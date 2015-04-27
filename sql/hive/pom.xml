@@ -60,6 +60,11 @@
       <artifactId>hive-exec</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <version>${commons.httpclient.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.codehaus.jackson</groupId>
       <artifactId>jackson-mapper-asl</artifactId>
     </dependency>

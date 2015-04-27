@@ -220,8 +220,12 @@ private[spark] class Executor(
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          m.setExecutorDeserializeTime(taskStart - deserializeStartTime)
-          m.setExecutorRunTime(taskFinish - taskStart)
+          // Deserialization happens in two parts: first, we deserialize a Task object, which
+          // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
+          m.setExecutorDeserializeTime(
+            (taskStart - deserializeStartTime) + task.executorDeserializeTime)
+          // We need to subtract Task.run()'s deserialization time to avoid double-counting
+          m.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
           m.setJvmGCTime(computeTotalGcTime() - startGCTime)
           m.setResultSerializationTime(afterSerialization - beforeSerialization)
         }

@@ -43,8 +43,7 @@ import org.apache.spark.sql.DataFrame
 @AlphaComponent
 final class DecisionTreeClassifier
   extends Predictor[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
-  with DecisionTreeParams
-  with TreeClassifierParams {
+  with DecisionTreeParams with TreeClassifierParams {
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -59,11 +58,9 @@ final class DecisionTreeClassifier
 
   override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
 
-  override def setCacheNodeIds(value: Boolean): this.type =
-    super.setCacheNodeIds(value)
+  override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
 
-  override def setCheckpointInterval(value: Int): this.type =
-    super.setCheckpointInterval(value)
+  override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
@@ -75,8 +72,9 @@ final class DecisionTreeClassifier
     val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema(paramMap(labelCol))) match {
       case Some(n: Int) => n
       case None => throw new IllegalArgumentException("DecisionTreeClassifier was given input" +
-        s" with invalid label column, without the number of classes specified.")
-        // TODO: Automatically index labels.
+        s" with invalid label column ${paramMap(labelCol)}, without the number of classes" +
+        " specified. See StringIndexer.")
+        // TODO: Automatically index labels: SPARK-7126
     }
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, paramMap)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
@@ -85,18 +83,16 @@ final class DecisionTreeClassifier
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
-  override private[ml] def getOldStrategy(
+  private[ml] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): OldStrategy = {
-    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
-    strategy.algo = OldAlgo.Classification
-    strategy.setImpurity(getOldImpurity)
-    strategy
+    super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity,
+      subsamplingRate = 1.0)
   }
 }
 
 object DecisionTreeClassifier {
-  /** Accessor for supported impurities */
+  /** Accessor for supported impurities: entropy, gini */
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 }
 
