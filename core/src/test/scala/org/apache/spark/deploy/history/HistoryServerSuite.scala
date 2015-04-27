@@ -125,33 +125,6 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     }
   }
 
-  test("security") {
-    val conf = new SparkConf()
-      .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
-      .set("spark.history.fs.updateInterval", "0")
-      .set("spark.acls.enable", "true")
-      .set("spark.ui.view.acls", "user1")
-    val securityManager = new SecurityManager(conf)
-
-    val securePort = port + 1
-    val secureServer = new HistoryServer(conf, provider, securityManager, securePort)
-    secureServer.initialize()
-    secureServer.bind()
-
-    securityManager.checkUIViewPermissions("user1") should be (true)
-    securityManager.checkUIViewPermissions("user2") should be (false)
-
-    try {
-
-      // TODO figure out a way to authenticate as the users in the requests
-      pending
-
-    } finally {
-      secureServer.stop()
-    }
-
-  }
-
   test("response codes on bad paths") {
     val badAppId = getContentAndCode("applications/foobar")
     badAppId._1 should be (HttpServletResponse.SC_NOT_FOUND)
