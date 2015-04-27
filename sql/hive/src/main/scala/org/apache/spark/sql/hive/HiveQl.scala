@@ -665,12 +665,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                    outputClause) :: Nil) =>
 
             val recordWriter = writerClause match {
-              case Token(writer, Nil) :: Nil => writer
+              case Token(writer, Nil) :: Nil => BaseSemanticAnalyzer.unescapeSQLString(writer)
               case Nil => ""
             }
 
             val recordReader = readerClause match {
-              case Token(reader, Nil) :: Nil => reader
+              case Token(reader, Nil) :: Nil => BaseSemanticAnalyzer.unescapeSQLString(reader)
               case Nil => ""
             }
 
@@ -690,23 +690,26 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               : (Seq[(String, String, String)], String, Seq[(String, String)]) = clause match {
               case Token("TOK_SERDEPROPS", propsClause) :: Nil =>
                 val rowFormat = propsClause.map {
-                  case Token(name, Token(value, Nil) :: Nil) => (name, value, null)
+                  case Token(name, Token(value, Nil) :: Nil) =>
+                    (name, BaseSemanticAnalyzer.unescapeSQLString(value), null)
                   case Token(name, Token(value1, Nil) :: Token(value2, Nil) :: Nil) =>
-                    (name, value1, value2)
+                    (name, BaseSemanticAnalyzer.unescapeSQLString(value1),
+                      BaseSemanticAnalyzer.unescapeSQLString(value2))
                 }
                 (rowFormat, "", Nil)
 
               case Token("TOK_SERDENAME", Token(serdeClass, Nil) :: Nil) :: Nil =>
-                (Nil, serdeClass, Nil)
+                (Nil, BaseSemanticAnalyzer.unescapeSQLString(serdeClass), Nil)
 
               case Token("TOK_SERDENAME", Token(serdeClass, Nil) ::
                 Token("TOK_TABLEPROPERTIES",
                 Token("TOK_TABLEPROPLIST", propsClause) :: Nil) :: Nil) :: Nil =>
                 val serdeProps = propsClause.map {
                   case Token("TOK_TABLEPROPERTY", Token(name, Nil) :: Token(value, Nil) :: Nil) =>
-                    (name, value)
+                    (BaseSemanticAnalyzer.unescapeSQLString(name),
+                      BaseSemanticAnalyzer.unescapeSQLString(value))
                 } 
-                (Nil, serdeClass, serdeProps)
+                (Nil, BaseSemanticAnalyzer.unescapeSQLString(serdeClass), serdeProps)
 
               case Nil => (Nil, "", Nil)
             }

@@ -456,10 +456,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         |'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
         |WITH SERDEPROPERTIES ('avro.schema.literal'='{"namespace":
         |"testing.hive.avro.serde","name": "src","type": "record","fields":
-        |[{"name":"key","type":"int"}]}') USING 'cat' AS (tKey INT) ROW FORMAT SERDE
+        |[{"name":"key","type":"int"}]}')
+        |RECORDWRITER 'org.apache.hadoop.hive.ql.io.avro.AvroGenericRecordWriter'
+        |USING 'cat' AS (tKey INT) ROW FORMAT SERDE
         |'org.apache.hadoop.hive.serde2.avro.AvroSerDe' WITH SERDEPROPERTIES
         |('avro.schema.literal'='{"namespace": "testing.hive.avro.serde","name":
         |"src","type": "record","fields": [{"name":"key","type":"int"}]}')
+        |RECORDREADER 'org.apache.hadoop.hive.ql.io.avro.AvroGenericRecordReader'
         |FROM small_src
       """.stripMargin.replaceAll("\n", " ")).collect().head
 

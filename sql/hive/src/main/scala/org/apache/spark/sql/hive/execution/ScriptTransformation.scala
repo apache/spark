@@ -88,9 +88,7 @@ case class ScriptTransformation(
         var eof: Boolean = false
         val writable = scriptOutputReader.createRow()
 
-        override def hasNext: Boolean = {
-          !eof
-        }
+        override def hasNext: Boolean = !eof
 
         def deserialize(): Row = {
           if (cacheRow != null) return cacheRow
@@ -246,7 +244,7 @@ case class HiveScriptIOSchema (
       rowFormat: Seq[(String, String, String)]): TableDesc = {
     val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
     if (serdeClassName != "") {
-      val className = serdeClassName.split("'")(1)
+      val className = serdeClassName
       val serdeClass: Class[_ <: Deserializer] = Utils.classForName(className)
         .asInstanceOf[Class[_ <: Deserializer]]
 
@@ -254,7 +252,7 @@ case class HiveScriptIOSchema (
         columns.mkString(","), columnTypesNames, false)
  
       var propsMap = serdeProps.map(kv => {
-        (kv._1.split("'")(1), kv._2.split("'")(1))
+        (kv._1, kv._2)
       }).toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
       propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
       propsMap.map(kv => tblDesc.getProperties().setProperty(kv._1, kv._2))
