@@ -1,5 +1,5 @@
 [ {
-  "status" : "Complete",
+  "status" : "COMPLETE",
   "stageId" : 3,
   "attemptId" : 0,
   "numActiveTasks" : 0,
@@ -21,7 +21,7 @@
   "schedulingPool" : "default",
   "accumulatorUpdates" : [ ]
 }, {
-  "status" : "Complete",
+  "status" : "COMPLETE",
   "stageId" : 1,
   "attemptId" : 0,
   "numActiveTasks" : 0,
@@ -43,7 +43,7 @@
   "schedulingPool" : "default",
   "accumulatorUpdates" : [ ]
 }, {
-  "status" : "Complete",
+  "status" : "COMPLETE",
   "stageId" : 0,
   "attemptId" : 0,
   "numActiveTasks" : 0,
@@ -65,7 +65,7 @@
   "schedulingPool" : "default",
   "accumulatorUpdates" : [ ]
 }, {
-  "status" : "Failed",
+  "status" : "FAILED",
   "stageId" : 2,
   "attemptId" : 0,
   "numActiveTasks" : 0,

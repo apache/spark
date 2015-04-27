@@ -122,10 +122,10 @@ private[v1] object AllStagesResource {
     val listener = ui.jobProgressListener
     listener.synchronized {
       Seq(
-        StageStatus.Active -> listener.activeStages.values.toSeq,
-        StageStatus.Complete -> listener.completedStages.reverse.toSeq,
-        StageStatus.Failed -> listener.failedStages.reverse.toSeq,
-        StageStatus.Pending -> listener.pendingStages.values.toSeq
+        StageStatus.ACTIVE -> listener.activeStages.values.toSeq,
+        StageStatus.COMPLETE -> listener.completedStages.reverse.toSeq,
+        StageStatus.FAILED -> listener.failedStages.reverse.toSeq,
+        StageStatus.PENDING -> listener.pendingStages.values.toSeq
       )
     }
   }

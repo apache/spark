@@ -20,10 +20,10 @@ package org.apache.spark.status.api.v1;
 import org.apache.spark.util.EnumUtil;
 
 public enum StageStatus {
-  Active,
-  Complete,
-  Failed,
-  Pending;
+  ACTIVE,
+  COMPLETE,
+  FAILED,
+  PENDING;
 
   public static StageStatus fromString(String str) {
     return EnumUtil.parseIgnoreCase(StageStatus.class, str);

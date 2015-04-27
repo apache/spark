@@ -133,7 +133,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       }
       val stageJson = getJson(sc.ui.get, "stages")
       stageJson.children.length should be (1)
-      (stageJson \ "status").extract[String] should be (StageStatus.Failed.name())
+      (stageJson \ "status").extract[String] should be (StageStatus.FAILED.name())
 
       // Regression test for SPARK-2105
       class NotSerializable
@@ -255,7 +255,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
         JInt(stageId) <- stage \ "stageId"
         JInt(attemptId) <- stage \ "attemptId"
       } {
-        val exp = if (attemptId == 0 && stageId == 1) StageStatus.Failed else StageStatus.Complete
+        val exp = if (attemptId == 0 && stageId == 1) StageStatus.FAILED else StageStatus.COMPLETE
         status should be (exp.name())
       }
 
@@ -263,7 +263,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
         stageId <- 0 to 1
         attemptId <- 0 to 1
       } {
-        val exp = if (attemptId == 0 && stageId == 1) StageStatus.Failed else StageStatus.Complete
+        val exp = if (attemptId == 0 && stageId == 1) StageStatus.FAILED else StageStatus.COMPLETE
         val stageJson = getJson(sc.ui.get, s"stages/$stageId/$attemptId")
         (stageJson \ "status").extract[String] should be (exp.name())
       }

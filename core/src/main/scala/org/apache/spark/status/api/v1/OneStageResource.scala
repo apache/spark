@@ -122,10 +122,10 @@ private[v1] class OneStageResource(uiRoot: UIRoot) {
           StageStatusInfoUi(status, info, ui)
         }
       }
-      getStatusInfoUi(Active, listener.activeStages.values.toSeq) ++
-        getStatusInfoUi(Complete, listener.completedStages) ++
-        getStatusInfoUi(Failed, listener.failedStages) ++
-        getStatusInfoUi(Pending, listener.pendingStages.values.toSeq)
+      getStatusInfoUi(ACTIVE, listener.activeStages.values.toSeq) ++
+        getStatusInfoUi(COMPLETE, listener.completedStages) ++
+        getStatusInfoUi(FAILED, listener.failedStages) ++
+        getStatusInfoUi(PENDING, listener.pendingStages.values.toSeq)
     }
   }
 

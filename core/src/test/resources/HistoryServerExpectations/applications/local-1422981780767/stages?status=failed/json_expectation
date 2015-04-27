@@ -1,5 +1,5 @@
 [ {
-  "status" : "Failed",
+  "status" : "FAILED",
   "stageId" : 2,
   "attemptId" : 0,
   "numActiveTasks" : 0,
