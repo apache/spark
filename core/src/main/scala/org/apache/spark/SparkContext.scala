@@ -1055,7 +1055,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /** Build the union of a list of RDDs. */
   def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = {
     val partitioners = rdds.flatMap(_.partitioner).toSet
-    if (partitioners.size == 1) {
+    if (rdds.forall(_.partitioner.isDefined) && partitioners.size == 1) {
       new PartitionerAwareUnionRDD(this, rdds)
     } else {
       new UnionRDD(this, rdds)
