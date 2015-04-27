@@ -25,7 +25,7 @@ class HiveOperator(BaseOperator):
     __mapper_args__ = {
         'polymorphic_identity': 'HiveOperator'
     }
-    template_fields = ('hql',)
+    template_fields = ('hql', 'schema')
     template_ext = ('.hql', '.sql',)
     ui_color = '#f0e4ec'
 
@@ -33,6 +33,7 @@ class HiveOperator(BaseOperator):
     def __init__(
             self, hql,
             hive_cli_conn_id='hive_cli_default',
+            schema='default',
             hiveconf_jinja_translate=False,
             script_begin_tag=None,
             *args, **kwargs):
@@ -40,6 +41,7 @@ class HiveOperator(BaseOperator):
         super(HiveOperator, self).__init__(*args, **kwargs)
         self.hiveconf_jinja_translate = hiveconf_jinja_translate
         self.hql = hql
+        self.schema = schema
         self.hive_cli_conn_id = hive_cli_conn_id
         self.script_begin_tag = script_begin_tag
 
@@ -56,7 +58,7 @@ class HiveOperator(BaseOperator):
     def execute(self, context):
         logging.info('Executing: ' + self.hql)
         self.hook = self.get_hook()
-        self.hook.run_cli(hql=self.hql)
+        self.hook.run_cli(hql=self.hql, schema=self.schema)
 
     def on_kill(self):
         self.hook.kill()
