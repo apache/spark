@@ -216,29 +216,77 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("Comma separated paths could be used for hadoopFile and newAPIHadoopFile (SPARK-7155)") {
+  test("Comma separated paths for newAPIHadoopFile/wholeTextFiles/binaryFiles (SPARK-7155)") {
     // Regression test for SPARK-7155
-    val dir = Utils.createTempDir()
+    // dir1 and dir2 are used for wholeTextFiles and binaryFiles
+    val dir1 = Utils.createTempDir()
+    val dir2 = Utils.createTempDir()
 
-    val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
-    val absolutePath1 = file1.getAbsolutePath
+    val dirpath1=dir1.getAbsolutePath
+    val dirpath2=dir2.getAbsolutePath
 
-    val file2 = File.createTempFile("someprefix2", "somesuffix2", dir)
-    val absolutePath2 = file2.getAbsolutePath
+    // file1 and file2 are placed inside dir1, they are also used for
+    // textFile, hadoopFile, and newAPIHadoopFile
+    // file3, file4 and file5 are placed inside dir2, they are used for
+    // textFile, hadoopFile, and newAPIHadoopFile as well
+    val file1 = new File(dir1, "part-00000")
+    val file2 = new File(dir1, "part-00001")
+    val file3 = new File(dir2, "part-00000")
+    val file4 = new File(dir2, "part-00001")
+    val file5 = new File(dir2, "part-00002")
+
+    val filepath1=file1.getAbsolutePath
+    val filepath2=file2.getAbsolutePath
+    val filepath3=file3.getAbsolutePath
+    val filepath4=file4.getAbsolutePath
+    val filepath5=file5.getAbsolutePath
+
 
     try {
-      // Create two text files.
+      // Create 5 text files.
       Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", file1, UTF_8)
       Files.write("someline1 in file2\nsomeline2 in file2", file2, UTF_8)
+      Files.write("someline1 in file3", file3, UTF_8)
+      Files.write("someline1 in file4\nsomeline2 in file4", file4, UTF_8)
+      Files.write("someline1 in file2\nsomeline2 in file5", file5, UTF_8)
 
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
 
-      // Test textFile, hadoopFile, and newAPIHadoopFile
-      assert(sc.textFile(absolutePath1+","+absolutePath2).count() == 5L)
-      assert(sc.hadoopFile(absolutePath1+","+absolutePath2, classOf[TextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
-      assert(sc.newAPIHadoopFile(absolutePath1+","+absolutePath2, classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+      // Test textFile, hadoopFile, and newAPIHadoopFile for file1 and file2
+      assert(sc.textFile(filepath1 + "," + filepath2).count() == 5L)
+      assert(sc.hadoopFile(filepath1 + "," + filepath2,
+        classOf[TextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+      assert(sc.newAPIHadoopFile(filepath1 + "," + filepath2,
+        classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+
+      // Test textFile, hadoopFile, and newAPIHadoopFile for file3, file4, and file5
+      assert(sc.textFile(filepath3 + "," + filepath4 + "," + filepath5).count() == 5L)
+      assert(sc.hadoopFile(filepath3 + "," + filepath4 + "," + filepath5,
+               classOf[TextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+      assert(sc.newAPIHadoopFile(filepath3 + "," + filepath4 + "," + filepath5,
+               classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+
+      // Test wholeTextFiles, and binaryFiles for dir1 and dir2
+      assert(sc.wholeTextFiles(dirpath1 + "," + dirpath2).count() == 5L)
+      assert(sc.binaryFiles(dirpath1 + "," + dirpath2).count() == 5L)
+
     } finally {
       sc.stop()
+      if (file1.exists()) {
+        file1.delete()
+      }
+      if (file2.exists()) {
+        file2.delete()
+      }
+      if (file3.exists()) {
+        file3.delete()
+      }
+      if (file4.exists()) {
+        file4.delete()
+      }
+      if (file5.exists()) {
+        file5.delete()
+      }
     }
   }
 }
