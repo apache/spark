@@ -293,7 +293,7 @@ def build_apache_spark():
     if AMPLAB_JENKINS_BUILD_TOOL == "maven":
         exec_maven(hive_12_profile_args + base_mvn_args)
     else:
-        exec_sbt(hive_12_profile_args + sbt_hive_12_goals).wait()
+        exec_sbt(hive_12_profile_args + sbt_hive_12_goals)
 
     # Then build with default Hive version (0.13.1) because tests are based on
     # this version
