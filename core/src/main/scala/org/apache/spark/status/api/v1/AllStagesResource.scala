@@ -152,74 +152,78 @@ private[v1] object AllStagesResource {
 
     val rawMetrics = allTaskData.flatMap{_.taskMetrics}.toSeq
 
-    def getMetric[T](data: Seq[T], f: T => Double): IndexedSeq[Double] =
-      Distribution(data.map { d => f(d) }).get.getQuantiles(quantiles)
+    def metricQuantiles(f: InternalTaskMetrics => Double): IndexedSeq[Double] =
+      Distribution(rawMetrics.map { d => f(d) }).get.getQuantiles(quantiles)
 
-    abstract class MetricHelper[I,O](f: InternalTaskMetrics => Option[I]) {
-      val data: Seq[I] = rawMetrics.flatMap { x => f(x) }  // expanded to keep the compiler happy
-      def build: O
-      def m(f: I => Double): IndexedSeq[Double] = getMetric(data, f)
-      def metricOption: Option[O] = {
-        if (data.isEmpty) {
-          None
-        } else {
-          Some(build)
+    // We need to do a lot of similar munging to nested metrics here.  For each one,
+    // we want (a) extract the values for nested metrics (b) make a distribution for each metric
+    // (c) shove the distribution into the right field in our return type and (d) only return
+    // a result if the option is defined for any of the tasks.  MetricHelper is a little util
+    // to make it a little easier to deal w/ all of the nested options.  Mostly it lets us just
+    // implement one "build" method, which just builds the quantiles for each field.
+
+    val inputMetrics: Option[InputMetricDistributions] =
+      new MetricHelper[InternalInputMetrics, InputMetricDistributions](rawMetrics, quantiles) {
+        def getSubmetrics(raw: InternalTaskMetrics): Option[InternalInputMetrics] = {
+          raw.inputMetrics
         }
-      }
-    }
 
-    def m(f: InternalTaskMetrics => Double): IndexedSeq[Double] =
-      getMetric(rawMetrics, f)
-
-    val inputMetrics =
-      new MetricHelper[InternalInputMetrics, InputMetricDistributions](_.inputMetrics) {
         def build: InputMetricDistributions = new InputMetricDistributions(
-          bytesRead = m(_.bytesRead),
-          recordsRead = m(_.recordsRead)
+          bytesRead = submetricQuantiles(_.bytesRead),
+          recordsRead = submetricQuantiles(_.recordsRead)
         )
       }.metricOption
 
-    val outputMetrics =
-      new MetricHelper[InternalOutputMetrics, OutputMetricDistributions](_.outputMetrics) {
+    val outputMetrics: Option[OutputMetricDistributions] =
+      new MetricHelper[InternalOutputMetrics, OutputMetricDistributions](rawMetrics, quantiles) {
+        def getSubmetrics(raw:InternalTaskMetrics): Option[InternalOutputMetrics] = {
+          raw.outputMetrics
+        }
         def build: OutputMetricDistributions = new OutputMetricDistributions(
-          bytesWritten = m(_.bytesWritten),
-          recordsWritten = m(_.recordsWritten)
+          bytesWritten = submetricQuantiles(_.bytesWritten),
+          recordsWritten = submetricQuantiles(_.recordsWritten)
         )
       }.metricOption
 
-    val shuffleReadMetrics =
-      new MetricHelper[InternalShuffleReadMetrics, ShuffleReadMetricDistributions](
-          _.shuffleReadMetrics) {
+    val shuffleReadMetrics: Option[ShuffleReadMetricDistributions] =
+      new MetricHelper[InternalShuffleReadMetrics, ShuffleReadMetricDistributions](rawMetrics,
+        quantiles) {
+        def getSubmetrics(raw: InternalTaskMetrics): Option[InternalShuffleReadMetrics] = {
+          raw.shuffleReadMetrics
+        }
         def build: ShuffleReadMetricDistributions = new ShuffleReadMetricDistributions(
-          readBytes = m(_.totalBytesRead),
-          readRecords = m(_.recordsRead),
-          remoteBytesRead = m(_.remoteBytesRead),
-          remoteBlocksFetched = m(_.remoteBlocksFetched),
-          localBlocksFetched = m(_.localBlocksFetched),
-          totalBlocksFetched = m(_.totalBlocksFetched),
-          fetchWaitTime = m(_.fetchWaitTime)
+          readBytes = submetricQuantiles(_.totalBytesRead),
+          readRecords = submetricQuantiles(_.recordsRead),
+          remoteBytesRead = submetricQuantiles(_.remoteBytesRead),
+          remoteBlocksFetched = submetricQuantiles(_.remoteBlocksFetched),
+          localBlocksFetched = submetricQuantiles(_.localBlocksFetched),
+          totalBlocksFetched = submetricQuantiles(_.totalBlocksFetched),
+          fetchWaitTime = submetricQuantiles(_.fetchWaitTime)
         )
       }.metricOption
 
-    val shuffleWriteMetrics =
-      new MetricHelper[InternalShuffleWriteMetrics, ShuffleWriteMetricDistributions](
-          _.shuffleWriteMetrics) {
+    val shuffleWriteMetrics: Option[ShuffleWriteMetricDistributions] =
+      new MetricHelper[InternalShuffleWriteMetrics, ShuffleWriteMetricDistributions](rawMetrics,
+        quantiles) {
+        def getSubmetrics(raw: InternalTaskMetrics): Option[InternalShuffleWriteMetrics] = {
+          raw.shuffleWriteMetrics
+        }
         def build: ShuffleWriteMetricDistributions = new ShuffleWriteMetricDistributions(
-          writeBytes = m(_.shuffleBytesWritten),
-          writeRecords = m(_.shuffleRecordsWritten),
-          writeTime = m(_.shuffleWriteTime)
+          writeBytes = submetricQuantiles(_.shuffleBytesWritten),
+          writeRecords = submetricQuantiles(_.shuffleRecordsWritten),
+          writeTime = submetricQuantiles(_.shuffleWriteTime)
         )
       }.metricOption
 
     new TaskMetricDistributions(
       quantiles = quantiles,
-      executorDeserializeTime = m(_.executorDeserializeTime),
-      executorRunTime = m(_.executorRunTime),
-      resultSize = m(_.resultSize),
-      jvmGcTime = m(_.jvmGCTime),
-      resultSerializationTime = m(_.resultSerializationTime),
-      memoryBytesSpilled = m(_.memoryBytesSpilled),
-      diskBytesSpilled = m(_.diskBytesSpilled),
+      executorDeserializeTime = metricQuantiles(_.executorDeserializeTime),
+      executorRunTime = metricQuantiles(_.executorRunTime),
+      resultSize = metricQuantiles(_.resultSize),
+      jvmGcTime = metricQuantiles(_.jvmGCTime),
+      resultSerializationTime = metricQuantiles(_.resultSerializationTime),
+      memoryBytesSpilled = metricQuantiles(_.memoryBytesSpilled),
+      diskBytesSpilled = metricQuantiles(_.diskBytesSpilled),
       inputMetrics = inputMetrics,
       outputMetrics = outputMetrics,
       shuffleReadMetrics = shuffleReadMetrics,
@@ -278,5 +282,34 @@ private[v1] object AllStagesResource {
       writeTime = internal.shuffleWriteTime,
       recordsWritten = internal.shuffleRecordsWritten
     )
+  }
+}
+
+/**
+ * Helper for getting distributions from nested metric types.  Many of the metrics we want are
+ * contained in options inside TaskMetrics (eg., ShuffleWriteMetrics). This makes it easy to handle
+ * the options (returning None if the metrics are all empty), and extract the quantiles for each
+ * metric.  After creating an instance, call metricOption to get the result type
+ *
+ * **getSubMetrics** -- pulls out the submetric of interest from the overall task metrics
+ * **build** -- create the result container.  Generally this will just call submetricQuantiles for each
+ */
+private[v1] abstract class MetricHelper[I,O](
+    rawMetrics: Seq[InternalTaskMetrics],
+    quantiles: Array[Double]) {
+
+  def getSubmetrics(raw: InternalTaskMetrics): Option[I]
+  def build: O
+  val data: Seq[I] = rawMetrics.flatMap(getSubmetrics)
+  /** applies the given function to all input metrics, and returns the quantiles*/
+  def submetricQuantiles(f: I => Double): IndexedSeq[Double] = {
+    Distribution(data.map { d => f(d) }).get.getQuantiles(quantiles)
+  }
+  def metricOption: Option[O] = {
+    if (data.isEmpty) {
+      None
+    } else {
+      Some(build)
+    }
   }
 }
