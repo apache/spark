@@ -1389,6 +1389,7 @@ class TaskInstanceModelView(ModelViewOnly):
         end_date=datetime_f,
         dag_id=dag_link, duration=duration_f)
     column_searchable_list = ('dag_id', 'task_id', 'state')
+    column_default_sort = ('start_date', True)
     column_list = (
         'dag_id', 'task_id', 'execution_date',
         'start_date', 'end_date', 'duration', 'state', 'job_id', 'hostname',
@@ -1398,7 +1399,6 @@ class TaskInstanceModelView(ModelViewOnly):
 mv = TaskInstanceModelView(
     models.TaskInstance, Session, name="Task Instances", category="Browse")
 admin.add_view(mv)
-
 
 
 class ConnectionModelView(SuperUserMixin, ModelView):
@@ -1607,6 +1607,7 @@ class KnowEventView(DataProfilingMixin, ModelView):
         'description')
     column_list = (
         'label', 'event_type', 'start_date', 'end_date', 'reported_by')
+    column_default_sort = ("start_date", True)
 mv = KnowEventView(
     models.KnownEvent, Session, name="Known Events", category="Data Profiling")
 admin.add_view(mv)
