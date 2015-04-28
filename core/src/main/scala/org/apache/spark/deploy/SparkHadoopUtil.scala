@@ -36,6 +36,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
 import scala.collection.JavaConversions._
+import scala.concurrent.duration._
 
 /**
  * :: DeveloperApi ::
@@ -46,6 +47,8 @@ class SparkHadoopUtil extends Logging {
   private val sparkConf = new SparkConf()
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
+  private lazy val renewalInterval =
+    conf.getLong("dfs.namenode.delegation.token.renew-interval", (24 hours).toMillis)
 
   /**
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
@@ -235,18 +238,27 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Get the latest validity of the HDFS token in the Credentials object.
-   * @param credentials
-   * @return
+   * How much time is remaining (in millis) from now to (fraction * renewal time for the token that
+   * is valid the latest)?
+   * This will return -ve (or 0) value if the fraction of validity has already expired.
    */
-  def getLatestTokenValidity(credentials: Credentials): Long = {
+  def getTimeFromNowToRenewal(fraction: Double, credentials: Credentials): Long = {
+    val now = System.currentTimeMillis()
     credentials.getAllTokens.filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
       .map { t =>
       val identifier = new DelegationTokenIdentifier()
       identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
-      identifier.getMaxDate
+      (identifier.getIssueDate + fraction * renewalInterval).toLong - now
     }.foldLeft(0L)(math.max)
   }
+
+
+  private[spark] def getSuffixForCredentialsPath(credentialsPath: Path): Int = {
+    val fileName = credentialsPath.getName
+    fileName.substring(
+      fileName.lastIndexOf(SparkHadoopUtil.SPARK_YARN_CREDS_COUNTER_DELIM) + 1).toInt
+  }
+
 
   private val HADOOP_CONF_PATTERN = "(\\$\\{hadoopconf-[^\\}\\$\\s]+\\})".r.unanchored
 
@@ -297,6 +309,10 @@ object SparkHadoopUtil {
       new SparkHadoopUtil
     }
   }
+
+  val SPARK_YARN_CREDS_TEMP_EXTENSION = ".tmp"
+
+  val SPARK_YARN_CREDS_COUNTER_DELIM = "-"
 
   def get: SparkHadoopUtil = {
     hadoop

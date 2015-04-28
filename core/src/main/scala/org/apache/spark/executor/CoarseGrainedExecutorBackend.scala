@@ -55,7 +55,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     logInfo("Connecting to driver: " + driverUrl)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       driver = Some(ref)
-      ref.sendWithReply[RegisteredExecutor](
+      ref.sendWithReply[RegisteredExecutor.type](
         RegisterExecutor(executorId, self, hostPort, cores, extractLogUrls))
     } onComplete {
       case Success(msg) => Utils.tryLogNonFatalError {
@@ -72,17 +72,10 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def receive: PartialFunction[Any, Unit] = {
-    case RegisteredExecutor(tokens) =>
+    case RegisteredExecutor=>
       logInfo("Successfully registered with driver")
       val (hostname, _) = Utils.parseHostPort(hostPort)
       executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)
-      tokens.foreach { tokenBuffer =>
-        val inStream = new DataInputStream(new ByteArrayInputStream(tokenBuffer.value.array()))
-        val creds = new Credentials()
-        creds.readFields(inStream)
-        inStream.close()
-        UserGroupInformation.getCurrentUser.addCredentials(creds)
-      }
 
     case RegisterExecutorFailed(message) =>
       logError("Slave registration failed: " + message)
@@ -175,7 +168,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         }
       }
       var tokenUpdaterOption: Option[ExecutorDelegationTokenUpdater] = None
-      if(driverConf.contains("spark.yarn.credentials.file")) {
+      if (driverConf.contains("spark.yarn.credentials.file")) {
+        logInfo("Will periodically update credentials from: " +
+          driverConf.get("spark.yarn.credentials.file"))
         // Periodically update the credentials for this user to ensure HDFS tokens get updated.
         tokenUpdaterOption =
           Some(new ExecutorDelegationTokenUpdater(driverConf, SparkHadoopUtil.get.conf))

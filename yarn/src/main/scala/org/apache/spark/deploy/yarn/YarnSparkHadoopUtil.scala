@@ -18,21 +18,17 @@
 package org.apache.spark.deploy.yarn
 
 import java.io._
-import java.util.Arrays
-import java.util.Comparator
-import java.util.concurrent.{Executors, TimeUnit}
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
-import scala.collection.mutable.HashMap
+import org.apache.hadoop.security.token.TokenIdentifier
+
 import scala.collection.JavaConversions._
+import scala.collection.mutable.HashMap
 import scala.util.Try
 
-import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.{Master, JobConf}
 import org.apache.hadoop.security.Credentials
@@ -119,13 +115,14 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   def obtainTokensForNamenodes(
     paths: Set[Path],
     conf: Configuration,
-    creds: Credentials
+    creds: Credentials,
+    replaceExisting: Boolean = false
   ): Unit = {
     if (UserGroupInformation.isSecurityEnabled()) {
       val delegTokenRenewer = getTokenRenewer(conf)
       paths.foreach { dst =>
         val dstFs = dst.getFileSystem(conf)
-        logDebug("getting token for namenode: " + dst)
+        logInfo("getting token for namenode: " + dst)
         dstFs.addDelegationTokens(delegTokenRenewer, creds)
       }
     }

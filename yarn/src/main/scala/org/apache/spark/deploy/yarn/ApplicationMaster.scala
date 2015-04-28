@@ -142,7 +142,7 @@ private[spark] class ApplicationMaster(
 
       // If the credentials file config is present, we must periodically renew tokens. So create
       // a new AMDelegationTokenRenewer
-      if(sparkConf.contains("spark.yarn.credentials.file")) {
+      if (sparkConf.contains("spark.yarn.credentials.file")) {
         delegationTokenRenewerOption = Some(new AMDelegationTokenRenewer(sparkConf, yarnConf))
       }
 
@@ -261,7 +261,6 @@ private[spark] class ApplicationMaster(
       SparkEnv.driverActorSystemName,
       RpcAddress(host, port.toInt),
       YarnSchedulerBackend.ENDPOINT_NAME)
-    delegationTokenRenewerOption.foreach(_.driverEndPoint = driverEndpoint)
     amEndpoint =
       rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverEndpoint, isClusterMode))
   }
