@@ -1390,7 +1390,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _executorAllocationManager.foreach { _ =>
       logWarning(
         s"Dynamic allocation currently does not support cached RDDs. Cached data for RDD " +
-        s"${rdd.id} will be deallocated when executors are removed.")
+        s"${rdd.id} will be lost when executors are removed.")
     }
     persistentRdds(rdd.id) = rdd
   }
