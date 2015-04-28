@@ -56,7 +56,7 @@ case class DropTable(
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val databaseName = db.getOrElse(hiveContext.sessionState.getCurrentDatabase)
-    if(hiveContext.catalog.tableExists(Seq(databaseName, tableName))) {
+    if (hiveContext.catalog.tableExists(Seq(databaseName, tableName))) {
       val ifExistsClause = if (ifExists) "IF EXISTS " else ""
       val dbTableName = if (db == None) tableName else db.get + "." + tableName
       try {
