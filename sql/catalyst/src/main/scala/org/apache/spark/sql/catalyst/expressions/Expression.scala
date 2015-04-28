@@ -89,17 +89,6 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
   override def toString: String = s"($left $symbol $right)"
 }
 
-/**
- *  This class is for expressions that use math functions like `pow`, `max`, `hypot`, and `atan2`,
- *  which can't be expressed as `$left $symbol $right`. They are expressed as
- *  `$func($left, $right)`.
- */
-abstract class BinaryFunctionExpression extends Expression with trees.BinaryNode[Expression] {
-  self: Product =>
-
-  override def foldable: Boolean = left.foldable && right.foldable
-}
-
 abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {
   self: Product =>
 }
@@ -119,4 +108,14 @@ case class GroupExpression(children: Seq[Expression]) extends Expression {
   override def nullable: Boolean = false
   override def foldable: Boolean = false
   override def dataType: DataType = throw new UnsupportedOperationException
+}
+
+/**
+ * Expressions that require a specific `DataType` as input should implement this trait
+ * so that the proper type conversions can be performed in the analyzer.
+ */
+trait ExpectsInputTypes {
+
+  def expectedChildTypes: Seq[DataType]
+
 }

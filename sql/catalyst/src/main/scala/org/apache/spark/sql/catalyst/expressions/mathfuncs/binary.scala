@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.mathfuncs
 
-import math._
-
-import org.apache.spark.sql.catalyst.analysis.{ExpectsInputTypes, UnresolvedException}
-import org.apache.spark.sql.catalyst.expressions.{BinaryFunctionExpression, Expression, Row}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, BinaryExpression, Expression, Row}
 import org.apache.spark.sql.types._
 
 /**
@@ -30,9 +28,9 @@ import org.apache.spark.sql.types._
  * @param name The short name of the function
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String) 
-  extends BinaryFunctionExpression with Serializable with ExpectsInputTypes { self: Product =>
+  extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
   type EvaluatedType = Any
-
+  override def symbol: String = null
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
   override def nullable: Boolean = left.nullable || right.nullable
@@ -45,8 +43,8 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 
   override def dataType: DataType = {
     if (!resolved) {
-      throw new UnresolvedException(this,
-        s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
+      throw new UnresolvedException(this, "Unresolved datatype. Can not resolve due to " +
+        s"differing types ${left.dataType}, ${right.dataType}")
     }
     left.dataType
   }
@@ -67,15 +65,15 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   }
 }
 
-case class Pow(left: Expression, right: Expression) extends BinaryMathExpression(pow, "POWER")
+case class Pow(left: Expression, right: Expression) extends BinaryMathExpression(math.pow, "POWER")
 
 case class Hypot(
     left: Expression,
-    right: Expression) extends BinaryMathExpression(hypot, "HYPOT")
+    right: Expression) extends BinaryMathExpression(math.hypot, "HYPOT")
 
 case class Atan2(
     left: Expression,
-    right: Expression) extends BinaryMathExpression(atan2, "ATAN2") {
+    right: Expression) extends BinaryMathExpression(math.atan2, "ATAN2") {
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
     if (evalE1 == null) {
@@ -86,7 +84,8 @@ case class Atan2(
         null
       } else {
         // With codegen, the values returned by -0.0 and 0.0 are different. Handled with +0.0
-        val result = atan2(evalE1.asInstanceOf[Double] + 0.0, evalE2.asInstanceOf[Double] + 0.0)
+        val result = math.atan2(evalE1.asInstanceOf[Double] + 0.0,
+          evalE2.asInstanceOf[Double] + 0.0)
         if (result.isNaN) null else result
       }
     }

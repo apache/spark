@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.mathfuncs
 
 import math._
 
-import org.apache.spark.sql.catalyst.analysis.ExpectsInputTypes
-import org.apache.spark.sql.catalyst.expressions.{Expression, Row, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, Row, UnaryExpression}
 import org.apache.spark.sql.types._
 
 /**
