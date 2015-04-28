@@ -23,7 +23,7 @@ import scala.collection.mutable
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite, PrivateMethodTester}
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.serializer.SerializerInstance
 
 /**
@@ -38,7 +38,13 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
   private var closureSerializer: SerializerInstance = null
 
   override def beforeAll(): Unit = {
-    sc = new SparkContext("local", "test")
+    val conf = new SparkConf()
+      .set("spark.master", "local")
+      .set("spark.app.name", "test")
+      // SerializationDebugger currently cannot serialize ClosureCleanerSuite2 because
+      // it has non-serializable fields but inherits a serializable class (SPARK-7180)
+      .set("spark.serializer.extraDebugInfo", "false")
+    sc = new SparkContext(conf)
     closureSerializer = sc.env.closureSerializer.newInstance()
   }
 
