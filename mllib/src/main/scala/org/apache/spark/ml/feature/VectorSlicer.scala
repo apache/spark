@@ -55,13 +55,15 @@ final class VectorSlicer extends Transformer with HasInputCol with HasOutputCol 
   def setSelectedFeatures(value: Array[String]): this.type = setSelectedFeatures(Right(value))
 
   /** @group setParam */
-  def setSelectedFeatures(value: String*): this.type = setSelectedFeatures(value.toArray)
+  def setSelectedFeatures(first: String, others: String*): this.type =
+    setSelectedFeatures((Seq(first) ++ others).toArray)
 
   /** @group setParam */
   def setSelectedFeatures(value: Array[Int]): this.type = setSelectedFeatures(Left(value))
 
   /** @group setParam */
-  def setSelectedFeatures(value: Int*): this.type = setSelectedFeatures(value.toArray)
+  def setSelectedFeatures(first: Int, others: Int*): this.type =
+    setSelectedFeatures((Seq(first) ++ others).toArray)
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -87,17 +89,17 @@ final class VectorSlicer extends Transformer with HasInputCol with HasOutputCol 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = extractParamMap(paramMap)
-    val indices = map(selectedFeatures) match {
+    val selectedIndices = map(selectedFeatures) match {
       case Left(indices) => indices
       case Right(names) =>
         val inputAttr = AttributeGroup.fromStructField(dataset.schema(map(inputCol)))
         names.map(name => inputAttr.getAttr(name).index.get)
     }
-    val indexSet = indices.toSet
+    val selectedIndexSet = selectedIndices.toSet
     val slicer = udf { vec: Vector =>
       vec match {
-        case features: DenseVector => selectColumns(indices, features)
-        case features: SparseVector => selectColumns(indexSet, features)
+        case features: DenseVector => selectColumns(selectedIndices, features)
+        case features: SparseVector => selectColumns(selectedIndexSet, features)
       }
     }
     dataset.withColumn(map(outputCol), slicer(dataset(map(inputCol))))
