@@ -59,6 +59,11 @@ public class OneForOneStreamManager extends StreamManager {
   }
 
   @Override
+  public boolean streamHasNext(long streamId) {
+    return streams.containsKey(streamId);
+  }
+
+  @Override
   public ManagedBuffer getChunk(long streamId, int chunkIndex) {
     StreamState state = streams.get(streamId);
     if (chunkIndex != state.curChunk) {

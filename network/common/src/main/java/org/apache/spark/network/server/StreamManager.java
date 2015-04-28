@@ -44,6 +44,11 @@ public abstract class StreamManager {
   public abstract ManagedBuffer getChunk(long streamId, int chunkIndex);
 
   /**
+   * Indicates that if the specified stream has next chunks to read further.
+   */
+  public boolean streamHasNext(long streamId) { return true; }
+
+  /**
    * Indicates that the TCP connection that was tied to the given stream has been terminated. After
    * this occurs, we are guaranteed not to read from the stream again, so any state can be cleaned
    * up.

@@ -109,6 +109,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     ManagedBuffer buf;
     try {
       buf = streamManager.getChunk(req.streamChunkId.streamId, req.streamChunkId.chunkIndex);
+      if (!streamManager.streamHasNext(req.streamChunkId.streamId)) {
+        streamIds.remove(req.streamChunkId.streamId);
+      }
     } catch (Exception e) {
       logger.error(String.format(
         "Error opening block %s for request from %s", req.streamChunkId, client), e);
