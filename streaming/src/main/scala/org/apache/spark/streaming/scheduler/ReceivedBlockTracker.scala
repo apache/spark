@@ -63,6 +63,7 @@ private[streaming] class ReceivedBlockTracker(
     hadoopConf: Configuration,
     streamIds: Seq[Int],
     clock: Clock,
+    recoverFromWriteAheadLog: Boolean,
     checkpointDirOption: Option[String])
   extends Logging {
 
@@ -75,7 +76,9 @@ private[streaming] class ReceivedBlockTracker(
   private var lastAllocatedBatchTime: Time = null
 
   // Recover block information from write ahead logs
-  recoverFromWriteAheadLogs()
+  if (recoverFromWriteAheadLog) {
+    recoverPastEvents()
+  }
 
   /** Add received block. This event will get written to the write ahead log (if enabled). */
   def addBlock(receivedBlockInfo: ReceivedBlockInfo): Boolean = synchronized {
@@ -167,7 +170,7 @@ private[streaming] class ReceivedBlockTracker(
    * Recover all the tracker actions from the write ahead logs to recover the state (unallocated
    * and allocated block info) prior to failure.
    */
-  private def recoverFromWriteAheadLogs(): Unit = synchronized {
+  private def recoverPastEvents(): Unit = synchronized {
     // Insert the recovered block information
     def insertAddedBlock(receivedBlockInfo: ReceivedBlockInfo) {
       logTrace(s"Recovery: Inserting added block $receivedBlockInfo")

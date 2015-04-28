@@ -67,15 +67,20 @@ class ReceivedBlockTrackerSuite
 
     // Verify added blocks are unallocated blocks
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual blockInfos
+    receivedBlockTracker.hasUnallocatedReceivedBlocks should be (true)
+
 
     // Allocate the blocks to a batch and verify that all of them have been allocated
     receivedBlockTracker.allocateBlocksToBatch(1)
     receivedBlockTracker.getBlocksOfBatchAndStream(1, streamId) shouldEqual blockInfos
+    receivedBlockTracker.getBlocksOfBatch(1) shouldEqual Map(streamId -> blockInfos)
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldBe empty
+    receivedBlockTracker.hasUnallocatedReceivedBlocks should be (false)
 
     // Allocate no blocks to another batch
     receivedBlockTracker.allocateBlocksToBatch(2)
     receivedBlockTracker.getBlocksOfBatchAndStream(2, streamId) shouldBe empty
+    receivedBlockTracker.getBlocksOfBatch(2) shouldEqual Map(streamId -> Seq.empty)
 
     // Verify that older batches have no operation on batch allocation,
     // will return the same blocks as previously allocated.
@@ -126,19 +131,27 @@ class ReceivedBlockTrackerSuite
     getWrittenLogData() shouldEqual expectedWrittenData1
     getWriteAheadLogFiles() should have size 1
 
-    // Restart tracker and verify recovered list of unallocated blocks
     incrementTime()
-    val tracker2 = createTracker(clock = manualClock)
+
+    // Recovery without recovery from WAL and verify list of unallocated blocks is empty
+    val tracker1_ = createTracker(clock = manualClock, recoverFromWriteAheadLog = false)
+    tracker1_.getUnallocatedBlocks(streamId) shouldBe empty
+    tracker1_.hasUnallocatedReceivedBlocks should be (false)
+
+    // Restart tracker and verify recovered list of unallocated blocks
+    val tracker2 = createTracker(clock = manualClock, recoverFromWriteAheadLog = true)
     val unallocatedBlocks = tracker2.getUnallocatedBlocks(streamId).toList
     unallocatedBlocks shouldEqual blockInfos1
     unallocatedBlocks.foreach { block =>
       block.isBlockIdValid() should be (false)
     }
 
+
     // Allocate blocks to batch and verify whether the unallocated blocks got allocated
     val batchTime1 = manualClock.getTimeMillis()
     tracker2.allocateBlocksToBatch(batchTime1)
     tracker2.getBlocksOfBatchAndStream(batchTime1, streamId) shouldEqual blockInfos1
+    tracker2.getBlocksOfBatch(batchTime1) shouldEqual Map(streamId -> blockInfos1)
 
     // Add more blocks and allocate to another batch
     incrementTime()
@@ -156,7 +169,7 @@ class ReceivedBlockTrackerSuite
 
     // Restart tracker and verify recovered state
     incrementTime()
-    val tracker3 = createTracker(clock = manualClock)
+    val tracker3 = createTracker(clock = manualClock, recoverFromWriteAheadLog = true)
     tracker3.getBlocksOfBatchAndStream(batchTime1, streamId) shouldEqual blockInfos1
     tracker3.getBlocksOfBatchAndStream(batchTime2, streamId) shouldEqual blockInfos2
     tracker3.getUnallocatedBlocks(streamId) shouldBe empty
@@ -179,14 +192,14 @@ class ReceivedBlockTrackerSuite
     // Restart tracker and verify recovered state, specifically whether info about the first
     // batch has been removed, but not the second batch
     incrementTime()
-    val tracker4 = createTracker(clock = manualClock)
+    val tracker4 = createTracker(clock = manualClock, recoverFromWriteAheadLog = true)
     tracker4.getUnallocatedBlocks(streamId) shouldBe empty
     tracker4.getBlocksOfBatchAndStream(batchTime1, streamId) shouldBe empty  // should be cleaned
     tracker4.getBlocksOfBatchAndStream(batchTime2, streamId) shouldEqual blockInfos2
   }
 
-  test("write ahead log disabled when not checkpoint directory is set") {
-    // When checkpoint is not enabled, then the write ahead log is also disabled
+  test("disable write ahead log when checkpoint directory is not set") {
+    // When checkpoint is disabled, then the write ahead log is disabled
     val tracker1 = createTracker(setCheckpointDir = false)
     tracker1.isLogManagerEnabled should be (false)
   }
@@ -197,9 +210,11 @@ class ReceivedBlockTrackerSuite
    */
   def createTracker(
       setCheckpointDir: Boolean = true,
+      recoverFromWriteAheadLog: Boolean = false,
       clock: Clock = new SystemClock): ReceivedBlockTracker = {
     val cpDirOption = if (setCheckpointDir) Some(checkpointDirectory.toString) else None
-    val tracker = new ReceivedBlockTracker(conf, hadoopConf, Seq(streamId), clock, cpDirOption)
+    val tracker = new ReceivedBlockTracker(
+      conf, hadoopConf, Seq(streamId), clock, recoverFromWriteAheadLog, cpDirOption)
     allReceivedBlockTrackers += tracker
     tracker
   }
