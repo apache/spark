@@ -287,10 +287,7 @@ private[v1] object AllStagesResource {
  * Helper for getting distributions from nested metric types.  Many of the metrics we want are
  * contained in options inside TaskMetrics (eg., ShuffleWriteMetrics). This makes it easy to handle
  * the options (returning None if the metrics are all empty), and extract the quantiles for each
- * metric.  After creating an instance, call metricOption to get the result type
- *
- * **getSubMetrics** -- pulls out the submetric of interest from the overall task metrics
- * **build** -- create the result container.  Generally this will just call submetricQuantiles for each
+ * metric.  After creating an instance, call metricOption to get the result type.
  */
 private[v1] abstract class MetricHelper[I,O](
     rawMetrics: Seq[InternalTaskMetrics],
@@ -299,7 +296,7 @@ private[v1] abstract class MetricHelper[I,O](
   def getSubmetrics(raw: InternalTaskMetrics): Option[I]
   def build: O
   val data: Seq[I] = rawMetrics.flatMap(getSubmetrics)
-  /** applies the given function to all input metrics, and returns the quantiles*/
+  /** applies the given function to all input metrics, and returns the quantiles */
   def submetricQuantiles(f: I => Double): IndexedSeq[Double] = {
     Distribution(data.map { d => f(d) }).get.getQuantiles(quantiles)
   }
