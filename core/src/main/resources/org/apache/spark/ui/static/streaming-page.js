@@ -16,8 +16,9 @@
  */
 
 
-var globalMinX = 0;
-var globalMaxX = 0;
+var timelineMarginLeft = 50;
+var distributionMinX = 0;
+var distributionMaxX = 0;
 var binCount = 10;
 
 // An invisible div to show details of a point in the graph
@@ -53,19 +54,18 @@ function hideGraphTooltip() {
  */
 function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
     d3.select(d3.select(id).node().parentNode).style("padding", "8px 0 8px 8px").style("border-right", "0px solid white");
-    var margin = {top: 20, right: 27, bottom: 30, left: 50};
+    var margin = {top: 20, right: 27, bottom: 30, left: timelineMarginLeft};
     var width = 500 - margin.left - margin.right;
     var height = 150 - margin.top - margin.bottom;
 
-    var x = d3.time.scale().domain([minX, maxX]).range([0, width]);
+    var x = d3.scale.linear().domain([minX, maxX]).range([0, width]);
     var y = d3.scale.linear().domain([minY, maxY]).range([height, 0]);
 
-    var timeFormat = d3.time.format("%H:%M:%S")
-    var xAxis = d3.svg.axis().scale(x).orient("bottom").tickFormat(timeFormat);
+    var xAxis = d3.svg.axis().scale(x).orient("bottom").tickFormat(function(d) { return timeFormat[d]; });
     var yAxis = d3.svg.axis().scale(y).orient("left").ticks(5);
 
     var line = d3.svg.line()
-        .x(function(d) { return x(new Date(d.x)); })
+        .x(function(d) { return x(d.x); })
         .y(function(d) { return y(d.y); });
 
     var svg = d3.select(id).append("svg")
@@ -106,7 +106,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
                     .attr("cy", function(d) { return y(d.y); })
                     .attr("r", function(d) { return 3; })
                     .on('mouseover', function(d) {
-                        var tip = d.y + " " + unitY + " at " + timeFormat(new Date(d.x));
+                        var tip = d.y + " " + unitY + " at " + timeFormat[d.x];
                         showGraphTooltip(tip, d3.event.pageX + 5, d3.event.pageY - 25);
                         // show the point
                         d3.select(this)
@@ -137,15 +137,13 @@ function drawDistribution(id, values, minY, maxY, unitY) {
     var width = 300 - margin.left - margin.right;
     var height = 150 - margin.top - margin.bottom;
 
-    //var binCount = values.length > 100 ? 100 : values.length;
     var formatBinValue = d3.format(",.2f");
 
     var y = d3.scale.linear().domain([minY, maxY]).range([height, 0]);
     var data = d3.layout.histogram().range([minY, maxY]).bins(binCount)(values);
 
     var x = d3.scale.linear()
-        .domain([globalMinX, globalMaxX])
-        //.domain([0, d3.max(data, function(d) { return d.y; })])
+        .domain([distributionMinX, distributionMaxX])
         .range([0, width]);
 
     var xAxis = d3.svg.axis().scale(x).orient("top").ticks(5);
@@ -165,9 +163,6 @@ function drawDistribution(id, values, minY, maxY, unitY) {
     svg.append("g")
         .attr("class", "y axis")
         .call(yAxis)
-       // .append("text")
-         //   .attr("transform", "translate(0," + (-3) + ")")
-           // .text(unitY);
 
     var bar = svg.selectAll(".bar")
         .data(data)
@@ -199,8 +194,17 @@ function drawDistribution(id, values, minY, maxY, unitY) {
                   });
 }
 
+function prepareTimeline(minY, maxY) {
+    var y = d3.scale.linear().domain([0, maxY]).tickFormat(5);
+    console.log(y(maxY));
+    var numOfChars = y(maxY).length;
+    var maxPx = numOfChars * 8 + 10;
+    // Make sure we have enough space to show the ticks in the y axis of timeline
+    timelineMarginLeft = maxPx > timelineMarginLeft? maxPx : timelineMarginLeft;
+}
+
 function prepareDistribution(values, minY, maxY) {
     var data = d3.layout.histogram().range([minY, maxY]).bins(binCount)(values);
     var maxBarSize = d3.max(data, function(d) { return d.y; });
-    globalMaxX = maxBarSize > globalMaxX? maxBarSize : globalMaxX;
+    distributionMaxX = maxBarSize > distributionMaxX? maxBarSize : distributionMaxX;
 }

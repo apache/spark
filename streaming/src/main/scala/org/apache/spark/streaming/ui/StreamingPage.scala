@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.ui
 
+import java.text.SimpleDateFormat
+import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.ArrayBuffer
@@ -30,6 +32,8 @@ import org.apache.spark.util.Distribution
 /**
  * @param divId the `id` used in the html `div` tag
  * @param data the data for the timeline graph
+ * @param minX the min value of X axis
+ * @param maxX the max value of X axis
  * @param minY the min value of Y axis
  * @param maxY the max value of Y axis
  * @param unitY the unit of Y axis
@@ -41,6 +45,7 @@ private[ui] case class TimelineUIData(divId: String, data: Seq[(Long, _)], minX:
     val jsForData = data.map { case (x, y) =>
       s"""{"x": $x, "y": $y}"""
     }.mkString("[", ",", "]")
+    jsCollector.addPreparedStatement(s"prepareTimeline($minY, $maxY);")
     jsCollector.addStatement(
       s"drawTimeline('#$divId', $jsForData, $minX, $maxX, $minY, $maxY, '$unitY');")
 
@@ -67,16 +72,20 @@ private[ui] case class DistributionUIData(
   }
 }
 
-private[ui] case class LongStreamingUIData(data: Seq[(Long, Long)]) {
+private[ui] case class MillisecondsStatUIData(data: Seq[(Long, Long)]) {
 
   val avg: Option[Long] = if (data.isEmpty) None else Some(data.map(_._2).sum / data.size)
+
+  val formattedAvg: String = StreamingPage.formatDurationOption(avg)
 
   val max: Option[Long] = if (data.isEmpty) None else Some(data.map(_._2).max)
 }
 
-private[ui] case class DoubleStreamingUIData(data: Seq[(Long, Double)]) {
+private[ui] case class DoubleStatUIData(data: Seq[(Long, Double)]) {
 
   val avg: Option[Double] = if (data.isEmpty) None else Some(data.map(_._2).sum / data.size)
+
+  val formattedAvg: String = avg.map(_.formatted("%.2f")).getOrElse("-")
 
   val max: Option[Double] = if (data.isEmpty) None else Some(data.map(_._2).max)
 }
@@ -89,7 +98,6 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
   private val listener = parent.listener
   private val startTime = System.currentTimeMillis()
-  private val emptyCell = "-"
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -104,6 +112,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
     UIUtils.headerSparkPage("Streaming Statistics", content, parent, Some(5000))
   }
 
+  /**
+   * Generate html that will load css/js files for StreamingPage
+   */
   private def generateLoadResources(): Seq[Node] = {
     // scalastyle:off
     <script src={UIUtils.prependBaseUri("/static/d3.min.js")}></script>
@@ -130,6 +141,16 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </div>
   }
 
+  private def generateTimeMap(times: Seq[Long]): Seq[Node] = {
+    val dateFormat = new SimpleDateFormat("HH:mm:ss")
+    val js = "var timeFormat = {};\n" + times.map { time =>
+      val formattedTime = dateFormat.format(new Date(time))
+      s"timeFormat[$time] = '$formattedTime';"
+    }.mkString("\n")
+
+    <script>{Unparsed(js)}</script>
+  }
+
   private def generateStatTable(): Seq[Node] = {
     val batchInfos = listener.retainedBatches
 
@@ -137,17 +158,17 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val minBatchTime = if (batchTimes.isEmpty) startTime else batchTimes.min
     val maxBatchTime = if (batchTimes.isEmpty) startTime else batchTimes.max
 
-    val eventRateForAllReceivers = DoubleStreamingUIData(batchInfos.map { batchInfo =>
+    val eventRateForAllReceivers = DoubleStatUIData(batchInfos.map { batchInfo =>
       (batchInfo.batchTime.milliseconds, batchInfo.numRecords * 1000.0 / listener.batchDuration)
     })
 
-    val schedulingDelay = LongStreamingUIData(batchInfos.flatMap { batchInfo =>
+    val schedulingDelay = MillisecondsStatUIData(batchInfos.flatMap { batchInfo =>
       batchInfo.schedulingDelay.map(batchInfo.batchTime.milliseconds -> _)
     })
-    val processingTime = LongStreamingUIData(batchInfos.flatMap { batchInfo =>
+    val processingTime = MillisecondsStatUIData(batchInfos.flatMap { batchInfo =>
       batchInfo.processingDelay.map(batchInfo.batchTime.milliseconds -> _)
     })
-    val totalDelay = LongStreamingUIData(batchInfos.flatMap { batchInfo =>
+    val totalDelay = MillisecondsStatUIData(batchInfos.flatMap { batchInfo =>
       batchInfo.totalDelay.map(batchInfo.batchTime.milliseconds -> _)
     })
 
@@ -167,6 +188,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val maxEventRate = eventRateForAllReceivers.max.map(_.ceil.toLong).getOrElse(0L)
     val minEventRate = 0L
 
+    // JavaScript to show/hide the receiver sub table.
     val triangleJs =
       s"""$$('#inputs-table').toggle('collapsed');
          |if ($$(this).html() == '$BLACK_RIGHT_TRIANGLE_HTML')
@@ -258,7 +280,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
               <span onclick={Unparsed(triangleJs)}>{Unparsed(BLACK_RIGHT_TRIANGLE_HTML)}</span>
               <strong>Input Rate</strong>
             </div>
-            <div>Avg: {eventRateForAllReceivers.avg.map(_.formatted("%.2f")).getOrElse(emptyCell)} events/sec</div>
+            <div>Avg: {eventRateForAllReceivers.formattedAvg} events/sec</div>
           </td>
           <td class="timeline">{timelineDataForEventRateOfAllReceivers}</td>
           <td class="distribution">{distributionDataForEventRateOfAllReceivers}</td>
@@ -271,7 +293,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <td style="vertical-align: middle;">
             <div><strong>Scheduling Delay</strong></div>
-            <div>Avg: {formatDurationOption(schedulingDelay.avg)}</div>
+            <div>Avg: {schedulingDelay.formattedAvg}</div>
           </td>
           <td class="timeline">{timelineDataForSchedulingDelay}</td>
           <td class="distribution">{distributionDataForSchedulingDelay}</td>
@@ -279,7 +301,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <td style="vertical-align: middle;">
             <div><strong>Processing Time</strong></div>
-            <div>Avg: {formatDurationOption(processingTime.avg)}</div>
+            <div>Avg: {processingTime.formattedAvg}</div>
           </td>
           <td class="timeline">{timelineDataForProcessingTime}</td>
           <td class="distribution">{distributionDataForProcessingTime}</td>
@@ -287,7 +309,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <td style="vertical-align: middle;">
             <div><strong>Total Delay</strong></div>
-            <div>Avg: {formatDurationOption(totalDelay.avg)}</div>
+            <div>Avg: {totalDelay.formattedAvg}</div>
           </td>
           <td class="timeline">{timelineDataForTotalDelay}</td>
           <td class="distribution">{distributionDataForTotalDelay}</td>
@@ -296,7 +318,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </table>
     // scalastyle:on
 
-    table ++ jsCollector.toHtml
+    generateTimeMap(batchTimes) ++ table ++ jsCollector.toHtml
   }
 
   private def generateInputReceiversTable(
@@ -366,7 +388,6 @@ private[ui] class StreamingPage(parent: StreamingTab)
         maxY,
         "events/sec").toHtml(jsCollector)
 
-    // scalastyle:off
     <tr>
       <td rowspan="2" style="vertical-align: middle;">
         <div>
@@ -385,7 +406,6 @@ private[ui] class StreamingPage(parent: StreamingTab)
         </td>
         <td class="distribution">{distributionForEventsRate}</td>
       </tr>
-    // scalastyle:on
   }
 
   /**
@@ -417,13 +437,33 @@ private[ui] class StreamingPage(parent: StreamingTab)
   }
 }
 
-private object StreamingPage {
+private[ui] object StreamingPage {
   val BLACK_RIGHT_TRIANGLE_HTML = "&#9654;"
   val BLACK_DOWN_TRIANGLE_HTML = "&#9660;"
+
+  val emptyCell = "-"
+
+  /**
+   * Returns a human-readable string representing a duration such as "5 second 35 ms"
+   */
+  def formatDurationOption(msOption: Option[Long]): String = {
+    msOption.map(formatDurationVerbose).getOrElse(emptyCell)
+  }
 }
 
+/**
+ * A helper class that allows the user to add JavaScript statements which will be executed when the
+ * DOM has finished loading.
+ */
 private[ui] class JsCollector {
+  /**
+   * JavaScript statements that will execute before `statements`
+   */
   private val preparedStatements = ArrayBuffer[String]()
+
+  /**
+   * JavaScript statements that will execute after `preparedStatements`
+   */
   private val statements = ArrayBuffer[String]()
 
   def addPreparedStatement(js: String): Unit = {
@@ -434,6 +474,9 @@ private[ui] class JsCollector {
     statements += js
   }
 
+  /**
+   * Generate a html snippet that will execute all scripts when the DOM has finished loading.
+   */
   def toHtml: Seq[Node] = {
     val js =
       s"""

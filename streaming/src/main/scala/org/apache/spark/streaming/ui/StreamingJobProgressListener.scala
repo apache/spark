@@ -196,7 +196,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     retainedBatches.lastOption
   }
 
-  def retainedBatches: Seq[BatchInfo] = {
+  def retainedBatches: Seq[BatchInfo] = synchronized {
     (waitingBatchInfos.values.toSeq ++
       runningBatchInfos.values.toSeq ++ completedBatchInfos).sortBy(_.batchTime)(Time.ordering)
   }
