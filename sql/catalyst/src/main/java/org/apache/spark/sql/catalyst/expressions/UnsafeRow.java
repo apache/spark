@@ -47,21 +47,24 @@ import org.apache.spark.unsafe.bitset.BitSetMethods;
  * fields with non-primitive or variable-length values, we store a relative offset (w.r.t. the
  * base address of the row) that points to the beginning of the variable-length field.
  *
- * Instances of `UnsafeRow` act as pointers to row data stored in this format, similar to how
- * `Writable` objects work in Hadoop.
+ * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
 public final class UnsafeRow implements MutableRow {
 
   private Object baseObject;
   private long baseOffset;
+
   /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
   private int numFields;
+
   /** The width of the null tracking bit set, in bytes */
   private int bitSetWidthInBytes;
   /**
    * This optional schema is required if you want to call generic get() and set() methods on
    * this UnsafeRow, but is optional if callers will only use type-specific getTYPE() and setTYPE()
-   * methods.
+   * methods. This should be removed after the planned InternalRow / Row split; right now, it's only
+   * needed by the generic get() method, which is only called internally by code that accesses
+   * UTF8String-typed columns.
    */
   @Nullable
   private StructType schema;

@@ -36,9 +36,9 @@ import org.apache.spark.unsafe.memory.*;
  * This is backed by a power-of-2-sized hash table, using quadratic probing with triangular numbers,
  * which is guaranteed to exhaust the space.
  * <p>
- * Note that even though we use long for indexing, the map can support up to 2^31 keys because
- * we use 32 bit MurmurHash. In either case, if the key cardinality is so high, you should probably
- * be using sorting instead of hashing for better cache locality.
+ * The map can support up to 2^31 keys because we use 32 bit MurmurHash. If the key cardinality is
+ * higher than this, you should probably be using sorting instead of hashing for better cache
+ * locality.
  * <p>
  * This class is not thread safe.
  */
@@ -114,6 +114,8 @@ public final class BytesToBytesMap {
 
   /**
    * Mask for truncating hashcodes so that they do not exceed the long array's size.
+   * This is a strength reduction optimization; we're essentially performing a modulus operation,
+   * but doing so with a bitmask because this is a power-of-2-sized hash map.
    */
   private int mask;
 
@@ -278,10 +280,14 @@ public final class BytesToBytesMap {
     private void updateAddressesAndSizes(long fullKeyAddress) {
         final Object page = memoryManager.getPage(fullKeyAddress);
         final long keyOffsetInPage = memoryManager.getOffsetInPage(fullKeyAddress);
-        keyMemoryLocation.setObjAndOffset(page, keyOffsetInPage + 8);
-        keyLength = (int) PlatformDependent.UNSAFE.getLong(page, keyOffsetInPage);
-        valueMemoryLocation.setObjAndOffset(page, keyOffsetInPage + 8 + keyLength + 8);
-        valueLength = (int) PlatformDependent.UNSAFE.getLong(page, keyOffsetInPage + 8 + keyLength);
+        long position = keyOffsetInPage;
+        keyLength = (int) PlatformDependent.UNSAFE.getLong(page, position);
+        position += 8; // word used to store the key size
+        keyMemoryLocation.setObjAndOffset(page, position);
+        position += keyLength;
+        valueLength = (int) PlatformDependent.UNSAFE.getLong(page, position);
+        position += 8; // word used to store the key size
+        valueMemoryLocation.setObjAndOffset(page, position);
     }
 
     Location with(int pos, int keyHashcode, boolean isDefined) {
@@ -377,7 +383,8 @@ public final class BytesToBytesMap {
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
-      final long requiredSize = 8 + 8 + keyLengthBytes + valueLengthBytes;
+      // (8 byte key length) (key) (8 byte value length) (value)
+      final long requiredSize = 8 + keyLengthBytes + 8 + valueLengthBytes;
       assert(requiredSize <= PAGE_SIZE_BYTES);
       size++;
       bitset.set(pos);
@@ -394,11 +401,11 @@ public final class BytesToBytesMap {
       final Object pageBaseObject = currentDataPage.getBaseObject();
       final long pageBaseOffset = currentDataPage.getBaseOffset();
       final long keySizeOffsetInPage = pageBaseOffset + pageCursor;
-      pageCursor += 8;
+      pageCursor += 8; // word used to store the key size
       final long keyDataOffsetInPage = pageBaseOffset + pageCursor;
       pageCursor += keyLengthBytes;
       final long valueSizeOffsetInPage = pageBaseOffset + pageCursor;
-      pageCursor += 8;
+      pageCursor += 8; // word used to store the value size
       final long valueDataOffsetInPage = pageBaseOffset + pageCursor;
       pageCursor += valueLengthBytes;
 

@@ -102,7 +102,7 @@ public final class UnsafeFixedWidthAggregationMap {
    * @param emptyAggregationBuffer the default value for new keys (a "zero" of the agg. function)
    * @param aggregationBufferSchema the schema of the aggregation buffer, used for row conversion.
    * @param groupingKeySchema the schema of the grouping key, used for row conversion.
-   * @param groupingKeySchema the memory manager used to allocate our Unsafe memory structures.
+   * @param memoryManager the memory manager used to allocate our Unsafe memory structures.
    * @param initialCapacity the initial capacity of the map (a sizing hint to avoid re-hashing).
    * @param enablePerfMetrics if true, performance metrics will be recorded (has minor perf impact)
    */
@@ -186,7 +186,11 @@ public final class UnsafeFixedWidthAggregationMap {
     return currentAggregationBuffer;
   }
 
+  /**
+   * Mutable pair object returned by {@link UnsafeFixedWidthAggregationMap#iterator()}.
+   */
   public static class MapEntry {
+    private MapEntry() { };
     public final UnsafeRow key = new UnsafeRow();
     public final UnsafeRow value = new UnsafeRow();
   }

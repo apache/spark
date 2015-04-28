@@ -24,18 +24,13 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class TestLongArray {
 
-  private static LongArray createTestData() {
-    byte[] bytes = new byte[16];
-    LongArray arr = new LongArray(MemoryBlock.fromByteArray(bytes));
+  @Test
+  public void basicTest() {
+    long[] bytes = new long[2];
+    LongArray arr = new LongArray(MemoryBlock.fromLongArray(bytes));
     arr.set(0, 1L);
     arr.set(1, 2L);
     arr.set(1, 3L);
-    return arr;
-  }
-
-  @Test
-  public void basicTest() {
-    LongArray arr = createTestData();
     Assert.assertEquals(2, arr.size());
     Assert.assertEquals(1L, arr.get(0));
     Assert.assertEquals(3L, arr.get(1));

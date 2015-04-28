@@ -142,7 +142,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               partialComputation,
               planLater(child),
               unsafeEnabled),
-          unsafeEnabled) :: Nil
+            unsafeEnabled) :: Nil
 
       // Cases where some aggregate can not be codegened
       case PartialAggregation(

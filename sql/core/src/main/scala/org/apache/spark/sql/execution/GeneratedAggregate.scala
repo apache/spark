@@ -291,8 +291,8 @@ case class GeneratedAggregate(
           aggregationBufferSchema,
           groupKeySchema,
           SparkEnv.get.unsafeMemoryManager,
-          1024 * 16,
-          false
+          1024 * 16, // initial capacity
+          false // disable tracking of performance metrics
         )
 
         while (iter.hasNext) {

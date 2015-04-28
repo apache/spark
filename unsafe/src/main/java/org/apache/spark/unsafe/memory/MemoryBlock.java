@@ -34,10 +34,6 @@ public class MemoryBlock extends MemoryLocation {
    */
   int pageNumber = -1;
 
-  public int getPageNumber() {
-    return pageNumber;
-  }
-
   MemoryBlock(@Nullable Object obj, long offset, long length) {
     super(obj, offset);
     this.length = length;
@@ -56,13 +52,6 @@ public class MemoryBlock extends MemoryLocation {
   public MemoryBlock zero() {
     PlatformDependent.UNSAFE.setMemory(obj, offset, length, (byte) 0);
     return this;
-  }
-
-  /**
-   * Creates a memory block pointing to the memory used by the byte array.
-   */
-  public static MemoryBlock fromByteArray(final byte[] array) {
-    return new MemoryBlock(array, PlatformDependent.BYTE_ARRAY_OFFSET, array.length);
   }
 
   /**

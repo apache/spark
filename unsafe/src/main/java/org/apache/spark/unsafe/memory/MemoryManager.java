@@ -35,13 +35,17 @@ import java.util.BitSet;
  * store a "page number" and the lower 51 bits to store an offset within this page. These page
  * numbers are used to index into a "page table" array inside of the MemoryManager in order to
  * retrieve the base object.
+ * <p>
+ * This allows us to address 8192 pages. In on-heap mode, the maximum page size is limited by the
+ * maximum size of a long[] array, allowing us to address 8192 * 2^32 * 8 bytes, which is
+ * approximately 35 terabytes of memory.
  */
 public final class MemoryManager {
 
   /**
    * The number of entries in the page table.
    */
-  private static final int PAGE_TABLE_SIZE = (int) 1L << 13;
+  private static final int PAGE_TABLE_SIZE = 1 << 13;
 
   /** Bit mask for the lower 51 bits of a long. */
   private static final long MASK_LONG_LOWER_51_BITS = 0x7FFFFFFFFFFFFL;
