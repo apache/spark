@@ -73,7 +73,8 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
     var y = d3.scale.linear().domain([minY, maxY]).range([height, 0]);
 
     var xAxis = d3.svg.axis().scale(x).orient("bottom").tickFormat(function(d) { return timeFormat[d]; });
-    var yAxis = d3.svg.axis().scale(y).orient("left").ticks(5);
+    var formatYValue = d3.format(",.2f");
+    var yAxis = d3.svg.axis().scale(y).orient("left").ticks(5).tickFormat(formatYValue);
 
     var line = d3.svg.line()
         .x(function(d) { return x(d.x); })
@@ -117,7 +118,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
                     .attr("cy", function(d) { return y(d.y); })
                     .attr("r", function(d) { return 3; })
                     .on('mouseover', function(d) {
-                        var tip = d.y + " " + unitY + " at " + timeFormat[d.x];
+                        var tip = formatYValue(d.y) + " " + unitY + " at " + timeFormat[d.x];
                         showBootstrapTooltip(d3.select(this).node(), tip);
                         //showGraphTooltip(tip, d3.event.pageX + 5, d3.event.pageY - 25);
                         // show the point
@@ -210,9 +211,8 @@ function drawDistribution(id, values, minY, maxY, unitY) {
 }
 
 function prepareTimeline(minY, maxY) {
-    var y = d3.scale.linear().domain([0, maxY]).tickFormat(5);
-    console.log(y(maxY));
-    var numOfChars = y(maxY).length;
+    var formatYValue = d3.format(",.2f");
+    var numOfChars = formatYValue(maxY).length;
     var maxPx = numOfChars * 8 + 10;
     // Make sure we have enough space to show the ticks in the y axis of timeline
     timelineMarginLeft = maxPx > timelineMarginLeft? maxPx : timelineMarginLeft;

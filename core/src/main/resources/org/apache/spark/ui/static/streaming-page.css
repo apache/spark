@@ -32,18 +32,18 @@
 
 .line {
   fill: none;
-  stroke: steelblue;
+  stroke: #0088cc;
   stroke-width: 1.5px;
 }
 
 .bar rect {
-  fill: steelblue;
+  fill: #0088cc;
   shape-rendering: crispEdges;
 }
 
 .bar rect:hover {
   //fill: rgb(49, 91, 125);
-  fill: rgb(100, 185, 255);
+  fill: #005580;
 }
 
 .timeline {
