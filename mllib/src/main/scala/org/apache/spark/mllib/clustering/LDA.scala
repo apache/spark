@@ -78,21 +78,15 @@ class LDA private (
    *
    * This is the parameter to a symmetric Dirichlet distribution.
    */
-  def getDocConcentration: Double = {
-    if (this.docConcentration == -1) {
-      (50.0 / k) + 1.0
-    } else {
-      this.docConcentration
-    }
-  }
+  def getDocConcentration: Double = this.docConcentration
 
   /**
    * Concentration parameter (commonly named "alpha") for the prior placed on documents'
    * distributions over topics ("theta").
    *
-   * This is the parameter to a symmetric Dirichlet distribution.
+   * This is the parameter to a symmetric Dirichlet distribution, where larger values
+   * mean more smoothing (more regularization).
    *
-   * This value should be > 1.0, where larger values mean more smoothing (more regularization).
    * If set to -1, then docConcentration is set automatically.
    *  (default = -1 = automatic)
    *
@@ -100,13 +94,12 @@ class LDA private (
    *  - For EM: default = (50 / k) + 1.
    *     - The 50/k is common in LDA libraries.
    *     - The +1 follows Asuncion et al. (2009), who recommend a +1 adjustment for EM.
+   *  - For Online: default = (1.0 / k).
+   *     - follows the implementation from: https://github.com/Blei-Lab/onlineldavb.
    *
-   * Note: The restriction > 1.0 may be relaxed in the future (allowing sparse solutions),
-   *       but values in (0,1) are not yet supported.
+   * Note: For EM optimizer, This value should be > 1.0.
    */
   def setDocConcentration(docConcentration: Double): this.type = {
-    require(docConcentration > 1.0 || docConcentration == -1.0,
-      s"LDA docConcentration must be > 1.0 (or -1 for auto), but was set to $docConcentration")
     this.docConcentration = docConcentration
     this
   }
@@ -126,13 +119,7 @@ class LDA private (
    * Note: The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    */
-  def getTopicConcentration: Double = {
-    if (this.topicConcentration == -1) {
-      1.1
-    } else {
-      this.topicConcentration
-    }
-  }
+  def getTopicConcentration: Double = this.topicConcentration
 
   /**
    * Concentration parameter (commonly named "beta" or "eta") for the prior placed on topics'
@@ -143,7 +130,6 @@ class LDA private (
    * Note: The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    *
-   * This value should be > 0.0.
    * If set to -1, then topicConcentration is set automatically.
    *  (default = -1 = automatic)
    *
@@ -151,13 +137,12 @@ class LDA private (
    *  - For EM: default = 0.1 + 1.
    *     - The 0.1 gives a small amount of smoothing.
    *     - The +1 follows Asuncion et al. (2009), who recommend a +1 adjustment for EM.
+   *  - For Online: default = (1.0 / k).
+   *     - follows the implementation from: https://github.com/Blei-Lab/onlineldavb.
    *
-   * Note: The restriction > 1.0 may be relaxed in the future (allowing sparse solutions),
-   *       but values in (0,1) are not yet supported.
+   * Note: For EM optimizer, This value should be > 1.0.
    */
   def setTopicConcentration(topicConcentration: Double): this.type = {
-    require(topicConcentration > 1.0 || topicConcentration == -1.0,
-      s"LDA topicConcentration must be > 1.0 (or -1 for auto), but was set to $topicConcentration")
     this.topicConcentration = topicConcentration
     this
   }
@@ -245,8 +230,7 @@ class LDA private (
    * @return  Inferred LDA model
    */
   def run(documents: RDD[(Long, Vector)]): LDAModel = {
-    val state = ldaOptimizer.initialState(documents, k, getDocConcentration, getTopicConcentration,
-      seed, checkpointInterval)
+    val state = ldaOptimizer.initialize(documents, this)
     var iter = 0
     val iterationTimes = Array.fill[Double](maxIterations)(0)
     while (iter < maxIterations) {
