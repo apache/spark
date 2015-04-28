@@ -48,9 +48,6 @@ public final class BytesToBytesMap {
 
   private static final HashMapGrowthStrategy growthStrategy = HashMapGrowthStrategy.DOUBLING;
 
-  /** Bit mask for the lower 32 bits of a long */
-  private static final long MASK_LONG_LOWER_32_BITS = 0xFFFFFFFFL;
-
   private final MemoryManager memoryManager;
 
   /**
@@ -84,10 +81,18 @@ public final class BytesToBytesMap {
    * A single array to store the key and value.
    *
    * Position {@code 2 * i} in the array is used to track a pointer to the key at index {@code i},
-   * while position {@code 2 * i + 1} in the array holds the upper bits of the key's hashcode plus
-   * the relative offset from the key pointer to the value at index {@code i}.
+   * while position {@code 2 * i + 1} in the array holds key's full 32-bit hashcode.
    */
   private LongArray longArray;
+  // TODO: we're wasting 32 bits of space here; we can probably store fewer bits of the hashcode
+  // and exploit word-alignment to use fewer bits to hold the address.  This might let us store
+  // only one long per map entry, increasing the chance that this array will fit in cache at the
+  // expense of maybe performing more lookups if we have hash collisions.  Say that we stored only
+  // 27 bits of the hashcode and 37 bits of the address.  37 bits is enough to address 1 terabyte
+  // of RAM given word-alignment.  If we use 13 bits of this for our page table, that gives us a
+  // maximum page size of 2^24 * 8 = ~134 megabytes per page. This change will require us to store
+  // full base addresses in the page table for off-heap mode so that we can reconstruct the full
+  // absolute memory addresses.
 
   /**
    * A {@link BitSet} used to track location of the map where the key is set.
@@ -222,7 +227,7 @@ public final class BytesToBytesMap {
         return loc.with(pos, hashcode, false);
       } else {
         long stored = longArray.get(pos * 2 + 1);
-        if (((int) (stored & MASK_LONG_LOWER_32_BITS)) == hashcode) {
+        if ((int) (stored) == hashcode) {
           // Full hash code matches.  Let's compare the keys for equality.
           loc.with(pos, hashcode, true);
           if (loc.getKeyLength() == keyRowLengthBytes) {
@@ -270,14 +275,13 @@ public final class BytesToBytesMap {
     private int keyLength;
     private int valueLength;
 
-    private void updateAddressesAndSizes(long fullKeyAddress, long offsetFromKeyToValue) {
+    private void updateAddressesAndSizes(long fullKeyAddress) {
         final Object page = memoryManager.getPage(fullKeyAddress);
         final long keyOffsetInPage = memoryManager.getOffsetInPage(fullKeyAddress);
         keyMemoryLocation.setObjAndOffset(page, keyOffsetInPage + 8);
-        valueMemoryLocation.setObjAndOffset(page, keyOffsetInPage + 8 + offsetFromKeyToValue);
         keyLength = (int) PlatformDependent.UNSAFE.getLong(page, keyOffsetInPage);
-        valueLength =
-          (int) PlatformDependent.UNSAFE.getLong(page, keyOffsetInPage + offsetFromKeyToValue);
+        valueMemoryLocation.setObjAndOffset(page, keyOffsetInPage + 8 + keyLength + 8);
+        valueLength = (int) PlatformDependent.UNSAFE.getLong(page, keyOffsetInPage + 8 + keyLength);
     }
 
     Location with(int pos, int keyHashcode, boolean isDefined) {
@@ -286,9 +290,7 @@ public final class BytesToBytesMap {
       this.keyHashcode = keyHashcode;
       if (isDefined) {
         final long fullKeyAddress = longArray.get(pos * 2);
-        final long offsetFromKeyToValue =
-          (longArray.get(pos * 2 + 1) & ~MASK_LONG_LOWER_32_BITS) >>> 32;
-        updateAddressesAndSizes(fullKeyAddress, offsetFromKeyToValue);
+        updateAddressesAndSizes(fullKeyAddress);
       }
       return this;
     }
@@ -399,8 +401,6 @@ public final class BytesToBytesMap {
       pageCursor += 8;
       final long valueDataOffsetInPage = pageBaseOffset + pageCursor;
       pageCursor += valueLengthBytes;
-      final long relativeOffsetFromKeyToValue = valueSizeOffsetInPage - keySizeOffsetInPage;
-      assert(relativeOffsetFromKeyToValue > 0);
 
       // Copy the key
       PlatformDependent.UNSAFE.putLong(pageBaseObject, keySizeOffsetInPage, keyLengthBytes);
@@ -414,10 +414,8 @@ public final class BytesToBytesMap {
       final long storedKeyAddress = memoryManager.encodePageNumberAndOffset(
         currentDataPage, keySizeOffsetInPage);
       longArray.set(pos * 2, storedKeyAddress);
-      final long storedValueOffsetAndKeyHashcode =
-        (relativeOffsetFromKeyToValue << 32) | (keyHashcode & MASK_LONG_LOWER_32_BITS);
-      longArray.set(pos * 2 + 1, storedValueOffsetAndKeyHashcode);
-      updateAddressesAndSizes(storedKeyAddress, relativeOffsetFromKeyToValue);
+      longArray.set(pos * 2 + 1, keyHashcode);
+      updateAddressesAndSizes(storedKeyAddress);
       isDefined = true;
       if (size > growthThreshold) {
         growAndRehash();
@@ -518,8 +516,7 @@ public final class BytesToBytesMap {
     // Re-mask (we don't recompute the hashcode because we stored all 32 bits of it)
     for (int pos = oldBitSet.nextSetBit(0); pos >= 0; pos = oldBitSet.nextSetBit(pos + 1)) {
       final long keyPointer = oldLongArray.get(pos * 2);
-      final long valueOffsetPlusHashcode = oldLongArray.get(pos * 2 + 1);
-      final int hashcode = (int) (valueOffsetPlusHashcode & MASK_LONG_LOWER_32_BITS);
+      final int hashcode = (int) oldLongArray.get(pos * 2 + 1);
       int newPos = hashcode & mask;
       int step = 1;
       boolean keepGoing = true;
@@ -530,7 +527,7 @@ public final class BytesToBytesMap {
         if (!bitset.isSet(newPos)) {
           bitset.set(newPos);
           longArray.set(newPos * 2, keyPointer);
-          longArray.set(newPos * 2 + 1, valueOffsetPlusHashcode);
+          longArray.set(newPos * 2 + 1, hashcode);
           keepGoing = false;
         } else {
           newPos = (newPos + step) & mask;
