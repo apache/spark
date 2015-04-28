@@ -42,10 +42,10 @@ private[spark] object UIUtils extends Logging {
     case TimeUnit.NANOSECONDS => "ns"
     case TimeUnit.MICROSECONDS => "us"
     case TimeUnit.MILLISECONDS => "ms"
-    case TimeUnit.SECONDS => "s"
+    case TimeUnit.SECONDS => "sec"
     case TimeUnit.MINUTES => "min"
-    case TimeUnit.HOURS => "h"
-    case TimeUnit.DAYS => "d"
+    case TimeUnit.HOURS => "hrs"
+    case TimeUnit.DAYS => "days"
   }
 
   /**

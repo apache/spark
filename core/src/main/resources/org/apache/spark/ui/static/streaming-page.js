@@ -63,7 +63,7 @@ function hideBootstrapTooltip(node) {
  * @param maxY the max value of Y axis
  * @param unitY the unit of Y axis
  */
-function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
+function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchTime) {
     d3.select(d3.select(id).node().parentNode).style("padding", "8px 0 8px 8px").style("border-right", "0px solid white");
     var margin = {top: 20, right: 27, bottom: 30, left: timelineMarginLeft};
     var width = 500 - margin.left - margin.right;
@@ -101,6 +101,26 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
             .attr("transform", "translate(0," + (-3) + ")")
             .text(unitY);
 
+
+    if (batchTime) {
+        var batchTimeline = d3.svg.line()
+            .x(function(d) { return x(d.x); })
+            .y(function(d) { return y(d.y); });
+
+        console.log(batchTime);
+        var batchTimeData = [
+           {x: minX, y: batchTime}, {x: maxX, y: batchTime}
+        ];
+        console.log(batchTimeData);
+
+        svg.append("path")
+            .datum(batchTimeData)
+            .style("stroke-dasharray", ("6, 6"))
+            .style("stroke", "lightblue")
+            .attr("class", "line")
+            .attr("d", batchTimeline);
+    }
+
     svg.append("path")
         .datum(data)
         .attr("class", "line")
@@ -136,6 +156,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
                             .attr("fill", "white")
                             .attr("opacity", "0");
                     });
+
 }
 
 /**
@@ -145,7 +166,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
  * @param maxY the max value of Y axis
  * @param unitY the unit of Y axis
  */
-function drawDistribution(id, values, minY, maxY, unitY) {
+function drawDistribution(id, values, minY, maxY, unitY, batchTime) {
     d3.select(d3.select(id).node().parentNode).style("padding", "8px 8px 8px 0").style("border-left", "0px solid white");
     var margin = {top: 20, right: 30, bottom: 30, left: 10};
     var width = 300 - margin.left - margin.right;
@@ -168,6 +189,25 @@ function drawDistribution(id, values, minY, maxY, unitY) {
         .attr("height", height + margin.top + margin.bottom)
         .append("g")
             .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    if (batchTime) {
+        var batchTimeline = d3.svg.line()
+            .x(function(d) { return x(d.x); })
+            .y(function(d) { return y(d.y); });
+
+        console.log(batchTime);
+        var batchTimeData = [
+           {x: distributionMinX, y: batchTime}, {x: distributionMaxX, y: batchTime}
+        ];
+        console.log(batchTimeData);
+
+        svg.append("path")
+            .datum(batchTimeData)
+            .style("stroke-dasharray", ("6, 6"))
+            .style("stroke", "lightblue")
+            .attr("class", "line")
+            .attr("d", batchTimeline);
+    }
 
     svg.append("g")
         .attr("class", "x axis")
@@ -208,6 +248,22 @@ function drawDistribution(id, values, minY, maxY, unitY) {
                       hideBootstrapTooltip(d3.select(this).node());
                       //hideGraphTooltip();
                   });
+
+    if (batchTime && batchTime <= maxY) {
+        svg.append("text")
+          .style("fill", "lightblue")
+          .attr("class", "stable-text")
+          .attr("text-anchor", "middle")
+          .attr("transform", "translate(" + (x(distributionMaxX)-20) +"," + (y(batchTime) + 15) + ")")
+          .text("stable")
+                            .on('mouseover', function(d) {
+                                var tip = "Processing Time <= Batch Interval (" + formatBinValue(batchTime) +" " + unitY +")";
+                                showBootstrapTooltip(d3.select(this).node(), tip);
+                            })
+                            .on('mouseout',  function() {
+                                hideBootstrapTooltip(d3.select(this).node());
+                            });
+    }
 }
 
 function prepareTimeline(minY, maxY) {

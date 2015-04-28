@@ -30,6 +30,10 @@
   fill: gray;
 }
 
+.tooltip-inner {
+    max-width: 500px !important;
+}
+
 .line {
   fill: none;
   stroke: #0088cc;
@@ -45,6 +49,10 @@
   //fill: rgb(49, 91, 125);
   //fill: #005580;
   fill: rgb(0, 194, 255);
+}
+
+.stable-text text:hover {
+  fill: #0088cc;
 }
 
 .timeline {

@@ -40,16 +40,20 @@ import org.apache.spark.util.Distribution
  * @param unitY the unit of Y axis
  */
 private[ui] class TimelineUIData(divId: String, data: Seq[(Long, _)], minX: Long, maxX: Long,
-    minY: Double, maxY: Double, unitY: String) {
+    minY: Double, maxY: Double, unitY: String, batchTime: Option[Double] = None) {
 
   def toHtml(jsCollector: JsCollector): Seq[Node] = {
     val jsForData = data.map { case (x, y) =>
       s"""{"x": $x, "y": $y}"""
     }.mkString("[", ",", "]")
     jsCollector.addPreparedStatement(s"prepareTimeline($minY, $maxY);")
-    jsCollector.addStatement(
-      s"drawTimeline('#$divId', $jsForData, $minX, $maxX, $minY, $maxY, '$unitY');")
-
+    if (batchTime.isDefined) {
+      jsCollector.addStatement(
+        s"drawTimeline('#$divId', $jsForData, $minX, $maxX, $minY, $maxY, '$unitY', ${batchTime.get});")
+    } else {
+      jsCollector.addStatement(
+        s"drawTimeline('#$divId', $jsForData, $minX, $maxX, $minY, $maxY, '$unitY');")
+    }
     <div id={divId}></div>
   }
 }
@@ -62,13 +66,16 @@ private[ui] class TimelineUIData(divId: String, data: Seq[(Long, _)], minX: Long
  * @param unitY the unit of Y axis
  */
 private[ui] class DistributionUIData(
-    divId: String, data: Seq[_], minY: Double, maxY: Double, unitY: String) {
+    divId: String, data: Seq[_], minY: Double, maxY: Double, unitY: String, batchTime: Option[Double] = None) {
 
   def toHtml(jsCollector: JsCollector): Seq[Node] = {
     val jsForData = data.mkString("[", ",", "]")
     jsCollector.addPreparedStatement(s"prepareDistribution($jsForData, $minY, $maxY);")
-    jsCollector.addStatement(s"drawDistribution('#$divId', $jsForData, $minY, $maxY, '$unitY');")
-
+    if (batchTime.isDefined) {
+      jsCollector.addStatement(s"drawDistribution('#$divId', $jsForData, $minY, $maxY, '$unitY', ${batchTime.get});")
+    } else {
+      jsCollector.addStatement(s"drawDistribution('#$divId', $jsForData, $minY, $maxY, '$unitY');")
+    }
     <div id={divId}></div>
   }
 }
@@ -204,6 +211,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
          |else {$$(this).html('$BLACK_RIGHT_TRIANGLE_HTML');status  = false;}
          |window.history.pushState('', document.title, window.location.pathname + '?show-receivers-detail=' + status);""".stripMargin.replaceAll("\\n", "")
 
+    var batchTime = StreamingPage.convertToTimeUnit(listener.batchDuration, unit)
+
     val timelineDataForEventRateOfAllReceivers =
       new TimelineUIData(
         "all-receiver-events-timeline",
@@ -248,7 +257,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         maxBatchTime,
         minTime,
         maxTime,
-        formattedUnit).toHtml(jsCollector)
+        formattedUnit, Some(batchTime)).toHtml(jsCollector)
 
     val distributionDataForProcessingTime =
       new DistributionUIData(
@@ -256,7 +265,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         processingTime.distributionData(unit),
         minTime,
         maxTime,
-        formattedUnit).toHtml(jsCollector)
+        formattedUnit, Some(batchTime)).toHtml(jsCollector)
 
     val timelineDataForTotalDelay =
       new TimelineUIData(
