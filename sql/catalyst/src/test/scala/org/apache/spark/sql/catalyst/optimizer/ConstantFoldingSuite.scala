@@ -180,8 +180,8 @@ class ConstantFoldingSuite extends PlanTest {
       IsNull(Literal(null)) as 'c1,
       IsNotNull(Literal(null)) as 'c2,
 
-      GetItem(Literal.create(null, ArrayType(IntegerType)), 1) as 'c3,
-      GetItem(
+      UnresolvedGetField(Literal.create(null, ArrayType(IntegerType)), 1) as 'c3,
+      UnresolvedGetField(
         Literal.create(Seq(1), ArrayType(IntegerType)), Literal.create(null, IntegerType)) as 'c4,
       UnresolvedGetField(
         Literal.create(null, StructType(Seq(StructField("a", IntegerType, true)))),

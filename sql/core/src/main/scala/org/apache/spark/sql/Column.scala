@@ -529,14 +529,14 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group expr_ops
    */
-  def getItem(key: Any): Column = GetItem(expr, Literal(key))
+  def getItem(key: Any): Column = UnresolvedGetField(expr, Literal(key))
 
   /**
    * An expression that gets a field by name in a [[StructType]].
    *
    * @group expr_ops
    */
-  def getField(fieldName: String): Column = UnresolvedGetField(expr, fieldName)
+  def getField(fieldName: String): Column = UnresolvedGetField(expr, Literal(fieldName))
 
   /**
    * An expression that returns a substring.

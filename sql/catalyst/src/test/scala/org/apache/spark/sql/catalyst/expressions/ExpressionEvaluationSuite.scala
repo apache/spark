@@ -880,7 +880,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     val row = create_row(
       "^Ba*n",                                // 0
       null.asInstanceOf[UTF8String],          // 1
-      create_row("aa", "bb"),     // 2
+      create_row("aa", "bb"),                 // 2
       Map("aa"->"bb"),                        // 3
       Seq("aa", "bb")                         // 4
     )
@@ -891,32 +891,32 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     val typeMap = MapType(StringType, StringType)
     val typeArray = ArrayType(StringType)
 
-    checkEvaluation(GetItem(BoundReference(3, typeMap, true),
+    checkEvaluation(MapOrdinalGetField(BoundReference(3, typeMap, true),
       Literal("aa")), "bb", row)
-    checkEvaluation(GetItem(Literal.create(null, typeMap), Literal("aa")), null, row)
+    checkEvaluation(MapOrdinalGetField(Literal.create(null, typeMap), Literal("aa")), null, row)
     checkEvaluation(
-      GetItem(Literal.create(null, typeMap), Literal.create(null, StringType)), null, row)
-    checkEvaluation(GetItem(BoundReference(3, typeMap, true),
+      MapOrdinalGetField(Literal.create(null, typeMap), Literal.create(null, StringType)), null, row)
+    checkEvaluation(MapOrdinalGetField(BoundReference(3, typeMap, true),
       Literal.create(null, StringType)), null, row)
 
-    checkEvaluation(GetItem(BoundReference(4, typeArray, true),
+    checkEvaluation(ArrayOrdinalGetField(BoundReference(4, typeArray, true),
       Literal(1)), "bb", row)
-    checkEvaluation(GetItem(Literal.create(null, typeArray), Literal(1)), null, row)
+    checkEvaluation(ArrayOrdinalGetField(Literal.create(null, typeArray), Literal(1)), null, row)
     checkEvaluation(
-      GetItem(Literal.create(null, typeArray), Literal.create(null, IntegerType)), null, row)
-    checkEvaluation(GetItem(BoundReference(4, typeArray, true),
+      ArrayOrdinalGetField(Literal.create(null, typeArray), Literal.create(null, IntegerType)), null, row)
+    checkEvaluation(ArrayOrdinalGetField(BoundReference(4, typeArray, true),
       Literal.create(null, IntegerType)), null, row)
 
     def quickBuildGetField(expr: Expression, fieldName: String): StructGetField = {
       expr.dataType match {
         case StructType(fields) =>
           val field = fields.find(_.name == fieldName).get
-          StructGetField(expr, field, fields.indexOf(field))
+          SimpleStructGetField(expr, field, fields.indexOf(field))
       }
     }
 
-    def quickResolve(u: UnresolvedGetField): StructGetField = {
-      quickBuildGetField(u.child, u.fieldName)
+    def resolveGetField(u: UnresolvedGetField): GetField = {
+      GetField(u.child, u.fieldExpr, _ == _)
     }
 
     checkEvaluation(quickBuildGetField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
@@ -934,9 +934,9 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     assert(quickBuildGetField(Literal.create(null, typeS), "a").nullable === true)
     assert(quickBuildGetField(Literal.create(null, typeS_notNullable), "a").nullable === true)
 
-    checkEvaluation('c.map(typeMap).at(3).getItem("aa"), "bb", row)
-    checkEvaluation('c.array(typeArray.elementType).at(4).getItem(1), "bb", row)
-    checkEvaluation(quickResolve('c.struct(typeS).at(2).getField("a")), "aa", row)
+    checkEvaluation(resolveGetField('c.map(typeMap).at(3).getItem("aa")), "bb", row)
+    checkEvaluation(resolveGetField('c.array(typeArray.elementType).at(4).getItem(1)), "bb", row)
+    checkEvaluation(resolveGetField('c.struct(typeS).at(2).getField("a")), "aa", row)
   }
 
   test("arithmetic") {

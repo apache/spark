@@ -375,9 +375,9 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val primary: PackratParser[Expression] =
     ( literal
     | expression ~ ("[" ~> expression <~ "]") ^^
-      { case base ~ ordinal => GetItem(base, ordinal) }
+      { case base ~ ordinal => UnresolvedGetField(base, ordinal) }
     | (expression <~ ".") ~ ident ^^
-      { case base ~ fieldName => UnresolvedGetField(base, fieldName) }
+      { case base ~ fieldName => UnresolvedGetField(base, Literal(fieldName)) }
     | cast
     | "(" ~> expression <~ ")"
     | function

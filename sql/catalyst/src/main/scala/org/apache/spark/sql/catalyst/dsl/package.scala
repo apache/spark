@@ -100,8 +100,8 @@ package object dsl {
     def isNull: Predicate = IsNull(expr)
     def isNotNull: Predicate = IsNotNull(expr)
 
-    def getItem(ordinal: Expression): Expression = GetItem(expr, ordinal)
-    def getField(fieldName: String): UnresolvedGetField = UnresolvedGetField(expr, fieldName)
+    def getItem(ordinal: Expression): UnresolvedGetField = UnresolvedGetField(expr, ordinal)
+    def getField(fieldName: String): UnresolvedGetField = UnresolvedGetField(expr, Literal(fieldName))
 
     def cast(to: DataType): Expression = Cast(expr, to)
 
