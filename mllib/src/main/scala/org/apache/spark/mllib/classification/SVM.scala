@@ -121,11 +121,19 @@ object SVMModel extends Loader[SVMModel] {
 }
 
 /**
+ * :: Experimental ::
  * Train a Support Vector Machine (SVM) using Stochastic Gradient Descent. By default L2
  * regularization is used, which can be changed via [[SVMWithSGD.optimizer]].
+ * 
  * NOTE: Labels used in SVM should be {0, 1}.
+ * 
+ * @param stepSize Step size to be used for each iteration of gradient descent.
+ * @param numIterations Number of iterations of gradient descent to run.
+ * @param regParam Regularization parameter.
+ * @param miniBatchFraction Fraction of data to be used per iteration.
  */
-class SVMWithSGD private (
+@Experimental
+class SVMWithSGD (
     private var stepSize: Double,
     private var numIterations: Int,
     private var regParam: Double,
@@ -156,7 +164,6 @@ class SVMWithSGD private (
  * Top-level methods for calling SVM. NOTE: Labels used in SVM should be {0, 1}.
  */
 object SVMWithSGD {
-
   /**
    * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. Each iteration uses
