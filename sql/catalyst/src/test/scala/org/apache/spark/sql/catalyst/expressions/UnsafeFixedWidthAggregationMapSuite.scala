@@ -33,7 +33,7 @@ class UnsafeFixedWidthAggregationMapSuite extends FunSuite with Matchers with Be
   private var memoryManager: MemoryManager = null
 
   override def beforeEach(): Unit = {
-    memoryManager = new MemoryManager(true)
+    memoryManager = new MemoryManager(MemoryAllocator.HEAP)
   }
 
   override def afterEach(): Unit = {
