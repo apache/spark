@@ -25,10 +25,10 @@ import scala.language.implicitConversions
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, Logging, SparkConf}
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.util.WriteAheadLogManager
 import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.{Logging, SparkConf, SparkException}
 
 /** Trait representing any event in the ReceivedBlockTracker that updates its state. */
 private[streaming] sealed trait ReceivedBlockTrackerLogEvent
@@ -45,7 +45,7 @@ private[streaming] case class BatchCleanupEvent(times: Seq[Time])
 private[streaming]
 case class AllocatedBlocks(streamIdToAllocatedBlocks: Map[Int, Seq[ReceivedBlockInfo]]) {
   def getBlocksOfStream(streamId: Int): Seq[ReceivedBlockInfo] = {
-    streamIdToAllocatedBlocks.get(streamId).getOrElse(Seq.empty)
+    streamIdToAllocatedBlocks.getOrElse(streamId, Seq.empty)
   }
 }
 
@@ -171,6 +171,7 @@ private[streaming] class ReceivedBlockTracker(
     // Insert the recovered block information
     def insertAddedBlock(receivedBlockInfo: ReceivedBlockInfo) {
       logTrace(s"Recovery: Inserting added block $receivedBlockInfo")
+      receivedBlockInfo.setBlockIdInvalid()
       getReceivedBlockQueue(receivedBlockInfo.streamId) += receivedBlockInfo
     }
 
@@ -223,22 +224,13 @@ private[streaming] class ReceivedBlockTracker(
 
   /** Optionally create the write ahead log manager only if the feature is enabled */
   private def createLogManager(): Option[WriteAheadLogManager] = {
-    if (conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)) {
-      if (checkpointDirOption.isEmpty) {
-        throw new SparkException(
-          "Cannot enable receiver write-ahead log without checkpoint directory set. " +
-            "Please use streamingContext.checkpoint() to set the checkpoint directory. " +
-            "See documentation for more details.")
-      }
-      val logDir = ReceivedBlockTracker.checkpointDirToLogDir(checkpointDirOption.get)
+    checkpointDirOption.map { checkpointDir =>
+      val logDir = ReceivedBlockTracker.checkpointDirToLogDir(checkpointDir)
       val rollingIntervalSecs = conf.getInt(
         "spark.streaming.receivedBlockTracker.writeAheadLog.rotationIntervalSecs", 60)
-      val logManager = new WriteAheadLogManager(logDir, hadoopConf,
+      new WriteAheadLogManager(logDir, hadoopConf,
         rollingIntervalSecs = rollingIntervalSecs, clock = clock,
         callerName = "ReceivedBlockHandlerMaster")
-      Some(logManager)
-    } else {
-      None
     }
   }
 

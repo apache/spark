@@ -17,12 +17,38 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.streaming.receiver.ReceivedBlockStoreResult
+import org.apache.spark.storage.StreamBlockId
+import org.apache.spark.streaming.receiver.{WriteAheadLogBasedStoreResult, ReceivedBlockStoreResult}
+import org.apache.spark.streaming.util.WriteAheadLogFileSegment
 
 /** Information about blocks received by the receiver */
 private[streaming] case class ReceivedBlockInfo(
     streamId: Int,
     numRecords: Long,
+    metadataOption: Option[Any],
     blockStoreResult: ReceivedBlockStoreResult
-  )
+  ) {
+
+  @volatile private var _isBlockIdValid = true
+
+  def blockId: StreamBlockId = blockStoreResult.blockId
+
+  def writeAheadLogSegmentOption: Option[WriteAheadLogFileSegment] = {
+    blockStoreResult match {
+      case walStoreResult: WriteAheadLogBasedStoreResult => Some(walStoreResult.segment)
+      case _ => None
+    }
+  }
+
+  /** Is the block ID valid, that is, is the block present in the Spark executors. */
+  def isBlockIdValid(): Boolean = _isBlockIdValid
+
+  /**
+   * Set the block ID as invalid. This is useful when it is known that the block is not present
+   * in the Spark executors.
+   */
+  def setBlockIdInvalid(): Unit = {
+    _isBlockIdValid = false
+  }
+}
 

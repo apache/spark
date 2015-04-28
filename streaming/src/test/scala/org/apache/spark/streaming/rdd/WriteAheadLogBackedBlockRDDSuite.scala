@@ -128,12 +128,12 @@ class WriteAheadLogBackedBlockRDDSuite
 
     // Create the RDD and verify whether the returned data is correct
     val rdd = new WriteAheadLogBackedBlockRDD[String](sparkContext, blockIds.toArray,
-      segments.toArray, storeInBlockManager = false, StorageLevel.MEMORY_ONLY)
+      segments.toArray, storeInBlockManager = false, storageLevel = StorageLevel.MEMORY_ONLY)
     assert(rdd.collect() === data.flatten)
 
     if (testStoreInBM) {
       val rdd2 = new WriteAheadLogBackedBlockRDD[String](sparkContext, blockIds.toArray,
-        segments.toArray, storeInBlockManager = true, StorageLevel.MEMORY_ONLY)
+        segments.toArray, storeInBlockManager = true, storageLevel = StorageLevel.MEMORY_ONLY)
       assert(rdd2.collect() === data.flatten)
       assert(
         blockIds.forall(blockManager.get(_).nonEmpty),

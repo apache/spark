@@ -36,8 +36,8 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     val listener = new StreamingJobProgressListener(ssc)
 
     val receivedBlockInfo = Map(
-      0 -> Array(ReceivedBlockInfo(0, 100, null), ReceivedBlockInfo(0, 200, null)),
-      1 -> Array(ReceivedBlockInfo(1, 300, null))
+      0 -> Array(ReceivedBlockInfo(0, 100, None, null), ReceivedBlockInfo(0, 200, None, null)),
+      1 -> Array(ReceivedBlockInfo(1, 300, None, null))
     )
 
     // onBatchSubmitted
@@ -104,8 +104,8 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     val listener = new StreamingJobProgressListener(ssc)
 
     val receivedBlockInfo = Map(
-      0 -> Array(ReceivedBlockInfo(0, 100, null), ReceivedBlockInfo(0, 200, null)),
-      1 -> Array(ReceivedBlockInfo(1, 300, null))
+      0 -> Array(ReceivedBlockInfo(0, 100, None, null), ReceivedBlockInfo(0, 200, None, null)),
+      1 -> Array(ReceivedBlockInfo(1, 300, None, null))
     )
     val batchInfoCompleted = BatchInfo(Time(1000), receivedBlockInfo, 1000, Some(2000), None)
 

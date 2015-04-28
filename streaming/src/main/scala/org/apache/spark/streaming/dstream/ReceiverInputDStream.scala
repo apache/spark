@@ -67,27 +67,26 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
       } else {
         // Otherwise, ask the tracker for all the blocks that have been allocated to this stream
         // for this batch
-        val blockInfos =
-          ssc.scheduler.receiverTracker.getBlocksOfBatch(validTime).get(id).getOrElse(Seq.empty)
-        val blockStoreResults = blockInfos.map { _.blockStoreResult }
-        val blockIds = blockStoreResults.map { _.blockId.asInstanceOf[BlockId] }.toArray
+        val receiverTracker = ssc.scheduler.receiverTracker
+        val blockInfos = receiverTracker.getBlocksOfBatch(validTime).getOrElse(id, Seq.empty)
+        val blockIds = blockInfos.map { _.blockId.asInstanceOf[BlockId] }.toArray
 
-        // Check whether all the results are of the same type
-        val resultTypes = blockStoreResults.map { _.getClass }.distinct
-        if (resultTypes.size > 1) {
-          logWarning("Multiple result types in block information, WAL information will be ignored.")
-        }
+        // Is WAL segment info present with all the blocks
+        val isWALSegmentInfoPresent = blockInfos.forall { _.writeAheadLogSegmentOption.nonEmpty }
 
-        // If all the results are of type WriteAheadLogBasedStoreResult, then create
-        // WriteAheadLogBackedBlockRDD else create simple BlockRDD.
-        if (resultTypes.size == 1 && resultTypes.head == classOf[WriteAheadLogBasedStoreResult]) {
-          val logSegments = blockStoreResults.map {
-            _.asInstanceOf[WriteAheadLogBasedStoreResult].segment
-          }.toArray
-          // Since storeInBlockManager = false, the storage level does not matter.
-          new WriteAheadLogBackedBlockRDD[T](ssc.sparkContext,
-            blockIds, logSegments, storeInBlockManager = false, StorageLevel.MEMORY_ONLY_SER)
+        if (isWALSegmentInfoPresent) {
+          // If all the blocks have WAL segment info, then create a WALBackedBlockRDD
+          val isBlockIdValid = blockInfos.map { _.isBlockIdValid() }.toArray
+          val blockWALSegments = blockInfos.map { _.writeAheadLogSegmentOption.get }.toArray
+          new WriteAheadLogBackedBlockRDD[T](
+            ssc.sparkContext, blockIds, blockWALSegments, isBlockIdValid)
         } else {
+          // Else, create a BlockRDD. However, if there are some blocks with WAL info but not others
+          // then that is unexpected and log a warning accordingly.
+          if (blockInfos.find(_.writeAheadLogSegmentOption.nonEmpty).nonEmpty) {
+            logWarning("Could not find Write Ahead Log information on some of the blocks, " +
+              "data may not be recoverable after driver failures")
+          }
           new BlockRDD[T](ssc.sc, blockIds)
         }
       }
