@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.mathfuncs
 
-import math._
-
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, Row, UnaryExpression}
 import org.apache.spark.sql.types._
 
@@ -119,52 +117,52 @@ abstract class MathematicalExpressionForLong(f: Long => Long, name: String)
   }
 }
 
-case class Sin(child: Expression) extends MathematicalExpressionForDouble(sin, "SIN")
+case class Sin(child: Expression) extends MathematicalExpressionForDouble(math.sin, "SIN")
 
-case class Asin(child: Expression) extends MathematicalExpressionForDouble(asin, "ASIN")
+case class Asin(child: Expression) extends MathematicalExpressionForDouble(math.asin, "ASIN")
 
-case class Sinh(child: Expression) extends MathematicalExpressionForDouble(sinh, "SINH")
+case class Sinh(child: Expression) extends MathematicalExpressionForDouble(math.sinh, "SINH")
 
-case class Cos(child: Expression) extends MathematicalExpressionForDouble(cos, "COS")
+case class Cos(child: Expression) extends MathematicalExpressionForDouble(math.cos, "COS")
 
-case class Acos(child: Expression) extends MathematicalExpressionForDouble(acos, "ACOS")
+case class Acos(child: Expression) extends MathematicalExpressionForDouble(math.acos, "ACOS")
 
-case class Cosh(child: Expression) extends MathematicalExpressionForDouble(cosh, "COSH")
+case class Cosh(child: Expression) extends MathematicalExpressionForDouble(math.cosh, "COSH")
 
-case class Tan(child: Expression) extends MathematicalExpressionForDouble(tan, "TAN")
+case class Tan(child: Expression) extends MathematicalExpressionForDouble(math.tan, "TAN")
 
-case class Atan(child: Expression) extends MathematicalExpressionForDouble(atan, "ATAN")
+case class Atan(child: Expression) extends MathematicalExpressionForDouble(math.atan, "ATAN")
 
-case class Tanh(child: Expression) extends MathematicalExpressionForDouble(tanh, "TANH")
+case class Tanh(child: Expression) extends MathematicalExpressionForDouble(math.tanh, "TANH")
 
-case class Ceil(child: Expression) extends MathematicalExpressionForDouble(ceil, "CEIL")
+case class Ceil(child: Expression) extends MathematicalExpressionForDouble(math.ceil, "CEIL")
 
-case class Floor(child: Expression) extends MathematicalExpressionForDouble(floor, "FLOOR")
+case class Floor(child: Expression) extends MathematicalExpressionForDouble(math.floor, "FLOOR")
 
-case class Rint(child: Expression) extends MathematicalExpressionForDouble(rint, "ROUND")
+case class Rint(child: Expression) extends MathematicalExpressionForDouble(math.rint, "ROUND")
 
-case class Cbrt(child: Expression) extends MathematicalExpressionForDouble(cbrt, "CBRT")
+case class Cbrt(child: Expression) extends MathematicalExpressionForDouble(math.cbrt, "CBRT")
 
-case class Signum(child: Expression) extends MathematicalExpressionForDouble(signum, "SIGNUM")
+case class Signum(child: Expression) extends MathematicalExpressionForDouble(math.signum, "SIGNUM")
 
-case class ISignum(child: Expression) extends MathematicalExpressionForInt(signum, "ISIGNUM")
+case class ISignum(child: Expression) extends MathematicalExpressionForInt(math.signum, "ISIGNUM")
 
-case class FSignum(child: Expression) extends MathematicalExpressionForFloat(signum, "FSIGNUM")
+case class FSignum(child: Expression) extends MathematicalExpressionForFloat(math.signum, "FSIGNUM")
 
-case class LSignum(child: Expression) extends MathematicalExpressionForLong(signum, "LSIGNUM")
+case class LSignum(child: Expression) extends MathematicalExpressionForLong(math.signum, "LSIGNUM")
 
 case class ToDegrees(child: Expression) 
-  extends MathematicalExpressionForDouble(toDegrees, "DEGREES")
+  extends MathematicalExpressionForDouble(math.toDegrees, "DEGREES")
 
 case class ToRadians(child: Expression) 
-  extends MathematicalExpressionForDouble(toRadians, "RADIANS")
+  extends MathematicalExpressionForDouble(math.toRadians, "RADIANS")
 
-case class Log(child: Expression) extends MathematicalExpressionForDouble(log, "LOG")
+case class Log(child: Expression) extends MathematicalExpressionForDouble(math.log, "LOG")
 
-case class Log10(child: Expression) extends MathematicalExpressionForDouble(log10, "LOG10")
+case class Log10(child: Expression) extends MathematicalExpressionForDouble(math.log10, "LOG10")
 
-case class Log1p(child: Expression) extends MathematicalExpressionForDouble(log1p, "LOG1P")
+case class Log1p(child: Expression) extends MathematicalExpressionForDouble(math.log1p, "LOG1P")
 
-case class Exp(child: Expression) extends MathematicalExpressionForDouble(exp, "EXP")
+case class Exp(child: Expression) extends MathematicalExpressionForDouble(math.exp, "EXP")
 
-case class Expm1(child: Expression) extends MathematicalExpressionForDouble(expm1, "EXPM1")
+case class Expm1(child: Expression) extends MathematicalExpressionForDouble(math.expm1, "EXPM1")
