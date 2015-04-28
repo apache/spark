@@ -21,7 +21,6 @@ import java.io.{BufferedInputStream, FileNotFoundException, IOException, InputSt
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
 
 import scala.collection.mutable
-import scala.concurrent.duration.Duration
 
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -33,7 +32,6 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ThreadUtils, Utils}
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /**
  * A class that provides application history from event logs stored in the file system.
@@ -43,7 +41,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
 private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
   with Logging {
 
-  import org.apache.spark.deploy.history.FsHistoryProvider._
+  import FsHistoryProvider._
 
   private val NOT_STARTED = "<Not Started>"
 
@@ -136,9 +134,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     }
   }
 
-  override def getListing(): Iterable[FsApplicationHistoryInfo] = {
-    applications.values
-  }
+  override def getListing(): Iterable[FsApplicationHistoryInfo] = applications.values
 
   override def getAppUI(appId: String): Option[SparkUI] = {
     try {
