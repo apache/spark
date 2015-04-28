@@ -35,8 +35,15 @@ private[serializer] object SerializationDebugger extends Logging {
    */
   def improveException(obj: Any, e: NotSerializableException): NotSerializableException = {
     if (enableDebugging && reflect != null) {
-      new NotSerializableException(
-        e.getMessage + "\nSerialization stack:\n" + find(obj).map("\t- " + _).mkString("\n"))
+      try {
+        new NotSerializableException(
+          e.getMessage + "\nSerialization stack:\n" + find(obj).map("\t- " + _).mkString("\n"))
+      } catch {
+        case e2: Exception =>
+          // Fall back to old exception
+          logWarning("Exception in serialization debugger", e2)
+          e
+      }
     } else {
       e
     }
