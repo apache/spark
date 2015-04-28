@@ -269,13 +269,13 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     val table =
       // scalastyle:off
-      <table class="table table-bordered">
+      <table class="table table-bordered" style="width: auto">
       <thead>
-        <tr><th></th><th>Timelines</th><th>Distributions</th></tr>
+        <tr><th></th><th>Timelines</th><th>Histograms</th></tr>
       </thead>
       <tbody>
         <tr>
-          <td style="vertical-align: middle;">
+          <td style="vertical-align: middle; width: 200px;">
             <div>
               <span onclick={Unparsed(triangleJs)}>{Unparsed(BLACK_RIGHT_TRIANGLE_HTML)}</span>
               <strong>Input Rate</strong>
@@ -331,7 +331,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       generateInputReceiverRow(jsCollector, receiverId, distribution, minX, maxX, minY, maxY)
     }.foldLeft[Seq[Node]](Nil)(_ ++ _)
 
-    <table class="table table-bordered">
+    <table class="table table-bordered" style="width: auto">
       <thead>
         <tr>
           <th></th>
@@ -389,7 +389,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         "events/sec").toHtml(jsCollector)
 
     <tr>
-      <td rowspan="2" style="vertical-align: middle;">
+      <td rowspan="2" style="vertical-align: middle; width: 193px;">
         <div>
           <strong>{receiverName}</strong>
         </div>

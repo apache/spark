@@ -45,6 +45,17 @@ function hideGraphTooltip() {
     graphTooltip.style("visibility", "hidden");
 }
 
+function showBootstrapTooltip(node, text) {
+    console.log(text);
+    $(node).tooltip({title: text, trigger: "manual", 'container': 'body'});
+    $(node).tooltip("show");
+    console.log($(node));
+}
+
+function hideBootstrapTooltip(node) {
+    $(node).tooltip("destroy");
+}
+
 /**
  * @param id the `id` used in the html `div` tag
  * @param data the data for the timeline graph
@@ -107,7 +118,8 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
                     .attr("r", function(d) { return 3; })
                     .on('mouseover', function(d) {
                         var tip = d.y + " " + unitY + " at " + timeFormat[d.x];
-                        showGraphTooltip(tip, d3.event.pageX + 5, d3.event.pageY - 25);
+                        showBootstrapTooltip(d3.select(this).node(), tip);
+                        //showGraphTooltip(tip, d3.event.pageX + 5, d3.event.pageY - 25);
                         // show the point
                         d3.select(this)
                             .attr("stroke", "steelblue")
@@ -115,7 +127,8 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
                             .attr("opacity", "1");
                     })
                     .on('mouseout',  function() {
-                        hideGraphTooltip();
+                        hideBootstrapTooltip(d3.select(this).node());
+                        //hideGraphTooltip();
                         // hide the point
                         d3.select(this)
                             .attr("stroke", "white")
@@ -172,7 +185,8 @@ function drawDistribution(id, values, minY, maxY, unitY) {
                   .attr("width", function(d) { return x(d.y); })
                   .attr("height", function(d) { return height - y(d.dx); })
                   .on('mouseover', function(d) {
-                      var tip = d.y + " between " + formatBinValue(d.x) + " " + unitY + " and " + formatBinValue(d.x + d.dx) + " " + unitY;
+                      var tip = d.y + " between " + formatBinValue(d.x) + " and " + formatBinValue(d.x + d.dx) + " " + unitY;
+                      showBootstrapTooltip(d3.select(this).node(), tip);
 
                       // Calculate the location for tip
                       var scrollTop  = document.documentElement.scrollTop || document.body.scrollTop;
@@ -184,13 +198,14 @@ function drawDistribution(id, values, minY, maxY, unitY) {
                       point.x = targetBBox.x;
                       point.y = targetBBox.y;
                       var bbox = point.matrixTransform(matrix);
-                      var tipX = bbox.x + scrollLeft + x(d.y) + 2;
-                      var tipY = bbox.y + scrollTop - 6;
+                      var tipX = bbox.x + scrollLeft;
+                      var tipY = bbox.y + scrollTop + 15;
 
-                      showGraphTooltip(tip, tipX, tipY);
+                      //showGraphTooltip(tip, tipX, tipY);
                   })
                   .on('mouseout',  function() {
-                      hideGraphTooltip();
+                      hideBootstrapTooltip(d3.select(this).node());
+                      //hideGraphTooltip();
                   });
 }
 
