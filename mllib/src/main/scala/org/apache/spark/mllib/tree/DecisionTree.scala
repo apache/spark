@@ -298,7 +298,7 @@ object DecisionTree extends Serializable with Logging {
           val featureValue = binnedFeatures(featureIndex)
           node.split.get.categories.contains(featureValue)
         }
-        case _ => throw new RuntimeException(s"predictNodeIndex failed for unknown reason.")
+        case _ => throw new RuntimeException(s"predictNodeIndex failed for unknown feature type.")
       }
       if (node.leftNode.isEmpty || node.rightNode.isEmpty) {
         // Return index from next layer of nodes to train
@@ -1006,9 +1006,9 @@ object DecisionTree extends Serializable with Logging {
                 new Split(featureIndex, threshold, Continuous, List())
               splitIndex += 1
             }
+
             bins(featureIndex)(0) = new Bin(new DummyLowSplit(featureIndex, Continuous),
               splits(featureIndex)(0), Continuous, Double.MinValue)
-
             splitIndex = 1
             while (splitIndex < numSplits) {
               bins(featureIndex)(splitIndex) =

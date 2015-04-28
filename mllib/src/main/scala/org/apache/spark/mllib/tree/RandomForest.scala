@@ -227,7 +227,7 @@ private class RandomForest (
         RandomForest.selectNodesToSplit(nodeQueue, maxMemoryUsage, metadata, rng)
       // Sanity check (should never occur):
       assert(nodesForGroup.size > 0,
-        s"RandomForest selected empty nodesForGroup.  Error for unknown reason.")
+        s"RandomForest selected empty nodesForGroup. Error for unknown reason.")
 
       // Choose node splits, and enqueue new nodes as needed.
       timer.start("findBestSplits")
@@ -473,9 +473,14 @@ object RandomForest extends Serializable with Logging {
       val (treeIndex, node) = nodeQueue.head
       // Choose subset of features for node (if subsampling).
       val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
-        // TODO: Use more efficient subsampling?  (use selection-and-rejection or reservoir)
-        Some(rng.shuffle(Range(0, metadata.numFeatures).toList)
-          .take(metadata.numFeaturesPerNode).toArray)
+        val sampledFeatures = Range(0, metadata.numFeaturesPerNode).toArray
+        for (featureIndex <- metadata.numFeaturesPerNode until metadata.numFeatures) {
+          val next = rng.nextInt(featureIndex + 1)
+          if (next < metadata.numFeaturesPerNode) {
+            sampledFeatures(next) = featureIndex
+          }
+        }
+        Some(sampledFeatures)
       } else {
         None
       }
