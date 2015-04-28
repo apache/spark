@@ -555,13 +555,16 @@ by `SQLContext`.
 
 For example:
 {% highlight java %}
-// Import factory methods provided by DataType.
-import org.apache.spark.sql.types.DataType;
+import org.apache.spark.api.java.function.Function;
+// Import factory methods provided by DataTypes.
+import org.apache.spark.sql.types.DataTypes;
 // Import StructType and StructField
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructField;
 // Import Row.
 import org.apache.spark.sql.Row;
+// Import RowFactory.
+import org.apache.spark.sql.RowFactory;
 
 // sc is an existing JavaSparkContext.
 SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
@@ -575,16 +578,16 @@ String schemaString = "name age";
 // Generate the schema based on the string of schema
 List<StructField> fields = new ArrayList<StructField>();
 for (String fieldName: schemaString.split(" ")) {
-  fields.add(DataType.createStructField(fieldName, DataType.StringType, true));
+  fields.add(DataTypes.createStructField(fieldName, DataTypes.StringType, true));
 }
-StructType schema = DataType.createStructType(fields);
+StructType schema = DataTypes.createStructType(fields);
 
 // Convert records of the RDD (people) to Rows.
 JavaRDD<Row> rowRDD = people.map(
   new Function<String, Row>() {
     public Row call(String record) throws Exception {
       String[] fields = record.split(",");
-      return Row.create(fields[0], fields[1].trim());
+      return RowFactory.create(fields[0], fields[1].trim());
     }
   });
 
@@ -678,8 +681,8 @@ In the simplest form, the default data source (`parquet` unless otherwise config
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-val df = sqlContext.load("people.parquet")
-df.select("name", "age").save("namesAndAges.parquet")
+val df = sqlContext.load("examples/src/main/resources/users.parquet")
+df.select("name", "favorite_color").save("namesAndFavColors.parquet")
 {% endhighlight %}
 
 </div>
@@ -688,8 +691,8 @@ df.select("name", "age").save("namesAndAges.parquet")
 
 {% highlight java %}
 
-DataFrame df = sqlContext.load("people.parquet");
-df.select("name", "age").save("namesAndAges.parquet");
+DataFrame df = sqlContext.load("examples/src/main/resources/users.parquet");
+df.select("name", "favorite_color").save("namesAndFavColors.parquet");
 
 {% endhighlight %}
 
@@ -699,8 +702,8 @@ df.select("name", "age").save("namesAndAges.parquet");
 
 {% highlight python %}
 
-df = sqlContext.load("people.parquet")
-df.select("name", "age").save("namesAndAges.parquet")
+df = sqlContext.load("examples/src/main/resources/users.parquet")
+df.select("name", "favorite_color").save("namesAndFavColors.parquet")
 
 {% endhighlight %}
 
@@ -719,7 +722,7 @@ using this syntax.
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-val df = sqlContext.load("people.json", "json")
+val df = sqlContext.load("examples/src/main/resources/people.json", "json")
 df.select("name", "age").save("namesAndAges.parquet", "parquet")
 {% endhighlight %}
 
@@ -729,7 +732,7 @@ df.select("name", "age").save("namesAndAges.parquet", "parquet")
 
 {% highlight java %}
 
-DataFrame df = sqlContext.load("people.json", "json");
+DataFrame df = sqlContext.load("examples/src/main/resources/people.json", "json");
 df.select("name", "age").save("namesAndAges.parquet", "parquet");
 
 {% endhighlight %}
@@ -740,7 +743,7 @@ df.select("name", "age").save("namesAndAges.parquet", "parquet");
 
 {% highlight python %}
 
-df = sqlContext.load("people.json", "json")
+df = sqlContext.load("examples/src/main/resources/people.json", "json")
 df.select("name", "age").save("namesAndAges.parquet", "parquet")
 
 {% endhighlight %}
@@ -1361,7 +1364,7 @@ the Data Sources API.  The following options are supported:
   <tr>
     <td><code>driver</code></td>
     <td>
-      The class name of the JDBC driver needed to connect to this URL.  This class with be loaded
+      The class name of the JDBC driver needed to connect to this URL.  This class will be loaded
       on the master and workers before running an JDBC commands to allow the driver to
       register itself with the JDBC subsystem.
     </td>

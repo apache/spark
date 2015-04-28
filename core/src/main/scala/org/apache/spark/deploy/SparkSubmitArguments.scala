@@ -77,12 +77,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
     Option(propertiesFile).foreach { filename =>
       Utils.getPropertiesFromFile(filename).foreach { case (k, v) =>
-        if (k.startsWith("spark.")) {
-          defaultProperties(k) = v
-          if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
-        } else {
-          SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
-        }
+        defaultProperties(k) = v
+        if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
       }
     }
     defaultProperties
@@ -97,6 +93,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
   // Populate `sparkProperties` map from properties file
   mergeDefaultSparkProperties()
+  // Remove keys that don't start with "spark." from `sparkProperties`.
+  ignoreNonSparkProperties()
   // Use `sparkProperties` map along with env vars to fill in any missing parameters
   loadEnvironmentArguments()
 
@@ -113,6 +111,18 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     defaultSparkProperties.foreach { case (k, v) =>
       if (!sparkProperties.contains(k)) {
         sparkProperties(k) = v
+      }
+    }
+  }
+
+  /**
+   * Remove keys that don't start with "spark." from `sparkProperties`.
+   */
+  private def ignoreNonSparkProperties(): Unit = {
+    sparkProperties.foreach { case (k, v) =>
+      if (!k.startsWith("spark.")) {
+        sparkProperties -= k
+        SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
       }
     }
   }

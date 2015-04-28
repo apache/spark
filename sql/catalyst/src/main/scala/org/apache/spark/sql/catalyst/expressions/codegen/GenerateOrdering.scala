@@ -30,7 +30,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
   import scala.reflect.runtime.universe._
 
  protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
-    in.map(ExpressionCanonicalizer(_).asInstanceOf[SortOrder])
+    in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[SortOrder])
 
   protected def bind(in: Seq[SortOrder], inputSchema: Seq[Attribute]): Seq[SortOrder] =
     in.map(BindReferences.bindReference(_, inputSchema))

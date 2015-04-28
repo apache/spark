@@ -183,7 +183,7 @@ private[sql] object JsonRDD extends Logging {
   private def typeOfPrimitiveValue: PartialFunction[Any, DataType] = {
     // For Integer values, use LongType by default.
     val useLongType: PartialFunction[Any, DataType] = {
-      case value: IntegerType.JvmType => LongType
+      case value: IntegerType.InternalType => LongType
     }
 
     useLongType orElse ScalaReflection.typeOfObject orElse {
@@ -411,11 +411,11 @@ private[sql] object JsonRDD extends Logging {
       desiredType match {
         case StringType => UTF8String(toString(value))
         case _ if value == null || value == "" => null // guard the non string type
-        case IntegerType => value.asInstanceOf[IntegerType.JvmType]
+        case IntegerType => value.asInstanceOf[IntegerType.InternalType]
         case LongType => toLong(value)
         case DoubleType => toDouble(value)
         case DecimalType() => toDecimal(value)
-        case BooleanType => value.asInstanceOf[BooleanType.JvmType]
+        case BooleanType => value.asInstanceOf[BooleanType.InternalType]
         case NullType => null
         case ArrayType(elementType, _) =>
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
