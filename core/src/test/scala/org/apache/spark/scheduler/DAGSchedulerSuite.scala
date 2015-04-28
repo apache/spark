@@ -498,7 +498,7 @@ class DAGSchedulerSuite
 
       scheduler.resubmitFailedStages()
       if (x < stage.maxStageFailures) {
-        assert(!scheduler.runningStages.isEmpty)
+        assert(scheduler.runningStages.nonEmpty)
       } else {
         assertDataStructuresEmpty()
       }
