@@ -43,7 +43,7 @@ class Param[T] (val parent: Params, val name: String, val doc: String, val isVal
   extends Serializable {
 
   def this(parent: Params, name: String, doc: String) =
-    this(parent, name, doc, ParamValidate.default[T])
+    this(parent, name, doc, ParamValidate.alwaysTrue[T])
 
   /**
    * Assert that the given value is valid for this parameter.
@@ -96,8 +96,8 @@ class Param[T] (val parent: Params, val name: String, val doc: String, val isVal
  */
 object ParamValidate {
 
-  /** Default validation always return true */
-  def default[T]: T => Boolean = (_: T) => true
+  /** (private[param]) Default validation always return true */
+  private[param] def alwaysTrue[T]: T => Boolean = (_: T) => true
 
   /**
    * Private method for checking numerical types and converting to Double.
@@ -176,7 +176,7 @@ class DoubleParam(parent: Params, name: String, doc: String, isValid: Double => 
   extends Param[Double](parent, name, doc, isValid) {
 
   def this(parent: Params, name: String, doc: String) =
-    this(parent, name, doc, ParamValidate.default[Double])
+    this(parent, name, doc, ParamValidate.alwaysTrue[Double])
 
   override def w(value: Double): ParamPair[Double] = super.w(value)
 }
@@ -186,7 +186,7 @@ class IntParam(parent: Params, name: String, doc: String, isValid: Int => Boolea
   extends Param[Int](parent, name, doc) {
 
   def this(parent: Params, name: String, doc: String) =
-    this(parent, name, doc, ParamValidate.default[Int])
+    this(parent, name, doc, ParamValidate.alwaysTrue[Int])
 
   override def w(value: Int): ParamPair[Int] = super.w(value)
 }
@@ -196,7 +196,7 @@ class FloatParam(parent: Params, name: String, doc: String, isValid: Float => Bo
   extends Param[Float](parent, name, doc) {
 
   def this(parent: Params, name: String, doc: String) =
-    this(parent, name, doc, ParamValidate.default[Float])
+    this(parent, name, doc, ParamValidate.alwaysTrue[Float])
 
   override def w(value: Float): ParamPair[Float] = super.w(value)
 }
@@ -206,7 +206,7 @@ class LongParam(parent: Params, name: String, doc: String, isValid: Long => Bool
   extends Param[Long](parent, name, doc) {
 
   def this(parent: Params, name: String, doc: String) =
-    this(parent, name, doc, ParamValidate.default[Long])
+    this(parent, name, doc, ParamValidate.alwaysTrue[Long])
 
   override def w(value: Long): ParamPair[Long] = super.w(value)
 }
@@ -351,11 +351,13 @@ trait Params extends Identifiable with Serializable {
 
   /**
    * Sets default values for a list of params.
+   *
+   * Note: Java developers should use the single-parameter [[setDefault()]].
+   *
    * @param paramPairs  a list of param pairs that specify params and their default values to set
    *                    respectively. Make sure that the params are initialized before this method
    *                    gets called.
    */
-  @varargs
   protected final def setDefault(paramPairs: ParamPair[_]*): this.type = {
     paramPairs.foreach { p =>
       setDefault(p.param.asInstanceOf[Param[Any]], p.value)

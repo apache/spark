@@ -147,8 +147,8 @@ class ParamsSuite extends FunSuite {
   }
 
   test("ParamValidate") {
-    val default = ParamValidate.default[Int]
-    assert(default(1))
+    val alwaysTrue = ParamValidate.alwaysTrue[Int]
+    assert(alwaysTrue(1))
 
     val gt1Int = ParamValidate.gt[Int](1)
     assert(!gt1Int(1) && gt1Int(2))

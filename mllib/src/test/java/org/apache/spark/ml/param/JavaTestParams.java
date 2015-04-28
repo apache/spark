@@ -40,6 +40,7 @@ public class JavaTestParams extends JavaParams {
     List<String> validStrings = Lists.newArrayList("a", "b");
     myStringParam = new Param<String>(this, "myStringParam", "this is a string param",
       ParamValidate.inArray(validStrings));
-    setDefault(myIntParam.w(1), myDoubleParam.w(0.5));
+    setDefault(myIntParam, 1);
+    setDefault(myDoubleParam, 0.5);
   }
 }

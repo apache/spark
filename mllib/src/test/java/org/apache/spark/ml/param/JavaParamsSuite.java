@@ -1,5 +1,6 @@
 package org.apache.spark.ml.param;
 
+import com.google.common.collect.Lists;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -29,7 +30,21 @@ public class JavaParamsSuite {
   public void testParams() {
     JavaTestParams testParams = new JavaTestParams();
     Assert.assertEquals(testParams.getMyIntParam(), 1);
-    testParams.setMyIntParam(2).setMyDoubleParam(0.4);
+    testParams.setMyIntParam(2).setMyDoubleParam(0.4).setMyStringParam("a");
     Assert.assertEquals(testParams.getMyDoubleParam(), 0.4, 0.0);
+    Assert.assertEquals(testParams.getMyStringParam(), "a");
+  }
+
+  @Test
+  public void testParamValidate() {
+    ParamValidate.alwaysTrue();
+    ParamValidate.gt(1.0);
+    ParamValidate.gtEq(1.0);
+    ParamValidate.lt(1.0);
+    ParamValidate.ltEq(1.0);
+    ParamValidate.inRange(0, 1, true, false);
+    ParamValidate.inRange(0, 1);
+    ParamValidate.inArray(Lists.newArrayList(0, 1, 3));
+    ParamValidate.inArray(Lists.newArrayList("a", "b"));
   }
 }
