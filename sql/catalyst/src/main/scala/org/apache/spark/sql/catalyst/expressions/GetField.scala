@@ -46,7 +46,8 @@ object GetField {
         MapOrdinalGetField(child, fieldExpr)
       case (otherType, _) =>
         throw new AnalysisException(
-          s"GetField is not valid on child of type $otherType with fieldExpr of type ${fieldExpr.dataType}")
+          "GetField is not valid on child of type " +
+            s"$otherType with fieldExpr of type ${fieldExpr.dataType}")
     }
   }
 
@@ -138,8 +139,11 @@ case class SimpleStructGetField(child: Expression, field: StructField, ordinal: 
 /**
  * Returns the array of value of fields in the Array of Struct `child`.
  */
-case class ArrayStructGetField(child: Expression, field: StructField, ordinal: Int, containsNull: Boolean)
-  extends StructGetField {
+case class ArrayStructGetField(
+    child: Expression,
+    field: StructField,
+    ordinal: Int,
+    containsNull: Boolean) extends StructGetField {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def nullable: Boolean = child.nullable
@@ -160,7 +164,7 @@ case class ArrayStructGetField(child: Expression, field: StructField, ordinal: I
 case class ArrayOrdinalGetField(child: Expression, ordinal: Expression)
   extends OrdinalGetField {
 
-  override def dataType = child.dataType.asInstanceOf[ArrayType].elementType
+  override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType
 
   override lazy val resolved = childrenResolved &&
     child.dataType.isInstanceOf[ArrayType] && ordinal.dataType.isInstanceOf[IntegralType]
@@ -184,7 +188,7 @@ case class ArrayOrdinalGetField(child: Expression, ordinal: Expression)
 case class MapOrdinalGetField(child: Expression, ordinal: Expression)
   extends OrdinalGetField {
 
-  override def dataType = child.dataType.asInstanceOf[MapType].valueType
+  override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
 
   override lazy val resolved = childrenResolved && child.dataType.isInstanceOf[MapType]
 

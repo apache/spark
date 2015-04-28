@@ -895,7 +895,8 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
       Literal("aa")), "bb", row)
     checkEvaluation(MapOrdinalGetField(Literal.create(null, typeMap), Literal("aa")), null, row)
     checkEvaluation(
-      MapOrdinalGetField(Literal.create(null, typeMap), Literal.create(null, StringType)), null, row)
+      MapOrdinalGetField(Literal.create(null, typeMap),
+        Literal.create(null, StringType)), null, row)
     checkEvaluation(MapOrdinalGetField(BoundReference(3, typeMap, true),
       Literal.create(null, StringType)), null, row)
 
@@ -903,7 +904,8 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
       Literal(1)), "bb", row)
     checkEvaluation(ArrayOrdinalGetField(Literal.create(null, typeArray), Literal(1)), null, row)
     checkEvaluation(
-      ArrayOrdinalGetField(Literal.create(null, typeArray), Literal.create(null, IntegerType)), null, row)
+      ArrayOrdinalGetField(Literal.create(null, typeArray),
+        Literal.create(null, IntegerType)), null, row)
     checkEvaluation(ArrayOrdinalGetField(BoundReference(4, typeArray, true),
       Literal.create(null, IntegerType)), null, row)
 
