@@ -439,6 +439,12 @@ private[spark] object Params {
   }
 }
 
+/**
+ * Java-friendly wrapper for [[Params]].
+ * Java developers who need to extend [[Params]] should use this class instead.
+ * If you need to extend a abstract class which already extends [[Params]], then that abstract
+ * class should be Java-friendly as well.
+ */
 abstract class JavaParams extends Params
 
 /**
