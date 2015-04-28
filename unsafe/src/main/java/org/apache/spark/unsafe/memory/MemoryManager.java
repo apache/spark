@@ -19,6 +19,9 @@ package org.apache.spark.unsafe.memory;
 
 import java.util.BitSet;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Manages the lifecycle of data pages exchanged between operators.
  * <p>
@@ -41,6 +44,8 @@ import java.util.BitSet;
  * approximately 35 terabytes of memory.
  */
 public final class MemoryManager {
+
+  private final Logger logger = LoggerFactory.getLogger(MemoryManager.class);
 
   /**
    * The number of entries in the page table.
@@ -93,6 +98,9 @@ public final class MemoryManager {
    * intended for allocating large blocks of memory that will be shared between operators.
    */
   public MemoryBlock allocatePage(long size) {
+    if (logger.isTraceEnabled()) {
+      logger.trace("Allocating {} byte page", size);
+    }
     if (size >= (1L << 51)) {
       throw new IllegalArgumentException("Cannot allocate a page with more than 2^51 bytes");
     }
@@ -109,6 +117,9 @@ public final class MemoryManager {
     final MemoryBlock page = allocator.allocate(size);
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
+    if (logger.isDebugEnabled()) {
+      logger.debug("Allocate page number {} ({} bytes)", pageNumber, size);
+    }
     return page;
   }
 
@@ -116,14 +127,19 @@ public final class MemoryManager {
    * Free a block of memory allocated via {@link MemoryManager#allocatePage(long)}.
    */
   public void freePage(MemoryBlock page) {
+    if (logger.isDebugEnabled()) {
+      logger.debug("Freeing page number {} ({} bytes)", page.pageNumber, page.size());
+    }
     assert (page.pageNumber != -1) :
       "Called freePage() on memory that wasn't allocated with allocatePage()";
-
     allocator.free(page);
     synchronized (this) {
       allocatedPages.clear(page.pageNumber);
     }
     pageTable[page.pageNumber] = null;
+    if (logger.isDebugEnabled()) {
+      logger.debug("Freed page number {} ({} bytes)", page.pageNumber, page.size());
+    }
   }
 
   /**
