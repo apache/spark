@@ -49,9 +49,9 @@ private[mllib] class BinaryClassificationPMMLModelExport(
        var interceptNO = threshold
        if (RegressionNormalizationMethodType.LOGIT == normalizationMethod) {
          if (threshold <= 0)
-           interceptNO = 1000
-         else if (threshold >= 1)
            interceptNO = -1000
+         else if (threshold >= 1)
+           interceptNO = 1000
          else
            interceptNO = -math.log(1/threshold -1)
        }
