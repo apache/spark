@@ -58,7 +58,7 @@ case class DropTable(
     val databaseName = db.getOrElse(hiveContext.sessionState.getCurrentDatabase)
     if(hiveContext.catalog.tableExists(Seq(databaseName, tableName))) {
       val ifExistsClause = if (ifExists) "IF EXISTS " else ""
-      val dbTableName = db.get + "." + tableName
+      val dbTableName = if(db == None) tableName else db.get + "." + tableName
       try {
         hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName))
       } catch {
