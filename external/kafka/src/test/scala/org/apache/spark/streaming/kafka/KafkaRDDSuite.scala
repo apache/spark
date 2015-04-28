@@ -53,14 +53,14 @@ class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("basic usage") {
-    val topic = "topicbasic"
+    val topic = s"topicbasic-${Random.nextInt}"
     kafkaTestUtils.createTopic(topic)
     val messages = Set("the", "quick", "brown", "fox")
     kafkaTestUtils.sendMessages(topic, messages.toArray)
 
 
     val kafkaParams = Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress,
-      "group.id" -> s"test-consumer-${Random.nextInt(10000)}")
+      "group.id" -> s"test-consumer-${Random.nextInt}")
 
     val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
 
@@ -73,12 +73,12 @@ class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
 
   test("iterator boundary conditions") {
     // the idea is to find e.g. off-by-one errors between what kafka has available and the rdd
-    val topic = "topic1"
+    val topic = s"topicboundary-${Random.nextInt}"
     val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
     kafkaTestUtils.createTopic(topic)
 
     val kafkaParams = Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress,
-      "group.id" -> s"test-consumer-${Random.nextInt(10000)}")
+      "group.id" -> s"test-consumer-${Random.nextInt}")
 
     val kc = new KafkaCluster(kafkaParams)
 
@@ -88,12 +88,17 @@ class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
     val rdd = getRdd(kc, Set(topic))
 
     assert(rdd.isDefined)
-    assert(rdd.get.count === sent.values.sum, "didn't get all sent messages")
 
-    val ranges = rdd.get.asInstanceOf[HasOffsetRanges]
-      .offsetRanges.map(o => TopicAndPartition(o.topic, o.partition) -> o.untilOffset).toMap
+    val ranges = rdd.get.asInstanceOf[HasOffsetRanges].offsetRanges
+    val rangeCount = ranges.map(o => o.untilOffset - o.fromOffset).sum
+    val sentCount = sent.values.sum
 
-    kc.setConsumerOffsets(kafkaParams("group.id"), ranges).fold(
+    assert(rangeCount === sentCount, "offset range didn't include all sent messages")
+    assert(rdd.get.count === sentCount, "didn't get all sent messages")
+
+    val rangesMap = ranges.map(o => TopicAndPartition(o.topic, o.partition) -> o.untilOffset).toMap
+
+    kc.setConsumerOffsets(kafkaParams("group.id"), rangesMap).fold(
       err => throw new Exception(err.mkString("\n")),
       _ => ()
     )
