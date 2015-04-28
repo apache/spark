@@ -370,10 +370,15 @@ private[spark] class Client(
       try {
         hadoopConfStream.setLevel(0)
         hadoopConfFiles.foreach { case (name, file) =>
-          hadoopConfStream.putNextEntry(new ZipEntry(name))
-          Files.copy(file, hadoopConfStream)
-          hadoopConfStream.closeEntry()
+          if(file.canRead()) {
+            hadoopConfStream.putNextEntry(new ZipEntry(name))
+            Files.copy(file, hadoopConfStream)
+            hadoopConfStream.closeEntry()
+          }
         }
+      } catch {
+        case e: Exception => 
+          logError(s"Exception while copying Hadoop config files.", e)
       } finally {
         hadoopConfStream.close()
       }
