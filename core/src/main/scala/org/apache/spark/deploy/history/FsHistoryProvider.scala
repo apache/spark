@@ -333,8 +333,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       }
     try {
       val appListener = new ApplicationEventListener
+      val maybeTruncated = logPath.getName().endsWith(EventLoggingListener.IN_PROGRESS)
       bus.addListener(appListener)
-      bus.replay(logInput, logPath.toString)
+      bus.replay(logInput, logPath.toString, maybeTruncated)
       new FsApplicationHistoryInfo(
         logPath.getName(),
         appListener.appId.getOrElse(logPath.getName()),
