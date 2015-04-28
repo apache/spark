@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import java.util.concurrent.TimeoutException
+
 import scala.collection.JavaConversions.mapAsJavaMap
 import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
@@ -28,6 +30,48 @@ import com.typesafe.config.ConfigFactory
 import org.apache.log4j.{Level, Logger}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, SparkException}
+
+/**
+ * Binds a timeout to a configuration property so that a thrown akka timeout exception can be
+ * traced back to the originating value.  The main constructor takes a generic timeout and
+ * description while the auxilary constructor uses a specific property defined in the
+ * configuration.
+ * @param timeout_duration timeout duration in milliseconds
+ * @param timeout_description description to be displayed in a timeout exception
+ */
+class ConfiguredTimeout(timeout_duration: FiniteDuration, timeout_description: String = null) {
+
+  /**
+   * Specialized constructor to lookup the timeout property in the configuration and construct
+   * a FiniteDuration timeout with the property key as the description
+   * @param conf configuration properties containing the timeout
+   * @param timeout_prop property key for the timeout
+   */
+  def this(conf: SparkConf, timeout_prop: String) = {
+    this(FiniteDuration(conf.getInt(timeout_prop, -1), "millis"), timeout_prop)
+    require(timeout_duration.toMillis >= 0, "invalid property string: " + timeout_prop)
+  }
+
+  val timeout = timeout_duration
+  val description = timeout_description
+}
+
+object ConfiguredTimeout {
+
+  /**
+   * Implicit conversion to allow for a simple FiniteDuration timeout to be used instead of a
+   * ConfiguredTimeout when the description is not needed.
+   * @param timeout_duration timeout duration in milliseconds
+   * @return ConfiguredTimeout object
+   */
+  implicit def toConfiguredTimeout(timeout_duration: FiniteDuration): ConfiguredTimeout =
+    new ConfiguredTimeout(timeout_duration)
+
+  def apply(conf: SparkConf, timeout_prop: String): ConfiguredTimeout =
+    new ConfiguredTimeout(conf, timeout_prop)
+  def apply(timeout_duration: FiniteDuration, timeout_description: String): ConfiguredTimeout =
+    new ConfiguredTimeout(timeout_duration, timeout_description)
+}
 
 /**
  * Various utility classes for working with Akka.
@@ -147,8 +191,8 @@ private[spark] object AkkaUtils extends Logging {
   def askWithReply[T](
       message: Any,
       actor: ActorRef,
-      timeout: FiniteDuration): T = {
-    askWithReply[T](message, actor, maxAttempts = 1, retryInterval = Int.MaxValue, timeout)
+      confTimeout: ConfiguredTimeout): T = {
+    askWithReply[T](message, actor, maxAttempts = 1, retryInterval = Int.MaxValue, confTimeout)
   }
 
   /**
@@ -160,7 +204,7 @@ private[spark] object AkkaUtils extends Logging {
       actor: ActorRef,
       maxAttempts: Int,
       retryInterval: Long,
-      timeout: FiniteDuration): T = {
+      confTimeout: ConfiguredTimeout): T = {
     // TODO: Consider removing multiple attempts
     if (actor == null) {
       throw new SparkException(s"Error sending message [message = $message]" +
@@ -171,14 +215,20 @@ private[spark] object AkkaUtils extends Logging {
     while (attempts < maxAttempts) {
       attempts += 1
       try {
-        val future = actor.ask(message)(timeout)
-        val result = Await.result(future, timeout)
+        val future = actor.ask(message)(confTimeout.timeout)
+        val result = Await.result(future, confTimeout.timeout)
         if (result == null) {
           throw new SparkException("Actor returned null")
         }
         return result.asInstanceOf[T]
       } catch {
         case ie: InterruptedException => throw ie
+        case te: TimeoutException =>
+          var msg = te.toString()
+          if (confTimeout.description != null) {
+            msg += " with [" + confTimeout.description + "]"
+          }
+          lastException = new TimeoutException(msg)
         case e: Exception =>
           lastException = e
           logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
