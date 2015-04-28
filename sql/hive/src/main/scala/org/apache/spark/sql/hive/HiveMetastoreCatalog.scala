@@ -730,8 +730,6 @@ private[hive] case class MetastoreRelation
         pruningCondition(inputData)
       }
 
-      val sc = sqlContext.asInstanceOf[HiveContext]
-
       def sumParts(): Long = {
         var size: Long = 0
         refParts.foreach { refPart =>

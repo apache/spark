@@ -287,7 +287,6 @@ private[hive] trait HiveStrategies {
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
         if {
           val (fields, filters, child, _) = PhysicalOperation.collectProjectsAndFilters(right)
-          Some((fields.getOrElse(child.output), filters, child))
           right transform {
               case relation: MetastoreRelation => relation.updateStats(filters)
                 relation
@@ -301,7 +300,6 @@ private[hive] trait HiveStrategies {
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
           if {
             val (fields, filters, child, _) = PhysicalOperation.collectProjectsAndFilters(left)
-            Some((fields.getOrElse(child.output), filters, child))
             left transform {
               case relation: MetastoreRelation => relation.updateStats(filters)
                 relation
