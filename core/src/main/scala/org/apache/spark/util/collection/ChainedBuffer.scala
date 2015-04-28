@@ -142,5 +142,3 @@ private[spark] class ChainedBufferOutputStream(chainedBuffer: ChainedBuffer) ext
     pos += len
   }
 }
-
-private[spark] class OffsetAndLength(var offs: Int, var len: Int)
