@@ -111,7 +111,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       def makeAppInfo(id: String, name: String, start: Long, end: Long, lastMod: Long,
         user: String, completed: Boolean): ApplicationHistoryInfo = {
         ApplicationHistoryInfo(id, name,
-          List(ApplicationAttemptInfo("", start, end, lastMod, user, completed)))
+          List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed)))
       }
 
       list(0) should be (makeAppInfo(newAppComplete.getName(), "new-app-complete", 1L, 5L,
@@ -128,8 +128,9 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
       // Make sure the UI can be rendered.
       list.foreach { case info =>
-        val appUi = provider.getAppUI(info.id, "")
+        val appUi = provider.getAppUI(info.id, None)
         appUi should not be null
+        appUi should not be None
       }
     }
   }
@@ -245,7 +246,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     updateAndCheck(provider) { list =>
       list.size should be (1)
       list.head.attempts.size should be (2)
-      list.head.attempts.head.attemptId should be ("attempt2")
+      list.head.attempts.head.attemptId should be (Some("attempt2"))
     }
 
     val completedAttempt2 = newLogFile("app1", Some("attempt2"), inProgress = false)
@@ -259,7 +260,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       list should not be (null)
       list.size should be (1)
       list.head.attempts.size should be (2)
-      list.head.attempts.head.attemptId should be ("attempt2")
+      list.head.attempts.head.attemptId should be (Some("attempt2"))
     }
 
     val app2Attempt1 = newLogFile("app2", Some("attempt1"), inProgress = false)
@@ -272,7 +273,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       list.size should be (2)
       list.head.attempts.size should be (1)
       list.last.attempts.size should be (2)
-      list.head.attempts.head.attemptId should be ("attempt1")
+      list.head.attempts.head.attemptId should be (Some("attempt1"))
 
       list.foreach { case app =>
         app.attempts.foreach { attempt =>
@@ -315,7 +316,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     updateAndCheck(provider) { list =>
       list.size should be (1)
       list.head.attempts.size should be (1)
-      list.head.attempts.head.attemptId should be ("attempt2")
+      list.head.attempts.head.attemptId should be (Some("attempt2"))
     }
     assert(!log1.exists())
 

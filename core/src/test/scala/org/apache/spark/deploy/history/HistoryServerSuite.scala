@@ -37,7 +37,7 @@ class HistoryServerSuite extends FunSuite with Matchers with MockitoSugar {
     val ui = mock[SparkUI]
     val link = "/history/app1"
     val info = new ApplicationHistoryInfo("app1", "app1",
-      List(ApplicationAttemptInfo("", 0, 2, 1, "xxx", true)))
+      List(ApplicationAttemptInfo(None, 0, 2, 1, "xxx", true)))
     when(historyServer.getApplicationList()).thenReturn(Seq(info))
     when(ui.basePath).thenReturn(link)
     when(historyServer.getProviderConfig()).thenReturn(Map[String, String]())

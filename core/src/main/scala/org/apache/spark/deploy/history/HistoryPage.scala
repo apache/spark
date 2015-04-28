@@ -42,7 +42,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val allAppsSize = allApps.size
 
     val actualFirst = if (requestedFirst < allAppsSize) requestedFirst else 0
-    val appsToShow = allApps.slice(actualFirst, Math.min(actualFirst + pageSize, allAppsSize))
+    val appsToShow = allApps.slice(actualFirst, actualFirst + pageSize)
 
     val actualPage = (actualFirst / pageSize) + 1
     val last = Math.min(actualFirst + pageSize, allAppsSize) - 1
@@ -167,9 +167,9 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val duration =
       if (attempt.endTime > 0) {
         UIUtils.formatDuration(attempt.endTime - attempt.startTime)
-        } else {
-          "-"
-        }
+      } else {
+        "-"
+      }
     val lastUpdated = UIUtils.formatDate(attempt.lastUpdated)
     <tr>
       {
@@ -189,9 +189,9 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       }
       {
         if (renderAttemptIdColumn) {
-          if (info.attempts.size > 1 && !attempt.attemptId.isEmpty) {
+          if (info.attempts.size > 1 && attempt.attemptId.isDefined) {
             <td><a href={HistoryServer.getAttemptURI(info.id, attempt.attemptId)}>
-              {attempt.attemptId}</a></td>
+              {attempt.attemptId.get}</a></td>
           } else {
             <td>&nbsp;</td>
           }

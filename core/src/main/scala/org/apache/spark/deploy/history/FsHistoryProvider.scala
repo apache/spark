@@ -142,7 +142,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def getListing(): Iterable[FsApplicationHistoryInfo] = applications.values
 
-  override def getAppUI(appId: String, attemptId: String): Option[SparkUI] = {
+  override def getAppUI(appId: String, attemptId: Option[String]): Option[SparkUI] = {
     try {
       applications.get(appId).flatMap { appInfo =>
         val attempts = appInfo.attempts.filter(_.attemptId == attemptId)
@@ -307,15 +307,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // Scan all logs from the log directory.
       // Only completed applications older than the specified max age will be deleted.
       applications.values.foreach { app =>
-        val toClean = app.attempts.filter(shouldClean)
+        val (toClean, toRetain) = app.attempts.partition(shouldClean)
         attemptsToClean ++= toClean
 
         if (toClean.isEmpty) {
           appsToRetain += (app.id -> app)
-        } else if (toClean.size < app.attempts.size) {
+        } else if (toRetain.nonEmpty) {
           appsToRetain += (app.id ->
-            new FsApplicationHistoryInfo(app.id, app.name,
-              app.attempts.filter(!shouldClean(_)).toList))
+            new FsApplicationHistoryInfo(app.id, app.name, toRetain.toList))
         }
       }
 
@@ -397,7 +396,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         logPath.getName(),
         appListener.appName.getOrElse(NOT_STARTED),
         appListener.appId.getOrElse(logPath.getName()),
-        appListener.appAttemptId.getOrElse(""),
+        appListener.appAttemptId,
         appListener.startTime.getOrElse(-1L),
         appListener.endTime.getOrElse(-1L),
         getModificationTime(eventLog).get,
@@ -487,7 +486,7 @@ private class FsApplicationAttemptInfo(
     val logPath: String,
     val name: String,
     val appId: String,
-    attemptId: String,
+    attemptId: Option[String],
     startTime: Long,
     endTime: Long,
     lastUpdated: Long,

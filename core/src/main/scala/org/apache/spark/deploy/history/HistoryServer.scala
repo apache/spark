@@ -55,7 +55,7 @@ class HistoryServer(
       val parts = key.split("/")
       require(parts.length == 1 || parts.length == 2, s"Invalid app key $key")
       val ui = provider
-        .getAppUI(parts(0), if (parts.length > 1) parts(1) else "")
+        .getAppUI(parts(0), if (parts.length > 1) Some(parts(1)) else None)
         .getOrElse(throw new NoSuchElementException())
       attachSparkUI(ui)
       ui
@@ -222,8 +222,8 @@ object HistoryServer extends Logging {
     }
   }
 
-  private[history] def getAttemptURI(appId: String, attemptId: String): String = {
-    val attemptSuffix = if (!attemptId.isEmpty) s"/${attemptId}" else ""
+  private[history] def getAttemptURI(appId: String, attemptId: Option[String]): String = {
+    val attemptSuffix = attemptId.map { id => s"/$id" }.getOrElse("")
     s"${HistoryServer.UI_PATH_PREFIX}/${appId}${attemptSuffix}"
   }
 
