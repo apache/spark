@@ -187,6 +187,15 @@ trait Row extends Serializable {
    * @throws NullPointerException when value is null.
    */
   def getBoolean(i: Int): Boolean
+  
+  /**
+   * Returns the value of a given fieldName as a primitive boolean.
+   *
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
+   */
+  def getBoolean(fieldName: String): Boolean = getBoolean(fieldIndex(fieldName))
 
   /**
    * Returns the value at position i as a primitive byte.
@@ -196,6 +205,15 @@ trait Row extends Serializable {
    */
   def getByte(i: Int): Byte
 
+   /**
+   * Returns the value of a given fieldName as a primitive Byte.
+   *
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
+   */
+  def getByte(fieldName: String): Byte = getByte(fieldIndex(fieldName))
+
   /**
    * Returns the value at position i as a primitive short.
    *
@@ -204,6 +222,15 @@ trait Row extends Serializable {
    */
   def getShort(i: Int): Short
 
+   /**
+   * Returns the value of a given fieldName as a primitive short.
+   *
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
+   */
+  def getShort(fieldName: String): Short = getShort(fieldIndex(fieldName))
+  
   /**
    * Returns the value at position i as a primitive int.
    *
@@ -212,6 +239,15 @@ trait Row extends Serializable {
    */
   def getInt(i: Int): Int
 
+   /**
+   * Returns the value of a given fieldName as a primitive int.
+   *
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
+   */
+  def getInt(fieldName: String): Int = getInt(fieldIndex(fieldName))
+  
   /**
    * Returns the value at position i as a primitive long.
    *
@@ -219,6 +255,15 @@ trait Row extends Serializable {
    * @throws NullPointerException when value is null.
    */
   def getLong(i: Int): Long
+  
+   /**
+   * Returns the value of a given fieldName as a primitive long.
+   *
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
+   */
+  def getLong(fieldName: String): Long = getLong(fieldIndex(fieldName))  
 
   /**
    * Returns the value at position i as a primitive float.
@@ -229,6 +274,15 @@ trait Row extends Serializable {
    */
   def getFloat(i: Int): Float
 
+   /**
+   * Returns the value of a given fieldName as a primitive float.
+   *
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
+   */
+  def getFloat(fieldName: String): Float = getFloat(fieldIndex(fieldName))    
+  
   /**
    * Returns the value at position i as a primitive double.
    *
@@ -237,6 +291,15 @@ trait Row extends Serializable {
    */
   def getDouble(i: Int): Double
 
+   /**
+   * Returns the value of a given fieldName as a primitive double.
+   *
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
+   */
+  def getDouble(fieldName: String): Double = getDouble(fieldIndex(fieldName))      
+  
   /**
    * Returns the value at position i as a String object.
    *
@@ -244,6 +307,16 @@ trait Row extends Serializable {
    * @throws NullPointerException when value is null.
    */
   def getString(i: Int): String
+  
+   /**
+   * Returns the value of a given fieldName as a String object.
+   *
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
+   */
+  def getString(fieldName: String): String = getString(fieldIndex(fieldName))
+  
 
   /**
    * Returns the value at position i of decimal type as java.math.BigDecimal.
@@ -252,6 +325,15 @@ trait Row extends Serializable {
    */
   def getDecimal(i: Int): java.math.BigDecimal = apply(i).asInstanceOf[java.math.BigDecimal]
 
+   /**
+   * Returns the value of a given fieldName as java.math.BigDecimal.
+   *
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
+   */
+  def getDecimal(fieldName: String): java.math.BigDecimal = getDecimal(fieldIndex(fieldName))       
+  
   /**
    * Returns the value at position i of date type as java.sql.Date.
    *
