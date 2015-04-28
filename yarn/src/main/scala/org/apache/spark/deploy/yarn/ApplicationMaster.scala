@@ -131,6 +131,9 @@ private[spark] class ApplicationMaster(
       // a new AMDelegationTokenRenewer
       if (sparkConf.contains("spark.yarn.credentials.file")) {
         delegationTokenRenewerOption = Some(new AMDelegationTokenRenewer(sparkConf, yarnConf))
+        // If a principal and keytab have been set, use that to create new credentials for executors
+        // periodically
+        delegationTokenRenewerOption.foreach(_.scheduleLoginFromKeytab())
       }
 
       if (isClusterMode) {
@@ -272,9 +275,6 @@ private[spark] class ApplicationMaster(
         sc.getConf.get("spark.driver.port"),
         isClusterMode = true)
       registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
-      // If a principal and keytab have been set, use that to create new credentials for executors
-      // periodically
-      delegationTokenRenewerOption.foreach(_.scheduleLoginFromKeytab())
       userClassThread.join()
     }
   }
