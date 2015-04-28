@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.trees._
@@ -43,7 +44,6 @@ case class AggregateEvaluation(
  * @param aggregateExpressions expressions that are computed for each group.
  * @param child the input data source.
  * @param unsafeEnabled whether to allow Unsafe-based aggregation buffers to be used.
- * @param useOffHeap whether to use off-heap allocation (only takes effect if unsafeEnabled=true)
  */
 @DeveloperApi
 case class GeneratedAggregate(
@@ -51,8 +51,7 @@ case class GeneratedAggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
     child: SparkPlan,
-    unsafeEnabled: Boolean,
-    useOffHeap: Boolean)
+    unsafeEnabled: Boolean)
   extends UnaryNode {
 
   override def requiredChildDistribution: Seq[Distribution] =
@@ -291,7 +290,7 @@ case class GeneratedAggregate(
           newAggregationBuffer(EmptyRow),
           aggregationBufferSchema,
           groupKeySchema,
-          if (useOffHeap) MemoryAllocator.UNSAFE else MemoryAllocator.HEAP,
+          SparkEnv.get.unsafeMemoryManager,
           1024 * 16,
           false
         )

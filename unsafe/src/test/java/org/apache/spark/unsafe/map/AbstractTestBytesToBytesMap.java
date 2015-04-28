@@ -21,20 +21,36 @@ import java.lang.Exception;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryLocation;
+import org.apache.spark.unsafe.memory.MemoryManager;
 import static org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET;
 
 public abstract class AbstractTestBytesToBytesMap {
 
   private final Random rand = new Random(42);
 
-  private final MemoryAllocator allocator = getMemoryAllocator();
+  private MemoryManager memoryManager;
+
+  @Before
+  public void setup() {
+    memoryManager = new MemoryManager(getMemoryAllocator());
+  }
+
+  @After
+  public void tearDown() {
+    if (memoryManager != null) {
+      memoryManager.cleanUpAllPages();
+      memoryManager = null;
+    }
+  }
 
   protected abstract MemoryAllocator getMemoryAllocator();
 
@@ -77,7 +93,7 @@ public abstract class AbstractTestBytesToBytesMap {
 
   @Test
   public void emptyMap() {
-    BytesToBytesMap map = new BytesToBytesMap(allocator, 64);
+    BytesToBytesMap map = new BytesToBytesMap(memoryManager, 64);
     Assert.assertEquals(0, map.size());
     final int keyLengthInWords = 10;
     final int keyLengthInBytes = keyLengthInWords * 8;
@@ -87,7 +103,7 @@ public abstract class AbstractTestBytesToBytesMap {
 
   @Test
   public void setAndRetrieveAKey() {
-    BytesToBytesMap map = new BytesToBytesMap(allocator, 64);
+    BytesToBytesMap map = new BytesToBytesMap(memoryManager, 64);
     final int recordLengthWords = 10;
     final int recordLengthBytes = recordLengthWords * 8;
     final byte[] keyData = getRandomByteArray(recordLengthWords);
@@ -139,7 +155,7 @@ public abstract class AbstractTestBytesToBytesMap {
   @Test
   public void iteratorTest() throws Exception {
     final int size = 128;
-    BytesToBytesMap map = new BytesToBytesMap(allocator, size / 2);
+    BytesToBytesMap map = new BytesToBytesMap(memoryManager, size / 2);
     try {
       for (long i = 0; i < size; i++) {
         final long[] value = new long[] { i };
@@ -181,7 +197,7 @@ public abstract class AbstractTestBytesToBytesMap {
     // Java arrays' hashCodes() aren't based on the arrays' contents, so we need to wrap arrays
     // into ByteBuffers in order to use them as keys here.
     final Map<ByteBuffer, byte[]> expected = new HashMap<ByteBuffer, byte[]>();
-    final BytesToBytesMap map = new BytesToBytesMap(allocator, size);
+    final BytesToBytesMap map = new BytesToBytesMap(memoryManager, size);
 
     try {
       // Fill the map to 90% full so that we can trigger probing

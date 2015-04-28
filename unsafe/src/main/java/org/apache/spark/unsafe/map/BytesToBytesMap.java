@@ -48,21 +48,10 @@ public final class BytesToBytesMap {
 
   private static final HashMapGrowthStrategy growthStrategy = HashMapGrowthStrategy.DOUBLING;
 
-  /** Bit mask for the lower 51 bits of a long. */
-  private static final long MASK_LONG_LOWER_51_BITS = 0x7FFFFFFFFFFFFL;
-
-  /** Bit mask for the upper 13 bits of a long */
-  private static final long MASK_LONG_UPPER_13_BITS = ~MASK_LONG_LOWER_51_BITS;
-
   /** Bit mask for the lower 32 bits of a long */
   private static final long MASK_LONG_LOWER_32_BITS = 0xFFFFFFFFL;
 
-  private final MemoryAllocator allocator;
-
-  /**
-   * Tracks whether we're using in-heap or off-heap addresses.
-   */
-  private final boolean inHeap;
+  private final MemoryManager memoryManager;
 
   /**
    * A linked list for tracking all allocated data pages so that we can free all of our memory.
@@ -81,26 +70,6 @@ public final class BytesToBytesMap {
    * the page.
    */
   private long pageCursor = 0;
-
-  /**
-   * Similar to an operating system's page table, this array maps page numbers into base object
-   * pointers, allowing us to translate between the hashtable's internal 64-bit address
-   * representation and the baseObject+offset representation which we use to support both in- and
-   * off-heap addresses. When using an off-heap allocator, every entry in this map will be `null`.
-   * When using an in-heap allocator, the entries in this map will point to pages' base objects.
-   * Entries are added to this map as new data pages are allocated.
-   */
-  private final Object[] pageTable = new Object[PAGE_TABLE_SIZE];
-
-  /**
-   * When using an in-heap allocator, this holds the current page number.
-   */
-  private int currentPageNumber = -1;
-
-  /**
-   * The number of entries in the page table.
-   */
-  private static final int PAGE_TABLE_SIZE = (int) 1L << 13;
 
   /**
    * The size of the data pages that hold key and value data. Map entries cannot span multiple
@@ -159,27 +128,26 @@ public final class BytesToBytesMap {
   private long numHashCollisions = 0;
 
   public BytesToBytesMap(
-      MemoryAllocator allocator,
+      MemoryManager memoryManager,
       int initialCapacity,
       double loadFactor,
       boolean enablePerfMetrics) {
-    this.inHeap = allocator instanceof HeapMemoryAllocator;
-    this.allocator = allocator;
+    this.memoryManager = memoryManager;
     this.loadFactor = loadFactor;
     this.loc = new Location();
     this.enablePerfMetrics = enablePerfMetrics;
     allocate(initialCapacity);
   }
 
-  public BytesToBytesMap(MemoryAllocator allocator, int initialCapacity) {
-    this(allocator, initialCapacity, 0.70, false);
+  public BytesToBytesMap(MemoryManager memoryManager, int initialCapacity) {
+    this(memoryManager, initialCapacity, 0.70, false);
   }
 
   public BytesToBytesMap(
-      MemoryAllocator allocator,
+      MemoryManager memoryManager,
       int initialCapacity,
       boolean enablePerfMetrics) {
-    this(allocator, initialCapacity, 0.70, enablePerfMetrics);
+    this(memoryManager, initialCapacity, 0.70, enablePerfMetrics);
   }
 
   @Override
@@ -303,20 +271,13 @@ public final class BytesToBytesMap {
     private int valueLength;
 
     private void updateAddressesAndSizes(long fullKeyAddress, long offsetFromKeyToValue) {
-      if (inHeap) {
-        final Object page = getPage(fullKeyAddress);
-        final long keyOffsetInPage = getOffsetInPage(fullKeyAddress);
+        final Object page = memoryManager.getPage(fullKeyAddress);
+        final long keyOffsetInPage = memoryManager.getOffsetInPage(fullKeyAddress);
         keyMemoryLocation.setObjAndOffset(page, keyOffsetInPage + 8);
         valueMemoryLocation.setObjAndOffset(page, keyOffsetInPage + 8 + offsetFromKeyToValue);
         keyLength = (int) PlatformDependent.UNSAFE.getLong(page, keyOffsetInPage);
         valueLength =
           (int) PlatformDependent.UNSAFE.getLong(page, keyOffsetInPage + offsetFromKeyToValue);
-      } else {
-        keyMemoryLocation.setObjAndOffset(null, fullKeyAddress + 8);
-        valueMemoryLocation.setObjAndOffset(null, fullKeyAddress + 8 + offsetFromKeyToValue);
-        keyLength = (int) PlatformDependent.UNSAFE.getLong(fullKeyAddress);
-        valueLength = (int) PlatformDependent.UNSAFE.getLong(fullKeyAddress + offsetFromKeyToValue);
-      }
     }
 
     Location with(int pos, int keyHashcode, boolean isDefined) {
@@ -337,21 +298,6 @@ public final class BytesToBytesMap {
      */
     public boolean isDefined() {
       return isDefined;
-    }
-
-    private Object getPage(long fullKeyAddress) {
-      assert (inHeap);
-      final int keyPageNumber = (int) ((fullKeyAddress & MASK_LONG_UPPER_13_BITS) >>> 51);
-      assert (keyPageNumber >= 0 && keyPageNumber < PAGE_TABLE_SIZE);
-      assert (keyPageNumber <= currentPageNumber);
-      final Object page = pageTable[keyPageNumber];
-      assert (page != null);
-      return page;
-    }
-
-    private long getOffsetInPage(long fullKeyAddress) {
-      assert (inHeap);
-      return (fullKeyAddress & MASK_LONG_LOWER_51_BITS);
     }
 
     /**
@@ -436,11 +382,9 @@ public final class BytesToBytesMap {
 
       // If there's not enough space in the current page, allocate a new page:
       if (currentDataPage == null || PAGE_SIZE_BYTES - pageCursor < requiredSize) {
-        MemoryBlock newPage = allocator.allocate(PAGE_SIZE_BYTES);
+        MemoryBlock newPage = memoryManager.allocatePage(PAGE_SIZE_BYTES);
         dataPages.add(newPage);
         pageCursor = 0;
-        currentPageNumber++;
-        pageTable[currentPageNumber] = newPage.getBaseObject();
         currentDataPage = newPage;
       }
 
@@ -467,15 +411,8 @@ public final class BytesToBytesMap {
       PlatformDependent.UNSAFE.copyMemory(
         valueBaseObject, valueBaseOffset, pageBaseObject, valueDataOffsetInPage, valueLengthBytes);
 
-      final long storedKeyAddress;
-      if (inHeap) {
-        // If we're in-heap, then we need to store the page number in the upper 13 bits of the
-        // address
-        storedKeyAddress = (((long) currentPageNumber) << 51) | (keySizeOffsetInPage & MASK_LONG_LOWER_51_BITS);
-      } else {
-        // Otherwise, just store the raw memory address
-        storedKeyAddress = keySizeOffsetInPage;
-      }
+      final long storedKeyAddress = memoryManager.encodePageNumberAndOffset(
+        currentDataPage, keySizeOffsetInPage);
       longArray.set(pos * 2, storedKeyAddress);
       final long storedValueOffsetAndKeyHashcode =
         (relativeOffsetFromKeyToValue << 32) | (keyHashcode & MASK_LONG_LOWER_32_BITS);
@@ -496,8 +433,8 @@ public final class BytesToBytesMap {
    */
   private void allocate(int capacity) {
     capacity = Math.max((int) Math.min(Integer.MAX_VALUE, nextPowerOf2(capacity)), 64);
-    longArray = new LongArray(allocator.allocate(capacity * 8 * 2));
-    bitset = new BitSet(allocator.allocate(capacity / 8).zero());
+    longArray = new LongArray(memoryManager.allocator.allocate(capacity * 8 * 2));
+    bitset = new BitSet(memoryManager.allocator.allocate(capacity / 8).zero());
 
     this.growthThreshold = (int) (capacity * loadFactor);
     this.mask = capacity - 1;
@@ -511,16 +448,16 @@ public final class BytesToBytesMap {
    */
   public void free() {
     if (longArray != null) {
-      allocator.free(longArray.memoryBlock());
+      memoryManager.allocator.free(longArray.memoryBlock());
       longArray = null;
     }
     if (bitset != null) {
-      allocator.free(bitset.memoryBlock());
+      memoryManager.allocator.free(bitset.memoryBlock());
       bitset = null;
     }
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
     while (dataPagesIterator.hasNext()) {
-      allocator.free(dataPagesIterator.next());
+      memoryManager.freePage(dataPagesIterator.next());
       dataPagesIterator.remove();
     }
     assert(dataPages.isEmpty());
@@ -603,8 +540,8 @@ public final class BytesToBytesMap {
     }
 
     // Deallocate the old data structures.
-    allocator.free(oldLongArray.memoryBlock());
-    allocator.free(oldBitSet.memoryBlock());
+    memoryManager.allocator.free(oldLongArray.memoryBlock());
+    memoryManager.allocator.free(oldBitSet.memoryBlock());
     if (enablePerfMetrics) {
       timeSpentResizingMs += System.currentTimeMillis() - resizeStartTime;
     }

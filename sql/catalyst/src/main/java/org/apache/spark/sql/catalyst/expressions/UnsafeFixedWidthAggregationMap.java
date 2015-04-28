@@ -25,8 +25,8 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
-import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryLocation;
+import org.apache.spark.unsafe.memory.MemoryManager;
 
 /**
  * Unsafe-based HashMap for performing aggregations where the aggregated values are fixed-width.
@@ -102,7 +102,7 @@ public final class UnsafeFixedWidthAggregationMap {
    * @param emptyAggregationBuffer the default value for new keys (a "zero" of the agg. function)
    * @param aggregationBufferSchema the schema of the aggregation buffer, used for row conversion.
    * @param groupingKeySchema the schema of the grouping key, used for row conversion.
-   * @param allocator the memory allocator used to allocate our Unsafe memory structures.
+   * @param groupingKeySchema the memory manager used to allocate our Unsafe memory structures.
    * @param initialCapacity the initial capacity of the map (a sizing hint to avoid re-hashing).
    * @param enablePerfMetrics if true, performance metrics will be recorded (has minor perf impact)
    */
@@ -110,7 +110,7 @@ public final class UnsafeFixedWidthAggregationMap {
       Row emptyAggregationBuffer,
       StructType aggregationBufferSchema,
       StructType groupingKeySchema,
-      MemoryAllocator allocator,
+      MemoryManager memoryManager,
       int initialCapacity,
       boolean enablePerfMetrics) {
     this.emptyAggregationBuffer =
@@ -118,7 +118,7 @@ public final class UnsafeFixedWidthAggregationMap {
     this.aggregationBufferSchema = aggregationBufferSchema;
     this.groupingKeyToUnsafeRowConverter = new UnsafeRowConverter(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
-    this.map = new BytesToBytesMap(allocator, initialCapacity, enablePerfMetrics);
+    this.map = new BytesToBytesMap(memoryManager, initialCapacity, enablePerfMetrics);
     this.enablePerfMetrics = enablePerfMetrics;
   }
 

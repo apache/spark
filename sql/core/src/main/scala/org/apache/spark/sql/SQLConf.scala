@@ -31,7 +31,6 @@ private[spark] object SQLConf {
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val CODEGEN_ENABLED = "spark.sql.codegen"
   val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
-  val UNSAFE_USE_OFF_HEAP = "spark.sql.unsafe.offHeap"
   val DIALECT = "spark.sql.dialect"
 
   val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
@@ -158,13 +157,6 @@ private[sql] class SQLConf extends Serializable {
    * Defaults to false as this feature is currently experimental.
    */
   private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, "false").toBoolean
-
-  /**
-   * When set to true, Spark SQL will use off-heap memory allocation for managed memory operations.
-   *
-   * Defaults to false.
-   */
-  private[spark] def unsafeUseOffHeap: Boolean = getConf(UNSAFE_USE_OFF_HEAP, "false").toBoolean
 
   private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2, "true").toBoolean
 

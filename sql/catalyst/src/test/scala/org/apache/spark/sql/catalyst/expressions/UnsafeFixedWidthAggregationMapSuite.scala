@@ -17,18 +17,31 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.unsafe.memory.MemoryAllocator
-import org.scalatest.{FunSuite, Matchers}
+import org.apache.spark.unsafe.memory.{MemoryManager, MemoryAllocator}
+import org.scalatest.{BeforeAndAfterEach, FunSuite, Matchers}
 
 import org.apache.spark.sql.types._
 
-class UnsafeFixedWidthAggregationMapSuite extends FunSuite with Matchers {
+class UnsafeFixedWidthAggregationMapSuite extends FunSuite with Matchers with BeforeAndAfterEach {
 
   import UnsafeFixedWidthAggregationMap._
 
   private val groupKeySchema = StructType(StructField("product", StringType) :: Nil)
   private val aggBufferSchema = StructType(StructField("salePrice", IntegerType) :: Nil)
   private def emptyAggregationBuffer: Row = new GenericRow(Array[Any](0))
+
+  private var memoryManager: MemoryManager = null
+
+  override def beforeEach(): Unit = {
+    memoryManager = new MemoryManager(true)
+  }
+
+  override def afterEach(): Unit = {
+    if (memoryManager != null) {
+      memoryManager.cleanUpAllPages()
+      memoryManager = null
+    }
+  }
 
   test("supported schemas") {
     assert(!supportsAggregationBufferSchema(StructType(StructField("x", StringType) :: Nil)))
@@ -45,7 +58,7 @@ class UnsafeFixedWidthAggregationMapSuite extends FunSuite with Matchers {
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      MemoryAllocator.HEAP,
+      memoryManager,
       1024,
       false
     )
@@ -58,7 +71,7 @@ class UnsafeFixedWidthAggregationMapSuite extends FunSuite with Matchers {
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      MemoryAllocator.HEAP,
+      memoryManager,
       1024,
       false
     )

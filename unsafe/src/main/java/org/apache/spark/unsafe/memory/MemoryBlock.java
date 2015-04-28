@@ -28,6 +28,16 @@ public class MemoryBlock extends MemoryLocation {
 
   private final long length;
 
+  /**
+   * Optional page number; used when this MemoryBlock represents a page allocated by a
+   * MemoryManager. This is package-private and is modified by MemoryManager.
+   */
+  int pageNumber = -1;
+
+  public int getPageNumber() {
+    return pageNumber;
+  }
+
   MemoryBlock(@Nullable Object obj, long offset, long length) {
     super(obj, offset);
     this.length = length;
