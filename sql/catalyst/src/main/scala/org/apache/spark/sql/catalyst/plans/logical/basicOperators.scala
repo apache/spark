@@ -310,6 +310,10 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
+case class Coalesce(numPartitions: Int, shuffle: Boolean, child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
+
 /**
  * A relation with one row. This is used in "SELECT ..." without a from clause.
  */

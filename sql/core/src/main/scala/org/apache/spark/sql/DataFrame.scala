@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, S
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation, ResolvedStar}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
+import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
 import org.apache.spark.sql.jdbc.JDBCWriteDetails
@@ -961,9 +962,7 @@ class DataFrame private[sql](
    * @group rdd
    */
   override def repartition(numPartitions: Int): DataFrame = {
-    sqlContext.createDataFrame(
-      queryExecution.toRdd.map(_.copy()).repartition(numPartitions),
-      schema, needsConversion = false)
+    logical.Coalesce(numPartitions, shuffle = true, logicalPlan)
   }
 
   /**
@@ -974,10 +973,7 @@ class DataFrame private[sql](
    * @group rdd
    */
   override def coalesce(numPartitions: Int): DataFrame = {
-    sqlContext.createDataFrame(
-      queryExecution.toRdd.coalesce(numPartitions),
-      schema,
-      needsConversion = false)
+    logical.Coalesce(numPartitions, shuffle = false, logicalPlan)
   }
 
   /**
