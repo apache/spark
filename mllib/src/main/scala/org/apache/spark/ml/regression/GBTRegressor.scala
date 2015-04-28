@@ -23,7 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
 import org.apache.spark.ml.impl.tree._
-import org.apache.spark.ml.param.{ParamValidate, Params, ParamMap, Param}
+import org.apache.spark.ml.param.{Params, ParamMap, Param}
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
@@ -103,21 +103,15 @@ final class GBTRegressor
   val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
     " tries to minimize (case-insensitive). Supported options:" +
     s" ${GBTRegressor.supportedLossTypes.mkString(", ")}",
-    ParamValidate.inArray[String](GBTRegressor.supportedLossTypes))
+    (value: String) => GBTRegressor.supportedLossTypes.contains(value.toLowerCase))
 
   setDefault(lossType -> "squared")
 
   /** @group setParam */
-  def setLossType(value: String): this.type = {
-    val lossStr = value.toLowerCase
-    require(GBTRegressor.supportedLossTypes.contains(lossStr), "GBTRegressor was given bad loss" +
-      s" type: $value. Supported options: ${GBTRegressor.supportedLossTypes.mkString(", ")}")
-    set(lossType, lossStr)
-    this
-  }
+  def setLossType(value: String): this.type = set(lossType, value)
 
   /** @group getParam */
-  def getLossType: String = getOrDefault(lossType)
+  def getLossType: String = getOrDefault(lossType).toLowerCase
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {

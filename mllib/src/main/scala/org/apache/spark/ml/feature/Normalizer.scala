@@ -36,7 +36,7 @@ class Normalizer extends UnaryTransformer[Vector, Vector, Normalizer] {
    * (default: p = 2)
    * @group param
    */
-  val p = new DoubleParam(this, "p", "the p norm value", isValid = ParamValidate.gtEq[Double](1))
+  val p = new DoubleParam(this, "p", "the p norm value", ParamValidate.gtEq[Double](1))
 
   setDefault(p -> 2.0)
 

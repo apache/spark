@@ -56,7 +56,7 @@ class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenize
    * @group param
    */
   val minTokenLength: IntParam = new IntParam(this, "minLength", "minimum token length (>= 0)",
-    isValid = ParamValidate.gtEq[Int](0))
+    ParamValidate.gtEq[Int](0))
 
   /** @group setParam */
   def setMinTokenLength(value: Int): this.type = set(minTokenLength, value)
@@ -79,7 +79,7 @@ class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenize
 
   /**
    * Regex pattern used by tokenizer.
-   * Default: "\\p{L}+|[^\\p{L}\\s]+"
+   * Default: `"\\p{L}+|[^\\p{L}\\s]+"`
    * @group param
    */
   val pattern: Param[String] = new Param(this, "pattern", "regex pattern used for tokenizing")

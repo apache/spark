@@ -72,13 +72,6 @@ private[ml] trait CrossValidatorParams extends Params {
   def getNumFolds: Int = getOrDefault(numFolds)
 
   setDefault(numFolds -> 3)
-
-  override def validate(paramMap: ParamMap): Unit = {
-    val map = extractParamMap(paramMap)
-    getEstimatorParamMaps.foreach { eMap =>
-      getEstimator.validate(map ++ eMap)
-    }
-  }
 }
 
 /**
@@ -101,6 +94,13 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
 
   /** @group setParam */
   def setNumFolds(value: Int): this.type = set(numFolds, value)
+
+  override def validate(paramMap: ParamMap): Unit = {
+    val map = extractParamMap(paramMap)
+    getEstimatorParamMaps.foreach { eMap =>
+      getEstimator.validate(map ++ eMap)
+    }
+  }
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): CrossValidatorModel = {
     val map = extractParamMap(paramMap)
@@ -156,6 +156,10 @@ class CrossValidatorModel private[ml] (
     override val fittingParamMap: ParamMap,
     val bestModel: Model[_])
   extends Model[CrossValidatorModel] with CrossValidatorParams {
+
+  override def validate(paramMap: ParamMap): Unit = {
+    bestModel.validate(paramMap)
+  }
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     bestModel.transform(dataset, paramMap)

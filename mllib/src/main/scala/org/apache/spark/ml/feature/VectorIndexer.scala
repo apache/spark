@@ -92,11 +92,7 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
 class VectorIndexer extends Estimator[VectorIndexerModel] with VectorIndexerParams {
 
   /** @group setParam */
-  def setMaxCategories(value: Int): this.type = {
-    require(value > 1,
-      s"DatasetIndexer given maxCategories = value, but requires maxCategories > 1.")
-    set(maxCategories, value)
-  }
+  def setMaxCategories(value: Int): this.type = set(maxCategories, value)
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)

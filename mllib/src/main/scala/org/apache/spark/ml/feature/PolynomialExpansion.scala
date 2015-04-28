@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.{IntParam, ParamMap}
+import org.apache.spark.ml.param.{ParamValidate, IntParam, ParamMap}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.types.DataType
 
@@ -38,9 +38,12 @@ class PolynomialExpansion extends UnaryTransformer[Vector, Vector, PolynomialExp
 
   /**
    * The polynomial degree to expand, which should be larger than 1.
+   * Default: 2
    * @group param
    */
-  val degree = new IntParam(this, "degree", "the polynomial degree to expand")
+  val degree = new IntParam(this, "degree", "the polynomial degree to expand",
+    ParamValidate.gt[Int](2))
+
   setDefault(degree -> 2)
 
   /** @group getParam */

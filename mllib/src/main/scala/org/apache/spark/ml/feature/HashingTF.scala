@@ -37,7 +37,7 @@ class HashingTF extends UnaryTransformer[Iterable[_], Vector, HashingTF] {
    * @group param
    */
   val numFeatures = new IntParam(this, "numFeatures", "number of features (> 0)",
-    isValid = ParamValidate.gt[Int](0))
+    ParamValidate.gt[Int](0))
 
   setDefault(numFeatures -> (1 << 18))
 

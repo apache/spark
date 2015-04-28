@@ -120,28 +120,19 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
     maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
 
   /** @group setParam */
-  def setMaxDepth(value: Int): this.type = {
-    require(value >= 0, s"maxDepth parameter must be >= 0.  Given bad value: $value")
-    set(maxDepth, value)
-  }
+  def setMaxDepth(value: Int): this.type = set(maxDepth, value)
 
   /** @group getParam */
   final def getMaxDepth: Int = getOrDefault(maxDepth)
 
   /** @group setParam */
-  def setMaxBins(value: Int): this.type = {
-    require(value >= 2, s"maxBins parameter must be >= 2.  Given bad value: $value")
-    set(maxBins, value)
-  }
+  def setMaxBins(value: Int): this.type = set(maxBins, value)
 
   /** @group getParam */
   final def getMaxBins: Int = getOrDefault(maxBins)
 
   /** @group setParam */
-  def setMinInstancesPerNode(value: Int): this.type = {
-    require(value >= 1, s"minInstancesPerNode parameter must be >= 1.  Given bad value: $value")
-    set(minInstancesPerNode, value)
-  }
+  def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
   /** @group getParam */
   final def getMinInstancesPerNode: Int = getOrDefault(minInstancesPerNode)
@@ -153,10 +144,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   final def getMinInfoGain: Double = getOrDefault(minInfoGain)
 
   /** @group expertSetParam */
-  def setMaxMemoryInMB(value: Int): this.type = {
-    require(value > 0, s"maxMemoryInMB parameter must be > 0.  Given bad value: $value")
-    set(maxMemoryInMB, value)
-  }
+  def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
 
   /** @group expertGetParam */
   final def getMaxMemoryInMB: Int = getOrDefault(maxMemoryInMB)
@@ -168,10 +156,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   final def getCacheNodeIds: Boolean = getOrDefault(cacheNodeIds)
 
   /** @group expertSetParam */
-  def setCheckpointInterval(value: Int): this.type = {
-    require(value >= 1, s"checkpointInterval parameter must be >= 1.  Given bad value: $value")
-    set(checkpointInterval, value)
-  }
+  def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
   /** @group expertGetParam */
   final def getCheckpointInterval: Int = getOrDefault(checkpointInterval)
@@ -213,21 +198,15 @@ private[ml] trait TreeClassifierParams extends Params {
   final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
     s" ${TreeClassifierParams.supportedImpurities.mkString(", ")}",
-    ParamValidate.inArray[String](TreeClassifierParams.supportedImpurities))
+    (value: String) => TreeClassifierParams.supportedImpurities.contains(value.toLowerCase))
 
   setDefault(impurity -> "gini")
 
   /** @group setParam */
-  def setImpurity(value: String): this.type = {
-    val impurityStr = value.toLowerCase
-    require(TreeClassifierParams.supportedImpurities.contains(impurityStr),
-      s"Tree-based classifier was given unrecognized impurity: $value." +
-      s"  Supported options: ${TreeClassifierParams.supportedImpurities.mkString(", ")}")
-    set(impurity, impurityStr)
-  }
+  def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
-  final def getImpurity: String = getOrDefault(impurity)
+  final def getImpurity: String = getOrDefault(impurity).toLowerCase
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -261,21 +240,15 @@ private[ml] trait TreeRegressorParams extends Params {
   final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
     s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}",
-    ParamValidate.inArray[String](TreeRegressorParams.supportedImpurities))
+    (value: String) => TreeRegressorParams.supportedImpurities.contains(value.toLowerCase))
 
   setDefault(impurity -> "variance")
 
   /** @group setParam */
-  def setImpurity(value: String): this.type = {
-    val impurityStr = value.toLowerCase
-    require(TreeRegressorParams.supportedImpurities.contains(impurityStr),
-      s"Tree-based regressor was given unrecognized impurity: $value." +
-        s"  Supported options: ${TreeRegressorParams.supportedImpurities.mkString(", ")}")
-    set(impurity, impurityStr)
-  }
+  def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
-  final def getImpurity: String = getOrDefault(impurity)
+  final def getImpurity: String = getOrDefault(impurity).toLowerCase
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -315,11 +288,7 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
   setDefault(subsamplingRate -> 1.0)
 
   /** @group setParam */
-  def setSubsamplingRate(value: Double): this.type = {
-    require(value > 0.0 && value <= 1.0,
-      s"Subsampling rate must be in range (0,1]. Bad rate: $value")
-    set(subsamplingRate, value)
-  }
+  def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
 
   /** @group getParam */
   final def getSubsamplingRate: Double = getOrDefault(subsamplingRate)
@@ -386,30 +355,22 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
   final val featureSubsetStrategy: Param[String] = new Param[String](this, "featureSubsetStrategy",
     "The number of features to consider for splits at each tree node." +
       s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}",
-    ParamValidate.inArray[String](RandomForestParams.supportedFeatureSubsetStrategies))
+    (value: String) =>
+      RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase))
 
   setDefault(numTrees -> 20, featureSubsetStrategy -> "auto")
 
   /** @group setParam */
-  def setNumTrees(value: Int): this.type = {
-    require(value >= 1, s"Random Forest numTrees parameter cannot be $value; it must be >= 1.")
-    set(numTrees, value)
-  }
+  def setNumTrees(value: Int): this.type = set(numTrees, value)
 
   /** @group getParam */
   final def getNumTrees: Int = getOrDefault(numTrees)
 
   /** @group setParam */
-  def setFeatureSubsetStrategy(value: String): this.type = {
-    val strategyStr = value.toLowerCase
-    require(RandomForestParams.supportedFeatureSubsetStrategies.contains(strategyStr),
-      s"RandomForestParams was given unrecognized featureSubsetStrategy: $value. Supported" +
-        s" options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}")
-    set(featureSubsetStrategy, strategyStr)
-  }
+  def setFeatureSubsetStrategy(value: String): this.type = set(featureSubsetStrategy, value)
 
   /** @group getParam */
-  final def getFeatureSubsetStrategy: String = getOrDefault(featureSubsetStrategy)
+  final def getFeatureSubsetStrategy: String = getOrDefault(featureSubsetStrategy).toLowerCase
 }
 
 private[ml] object RandomForestParams {
@@ -451,17 +412,10 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
   setDefault(maxIter -> 20, stepSize -> 0.1)
 
   /** @group setParam */
-  def setMaxIter(value: Int): this.type = {
-    require(value >= 1, s"Gradient Boosting maxIter parameter cannot be $value; it must be >= 1.")
-    set(maxIter, value)
-  }
+  def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /** @group setParam */
-  def setStepSize(value: Double): this.type = {
-    require(value > 0.0 && value <= 1.0,
-      s"GBT given invalid step size ($value).  Value should be in (0,1].")
-    set(stepSize, value)
-  }
+  def setStepSize(value: Double): this.type = set(stepSize, value)
 
   /** @group getParam */
   final def getStepSize: Double = getOrDefault(stepSize)
