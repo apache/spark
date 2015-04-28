@@ -37,6 +37,13 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(syms.length == 2)
     assert(syms(0)._1 == "b")
     assert(syms(1)._1 == "c")
+
+    val word2VecMap = model.getVectors
+    val newModel = new Word2VecModel(word2VecMap)
+    val newSyms = newModel.findSynonyms("a", 2)
+    assert(newSyms.length == 2)
+    assert(newSyms(0)._1 == "b")
+    assert(newSyms(1)._1 == "c")
   }
 
   test("Word2VecModel") {
