@@ -381,6 +381,28 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       }
     }
   }
+
+  test("SPARK-6352 DirectParquetOutputCommitter") {
+    // Write to a parquet file and let it fail.
+    // _temporary should be missing if direct output committer works.
+    try {
+      configuration.set("spark.sql.parquet.output.committer.class",
+        "org.apache.spark.sql.parquet.DirectParquetOutputCommitter")
+      sqlContext.udf.register("div0", (x: Int) => x / 0)
+      withTempPath { dir =>
+        intercept[org.apache.spark.SparkException] {
+          sqlContext.sql("select div0(1)").saveAsParquetFile(dir.getCanonicalPath)
+        }
+        val path = new Path(dir.getCanonicalPath, "_temporary")
+        val fs = path.getFileSystem(configuration)
+        assert(!fs.exists(path))
+      }
+    }
+    finally {
+      configuration.set("spark.sql.parquet.output.committer.class",
+        "parquet.hadoop.ParquetOutputCommitter")
+    }
+  }
 }
 
 class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterAll {
