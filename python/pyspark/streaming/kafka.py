@@ -15,8 +15,7 @@
 # limitations under the License.
 #
 
-from py4j.java_collections import ListConverter, MapConverter, SetConverter
-from py4j.java_gateway import java_import, Py4JError, Py4JJavaError
+from py4j.java_gateway import Py4JJavaError
 
 from pyspark.rdd import RDD
 from pyspark.storagelevel import StorageLevel
@@ -109,25 +108,22 @@ class KafkaUtils(object):
         if not isinstance(kafkaParams, dict):
             raise TypeError("kafkaParams should be dict")
 
-        jparam = MapConverter().convert(kafkaParams, ssc.sparkContext._gateway._gateway_client)
-        jtopics = SetConverter().convert(topics, ssc.sparkContext._gateway._gateway_client)
         try:
             helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
                 .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
             helper = helperClass.newInstance()
 
-            jfromOffsets = MapConverter().convert(
-                dict([(k._jTopicAndPartition(helper), v) for (k, v) in fromOffsets.items()]),
-                ssc.sparkContext._gateway._gateway_client)
-            jstream = helper.createDirectStream(ssc._jssc, jparam, jtopics, jfromOffsets)
-        except Py4JJavaError, e:
+            jfromOffsets = dict([(k._jTopicAndPartition(helper),
+                                  v) for (k, v) in fromOffsets.items()])
+            jstream = helper.createDirectStream(ssc._jssc, kafkaParams, set(topics), jfromOffsets)
+        except Py4JJavaError as e:
             if 'ClassNotFoundException' in str(e.java_exception):
                 KafkaUtils._printErrorMsg(ssc.sparkContext)
             raise e
 
         ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
         stream = DStream(jstream, ssc, ser)
-        return stream.map(lambda (k, v): (keyDecoder(k), valueDecoder(v)))
+        return stream.map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))
 
     @staticmethod
     def createRDD(sc, kafkaParams, offsetRanges, leaders={},
@@ -150,30 +146,26 @@ class KafkaUtils(object):
         if not isinstance(offsetRanges, list):
             raise TypeError("offsetRanges should be list")
 
-        jparam = MapConverter().convert(kafkaParams, sc._gateway._gateway_client)
         try:
             helperClass = sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
                 .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
             helper = helperClass.newInstance()
-            joffsetRanges = ListConverter().convert([o._jOffsetRange(helper) for o in offsetRanges],
-                                                    sc._gateway._gateway_client)
-            jleaders = MapConverter().convert(
-                dict([(k._jTopicAndPartition(helper),
-                       v._jBroker(helper)) for (k, v) in leaders.items()]),
-                sc._gateway._gateway_client)
-            jrdd = helper.createRDD(sc._jsc, jparam, joffsetRanges, jleaders)
-        except Py4JJavaError, e:
+            joffsetRanges = [o._jOffsetRange(helper) for o in offsetRanges]
+            jleaders = dict([(k._jTopicAndPartition(helper),
+                              v._jBroker(helper)) for (k, v) in leaders.items()])
+            jrdd = helper.createRDD(sc._jsc, kafkaParams, joffsetRanges, jleaders)
+        except Py4JJavaError as e:
             if 'ClassNotFoundException' in str(e.java_exception):
                 KafkaUtils._printErrorMsg(sc)
             raise e
 
         ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
         rdd = RDD(jrdd, sc, ser)
-        return rdd.map(lambda (k, v): (keyDecoder(k), valueDecoder(v)))
+        return rdd.map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))
 
     @staticmethod
     def _printErrorMsg(sc):
-        print """
+        print("""
 ________________________________________________________________________________________________
 
   Spark Streaming's Kafka libraries not found in class path. Try one of the following.
@@ -191,7 +183,7 @@ ________________________________________________________________________________
 
 ________________________________________________________________________________________________
 
-        """ % (sc.version, sc.version)
+""" % (sc.version, sc.version))
 
 
 class OffsetRange(object):

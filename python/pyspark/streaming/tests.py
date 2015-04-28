@@ -626,60 +626,55 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         """Test the Python direct Kafka stream API."""
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
-        jSendData = MapConverter().convert(sendData,
-                                           self.ssc.sparkContext._gateway._gateway_client)
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
                        "auto.offset.reset": "smallest"}
 
         self._kafkaTestUtils.createTopic(topic)
-        self._kafkaTestUtils.sendMessages(topic, jSendData)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
 
         stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams)
         self._validateStreamResult(sendData, stream)
 
+    @unittest.skipIf(sys.version >= "3", "long type not support")
     def test_kafka_direct_stream_from_offset(self):
         """Test the Python direct Kafka stream API with start offset specified."""
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
-        jSendData = MapConverter().convert(sendData,
-                                           self.ssc.sparkContext._gateway._gateway_client)
-        fromOffsets = {TopicAndPartition(topic, 0): 0L}
+        fromOffsets = {TopicAndPartition(topic, 0): long(0)}
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
 
         self._kafkaTestUtils.createTopic(topic)
-        self._kafkaTestUtils.sendMessages(topic, jSendData)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
 
         stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams, fromOffsets)
         self._validateStreamResult(sendData, stream)
 
+    @unittest.skipIf(sys.version >= "3", "long type not support")
     def test_kafka_rdd(self):
         """Test the Python direct Kafka RDD API."""
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2}
-        jSendData = MapConverter().convert(sendData,
-                                           self.ssc.sparkContext._gateway._gateway_client)
-        offsetRanges = [OffsetRange(topic, 0, 0L, sum(sendData.values()))]
+        offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
 
         self._kafkaTestUtils.createTopic(topic)
-        self._kafkaTestUtils.sendMessages(topic, jSendData)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
 
         rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges)
         self._validateRddResult(sendData, rdd)
 
+    @unittest.skipIf(sys.version >= "3", "long type not support")
     def test_kafka_rdd_with_leaders(self):
         """Test the Python direct Kafka RDD API with leaders."""
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
-        jSendData = MapConverter().convert(sendData,
-                                           self.ssc.sparkContext._gateway._gateway_client)
-        offsetRanges = [OffsetRange(topic, 0, 0L, sum(sendData.values()))]
+        offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
         address = self._kafkaTestUtils.brokerAddress().split(":")
         leaders = {TopicAndPartition(topic, 0): Broker(address[0], int(address[1]))}
 
         self._kafkaTestUtils.createTopic(topic)
-        self._kafkaTestUtils.sendMessages(topic, jSendData)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
 
         rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges, leaders)
         self._validateRddResult(sendData, rdd)

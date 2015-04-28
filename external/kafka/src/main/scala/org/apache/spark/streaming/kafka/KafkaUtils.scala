@@ -17,7 +17,6 @@
 
 package org.apache.spark.streaming.kafka
 
-import java.io.{DataOutputStream, ByteArrayOutputStream}
 import java.lang.{Integer => JInt}
 import java.lang.{Long => JLong}
 import java.util.{Map => JMap}
@@ -642,11 +641,11 @@ private class KafkaUtilsPythonHelper {
     }
   }
 
-  def createOffsetRange(topic: String, partition: Int, fromOffset: Long, untilOffset: Long
+  def createOffsetRange(topic: String, partition: JInt, fromOffset: JLong, untilOffset: JLong
     ): OffsetRange = OffsetRange.create(topic, partition, fromOffset, untilOffset)
 
-  def createTopicAndPartition(topic: String, partition: Int): TopicAndPartition =
+  def createTopicAndPartition(topic: String, partition: JInt): TopicAndPartition =
     TopicAndPartition(topic, partition)
 
-  def createBroker(host: String, port: Int): Broker = Broker(host, port)
+  def createBroker(host: String, port: JInt): Broker = Broker(host, port)
 }
