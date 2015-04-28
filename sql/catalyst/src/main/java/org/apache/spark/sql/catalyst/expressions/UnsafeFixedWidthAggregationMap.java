@@ -139,13 +139,17 @@ public final class UnsafeFixedWidthAggregationMap {
    * return the same object.
    */
   public UnsafeRow getAggregationBuffer(Row groupingKey) {
-    // Zero out the buffer that's used to hold the current row. This is necessary in order
-    // to ensure that rows hash properly, since garbage data from the previous row could
-    // otherwise end up as padding in this row.
-    Arrays.fill(groupingKeyConversionScratchSpace, 0);
     final int groupingKeySize = groupingKeyToUnsafeRowConverter.getSizeRequirement(groupingKey);
+    // Make sure that the buffer is large enough to hold the key. If it's not, grow it:
     if (groupingKeySize > groupingKeyConversionScratchSpace.length) {
+      // This new array will be initially zero, so there's no need to zero it out here
       groupingKeyConversionScratchSpace = new long[groupingKeySize];
+    } else {
+      // Zero out the buffer that's used to hold the current row. This is necessary in order
+      // to ensure that rows hash properly, since garbage data from the previous row could
+      // otherwise end up as padding in this row. As a performance optimization, we only zero out
+      // the portion of the buffer that we'll actually write to.
+      Arrays.fill(groupingKeyConversionScratchSpace, 0, groupingKeySize, 0);
     }
     final long actualGroupingKeySize = groupingKeyToUnsafeRowConverter.writeRow(
       groupingKey,

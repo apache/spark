@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.JavaConverters._
+import scala.util.Random
+
 import org.apache.spark.unsafe.memory.{MemoryManager, MemoryAllocator}
 import org.scalatest.{BeforeAndAfterEach, FunSuite, Matchers}
 
@@ -59,8 +62,8 @@ class UnsafeFixedWidthAggregationMapSuite extends FunSuite with Matchers with Be
       aggBufferSchema,
       groupKeySchema,
       memoryManager,
-      1024,
-      false
+      1024, // initial capacity
+      false // disable perf metrics
     )
     assert(!map.iterator().hasNext)
     map.free()
@@ -72,8 +75,8 @@ class UnsafeFixedWidthAggregationMapSuite extends FunSuite with Matchers with Be
       aggBufferSchema,
       groupKeySchema,
       memoryManager,
-      1024,
-      false
+      1024, // initial capacity
+      false // disable perf metrics
     )
     val groupKey = new GenericRow(Array[Any](UTF8String("cats")))
 
@@ -90,6 +93,27 @@ class UnsafeFixedWidthAggregationMapSuite extends FunSuite with Matchers with Be
     map.getAggregationBuffer(groupKey).getInt(0) should be (42)
 
     map.free()
+  }
+
+  test("inserting large random keys") {
+    val map = new UnsafeFixedWidthAggregationMap(
+      emptyAggregationBuffer,
+      aggBufferSchema,
+      groupKeySchema,
+      memoryManager,
+      128, // initial capacity
+      false // disable perf metrics
+    )
+    val rand = new Random(42)
+    val groupKeys: Set[String] = Seq.fill(512)(rand.nextString(1024)).toSet
+    groupKeys.foreach { keyString =>
+      map.getAggregationBuffer(new GenericRow(Array[Any](UTF8String(keyString))))
+    }
+    val seenKeys: Set[String] = map.iterator().asScala.map { entry =>
+      entry.key.getString(0)
+    }.toSet
+    seenKeys.size should be (groupKeys.size)
+    seenKeys should be (groupKeys)
   }
 
 }
