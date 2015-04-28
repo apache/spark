@@ -49,6 +49,7 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
  */
 private[hive]
 case class DropTable(
+    db: Option[String],
     tableName: String,
     ifExists: Boolean) extends RunnableCommand {
 
