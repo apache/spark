@@ -83,8 +83,8 @@ abstract class BinaryArithmetic extends BinaryExpression {
 
   def dataType: DataType = {
     if (!resolved) {
-      throw new UnresolvedException(this, "Unresolved datatype. Can not resolve due to " +
-        s"differing types ${left.dataType}, ${right.dataType}")
+      throw new UnresolvedException(this,
+        s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
     }
     left.dataType
   }
@@ -339,8 +339,8 @@ case class MaxOf(left: Expression, right: Expression) extends Expression {
 
   override def dataType: DataType = {
     if (!resolved) {
-      throw new UnresolvedException(this, "Unresolved datatype. Can not resolve due to " +
-        s"differing types ${left.dataType}, ${right.dataType}")
+      throw new UnresolvedException(this,
+        s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
     }
     left.dataType
   }
@@ -384,8 +384,8 @@ case class MinOf(left: Expression, right: Expression) extends Expression {
 
   override def dataType: DataType = {
     if (!resolved) {
-      throw new UnresolvedException(this, "Unresolved datatype. Can not resolve due to " +
-        s"differing types ${left.dataType}, ${right.dataType}")
+      throw new UnresolvedException(this,
+        s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
     }
     left.dataType
   }

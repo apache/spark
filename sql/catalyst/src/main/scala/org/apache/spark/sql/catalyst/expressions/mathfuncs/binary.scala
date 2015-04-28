@@ -43,8 +43,8 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 
   override def dataType: DataType = {
     if (!resolved) {
-      throw new UnresolvedException(this, "Unresolved datatype. Can not resolve due to " +
-        s"differing types ${left.dataType}, ${right.dataType}")
+      throw new UnresolvedException(this,
+        s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
     }
     left.dataType
   }
