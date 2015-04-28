@@ -19,11 +19,11 @@ package org.apache.spark.deploy
 import java.util.concurrent.{Executors, TimeUnit}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 import scala.util.control.NonFatal
 
@@ -37,7 +37,7 @@ private[spark] class ExecutorDelegationTokenUpdater(
 
   private val delegationTokenRenewer =
     Executors.newSingleThreadScheduledExecutor(
-      Utils.namedThreadFactory("Delegation Token Refresh Thread"))
+      ThreadUtils.namedThreadFactory("Delegation Token Refresh Thread"))
 
   // On the executor, this thread wakes up and picks up new tokens from HDFS, if any.
   private val executorUpdaterRunnable =

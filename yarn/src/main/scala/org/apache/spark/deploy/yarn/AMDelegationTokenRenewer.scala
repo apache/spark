@@ -20,12 +20,12 @@ import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{Executors, TimeUnit}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.deploy.SparkHadoopUtil
 
 import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.ThreadUtils
 
 /*
  * The following methods are primarily meant to make sure long-running apps like Spark
@@ -54,7 +54,7 @@ private[yarn] class AMDelegationTokenRenewer(
 
   private val delegationTokenRenewer =
     Executors.newSingleThreadScheduledExecutor(
-      Utils.namedThreadFactory("Delegation Token Refresh Thread"))
+      ThreadUtils.namedThreadFactory("Delegation Token Refresh Thread"))
 
   private val hadoopUtil = YarnSparkHadoopUtil.get
 
