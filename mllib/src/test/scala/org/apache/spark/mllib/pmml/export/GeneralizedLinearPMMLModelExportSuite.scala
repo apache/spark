@@ -20,13 +20,12 @@ package org.apache.spark.mllib.pmml.export
 import org.dmg.pmml.RegressionModel
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.classification.SVMModel
 import org.apache.spark.mllib.regression.{LassoModel, LinearRegressionModel, RidgeRegressionModel}
 import org.apache.spark.mllib.util.LinearDataGenerator
 
 class GeneralizedLinearPMMLModelExportSuite extends FunSuite {
 
-  test("linear regression pmml export") {
+  test("linear regression PMML export") {
     val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)
     val linearRegressionModel =
       new LinearRegressionModel(linearInput(0).features, linearInput(0).label)
@@ -45,7 +44,7 @@ class GeneralizedLinearPMMLModelExportSuite extends FunSuite {
       === linearRegressionModel.weights.size)
   }
 
-  test("ridge regression pmml export") {
+  test("ridge regression PMML export") {
     val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)
     val ridgeRegressionModel =
       new RidgeRegressionModel(linearInput(0).features, linearInput(0).label)
@@ -64,7 +63,7 @@ class GeneralizedLinearPMMLModelExportSuite extends FunSuite {
       === ridgeRegressionModel.weights.size)
   }
 
-  test("lasso pmml export") {
+  test("lasso PMML export") {
     val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)
     val lassoModel = new LassoModel(linearInput(0).features, linearInput(0).label)
     val lassoModelExport = PMMLModelExportFactory.createPMMLModelExport(lassoModel)
@@ -82,22 +81,4 @@ class GeneralizedLinearPMMLModelExportSuite extends FunSuite {
       === lassoModel.weights.size)
   }
 
-  test("svm pmml export") {
-    val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)
-    val svmModel = new SVMModel(linearInput(0).features, linearInput(0).label)
-    val svmModelExport = PMMLModelExportFactory.createPMMLModelExport(svmModel)
-    // assert that the PMML format is as expected
-    assert(svmModelExport.isInstanceOf[PMMLModelExport])
-    val pmml = svmModelExport.getPmml
-    assert(pmml.getHeader.getDescription
-      === "linear SVM: if predicted value > 0, the outcome is positive, or negative otherwise")
-    // check that the number of fields match the weights size
-    assert(pmml.getDataDictionary.getNumberOfFields === svmModel.weights.size + 1)
-    // This verify that there is a model attached to the pmml object and the model is a regression
-    // one. It also verifies that the pmml model has a regression table with the same number of
-    // predictors of the model weights.
-    val pmmlRegressionModel = pmml.getModels.get(0).asInstanceOf[RegressionModel]
-    assert(pmmlRegressionModel.getRegressionTables.get(0).getNumericPredictors.size
-      === svmModel.weights.size)
-  }
 }

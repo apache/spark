@@ -40,7 +40,7 @@ class PMMLModelExportFactorySuite extends FunSuite {
   }
 
   test("PMMLModelExportFactory create GeneralizedLinearPMMLModelExport when passing a "
-    + "LinearRegressionModel, RidgeRegressionModel, LassoModel or SVMModel") {
+    + "LinearRegressionModel, RidgeRegressionModel or LassoModel") {
     val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)
 
     val linearRegressionModel =
@@ -56,22 +56,21 @@ class PMMLModelExportFactorySuite extends FunSuite {
     val lassoModel = new LassoModel(linearInput(0).features, linearInput(0).label)
     val lassoModelExport = PMMLModelExportFactory.createPMMLModelExport(lassoModel)
     assert(lassoModelExport.isInstanceOf[GeneralizedLinearPMMLModelExport])
-
-    val svmModel = new SVMModel(linearInput(0).features, linearInput(0).label)
-    val svmModelExport = PMMLModelExportFactory.createPMMLModelExport(svmModel)
-    assert(svmModelExport.isInstanceOf[GeneralizedLinearPMMLModelExport])
   }
 
-  test("PMMLModelExportFactory create LogisticRegressionPMMLModelExport "
-    + "when passing a LogisticRegressionModel") {
+  test("PMMLModelExportFactory create BinaryClassificationPMMLModelExport "
+    + "when passing a LogisticRegressionModel or SVMModel") {
     val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)
+    
     val logisticRegressionModel =
       new LogisticRegressionModel(linearInput(0).features, linearInput(0).label)
-
     val logisticRegressionModelExport =
       PMMLModelExportFactory.createPMMLModelExport(logisticRegressionModel)
-
-    assert(logisticRegressionModelExport.isInstanceOf[LogisticRegressionPMMLModelExport])
+    assert(logisticRegressionModelExport.isInstanceOf[BinaryClassificationPMMLModelExport])
+    
+    val svmModel = new SVMModel(linearInput(0).features, linearInput(0).label)
+    val svmModelExport = PMMLModelExportFactory.createPMMLModelExport(svmModel)
+    assert(svmModelExport.isInstanceOf[BinaryClassificationPMMLModelExport])
   }
   
   test("PMMLModelExportFactory throw IllegalArgumentException "
