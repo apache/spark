@@ -27,7 +27,6 @@ import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.serializer.{SerializerInstance, Serializer}
 import org.apache.spark.util.{CompletionIterator, Utils}
-import org.apache.spark.util.collection.PairIterator
 
 /**
  * An iterator that fetches multiple blocks. For local blocks, it fetches from the local block
@@ -300,7 +299,7 @@ final class ShuffleBlockFetcherIterator(
         // the scheduler gets a FetchFailedException.
         Try(buf.createInputStream()).map { is0 =>
           val is = blockManager.wrapForCompression(blockId, is0)
-          val iter = new PairIterator(serializerInstance.deserializeStream(is).asIterator)
+          val iter = serializerInstance.deserializeStream(is).asKeyValueIterator
           CompletionIterator[Any, Iterator[Any]](iter, {
             // Once the iterator is exhausted, release the buffer and set currentResult to null
             // so we don't release it again in cleanup.

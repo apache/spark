@@ -213,8 +213,8 @@ private[spark] class DiskBlockObjectWriter(
       open()
     }
 
-    objOut.writeObject(key)
-    objOut.writeObject(value)
+    objOut.writeKey(key)
+    objOut.writeValue(value)
     numRecordsWritten += 1
     writeMetrics.incShuffleRecordsWritten(1)
 

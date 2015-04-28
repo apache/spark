@@ -105,8 +105,8 @@ private[spark] class PartitionedSerializedPairBuffer[K, V](
       var metaBufferPos = 0
       def hasNext: Boolean = metaBufferPos < metaBuffer.position
       def next(): ((Int, K), V) = {
-        val key = deserStream.readObject[Any]().asInstanceOf[K]
-        val value = deserStream.readObject[Any]().asInstanceOf[V]
+        val key = deserStream.readKey[Any]().asInstanceOf[K]
+        val value = deserStream.readValue[Any]().asInstanceOf[V]
         val partition = metaBuffer.get(metaBufferPos + PARTITION)
         metaBufferPos += RECORD_SIZE
         ((partition, key), value)
