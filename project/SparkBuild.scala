@@ -467,7 +467,7 @@ object Unidoc {
         "mllib.evaluation", "mllib.feature", "mllib.random", "mllib.stat.correlation",
         "mllib.stat.test", "mllib.tree.impl", "mllib.tree.loss",
         "ml", "ml.attribute", "ml.classification", "ml.evaluation", "ml.feature", "ml.param",
-        "ml.tuning"
+        "ml.recommendation", "ml.regression", "ml.tuning"
       ),
       "-group", "Spark SQL", packageList("sql.api.java", "sql.api.java.types", "sql.hive.api.java"),
       "-noqualifier", "java.lang"
