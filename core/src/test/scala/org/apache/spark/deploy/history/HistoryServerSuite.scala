@@ -28,6 +28,17 @@ import org.scalatest.mock.MockitoSugar
 import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf}
 import org.apache.spark.ui.SparkUI
 
+/**
+ * A collection of tests against the historyserver, including comparing responses from the json
+ * metrics api to a set of known "golden files".  If new endpoints / parameters are added,
+ * cases should be added to this test suite.  The expected outcomes can be genered by running
+ * the HistoryServerSuite.main.  Note that this will blindly generate new expectation files matching
+ * the current behavior -- the developer must verify that behavior is correct.
+ *
+ * Similarly, if the behavior is changed, HistoryServerSuite.main can be run to update the
+ * expectations.  However, in general this should be done with extreme caution, as the metrics
+ * are considered part of Spark's public api.
+ */
 class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with MockitoSugar
   with JsonTestUtils {
 

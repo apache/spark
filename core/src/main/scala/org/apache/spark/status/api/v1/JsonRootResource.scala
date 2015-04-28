@@ -28,6 +28,16 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.apache.spark.SecurityManager
 import org.apache.spark.ui.SparkUI
 
+/**
+ * Main entry point for serving spark application metrics as json, using JAX-RS.
+ *
+ * Each resource should have endpoints that return **public** classes defined in api.scala.  Mima
+ * binary compatibility checks ensure that we don't inadvertently make changes that break the api.
+ * The returned objects are automatically converted to json by jackson with JacksonMessageWriter.
+ * In addition, there are a number of tests in HistoryServerSuite that compare the json to "golden
+ * files".  Any changes and additions should be reflected there as well -- see the notes in
+ * HistoryServerSuite.
+ */
 @Path("/v1")
 private[v1] class JsonRootResource extends UIRootFromServletContext {
 
@@ -156,4 +166,8 @@ private[v1] class BadParameterException(msg: String) extends WebApplicationExcep
   }
 }
 
+/**
+ * Signal to JacksonMessageWriter to not convert the message into json (which would result in an
+ * extra set of quotes).
+ */
 private[v1] case class ErrorWrapper(s: String)

@@ -23,6 +23,7 @@ import org.apache.spark.util.EnumUtil;
 import java.util.HashSet;
 import java.util.Set;
 
+// exposed for jersey
 @DeveloperApi
 public enum TaskSorting {
   ID,
