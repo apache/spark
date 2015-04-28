@@ -45,13 +45,13 @@ public class ExternalShuffleBlockHandlerSuite {
   TransportClient client = mock(TransportClient.class);
 
   OneForOneStreamManager streamManager;
-  ExternalShuffleBlockManager blockManager;
+  ExternalShuffleBlockResolver blockManager;
   RpcHandler handler;
 
   @Before
   public void beforeEach() {
     streamManager = mock(OneForOneStreamManager.class);
-    blockManager = mock(ExternalShuffleBlockManager.class);
+    blockManager = mock(ExternalShuffleBlockResolver.class);
     handler = new ExternalShuffleBlockHandler(streamManager, blockManager);
   }
 

@@ -41,7 +41,7 @@ public class ExternalShuffleCleanupSuite {
   public void noCleanupAndCleanup() throws IOException {
     TestShuffleDataContext dataContext = createSomeData();
 
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf, sameThreadExecutor);
+    ExternalShuffleBlockResolver manager = new ExternalShuffleBlockResolver(conf, sameThreadExecutor);
     manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
     manager.applicationRemoved("app", false /* cleanup */);
 
@@ -64,7 +64,7 @@ public class ExternalShuffleCleanupSuite {
       @Override public void execute(Runnable runnable) { cleanupCalled.set(true); }
     };
 
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf, noThreadExecutor);
+    ExternalShuffleBlockResolver manager = new ExternalShuffleBlockResolver(conf, noThreadExecutor);
 
     manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
     manager.applicationRemoved("app", true);
@@ -81,7 +81,7 @@ public class ExternalShuffleCleanupSuite {
     TestShuffleDataContext dataContext0 = createSomeData();
     TestShuffleDataContext dataContext1 = createSomeData();
 
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf, sameThreadExecutor);
+    ExternalShuffleBlockResolver manager = new ExternalShuffleBlockResolver(conf, sameThreadExecutor);
 
     manager.registerExecutor("app", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
     manager.registerExecutor("app", "exec1", dataContext1.createExecutorInfo("shuffleMgr"));
@@ -96,7 +96,7 @@ public class ExternalShuffleCleanupSuite {
     TestShuffleDataContext dataContext0 = createSomeData();
     TestShuffleDataContext dataContext1 = createSomeData();
 
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf, sameThreadExecutor);
+    ExternalShuffleBlockResolver manager = new ExternalShuffleBlockResolver(conf, sameThreadExecutor);
 
     manager.registerExecutor("app-0", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
     manager.registerExecutor("app-1", "exec0", dataContext1.createExecutorInfo("shuffleMgr"));
