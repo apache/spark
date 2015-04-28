@@ -142,7 +142,7 @@ class Strategy (
       case _ =>
         throw new IllegalArgumentException(
           s"DecisionTree Strategy given invalid algo parameter: $algo." +
-          s"  Valid settings are: Classification, Regression.")
+          s"  Valid settings: Classification, Regression.")
     }
     require(maxDepth >= 0, s"DecisionTree Strategy given invalid maxDepth parameter: $maxDepth." +
       s"  Valid values are integers >= 0.")
@@ -151,14 +151,14 @@ class Strategy (
     categoricalFeaturesInfo.foreach { case (feature, arity) =>
       require(arity >= 2,
         s"DecisionTree Strategy given invalid categoricalFeaturesInfo setting:" +
-        s" feature $feature has $arity categories.  The number of categories should be >= 2.")
+        s" feature $feature has $arity categories. The number of categories should be >= 2.")
     }
     require(minInstancesPerNode >= 1,
       s"DecisionTree Strategy requires minInstancesPerNode >= 1 but was given $minInstancesPerNode")
     require(maxMemoryInMB <= 10240,
       s"DecisionTree Strategy requires maxMemoryInMB <= 10240, but was given $maxMemoryInMB")
     require(subsamplingRate > 0 && subsamplingRate <= 1,
-      s"DecisionTree Strategy requires subsamplingRate <=1 and >0, but was given " +
+      s"DecisionTree Strategy requires subsamplingRate <= 1 and > 0, but was given " +
       s"$subsamplingRate")
   }
 

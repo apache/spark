@@ -51,7 +51,7 @@ class Node (
     var stats: Option[InformationGainStats]) extends Serializable with Logging {
 
   override def toString: String = {
-    s"id = $id, isLeaf = $isLeaf, predict = $predict, impurity = $impurity, " +
+    s"id = $id, isLeaf = $isLeaf, predict = ${predict.toString}, impurity = $impurity, " +
       s"split = $split, stats = $stats"
   }
 
