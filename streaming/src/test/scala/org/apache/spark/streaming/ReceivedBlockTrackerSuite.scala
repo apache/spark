@@ -88,7 +88,7 @@ class ReceivedBlockTrackerSuite
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual blockInfos
   }
 
-  test("block addition, block to batch allocation and cleanup with write ahead log") {
+  test("block addition, block to batch allocation and clean up with write ahead log") {
     val manualClock = new ManualClock
     // Set the time increment level to twice the rotation interval so that every increment creates
     // a new log file
@@ -175,7 +175,7 @@ class ReceivedBlockTrackerSuite
     eventually(timeout(10 seconds), interval(10 millisecond)) {
       getWriteAheadLogFiles() should not contain oldestLogFile
     }
-    printLogFiles("After cleanup")
+    printLogFiles("After clean")
 
     // Restart tracker and verify recovered state, specifically whether info about the first
     // batch has been removed, but not the second batch
@@ -206,7 +206,7 @@ class ReceivedBlockTrackerSuite
 
   /**
    * Create tracker object with the optional provided clock. Use fake clock if you
-   * want to control time by manually incrementing it to test log cleanup.
+   * want to control time by manually incrementing it to test log clean.
    */
   def createTracker(
       setCheckpointDir: Boolean = true,
@@ -254,7 +254,7 @@ class ReceivedBlockTrackerSuite
     BatchAllocationEvent(time, AllocatedBlocks(Map((streamId -> blockInfos))))
   }
 
-  /** Create batch cleanup object from the given info */
+  /** Create batch clean object from the given info */
   def createBatchCleanup(time: Long, moreTimes: Long*): BatchCleanupEvent = {
     BatchCleanupEvent((Seq(time) ++ moreTimes).map(Time.apply))
   }

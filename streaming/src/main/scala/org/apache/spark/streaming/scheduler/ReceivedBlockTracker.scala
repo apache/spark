@@ -155,7 +155,7 @@ private[streaming] class ReceivedBlockTracker(
     logInfo("Deleting batches " + timesToCleanup)
     writeToLog(BatchCleanupEvent(timesToCleanup))
     timeToAllocatedBlocks --= timesToCleanup
-    writeAheadLogOption.foreach(_.cleanup(cleanupThreshTime.milliseconds, waitForCompletion))
+    writeAheadLogOption.foreach(_.clean(cleanupThreshTime.milliseconds, waitForCompletion))
   }
 
   /** Stop the block tracker. */

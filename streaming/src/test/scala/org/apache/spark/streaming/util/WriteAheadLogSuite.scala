@@ -230,11 +230,11 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     assert(dataToWrite === readData)
   }
 
-  test("FileBasedWriteAheadLog - cleanup old logs") {
+  test("FileBasedWriteAheadLog - clean old logs") {
     logCleanUpTest(waitForCompletion = false)
   }
 
-  test("FileBasedWriteAheadLog - cleanup old logs synchronously") {
+  test("FileBasedWriteAheadLog - clean old logs synchronously") {
     logCleanUpTest(waitForCompletion = true)
   }
 
@@ -246,7 +246,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     val logFiles = getLogFilesInDirectory(testDir)
     assert(logFiles.size > 1)
 
-    writeAheadLog.cleanup(manualClock.getTimeMillis() / 2, waitForCompletion)
+    writeAheadLog.clean(manualClock.getTimeMillis() / 2, waitForCompletion)
 
     if (waitForCompletion) {
       assert(getLogFilesInDirectory(testDir).size < logFiles.size)
@@ -293,10 +293,10 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
 object WriteAheadLogSuite {
 
   class MockWriteAheadLog0() extends WriteAheadLog {
-    override def write(record: ByteBuffer, time: Long): WriteAheadLogSegment = { null }
-    override def read(segment: WriteAheadLogSegment): ByteBuffer = { null }
+    override def write(record: ByteBuffer, time: Long): WriteAheadLogRecordHandle = { null }
+    override def read(segment: WriteAheadLogRecordHandle): ByteBuffer = { null }
     override def readAll(): util.Iterator[ByteBuffer] = { null }
-    override def cleanup(threshTime: Long, waitForCompletion: Boolean): Unit = { }
+    override def clean(threshTime: Long, waitForCompletion: Boolean): Unit = { }
     override def close(): Unit = { }
   }
 

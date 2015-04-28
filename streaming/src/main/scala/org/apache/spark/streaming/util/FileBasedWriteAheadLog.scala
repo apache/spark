@@ -95,7 +95,7 @@ private[streaming] class FileBasedWriteAheadLog(
     fileSegment
   }
 
-  def read(segment: WriteAheadLogSegment): ByteBuffer = {
+  def read(segment: WriteAheadLogRecordHandle): ByteBuffer = {
     val fileSegment = segment.asInstanceOf[FileBasedWriteAheadLogSegment]
     var reader: FileBasedWriteAheadLogRandomReader = null
     var byteBuffer: ByteBuffer = null
@@ -140,7 +140,7 @@ private[streaming] class FileBasedWriteAheadLog(
    * deleted. This should be set to true only for testing. Else the files will be deleted
    * asynchronously.
    */
-  def cleanup(threshTime: Long, waitForCompletion: Boolean): Unit = {
+  def clean(threshTime: Long, waitForCompletion: Boolean): Unit = {
     val oldLogFiles = synchronized { pastLogs.filter { _.endTime < threshTime } }
     logInfo(s"Attempting to clear ${oldLogFiles.size} old log files in $logDirectory " +
       s"older than $threshTime: ${oldLogFiles.map { _.path }.mkString("\n")}")

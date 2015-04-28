@@ -18,9 +18,13 @@
 package org.apache.spark.streaming.util;
 
 /**
- * This is an interface that represent the information required by any implementation of
- * a WriteAheadLog to read a written record.
+ * This abstract class represents a handle that refers to a record written in a
+ * {@link org.apache.spark.streaming.util.WriteAheadLog WriteAheadLog}.
+ * It must contain all the information necessary for the record to be read and returned by
+ * an implemenation of the WriteAheadLog class.
+ *
+ * @see org.apache.spark.streaming.util.WriteAheadLog
  */
 @org.apache.spark.annotation.DeveloperApi
-public interface WriteAheadLogSegment extends java.io.Serializable {
+public abstract class WriteAheadLogRecordHandle implements java.io.Serializable {
 }

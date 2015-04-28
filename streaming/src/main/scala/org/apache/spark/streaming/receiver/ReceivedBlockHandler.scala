@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._
-import org.apache.spark.streaming.util.{WriteAheadLogSegment, WriteAheadLogUtils}
+import org.apache.spark.streaming.util.{WriteAheadLogRecordHandle, WriteAheadLogUtils}
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 import org.apache.spark.{Logging, SparkConf, SparkException}
 
@@ -96,7 +96,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
  */
 private[streaming] case class WriteAheadLogBasedStoreResult(
     blockId: StreamBlockId,
-    segment: WriteAheadLogSegment
+    segment: WriteAheadLogRecordHandle
   ) extends ReceivedBlockStoreResult
 
 
@@ -185,7 +185,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
   }
 
   def cleanupOldBlocks(threshTime: Long) {
-    writeAheadLog.cleanup(threshTime, false)
+    writeAheadLog.clean(threshTime, false)
   }
 
   def stop() {

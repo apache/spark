@@ -40,7 +40,7 @@ private[streaming]
 class WriteAheadLogBackedBlockRDDPartition(
     val index: Int,
     val blockId: BlockId,
-    val segment: WriteAheadLogSegment)
+    val segment: WriteAheadLogRecordHandle)
   extends Partition
 
 
@@ -61,7 +61,7 @@ private[streaming]
 class WriteAheadLogBackedBlockRDD[T: ClassTag](
     @transient sc: SparkContext,
     @transient blockIds: Array[BlockId],
-    @transient segments: Array[WriteAheadLogSegment],
+    @transient segments: Array[WriteAheadLogRecordHandle],
     storeInBlockManager: Boolean,
     storageLevel: StorageLevel)
   extends BlockRDD[T](sc, blockIds) {

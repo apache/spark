@@ -21,39 +21,39 @@ import java.nio.ByteBuffer;
 import java.util.Iterator;
 
 /**
- * Interface representing a write ahead log (aka journal) that is used by Spark Streaming to
- * save the received data (by receivers) and associated metadata to a reliable storage, so that
- * they can be recovered after driver failures. See the Spark docs for more information on how
- * to plug in your own custom implementation of a write ahead log.
+ * This abstract class represents a write ahead log (aka journal) that is used by Spark Streaming
+ * to save the received data (by receivers) and associated metadata to a reliable storage, so that
+ * they can be recovered after driver failures. See the Spark documentation for more information
+ * on how to plug in your own custom implementation of a write ahead log.
  */
 @org.apache.spark.annotation.DeveloperApi
-public interface WriteAheadLog {
+public abstract class WriteAheadLog {
   /**
    * Write the record to the log and return the segment information that is necessary to read
    * back the written record. The time is used to the index the record, such that it can be
    * cleaned later. Note that the written data must be durable and readable (using the
    * segment info) by the time this function returns.
    */
-  WriteAheadLogSegment write(ByteBuffer record, long time);
+  abstract public WriteAheadLogRecordHandle write(ByteBuffer record, long time);
 
   /**
    * Read a written record based on the given segment information.
    */
-  ByteBuffer read(WriteAheadLogSegment segment);
+  abstract public ByteBuffer read(WriteAheadLogRecordHandle handle);
 
   /**
-   * Read and return an iterator of all the records that have written and not yet cleanup.
+   * Read and return an iterator of all the records that have been written but not yet cleaned up.
    */
-  Iterator<ByteBuffer> readAll();
+  abstract public Iterator<ByteBuffer> readAll();
 
   /**
-   * Cleanup all the records that are older than the given threshold time. It can wait for
+   * Clean all the records that are older than the threshold time. It can wait for
    * the completion of the deletion.
    */
-  void cleanup(long threshTime, boolean waitForCompletion);
+  abstract public void clean(long threshTime, boolean waitForCompletion);
 
   /**
    * Close this log and release any resources.
    */
-  void close();
+  abstract public void close();
 }
