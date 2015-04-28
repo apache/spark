@@ -127,8 +127,8 @@ public final class MemoryManager {
    * Free a block of memory allocated via {@link MemoryManager#allocatePage(long)}.
    */
   public void freePage(MemoryBlock page) {
-    if (logger.isDebugEnabled()) {
-      logger.debug("Freeing page number {} ({} bytes)", page.pageNumber, page.size());
+    if (logger.isTraceEnabled()) {
+      logger.trace("Freeing page number {} ({} bytes)", page.pageNumber, page.size());
     }
     assert (page.pageNumber != -1) :
       "Called freePage() on memory that wasn't allocated with allocatePage()";
