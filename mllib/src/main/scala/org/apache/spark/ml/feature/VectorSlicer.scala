@@ -30,7 +30,8 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * :: AlphaComponent ::
- * Normalize a vector to have unit norm using the given p-norm.
+ * Given either indices or names, it takes a vector column and output a vector column with the
+ * specified subset of features. Note that the vector column should contain ML [[Attribute]].
  */
 @AlphaComponent
 final class VectorSlicer extends Transformer with HasInputCol with HasOutputCol {
