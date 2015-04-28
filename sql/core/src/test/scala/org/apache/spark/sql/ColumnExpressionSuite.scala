@@ -22,7 +22,6 @@ import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
 
-
 class ColumnExpressionSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
