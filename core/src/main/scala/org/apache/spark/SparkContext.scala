@@ -247,7 +247,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def eventLogDir: Option[URI] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
-  // Generate the random name for a temp folder in external block store
+  // Generate the random name for a temp folder in external block store.
   // Add a timestamp as the suffix here to make it more safe
   val externalBlockStoreFolderName = "spark-" + randomUUID.toString()
   @deprecated("Use externalBlockStoreFolderName instead.", "1.4.0")
