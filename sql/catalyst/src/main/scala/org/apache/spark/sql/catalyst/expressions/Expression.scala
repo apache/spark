@@ -109,3 +109,13 @@ case class GroupExpression(children: Seq[Expression]) extends Expression {
   override def foldable: Boolean = false
   override def dataType: DataType = throw new UnsupportedOperationException
 }
+
+/**
+ * Expressions that require a specific `DataType` as input should implement this trait
+ * so that the proper type conversions can be performed in the analyzer.
+ */
+trait ExpectsInputTypes {
+
+  def expectedChildTypes: Seq[DataType]
+
+}

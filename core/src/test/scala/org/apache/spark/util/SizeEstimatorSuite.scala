@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, FunSuite, PrivateMethodTester}
 
 class DummyClass1 {}
@@ -96,6 +98,22 @@ class SizeEstimatorSuite
     // Past size 100, our samples 100 elements, but we should still get the right size.
     assertResult(28016)(SizeEstimator.estimate(Array.fill(1000)(new DummyClass3)))
 
+
+    val arr = new Array[Char](100000)
+    assertResult(200016)(SizeEstimator.estimate(arr))
+    assertResult(480032)(SizeEstimator.estimate(Array.fill(10000)(new DummyString(arr))))
+    
+    val buf = new ArrayBuffer[DummyString]()
+    for (i <- 0 until 5000) {
+      buf.append(new DummyString(new Array[Char](10)))
+    }
+    assertResult(340016)(SizeEstimator.estimate(buf.toArray))
+    
+    for (i <- 0 until 5000) {
+      buf.append(new DummyString(arr))
+    }
+    assertResult(683912)(SizeEstimator.estimate(buf.toArray))
+    
     // If an array contains the *same* element many times, we should only count it once.
     val d1 = new DummyClass1
     // 10 pointers plus 8-byte object
