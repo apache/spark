@@ -30,7 +30,7 @@ import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.util.{ActorLogReceive, Utils, AkkaUtils}
+import org.apache.spark.util.{ActorLogReceive, RpcUtils, Utils, AkkaUtils}
 
 /**
  * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
@@ -193,7 +193,7 @@ private[spark] class AppClient(
   def stop() {
     if (actor != null) {
       try {
-        val timeout = AkkaUtils.askTimeout(conf)
+        val timeout = RpcUtils.askTimeout(conf)
         val future = actor.ask(StopAppClient)(timeout)
         Await.result(future, timeout)
       } catch {

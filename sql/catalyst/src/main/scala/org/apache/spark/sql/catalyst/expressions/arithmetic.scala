@@ -346,7 +346,7 @@ case class MaxOf(left: Expression, right: Expression) extends Expression {
   }
 
   lazy val ordering = left.dataType match {
-    case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+    case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
     case other => sys.error(s"Type $other does not support ordered operations")
   }
 
@@ -391,7 +391,7 @@ case class MinOf(left: Expression, right: Expression) extends Expression {
   }
 
   lazy val ordering = left.dataType match {
-    case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+    case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
     case other => sys.error(s"Type $other does not support ordered operations")
   }
 

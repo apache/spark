@@ -24,7 +24,9 @@ private[spark] object ToolTips {
        scheduler delay is large, consider decreasing the size of tasks or decreasing the size
        of task results."""
 
-  val TASK_DESERIALIZATION_TIME = "Time spent deserializing the task closure on the executor."
+  val TASK_DESERIALIZATION_TIME =
+    """Time spent deserializing the task closure on the executor, including the time to read the
+       broadcasted task."""
 
   val SHUFFLE_READ_BLOCKED_TIME =
     "Time that the task spent blocked waiting for shuffle data to be read from remote machines."

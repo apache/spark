@@ -20,7 +20,7 @@ package org.apache.spark.mllib.tree.loss
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel
-import org.apache.spark.rdd.RDD
+
 
 /**
  * :: DeveloperApi ::
@@ -45,9 +45,8 @@ object AbsoluteError extends Loss {
     if (label - prediction < 0) 1.0 else -1.0
   }
 
-  override def computeError(prediction: Double, label: Double): Double = {
+  override private[mllib] def computeError(prediction: Double, label: Double): Double = {
     val err = label - prediction
     math.abs(err)
   }
-
 }

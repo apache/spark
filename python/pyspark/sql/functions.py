@@ -23,13 +23,11 @@ import sys
 if sys.version < "3":
     from itertools import imap as map
 
-from py4j.java_collections import ListConverter
-
 from pyspark import SparkContext
 from pyspark.rdd import _prepare_for_python_RDD
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
-from pyspark.sql.dataframe import Column, _to_java_column
+from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
 
 
 __all__ = ['countDistinct', 'approxCountDistinct', 'udf']
@@ -77,21 +75,6 @@ __all__ += _functions.keys()
 __all__.sort()
 
 
-def countDistinct(col, *cols):
-    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
-
-    >>> df.agg(countDistinct(df.age, df.name).alias('c')).collect()
-    [Row(c=2)]
-
-    >>> df.agg(countDistinct("age", "name").alias('c')).collect()
-    [Row(c=2)]
-    """
-    sc = SparkContext._active_spark_context
-    jcols = ListConverter().convert([_to_java_column(c) for c in cols], sc._gateway._gateway_client)
-    jc = sc._jvm.functions.countDistinct(_to_java_column(col), sc._jvm.PythonUtils.toSeq(jcols))
-    return Column(jc)
-
-
 def approxCountDistinct(col, rsd=None):
     """Returns a new :class:`Column` for approximate distinct count of ``col``.
 
@@ -104,6 +87,32 @@ def approxCountDistinct(col, rsd=None):
     else:
         jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col), rsd)
     return Column(jc)
+
+
+def countDistinct(col, *cols):
+    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
+
+    >>> df.agg(countDistinct(df.age, df.name).alias('c')).collect()
+    [Row(c=2)]
+
+    >>> df.agg(countDistinct("age", "name").alias('c')).collect()
+    [Row(c=2)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.countDistinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
+def sparkPartitionId():
+    """Returns a column for partition ID of the Spark task.
+
+    Note that this is indeterministic because it depends on data partitioning and task scheduling.
+
+    >>> df.repartition(1).select(sparkPartitionId().alias("pid")).collect()
+    [Row(pid=0), Row(pid=0)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.sparkPartitionId())
 
 
 class UserDefinedFunction(object):
@@ -138,9 +147,7 @@ class UserDefinedFunction(object):
 
     def __call__(self, *cols):
         sc = SparkContext._active_spark_context
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        sc._gateway._gateway_client)
-        jc = self._judf.apply(sc._jvm.PythonUtils.toSeq(jcols))
+        jc = self._judf.apply(_to_seq(sc, cols, _to_java_column))
         return Column(jc)
 
 

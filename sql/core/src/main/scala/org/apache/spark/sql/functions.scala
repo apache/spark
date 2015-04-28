@@ -277,6 +277,13 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Computes the absolute value.
+   *
+   * @group normal_funcs
+   */
+  def abs(e: Column): Column = Abs(e.expr)
+
+  /**
    * Returns the first column that is not null.
    * {{{
    *   df.select(coalesce(df("a"), df("b")))
@@ -286,6 +293,13 @@ object functions {
    */
   @scala.annotation.varargs
   def coalesce(e: Column*): Column = Coalesce(e.map(_.expr))
+
+  /**
+   * Converts a string exprsesion to lower case.
+   *
+   * @group normal_funcs
+   */
+  def lower(e: Column): Column = Lower(e.expr)
 
   /**
    * Unary minus, i.e. negate the expression.
@@ -317,18 +331,13 @@ object functions {
   def not(e: Column): Column = !e
 
   /**
-   * Converts a string expression to upper case.
+   * Partition ID of the Spark task.
+   *
+   * Note that this is indeterministic because it depends on data partitioning and task scheduling.
    *
    * @group normal_funcs
    */
-  def upper(e: Column): Column = Upper(e.expr)
-
-  /**
-   * Converts a string exprsesion to lower case.
-   *
-   * @group normal_funcs
-   */
-  def lower(e: Column): Column = Lower(e.expr)
+  def sparkPartitionId(): Column = execution.expressions.SparkPartitionID
 
   /**
    * Computes the square root of the specified float value.
@@ -338,11 +347,11 @@ object functions {
   def sqrt(e: Column): Column = Sqrt(e.expr)
 
   /**
-   * Computes the absolutle value.
+   * Converts a string expression to upper case.
    *
    * @group normal_funcs
    */
-  def abs(e: Column): Column = Abs(e.expr)
+  def upper(e: Column): Column = Upper(e.expr)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////

@@ -277,7 +277,7 @@ class ExecutorRunnable(
   private def prepareEnvironment(container: Container): HashMap[String, String] = {
     val env = new HashMap[String, String]()
     val extraCp = sparkConf.getOption("spark.executor.extraClassPath")
-    Client.populateClasspath(null, yarnConf, sparkConf, env, extraCp)
+    Client.populateClasspath(null, yarnConf, sparkConf, env, false, extraCp)
 
     sparkConf.getExecutorEnv.foreach { case (key, value) =>
       // This assumes each executor environment variable set here is a path
