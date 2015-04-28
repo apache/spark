@@ -35,28 +35,6 @@ public class ByteArrayMethods {
   }
 
   /**
-   * Optimized  equality check for equal-length byte arrays.
-   * @return true if the arrays are equal, false otherwise
-   */
-  public static boolean arrayEquals(
-      Object leftBaseObject,
-      long leftBaseOffset,
-      Object rightBaseObject,
-      long rightBaseOffset,
-      long arrayLengthInBytes) {
-    // TODO: this can be optimized by comparing words and falling back to individual byte
-    // comparison only at the end of the array (Guava's UnsignedBytes has an implementation of this)
-    for (int i = 0; i < arrayLengthInBytes; i++) {
-      final byte left =
-        PlatformDependent.UNSAFE.getByte(leftBaseObject, leftBaseOffset + i);
-      final byte right =
-        PlatformDependent.UNSAFE.getByte(rightBaseObject, rightBaseOffset + i);
-      if (left != right) return false;
-    }
-    return true;
-  }
-
-  /**
    * Optimized byte array equality check for 8-byte-word-aligned byte arrays.
    * @return true if the arrays are equal, false otherwise
    */
