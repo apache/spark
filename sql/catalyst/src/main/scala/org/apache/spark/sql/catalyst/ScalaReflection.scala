@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.sql.Timestamp
-
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -110,7 +108,7 @@ trait ScalaReflection {
             StructField(p.name.toString, dataType, nullable)
           }), nullable = true)
       case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
-      case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
+      case t if t <:< typeOf[java.sql.Timestamp] => Schema(TimestampType, nullable = true)
       case t if t <:< typeOf[java.sql.Date] => Schema(DateType, nullable = true)
       case t if t <:< typeOf[BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
       case t if t <:< typeOf[java.math.BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
@@ -136,20 +134,20 @@ trait ScalaReflection {
 
   def typeOfObject: PartialFunction[Any, DataType] = {
     // The data type can be determined without ambiguity.
-    case obj: BooleanType.JvmType => BooleanType
-    case obj: BinaryType.JvmType => BinaryType
+    case obj: Boolean => BooleanType
+    case obj: Array[Byte] => BinaryType
     case obj: String => StringType
-    case obj: StringType.JvmType => StringType
-    case obj: ByteType.JvmType => ByteType
-    case obj: ShortType.JvmType => ShortType
-    case obj: IntegerType.JvmType => IntegerType
-    case obj: LongType.JvmType => LongType
-    case obj: FloatType.JvmType => FloatType
-    case obj: DoubleType.JvmType => DoubleType
+    case obj: UTF8String => StringType
+    case obj: Byte => ByteType
+    case obj: Short => ShortType
+    case obj: Int => IntegerType
+    case obj: Long => LongType
+    case obj: Float => FloatType
+    case obj: Double => DoubleType
     case obj: java.sql.Date => DateType
     case obj: java.math.BigDecimal => DecimalType.Unlimited
     case obj: Decimal => DecimalType.Unlimited
-    case obj: TimestampType.JvmType => TimestampType
+    case obj: java.sql.Timestamp => TimestampType
     case null => NullType
     // For other cases, there is no obvious mapping from the type of the given object to a
     // Catalyst data type. A user should provide his/her specific rules

@@ -230,7 +230,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: Reinstate test once save/load are implemented
+  // TODO: Reinstate test once save/load are implemented   SPARK-6725
   /*
   test("model save/load") {
     val tempDir = Utils.createTempDir()

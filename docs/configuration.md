@@ -963,8 +963,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Default timeout for all network interactions. This config will be used in place of 
     <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>,
-    <code>spark.storage.blockManagerSlaveTimeoutMs</code> or
-    <code>spark.shuffle.io.connectionTimeout</code>, if they are not configured.
+    <code>spark.storage.blockManagerSlaveTimeoutMs</code>,
+    <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
+    <code>spark.rpc.lookupTimeout</code> if they are not configured.
   </td>
 </tr>
 <tr>
@@ -980,6 +981,35 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Port for the driver's HTTP class server to listen on.
     This is only relevant for the Spark shell.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.rpc.numRetries</code></td>
+  <td>3</td>
+    Number of times to retry before an RPC task gives up.
+    An RPC task will run at most times of this number.
+  <td>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.rpc.retry.wait</code></td>
+  <td>3s</td>
+  <td>
+    Duration for an RPC ask operation to wait before retrying.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.rpc.askTimeout</code></td>
+  <td>120s</td>
+  <td>
+    Duration for an RPC ask operation to wait before timing out.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.rpc.lookupTimeout</code></td>
+  <td>120s</td>
+    Duration for an RPC remote endpoint lookup operation to wait before timing out.
+  <td>
   </td>
 </tr>
 </table>

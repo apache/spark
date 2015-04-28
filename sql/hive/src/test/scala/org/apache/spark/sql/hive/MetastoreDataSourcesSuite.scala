@@ -23,7 +23,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.metastore.TableType
 import org.apache.hadoop.hive.ql.metadata.Table
@@ -174,7 +173,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT * FROM jsonTable"),
       Row("a", "b"))
 
-    FileUtils.deleteDirectory(tempDir)
+    Utils.deleteRecursively(tempDir)
     sparkContext.parallelize(("a1", "b1", "c1") :: Nil).toDF()
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
@@ -190,7 +189,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
       Row("a1", "b1", "c1"))
-    FileUtils.deleteDirectory(tempDir)
+    Utils.deleteRecursively(tempDir)
   }
 
   test("drop, change, recreate") {
@@ -212,7 +211,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT * FROM jsonTable"),
       Row("a", "b"))
 
-    FileUtils.deleteDirectory(tempDir)
+    Utils.deleteRecursively(tempDir)
     sparkContext.parallelize(("a", "b", "c") :: Nil).toDF()
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
@@ -231,7 +230,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
       Row("a", "b", "c"))
-    FileUtils.deleteDirectory(tempDir)
+    Utils.deleteRecursively(tempDir)
   }
 
   test("invalidate cache and reload") {

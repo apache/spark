@@ -49,13 +49,14 @@ class SqlParserSuite extends FunSuite {
 
   test("test long keyword") {
     val parser = new SuperLongKeywordTestParser
-    assert(TestCommand("NotRealCommand") === parser("ThisIsASuperLongKeyWordTest NotRealCommand"))
+    assert(TestCommand("NotRealCommand") ===
+      parser.parse("ThisIsASuperLongKeyWordTest NotRealCommand"))
   }
 
   test("test case insensitive") {
     val parser = new CaseInsensitiveTestParser
-    assert(TestCommand("NotRealCommand") === parser("EXECUTE NotRealCommand"))
-    assert(TestCommand("NotRealCommand") === parser("execute NotRealCommand"))
-    assert(TestCommand("NotRealCommand") === parser("exEcute NotRealCommand"))
+    assert(TestCommand("NotRealCommand") === parser.parse("EXECUTE NotRealCommand"))
+    assert(TestCommand("NotRealCommand") === parser.parse("execute NotRealCommand"))
+    assert(TestCommand("NotRealCommand") === parser.parse("exEcute NotRealCommand"))
   }
 }

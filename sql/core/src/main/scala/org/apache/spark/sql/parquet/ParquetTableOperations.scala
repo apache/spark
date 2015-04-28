@@ -268,7 +268,7 @@ private[sql] case class InsertIntoParquetTable(
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
 
     val writeSupport =
-      if (child.output.map(_.dataType).forall(_.isPrimitive)) {
+      if (child.output.map(_.dataType).forall(ParquetTypesConverter.isPrimitiveType)) {
         log.debug("Initializing MutableRowWriteSupport")
         classOf[org.apache.spark.sql.parquet.MutableRowWriteSupport]
       } else {
