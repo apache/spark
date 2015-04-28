@@ -300,9 +300,19 @@ case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
 }
 
+/**
+ * Sample the dataset.
+ *
+ * @param lowerBound Lower-bound of the sampling probability (usually 0.0)
+ * @param upperBound Upper-bound of the sampling probability. The expected fraction sampled
+ *                   will be ub - lb.
+ * @param withReplacement Whether to sample with replacement.
+ * @param seed the random seed
+ * @param child the LogicalPlan
+ */
 case class Sample(
-    lb: Double,
-    ub: Double,
+    lowerBound: Double,
+    upperBound: Double,
     withReplacement: Boolean,
     seed: Long,
     child: LogicalPlan) extends UnaryNode {

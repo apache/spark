@@ -64,16 +64,17 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
 /**
  * :: DeveloperApi ::
  * Sample the dataset.
- * @param lb Lower-bound of the sampling probability (usually 0.0)
- * @param ub Upper-bound of the sampling probability. The expected fraction sampled will be ub - lb.
+ * @param lowerBound Lower-bound of the sampling probability (usually 0.0)
+ * @param upperBound Upper-bound of the sampling probability. The expected fraction sampled 
+ *                   will be ub - lb.
  * @param withReplacement Whether to sample with replacement.
  * @param seed the random seed
  * @param child the QueryPlan
  */
 @DeveloperApi
 case class Sample(
-    lb: Double,
-    ub: Double,
+    lowerBound: Double,
+    upperBound: Double,
     withReplacement: Boolean,
     seed: Long,
     child: SparkPlan)

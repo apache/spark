@@ -420,10 +420,9 @@ abstract class RDD[T: ClassTag](
    * @return A random sub-sample of the RDD without replacement.
    */
   private[spark] def randomSampleWithRange(lb: Double, ub: Double, seed: Long): RDD[T] = {
-    val random = new Random(seed)
-    this.mapPartitions { partition =>
+    this.mapPartitionsWithIndex { case (index, partition) =>
       val sampler = new BernoulliCellSampler[T](lb, ub)
-      sampler.setSeed(random.nextLong)
+      sampler.setSeed(seed + index)
       sampler.sample(partition)
     }
   }
