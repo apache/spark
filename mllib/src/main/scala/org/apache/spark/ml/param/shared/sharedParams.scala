@@ -250,37 +250,33 @@ private[ml] trait HasSeed extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param elasticNetParam.
+ * (private[ml]) Trait for shared param elasticNetParam.
  */
-@DeveloperApi
-trait HasElasticNetParam extends Params {
+private[ml] trait HasElasticNetParam extends Params {
 
   /**
-   * Param for the ElasticNet mixing parameter.
+   * Param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty..
    * @group param
    */
-  final val elasticNetParam: DoubleParam = new DoubleParam(this, "elasticNetParam", "the ElasticNet mixing parameter")
+  final val elasticNetParam: DoubleParam = new DoubleParam(this, "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", ParamValidate.inRange[Double](0, 1))
 
   /** @group getParam */
   final def getElasticNetParam: Double = getOrDefault(elasticNetParam)
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param tol.
+ * (private[ml]) Trait for shared param convergenceTol.
  */
-@DeveloperApi
-trait HasTol extends Params {
+private[ml] trait HasConvergenceTol extends Params {
 
   /**
    * Param for the convergence tolerance for iterative algorithms.
    * @group param
    */
-  final val tol: DoubleParam = new DoubleParam(this, "tol", "the convergence tolerance for iterative algorithms")
+  final val convergenceTol: DoubleParam = new DoubleParam(this, "convergenceTol", "the convergence tolerance for iterative algorithms")
 
   /** @group getParam */
-  final def getTol: Double = getOrDefault(tol)
+  final def getConvergenceTol: Double = getOrDefault(convergenceTol)
 }
 
 /**

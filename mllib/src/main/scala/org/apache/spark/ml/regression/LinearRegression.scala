@@ -25,7 +25,8 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction}
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param.{Params, ParamMap}
-import org.apache.spark.ml.param.shared.{HasElasticNetParam, HasMaxIter, HasRegParam, HasTol}
+import org.apache.spark.ml.param.shared.{HasConvergenceTol, HasElasticNetParam, HasMaxIter,
+  HasRegParam}
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
@@ -40,12 +41,22 @@ import org.apache.spark.Logging
  * Params for linear regression.
  */
 private[regression] trait LinearRegressionParams extends RegressorParams
-  with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol // TODO: elasticnetparam, tol
+  with HasRegParam with HasElasticNetParam with HasMaxIter with HasConvergenceTol
 
 /**
  * :: AlphaComponent ::
  *
  * Linear regression.
+ *
+ * The learning objective is to minimize the squared error, with regularization.
+ * The specific squared error loss function used is:
+ *   L = 1/2n ||A weights - y||^2^
+ *
+ * This support multiple types of regularization:
+ *  - none (a.k.a. ordinary least squares)
+ *  - L2 (ridge regression)
+ *  - L1 (Lasso)
+ *  - L2 + L1 (elastic net)
  */
 @AlphaComponent
 class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegressionModel]
@@ -83,8 +94,8 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
    * Default is 1E-6.
    * @group setParam
    */
-  def setTol(value: Double): this.type = set(tol, value)
-  setDefault(tol -> 1E-6)
+  def setTol(value: Double): this.type = set(convergenceTol, value)
+  setDefault(convergenceTol -> 1E-6)
 
   override protected def train(dataset: DataFrame, paramMap: ParamMap): LinearRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist instances.
@@ -133,9 +144,10 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
       featuresStd, featuresMean, effectiveL2RegParam)
 
     val optimizer = if (paramMap(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
-      new BreezeLBFGS[BDV[Double]](paramMap(maxIter), 10, paramMap(tol))
+      new BreezeLBFGS[BDV[Double]](paramMap(maxIter), 10, paramMap(convergenceTol))
     } else {
-      new BreezeOWLQN[Int, BDV[Double]](paramMap(maxIter), 10, effectiveL1RegParam, paramMap(tol))
+      new BreezeOWLQN[Int, BDV[Double]](paramMap(maxIter), 10, effectiveL1RegParam,
+        paramMap(convergenceTol))
     }
 
     val initialWeights = Vectors.zeros(numFeatures)
