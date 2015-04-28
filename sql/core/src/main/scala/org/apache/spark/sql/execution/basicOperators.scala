@@ -85,9 +85,9 @@ case class Sample(
   // TODO: How to pick seed?
   override def execute(): RDD[Row] = {
     if (withReplacement) {
-      child.execute().map(_.copy()).sample(withReplacement, ub - lb, seed)
+      child.execute().map(_.copy()).sample(withReplacement, upperBound - lowerBound, seed)
     } else {
-      child.execute().map(_.copy()).randomSampleWithRange(lb, ub, seed)
+      child.execute().map(_.copy()).randomSampleWithRange(lowerBound, upperBound, seed)
     }
   }
 }
