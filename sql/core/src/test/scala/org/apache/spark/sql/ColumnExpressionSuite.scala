@@ -22,7 +22,6 @@ import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
 
-
 class ColumnExpressionSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
@@ -307,6 +306,14 @@ class ColumnExpressionSuite extends QueryTest {
     checkAnswer(
       testData.select(lower(lit(null))),
       (1 to 100).map(n => Row(null))
+    )
+  }
+
+  test("sparkPartitionId") {
+    val df = TestSQLContext.sparkContext.parallelize(1 to 1, 1).map(i => (i, i)).toDF("a", "b")
+    checkAnswer(
+      df.select(sparkPartitionId()),
+      Row(0)
     )
   }
 
