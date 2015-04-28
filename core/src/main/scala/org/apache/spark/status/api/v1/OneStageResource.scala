@@ -147,8 +147,8 @@ object OneStageResource {
     val extractor: (TaskData => Long) = td =>
       taskSorting match {
         case ID => td.taskId
-        case IncreasingRuntime => td.taskMetrics.map{_.executorRunTime}.getOrElse(-1L)
-        case DecreasingRuntime => -td.taskMetrics.map{_.executorRunTime}.getOrElse(-1L)
+        case INCREASING_RUNTIME => td.taskMetrics.map{_.executorRunTime}.getOrElse(-1L)
+        case DECREASING_RUNTIME => -td.taskMetrics.map{_.executorRunTime}.getOrElse(-1L)
       }
     Ordering.by(extractor)
   }

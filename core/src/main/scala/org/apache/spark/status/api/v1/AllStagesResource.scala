@@ -294,12 +294,16 @@ private[v1] abstract class MetricHelper[I,O](
     quantiles: Array[Double]) {
 
   def getSubmetrics(raw: InternalTaskMetrics): Option[I]
+
   def build: O
+
   val data: Seq[I] = rawMetrics.flatMap(getSubmetrics)
+
   /** applies the given function to all input metrics, and returns the quantiles */
   def submetricQuantiles(f: I => Double): IndexedSeq[Double] = {
     Distribution(data.map { d => f(d) }).get.getQuantiles(quantiles)
   }
+
   def metricOption: Option[O] = {
     if (data.isEmpty) {
       None

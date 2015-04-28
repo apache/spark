@@ -104,7 +104,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "stage task list w/ offset & length" ->
       "applications/local-1427397477963/stages/20/0/taskList?offset=10&length=50",
     "stage task list w/ sortBy" ->
-      "applications/local-1427397477963/stages/20/0/taskList?sortBy=DecreasingRuntime",
+      "applications/local-1427397477963/stages/20/0/taskList?sortBy=DECREASING_RUNTIME",
     "stage task list w/ sortBy short names: -runtime" ->
       "applications/local-1427397477963/stages/20/0/taskList?sortBy=-runtime",
     "stage task list w/ sortBy short names: runtime" ->
