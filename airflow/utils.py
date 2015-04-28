@@ -303,7 +303,7 @@ def send_MIME_email(e_from, e_to, mime_msg):
     s.starttls()
     if SMTP_USER and SMTP_PASSWORD:
         s.login(SMTP_USER, SMTP_PASSWORD)
-    logging.info("Sent an altert email to " + str(e_to))
+    logging.info("Sent an alert email to " + str(e_to))
     s.sendmail(e_from, e_to, mime_msg.as_string())
     s.quit()
 
