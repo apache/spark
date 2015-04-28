@@ -136,6 +136,12 @@ class SaslEncryption {
     private final boolean isByteBuf;
     private final ByteBuf buf;
     private final FileRegion region;
+
+    /**
+     * A channel used to buffer input data for encryption. The channel has an upper size bound
+     * so that if the input is larger than the allowed buffer, it will be broken into multiple
+     * chunks.
+     */
     private final ByteArrayWritableChannel byteChannel;
 
     private ByteBuf currentHeader;
