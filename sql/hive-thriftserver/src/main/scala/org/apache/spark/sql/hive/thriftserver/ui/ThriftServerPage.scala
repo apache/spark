@@ -20,13 +20,14 @@ package org.apache.spark.sql.hive.thriftserver.ui
 import java.util.Calendar
 import javax.servlet.http.HttpServletRequest
 
+import scala.xml.Node
+
 import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{SessionInfo, ExecutionState, ExecutionInfo}
 import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui._
 
-import scala.xml.Node
 
 /** Page for Spark Web UI that shows statistics of a streaming job */
 private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage("") with Logging {
@@ -41,8 +42,8 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       generateBasicStats() ++
       <br/> ++
       <h4>
-        Total {listener.sessionList.size} session online,
-        Total {listener.totalRunning} sql running
+        {listener.sessionList.size} session(s) are online,
+        running {listener.totalRunning} SQL statement(s)
       </h4> ++
       generateSessionStatsTable() ++
       generateSQLStatsTable()
@@ -64,11 +65,11 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
   /** Generate stats of batch statements of the thrift server program */
   private def generateSQLStatsTable(): Seq[Node] = {
-    val numStatement = listener.executeList.size
+    val numStatement = listener.executionList.size
     val table = if (numStatement > 0) {
       val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Duration",
         "Statement", "State", "Detail")
-      val dataRows = listener.executeList.values.toSeq.sortBy(_.startTimestamp).reverse
+      val dataRows = listener.executionList.values
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
         val jobLink = info.jobId.map { id: String =>
@@ -99,7 +100,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     }
 
     val content =
-      <h5>SQL Statistics</h5> ++
+      <h5 id="sqlstat">SQL Statistics</h5> ++
         <div>
           <ul class="unstyled">
             {table.getOrElse("No statistics have been generated yet.")}
@@ -138,7 +139,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     val numBatches = listener.sessionList.size
     val table = if (numBatches > 0) {
       val dataRows =
-        listener.sessionList.values.toSeq.sortBy(_.startTimestamp).reverse
+        listener.sessionList.values
       val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
         "Total Execute")
       def generateDataRow(session: SessionInfo): Seq[Node] = {
@@ -151,7 +152,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
           <td> {formatDate(session.startTimestamp)} </td>
           <td> {if(session.finishTimestamp > 0) formatDate(session.finishTimestamp)} </td>
           <td> {formatDurationOption(Some(session.totalTime))} </td>
-          <td> {session.totalExecute.toString} </td>
+          <td> {session.totalExecution.toString} </td>
         </tr>
       }
       Some(UIUtils.listingTable(headerRow, generateDataRow, dataRows, true, None, Seq(null), false))
@@ -160,7 +161,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     }
 
     val content =
-      <h5>Session Statistics</h5> ++
+      <h5 id="sessionstat">Session Statistics</h5> ++
       <div>
         <ul class="unstyled">
           {table.getOrElse("No statistics have been generated yet.")}

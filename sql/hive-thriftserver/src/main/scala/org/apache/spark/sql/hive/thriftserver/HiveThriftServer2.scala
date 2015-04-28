@@ -22,6 +22,7 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.{HiveServer2, ServerOptionsProcessor}
+import org.apache.spark.sql.SQLConf
 
 import org.apache.spark.{SparkContext, SparkConf, Logging}
 import org.apache.spark.annotation.DeveloperApi
@@ -52,7 +53,7 @@ object HiveThriftServer2 extends Logging {
     val server = new HiveThriftServer2(sqlContext)
     server.init(sqlContext.hiveconf)
     server.start()
-    listener = new HiveThriftServer2Listener(server, sqlContext.sparkContext.conf)
+    listener = new HiveThriftServer2Listener(server, sqlContext.conf)
     sqlContext.sparkContext.addSparkListener(listener)
     uiTab = if (sqlContext.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
       Some(new ThriftServerTab(sqlContext.sparkContext))
@@ -80,7 +81,7 @@ object HiveThriftServer2 extends Logging {
       server.init(SparkSQLEnv.hiveContext.hiveconf)
       server.start()
       logInfo("HiveThriftServer2 started")
-      listener = new HiveThriftServer2Listener(server, SparkSQLEnv.sparkContext.conf)
+      listener = new HiveThriftServer2Listener(server, SparkSQLEnv.hiveContext.conf)
       SparkSQLEnv.sparkContext.addSparkListener(listener)
       uiTab = if (SparkSQLEnv.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
         Some(new ThriftServerTab(SparkSQLEnv.sparkContext))
@@ -100,10 +101,10 @@ object HiveThriftServer2 extends Logging {
       val ip: String,
       val userName: String) {
     var finishTimestamp: Long = 0L
-    var totalExecute: Int = 0
+    var totalExecution: Int = 0
     def totalTime: Long = {
       if (finishTimestamp == 0L) {
-        System.currentTimeMillis() - startTimestamp
+        System.currentTimeMillis - startTimestamp
       } else {
         finishTimestamp - startTimestamp
       }
@@ -139,43 +140,37 @@ object HiveThriftServer2 extends Logging {
   /**
    * A inner sparkListener called in sc.stop to clean up the HiveThriftServer2
    */
-  class HiveThriftServer2Listener(
+  private[thriftserver] class HiveThriftServer2Listener(
       val server: HiveServer2,
-      val conf: SparkConf) extends SparkListener {
+      val conf: SQLConf) extends SparkListener {
 
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       server.stop()
     }
 
-    val sessionList = new mutable.HashMap[String, SessionInfo]
-    val executeList = new mutable.HashMap[String, ExecutionInfo]
+    val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
+    val executionList = new mutable.LinkedHashMap[String, ExecutionInfo]
     val retainedStatements =
-      conf.getInt("spark.thriftserver.ui.retainedStatements", 200)
+      conf.getConf(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT, "200").toInt
     val retainedSessions =
-      conf.getInt("spark.thriftserver.ui.retainedSessions", 200)
+      conf.getConf(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT, "200").toInt
     var totalRunning = 0
 
     override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-      val jobGroup = for (
-        props <- Option(jobStart.properties);
-        statement <- Option(props.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
-      ) yield statement
-
-      jobGroup.map( groupId => {
-        val ret = executeList.find( _ match {
-          case (id: String, info: ExecutionInfo) => info.groupId == groupId
-        })
-        if (ret.isDefined) {
-          ret.get._2.jobId += jobStart.jobId.toString
-          ret.get._2.groupId = groupId
-        }
-      })
+      for {
+        props <- Option(jobStart.properties)
+        groupId <- Option(props.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
+        (_, info) <- executionList if info.groupId == groupId
+      } {
+        info.jobId += jobStart.jobId.toString
+        info.groupId = groupId
+      }
     }
 
     def onSessionCreated(ip: String, sessionId: String, userName: String = "UNKNOWN"): Unit = {
       val info = new SessionInfo(sessionId, System.currentTimeMillis, ip, userName)
-      sessionList(sessionId) = info
-      trimSessionIfNecessary
+      sessionList.put(sessionId, info)
+      trimSessionIfNecessary()
     }
 
     def onSessionClosed(sessionId: String): Unit = {
@@ -190,44 +185,44 @@ object HiveThriftServer2 extends Logging {
         userName: String = "UNKNOWN"): Unit = {
       val info = new ExecutionInfo(statement, sessionId, System.currentTimeMillis, userName)
       info.state = ExecutionState.STARTED
-      executeList(id) = info
-      trimExecutionIfNecessary
-      sessionList(sessionId).totalExecute += 1
-      executeList(id).groupId = groupId
+      executionList.put(id, info)
+      trimExecutionIfNecessary()
+      sessionList(sessionId).totalExecution += 1
+      executionList(id).groupId = groupId
       totalRunning += 1
     }
 
-    def onStatementParse(id: String, executePlan: String): Unit = {
-      executeList(id).executePlan = executePlan
-      executeList(id).state = ExecutionState.COMPILED
+    def onStatementParsed(id: String, executionPlan: String): Unit = {
+      executionList(id).executePlan = executionPlan
+      executionList(id).state = ExecutionState.COMPILED
     }
 
     def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit = {
-      executeList(id).finishTimestamp = System.currentTimeMillis
-      executeList(id).detail = errorMessage
-      executeList(id).state = ExecutionState.FAILED
+      executionList(id).finishTimestamp = System.currentTimeMillis
+      executionList(id).detail = errorMessage
+      executionList(id).state = ExecutionState.FAILED
       totalRunning -= 1
     }
 
     def onStatementFinish(id: String): Unit = {
-      executeList(id).finishTimestamp = System.currentTimeMillis
-      executeList(id).state = ExecutionState.FINISHED
+      executionList(id).finishTimestamp = System.currentTimeMillis
+      executionList(id).state = ExecutionState.FINISHED
       totalRunning -= 1
     }
 
-    private def trimExecutionIfNecessary = synchronized {
-      if (executeList.size > retainedStatements) {
+    private def trimExecutionIfNecessary() = synchronized {
+      if (executionList.size > retainedStatements) {
         val toRemove = math.max(retainedStatements / 10, 1)
-        executeList.toList.sortBy(_._2.startTimestamp).take(toRemove).foreach { s =>
-          executeList.remove(s._1)
+        executionList.take(toRemove).foreach { s =>
+          executionList.remove(s._1)
         }
       }
     }
 
-    private def trimSessionIfNecessary = synchronized {
+    private def trimSessionIfNecessary() = synchronized {
       if (sessionList.size > retainedSessions) {
         val toRemove = math.max(retainedSessions / 10, 1)
-        sessionList.toList.sortBy(_._2.startTimestamp).take(toRemove).foreach { s =>
+        sessionList.take(toRemove).foreach { s =>
           sessionList.remove(s._1)
         }
       }

@@ -20,13 +20,13 @@ package org.apache.spark.sql.hive.thriftserver.ui
 import java.util.Calendar
 import javax.servlet.http.HttpServletRequest
 
+import scala.xml.Node
+
 import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, ExecutionState}
 import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui._
-
-import scala.xml.Node
 
 /** Page for Spark Web UI that shows statistics of a streaming job */
 private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
@@ -52,7 +52,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
         User {sessionStat._2.userName},
         IP {sessionStat._2.ip},
         Session created at {formatDate(sessionStat._2.startTimestamp)},
-        Total run {sessionStat._2.totalExecute} SQL
+        Total run {sessionStat._2.totalExecution} SQL
       </h4> ++
       generateSQLStatsTable(sessionStat._2.sessionId)
     UIUtils.headerSparkPage("ThriftServer", content, parent, Some(5000))
@@ -73,7 +73,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
 
   /** Generate stats of batch statements of the thrift server program */
   private def generateSQLStatsTable(sessionID: String): Seq[Node] = {
-    val executionList = listener.executeList
+    val executionList = listener.executionList
       .filter(_._2.sessionId == sessionID)
     val numStatement = executionList.size
     val table = if (numStatement > 0) {
@@ -157,7 +157,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
           formatDate(session.startTimestamp),
           formatDate(session.finishTimestamp),
           formatDurationOption(Some(session.totalTime)),
-          session.totalExecute.toString
+          session.totalExecution.toString
         )
       ).toSeq
       val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",

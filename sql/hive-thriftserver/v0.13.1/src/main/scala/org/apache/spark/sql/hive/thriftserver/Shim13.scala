@@ -164,7 +164,8 @@ private[hive] class SparkExecuteStatementOperation(
     val statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement'")
     setState(OperationState.RUNNING)
-    HiveThriftServer2.listener.onStatementStart(statementId,
+    HiveThriftServer2.listener.onStatementStart(
+      statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       statement,
       statementId,
@@ -182,7 +183,7 @@ private[hive] class SparkExecuteStatementOperation(
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
       }
-      HiveThriftServer2.listener.onStatementParse(statementId, result.queryExecution.toString())
+      HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())
       iter = {
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
@@ -199,7 +200,8 @@ private[hive] class SparkExecuteStatementOperation(
       // HiveServer will silently swallow them.
       case e: Throwable =>
         setState(OperationState.ERROR)
-        HiveThriftServer2.listener.onStatementError(statementId, e.getMessage, e.getStackTraceString)
+        HiveThriftServer2.listener.onStatementError(
+          statementId, e.getMessage, e.getStackTraceString)
         logError("Error executing query:", e)
         throw new HiveSQLException(e.toString)
     }
@@ -236,9 +238,11 @@ private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
       withImpersonation: Boolean,
       delegationToken: String): SessionHandle = {
     hiveContext.openSession()
-    val sessionHandle = super.openSession(protocol, username, passwd, sessionConf, withImpersonation, delegationToken)
+    val sessionHandle = super.openSession(
+      protocol, username, passwd, sessionConf, withImpersonation, delegationToken)
     val session = super.getSession(sessionHandle)
-    HiveThriftServer2.listener.onSessionCreated(session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
+    HiveThriftServer2.listener.onSessionCreated(
+      session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
     sessionHandle
   }
 
