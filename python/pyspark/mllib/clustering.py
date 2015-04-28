@@ -110,7 +110,7 @@ class KMeansModel(Saveable, Loader):
         """Return the K-means cost (sum of squared distances of points to their nearest center) for this
             model on the given data."""
         cost = callMLlibFunc("computeCostKmeansModel", rdd.map(_convert_to_vector),
-                             map(_convert_to_vector, self.centers))
+                             [_convert_to_vector(c) for c in self.centers])
         return cost
 
     def save(self, sc, path):
