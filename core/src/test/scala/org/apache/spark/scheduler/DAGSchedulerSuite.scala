@@ -475,7 +475,36 @@ class DAGSchedulerSuite
     assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty()
   }
+  
+  test("Test taskAbort after multiple stage failures.") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    submit(reduceRdd, Array(0, 1))
+    scheduler.resubmitFailedStages()
+    
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 1)),
+      (Success, makeMapStatus("hostB", 1))))
+    
+    // Create stage object to get maxStageFailures
+    val stage = new ResultStage(0, reduceRdd, 0, null, 0, new CallSite("blah","blah"))
+    for (x <- 1 to stage.maxStageFailures) {
+      // the 2nd ResultTask failed
+      complete(taskSets(1), Seq(
+        (Success, 42),
+        (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null)))
 
+      scheduler.resubmitFailedStages()
+      if (x < stage.maxStageFailures) {
+        assert(!scheduler.runningStages.isEmpty)
+      } else {
+        assertDataStructuresEmpty()
+      }
+    }
+  }
+  
   test("trivial shuffle with multiple fetch failures") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)

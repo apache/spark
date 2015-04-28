@@ -71,13 +71,13 @@ private[spark] abstract class Stage(
   var latestInfo: StageInfo = StageInfo.fromStage(this)
 
   // The maximum number of times to retry a stage before aborting
-  final val maxStageFailures = 4
+  val maxStageFailures = 4
   
   // To avoid cyclical stage failures (see SPARK-5945) we limit the number of times that a stage
   // may be retried.
   private var failCount = 0
   private[scheduler] def fail() : Unit = { failCount += 1 }
-  private[scheduler] def shouldAbort(): Boolean = { failCount > maxStageFailures }
+  private[scheduler] def shouldAbort(): Boolean = { failCount >= maxStageFailures }
   private[scheduler] def clearFailures() : Unit = { failCount = 0 }
 
   /**

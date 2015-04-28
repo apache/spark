@@ -968,10 +968,6 @@ class DAGScheduler(
     val stage = stageIdToStage(task.stageId)
     event.reason match {
       case Success =>
-        // Clear failure count for this stage, now that it's succeeded. This ensures that even if 
-        // subsequent stages fail, triggering a recompute of this stage, we abort because of 
-        // those failures. 
-        stage.clearFailures()
         listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
           event.reason, event.taskInfo, event.taskMetrics))
         stage.pendingTasks -= task
@@ -988,6 +984,11 @@ class DAGScheduler(
                   job.numFinished += 1
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
+                    // Clear failure count for this stage, now that it's succeeded. 
+                    // This ensures that even if subsequent stages fail, triggering 
+                    // a recompute of this stage, we abort because of those failures. 
+                    stage.clearFailures()
+                    
                     markStageAsFinished(resultStage)
                     cleanupStateForJobAndIndependentStages(job)
                     listenerBus.post(
