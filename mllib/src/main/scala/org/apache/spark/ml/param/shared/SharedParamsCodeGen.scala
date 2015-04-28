@@ -21,6 +21,8 @@ import java.io.PrintWriter
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.ml.param.ParamValidate
+
 /**
  * Code generator for shared params (sharedParams.scala). Run under the Spark folder with
  * {{{
@@ -31,8 +33,10 @@ private[shared] object SharedParamsCodeGen {
 
   def main(args: Array[String]): Unit = {
     val params = Seq(
-      ParamDesc[Double]("regParam", "regularization parameter"),
-      ParamDesc[Int]("maxIter", "max number of iterations"),
+      ParamDesc[Double]("regParam", "regularization parameter (>= 0)",
+        isValid = "ParamValidate.gtEq[Double](0)"),
+      ParamDesc[Int]("maxIter", "max number of iterations (>= 0)",
+        isValid = "ParamValidate.gtEq[Int](0)"),
       ParamDesc[String]("featuresCol", "features column name", Some("\"features\"")),
       ParamDesc[String]("labelCol", "label column name", Some("\"label\"")),
       ParamDesc[String]("predictionCol", "prediction column name", Some("\"prediction\"")),
@@ -40,11 +44,14 @@ private[shared] object SharedParamsCodeGen {
         Some("\"rawPrediction\"")),
       ParamDesc[String]("probabilityCol",
         "column name for predicted class conditional probabilities", Some("\"probability\"")),
-      ParamDesc[Double]("threshold", "threshold in binary classification prediction"),
+      ParamDesc[Double]("threshold",
+        "threshold in binary classification prediction, in range [0, 1]",
+        isValid = "ParamValidate.inRange[Double](0, 1)"),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name"),
-      ParamDesc[Int]("checkpointInterval", "checkpoint interval"),
+      ParamDesc[Int]("checkpointInterval", "checkpoint interval (>= 1)",
+        isValid = "ParamValidate.gtEq[Int](1)"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
       ParamDesc[Long]("seed", "random seed", Some("Utils.random.nextLong()")),
       ParamDesc[Double]("elasticNetParam", "the ElasticNet mixing parameter"),
@@ -62,7 +69,8 @@ private[shared] object SharedParamsCodeGen {
   private case class ParamDesc[T: ClassTag](
       name: String,
       doc: String,
-      defaultValueStr: Option[String] = None) {
+      defaultValueStr: Option[String] = None,
+      isValid: String = "") {
 
     require(name.matches("[a-z][a-zA-Z0-9]*"), s"Param name $name is invalid.")
     require(doc.nonEmpty) // TODO: more rigorous on doc
@@ -113,6 +121,11 @@ private[shared] object SharedParamsCodeGen {
          |  setDefault($name, $v)
          |""".stripMargin
     }.getOrElse("")
+    val isValid = if (param.isValid != "") {
+      ", " + param.isValid
+    } else {
+      ""
+    }
 
     s"""
       |/**
@@ -126,7 +139,7 @@ private[shared] object SharedParamsCodeGen {
       |   * Param for $doc.
       |   * @group param
       |   */
-      |  final val $name: $Param = new $Param(this, "$name", "$doc")
+      |  final val $name: $Param = new $Param(this, "$name", "$doc"$isValid)
       |$setDefault
       |  /** @group getParam */
       |  final def get$Name: $T = getOrDefault($name)

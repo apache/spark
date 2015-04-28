@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.{ParamMap, IntParam, BooleanParam, Param}
+import org.apache.spark.ml.param._
 import org.apache.spark.sql.types.{DataType, StringType, ArrayType}
 
 /**
@@ -28,8 +28,6 @@ import org.apache.spark.sql.types.{DataType, StringType, ArrayType}
  */
 @AlphaComponent
 class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
-
-  override def validate(paramMap: ParamMap): Unit = { }
 
   override protected def createTransformFunc(paramMap: ParamMap): String => Seq[String] = {
     _.toLowerCase.split("\\s")
@@ -52,17 +50,13 @@ class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
 @AlphaComponent
 class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
 
-  override def validate(paramMap: ParamMap): Unit = {
-    require(getOrDefault(minTokenLength) >= 0,
-      s"RegexTokenizer minTokenLength must be >= 0, but was ${getOrDefault(minTokenLength)}")
-  }
-
   /**
    * Minimum token length, >= 0.
    * Default: 1, to avoid returning empty strings
    * @group param
    */
-  val minTokenLength: IntParam = new IntParam(this, "minLength", "minimum token length (>= 0)")
+  val minTokenLength: IntParam = new IntParam(this, "minLength", "minimum token length (>= 0)",
+    isValid = ParamValidate.gtEq[Int](0))
 
   /** @group setParam */
   def setMinTokenLength(value: Int): this.type = set(minTokenLength, value)

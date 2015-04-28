@@ -45,7 +45,8 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
    */
   final val maxDepth: IntParam =
     new IntParam(this, "maxDepth", "Maximum depth of the tree. (>= 0)" +
-      " E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.")
+      " E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.",
+      ParamValidate.gtEq[Int](0))
 
   /**
    * Maximum number of bins used for discretizing continuous features and for choosing how to split
@@ -56,7 +57,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
    */
   final val maxBins: IntParam = new IntParam(this, "maxBins", "Max number of bins for" +
     " discretizing continuous features.  Must be >=2 and >= number of categories for any" +
-    " categorical feature.")
+    " categorical feature.", ParamValidate.gtEq[Int](2))
 
   /**
    * Minimum number of instances each child must have after split.
@@ -69,7 +70,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   final val minInstancesPerNode: IntParam = new IntParam(this, "minInstancesPerNode", "Minimum" +
     " number of instances each child must have after split.  If a split causes the left or right" +
     " child to have fewer than minInstancesPerNode, the split will be discarded as invalid." +
-    " Should be >= 1.")
+    " Should be >= 1.", ParamValidate.gtEq[Int](1))
 
   /**
    * Minimum information gain for a split to be considered at a tree node.
@@ -85,7 +86,8 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
    * @group expertParam
    */
   final val maxMemoryInMB: IntParam = new IntParam(this, "maxMemoryInMB",
-    "Maximum memory in MB allocated to histogram aggregation.")
+    "Maximum memory in MB allocated to histogram aggregation.",
+    ParamValidate.gtEq[Int](0))
 
   /**
    * If false, the algorithm will pass trees to executors to match instances with nodes.
@@ -111,7 +113,8 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "Specifies" +
     " how often to checkpoint the cached node IDs.  E.g. 10 means that the cache will get" +
     " checkpointed every 10 iterations. This is only used if cacheNodeIds is true and if the" +
-    " checkpoint directory is set in the SparkContext. Must be >= 1.")
+    " checkpoint directory is set in the SparkContext. Must be >= 1.",
+    ParamValidate.gtEq[Int](1))
 
   setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1, minInfoGain -> 0.0,
     maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
@@ -173,24 +176,6 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   /** @group expertGetParam */
   final def getCheckpointInterval: Int = getOrDefault(checkpointInterval)
 
-  /**
-   * Same as [[validate()]], but renamed to force concrete classes to explicitly implement
-   * validation (in case concrete classes have their own parameters).
-   */
-  protected def validateImpl(paramMap: ParamMap): Unit = {
-    val map = extractParamMap(paramMap)
-    require(map(maxDepth) >= 0, s"${this.getClass.getSimpleName}" +
-      s" maxDepth must be >= 0, but was ${map(maxDepth)}")
-    require(map(maxBins) >= 2, s"${this.getClass.getSimpleName}" +
-      s" maxBins must be >= 2, but was ${map(maxBins)}")
-    require(map(minInstancesPerNode) >= 1, s"${this.getClass.getSimpleName}" +
-      s" minInstancesPerNode must be >= 1, but was ${map(minInstancesPerNode)}")
-    require(map(maxMemoryInMB) > 0, s"${this.getClass.getSimpleName}" +
-      s" maxMemoryInMB must be > 0, but was ${map(maxMemoryInMB)}")
-    require(map(checkpointInterval) >= 1, s"${this.getClass.getSimpleName}" +
-      s" checkpointInterval must be >= 1, but was ${map(checkpointInterval)}")
-  }
-
   /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
@@ -227,7 +212,8 @@ private[ml] trait TreeClassifierParams extends Params {
    */
   final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
-    s" ${TreeClassifierParams.supportedImpurities.mkString(", ")}")
+    s" ${TreeClassifierParams.supportedImpurities.mkString(", ")}",
+    ParamValidate.inArray[String](TreeClassifierParams.supportedImpurities))
 
   setDefault(impurity -> "gini")
 
@@ -274,7 +260,8 @@ private[ml] trait TreeRegressorParams extends Params {
    */
   final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
-    s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}")
+    s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}",
+    ParamValidate.inArray[String](TreeRegressorParams.supportedImpurities))
 
   setDefault(impurity -> "variance")
 
@@ -322,7 +309,8 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
    * @group param
    */
   final val subsamplingRate: DoubleParam = new DoubleParam(this, "subsamplingRate",
-    "Fraction of the training data used for learning each decision tree, in range (0, 1].")
+    "Fraction of the training data used for learning each decision tree, in range (0, 1].",
+    ParamValidate.inRange[Double](0, 1, lowerInclusive = false, upperInclusive = true))
 
   setDefault(subsamplingRate -> 1.0)
 
@@ -338,14 +326,6 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
 
   /** @group setParam */
   def setSeed(value: Long): this.type = set(seed, value)
-
-  override protected def validateImpl(paramMap: ParamMap): Unit = {
-    super.validateImpl(paramMap)
-    val map = extractParamMap(paramMap)
-    val rate = map(subsamplingRate)
-    require(0.0 < rate && rate <= 1.0, s"${this.getClass.getSimpleName}" +
-      s" subsamplingRate must be in range (0, 1], but was $rate")
-  }
 
   /**
    * Create a Strategy instance to use with the old API.
@@ -376,7 +356,8 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
    * (default = 20)
    * @group param
    */
-  final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)")
+  final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)",
+    ParamValidate.gtEq[Int](1))
 
   /**
    * The number of features to consider for splits at each tree node.
@@ -404,7 +385,8 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
    */
   final val featureSubsetStrategy: Param[String] = new Param[String](this, "featureSubsetStrategy",
     "The number of features to consider for splits at each tree node." +
-      s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}")
+      s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}",
+    ParamValidate.inArray[String](RandomForestParams.supportedFeatureSubsetStrategies))
 
   setDefault(numTrees -> 20, featureSubsetStrategy -> "auto")
 
@@ -428,18 +410,6 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
 
   /** @group getParam */
   final def getFeatureSubsetStrategy: String = getOrDefault(featureSubsetStrategy)
-
-  override protected def validateImpl(paramMap: ParamMap): Unit = {
-    super.validateImpl(paramMap)
-    val map = extractParamMap(paramMap)
-    require(map(numTrees) >= 1, s"${this.getClass.getSimpleName}" +
-      s" numTrees must be >= 1, but was ${map(numTrees)}")
-    require(
-      RandomForestParams.supportedFeatureSubsetStrategies.contains(map(featureSubsetStrategy)),
-      s"RandomForestParams was given unrecognized featureSubsetStrategy:" +
-        s" ${map(featureSubsetStrategy)}. Supported" +
-        s" options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}")
-  }
 }
 
 private[ml] object RandomForestParams {
@@ -464,7 +434,8 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
    * @group param
    */
   final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size (a.k.a." +
-    " learning rate) in interval (0, 1] for shrinking the contribution of each estimator")
+    " learning rate) in interval (0, 1] for shrinking the contribution of each estimator",
+    ParamValidate.inRange[Double](0, 1, lowerInclusive = false, upperInclusive = true))
 
   /* TODO: Add this doc when we add this param.  SPARK-7132
    * Threshold for stopping early when runWithValidation is used.

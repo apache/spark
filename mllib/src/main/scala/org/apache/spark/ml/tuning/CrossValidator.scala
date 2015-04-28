@@ -22,7 +22,7 @@ import com.github.fommil.netlib.F2jBLAS
 import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
+import org.apache.spark.ml.param._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
@@ -65,8 +65,8 @@ private[ml] trait CrossValidatorParams extends Params {
    * Default: 3
    * @group param
    */
-  val numFolds: IntParam =
-    new IntParam(this, "numFolds", "number of folds for cross validation (>= 2)")
+  val numFolds: IntParam = new IntParam(this, "numFolds",
+    "number of folds for cross validation (>= 2)", ParamValidate.gtEq[Int](2))
 
   /** @group getParam */
   def getNumFolds: Int = getOrDefault(numFolds)
@@ -74,8 +74,6 @@ private[ml] trait CrossValidatorParams extends Params {
   setDefault(numFolds -> 3)
 
   override def validate(paramMap: ParamMap): Unit = {
-    require(getOrDefault(numFolds) >= 2,
-      s"CrossValidator numFolds must be >= 2, but was ${getOrDefault(numFolds)}")
     val map = extractParamMap(paramMap)
     getEstimatorParamMaps.foreach { eMap =>
       getEstimator.validate(map ++ eMap)

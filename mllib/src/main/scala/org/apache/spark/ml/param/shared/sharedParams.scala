@@ -33,11 +33,10 @@ import org.apache.spark.util.Utils
 trait HasRegParam extends Params {
 
   /**
-   * Param for regularization parameter.  Should be >= 0.
+   * Param for regularization parameter (>= 0).
    * @group param
    */
-  final val regParam: DoubleParam =
-    new DoubleParam(this, "regParam", "regularization parameter (>= 0)")
+  final val regParam: DoubleParam = new DoubleParam(this, "regParam", "regularization parameter (>= 0)", ParamValidate.gtEq[Double](0))
 
   /** @group getParam */
   final def getRegParam: Double = getOrDefault(regParam)
@@ -51,10 +50,10 @@ trait HasRegParam extends Params {
 trait HasMaxIter extends Params {
 
   /**
-   * Param for max number of iterations.  Should be >= 0.
+   * Param for max number of iterations (>= 0).
    * @group param
    */
-  final val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations (>= 0)")
+  final val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations (>= 0)", ParamValidate.gtEq[Int](0))
 
   /** @group getParam */
   final def getMaxIter: Int = getOrDefault(maxIter)
@@ -163,10 +162,10 @@ trait HasProbabilityCol extends Params {
 trait HasThreshold extends Params {
 
   /**
-   * Param for threshold in binary classification prediction.
+   * Param for threshold in binary classification prediction, in range [0, 1].
    * @group param
    */
-  final val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in binary classification prediction, in range [0, 1]")
+  final val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in binary classification prediction, in range [0, 1]", ParamValidate.inRange[Double](0, 1))
 
   /** @group getParam */
   final def getThreshold: Double = getOrDefault(threshold)
@@ -231,10 +230,10 @@ trait HasOutputCol extends Params {
 trait HasCheckpointInterval extends Params {
 
   /**
-   * Param for checkpoint interval.
+   * Param for checkpoint interval (>= 1).
    * @group param
    */
-  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "checkpoint interval (>= 1)")
+  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "checkpoint interval (>= 1)", ParamValidate.gtEq[Int](1))
 
   /** @group getParam */
   final def getCheckpointInterval: Int = getOrDefault(checkpointInterval)

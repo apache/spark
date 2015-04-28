@@ -52,35 +52,42 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
   with HasPredictionCol with HasCheckpointInterval {
 
   /**
-   * Param for rank of the matrix factorization.
+   * Param for rank of the matrix factorization (>= 1).
+   * Default: 10
    * @group param
    */
-  val rank = new IntParam(this, "rank", "rank of the factorization")
+  val rank = new IntParam(this, "rank", "rank of the factorization",
+    isValid = ParamValidate.gtEq[Int](1))
 
   /** @group getParam */
   def getRank: Int = getOrDefault(rank)
 
   /**
-   * Param for number of user blocks.
+   * Param for number of user blocks (>= 1).
+   * Default: 10
    * @group param
    */
-  val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks")
+  val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks",
+    isValid = ParamValidate.gtEq[Int](1))
 
   /** @group getParam */
   def getNumUserBlocks: Int = getOrDefault(numUserBlocks)
 
   /**
-   * Param for number of item blocks.
+   * Param for number of item blocks (>= 1).
+   * Default: 10
    * @group param
    */
   val numItemBlocks =
-    new IntParam(this, "numItemBlocks", "number of item blocks")
+    new IntParam(this, "numItemBlocks", "number of item blocks",
+      isValid = ParamValidate.gtEq[Int](1))
 
   /** @group getParam */
   def getNumItemBlocks: Int = getOrDefault(numItemBlocks)
 
   /**
    * Param to decide whether to use implicit preference.
+   * Default: false
    * @group param
    */
   val implicitPrefs = new BooleanParam(this, "implicitPrefs", "whether to use implicit preference")
@@ -89,16 +96,19 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
   def getImplicitPrefs: Boolean = getOrDefault(implicitPrefs)
 
   /**
-   * Param for the alpha parameter in the implicit preference formulation.
+   * Param for the alpha parameter in the implicit preference formulation (>= 0).
+   * Default: 1.0
    * @group param
    */
-  val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference")
+  val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference",
+    isValid = ParamValidate.gtEq[Double](0))
 
   /** @group getParam */
   def getAlpha: Double = getOrDefault(alpha)
 
   /**
    * Param for the column name for user ids.
+   * Default: "user"
    * @group param
    */
   val userCol = new Param[String](this, "userCol", "column name for user ids")
@@ -108,6 +118,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
 
   /**
    * Param for the column name for item ids.
+   * Default: "item"
    * @group param
    */
   val itemCol = new Param[String](this, "itemCol", "column name for item ids")
@@ -117,6 +128,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
 
   /**
    * Param for the column name for ratings.
+   * Default: "rating"
    * @group param
    */
   val ratingCol = new Param[String](this, "ratingCol", "column name for ratings")
@@ -126,6 +138,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
 
   /**
    * Param for whether to apply nonnegativity constraints.
+   * Default: false
    * @group param
    */
   val nonnegative = new BooleanParam(
@@ -136,16 +149,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
 
   setDefault(rank -> 10, maxIter -> 10, regParam -> 0.1, numUserBlocks -> 10, numItemBlocks -> 10,
     implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
-    ratingCol -> "rating", nonnegative -> false)
-
-  override def validate(paramMap: ParamMap): Unit = {
-    require(getOrDefault(regParam) >= 0,
-      s"ALS regParam must be >= 0, but was ${getOrDefault(regParam)}")
-    require(getOrDefault(maxIter) >= 0,
-      s"ALS maxIter must be >= 0, but was ${getOrDefault(maxIter)}")
-    require(getOrDefault(checkpointInterval) >= 1,
-      s"ALS checkpointInterval must be >= 1, but was ${getOrDefault(checkpointInterval)}")
-  }
+    ratingCol -> "rating", nonnegative -> false, checkpointInterval -> 10)
 
   /**
    * Validates and transforms the input schema.
@@ -289,10 +293,6 @@ class ALS extends Estimator[ALSModel] with ALSParams {
     setNumItemBlocks(value)
     this
   }
-
-  setMaxIter(20)
-  setRegParam(1.0)
-  setCheckpointInterval(10)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): ALSModel = {
     val map = extractParamMap(paramMap)

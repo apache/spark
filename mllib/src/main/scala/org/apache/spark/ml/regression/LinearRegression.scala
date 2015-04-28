@@ -40,15 +40,7 @@ import org.apache.spark.Logging
  * Params for linear regression.
  */
 private[regression] trait LinearRegressionParams extends RegressorParams
-  with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol { // TODO: elasticnetparam, tol
-
-  override def validate(paramMap: ParamMap): Unit = {
-    require(getOrDefault(regParam) >= 0,
-      s"LinearRegression regParam must be >= 0, but was ${getOrDefault(regParam)}")
-    require(getOrDefault(maxIter) >= 0,
-      s"LinearRegression maxIter must be >= 0, but was ${getOrDefault(maxIter)}")
-  }
-}
+  with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol // TODO: elasticnetparam, tol
 
 /**
  * :: AlphaComponent ::

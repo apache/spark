@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.{IntParam, ParamMap}
+import org.apache.spark.ml.param.{ParamValidate, IntParam, ParamMap}
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{VectorUDT, Vector}
 import org.apache.spark.sql.types.DataType
@@ -31,17 +31,13 @@ import org.apache.spark.sql.types.DataType
 @AlphaComponent
 class HashingTF extends UnaryTransformer[Iterable[_], Vector, HashingTF] {
 
-  override def validate(paramMap: ParamMap): Unit = {
-    require(getOrDefault(numFeatures) > 0,
-      s"HashingTF numFeatures must be > 0, but was ${getOrDefault(numFeatures)}")
-  }
-
   /**
    * Number of features.  Should be > 0.
    * (default = 2^18^)
    * @group param
    */
-  val numFeatures = new IntParam(this, "numFeatures", "number of features (> 0)")
+  val numFeatures = new IntParam(this, "numFeatures", "number of features (> 0)",
+    isValid = ParamValidate.gt[Int](0))
 
   setDefault(numFeatures -> (1 << 18))
 

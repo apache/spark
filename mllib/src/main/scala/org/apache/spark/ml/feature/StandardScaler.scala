@@ -45,8 +45,6 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
    * @group param
    */
   val withStd: BooleanParam = new BooleanParam(this, "withStd", "Scale to unit standard deviation")
-
-  override def validate(paramMap: ParamMap): Unit = { }
 }
 
 /**

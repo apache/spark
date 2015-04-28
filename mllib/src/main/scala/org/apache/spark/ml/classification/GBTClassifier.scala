@@ -23,7 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
 import org.apache.spark.ml.impl.tree._
-import org.apache.spark.ml.param.{Param, Params, ParamMap}
+import org.apache.spark.ml.param.{ParamValidate, Param, Params, ParamMap}
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.MetadataUtils
@@ -103,7 +103,8 @@ final class GBTClassifier
    */
   val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
     " tries to minimize (case-insensitive). Supported options:" +
-    s" ${GBTClassifier.supportedLossTypes.mkString(", ")}")
+    s" ${GBTClassifier.supportedLossTypes.mkString(", ")}",
+    ParamValidate.inArray[String](GBTClassifier.supportedLossTypes))
 
   setDefault(lossType -> "logistic")
 
