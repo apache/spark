@@ -32,8 +32,22 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  * Binarize a column of continuous features given a threshold.
  */
 @AlphaComponent
-final class Binarizer extends Transformer
-    with HasInputCol with HasOutputCol with HasThreshold {
+final class Binarizer extends Transformer with HasInputCol with HasOutputCol {
+
+  /**
+   * Param for threshold used to binarize continuous features.
+   * The features greater than the threshold, will be binarized to 1.0.
+   * The features equal to or less than the threshold, will be binarized to 0.0.
+   * @group param
+   */
+  val threshold: DoubleParam =
+    new DoubleParam(this, "threshold", "threshold used to binarize continuous features")
+
+  /** @group getParam */
+  def getThreshold: Double = getOrDefault(threshold)
+
+  /** @group setParam */
+  def setThreshold(value: Double): this.type = set(threshold, value)
 
   setDefault(threshold -> 0.0)
 
@@ -43,14 +57,11 @@ final class Binarizer extends Transformer
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  /** @group setParam */
-  def setThreshold(value: Double): this.type = set(threshold, value)
-
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = extractParamMap(paramMap)
-    val threshold = getThreshold
-    val binarizer = udf { in: Double => if (in > threshold) 1.0 else 0.0 }
+    val td = map(threshold)
+    val binarizer = udf { in: Double => if (in > td) 1.0 else 0.0 }
     dataset.withColumn(map(outputCol), binarizer(col(map(inputCol))))
   }
 
