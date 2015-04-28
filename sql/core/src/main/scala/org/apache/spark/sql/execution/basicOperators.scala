@@ -63,16 +63,31 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
 
 /**
  * :: DeveloperApi ::
+ * Sample the dataset.
+ * @param lb Lower-bound of the sampling probability (usually 0.0)
+ * @param ub Upper-bound of the sampling probability. The expected fraction sampled will be ub - lb.
+ * @param withReplacement Whether to sample with replacement.
+ * @param seed the random seed
+ * @param child the QueryPlan
  */
 @DeveloperApi
-case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child: SparkPlan)
+case class Sample(
+    lb: Double,
+    ub: Double,
+    withReplacement: Boolean,
+    seed: Long,
+    child: SparkPlan)
   extends UnaryNode
 {
   override def output: Seq[Attribute] = child.output
 
   // TODO: How to pick seed?
   override def execute(): RDD[Row] = {
-    child.execute().map(_.copy()).sample(withReplacement, fraction, seed)
+    if (withReplacement) {
+      child.execute().map(_.copy()).sample(withReplacement, ub - lb, seed)
+    } else {
+      child.execute().map(_.copy()).randomSampleWithRange(lb, ub, seed)
+    }
   }
 }
 

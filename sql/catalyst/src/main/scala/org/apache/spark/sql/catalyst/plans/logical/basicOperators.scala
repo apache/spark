@@ -300,8 +300,12 @@ case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
 }
 
-case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child: LogicalPlan)
-    extends UnaryNode {
+case class Sample(
+    lb: Double,
+    ub: Double,
+    withReplacement: Boolean,
+    seed: Long,
+    child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
 }
