@@ -439,28 +439,28 @@ object mathfunctions {
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
 
   /**
-   * Computes sqrt(a^2^ + b^2^) without intermediate overflow or underflow.
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
    *
    * @group double_funcs
    */
   def hypot(l: Column, r: Column): Column = Hypot(l.expr, r.expr)
 
   /**
-   * Computes sqrt(a^2^ + b^2^) without intermediate overflow or underflow.
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
    *
    * @group double_funcs
    */
   def hypot(l: Column, rightName: String): Column = hypot(l, Column(rightName))
 
   /**
-   * Computes sqrt(a^2^ + b^2^) without intermediate overflow or underflow.
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
    *
    * @group double_funcs
    */
   def hypot(leftName: String, r: Column): Column = hypot(Column(leftName), r)
 
   /**
-   * Computes sqrt(a^2^ + b^2^) without intermediate overflow or underflow.
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
    *
    * @group double_funcs
    */
@@ -468,28 +468,28 @@ object mathfunctions {
     hypot(Column(leftName), Column(rightName))
 
   /**
-   * Computes sqrt(a^2^ + b^2^) without intermediate overflow or underflow.
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
    *
    * @group double_funcs
    */
   def hypot(l: Column, r: Double): Column = hypot(l, lit(r).expr)
 
   /**
-   * Computes sqrt(a^2^ + b^2^) without intermediate overflow or underflow.
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
    *
    * @group double_funcs
    */
   def hypot(leftName: String, r: Double): Column = hypot(Column(leftName), r)
 
   /**
-   * Computes sqrt(a^2^ + b^2^) without intermediate overflow or underflow.
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
    *
    * @group double_funcs
    */
   def hypot(l: Double, r: Column): Column = hypot(lit(l).expr, r)
 
   /**
-   * Computes sqrt(a^2^ + b^2^) without intermediate overflow or underflow.
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
    *
    * @group double_funcs
    */
