@@ -89,6 +89,11 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
   override def toString: String = s"($left $symbol $right)"
 }
 
+/**
+ *  This class is for expressions that use math functions like `pow`, `max`, `hypot`, and `atan2`,
+ *  which can't be expressed as `$left $symbol $right`. They are expressed as
+ *  `$func($left, $right)`.
+ */
 abstract class BinaryFunctionExpression extends Expression with trees.BinaryNode[Expression] {
   self: Product =>
 

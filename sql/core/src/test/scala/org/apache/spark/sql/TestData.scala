@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.lang.{Double => JavaDouble}
 import java.sql.Timestamp
 
 import org.apache.spark.sql.catalyst.plans.logical
@@ -57,15 +56,6 @@ object TestData {
       TestData2(3, 1) ::
       TestData2(3, 2) :: Nil, 2).toDF()
   testData2.registerTempTable("testData2")
-
-  case class DoubleData(a: JavaDouble, b: JavaDouble)
-  val doubleData = TestSQLContext.sparkContext.parallelize(
-    (1 to 100).map(i => DoubleData(i * 0.02 - 1, i * -0.02 + 1))).toDF()
-  doubleData.registerTempTable("doubleData")
-
-  val nnDoubleData = TestSQLContext.sparkContext.parallelize(
-    (1 to 100).map(i => DoubleData(i * 0.01, i * -0.01))).toDF()
-  nnDoubleData.registerTempTable("nnDoubleData")
 
   case class DecimalData(a: BigDecimal, b: BigDecimal)
 
@@ -155,16 +145,6 @@ object TestData {
       NullInts(null) :: Nil
     ).toDF()
   nullInts.registerTempTable("nullInts")
-
-  case class NullDoubles(a: JavaDouble)
-  val nullDoubles =
-    TestSQLContext.sparkContext.parallelize(
-      NullDoubles(1.0) ::
-      NullDoubles(2.0) ::
-      NullDoubles(3.0) ::
-      NullDoubles(null) :: Nil
-    ).toDF()
-  nullDoubles.registerTempTable("nullDoubles")
 
   val allNulls =
     TestSQLContext.sparkContext.parallelize(

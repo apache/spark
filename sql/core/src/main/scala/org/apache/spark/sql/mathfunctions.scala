@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.mathfuncs._
 import org.apache.spark.sql.functions.lit
 
 /**
