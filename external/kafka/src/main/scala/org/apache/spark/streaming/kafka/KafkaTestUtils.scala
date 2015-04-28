@@ -29,10 +29,11 @@ import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 import kafka.admin.AdminUtils
+import kafka.api.Request
 import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
 import kafka.serializer.StringEncoder
 import kafka.server.{KafkaConfig, KafkaServer}
-import kafka.utils.ZKStringSerializer
+import kafka.utils.{ZKStringSerializer, ZkUtils}
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.I0Itec.zkclient.ZkClient
 
@@ -232,8 +233,11 @@ private class KafkaTestUtils extends Logging {
       assert(
         server.apis.metadataCache.getPartitionInfo(topic, partition) match {
           case Some(partitionState) =>
-            // is valid broker id
-            partitionState.leaderIsrAndControllerEpoch.leaderAndIsr.leader >= 0
+            val leaderAndIsr = partitionState.leaderIsrAndControllerEpoch.leaderAndIsr
+            ZkUtils.getLeaderForPartition(zkClient, topic, partition).isDefined &&
+              Request.isValidBrokerId(leaderAndIsr.leader) &&
+              leaderAndIsr.isr.size >= 1
+
           case _ =>
             false
         },
