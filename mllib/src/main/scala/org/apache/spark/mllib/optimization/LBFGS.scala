@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.optimization
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV}
@@ -164,7 +165,7 @@ object LBFGS extends Logging {
       regParam: Double,
       initialWeights: Vector): (Vector, Array[Double]) = {
 
-    val lossHistory = new ArrayBuffer[Double](maxNumIterations)
+    val lossHistory = mutable.ArrayBuilder.make[Double]
 
     val numExamples = data.count()
 
@@ -181,24 +182,26 @@ object LBFGS extends Logging {
      * and regVal is the regularization value computed in the previous iteration as well.
      */
     var state = states.next()
-    while(states.hasNext) {
-      lossHistory.append(state.value)
+    while (states.hasNext) {
+      lossHistory += state.value
       state = states.next()
     }
-    lossHistory.append(state.value)
+    lossHistory += state.value
     val weights = Vectors.fromBreeze(state.x)
 
-    logInfo("LBFGS.runLBFGS finished. Last 10 losses %s".format(
-      lossHistory.takeRight(10).mkString(", ")))
+    val lossHistoryArray = lossHistory.result()
 
-    (weights, lossHistory.toArray)
+    logInfo("LBFGS.runLBFGS finished. Last 10 losses %s".format(
+      lossHistoryArray.takeRight(10).mkString(", ")))
+
+    (weights, lossHistoryArray)
   }
 
   /**
    * CostFun implements Breeze's DiffFunction[T], which returns the loss and gradient
    * at a particular point (weights). It's used in Breeze's convex optimization routines.
    */
-  private[spark] class CostFun(
+  private class CostFun(
     data: RDD[(Double, Vector)],
     gradient: Gradient,
     updater: Updater,

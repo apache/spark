@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.regression
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 
 import breeze.linalg.{norm => brzNorm, DenseVector => BDV}
 import breeze.optimize.{LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
@@ -79,11 +79,11 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
   /**
    * Set the convergence tolerance of iterations.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
-   * Default is 1E-9.
+   * Default is 1E-6.
    * @group setParam
    */
   def setTol(value: Double): this.type = set(tol, value)
-  setDefault(tol -> 1E-9)
+  setDefault(tol -> 1E-6)
 
   override protected def train(dataset: DataFrame, paramMap: ParamMap): LinearRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist instances.
@@ -119,12 +119,8 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     val effectiveL1RegParam = paramMap(elasticNetParam) * effectiveRegParam
     val effectiveL2RegParam = (1.0 - paramMap(elasticNetParam)) * effectiveRegParam
 
-    val costFun = new LeastSquaresCostFun(
-      instances,
-      yStd, yMean,
-      featuresStd,
-      featuresMean,
-      effectiveL2RegParam)
+    val costFun = new LeastSquaresCostFun(instances, yStd, yMean,
+      featuresStd, featuresMean, effectiveL2RegParam)
 
     val optimizer = if (paramMap(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
       new BreezeLBFGS[BDV[Double]](paramMap(maxIter), 10, paramMap(tol))
@@ -137,12 +133,13 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
       optimizer.iterations(new CachedDiffFunction(costFun), initialWeights.toBreeze.toDenseVector)
 
     var state = states.next()
-    val lossHistory = new ArrayBuffer[Double](paramMap(maxIter))
-    while(states.hasNext) {
-      lossHistory.append(state.value)
+    val lossHistory = mutable.ArrayBuilder.make[Double]
+
+    while (states.hasNext) {
+      lossHistory += state.value
       state = states.next()
     }
-    lossHistory.append(state.value)
+    lossHistory += state.value
 
     // TODO: Based on the sparsity of weights, we may convert the weights to the sparse vector.
     // The weights are trained in the scaled space; we're converting them back to
@@ -151,7 +148,7 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
       val rawWeights = state.x.toArray.clone()
       var i = 0
       while (i < rawWeights.length) {
-        rawWeights(i) = if (featuresStd(i) != 0.0) rawWeights(i) * yStd / featuresStd(i) else 0.0
+        rawWeights(i) *= { if (featuresStd(i) != 0.0) yStd / featuresStd(i) else 0.0 }
         i += 1
       }
       Vectors.dense(rawWeights)
@@ -218,7 +215,7 @@ private class LeastSquaresAggregator(
       }
       i += 1
     }
-    (weightsArray, -sum, weightsArray.length)
+    (weightsArray, -sum + labelMean / labelStd, weightsArray.length)
   }
   private val effectiveWeightsVector = Vectors.dense(effectiveWeightsArray)
 
@@ -237,7 +234,7 @@ private class LeastSquaresAggregator(
     require(dim == data.size, s"Dimensions mismatch when adding new sample." +
       s" Expecting $dim but got ${data.size}.")
 
-    val diff = dot(data, effectiveWeightsVector) - (label - labelMean) / labelStd + offset
+    val diff = dot(data, effectiveWeightsVector) - label / labelStd + offset
 
     if (diff != 0) {
       val localGradientSumArray = gradientSumArray
@@ -266,7 +263,7 @@ private class LeastSquaresAggregator(
     require(dim == other.dim, s"Dimensions mismatch when merging with another " +
       s"LeastSquaresAggregator. Expecting $dim but got ${other.dim}.")
 
-    if (this.totalCnt != 0 && other.totalCnt != 0) {
+    if (other.totalCnt != 0) {
       totalCnt += other.totalCnt
       lossSum += other.lossSum
       diffSum += other.diffSum
@@ -278,11 +275,6 @@ private class LeastSquaresAggregator(
         localThisGradientSumArray(i) += localOtherGradientSumArray(i)
         i += 1
       }
-    } else if (totalCnt == 0 && other.totalCnt != 0) {
-      this.totalCnt = other.totalCnt
-      this.lossSum = other.lossSum
-      this.diffSum = other.diffSum
-      System.arraycopy(other.gradientSumArray, 0, this.gradientSumArray, 0, dim)
     }
     this
   }
@@ -304,7 +296,7 @@ private class LeastSquaresAggregator(
       Vectors.dense(temp)
     }
 
-    axpy(-diffSum, result, correction)
+    axpy(-diffSum, correction, result)
     scal(1.0 / totalCnt, result)
     result
   }
@@ -319,27 +311,25 @@ private class LeastSquaresCostFun(
     effectiveL2regParam: Double) extends DiffFunction[BDV[Double]] {
 
   override def calculate(weights: BDV[Double]): (Double, BDV[Double]) = {
-   val w = Vectors.fromBreeze(weights)
+    val w = Vectors.fromBreeze(weights)
 
-   val leastSquaresAggregator = data.treeAggregate(
-     new LeastSquaresAggregator(w, labelStd, labelMean, featuresStd, featuresMean))(
-     seqOp = (c, v) => (c, v) match {
-       case (aggregator, (label, features)) => aggregator.add(label, features)
-     },
-     combOp = (c1, c2) => (c1, c2) match {
-       case (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
-     })
+    val leastSquaresAggregator = data.treeAggregate(new LeastSquaresAggregator(w, labelStd,
+      labelMean, featuresStd, featuresMean))(
+        seqOp = (c, v) => (c, v) match {
+          case (aggregator, (label, features)) => aggregator.add(label, features)
+        },
+        combOp = (c1, c2) => (c1, c2) match {
+          case (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
+        })
 
-   // regVal is sum of weight squares for L2 regularization
-   val norm = brzNorm(weights, 2.0)
-   val regVal = 0.5 * effectiveL2regParam * norm * norm
+    // regVal is sum of weight squares for L2 regularization
+    val norm = brzNorm(weights, 2.0)
+    val regVal = 0.5 * effectiveL2regParam * norm * norm
 
-   val loss = leastSquaresAggregator.loss + regVal
+    val loss = leastSquaresAggregator.loss + regVal
+    val gradient = leastSquaresAggregator.gradient
+    axpy(effectiveL2regParam, w, gradient)
 
-   val gradientTotal = w.copy
-   scal(effectiveL2regParam, gradientTotal)
-   axpy(1.0, leastSquaresAggregator.gradient, gradientTotal)
-
-   (loss, gradientTotal.toBreeze.asInstanceOf[BDV[Double]])
- }
+    (loss, gradient.toBreeze.asInstanceOf[BDV[Double]])
+  }
 }
