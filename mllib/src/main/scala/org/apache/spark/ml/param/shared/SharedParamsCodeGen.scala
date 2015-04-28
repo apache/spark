@@ -46,7 +46,9 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("outputCol", "output column name"),
       ParamDesc[Int]("checkpointInterval", "checkpoint interval"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
-      ParamDesc[Long]("seed", "random seed", Some("Utils.random.nextLong()")))
+      ParamDesc[Long]("seed", "random seed", Some("Utils.random.nextLong()")),
+      ParamDesc[Double]("elasticNetParam", "the ElasticNet mixing parameter"),
+      ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms"))
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
