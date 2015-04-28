@@ -851,7 +851,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
-  def subtractByKey[W: ClassTag](other: RDD[(K, W)], numPartitions: Int): RDD[(K, V)] = self.withScope {
+  def subtractByKey[W: ClassTag](
+      other: RDD[(K, W)],
+      numPartitions: Int): RDD[(K, V)] = self.withScope {
     subtractByKey(other, new HashPartitioner(numPartitions))
   }
 

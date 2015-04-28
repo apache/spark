@@ -667,7 +667,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *
    * This method is identical to `parallelize`.
    */
-  def makeRDD[T: ClassTag](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = withRDDScope {
+  def makeRDD[T: ClassTag](
+      seq: Seq[T],
+      numSlices: Int = defaultParallelism): RDD[T] = withRDDScope {
     parallelize(seq, numSlices)
   }
 
@@ -684,7 +686,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
-  def textFile(path: String, minPartitions: Int = defaultMinPartitions): RDD[String] = withRDDScope {
+  def textFile(
+      path: String,
+      minPartitions: Int = defaultMinPartitions): RDD[String] = withRDDScope {
     assertNotStopped()
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
       minPartitions).map(pair => pair._2.toString)
@@ -1040,15 +1044,17 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    def sequenceFile[K, V]
        (path: String, minPartitions: Int = defaultMinPartitions)
        (implicit km: ClassTag[K], vm: ClassTag[V],
-        kcf: () => WritableConverter[K], vcf: () => WritableConverter[V]): RDD[(K, V)] = withRDDScope {
-    assertNotStopped()
-    val kc = kcf()
-    val vc = vcf()
-    val format = classOf[SequenceFileInputFormat[Writable, Writable]]
-    val writables = hadoopFile(path, format,
+        kcf: () => WritableConverter[K], vcf: () => WritableConverter[V]): RDD[(K, V)] = {
+    withRDDScope {
+      assertNotStopped()
+      val kc = kcf()
+      val vc = vcf()
+      val format = classOf[SequenceFileInputFormat[Writable, Writable]]
+      val writables = hadoopFile(path, format,
         kc.writableClass(km).asInstanceOf[Class[Writable]],
         vc.writableClass(vm).asInstanceOf[Class[Writable]], minPartitions)
-    writables.map { case (k, v) => (kc.convert(k), vc.convert(v)) }
+      writables.map { case (k, v) => (kc.convert(k), vc.convert(v)) }
+    }
   }
 
   /**
