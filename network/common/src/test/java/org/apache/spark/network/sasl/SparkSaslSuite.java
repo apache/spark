@@ -64,9 +64,6 @@ import org.apache.spark.network.util.TransportConf;
  */
 public class SparkSaslSuite {
 
-  private static final String BLOCK_SIZE_CONF = "spark.network.sasl.maxEncryptedBlockSizeKb";
-
-
   /** Provides a secret key holder which returns secret key == appId */
   private SecretKeyHolder secretKeyHolder = new SecretKeyHolder() {
     @Override
@@ -235,7 +232,8 @@ public class SparkSaslSuite {
 
   @Test
   public void testFileRegionEncryption() throws Exception {
-    System.setProperty(BLOCK_SIZE_CONF, "1");
+    final String blockSizeConf = "spark.network.sasl.maxEncryptedBlockSizeKb";
+    System.setProperty(blockSizeConf, "1");
 
     final AtomicReference<ManagedBuffer> response = new AtomicReference();
     final File file = File.createTempFile("sasltest", ".txt");
@@ -292,7 +290,7 @@ public class SparkSaslSuite {
       if (response.get() != null) {
         response.get().release();
       }
-      System.clearProperty(BLOCK_SIZE_CONF);
+      System.clearProperty(blockSizeConf);
     }
   }
 
