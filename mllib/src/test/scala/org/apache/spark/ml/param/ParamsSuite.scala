@@ -26,15 +26,16 @@ class ParamsSuite extends FunSuite {
     import solver.{maxIter, inputCol}
 
     assert(maxIter.name === "maxIter")
-    assert(maxIter.doc === "max number of iterations")
+    assert(maxIter.doc === "max number of iterations (>= 0)")
     assert(maxIter.parent.eq(solver))
-    assert(maxIter.toString === "maxIter: max number of iterations (default: 10)")
+    assert(maxIter.toString === "maxIter: max number of iterations (>= 0) (default: 10)")
     assert(!maxIter.isValid(-1))
     assert(maxIter.isValid(0))
     assert(maxIter.isValid(1))
 
     solver.setMaxIter(5)
-    assert(maxIter.toString === "maxIter: max number of iterations (default: 10, current: 5)")
+    assert(maxIter.toString ===
+      "maxIter: max number of iterations (>= 0) (default: 10, current: 5)")
 
     assert(inputCol.toString === "inputCol: input column name (undefined)")
 
@@ -55,7 +56,7 @@ class ParamsSuite extends FunSuite {
       assert(pair.value === 5)
     }
     intercept[IllegalArgumentException] {
-      maxIter -> -1
+      val pair = maxIter -> -1
     }
   }
 
@@ -135,11 +136,10 @@ class ParamsSuite extends FunSuite {
     assert(solver.getInputCol === "input")
     solver.validate()
     intercept[IllegalArgumentException] {
-      solver.validate(ParamMap(maxIter -> -10))
+      ParamMap(maxIter -> -10)
     }
-    solver.setMaxIter(-10)
     intercept[IllegalArgumentException] {
-      solver.validate()
+      solver.setMaxIter(-10)
     }
 
     solver.clearMaxIter()
@@ -147,46 +147,46 @@ class ParamsSuite extends FunSuite {
   }
 
   test("ParamValidate") {
-    val alwaysTrue = ParamValidate.alwaysTrue[Int]
+    val alwaysTrue = ParamValidators.alwaysTrue[Int]
     assert(alwaysTrue(1))
 
-    val gt1Int = ParamValidate.gt[Int](1)
+    val gt1Int = ParamValidators.gt[Int](1)
     assert(!gt1Int(1) && gt1Int(2))
-    val gt1Double = ParamValidate.gt[Double](1)
+    val gt1Double = ParamValidators.gt[Double](1)
     assert(!gt1Double(1.0) && gt1Double(1.1))
 
-    val gtEq1Int = ParamValidate.gtEq[Int](1)
+    val gtEq1Int = ParamValidators.gtEq[Int](1)
     assert(!gtEq1Int(0) && gtEq1Int(1))
-    val gtEq1Double = ParamValidate.gtEq[Double](1)
+    val gtEq1Double = ParamValidators.gtEq[Double](1)
     assert(!gtEq1Double(0.9) && gtEq1Double(1.0))
 
-    val lt1Int = ParamValidate.lt[Int](1)
+    val lt1Int = ParamValidators.lt[Int](1)
     assert(lt1Int(0) && !lt1Int(1))
-    val lt1Double = ParamValidate.lt[Double](1)
+    val lt1Double = ParamValidators.lt[Double](1)
     assert(lt1Double(0.9) && !lt1Double(1.0))
 
-    val ltEq1Int = ParamValidate.ltEq[Int](1)
+    val ltEq1Int = ParamValidators.ltEq[Int](1)
     assert(ltEq1Int(1) && !ltEq1Int(2))
-    val ltEq1Double = ParamValidate.ltEq[Double](1)
+    val ltEq1Double = ParamValidators.ltEq[Double](1)
     assert(ltEq1Double(1.0) && !ltEq1Double(1.1))
 
-    val inRange02IntInclusive = ParamValidate.inRange[Int](0, 2)
+    val inRange02IntInclusive = ParamValidators.inRange[Int](0, 2)
     assert(inRange02IntInclusive(0) && inRange02IntInclusive(1) && inRange02IntInclusive(2) &&
       !inRange02IntInclusive(-1) && !inRange02IntInclusive(3))
     val inRange02IntExclusive =
-      ParamValidate.inRange[Int](0, 2, lowerInclusive = false, upperInclusive = false)
+      ParamValidators.inRange[Int](0, 2, lowerInclusive = false, upperInclusive = false)
     assert(!inRange02IntExclusive(0) && inRange02IntExclusive(1) && !inRange02IntExclusive(2))
 
-    val inRange02DoubleInclusive = ParamValidate.inRange[Double](0, 2)
+    val inRange02DoubleInclusive = ParamValidators.inRange[Double](0, 2)
     assert(inRange02DoubleInclusive(0) && inRange02DoubleInclusive(1) &&
       inRange02DoubleInclusive(2) &&
       !inRange02DoubleInclusive(-0.1) && !inRange02DoubleInclusive(2.1))
     val inRange02DoubleExclusive =
-      ParamValidate.inRange[Double](0, 2, lowerInclusive = false, upperInclusive = false)
+      ParamValidators.inRange[Double](0, 2, lowerInclusive = false, upperInclusive = false)
     assert(!inRange02DoubleExclusive(0) && inRange02DoubleExclusive(1) &&
       !inRange02DoubleExclusive(2))
 
-    val inArray = ParamValidate.inArray[Int](Array(1, 2))
+    val inArray = ParamValidators.inArray[Int](Array(1, 2))
     assert(inArray(1) && inArray(2) && !inArray(0))
   }
 }

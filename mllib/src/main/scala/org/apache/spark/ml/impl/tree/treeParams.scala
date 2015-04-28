@@ -46,7 +46,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   final val maxDepth: IntParam =
     new IntParam(this, "maxDepth", "Maximum depth of the tree. (>= 0)" +
       " E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.",
-      ParamValidate.gtEq[Int](0))
+      ParamValidators.gtEq(0))
 
   /**
    * Maximum number of bins used for discretizing continuous features and for choosing how to split
@@ -57,7 +57,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
    */
   final val maxBins: IntParam = new IntParam(this, "maxBins", "Max number of bins for" +
     " discretizing continuous features.  Must be >=2 and >= number of categories for any" +
-    " categorical feature.", ParamValidate.gtEq[Int](2))
+    " categorical feature.", ParamValidators.gtEq(2))
 
   /**
    * Minimum number of instances each child must have after split.
@@ -70,7 +70,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   final val minInstancesPerNode: IntParam = new IntParam(this, "minInstancesPerNode", "Minimum" +
     " number of instances each child must have after split.  If a split causes the left or right" +
     " child to have fewer than minInstancesPerNode, the split will be discarded as invalid." +
-    " Should be >= 1.", ParamValidate.gtEq[Int](1))
+    " Should be >= 1.", ParamValidators.gtEq(1))
 
   /**
    * Minimum information gain for a split to be considered at a tree node.
@@ -87,7 +87,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
    */
   final val maxMemoryInMB: IntParam = new IntParam(this, "maxMemoryInMB",
     "Maximum memory in MB allocated to histogram aggregation.",
-    ParamValidate.gtEq[Int](0))
+    ParamValidators.gtEq(0))
 
   /**
    * If false, the algorithm will pass trees to executors to match instances with nodes.
@@ -114,7 +114,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
     " how often to checkpoint the cached node IDs.  E.g. 10 means that the cache will get" +
     " checkpointed every 10 iterations. This is only used if cacheNodeIds is true and if the" +
     " checkpoint directory is set in the SparkContext. Must be >= 1.",
-    ParamValidate.gtEq[Int](1))
+    ParamValidators.gtEq(1))
 
   setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1, minInfoGain -> 0.0,
     maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
@@ -283,7 +283,7 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
    */
   final val subsamplingRate: DoubleParam = new DoubleParam(this, "subsamplingRate",
     "Fraction of the training data used for learning each decision tree, in range (0, 1].",
-    ParamValidate.inRange[Double](0, 1, lowerInclusive = false, upperInclusive = true))
+    ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
   setDefault(subsamplingRate -> 1.0)
 
@@ -326,7 +326,7 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
    * @group param
    */
   final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)",
-    ParamValidate.gtEq[Int](1))
+    ParamValidators.gtEq(1))
 
   /**
    * The number of features to consider for splits at each tree node.
@@ -396,7 +396,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
    */
   final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size (a.k.a." +
     " learning rate) in interval (0, 1] for shrinking the contribution of each estimator",
-    ParamValidate.inRange[Double](0, 1, lowerInclusive = false, upperInclusive = true))
+    ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
   /* TODO: Add this doc when we add this param.  SPARK-7132
    * Threshold for stopping early when runWithValidation is used.

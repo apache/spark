@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.{ParamValidate, DoubleParam, ParamMap}
+import org.apache.spark.ml.param.{ParamValidators, DoubleParam, ParamMap}
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{VectorUDT, Vector}
 import org.apache.spark.sql.types.DataType
@@ -36,7 +36,7 @@ class Normalizer extends UnaryTransformer[Vector, Vector, Normalizer] {
    * (default: p = 2)
    * @group param
    */
-  val p = new DoubleParam(this, "p", "the p norm value", ParamValidate.gtEq[Double](1))
+  val p = new DoubleParam(this, "p", "the p norm value", ParamValidators.gtEq(1))
 
   setDefault(p -> 2.0)
 

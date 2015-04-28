@@ -51,12 +51,12 @@ public class JavaTestParams extends JavaParams {
   }
 
   public JavaTestParams() {
-    myIntParam = new IntParam(this, "myIntParam", "this is an int param", ParamValidate.gt(0));
+    myIntParam = new IntParam(this, "myIntParam", "this is an int param", ParamValidators.gt(0));
     myDoubleParam = new DoubleParam(this, "myDoubleParam", "this is a double param",
-      ParamValidate.inRange(0.0, 1.0));
+      ParamValidators.inRange(0.0, 1.0));
     List<String> validStrings = Lists.newArrayList("a", "b");
     myStringParam = new Param<String>(this, "myStringParam", "this is a string param",
-      ParamValidate.inArray(validStrings));
+      ParamValidators.inArray(validStrings));
     setDefault(myIntParam, 1);
     setDefault(myDoubleParam, 0.5);
   }

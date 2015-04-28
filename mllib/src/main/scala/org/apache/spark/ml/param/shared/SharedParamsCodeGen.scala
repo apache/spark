@@ -21,7 +21,7 @@ import java.io.PrintWriter
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.ml.param.ParamValidate
+import org.apache.spark.ml.param.ParamValidators
 
 /**
  * Code generator for shared params (sharedParams.scala). Run under the Spark folder with
@@ -34,9 +34,9 @@ private[shared] object SharedParamsCodeGen {
   def main(args: Array[String]): Unit = {
     val params = Seq(
       ParamDesc[Double]("regParam", "regularization parameter (>= 0)",
-        isValid = "ParamValidate.gtEq[Double](0)"),
+        isValid = "ParamValidators.gtEq(0)"),
       ParamDesc[Int]("maxIter", "max number of iterations (>= 0)",
-        isValid = "ParamValidate.gtEq[Int](0)"),
+        isValid = "ParamValidators.gtEq(0)"),
       ParamDesc[String]("featuresCol", "features column name", Some("\"features\"")),
       ParamDesc[String]("labelCol", "label column name", Some("\"label\"")),
       ParamDesc[String]("predictionCol", "prediction column name", Some("\"prediction\"")),
@@ -46,17 +46,17 @@ private[shared] object SharedParamsCodeGen {
         "column name for predicted class conditional probabilities", Some("\"probability\"")),
       ParamDesc[Double]("threshold",
         "threshold in binary classification prediction, in range [0, 1]",
-        isValid = "ParamValidate.inRange[Double](0, 1)"),
+        isValid = "ParamValidators.inRange(0, 1)"),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name"),
       ParamDesc[Int]("checkpointInterval", "checkpoint interval (>= 1)",
-        isValid = "ParamValidate.gtEq[Int](1)"),
+        isValid = "ParamValidators.gtEq(1)"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
       ParamDesc[Long]("seed", "random seed", Some("Utils.random.nextLong()")),
       ParamDesc[Double]("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]." +
         " For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.",
-        isValid = "ParamValidate.inRange[Double](0, 1)"),
+        isValid = "ParamValidators.inRange(0, 1)"),
       ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms"),
       ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization."))
 

@@ -35,7 +35,7 @@ import org.apache.spark.ml.util.Identifiable
  * @param name param name
  * @param doc documentation
  * @param isValid optional validation method which indicates if a value is valid.
- *                See [[ParamValidate]] for factory methods for common validation functions.
+ *                See [[ParamValidators]] for factory methods for common validation functions.
  * @tparam T param value type
  */
 @AlphaComponent
@@ -43,7 +43,7 @@ class Param[T] (val parent: Params, val name: String, val doc: String, val isVal
   extends Serializable {
 
   def this(parent: Params, name: String, doc: String) =
-    this(parent, name, doc, ParamValidate.alwaysTrue[T])
+    this(parent, name, doc, ParamValidators.alwaysTrue[T])
 
   /**
    * Assert that the given value is valid for this parameter.
@@ -94,7 +94,7 @@ class Param[T] (val parent: Params, val name: String, val doc: String, val isVal
  * Factory methods for common validation functions for [[Param.isValid]].
  * The numerical methods only support Int, Long, Float, and Double.
  */
-object ParamValidate {
+object ParamValidators {
 
   /** (private[param]) Default validation always return true */
   private[param] def alwaysTrue[T]: T => Boolean = (_: T) => true
@@ -176,37 +176,37 @@ class DoubleParam(parent: Params, name: String, doc: String, isValid: Double => 
   extends Param[Double](parent, name, doc, isValid) {
 
   def this(parent: Params, name: String, doc: String) =
-    this(parent, name, doc, ParamValidate.alwaysTrue[Double])
+    this(parent, name, doc, ParamValidators.alwaysTrue)
 
   override def w(value: Double): ParamPair[Double] = super.w(value)
 }
 
 /** Specialized version of [[Param[Int]]] for Java. */
 class IntParam(parent: Params, name: String, doc: String, isValid: Int => Boolean)
-  extends Param[Int](parent, name, doc) {
+  extends Param[Int](parent, name, doc, isValid) {
 
   def this(parent: Params, name: String, doc: String) =
-    this(parent, name, doc, ParamValidate.alwaysTrue[Int])
+    this(parent, name, doc, ParamValidators.alwaysTrue)
 
   override def w(value: Int): ParamPair[Int] = super.w(value)
 }
 
 /** Specialized version of [[Param[Float]]] for Java. */
 class FloatParam(parent: Params, name: String, doc: String, isValid: Float => Boolean)
-  extends Param[Float](parent, name, doc) {
+  extends Param[Float](parent, name, doc, isValid) {
 
   def this(parent: Params, name: String, doc: String) =
-    this(parent, name, doc, ParamValidate.alwaysTrue[Float])
+    this(parent, name, doc, ParamValidators.alwaysTrue)
 
   override def w(value: Float): ParamPair[Float] = super.w(value)
 }
 
 /** Specialized version of [[Param[Long]]] for Java. */
 class LongParam(parent: Params, name: String, doc: String, isValid: Long => Boolean)
-  extends Param[Long](parent, name, doc) {
+  extends Param[Long](parent, name, doc, isValid) {
 
   def this(parent: Params, name: String, doc: String) =
-    this(parent, name, doc, ParamValidate.alwaysTrue[Long])
+    this(parent, name, doc, ParamValidators.alwaysTrue)
 
   override def w(value: Long): ParamPair[Long] = super.w(value)
 }

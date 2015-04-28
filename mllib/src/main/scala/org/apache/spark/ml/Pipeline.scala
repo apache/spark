@@ -90,6 +90,7 @@ class Pipeline extends Estimator[PipelineModel] {
     val map = extractParamMap(paramMap)
     getStages.foreach {
       case pStage: Params => pStage.validate(map)
+      case _ =>
     }
   }
 

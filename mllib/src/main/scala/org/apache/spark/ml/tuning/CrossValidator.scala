@@ -66,7 +66,7 @@ private[ml] trait CrossValidatorParams extends Params {
    * @group param
    */
   val numFolds: IntParam = new IntParam(this, "numFolds",
-    "number of folds for cross validation (>= 2)", ParamValidate.gtEq[Int](2))
+    "number of folds for cross validation (>= 2)", ParamValidators.gtEq(2))
 
   /** @group getParam */
   def getNumFolds: Int = getOrDefault(numFolds)
@@ -96,9 +96,8 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
   def setNumFolds(value: Int): this.type = set(numFolds, value)
 
   override def validate(paramMap: ParamMap): Unit = {
-    val map = extractParamMap(paramMap)
     getEstimatorParamMaps.foreach { eMap =>
-      getEstimator.validate(map ++ eMap)
+      getEstimator.validate(eMap ++ paramMap)
     }
   }
 

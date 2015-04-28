@@ -54,14 +54,13 @@ public class JavaParamsSuite {
 
   @Test
   public void testParamValidate() {
-    ParamValidate.alwaysTrue();
-    ParamValidate.gt(1.0);
-    ParamValidate.gtEq(1.0);
-    ParamValidate.lt(1.0);
-    ParamValidate.ltEq(1.0);
-    ParamValidate.inRange(0, 1, true, false);
-    ParamValidate.inRange(0, 1);
-    ParamValidate.inArray(Lists.newArrayList(0, 1, 3));
-    ParamValidate.inArray(Lists.newArrayList("a", "b"));
+    ParamValidators.gt(1.0);
+    ParamValidators.gtEq(1.0);
+    ParamValidators.lt(1.0);
+    ParamValidators.ltEq(1.0);
+    ParamValidators.inRange(0, 1, true, false);
+    ParamValidators.inRange(0, 1);
+    ParamValidators.inArray(Lists.newArrayList(0, 1, 3));
+    ParamValidators.inArray(Lists.newArrayList("a", "b"));
   }
 }

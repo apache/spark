@@ -56,7 +56,7 @@ class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenize
    * @group param
    */
   val minTokenLength: IntParam = new IntParam(this, "minLength", "minimum token length (>= 0)",
-    ParamValidate.gtEq[Int](0))
+    ParamValidators.gtEq(0))
 
   /** @group setParam */
   def setMinTokenLength(value: Int): this.type = set(minTokenLength, value)

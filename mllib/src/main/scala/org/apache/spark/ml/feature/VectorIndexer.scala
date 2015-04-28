@@ -22,7 +22,7 @@ import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.{BinaryAttribute, NumericAttribute, NominalAttribute,
   Attribute, AttributeGroup}
-import org.apache.spark.ml.param.{ParamValidate, IntParam, ParamMap, Params}
+import org.apache.spark.ml.param.{ParamValidators, IntParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, VectorUDT}
 import org.apache.spark.sql.{Row, DataFrame}
@@ -44,7 +44,7 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
   val maxCategories = new IntParam(this, "maxCategories",
     "Threshold for the number of values a categorical feature can take (>= 2)." +
       " If a feature is found to have > maxCategories values, then it is declared continuous.",
-    ParamValidate.gtEq[Int](2))
+    ParamValidators.gtEq(2))
 
   setDefault(maxCategories -> 20)
 
