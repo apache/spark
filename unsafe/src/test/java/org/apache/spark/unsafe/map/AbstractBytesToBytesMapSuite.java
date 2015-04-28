@@ -28,26 +28,27 @@ import org.junit.Test;
 
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.PlatformDependent;
+import static org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET;
+import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryLocation;
-import org.apache.spark.unsafe.memory.MemoryManager;
-import static org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET;
+import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
 public abstract class AbstractBytesToBytesMapSuite {
 
   private final Random rand = new Random(42);
 
-  private MemoryManager memoryManager;
+  private TaskMemoryManager memoryManager;
 
   @Before
   public void setup() {
-    memoryManager = new MemoryManager(getMemoryAllocator());
+    memoryManager = new TaskMemoryManager(new ExecutorMemoryManager(getMemoryAllocator()));
   }
 
   @After
   public void tearDown() {
     if (memoryManager != null) {
-      memoryManager.cleanUpAllPages();
+      memoryManager.cleanUpAllAllocatedMemory();
       memoryManager = null;
     }
   }

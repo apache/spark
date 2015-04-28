@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.JavaConverters._
 import scala.util.Random
 
-import org.apache.spark.unsafe.memory.{MemoryManager, MemoryAllocator}
+import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, TaskMemoryManager, MemoryAllocator}
 import org.scalatest.{BeforeAndAfterEach, FunSuite, Matchers}
 
 import org.apache.spark.sql.types._
@@ -33,15 +33,15 @@ class UnsafeFixedWidthAggregationMapSuite extends FunSuite with Matchers with Be
   private val aggBufferSchema = StructType(StructField("salePrice", IntegerType) :: Nil)
   private def emptyAggregationBuffer: Row = new GenericRow(Array[Any](0))
 
-  private var memoryManager: MemoryManager = null
+  private var memoryManager: TaskMemoryManager = null
 
   override def beforeEach(): Unit = {
-    memoryManager = new MemoryManager(MemoryAllocator.HEAP)
+    memoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
   }
 
   override def afterEach(): Unit = {
     if (memoryManager != null) {
-      memoryManager.cleanUpAllPages()
+      memoryManager.cleanUpAllAllocatedMemory()
       memoryManager = null
     }
   }

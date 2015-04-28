@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.TaskContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.memory.MemoryAllocator
 
 case class AggregateEvaluation(
     schema: Seq[Attribute],
@@ -290,7 +289,7 @@ case class GeneratedAggregate(
           newAggregationBuffer(EmptyRow),
           aggregationBufferSchema,
           groupKeySchema,
-          SparkEnv.get.unsafeMemoryManager,
+          TaskContext.get.taskMemoryManager(),
           1024 * 16, // initial capacity
           false // disable tracking of performance metrics
         )

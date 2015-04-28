@@ -17,13 +17,13 @@
 
 package org.apache.spark.unsafe.memory;
 
-import java.util.BitSet;
+import java.util.*;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Manages the lifecycle of data pages exchanged between operators.
+ * Manages the memory allocated by an individual task.
  * <p>
  * Most of the complexity in this class deals with encoding of off-heap addresses into 64-bit longs.
  * In off-heap mode, memory can be directly addressed with 64-bit longs. In on-heap mode, memory is
@@ -43,9 +43,9 @@ import org.slf4j.LoggerFactory;
  * maximum size of a long[] array, allowing us to address 8192 * 2^32 * 8 bytes, which is
  * approximately 35 terabytes of memory.
  */
-public final class MemoryManager {
+public final class TaskMemoryManager {
 
-  private final Logger logger = LoggerFactory.getLogger(MemoryManager.class);
+  private final Logger logger = LoggerFactory.getLogger(TaskMemoryManager.class);
 
   /**
    * The number of entries in the page table.
@@ -74,9 +74,12 @@ public final class MemoryManager {
   private final BitSet allocatedPages = new BitSet(PAGE_TABLE_SIZE);
 
   /**
-   * Allocator, exposed for enabling untracked allocations of temporary data structures.
+   * Tracks memory allocated with {@link TaskMemoryManager#allocate(long)}, used to detect / clean
+   * up leaked memory.
    */
-  public final MemoryAllocator allocator;
+  private final HashSet<MemoryBlock> allocatedNonPageMemory = new HashSet<MemoryBlock>();
+
+  private final ExecutorMemoryManager executorMemoryManager;
 
   /**
    * Tracks whether we're in-heap or off-heap. For off-heap, we short-circuit most of these methods
@@ -88,9 +91,9 @@ public final class MemoryManager {
   /**
    * Construct a new MemoryManager.
    */
-  public MemoryManager(MemoryAllocator allocator) {
-    this.inHeap = allocator instanceof HeapMemoryAllocator;
-    this.allocator = allocator;
+  public TaskMemoryManager(ExecutorMemoryManager executorMemoryManager) {
+    this.inHeap = executorMemoryManager.inHeap;
+    this.executorMemoryManager = executorMemoryManager;
   }
 
   /**
@@ -114,7 +117,7 @@ public final class MemoryManager {
       }
       allocatedPages.set(pageNumber);
     }
-    final MemoryBlock page = allocator.allocate(size);
+    final MemoryBlock page = executorMemoryManager.allocate(size);
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
     if (logger.isDebugEnabled()) {
@@ -124,7 +127,7 @@ public final class MemoryManager {
   }
 
   /**
-   * Free a block of memory allocated via {@link MemoryManager#allocatePage(long)}.
+   * Free a block of memory allocated via {@link TaskMemoryManager#allocatePage(long)}.
    */
   public void freePage(MemoryBlock page) {
     if (logger.isTraceEnabled()) {
@@ -132,7 +135,7 @@ public final class MemoryManager {
     }
     assert (page.pageNumber != -1) :
       "Called freePage() on memory that wasn't allocated with allocatePage()";
-    allocator.free(page);
+    executorMemoryManager.free(page);
     synchronized (this) {
       allocatedPages.clear(page.pageNumber);
     }
@@ -140,6 +143,31 @@ public final class MemoryManager {
     if (logger.isDebugEnabled()) {
       logger.debug("Freed page number {} ({} bytes)", page.pageNumber, page.size());
     }
+  }
+
+  /**
+   * Allocates a contiguous block of memory. Note that the allocated memory is not guaranteed
+   * to be zeroed out (call `zero()` on the result if this is necessary). This method is intended
+   * to be used for allocating operators' internal data structures. For data pages that you want to
+   * exchange between operators, consider using {@link TaskMemoryManager#allocatePage(long)}, since
+   * that will enable intra-memory pointers (see
+   * {@link TaskMemoryManager#encodePageNumberAndOffset(MemoryBlock, long)} and this class's
+   * top-level Javadoc for more details).
+   */
+  public MemoryBlock allocate(long size) throws OutOfMemoryError {
+    final MemoryBlock memory = executorMemoryManager.allocate(size);
+    allocatedNonPageMemory.add(memory);
+    return memory;
+  }
+
+  /**
+   * Free memory allocated by {@link TaskMemoryManager#allocate(long)}.
+   */
+  public void free(MemoryBlock memory) {
+    assert (memory.pageNumber == -1) : "Should call freePage() for pages, not free()";
+    executorMemoryManager.free(memory);
+    final boolean wasAlreadyRemoved = !allocatedNonPageMemory.remove(memory);
+    assert (!wasAlreadyRemoved) : "Called free() on memory that was already freed!";
   }
 
   /**
@@ -157,7 +185,7 @@ public final class MemoryManager {
 
   /**
    * Get the page associated with an address encoded by
-   * {@link MemoryManager#encodePageNumberAndOffset(MemoryBlock, long)}
+   * {@link TaskMemoryManager#encodePageNumberAndOffset(MemoryBlock, long)}
    */
   public Object getPage(long pagePlusOffsetAddress) {
     if (inHeap) {
@@ -173,7 +201,7 @@ public final class MemoryManager {
 
   /**
    * Get the offset associated with an address encoded by
-   * {@link MemoryManager#encodePageNumberAndOffset(MemoryBlock, long)}
+   * {@link TaskMemoryManager#encodePageNumberAndOffset(MemoryBlock, long)}
    */
   public long getOffsetInPage(long pagePlusOffsetAddress) {
     if (inHeap) {
@@ -184,13 +212,26 @@ public final class MemoryManager {
   }
 
   /**
-   * Clean up all pages. This shouldn't be called in production code and is only exposed for tests.
+   * Clean up all allocated memory and pages. Returns the number of bytes freed. A non-zero return
+   * value can be used to detect memory leaks.
    */
-  public void cleanUpAllPages() {
+  public long cleanUpAllAllocatedMemory() {
+    long freedBytes = 0;
     for (MemoryBlock page : pageTable) {
       if (page != null) {
+        freedBytes += page.size();
         freePage(page);
       }
     }
+    final Iterator<MemoryBlock> iter = allocatedNonPageMemory.iterator();
+    while (iter.hasNext()) {
+      final MemoryBlock memory = iter.next();
+      freedBytes += memory.size();
+      // We don't call free() here because that calls Set.remove, which would lead to a
+      // ConcurrentModificationException here.
+      executorMemoryManager.free(memory);
+      iter.remove();
+    }
+    return freedBytes;
   }
 }

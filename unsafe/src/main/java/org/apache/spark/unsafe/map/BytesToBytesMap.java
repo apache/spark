@@ -48,7 +48,7 @@ public final class BytesToBytesMap {
 
   private static final HashMapGrowthStrategy growthStrategy = HashMapGrowthStrategy.DOUBLING;
 
-  private final MemoryManager memoryManager;
+  private final TaskMemoryManager memoryManager;
 
   /**
    * A linked list for tracking all allocated data pages so that we can free all of our memory.
@@ -135,7 +135,7 @@ public final class BytesToBytesMap {
   private long numHashCollisions = 0;
 
   public BytesToBytesMap(
-      MemoryManager memoryManager,
+      TaskMemoryManager memoryManager,
       int initialCapacity,
       double loadFactor,
       boolean enablePerfMetrics) {
@@ -146,12 +146,12 @@ public final class BytesToBytesMap {
     allocate(initialCapacity);
   }
 
-  public BytesToBytesMap(MemoryManager memoryManager, int initialCapacity) {
+  public BytesToBytesMap(TaskMemoryManager memoryManager, int initialCapacity) {
     this(memoryManager, initialCapacity, 0.70, false);
   }
 
   public BytesToBytesMap(
-      MemoryManager memoryManager,
+      TaskMemoryManager memoryManager,
       int initialCapacity,
       boolean enablePerfMetrics) {
     this(memoryManager, initialCapacity, 0.70, enablePerfMetrics);
@@ -438,8 +438,8 @@ public final class BytesToBytesMap {
    */
   private void allocate(int capacity) {
     capacity = Math.max((int) Math.min(Integer.MAX_VALUE, nextPowerOf2(capacity)), 64);
-    longArray = new LongArray(memoryManager.allocator.allocate(capacity * 8 * 2));
-    bitset = new BitSet(memoryManager.allocator.allocate(capacity / 8).zero());
+    longArray = new LongArray(memoryManager.allocate(capacity * 8 * 2));
+    bitset = new BitSet(memoryManager.allocate(capacity / 8).zero());
 
     this.growthThreshold = (int) (capacity * loadFactor);
     this.mask = capacity - 1;
@@ -453,11 +453,11 @@ public final class BytesToBytesMap {
    */
   public void free() {
     if (longArray != null) {
-      memoryManager.allocator.free(longArray.memoryBlock());
+      memoryManager.free(longArray.memoryBlock());
       longArray = null;
     }
     if (bitset != null) {
-      memoryManager.allocator.free(bitset.memoryBlock());
+      memoryManager.free(bitset.memoryBlock());
       bitset = null;
     }
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
@@ -544,8 +544,8 @@ public final class BytesToBytesMap {
     }
 
     // Deallocate the old data structures.
-    memoryManager.allocator.free(oldLongArray.memoryBlock());
-    memoryManager.allocator.free(oldBitSet.memoryBlock());
+    memoryManager.free(oldLongArray.memoryBlock());
+    memoryManager.free(oldBitSet.memoryBlock());
     if (enablePerfMetrics) {
       timeSpentResizingNs += System.nanoTime() - resizeStartTime;
     }

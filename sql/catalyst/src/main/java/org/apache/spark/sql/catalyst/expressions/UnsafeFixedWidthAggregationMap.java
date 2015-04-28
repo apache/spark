@@ -26,7 +26,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryLocation;
-import org.apache.spark.unsafe.memory.MemoryManager;
+import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
 /**
  * Unsafe-based HashMap for performing aggregations where the aggregated values are fixed-width.
@@ -110,7 +110,7 @@ public final class UnsafeFixedWidthAggregationMap {
       Row emptyAggregationBuffer,
       StructType aggregationBufferSchema,
       StructType groupingKeySchema,
-      MemoryManager memoryManager,
+      TaskMemoryManager memoryManager,
       int initialCapacity,
       boolean enablePerfMetrics) {
     this.emptyAggregationBuffer =
