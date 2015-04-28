@@ -247,7 +247,7 @@ case class Distinct(partial: Boolean, child: SparkPlan) extends UnaryNode {
 
 /**
  * :: DeveloperApi ::
- * Return a new RDD that has exactly numPartitions partitions.
+ * Return a new RDD that has exactly `numPartitions` partitions.
  */
 @DeveloperApi
 case class Coalesce(numPartitions: Int, shuffle: Boolean, child: SparkPlan) extends UnaryNode {
