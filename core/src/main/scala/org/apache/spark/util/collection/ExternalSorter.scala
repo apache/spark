@@ -26,7 +26,7 @@ import scala.collection.mutable
 import com.google.common.io.ByteStreams
 
 import org.apache.spark._
-import org.apache.spark.serializer.{DeserializationStream, KryoSerializer, Serializer}
+import org.apache.spark.serializer._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.storage.{BlockObjectWriter, BlockId}
 
@@ -129,14 +129,15 @@ private[spark] class ExternalSorter[K, V, C](
   private val kvChunkSize = conf.getInt("spark.shuffle.sort.kvChunkSize", 1 << 22) // 4 MB
   private val useSerializedPairBuffer =
     !ordering.isDefined && conf.getBoolean("spark.shuffle.sort.serializeMapOutputs", true) &&
-    ser.isInstanceOf[KryoSerializer] && ser.asInstanceOf[KryoSerializer].getAutoReset
+    ser.isInstanceOf[KryoSerializer] &&
+    serInstance.asInstanceOf[KryoSerializerInstance].getAutoReset
 
   // Data structures to store in-memory objects before we spill. Depending on whether we have an
   // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
   // store them in an array buffer.
   private var map = new PartitionedAppendOnlyMap[K, C]
   private var buffer = if (useSerializedPairBuffer) {
-    new PartitionedSerializedPairBuffer[K, C](metaInitialRecords, kvChunkSize)
+    new PartitionedSerializedPairBuffer[K, C](metaInitialRecords, kvChunkSize, serInstance)
   } else {
     new PartitionedPairBuffer[K, C]
   }
@@ -237,7 +238,7 @@ private[spark] class ExternalSorter[K, V, C](
     } else {
       if (maybeSpill(buffer, buffer.estimateSize())) {
         buffer = if (useSerializedPairBuffer) {
-          new PartitionedSerializedPairBuffer[K, C](metaInitialRecords, kvChunkSize)
+          new PartitionedSerializedPairBuffer[K, C](metaInitialRecords, kvChunkSize, serInstance)
         } else {
           new PartitionedPairBuffer[K, C]
         }

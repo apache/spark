@@ -48,7 +48,7 @@ import org.apache.spark.util.collection.PartitionedSerializedPairBuffer._
 private[spark] class PartitionedSerializedPairBuffer[K, V](
     metaInitialRecords: Int,
     kvBlockSize: Int,
-    serializerInstance: SerializerInstance = SparkEnv.get.serializer.newInstance)
+    serializerInstance: SerializerInstance)
   extends WritablePartitionedPairCollection[K, V] with SizeTracker {
 
   if (serializerInstance.isInstanceOf[JavaSerializerInstance]) {

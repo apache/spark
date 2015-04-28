@@ -282,11 +282,11 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   }
 
   test("getAutoReset") {
-    val ser = new KryoSerializer(new SparkConf)
+    val ser = new KryoSerializer(new SparkConf).newInstance().asInstanceOf[KryoSerializerInstance]
     assert(ser.getAutoReset)
     val conf = new SparkConf().set("spark.kryo.registrator",
       classOf[RegistratorWithoutAutoReset].getName)
-    val ser2 = new KryoSerializer(conf)
+    val ser2 = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
     assert(!ser2.getAutoReset)
   }
 }

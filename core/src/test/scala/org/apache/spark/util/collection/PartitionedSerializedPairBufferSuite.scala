@@ -52,7 +52,7 @@ class PartitionedSerializedPairBufferSuite extends FunSuite {
     val buffer = new PartitionedSerializedPairBuffer[Int, SomeStruct](4, 32, serializerInstance)
     val struct = SomeStruct("something", 5)
     buffer.insert(4, 10, struct)
-    val elements = buffer.partitionedDestructiveSortedIterator(null).toArray
+    val elements = buffer.partitionedDestructiveSortedIterator(None).toArray
     elements.size should be (1)
     elements.head should be (((4, 10), struct))
   }
@@ -67,7 +67,7 @@ class PartitionedSerializedPairBufferSuite extends FunSuite {
     val struct3 = SomeStruct("something3", 10)
     buffer.insert(5, 3, struct3)
 
-    val elements = buffer.partitionedDestructiveSortedIterator(null).toArray
+    val elements = buffer.partitionedDestructiveSortedIterator(None).toArray
     elements.size should be (3)
     elements(0) should be (((4, 2), struct2))
     elements(1) should be (((5, 3), struct3))
@@ -79,7 +79,7 @@ class PartitionedSerializedPairBufferSuite extends FunSuite {
     val buffer = new PartitionedSerializedPairBuffer[Int, SomeStruct](4, 32, serializerInstance)
     val struct = SomeStruct("something", 5)
     buffer.insert(4, 10, struct)
-    val it = buffer.destructiveSortedWritablePartitionedIterator(null)
+    val it = buffer.destructiveSortedWritablePartitionedIterator(None)
     val writer = new SimpleBlockObjectWriter
     assert(it.hasNext)
     it.nextPartition should be (4)
@@ -101,7 +101,7 @@ class PartitionedSerializedPairBufferSuite extends FunSuite {
     val struct3 = SomeStruct("something3", 10)
     buffer.insert(5, 3, struct3)
 
-    val it = buffer.destructiveSortedWritablePartitionedIterator(null)
+    val it = buffer.destructiveSortedWritablePartitionedIterator(None)
     val writer = new SimpleBlockObjectWriter
     assert(it.hasNext)
     it.nextPartition should be (4)
@@ -142,7 +142,7 @@ class SimpleBlockObjectWriter extends BlockObjectWriter(null) {
   override def isOpen: Boolean = true
   override def commitAndClose(): Unit = { }
   override def revertPartialWritesAndClose(): Unit = { }
-  override def fileSegment(): FileSegment = { null }
+  override def fileSegment(): FileSegment = null
   override def write(key: Any, value: Any): Unit = { }
   override def recordWritten(): Unit = { }
   override def write(b: Int): Unit = { }

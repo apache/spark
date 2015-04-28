@@ -52,8 +52,12 @@ class ChainedBufferSuite extends FunSuite {
   }
 
   test("write and read at middle") {
-    // write from start of source array
     val buffer = new ChainedBuffer(8)
+
+    // fill to a middle point
+    verifyWriteAndRead(buffer, 0, 0, 0, 3)
+
+    // write from start of source array
     verifyWriteAndRead(buffer, 3, 0, 0, 4)
     buffer.capacity should be (8)
 
@@ -79,8 +83,12 @@ class ChainedBufferSuite extends FunSuite {
   }
 
   test("write and read at later buffer") {
-    // write from start of source array
     val buffer = new ChainedBuffer(8)
+
+    // fill to a middle point
+    verifyWriteAndRead(buffer, 0, 0, 0, 11)
+
+    // write from start of source array
     verifyWriteAndRead(buffer, 11, 0, 0, 4)
     buffer.capacity should be (16)
 
