@@ -30,7 +30,7 @@ import org.apache.spark.streaming.TestSuiteBase
 class StreamingLogisticRegressionSuite extends FunSuite with TestSuiteBase {
 
   // use longer wait time to ensure job completion
-  override def maxWaitTimeMillis = 30000
+  override def maxWaitTimeMillis: Int = 30000
 
   // Test if we can accurately learn B for Y = logistic(BX) on streaming data
   test("parameter accuracy") {

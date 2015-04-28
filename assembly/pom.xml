@@ -194,7 +194,6 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-assembly-plugin</artifactId>
-            <version>2.4</version>
             <executions>
               <execution>
                 <id>dist</id>
@@ -212,16 +211,6 @@
           </plugin>
         </plugins>
       </build>
-    </profile>
-    <profile>
-      <id>kinesis-asl</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.httpcomponents</groupId>
-          <artifactId>httpclient</artifactId>
-          <version>${commons.httpclient.version}</version>
-        </dependency>
-      </dependencies>
     </profile>
 
     <!-- Profiles that disable inclusion of certain dependencies. -->

@@ -29,7 +29,7 @@ import scala.util.Random
 import sun.nio.ch.DirectBuffer
 
 import org.apache.spark._
-import org.apache.spark.executor._
+import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
@@ -37,7 +37,7 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.serializer.{SerializerInstance, Serializer}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.util._
@@ -50,11 +50,8 @@ private[spark] case class ArrayValues(buffer: Array[Any]) extends BlockValues
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
     val data: Iterator[Any],
-    readMethod: DataReadMethod.Value,
-    bytes: Long) {
-  val inputMetrics = new InputMetrics(readMethod)
-  inputMetrics.incBytesRead(bytes)
-}
+    val readMethod: DataReadMethod.Value,
+    val bytes: Long)
 
 /**
  * Manager running on every node (driver and executors) which provides interfaces for putting and
@@ -647,13 +644,13 @@ private[spark] class BlockManager(
   def getDiskWriter(
       blockId: BlockId,
       file: File,
-      serializer: Serializer,
+      serializerInstance: SerializerInstance,
       bufferSize: Int,
       writeMetrics: ShuffleWriteMetrics): BlockObjectWriter = {
     val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
     val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
-    new DiskBlockObjectWriter(blockId, file, serializer, bufferSize, compressStream, syncWrites,
-      writeMetrics)
+    new DiskBlockObjectWriter(blockId, file, serializerInstance, bufferSize, compressStream,
+      syncWrites, writeMetrics)
   }
 
   /**

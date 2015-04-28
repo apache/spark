@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.Star
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -277,6 +277,13 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Computes the absolute value.
+   *
+   * @group normal_funcs
+   */
+  def abs(e: Column): Column = Abs(e.expr)
+
+  /**
    * Returns the first column that is not null.
    * {{{
    *   df.select(coalesce(df("a"), df("b")))
@@ -286,6 +293,29 @@ object functions {
    */
   @scala.annotation.varargs
   def coalesce(e: Column*): Column = Coalesce(e.map(_.expr))
+
+  /**
+   * Converts a string exprsesion to lower case.
+   *
+   * @group normal_funcs
+   */
+  def lower(e: Column): Column = Lower(e.expr)
+
+  /**
+   * A column expression that generates monotonically increasing 64-bit integers.
+   *
+   * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+   * The current implementation puts the partition ID in the upper 31 bits, and the record number
+   * within each partition in the lower 33 bits. The assumption is that the data frame has
+   * less than 1 billion partitions, and each partition has less than 8 billion records.
+   *
+   * As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+   * This expression would return the following IDs:
+   * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   *
+   * @group normal_funcs
+   */
+  def monotonicallyIncreasingId(): Column = execution.expressions.MonotonicallyIncreasingID()
 
   /**
    * Unary minus, i.e. negate the expression.
@@ -317,18 +347,13 @@ object functions {
   def not(e: Column): Column = !e
 
   /**
-   * Converts a string expression to upper case.
+   * Partition ID of the Spark task.
+   *
+   * Note that this is indeterministic because it depends on data partitioning and task scheduling.
    *
    * @group normal_funcs
    */
-  def upper(e: Column): Column = Upper(e.expr)
-
-  /**
-   * Converts a string exprsesion to lower case.
-   *
-   * @group normal_funcs
-   */
-  def lower(e: Column): Column = Lower(e.expr)
+  def sparkPartitionId(): Column = execution.expressions.SparkPartitionID
 
   /**
    * Computes the square root of the specified float value.
@@ -338,11 +363,11 @@ object functions {
   def sqrt(e: Column): Column = Sqrt(e.expr)
 
   /**
-   * Computes the absolutle value.
+   * Converts a string expression to upper case.
    *
    * @group normal_funcs
    */
-  def abs(e: Column): Column = Abs(e.expr)
+  def upper(e: Column): Column = Upper(e.expr)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -605,4 +630,23 @@ object functions {
   }
 
   // scalastyle:on
+
+  /**
+   * Call an user-defined function.
+   * Example:
+   * {{{
+   *  import org.apache.spark.sql._
+   *
+   *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+   *  val sqlContext = df.sqlContext
+   *  sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
+   *  df.select($"id", callUdf("simpleUdf", $"value"))
+   * }}}
+   *
+   * @group udf_funcs
+   */
+  def callUdf(udfName: String, cols: Column*): Column = {
+     UnresolvedFunction(udfName, cols.map(_.expr))
+  }
+
 }
