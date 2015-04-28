@@ -248,7 +248,7 @@ public final class UnsafeFixedWidthAggregationMap {
     }
     System.out.println("Average probes per lookup: " + map.getAverageProbesPerLookup());
     System.out.println("Number of hash collisions: " + map.getNumHashCollisions());
-    System.out.println("Time spent resizing (ms): " + map.getTimeSpentResizingMs());
+    System.out.println("Time spent resizing (ns): " + map.getTimeSpentResizingNs());
     System.out.println("Total memory consumption (bytes): " + map.getTotalMemoryConsumption());
   }
 

@@ -124,7 +124,7 @@ public final class BytesToBytesMap {
 
   private final boolean enablePerfMetrics;
 
-  private long timeSpentResizingMs = 0;
+  private long timeSpentResizingNs = 0;
 
   private long numProbes = 0;
 
@@ -470,13 +470,13 @@ public final class BytesToBytesMap {
   }
 
   /**
-   * Returns the total amount of time spent resizing this map (in milliseconds).
+   * Returns the total amount of time spent resizing this map (in nanoseconds).
    */
-  public long getTimeSpentResizingMs() {
+  public long getTimeSpentResizingNs() {
     if (!enablePerfMetrics) {
       throw new IllegalStateException();
     }
-    return timeSpentResizingMs;
+    return timeSpentResizingNs;
   }
 
 
@@ -503,7 +503,7 @@ public final class BytesToBytesMap {
   private void growAndRehash() {
     long resizeStartTime = -1;
     if (enablePerfMetrics) {
-      resizeStartTime = System.currentTimeMillis();
+      resizeStartTime = System.nanoTime();
     }
     // Store references to the old data structures to be used when we re-hash
     final LongArray oldLongArray = longArray;
@@ -540,7 +540,7 @@ public final class BytesToBytesMap {
     memoryManager.allocator.free(oldLongArray.memoryBlock());
     memoryManager.allocator.free(oldBitSet.memoryBlock());
     if (enablePerfMetrics) {
-      timeSpentResizingMs += System.currentTimeMillis() - resizeStartTime;
+      timeSpentResizingNs += System.nanoTime() - resizeStartTime;
     }
   }
 
