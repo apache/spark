@@ -51,7 +51,8 @@ class LocalSparkCluster(
     val _conf = conf.clone().setIfMissing("spark.master.rest.enabled", "false")
 
     /* Start the Master */
-    val (masterSystem, masterPort, _, _) = Master.startSystemAndActor(localHostname, "0", "0", _conf)
+    val (masterSystem, masterPort, _, _) =
+      Master.startSystemAndActor(localHostname, "0", "0", _conf)
     masterActorSystems += masterSystem
     val masterUrl = "spark://" + Utils.localHostNameForURI() + ":" + masterPort
     val masters = Array(masterUrl)

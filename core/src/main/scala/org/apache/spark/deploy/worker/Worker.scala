@@ -196,7 +196,8 @@ private[worker] class Worker(
     for (masterAkkaUrl <- masterAkkaUrls) {
       logInfo("Connecting to master " + masterAkkaUrl + "...")
       val actor = context.actorSelection(masterAkkaUrl)
-      actor ! RegisterWorker(workerId, host, port.toInt, cores, memory, webUi.boundPort.toInt, publicAddress)
+      actor ! RegisterWorker(workerId, host, port.toInt, cores, memory,
+        webUi.boundPort, publicAddress)
     }
   }
 
@@ -235,7 +236,7 @@ private[worker] class Worker(
          */
         if (master != null) {
           master ! RegisterWorker(
-            workerId, host, port.toInt, cores, memory, webUi.boundPort.toInt, publicAddress)
+            workerId, host, port.toInt, cores, memory, webUi.boundPort, publicAddress)
         } else {
           // We are retrying the initial registration
           tryRegisterAllMasters()
@@ -269,8 +270,8 @@ private[worker] class Worker(
             INITIAL_REGISTRATION_RETRY_INTERVAL, self, ReregisterWithMaster)
         }
       case Some(_) =>
-        logInfo("Not spawning another attempt to register with the master, since there is an" +
-          " attempt scheduled already.")
+        logInfo("Not spawning another attempt to register with the master, " +
+          "since there is an attempt scheduled already.")
     }
   }
 
@@ -281,7 +282,8 @@ private[worker] class Worker(
       changeMaster(masterUrl, masterWebUiUrl)
       context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis, self, SendHeartbeat)
       if (CLEANUP_ENABLED) {
-        logInfo(s"Worker cleanup enabled; old application directories will be deleted in: $workDir")
+        logInfo(s"Worker cleanup enabled; " +
+          s"old application directories will be deleted in: $workDir")
         context.system.scheduler.schedule(CLEANUP_INTERVAL_MILLIS millis,
           CLEANUP_INTERVAL_MILLIS millis, self, WorkDirCleanup)
       }
@@ -414,7 +416,7 @@ private[worker] class Worker(
 
     case KillExecutor(masterUrl, appId, execId) =>
       if (masterUrl != activeMasterUrl) {
-        logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor " + execId)
+        logWarning(s"Invalid Master ($masterUrl) attempted to launch executor $execId")
       } else {
         val fullId = appId + "/" + execId
         executors.get(fullId) match {
@@ -457,7 +459,8 @@ private[worker] class Worker(
     case DriverStateChanged(driverId, state, exception) => {
       state match {
         case DriverState.ERROR =>
-          logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
+          logWarning(s"Driver $driverId failed " +
+            s"with unrecoverable exception: ${exception.get}")
         case DriverState.FAILED =>
           logWarning(s"Driver $driverId exited with failure")
         case DriverState.FINISHED =>
