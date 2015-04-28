@@ -22,7 +22,6 @@ import javax.ws.rs.core.MediaType
 
 import org.apache.spark.executor.{InputMetrics => InternalInputMetrics, OutputMetrics => InternalOutputMetrics, ShuffleReadMetrics => InternalShuffleReadMetrics, ShuffleWriteMetrics => InternalShuffleWriteMetrics, TaskMetrics => InternalTaskMetrics}
 import org.apache.spark.scheduler.{AccumulableInfo => InternalAccumulableInfo, StageInfo}
-import org.apache.spark.status.api._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.{StageUIData, TaskUIData}
 import org.apache.spark.util.Distribution
@@ -32,8 +31,8 @@ private[v1] class AllStagesResource(uiRoot: UIRoot) {
 
   @GET
   def stageList(
-    @PathParam("appId") appId: String,
-    @QueryParam("status") statuses: JList[StageStatus]
+      @PathParam("appId") appId: String,
+      @QueryParam("status") statuses: JList[StageStatus]
   ): Seq[StageData] = {
     uiRoot.withSparkUI(appId) { ui =>
       val listener = ui.jobProgressListener
@@ -60,11 +59,10 @@ private[v1] class AllStagesResource(uiRoot: UIRoot) {
 
 private[v1] object AllStagesResource {
   def stageUiToStageData(
-    status: StageStatus,
-    stageInfo: StageInfo,
-    stageUiData: StageUIData,
-    includeDetails: Boolean
-  ): StageData = {
+      status: StageStatus,
+      stageInfo: StageInfo,
+      stageUiData: StageUIData,
+      includeDetails: Boolean): StageData = {
 
     val taskData = if (includeDetails) {
       Some(stageUiData.taskData.map { case (k, v) => k -> convertTaskData(v) } )

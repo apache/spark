@@ -26,9 +26,7 @@ import org.apache.spark.ui.storage.StorageListener
 private[v1] class AllRDDResource(uiRoot: UIRoot) {
 
   @GET
-  def jobsList(
-    @PathParam("appId") appId: String
-  ): Seq[RDDStorageInfo] = {
+  def jobsList(@PathParam("appId") appId: String): Seq[RDDStorageInfo] = {
     uiRoot.withSparkUI(appId) { ui =>
       val storageStatusList = ui.storageListener.storageStatusList
       val rddInfos = ui.storageListener.rddInfoList
@@ -55,11 +53,10 @@ private[spark] object AllRDDResource {
   }
 
   def getRDDStorageInfo(
-    rddId: Int,
-    rddInfo: RDDInfo,
-    storageStatusList: Seq[StorageStatus],
-    includeDetails: Boolean
-  ): RDDStorageInfo = {
+      rddId: Int,
+      rddInfo: RDDInfo,
+      storageStatusList: Seq[StorageStatus],
+      includeDetails: Boolean): RDDStorageInfo = {
     val workers = storageStatusList.map { (rddId, _) }
     val blockLocations = StorageUtils.getRddBlockLocations(rddId, storageStatusList)
     val blocks = storageStatusList

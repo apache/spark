@@ -30,9 +30,8 @@ private[v1] class AllJobsResource(uiRoot: UIRoot) {
 
   @GET
   def jobsList(
-    @PathParam("appId") appId: String,
-    @QueryParam("status") statuses: JList[JobExecutionStatus]
-  ): Seq[JobData] = {
+      @PathParam("appId") appId: String,
+      @QueryParam("status") statuses: JList[JobExecutionStatus]): Seq[JobData] = {
     uiRoot.withSparkUI(appId) { ui =>
       val statusToJobs: Seq[(JobExecutionStatus, Seq[JobUIData])] =
         AllJobsResource.getStatusToJobs(ui)
@@ -69,10 +68,9 @@ private[v1] object AllJobsResource {
   }
 
   def convertJobData(
-    job: JobUIData,
-    listener: JobProgressListener,
-    includeStageDetails: Boolean
-  ): JobData = {
+      job: JobUIData,
+      listener: JobProgressListener,
+      includeStageDetails: Boolean): JobData = {
     listener.synchronized {
       val lastStageInfo = listener.stageIdToInfo.get(job.stageIds.max)
       val lastStageData = lastStageInfo.flatMap { s =>

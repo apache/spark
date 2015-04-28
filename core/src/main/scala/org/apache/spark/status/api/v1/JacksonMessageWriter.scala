@@ -52,21 +52,21 @@ private[v1] class JacksonMessageWriter extends MessageBodyWriter[Object]{
   mapper.setDateFormat(JacksonMessageWriter.makeISODateFormat)
 
   override def isWriteable(
-    aClass: Class[_],
-    `type`: Type,
-    annotations: Array[Annotation],
-    mediaType: MediaType): Boolean = {
-    true
+      aClass: Class[_],
+      `type`: Type,
+      annotations: Array[Annotation],
+      mediaType: MediaType): Boolean = {
+      true
   }
 
   override def writeTo(
-    t: Object,
-    aClass: Class[_],
-    `type`: Type,
-    annotations: Array[Annotation],
-    mediaType: MediaType,
-    multivaluedMap: MultivaluedMap[String, AnyRef],
-    outputStream: OutputStream): Unit = {
+      t: Object,
+      aClass: Class[_],
+      `type`: Type,
+      annotations: Array[Annotation],
+      mediaType: MediaType,
+      multivaluedMap: MultivaluedMap[String, AnyRef],
+      outputStream: OutputStream): Unit = {
     t match {
       case ErrorWrapper(err) => outputStream.write(err.getBytes("utf-8"))
       case _ => mapper.writeValue(outputStream, t)
@@ -74,11 +74,11 @@ private[v1] class JacksonMessageWriter extends MessageBodyWriter[Object]{
   }
 
   override def getSize(
-    t: Object,
-    aClass: Class[_],
-    `type`: Type,
-    annotations: Array[Annotation],
-    mediaType: MediaType): Long = {
+      t: Object,
+      aClass: Class[_],
+      `type`: Type,
+      annotations: Array[Annotation],
+      mediaType: MediaType): Long = {
     -1L
   }
 }

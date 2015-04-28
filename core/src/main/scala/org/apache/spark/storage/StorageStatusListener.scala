@@ -26,7 +26,7 @@ import org.apache.spark.scheduler._
  * :: DeveloperApi ::
  * A SparkListener that maintains executor storage status.
  *
- * Unlike JobProgressListener, this class is thread-safe, so users do not need to synchronize
+ * This class is thread-safe (unlike JobProgressListener)
  */
 @DeveloperApi
 class StorageStatusListener extends SparkListener {

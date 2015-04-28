@@ -26,10 +26,7 @@ import org.apache.spark.ui.jobs.UIData.JobUIData
 private[v1] class OneJobResource(uiRoot: UIRoot) {
 
   @GET
-  def jobsList(
-    @PathParam("appId") appId: String,
-    @PathParam("jobId") jobId: Int
-  ): JobData = {
+  def jobsList(@PathParam("appId") appId: String, @PathParam("jobId") jobId: Int): JobData = {
     uiRoot.withSparkUI(appId) { ui =>
       val statusToJobs: Seq[(JobExecutionStatus, Seq[JobUIData])] =
         AllJobsResource.getStatusToJobs(ui)

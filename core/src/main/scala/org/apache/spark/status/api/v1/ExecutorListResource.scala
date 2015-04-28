@@ -25,9 +25,7 @@ import org.apache.spark.ui.exec.ExecutorsPage
 private[v1] class ExecutorListResource(uiRoot: UIRoot) {
 
   @GET
-  def jobsList(
-    @PathParam("appId") appId: String
-  ): Seq[ExecutorSummary] = {
+  def jobsList(@PathParam("appId") appId: String): Seq[ExecutorSummary] = {
     uiRoot.withSparkUI(appId) { ui =>
       val listener = ui.executorsListener
       val storageStatusList = listener.storageStatusList

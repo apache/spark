@@ -24,9 +24,8 @@ private[v1] class OneRDDResource(uiRoot: UIRoot) {
 
     @GET
     def rddData(
-      @PathParam("appId") appId: String,
-      @PathParam("rddId") rddId: Int
-    ): RDDStorageInfo  = {
+        @PathParam("appId") appId: String,
+        @PathParam("rddId") rddId: Int): RDDStorageInfo  = {
       uiRoot.withSparkUI(appId) { ui =>
         AllRDDResource.getRDDStorageInfo(rddId, ui.storageListener, true).getOrElse(
           throw new NotFoundException(s"no rdd found w/ id $rddId")

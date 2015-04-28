@@ -32,9 +32,8 @@ private[v1] class OneStageResource(uiRoot: UIRoot) {
   @GET
   @Path("")
   def stageData(
-    @PathParam("appId") appId: String,
-    @PathParam("stageId") stageId: Int
-  ): Seq[StageData] = {
+      @PathParam("appId") appId: String,
+      @PathParam("stageId") stageId: Int): Seq[StageData] = {
     withStage(appId, stageId){ stageAttempts =>
       stageAttempts.map { stage =>
         AllStagesResource.stageUiToStageData(stage.status, stage.info, stage.ui,
@@ -46,10 +45,9 @@ private[v1] class OneStageResource(uiRoot: UIRoot) {
   @GET
   @Path("/{attemptId: \\d+}")
   def oneAttemptData(
-    @PathParam("appId") appId: String,
-    @PathParam("stageId") stageId: Int,
-    @PathParam("attemptId") attemptId: Int
-  ): StageData = {
+      @PathParam("appId") appId: String,
+      @PathParam("stageId") stageId: Int,
+      @PathParam("attemptId") attemptId: Int): StageData = {
     withStageAttempt(appId, stageId, attemptId) { stage =>
       AllStagesResource.stageUiToStageData(stage.status, stage.info, stage.ui,
         includeDetails = true)
@@ -59,11 +57,11 @@ private[v1] class OneStageResource(uiRoot: UIRoot) {
   @GET
   @Path("/{attemptId: \\d+}/taskSummary")
   def stageData(
-    @PathParam("appId") appId: String,
-    @PathParam("stageId") stageId: Int,
-    @PathParam("attemptId") attemptId: Int,
-    @DefaultValue("0.05,0.25,0.5,0.75,0.95") @QueryParam("quantiles") quantileString: String
-  ): TaskMetricDistributions = {
+      @PathParam("appId") appId: String,
+      @PathParam("stageId") stageId: Int,
+      @PathParam("attemptId") attemptId: Int,
+      @DefaultValue("0.05,0.25,0.5,0.75,0.95") @QueryParam("quantiles") quantileString: String)
+  : TaskMetricDistributions = {
     withStageAttempt(appId, stageId, attemptId) { stage =>
       val quantiles = quantileString.split(",").map { s =>
         try {
@@ -80,13 +78,12 @@ private[v1] class OneStageResource(uiRoot: UIRoot) {
   @GET
   @Path("/{attemptId: \\d+}/taskList")
   def taskList(
-    @PathParam("appId") appId: String,
-    @PathParam("stageId") stageId: Int,
-    @PathParam("attemptId") attemptId: Int,
-    @DefaultValue("0") @QueryParam("offset") offset: Int,
-    @DefaultValue("20") @QueryParam("length") length: Int,
-    @DefaultValue("ID") @QueryParam("sortBy") sortBy: TaskSorting
-  ): Seq[TaskData] = {
+      @PathParam("appId") appId: String,
+      @PathParam("stageId") stageId: Int,
+      @PathParam("attemptId") attemptId: Int,
+      @DefaultValue("0") @QueryParam("offset") offset: Int,
+      @DefaultValue("20") @QueryParam("length") length: Int,
+      @DefaultValue("ID") @QueryParam("sortBy") sortBy: TaskSorting): Seq[TaskData] = {
     withStageAttempt(appId, stageId, attemptId) { stage =>
       val tasks = stage.ui.taskData.values.map{AllStagesResource.convertTaskData}.toIndexedSeq
         .sorted(OneStageResource.ordering(sortBy))
