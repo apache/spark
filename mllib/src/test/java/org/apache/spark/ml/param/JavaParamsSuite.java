@@ -29,5 +29,7 @@ public class JavaParamsSuite {
   public void testParams() {
     JavaTestParams testParams = new JavaTestParams();
     Assert.assertEquals(testParams.getMyIntParam(), 1);
+    testParams.setMyIntParam(2).setMyDoubleParam(0.4);
+    Assert.assertEquals(testParams.getMyDoubleParam(), 0.4, 0.0);
   }
 }

@@ -56,8 +56,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: 10
    * @group param
    */
-  val rank = new IntParam(this, "rank", "rank of the factorization",
-    isValid = ParamValidate.gtEq[Int](1))
+  val rank = new IntParam(this, "rank", "rank of the factorization", ParamValidate.gtEq[Int](1))
 
   /** @group getParam */
   def getRank: Int = getOrDefault(rank)
@@ -68,7 +67,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * @group param
    */
   val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks",
-    isValid = ParamValidate.gtEq[Int](1))
+    ParamValidate.gtEq[Int](1))
 
   /** @group getParam */
   def getNumUserBlocks: Int = getOrDefault(numUserBlocks)
@@ -78,9 +77,8 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: 10
    * @group param
    */
-  val numItemBlocks =
-    new IntParam(this, "numItemBlocks", "number of item blocks",
-      isValid = ParamValidate.gtEq[Int](1))
+  val numItemBlocks = new IntParam(this, "numItemBlocks", "number of item blocks",
+      ParamValidate.gtEq[Int](1))
 
   /** @group getParam */
   def getNumItemBlocks: Int = getOrDefault(numItemBlocks)
@@ -101,7 +99,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * @group param
    */
   val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference",
-    isValid = ParamValidate.gtEq[Double](0))
+    ParamValidate.gtEq[Double](0))
 
   /** @group getParam */
   def getAlpha: Double = getOrDefault(alpha)

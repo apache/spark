@@ -129,11 +129,9 @@ private[shared] object SharedParamsCodeGen {
 
     s"""
       |/**
-      | * :: DeveloperApi ::
-      | * Trait for shared param $name$defaultValueDoc.
+      | * (private[ml]) Trait for shared param $name$defaultValueDoc.
       | */
-      |@DeveloperApi
-      |trait Has$Name extends Params {
+      |private[ml] trait Has$Name extends Params {
       |
       |  /**
       |   * Param for $doc.

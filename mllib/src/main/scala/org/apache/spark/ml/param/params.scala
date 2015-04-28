@@ -20,8 +20,8 @@ package org.apache.spark.ml.param
 import java.lang.reflect.Modifier
 import java.util.NoSuchElementException
 
-import scala.collection.mutable
 import scala.annotation.varargs
+import scala.collection.mutable
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.util.Identifiable
@@ -90,45 +90,50 @@ class Param[T] (val parent: Params, val name: String, val doc: String, val isVal
   }
 }
 
-/** Factory methods for common validation functions for [[Param.isValid]] */
+/**
+ * Factory methods for common validation functions for [[Param.isValid]].
+ * The numerical methods only support Int, Long, Float, and Double.
+ */
 object ParamValidate {
 
   /** Default validation always return true */
   def default[T]: T => Boolean = (_: T) => true
 
-  /** Negate the given check */
-  def not[T](isValid: T => Boolean): T => Boolean = { (value: T) =>
-    !isValid(value)
+  /**
+   * Private method for checking numerical types and converting to Double.
+   * This is mainly for the sake of compilation; type checks are really handled
+   * by [[Params]] setters and the [[ParamPair]] constructor.
+   */
+  private def getDouble[T](value: T): Double = value match {
+    case x: Int => x.toDouble
+    case x: Long => x.toDouble
+    case x: Float => x.toDouble
+    case x: Double => x.toDouble
+    case _ =>
+      // The type should be checked before this is ever called.
+      throw new IllegalArgumentException("Numerical Param validation failed because" +
+        s" of unexpected input type: ${value.getClass}")
   }
 
-  /** Combine two checks */
-  def and[T](isValid1: T => Boolean, isValid2: T => Boolean): T => Boolean = { (value: T) =>
-    isValid1(value) && isValid2(value)
+  /** Check if value > lowerBound */
+  def gt[T](lowerBound: Double): T => Boolean = { (value: T) =>
+    getDouble(value) > lowerBound
   }
 
-  /** Check for value > lowerBound.  Use [[not()]] for <= check. */
-  def gt(lowerBound: Int): Int => Boolean = { (value: Int) => value > lowerBound }
+  /** Check if value >= lowerBound */
+  def gtEq[T](lowerBound: Double): T => Boolean = { (value: T) =>
+    getDouble(value) >= lowerBound
+  }
 
-  /** Check for value >= lowerBound.  Use [[not()]] for < check. */
-  def gtEq(lowerBound: Int): Int => Boolean = { (value: Int) => value >= lowerBound }
+  /** Check if value < upperBound */
+  def lt[T](upperBound: Double): T => Boolean = { (value: T) =>
+    getDouble(value) < upperBound
+  }
 
-  /** Check for value > lowerBound.  Use [[not()]] for <= check. */
-  def gt(lowerBound: Long): Long => Boolean = { (value: Long) => value > lowerBound }
-
-  /** Check for value >= lowerBound.  Use [[not()]] for < check. */
-  def gtEq(lowerBound: Long): Long => Boolean = { (value: Long) => value >= lowerBound }
-
-  /** Check for value > lowerBound.  Use [[not()]] for <= check. */
-  def gt(lowerBound: Float): Float => Boolean = { (value: Float) => value > lowerBound }
-
-  /** Check for value >= lowerBound.  Use [[not()]] for < check. */
-  def gtEq(lowerBound: Float): Float => Boolean = { (value: Float) => value >= lowerBound }
-
-  /** Check for value > lowerBound.  Use [[not()]] for <= check. */
-  def gt(lowerBound: Double): Double => Boolean = { (value: Double) => value > lowerBound }
-
-  /** Check for value >= lowerBound.  Use [[not()]] for < check. */
-  def gtEq(lowerBound: Double): Double => Boolean = { (value: Double) => value >= lowerBound }
+  /** Check if value <= upperBound */
+  def ltEq[T](upperBound: Double): T => Boolean = { (value: T) =>
+    getDouble(value) <= upperBound
+  }
 
   /**
    * Check for value in range lowerBound to upperBound.
@@ -137,31 +142,29 @@ object ParamValidate {
    * @param upperInclusive  If true, check for value <= upperBound.
    *                        If false, check for value < upperBound.
    */
-  def inRange[T <: Comparable[T]](
-      lowerBound: T,
-      upperBound: T,
+  def inRange[T](
+      lowerBound: Double,
+      upperBound: Double,
       lowerInclusive: Boolean,
-      upperInclusive: Boolean): T => Boolean = { (x: T) =>
-    val lowerValid = if (lowerInclusive) {
-      x.compareTo(lowerBound) >= 0
-    } else {
-      x.compareTo(lowerBound) > 0
-    }
-    val upperValid = if (upperInclusive) {
-      x.compareTo(upperBound) <= 0
-    } else {
-      x.compareTo(upperBound) < 0
-    }
+      upperInclusive: Boolean): T => Boolean = { (value: T) =>
+    val x: Double = getDouble(value)
+    val lowerValid = if (lowerInclusive) x >= lowerBound else x > lowerBound
+    val upperValid = if (upperInclusive) x <= upperBound else x < upperBound
     lowerValid && upperValid
   }
 
   /** Version of [[inRange()]] which uses inclusive be default: [lowerBound, upperBound] */
-  def inRange[T](lowerBound: T, upperBound: T): T => Boolean = {
+  def inRange[T](lowerBound: Double, upperBound: Double): T => Boolean = {
     inRange[T](lowerBound, upperBound, lowerInclusive = true, upperInclusive = true)
   }
 
   /** Check for value in an allowed set of values. */
   def inArray[T](allowed: Array[T]): T => Boolean = { (value: T) =>
+    allowed.contains(value)
+  }
+
+  /** Check for value in an allowed set of values. */
+  def inArray[T](allowed: java.util.List[T]): T => Boolean = { (value: T) =>
     allowed.contains(value)
   }
 }
