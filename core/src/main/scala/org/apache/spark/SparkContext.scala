@@ -224,6 +224,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _listenerBusStarted: Boolean = false
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
+  private var _shutdownHookRef: AnyRef = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -521,6 +522,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _taskScheduler.postStartHook()
     _env.metricsSystem.registerSource(new DAGSchedulerSource(dagScheduler))
     _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
+
+    // Make sure the context is stopped if the user forgets about it. This avoids leaving
+    // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
+    // is killed, though.
+    _shutdownHookRef = Utils.addShutdownHook(Utils.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
+      logInfo("Invoking stop() from shutdown hook")
+      stop()
+    }
   } catch {
     case NonFatal(e) =>
       logError("Error initializing SparkContext.", e)
@@ -1059,7 +1068,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /** Build the union of a list of RDDs. */
   def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = {
     val partitioners = rdds.flatMap(_.partitioner).toSet
-    if (partitioners.size == 1) {
+    if (rdds.forall(_.partitioner.isDefined) && partitioners.size == 1) {
       new PartitionerAwareUnionRDD(this, rdds)
     } else {
       new UnionRDD(this, rdds)
@@ -1484,6 +1493,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     if (!stopped.compareAndSet(false, true)) {
       logInfo("SparkContext already stopped.")
       return
+    }
+    if (_shutdownHookRef != null) {
+      Utils.removeShutdownHook(_shutdownHookRef)
     }
 
     postApplicationEnd()

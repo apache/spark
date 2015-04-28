@@ -60,7 +60,7 @@ setGeneric("countByValue", function(x) { standardGeneric("countByValue") })
 
 #' @rdname distinct
 #' @export
-setGeneric("distinct", function(x, numPartitions = 1L) { standardGeneric("distinct") })
+setGeneric("distinct", function(x, numPartitions = 1) { standardGeneric("distinct") })
 
 #' @rdname filterRDD
 #' @export
@@ -182,7 +182,7 @@ setGeneric("setName", function(x, name) { standardGeneric("setName") })
 #' @rdname sortBy
 #' @export
 setGeneric("sortBy",
-           function(x, func, ascending = TRUE, numPartitions = 1L) {
+           function(x, func, ascending = TRUE, numPartitions = 1) {
              standardGeneric("sortBy")
            })
 
@@ -217,6 +217,11 @@ setGeneric("unpersist", function(x, ...) { standardGeneric("unpersist") })
 #' @export
 setGeneric("zipRDD", function(x, other) { standardGeneric("zipRDD") })
 
+#' @rdname zipRDD
+#' @export
+setGeneric("zipPartitions", function(..., func) { standardGeneric("zipPartitions") }, 
+           signature = "...")
+
 #' @rdname zipWithIndex
 #' @seealso zipWithUniqueId
 #' @export
@@ -244,7 +249,7 @@ setGeneric("flatMapValues", function(X, FUN) { standardGeneric("flatMapValues") 
 
 #' @rdname intersection
 #' @export
-setGeneric("intersection", function(x, other, numPartitions = 1L) {
+setGeneric("intersection", function(x, other, numPartitions = 1) {
   standardGeneric("intersection") })
 
 #' @rdname keys
@@ -346,21 +351,21 @@ setGeneric("rightOuterJoin", function(x, y, numPartitions) { standardGeneric("ri
 #' @rdname sortByKey
 #' @export
 setGeneric("sortByKey",
-           function(x, ascending = TRUE, numPartitions = 1L) {
+           function(x, ascending = TRUE, numPartitions = 1) {
              standardGeneric("sortByKey")
            })
 
 #' @rdname subtract
 #' @export
 setGeneric("subtract",
-           function(x, other, numPartitions = 1L) {
+           function(x, other, numPartitions = 1) {
              standardGeneric("subtract")
            })
 
 #' @rdname subtractByKey
 #' @export
 setGeneric("subtractByKey", 
-           function(x, other, numPartitions = 1L) {
+           function(x, other, numPartitions = 1) {
              standardGeneric("subtractByKey")
            })
 

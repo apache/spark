@@ -353,9 +353,9 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       EventLoggingListener.initEventLog(new FileOutputStream(file))
     }
     val writer = new OutputStreamWriter(bstream, "UTF-8")
-    try {
+    Utils.tryWithSafeFinally {
       events.foreach(e => writer.write(compact(render(JsonProtocol.sparkEventToJson(e))) + "\n"))
-    } finally {
+    } {
       writer.close()
     }
   }

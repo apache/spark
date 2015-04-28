@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.regression;
 
-import java.io.File;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
@@ -32,7 +31,6 @@ import org.apache.spark.ml.impl.TreeTests;
 import org.apache.spark.mllib.classification.LogisticRegressionSuite;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.DataFrame;
-import org.apache.spark.util.Utils;
 
 
 public class JavaDecisionTreeRegressorSuite implements Serializable {
@@ -57,22 +55,22 @@ public class JavaDecisionTreeRegressorSuite implements Serializable {
     double B = -1.5;
 
     JavaRDD<LabeledPoint> data = sc.parallelize(
-        LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
+      LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
     Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
     DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
 
     // This tests setters. Training with various options is tested in Scala.
     DecisionTreeRegressor dt = new DecisionTreeRegressor()
-        .setMaxDepth(2)
-        .setMaxBins(10)
-        .setMinInstancesPerNode(5)
-        .setMinInfoGain(0.0)
-        .setMaxMemoryInMB(256)
-        .setCacheNodeIds(false)
-        .setCheckpointInterval(10)
-        .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (int i = 0; i < DecisionTreeRegressor.supportedImpurities().length; ++i) {
-      dt.setImpurity(DecisionTreeRegressor.supportedImpurities()[i]);
+      .setMaxDepth(2)
+      .setMaxBins(10)
+      .setMinInstancesPerNode(5)
+      .setMinInfoGain(0.0)
+      .setMaxMemoryInMB(256)
+      .setCacheNodeIds(false)
+      .setCheckpointInterval(10)
+      .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
+    for (String impurity: DecisionTreeRegressor.supportedImpurities()) {
+      dt.setImpurity(impurity);
     }
     DecisionTreeRegressionModel model = dt.fit(dataFrame);
 
@@ -82,7 +80,7 @@ public class JavaDecisionTreeRegressorSuite implements Serializable {
     model.toDebugString();
 
     /*
-    // TODO: Add test once save/load are implemented.
+    // TODO: Add test once save/load are implemented.   SPARK-6725
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     String path = tempDir.toURI().toString();
     try {

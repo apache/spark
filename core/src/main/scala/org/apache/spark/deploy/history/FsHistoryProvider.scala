@@ -390,8 +390,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     try {
       val appListener = new ApplicationEventListener
+      val appCompleted = isApplicationCompleted(eventLog)
       bus.addListener(appListener)
-      bus.replay(logInput, logPath.toString)
+      bus.replay(logInput, logPath.toString, !appCompleted)
       new FsApplicationAttemptInfo(
         logPath.getName(),
         appListener.appName.getOrElse(NOT_STARTED),
@@ -401,7 +402,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         appListener.endTime.getOrElse(-1L),
         getModificationTime(eventLog).get,
         appListener.sparkUser.getOrElse(NOT_STARTED),
-        isApplicationCompleted(eventLog))
+        appCompleted)
     } finally {
       logInput.close()
     }

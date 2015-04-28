@@ -15,13 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
-
-import java.io.Serializable;
+package org.apache.spark.sql.execution
 
 /**
- * A zero-argument function that returns an R.
+ * Package containing expressions that are specific to Spark runtime.
  */
-public interface Function0<R> extends Serializable {
-  public R call() throws Exception;
-}
+package object expressions

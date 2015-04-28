@@ -759,6 +759,11 @@ test_that("collectAsMap() on a pairwise RDD", {
   expect_equal(vals, list(`1` = "a", `2` = "b"))
 })
 
+test_that("show()", {
+  rdd <- parallelize(sc, list(1:10))    
+  expect_output(show(rdd), "ParallelCollectionRDD\\[\\d+\\] at parallelize at RRDD\\.scala:\\d+")
+})
+
 test_that("sampleByKey() on pairwise RDDs", {
   rdd <- parallelize(sc, 1:2000)
   pairsRDD <- lapply(rdd, function(x) { if (x %% 2 == 0) list("a", x) else list("b", x) })
