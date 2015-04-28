@@ -43,7 +43,8 @@
 
 .bar rect:hover {
   //fill: rgb(49, 91, 125);
-  fill: #005580;
+  //fill: #005580;
+  fill: rgb(0, 194, 255);
 }
 
 .timeline {

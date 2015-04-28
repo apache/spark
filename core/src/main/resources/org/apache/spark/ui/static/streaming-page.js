@@ -223,3 +223,24 @@ function prepareDistribution(values, minY, maxY) {
     var maxBarSize = d3.max(data, function(d) { return d.y; });
     distributionMaxX = maxBarSize > distributionMaxX? maxBarSize : distributionMaxX;
 }
+
+function getUrlParameter(sParam)
+{
+    var sPageURL = window.location.search.substring(1);
+    var sURLVariables = sPageURL.split('&');
+    for (var i = 0; i < sURLVariables.length; i++)
+    {
+        var sParameterName = sURLVariables[i].split('=');
+        if (sParameterName[0] == sParam)
+        {
+            return sParameterName[1];
+        }
+    }
+}
+
+$(function() {
+    if (getUrlParameter("show-receivers-detail") == "true") {
+        $('#inputs-table').toggle('collapsed');
+        $('#triangle').html('&#9660;');
+    }
+});

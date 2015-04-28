@@ -142,8 +142,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
       since
       <strong>
         {UIUtils.formatDate(startTime)}
-      </strong>.
+      </strong>
     </div>
+    <div> </div>
   }
 
   private def generateTimeMap(times: Seq[Long]): Seq[Node] = {
@@ -197,9 +198,11 @@ private[ui] class StreamingPage(parent: StreamingTab)
     // JavaScript to show/hide the receiver sub table.
     val triangleJs =
       s"""$$('#inputs-table').toggle('collapsed');
-         |if ($$(this).html() == '$BLACK_RIGHT_TRIANGLE_HTML')
-         |$$(this).html('$BLACK_DOWN_TRIANGLE_HTML');
-         |else $$(this).html('$BLACK_RIGHT_TRIANGLE_HTML');""".stripMargin.replaceAll("\\n", "")
+         |var status = false;
+         |if ($$(this).html() == '$BLACK_RIGHT_TRIANGLE_HTML') {
+         |$$(this).html('$BLACK_DOWN_TRIANGLE_HTML');status = true;}
+         |else {$$(this).html('$BLACK_RIGHT_TRIANGLE_HTML');status  = false;}
+         |window.history.pushState('', document.title, window.location.pathname + '?show-receivers-detail=' + status);""".stripMargin.replaceAll("\\n", "")
 
     val timelineDataForEventRateOfAllReceivers =
       new TimelineUIData(
@@ -282,9 +285,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
       <tbody>
         <tr>
           <td style="vertical-align: middle; width: 160px;">
-            <div  style="width: 160px;">
+            <div style="width: 160px;">
             <div>
-              <span onclick={Unparsed(triangleJs)}>{Unparsed(BLACK_RIGHT_TRIANGLE_HTML)}</span>
+              <span id="triangle" onclick={Unparsed(triangleJs)}>{Unparsed(BLACK_RIGHT_TRIANGLE_HTML)}</span>
               <strong>Input Rate</strong>
             </div>
             <div>Avg: {eventRateForAllReceivers.formattedAvg} events/sec</div>
@@ -376,12 +379,12 @@ private[ui] class StreamingPage(parent: StreamingTab)
     }.getOrElse(emptyCell)
     val receiverLastErrorTime =
       listener.receiverLastErrorTime(receiverId).map(UIUtils.formatDate).getOrElse(emptyCell)
-    val receivedRecords = listener.receivedRecordsWithBatchTime.get(receiverId).getOrElse(Seq())
+    val receivedRecords = new DoubleStatUIData(listener.receivedRecordsWithBatchTime.get(receiverId).getOrElse(Seq()))
 
     val timelineForEventRate =
       new TimelineUIData(
         s"receiver-$receiverId-events-timeline",
-        receivedRecords,
+        receivedRecords.data,
         minX,
         maxX,
         minY,
@@ -391,7 +394,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val distributionForEventsRate =
       new DistributionUIData(
         s"receiver-$receiverId-events-distribution",
-        receivedRecords.map(_._2),
+        receivedRecords.data.map(_._2),
         minY,
         maxY,
         "events/sec").toHtml(jsCollector)
@@ -402,13 +405,13 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <div>
           <strong>{receiverName}</strong>
         </div>
-        <div>Avg: {avgReceiverEvents.map(_.toString).getOrElse(emptyCell)} events/sec</div>
+        <div>Avg: {receivedRecords.formattedAvg} events/sec</div>
           </div>
       </td>
       <td>{receiverActive}</td>
       <td>{receiverLocation}</td>
       <td>{receiverLastErrorTime}</td>
-      <td>{receiverLastError}</td>
+      <td><div style="width: 292px;">{receiverLastError}</div></td>
     </tr>
       <tr>
         <td colspan="3" class="timeline">
