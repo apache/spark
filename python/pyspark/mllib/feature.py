@@ -23,12 +23,17 @@ from __future__ import absolute_import
 import sys
 import warnings
 import random
+import binascii
+if sys.version >= '3':
+    basestring = str
+    unicode = str
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import RDD, SparkContext
+from pyspark import SparkContext
+from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import Vectors, Vector, _convert_to_vector
+from pyspark.mllib.linalg import Vectors, _convert_to_vector
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
            'HashingTF', 'IDFModel', 'IDF', 'Word2Vec', 'Word2VecModel']
@@ -132,6 +137,22 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         return JavaVectorTransformer.transform(self, vector)
 
+    def setWithMean(self, withMean):
+        """
+        Setter of the boolean which decides
+        whether it uses mean or not
+        """
+        self.call("setWithMean", withMean)
+        return self
+
+    def setWithStd(self, withStd):
+        """
+        Setter of the boolean which decides
+        whether it uses std or not
+        """
+        self.call("setWithStd", withStd)
+        return self
+
 
 class StandardScaler(object):
     """
@@ -190,7 +211,7 @@ class HashingTF(object):
     >>> htf = HashingTF(100)
     >>> doc = "a a b b c d".split(" ")
     >>> htf.transform(doc)
-    SparseVector(100, {1: 1.0, 14: 1.0, 31: 2.0, 44: 2.0})
+    SparseVector(100, {...})
     """
     def __init__(self, numFeatures=1 << 20):
         """
@@ -243,6 +264,12 @@ class IDFModel(JavaVectorTransformer):
 
         x = _convert_to_vector(x)
         return JavaVectorTransformer.transform(self, x)
+
+    def idf(self):
+        """
+        Returns the current IDF vector.
+        """
+        return self.call('idf')
 
 
 class IDF(object):
@@ -331,7 +358,14 @@ class Word2VecModel(JavaVectorTransformer):
         words, similarity = self.call("findSynonyms", word, num)
         return zip(words, similarity)
 
+    def getVectors(self):
+        """
+        Returns a map of words to their vector representations.
+        """
+        return self.call("getVectors")
 
+
+@ignore_unicode_prefix
 class Word2Vec(object):
     """
     Word2Vec creates vector representation of words in a text corpus.
@@ -354,7 +388,7 @@ class Word2Vec(object):
     >>> sentence = "a b " * 100 + "a c " * 10
     >>> localDoc = [sentence, sentence]
     >>> doc = sc.parallelize(localDoc).map(lambda line: line.split(" "))
-    >>> model = Word2Vec().setVectorSize(10).setSeed(42L).fit(doc)
+    >>> model = Word2Vec().setVectorSize(10).setSeed(42).fit(doc)
 
     >>> syms = model.findSynonyms("a", 2)
     >>> [s[0] for s in syms]
@@ -372,7 +406,8 @@ class Word2Vec(object):
         self.learningRate = 0.025
         self.numPartitions = 1
         self.numIterations = 1
-        self.seed = random.randint(0, sys.maxint)
+        self.seed = random.randint(0, sys.maxsize)
+        self.minCount = 5
 
     def setVectorSize(self, vectorSize):
         """
@@ -411,6 +446,14 @@ class Word2Vec(object):
         self.seed = seed
         return self
 
+    def setMinCount(self, minCount):
+        """
+        Sets minCount, the minimum number of times a token must appear
+        to be included in the word2vec model's vocabulary (default: 5).
+        """
+        self.minCount = minCount
+        return self
+
     def fit(self, data):
         """
         Computes the vector representation of each word in vocabulary.
@@ -422,7 +465,8 @@ class Word2Vec(object):
             raise TypeError("data should be an RDD of list of string")
         jmodel = callMLlibFunc("trainWord2Vec", data, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
-                               int(self.numIterations), long(self.seed))
+                               int(self.numIterations), int(self.seed),
+                               int(self.minCount))
         return Word2VecModel(jmodel)
 
 

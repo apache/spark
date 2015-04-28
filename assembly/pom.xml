@@ -213,16 +213,6 @@
         </plugins>
       </build>
     </profile>
-    <profile>
-      <id>kinesis-asl</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.httpcomponents</groupId>
-          <artifactId>httpclient</artifactId>
-          <version>${commons.httpclient.version}</version>
-        </dependency>
-      </dependencies>
-    </profile>
 
     <!-- Profiles that disable inclusion of certain dependencies. -->
     <profile>

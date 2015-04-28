@@ -211,6 +211,16 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.mesosExecutor.cores</code></td>
+  <td>1.0</td>
+  <td>
+    (Fine-grained mode only) Number of cores to give each Mesos executor. This does not
+    include the cores used to run the Spark tasks. In other words, even if no Spark task
+    is being run, each Mesos executor will occupy the number of cores configured here.
+    The value can be a floating point number.
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.executor.home</code></td>
   <td>driver side <code>SPARK_HOME</code></td>
   <td>

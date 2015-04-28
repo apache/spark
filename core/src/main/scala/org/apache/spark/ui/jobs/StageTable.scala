@@ -73,20 +73,21 @@ private[ui] class StageTableBase(
   }
 
   private def makeDescription(s: StageInfo): Seq[Node] = {
-    // scalastyle:off
-    val killLink = if (killEnabled) {
-      val killLinkUri = "%s/stages/stage/kill?id=%s&terminate=true"
-        .format(UIUtils.prependBaseUri(basePath), s.stageId)
-      val confirm = "return window.confirm('Are you sure you want to kill stage %s ?');"
-        .format(s.stageId)
-      <span class="kill-link">
-        (<a href={killLinkUri} onclick={confirm}>kill</a>)
-      </span>
-    }
-    // scalastyle:on
+    val basePathUri = UIUtils.prependBaseUri(basePath)
 
-    val nameLinkUri ="%s/stages/stage?id=%s&attempt=%s"
-      .format(UIUtils.prependBaseUri(basePath), s.stageId, s.attemptId)
+    val killLink = if (killEnabled) {
+      val killLinkUri = s"$basePathUri/stages/stage/kill/"
+      val confirm =
+        s"if (window.confirm('Are you sure you want to kill stage ${s.stageId} ?')) " +
+        "{ this.parentNode.submit(); return true; } else { return false; }"
+      <form action={killLinkUri} method="POST" style="display:inline">
+        <input type="hidden" name="id" value={s.stageId.toString}/>
+        <input type="hidden" name="terminate" value="true"/>
+        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
+      </form>
+    }
+
+    val nameLinkUri = s"$basePathUri/stages/stage?id=${s.stageId}&attempt=${s.attemptId}"
     val nameLink = <a href={nameLinkUri}>{s.name}</a>
 
     val cachedRddInfos = s.rddInfos.filter(_.numCachedPartitions > 0)
@@ -98,11 +99,9 @@ private[ui] class StageTableBase(
       <div class="stage-details collapsed">
         {if (cachedRddInfos.nonEmpty) {
           Text("RDD: ") ++
-          // scalastyle:off
           cachedRddInfos.map { i =>
-            <a href={"%s/storage/rdd?id=%d".format(UIUtils.prependBaseUri(basePath), i.id)}>{i.name}</a>
+            <a href={s"$basePathUri/storage/rdd?id=${i.id}"}>{i.name}</a>
           }
-          // scalastyle:on
         }}
         <pre>{s.details}</pre>
       </div>

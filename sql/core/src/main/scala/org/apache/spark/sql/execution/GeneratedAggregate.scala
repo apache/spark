@@ -68,6 +68,8 @@ case class GeneratedAggregate(
       a.collect { case agg: AggregateExpression => agg}
     }
 
+    // If you add any new function support, please add tests in org.apache.spark.sql.SQLQuerySuite
+    // (in test "aggregation with codegen").
     val computeFunctions = aggregatesToCompute.map {
       case c @ Count(expr) =>
         // If we're evaluating UnscaledValue(x), we can do Count on x directly, since its
@@ -93,13 +95,16 @@ case class GeneratedAggregate(
           }
 
         val currentSum = AttributeReference("currentSum", calcType, nullable = true)()
-        val initialValue = Literal(null, calcType)
+        val initialValue = Literal.create(null, calcType)
 
-        // Coalasce avoids double calculation...
+        // Coalesce avoids double calculation...
         // but really, common sub expression elimination would be better....
         val zero = Cast(Literal(0), calcType)
         val updateFunction = Coalesce(
-          Add(Coalesce(currentSum :: zero :: Nil), Cast(expr, calcType)) :: currentSum :: Nil)
+          Add(
+            Coalesce(currentSum :: zero :: Nil),
+            Cast(expr, calcType)
+          ) :: currentSum :: zero :: Nil)
         val result =
           expr.dataType match {
             case DecimalType.Fixed(_, _) =>
@@ -109,8 +114,8 @@ case class GeneratedAggregate(
 
         AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
 
-      case a @ Average(expr) =>
-        val calcType =
+      case cs @ CombineSum(expr) =>
+        val calcType = expr.dataType
           expr.dataType match {
             case DecimalType.Fixed(_, _) =>
               DecimalType.Unlimited
@@ -118,45 +123,39 @@ case class GeneratedAggregate(
               expr.dataType
           }
 
-        val currentCount = AttributeReference("currentCount", LongType, nullable = false)()
-        val currentSum = AttributeReference("currentSum", calcType, nullable = false)()
-        val initialCount = Literal(0L)
-        val initialSum = Cast(Literal(0L), calcType)
+        val currentSum = AttributeReference("currentSum", calcType, nullable = true)()
+        val initialValue = Literal.create(null, calcType)
 
+        // Coalasce avoids double calculation...
+        // but really, common sub expression elimination would be better....
+        val zero = Cast(Literal(0), calcType)
         // If we're evaluating UnscaledValue(x), we can do Count on x directly, since its
         // UnscaledValue will be null if and only if x is null; helps with Average on decimals
-        val toCount = expr match {
+        val actualExpr = expr match {
           case UnscaledValue(e) => e
           case _ => expr
         }
-
-        val updateCount = If(IsNotNull(toCount), Add(currentCount, Literal(1L)), currentCount)
-        val updateSum = Coalesce(Add(Cast(expr, calcType), currentSum) :: currentSum :: Nil)
-
+        // partial sum result can be null only when no input rows present 
+        val updateFunction = If(
+          IsNotNull(actualExpr),
+          Coalesce(
+            Add(
+              Coalesce(currentSum :: zero :: Nil), 
+              Cast(expr, calcType)) :: currentSum :: zero :: Nil),
+          currentSum)
+          
         val result =
           expr.dataType match {
             case DecimalType.Fixed(_, _) =>
-              If(EqualTo(currentCount, Literal(0L)),
-                Literal(null, a.dataType),
-                Cast(Divide(
-                  Cast(currentSum, DecimalType.Unlimited),
-                  Cast(currentCount, DecimalType.Unlimited)), a.dataType))
-            case _ =>
-              If(EqualTo(currentCount, Literal(0L)),
-                Literal(null, a.dataType),
-                Divide(Cast(currentSum, a.dataType), Cast(currentCount, a.dataType)))
+              Cast(currentSum, cs.dataType)
+            case _ => currentSum
           }
 
-        AggregateEvaluation(
-          currentCount :: currentSum :: Nil,
-          initialCount :: initialSum :: Nil,
-          updateCount :: updateSum :: Nil,
-          result
-        )
-
+        AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
+        
       case m @ Max(expr) =>
         val currentMax = AttributeReference("currentMax", expr.dataType, nullable = true)()
-        val initialValue = Literal(null, expr.dataType)
+        val initialValue = Literal.create(null, expr.dataType)
         val updateMax = MaxOf(currentMax, expr)
 
         AggregateEvaluation(
@@ -165,8 +164,20 @@ case class GeneratedAggregate(
           updateMax :: Nil,
           currentMax)
 
+      case m @ Min(expr) =>
+        val currentMin = AttributeReference("currentMin", expr.dataType, nullable = true)()
+        val initialValue = Literal.create(null, expr.dataType)
+        val updateMin = MinOf(currentMin, expr)
+
+        AggregateEvaluation(
+          currentMin :: Nil,
+          initialValue :: Nil,
+          updateMin :: Nil,
+          currentMin)
+
       case CollectHashSet(Seq(expr)) =>
-        val set = AttributeReference("hashSet", ArrayType(expr.dataType), nullable = false)()
+        val set =
+          AttributeReference("hashSet", new OpenHashSetUDT(expr.dataType), nullable = false)()
         val initialValue = NewSet(expr.dataType)
         val addToSet = AddItemToSet(expr, set)
 
@@ -177,9 +188,10 @@ case class GeneratedAggregate(
           set)
 
       case CombineSetsAndCount(inputSet) =>
-        val ArrayType(inputType, _) = inputSet.dataType
-        val set = AttributeReference("hashSet", inputSet.dataType, nullable = false)()
-        val initialValue = NewSet(inputType)
+        val elementType = inputSet.dataType.asInstanceOf[OpenHashSetUDT].elementType
+        val set =
+          AttributeReference("hashSet", new OpenHashSetUDT(elementType), nullable = false)()
+        val initialValue = NewSet(elementType)
         val collectSets = CombineSets(set, inputSet)
 
         AggregateEvaluation(
@@ -187,6 +199,8 @@ case class GeneratedAggregate(
           initialValue :: Nil,
           collectSets :: Nil,
           CountSet(set))
+
+      case o => sys.error(s"$o can't be codegened.")
     }
 
     val computationSchema = computeFunctions.flatMap(_.schema)

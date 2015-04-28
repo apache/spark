@@ -23,6 +23,7 @@ import java.util.{Set => JavaSet}
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
+import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.RegexSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -153,8 +154,13 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   val describedTable = "DESCRIBE (\\w+)".r
 
+  val vs = new VariableSubstitution()
+
+  // we should substitute variables in hql to pass the text to parseSql() as a parameter.
+  // Hive parser need substituted text. HiveContext.sql() does this but return a DataFrame,
+  // while we need a logicalPlan so we cannot reuse that.
   protected[hive] class HiveQLQueryExecution(hql: String)
-    extends this.QueryExecution(HiveQl.parseSql(hql)) {
+    extends this.QueryExecution(HiveQl.parseSql(vs.substitute(hiveconf, hql))) {
     def hiveExec(): Seq[String] = runSqlHive(hql)
     override def toString: String = hql + "\n" + super.toString
   }
@@ -179,7 +185,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)
       // Proceed with analysis.
-      analyzer(logical)
+      analyzer.execute(logical)
     }
   }
 
@@ -256,12 +262,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |WITH SERDEPROPERTIES ('field.delim'='\\t')
        """.stripMargin.cmd,
       "INSERT OVERWRITE TABLE serdeins SELECT * FROM src".cmd),
-    TestTable("sales",
-      s"""CREATE TABLE IF NOT EXISTS sales (key STRING, value INT)
-         |ROW FORMAT SERDE '${classOf[RegexSerDe].getCanonicalName}'
-         |WITH SERDEPROPERTIES ("input.regex" = "([^ ]*)\t([^ ]*)")
-       """.stripMargin.cmd,
-      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/sales.txt")}' INTO TABLE sales".cmd),
     TestTable("episodes",
       s"""CREATE TABLE episodes (title STRING, air_date STRING, doctor INT)
          |ROW FORMAT SERDE '${classOf[AvroSerDe].getCanonicalName}'

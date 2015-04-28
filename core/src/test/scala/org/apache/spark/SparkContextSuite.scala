@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 import com.google.common.base.Charsets._
 import com.google.common.io.Files
@@ -25,8 +26,10 @@ import com.google.common.io.Files
 import org.scalatest.FunSuite
 
 import org.apache.hadoop.io.BytesWritable
-
 import org.apache.spark.util.Utils
+
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 
 class SparkContextSuite extends FunSuite with LocalSparkContext {
 
@@ -64,6 +67,26 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("Test getOrCreate") {
+    var sc2: SparkContext = null
+    SparkContext.clearActiveContext()
+    val conf = new SparkConf().setAppName("test").setMaster("local")
+    
+    sc = SparkContext.getOrCreate(conf)
+    
+    assert(sc.getConf.get("spark.app.name").equals("test"))
+    sc2 = SparkContext.getOrCreate(new SparkConf().setAppName("test2").setMaster("local"))
+    assert(sc2.getConf.get("spark.app.name").equals("test"))
+    assert(sc === sc2)
+    assert(sc eq sc2)
+    
+    // Try creating second context to confirm that it's still possible, if desired
+    sc2 = new SparkContext(new SparkConf().setAppName("test3").setMaster("local")
+        .set("spark.driver.allowMultipleContexts", "true"))
+    
+    sc2.stop()
+  }
+  
   test("BytesWritable implicit conversion is correct") {
     // Regression test for SPARK-3121
     val bytesWritable = new BytesWritable()
@@ -111,11 +134,13 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
 
         if (length1 != gotten1.length()) {
           throw new SparkException(
-            s"file has different length $length1 than added file ${gotten1.length()} : " + absolutePath1)
+            s"file has different length $length1 than added file ${gotten1.length()} : " +
+              absolutePath1)
         }
         if (length2 != gotten2.length()) {
           throw new SparkException(
-            s"file has different length $length2 than added file ${gotten2.length()} : " + absolutePath2)
+            s"file has different length $length2 than added file ${gotten2.length()} : " +
+              absolutePath2)
         }
 
         if (absolutePath1 == gotten1.getAbsolutePath) {
@@ -169,6 +194,21 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
       intercept[SparkException] {
         sc.addFile(dir.getAbsolutePath)
       }
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
+    try {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      val future = sc.parallelize(Seq(0)).foreachAsync(_ => {Thread.sleep(1000L)})
+      sc.cancelJobGroup("nonExistGroupId")
+      Await.ready(future, Duration(2, TimeUnit.SECONDS))
+
+      // In SPARK-6414, sc.cancelJobGroup will cause NullPointerException and cause
+      // SparkContext to shutdown, so the following assertion will fail.
+      assert(sc.parallelize(1 to 10).count() == 10L)
     } finally {
       sc.stop()
     }

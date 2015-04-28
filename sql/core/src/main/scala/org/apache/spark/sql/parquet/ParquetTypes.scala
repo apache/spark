@@ -48,8 +48,10 @@ private[parquet] case class ParquetTypeInfo(
   length: Option[Int] = None)
 
 private[parquet] object ParquetTypesConverter extends Logging {
-  def isPrimitiveType(ctype: DataType): Boolean =
-    classOf[PrimitiveType] isAssignableFrom ctype.getClass
+  def isPrimitiveType(ctype: DataType): Boolean = ctype match {
+    case _: NumericType | BooleanType | StringType | BinaryType => true
+    case _: DataType => false
+  }
 
   def toPrimitiveDataType(
       parquetType: ParquetPrimitiveType,
@@ -390,6 +392,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
 
   def convertFromAttributes(attributes: Seq[Attribute],
                             toThriftSchemaNames: Boolean = false): MessageType = {
+    checkSpecialCharacters(attributes)
     val fields = attributes.map(
       attribute =>
         fromDataType(attribute.dataType, attribute.name, attribute.nullable,
@@ -404,7 +407,20 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }
   }
 
+  private def checkSpecialCharacters(schema: Seq[Attribute]) = {
+    // ,;{}()\n\t= and space character are special characters in Parquet schema
+    schema.map(_.name).foreach { name =>
+      if (name.matches(".*[ ,;{}()\n\t=].*")) {
+        sys.error(
+          s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\n\t=".
+             |Please use alias to rename it.
+           """.stripMargin.split("\n").mkString(" "))
+      }
+    }
+  }
+
   def convertToString(schema: Seq[Attribute]): String = {
+    checkSpecialCharacters(schema)
     StructType.fromAttributes(schema).json
   }
 

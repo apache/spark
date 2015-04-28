@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.jdbc
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.types.StructType
+import java.sql.DriverManager
+import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
-import java.sql.DriverManager
 
 import org.apache.spark.Partition
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * Data corresponding to one partition of a JDBCRDD.
@@ -98,7 +100,7 @@ private[sql] class DefaultSource extends RelationProvider {
     val upperBound = parameters.getOrElse("upperBound", null)
     val numPartitions = parameters.getOrElse("numPartitions", null)
 
-    if (driver != null) Class.forName(driver)
+    if (driver != null) Utils.getContextOrSparkClassLoader.loadClass(driver)
 
     if (partitionColumn != null
         && (lowerBound == null || upperBound == null || numPartitions == null)) {
@@ -115,18 +117,23 @@ private[sql] class DefaultSource extends RelationProvider {
         numPartitions.toInt)
     }
     val parts = JDBCRelation.columnPartition(partitionInfo)
-    JDBCRelation(url, table, parts)(sqlContext)
+    val properties = new Properties() // Additional properties that we will pass to getConnection
+    parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
+    JDBCRelation(url, table, parts, properties)(sqlContext)
   }
 }
 
 private[sql] case class JDBCRelation(
     url: String,
     table: String,
-    parts: Array[Partition])(@transient val sqlContext: SQLContext)
+    parts: Array[Partition],
+    properties: Properties = new Properties())(@transient val sqlContext: SQLContext)
   extends BaseRelation
   with PrunedFilteredScan {
 
-  override val schema: StructType = JDBCRDD.resolveTable(url, table)
+  override val needConversion: Boolean = false
+
+  override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val driver: String = DriverManager.getDriver(url).getClass.getCanonicalName
@@ -135,6 +142,7 @@ private[sql] case class JDBCRelation(
       schema,
       driver,
       url,
+      properties,
       table,
       requiredColumns,
       filters,

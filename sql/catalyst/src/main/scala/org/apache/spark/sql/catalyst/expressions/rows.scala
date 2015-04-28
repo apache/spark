@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.{StructType, NativeType}
-
+import org.apache.spark.sql.types.{UTF8String, DataType, StructType, AtomicType}
 
 /**
  * An extended interface to [[Row]] that allows the values for each column to be updated.  Setting
@@ -37,6 +36,7 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
+  // TODO(davies): add setDate() and setDecimal()
 }
 
 /**
@@ -44,8 +44,8 @@ trait MutableRow extends Row {
  */
 object EmptyRow extends Row {
   override def apply(i: Int): Any = throw new UnsupportedOperationException
-  override def toSeq = Seq.empty
-  override def length = 0
+  override def toSeq: Seq[Any] = Seq.empty
+  override def length: Int = 0
   override def isNullAt(i: Int): Boolean = throw new UnsupportedOperationException
   override def getInt(i: Int): Int = throw new UnsupportedOperationException
   override def getLong(i: Int): Long = throw new UnsupportedOperationException
@@ -56,7 +56,7 @@ object EmptyRow extends Row {
   override def getByte(i: Int): Byte = throw new UnsupportedOperationException
   override def getString(i: Int): String = throw new UnsupportedOperationException
   override def getAs[T](i: Int): T = throw new UnsupportedOperationException
-  def copy() = this
+  override def copy(): Row = this
 }
 
 /**
@@ -66,17 +66,17 @@ object EmptyRow extends Row {
  */
 class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   /** No-arg constructor for serialization. */
-  def this() = this(null)
+  protected def this() = this(null)
 
   def this(size: Int) = this(new Array[Any](size))
 
-  override def toSeq = values.toSeq
+  override def toSeq: Seq[Any] = values.toSeq
 
-  override def length = values.length
+  override def length: Int = values.length
 
-  override def apply(i: Int) = values(i)
+  override def apply(i: Int): Any = values(i)
 
-  override def isNullAt(i: Int) = values(i) == null
+  override def isNullAt(i: Int): Boolean = values(i) == null
 
   override def getInt(i: Int): Int = {
     if (values(i) == null) sys.error("Failed to check null bit for primitive int value.")
@@ -114,8 +114,14 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   }
 
   override def getString(i: Int): String = {
-    values(i).asInstanceOf[String]
+    values(i) match {
+      case null => null
+      case s: String => s
+      case utf8: UTF8String => utf8.toString
+    }
   }
+
+  // TODO(davies): add getDate and getDecimal
 
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {
@@ -167,16 +173,21 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
     case _ => false
   }
 
-  def copy() = this
+  override def copy(): Row = this
 }
 
 class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
   extends GenericRow(values) {
+
+  /** No-arg constructor for serialization. */
+  protected def this() = this(null, null)
+
+  override def fieldIndex(name: String): Int = schema.fieldIndex(name)
 }
 
 class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
   /** No-arg constructor for serialization. */
-  def this() = this(null)
+  protected def this() = this(null)
 
   def this(size: Int) = this(new Array[Any](size))
 
@@ -186,15 +197,14 @@ class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
   override def setFloat(ordinal: Int, value: Float): Unit = { values(ordinal) = value }
   override def setInt(ordinal: Int, value: Int): Unit = { values(ordinal) = value }
   override def setLong(ordinal: Int, value: Long): Unit = { values(ordinal) = value }
-  override def setString(ordinal: Int, value: String): Unit = { values(ordinal) = value }
-
+  override def setString(ordinal: Int, value: String) { values(ordinal) = UTF8String(value)}
   override def setNullAt(i: Int): Unit = { values(i) = null }
 
   override def setShort(ordinal: Int, value: Short): Unit = { values(ordinal) = value }
 
   override def update(ordinal: Int, value: Any): Unit = { values(ordinal) = value }
 
-  override def copy() = new GenericRow(values.clone())
+  override def copy(): Row = new GenericRow(values.clone())
 }
 
 
@@ -217,10 +227,11 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
         return if (order.direction == Ascending) 1 else -1
       } else {
         val comparison = order.dataType match {
-          case n: NativeType if order.direction == Ascending =>
+          case n: AtomicType if order.direction == Ascending =>
             n.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case n: NativeType if order.direction == Descending =>
+          case n: AtomicType if order.direction == Descending =>
             n.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
+          case other => sys.error(s"Type $other does not support ordered operations")
         }
         if (comparison != 0) return comparison
       }
@@ -228,4 +239,11 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
     }
     return 0
   }
+}
+
+object RowOrdering {
+  def forSchema(dataTypes: Seq[DataType]): RowOrdering =
+    new RowOrdering(dataTypes.zipWithIndex.map {
+      case(dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    })
 }

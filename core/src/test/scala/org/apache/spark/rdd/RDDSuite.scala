@@ -82,7 +82,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
   test("countApproxDistinct") {
 
-    def error(est: Long, size: Long) = math.abs(est - size) / size.toDouble
+    def error(est: Long, size: Long): Double = math.abs(est - size) / size.toDouble
 
     val size = 1000
     val uniformDistro = for (i <- 1 to 5000) yield i % size
@@ -99,8 +99,29 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(sc.union(Seq(nums, nums)).collect().toList === List(1, 2, 3, 4, 1, 2, 3, 4))
   }
 
+  test("SparkContext.union creates UnionRDD if at least one RDD has no partitioner") {
+    val rddWithPartitioner = sc.parallelize(Seq(1->true)).partitionBy(new HashPartitioner(1))
+    val rddWithNoPartitioner = sc.parallelize(Seq(2->true))
+    val unionRdd = sc.union(rddWithNoPartitioner, rddWithPartitioner)
+    assert(unionRdd.isInstanceOf[UnionRDD[_]])
+  }
+
+  test("SparkContext.union creates PartitionAwareUnionRDD if all RDDs have partitioners") {
+    val rddWithPartitioner = sc.parallelize(Seq(1->true)).partitionBy(new HashPartitioner(1))
+    val unionRdd = sc.union(rddWithPartitioner, rddWithPartitioner)
+    assert(unionRdd.isInstanceOf[PartitionerAwareUnionRDD[_]])
+  }
+
+  test("PartitionAwareUnionRDD raises exception if at least one RDD has no partitioner") {
+    val rddWithPartitioner = sc.parallelize(Seq(1->true)).partitionBy(new HashPartitioner(1))
+    val rddWithNoPartitioner = sc.parallelize(Seq(2->true))
+    intercept[IllegalArgumentException] {
+      new PartitionerAwareUnionRDD(sc, Seq(rddWithNoPartitioner, rddWithPartitioner))
+    }
+  }
+
   test("partitioner aware union") {
-    def makeRDDWithPartitioner(seq: Seq[Int]) = {
+    def makeRDDWithPartitioner(seq: Seq[Int]): RDD[Int] = {
       sc.makeRDD(seq, 1)
         .map(x => (x, null))
         .partitionBy(new HashPartitioner(2))
@@ -159,8 +180,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
   test("treeAggregate") {
     val rdd = sc.makeRDD(-1000 until 1000, 10)
-    def seqOp = (c: Long, x: Int) => c + x
-    def combOp = (c1: Long, c2: Long) => c1 + c2
+    def seqOp: (Long, Int) => Long = (c: Long, x: Int) => c + x
+    def combOp: (Long, Long) => Long = (c1: Long, c2: Long) => c1 + c2
     for (depth <- 1 until 10) {
       val sum = rdd.treeAggregate(0L)(seqOp, combOp, depth)
       assert(sum === -1000L)
@@ -204,7 +225,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(empty.collect().size === 0)
 
     val thrown = intercept[UnsupportedOperationException]{
-      empty.reduce(_+_)
+      empty.reduce(_ + _)
     }
     assert(thrown.getMessage.contains("empty"))
 
@@ -321,7 +342,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(list3.sorted === Array("a","b","c"), "Locality preferences are dropped")
 
     // RDD with locality preferences spread (non-randomly) over 6 machines, m0 through m5
-    val data = sc.makeRDD((1 to 9).map(i => (i, (i to (i+2)).map{ j => "m" + (j%6)})))
+    val data = sc.makeRDD((1 to 9).map(i => (i, (i to (i + 2)).map{ j => "m" + (j%6)})))
     val coalesced1 = data.coalesce(3)
     assert(coalesced1.collect().toList.sorted === (1 to 9).toList, "Data got *lost* in coalescing")
 
@@ -921,15 +942,17 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("task serialization exception should not hang scheduler") {
     class BadSerializable extends Serializable {
       @throws(classOf[IOException])
-      private def writeObject(out: ObjectOutputStream): Unit = throw new KryoException("Bad serialization")
+      private def writeObject(out: ObjectOutputStream): Unit =
+        throw new KryoException("Bad serialization")
 
       @throws(classOf[IOException])
       private def readObject(in: ObjectInputStream): Unit = {}
     }
-    // Note that in the original bug, SPARK-4349, that this verifies, the job would only hang if there were
-    // more threads in the Spark Context than there were number of objects in this sequence.
+    // Note that in the original bug, SPARK-4349, that this verifies, the job would only hang if
+    // there were more threads in the Spark Context than there were number of objects in this
+    // sequence.
     intercept[Throwable] {
-      sc.parallelize(Seq(new BadSerializable, new BadSerializable)).collect
+      sc.parallelize(Seq(new BadSerializable, new BadSerializable)).collect()
     }
     // Check that the context has not crashed
     sc.parallelize(1 to 100).map(x => x*2).collect
