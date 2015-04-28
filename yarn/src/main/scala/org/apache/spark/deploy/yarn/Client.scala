@@ -354,7 +354,7 @@ private[spark] class Client(
         val dir = new File(path)
         if (dir.isDirectory()) {
           dir.listFiles().foreach { file =>
-            if (!hadoopConfFiles.contains(file.getName())) {
+            if (file.isFile && !hadoopConfFiles.contains(file.getName())) {
               hadoopConfFiles(file.getName()) = file
             }
           }

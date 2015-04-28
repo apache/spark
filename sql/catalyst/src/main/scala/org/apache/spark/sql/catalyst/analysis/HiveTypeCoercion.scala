@@ -79,6 +79,7 @@ trait HiveTypeCoercion {
     CaseWhenCoercion ::
     Division ::
     PropagateTypes ::
+    ExpectedInputConversion ::
     Nil
 
   /**
@@ -643,4 +644,22 @@ trait HiveTypeCoercion {
     }
   }
 
+  /**
+   * Casts types according to the expected input types for Expressions that have the trait
+   * `ExpectsInputTypes`.
+   */
+  object ExpectedInputConversion extends Rule[LogicalPlan] {
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      case e: ExpectsInputTypes if e.children.map(_.dataType) != e.expectedChildTypes =>
+        val newC = (e.children, e.children.map(_.dataType), e.expectedChildTypes).zipped.map {
+          case (child, actual, expected) =>
+            if (actual == expected) child else Cast(child, expected)
+        }
+        e.withNewChildren(newC)
+    }
+  }
 }
