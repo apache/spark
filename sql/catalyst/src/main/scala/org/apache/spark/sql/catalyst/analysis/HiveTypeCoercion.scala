@@ -657,11 +657,7 @@ trait HiveTypeCoercion {
       case e: ExpectsInputTypes if e.children.map(_.dataType) != e.expectedChildTypes =>
         val newC = (e.children, e.children.map(_.dataType), e.expectedChildTypes).zipped.map {
           case (child, actual, expected) =>
-            if (actual == expected) {
-              child
-            } else {
-              Cast(child, expected)
-            }
+            if (actual == expected) child else Cast(child, expected)
         }
         e.withNewChildren(newC)
     }
