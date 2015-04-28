@@ -32,11 +32,13 @@ from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
 
 __all__ = ['countDistinct', 'approxCountDistinct', 'udf']
 
+
 def _function_obj(sc, is_math=False):
     if not is_math:
         return sc._jvm.functions
     else:
         return sc._jvm.mathfunctions
+
 
 def _create_function(name, doc="", is_math=False):
     """ Create a function for aggregator by name"""
@@ -73,12 +75,12 @@ _functions = {
 
 # math functions are found under another object therefore, they need to be handled separately
 _math_functions = {
-    'acos': 'Computes the cosine inverse of the given value; the returned angle is in the range' + \
+    'acos': 'Computes the cosine inverse of the given value; the returned angle is in the range' +
             '0.0 through pi.',
-    'asin': 'Computes the sine inverse of the given value; the returned angle is in the range' + \
+    'asin': 'Computes the sine inverse of the given value; the returned angle is in the range' +
             '-pi/2 through pi/2.',
     'atan': 'Computes the tangent inverse of the given value.',
-    'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' + \
+    'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
              'polar coordinates (r, theta).',
     'cbrt': 'Computes the cube-root of the given value.',
     'ceil': 'Computes the ceiling of the given value.',
@@ -92,16 +94,16 @@ _math_functions = {
     'log10': 'Computes the logarithm of the given value in Base 10.',
     'log1p': 'Computes the natural logarithm of the given value plus one.',
     'pow': 'Returns the value of the first argument raised to the power of the second argument.',
-    'rint': 'Returns the double value that is closest in value to the argument and' + \
+    'rint': 'Returns the double value that is closest in value to the argument and' +
             ' is equal to a mathematical integer.',
     'signum': 'Computes the signum of the given value.',
     'sin': 'Computes the sine of the given value.',
     'sinh': 'Computes the hyperbolic sine of the given value.',
     'tan': 'Computes the tangent of the given value.',
     'tanh': 'Computes the hyperbolic tangent of the given value.',
-    'toDeg': 'Converts an angle measured in radians to an approximately equivalent angle ' + \
+    'toDeg': 'Converts an angle measured in radians to an approximately equivalent angle ' +
              'measured in degrees.',
-    'toRad': 'Converts an angle measured in degrees to an approximately equivalent angle ' + \
+    'toRad': 'Converts an angle measured in degrees to an approximately equivalent angle ' +
              'measured in radians.'
 }
 
