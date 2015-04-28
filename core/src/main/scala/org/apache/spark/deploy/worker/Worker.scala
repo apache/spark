@@ -44,7 +44,7 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
   */
 private[worker] class Worker(
     host: String,
-    port: String,
+    port: Int,
     webUiPort: String,
     cores: Int,
     memory: Int,
@@ -196,8 +196,7 @@ private[worker] class Worker(
     for (masterAkkaUrl <- masterAkkaUrls) {
       logInfo("Connecting to master " + masterAkkaUrl + "...")
       val actor = context.actorSelection(masterAkkaUrl)
-      actor ! RegisterWorker(workerId, host, port.toInt, cores, memory,
-        webUi.boundPort, publicAddress)
+      actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
     }
   }
 
@@ -236,7 +235,7 @@ private[worker] class Worker(
          */
         if (master != null) {
           master ! RegisterWorker(
-            workerId, host, port.toInt, cores, memory, webUi.boundPort, publicAddress)
+            workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
         } else {
           // We are retrying the initial registration
           tryRegisterAllMasters()
@@ -482,7 +481,7 @@ private[worker] class Worker(
       masterDisconnected()
 
     case RequestWorkerState =>
-      sender ! WorkerStateResponse(host, port.toInt, workerId, executors.values.toList,
+      sender ! WorkerStateResponse(host, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, drivers.values.toList,
         finishedDrivers.values.toList, activeMasterUrl, cores, memory,
         coresUsed, memoryUsed, activeMasterWebUiUrl)
