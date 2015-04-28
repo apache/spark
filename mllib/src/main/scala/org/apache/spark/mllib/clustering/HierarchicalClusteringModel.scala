@@ -100,6 +100,37 @@ class HierarchicalClusteringModel(val tree: ClusterTree)
   }
 
   def WSSSE(data: JavaRDD[Vector]): Double = this.WSSSE(data.rdd)
+
+  def toAdjacencyList(): Array[(Int, Int, Double)] = this.tree.toAdjacencyList()
+
+  /** Since Java doesn't support tuple, we must support the data structure for java and py4j. */
+  def toJavaAdjacencyList(): java.util.ArrayList[java.util.ArrayList[java.lang.Double]] = {
+    var javaList = new java.util.ArrayList[java.util.ArrayList[java.lang.Double]]();
+    this.tree.toAdjacencyList().foreach { x =>
+      val edge = new java.util.ArrayList[java.lang.Double]()
+      edge.add(x._1)
+      edge.add(x._2)
+      edge.add(x._3)
+      javaList.add(edge)
+    }
+    javaList
+  }
+
+  def toLinkageMatrix(): Array[(Int, Int, Double, Int)] = this.tree.toLinkageMatrix()
+
+  /** Since Java doesn't support tuple, we must support the data structure for java and py4j. */
+  def toJavaLinkageMatrix(): java.util.ArrayList[java.util.ArrayList[java.lang.Double]] = {
+    val javaList = new java.util.ArrayList[java.util.ArrayList[java.lang.Double]]()
+    this.tree.toLinkageMatrix().foreach {x =>
+      val row = new java.util.ArrayList[java.lang.Double]()
+      row.add(x._1)
+      row.add(x._2)
+      row.add(x._3)
+      row.add(x._4)
+      javaList.add(row)
+    }
+    javaList
+  }
 }
 
 

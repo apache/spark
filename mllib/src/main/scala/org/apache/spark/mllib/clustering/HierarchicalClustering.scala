@@ -571,6 +571,58 @@ class ClusterTree private (
     }
   }
 
+  /**
+   * Converts to a adjacency list
+   *
+   * @return List[(fromNodeId, toNodeId, distance)]
+   */
+  def toAdjacencyList(): Array[(Int, Int, Double)] = {
+    val nodes = toArray()
+
+    var adjacencyList = Array.empty[(Int, Int, Double)]
+    nodes.foreach { parent =>
+      if (parent.children.size > 1) {
+        val parentIndex = nodes.indexOf(parent)
+        parent.children.foreach { child =>
+          val childIndex = nodes.indexOf(child)
+          adjacencyList = adjacencyList :+(parentIndex, childIndex, parent.localHeight)
+        }
+      }
+    }
+    adjacencyList
+  }
+
+  /**
+   * Converts to a linkage matrix
+   * Returned data format is fit for scipy's dendrogram function
+   * SEE ALSO: scipy.cluster.hierarchy.dendrogram
+   *
+   * @return List[(node1, node2, distance, tree size)]
+   */
+  def toLinkageMatrix(): Array[(Int, Int, Double, Int)] = {
+    val nodes = toArray().sortWith { case (a, b) => a.getHeight < b.getHeight}
+    val leaves = nodes.filter(_.isLeaf)
+    val notLeaves = nodes.filterNot(_.isLeaf).filter(_.getChildren.size > 1)
+    val clusters = leaves ++ notLeaves
+    val treeMap = clusters.zipWithIndex.map { case (tree, idx) => (tree -> idx)}.toMap
+
+    // If a node only has one-child, the child is regarded as the cluster of the child.
+    // Cluster A has cluster B and Cluster B. B is a leaf. C only has cluster D.
+    // ==> A merge list is (B, D), not (B, C).
+    def getIndex(map: Map[ClusterTree, Int], tree: ClusterTree): Int = {
+      tree.children.size match {
+        case 1 => getIndex(map, tree.children(0))
+        case _ => map(tree)
+      }
+    }
+    clusters.filterNot(_.isLeaf).map { tree =>
+      (getIndex(treeMap, tree.children(0)),
+          getIndex(treeMap, tree.children(1)),
+          tree.getHeight,
+          tree.toArray().filter(_.isLeaf).size)
+    }
+  }
+
   private[mllib]
   def setLocalHeight(height: Double) = (this.localHeight = height)
 }

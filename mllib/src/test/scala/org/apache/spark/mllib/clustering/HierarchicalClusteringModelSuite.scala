@@ -61,6 +61,28 @@ class HierarchicalClusteringModelSuite
 
     // compute WSSSE
     assert(model.WSSSE(data) === 0.0)
+
+    // adjacency list
+    val adjacencyList = model.toAdjacencyList()
+        .map(x => (x._1, x._2, math.round(10E3 * x._3) / 10E3))
+    assert(adjacencyList.size === 8)
+    assert(adjacencyList(0) === (0, 1, 2.5981))
+    assert(adjacencyList(1) === (0, 6, 2.5981))
+    assert(adjacencyList(2) === (1, 2, 1.7321))
+    assert(adjacencyList(3) === (1, 5, 1.7321))
+    assert(adjacencyList(4) === (2, 3, 0.866))
+    assert(adjacencyList(5) === (2, 4, 0.866))
+    assert(adjacencyList(6) === (6, 7, 0.866))
+    assert(adjacencyList(7) === (6, 8, 0.866))
+
+    // linkage matrix
+    val linkageMatrix = model.toLinkageMatrix()
+        .map(x => (x._1, x._2, math.round(10E3 * x._3) / 10E3, x._4))
+    assert(linkageMatrix.size === 4)
+    assert(linkageMatrix(0) === (0, 1, 0.866, 2))
+    assert(linkageMatrix(1) === (3, 4, 0.866, 2))
+    assert(linkageMatrix(2) === (5, 2, 2.5981, 3))
+    assert(linkageMatrix(3) === (7, 6, 5.1962, 5))
   }
 
   test("clustering sparse vectors") {
@@ -99,6 +121,28 @@ class HierarchicalClusteringModelSuite
 
     // compute WSSSE
     assert(model.WSSSE(data) === 0.0)
+
+    // adjacency list
+    val adjacencyList = model.toAdjacencyList()
+        .map(x => (x._1, x._2, math.round(10E3 * x._3) / 10E3))
+    assert(adjacencyList.size === 8)
+    assert(adjacencyList(0) === (0, 1, 1.5652))
+    assert(adjacencyList(1) === (0, 6, 1.5652))
+    assert(adjacencyList(2) === (1, 2, 1.3744))
+    assert(adjacencyList(3) === (1, 5, 1.3744))
+    assert(adjacencyList(4) === (2, 3, 0.5))
+    assert(adjacencyList(5) === (2, 4, 0.5))
+    assert(adjacencyList(6) === (6, 7, 2.5))
+    assert(adjacencyList(7) === (6, 8, 2.5))
+
+    // linkage matrix
+    val linkageMatrix = model.toLinkageMatrix()
+        .map(x => (x._1, x._2, math.round(10E3 * x._3) / 10E3, x._4))
+    assert(linkageMatrix.size === 4)
+    assert(linkageMatrix(0) === (0, 1, 0.5, 2))
+    assert(linkageMatrix(1) === (5, 2, 1.8744, 3))
+    assert(linkageMatrix(2) === (3, 4, 2.5, 2))
+    assert(linkageMatrix(3) === (6, 7, 4.0652, 5))
   }
 
   test("clustering should be done correctly") {
