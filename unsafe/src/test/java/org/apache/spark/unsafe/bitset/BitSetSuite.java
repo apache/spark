@@ -23,7 +23,7 @@ import org.junit.Test;
 
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
-public class TestBitSet {
+public class BitSetSuite {
 
   private static BitSet createBitSet(int capacity) {
     assert capacity % 64 == 0;

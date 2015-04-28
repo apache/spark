@@ -28,7 +28,7 @@ import org.junit.Test;
 /**
  * Test file based on Guava's Murmur3Hash32Test.
  */
-public class TestMurmur3_x86_32 {
+public class Murmur3_x86_32Suite {
 
   private static final Murmur3_x86_32 hasher = new Murmur3_x86_32(0);
 

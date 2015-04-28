@@ -33,7 +33,7 @@ import org.apache.spark.unsafe.memory.MemoryLocation;
 import org.apache.spark.unsafe.memory.MemoryManager;
 import static org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET;
 
-public abstract class AbstractTestBytesToBytesMap {
+public abstract class AbstractBytesToBytesMapSuite {
 
   private final Random rand = new Random(42);
 

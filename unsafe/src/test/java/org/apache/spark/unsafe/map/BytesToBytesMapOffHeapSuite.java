@@ -19,7 +19,7 @@ package org.apache.spark.unsafe.map;
 
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 
-public class TestBytesToBytesMapOffHeap extends AbstractTestBytesToBytesMap {
+public class BytesToBytesMapOffHeapSuite extends AbstractBytesToBytesMapSuite {
 
   @Override
   protected MemoryAllocator getMemoryAllocator() {
