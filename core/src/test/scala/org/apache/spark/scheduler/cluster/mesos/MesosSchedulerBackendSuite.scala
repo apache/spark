@@ -82,7 +82,8 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Mo
       .set("spark.mesos.executor.docker.portmaps", "80:8080,53:53:tcp")
      
     val listenerBus = mock[LiveListenerBus]
-    listenerBus.post(SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+    val execInfo = new ExecutorInfo("host1", 2, Map.empty)
+    listenerBus.post(SparkListenerExecutorAdded(anyLong, "s1", execInfo))
                          
     val sc = mock[SparkContext]
     when(sc.executorMemory).thenReturn(100)
