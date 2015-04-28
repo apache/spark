@@ -26,11 +26,9 @@ import org.apache.spark.util.Utils
 // scalastyle:off
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param regParam.
+ * (private[ml]) Trait for shared param regParam.
  */
-@DeveloperApi
-trait HasRegParam extends Params {
+private[ml] trait HasRegParam extends Params {
 
   /**
    * Param for regularization parameter (>= 0).
@@ -43,11 +41,9 @@ trait HasRegParam extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param maxIter.
+ * (private[ml]) Trait for shared param maxIter.
  */
-@DeveloperApi
-trait HasMaxIter extends Params {
+private[ml] trait HasMaxIter extends Params {
 
   /**
    * Param for max number of iterations (>= 0).
@@ -60,11 +56,9 @@ trait HasMaxIter extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param featuresCol (default: "features").
+ * (private[ml]) Trait for shared param featuresCol (default: "features").
  */
-@DeveloperApi
-trait HasFeaturesCol extends Params {
+private[ml] trait HasFeaturesCol extends Params {
 
   /**
    * Param for features column name.
@@ -79,11 +73,9 @@ trait HasFeaturesCol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param labelCol (default: "label").
+ * (private[ml]) Trait for shared param labelCol (default: "label").
  */
-@DeveloperApi
-trait HasLabelCol extends Params {
+private[ml] trait HasLabelCol extends Params {
 
   /**
    * Param for label column name.
@@ -98,11 +90,9 @@ trait HasLabelCol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param predictionCol (default: "prediction").
+ * (private[ml]) Trait for shared param predictionCol (default: "prediction").
  */
-@DeveloperApi
-trait HasPredictionCol extends Params {
+private[ml] trait HasPredictionCol extends Params {
 
   /**
    * Param for prediction column name.
@@ -117,11 +107,9 @@ trait HasPredictionCol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param rawPredictionCol (default: "rawPrediction").
+ * (private[ml]) Trait for shared param rawPredictionCol (default: "rawPrediction").
  */
-@DeveloperApi
-trait HasRawPredictionCol extends Params {
+private[ml] trait HasRawPredictionCol extends Params {
 
   /**
    * Param for raw prediction (a.k.a. confidence) column name.
@@ -136,11 +124,9 @@ trait HasRawPredictionCol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param probabilityCol (default: "probability").
+ * (private[ml]) Trait for shared param probabilityCol (default: "probability").
  */
-@DeveloperApi
-trait HasProbabilityCol extends Params {
+private[ml] trait HasProbabilityCol extends Params {
 
   /**
    * Param for column name for predicted class conditional probabilities.
@@ -155,11 +141,9 @@ trait HasProbabilityCol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param threshold.
+ * (private[ml]) Trait for shared param threshold.
  */
-@DeveloperApi
-trait HasThreshold extends Params {
+private[ml] trait HasThreshold extends Params {
 
   /**
    * Param for threshold in binary classification prediction, in range [0, 1].
@@ -172,11 +156,9 @@ trait HasThreshold extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param inputCol.
+ * (private[ml]) Trait for shared param inputCol.
  */
-@DeveloperApi
-trait HasInputCol extends Params {
+private[ml] trait HasInputCol extends Params {
 
   /**
    * Param for input column name.
@@ -189,11 +171,9 @@ trait HasInputCol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param inputCols.
+ * (private[ml]) Trait for shared param inputCols.
  */
-@DeveloperApi
-trait HasInputCols extends Params {
+private[ml] trait HasInputCols extends Params {
 
   /**
    * Param for input column names.
@@ -206,11 +186,9 @@ trait HasInputCols extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param outputCol.
+ * (private[ml]) Trait for shared param outputCol.
  */
-@DeveloperApi
-trait HasOutputCol extends Params {
+private[ml] trait HasOutputCol extends Params {
 
   /**
    * Param for output column name.
@@ -223,11 +201,9 @@ trait HasOutputCol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param checkpointInterval.
+ * (private[ml]) Trait for shared param checkpointInterval.
  */
-@DeveloperApi
-trait HasCheckpointInterval extends Params {
+private[ml] trait HasCheckpointInterval extends Params {
 
   /**
    * Param for checkpoint interval (>= 1).
@@ -240,11 +216,9 @@ trait HasCheckpointInterval extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param fitIntercept (default: true).
+ * (private[ml]) Trait for shared param fitIntercept (default: true).
  */
-@DeveloperApi
-trait HasFitIntercept extends Params {
+private[ml] trait HasFitIntercept extends Params {
 
   /**
    * Param for whether to fit an intercept term.
@@ -259,11 +233,9 @@ trait HasFitIntercept extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param seed (default: Utils.random.nextLong()).
+ * (private[ml]) Trait for shared param seed (default: Utils.random.nextLong()).
  */
-@DeveloperApi
-trait HasSeed extends Params {
+private[ml] trait HasSeed extends Params {
 
   /**
    * Param for random seed.
