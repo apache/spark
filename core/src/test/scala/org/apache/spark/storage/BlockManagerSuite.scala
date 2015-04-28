@@ -999,36 +999,33 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     assert(!store.memoryStore.contains(rdd(1, 0)), "rdd_1_0 was in store")
   }
 
-  test("reserve/release unroll memory") {
+  test("increase/decrease unroll memory") {
     store = makeBlockManager(12000)
     val memoryStore = store.memoryStore
     assert(memoryStore.currentUnrollMemory === 0)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 0)
 
-    // Reserve
-    memoryStore.reserveUnrollMemoryForThisThread(100)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 100)
-    memoryStore.reserveUnrollMemoryForThisThread(200)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 300)
-    memoryStore.reserveUnrollMemoryForThisThread(500)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 800)
-    memoryStore.reserveUnrollMemoryForThisThread(1000000)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 800) // not granted
-    // Release
-    memoryStore.releaseUnrollMemoryForThisThread(100)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 700)
-    memoryStore.releaseUnrollMemoryForThisThread(100)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 600)
-    // Reserve again
-    memoryStore.reserveUnrollMemoryForThisThread(4400)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 5000)
-    memoryStore.reserveUnrollMemoryForThisThread(20000)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 5000) // not granted
-    // Release again
-    memoryStore.releaseUnrollMemoryForThisThread(1000)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 4000)
-    memoryStore.releaseUnrollMemoryForThisThread() // release all
-    assert(memoryStore.currentUnrollMemoryForThisThread === 0)
+    // Increase
+    memoryStore.increaseUnrollMemoryForThisThread(100)
+    assert(memoryStore.currentUnrollMemory === 100)
+    memoryStore.increaseUnrollMemoryForThisThread(200)
+    assert(memoryStore.currentUnrollMemory === 300)
+    memoryStore.increaseUnrollMemoryForThisThread(500)
+    assert(memoryStore.currentUnrollMemory === 800)
+    // Decrease
+    memoryStore.decreaseUnrollMemoryForThisThread(100)
+    assert(memoryStore.currentUnrollMemory === 700)
+    memoryStore.decreaseUnrollMemoryForThisThread(100)
+    assert(memoryStore.currentUnrollMemory === 600)
+    memoryStore.decreaseUnrollMemoryForThisThread(700)
+    assert(memoryStore.currentUnrollMemory === 0) // decrease too much
+    // Increase again
+    memoryStore.increaseUnrollMemoryForThisThread(4400)
+    assert(memoryStore.currentUnrollMemory === 4400)
+    // Decrease again
+    memoryStore.decreaseUnrollMemoryForThisThread(1000)
+    assert(memoryStore.currentUnrollMemory === 3400)
+    memoryStore.removeUnrollMemoryForThisThread() // release all
+    assert(memoryStore.currentUnrollMemory === 0)
   }
 
   /**
@@ -1056,37 +1053,47 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
   test("safely unroll blocks") {
     store = makeBlockManager(12000)
     val smallList = List.fill(40)(new Array[Byte](100))
-    val bigList = List.fill(40)(new Array[Byte](1000))
+    val midList = List.fill(60)(new Array[Byte](100))
+    val bigList = List.fill(400)(new Array[Byte](100))
     val memoryStore = store.memoryStore
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-    assert(memoryStore.currentUnrollMemoryForThisThread === 0)
+    assert(memoryStore.currentUnrollMemory === 0)
 
     // Unroll with all the space in the world. This should succeed and return an array.
     var unrollResult = memoryStore.unrollSafely("unroll", smallList.iterator, droppedBlocks)
     verifyUnroll(smallList.iterator, unrollResult, shouldBeArray = true)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 0)
-    memoryStore.releasePendingUnrollMemoryForThisThread()
+    assert(memoryStore.currentUnrollMemory > 0)
+    memoryStore.removeUnrollMemoryForThisThread()
+    assert(memoryStore.currentUnrollMemory === 0)
 
     // Unroll with not enough space. This should succeed after kicking out someBlock1.
     store.putIterator("someBlock1", smallList.iterator, StorageLevel.MEMORY_ONLY)
     store.putIterator("someBlock2", smallList.iterator, StorageLevel.MEMORY_ONLY)
+
     unrollResult = memoryStore.unrollSafely("unroll", smallList.iterator, droppedBlocks)
     verifyUnroll(smallList.iterator, unrollResult, shouldBeArray = true)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 0)
     assert(droppedBlocks.size === 1)
     assert(droppedBlocks.head._1 === TestBlockId("someBlock1"))
     droppedBlocks.clear()
-    memoryStore.releasePendingUnrollMemoryForThisThread()
-
-    // Unroll huge block with not enough space. Even after ensuring free space of 12000 * 0.4 =
-    // 4800 bytes, there is still not enough room to unroll this block. This returns an iterator.
-    // In the mean time, however, we kicked out someBlock2 before giving up.
-    store.putIterator("someBlock3", smallList.iterator, StorageLevel.MEMORY_ONLY)
+    memoryStore.removeUnrollMemoryForThisThread()
+    memoryStore.remove("someBlock2")
+    assert(!memoryStore.contains("someblock2"))
+    
+    // memoryGrowthFactor is 1.5, put midList fist, will must drop someBlock3 when putting
+    // huge block.
+    store.putIterator("someBlock3", midList.iterator, StorageLevel.MEMORY_ONLY)
+    assert(memoryStore.contains("someBlock3"))
+    // Unroll huge block with not enough space. Even after ensuring free space by dropping old
+    // block "someBlock3", there is still not enough room to unroll this block. 
+    // This returns an iterator. In the mean time, however, we kicked out "someBlock3" before 
+    // giving up.
     unrollResult = memoryStore.unrollSafely("unroll", bigList.iterator, droppedBlocks)
     verifyUnroll(bigList.iterator, unrollResult, shouldBeArray = false)
-    assert(memoryStore.currentUnrollMemoryForThisThread > 0) // we returned an iterator
+    assert(memoryStore.currentUnrollMemory === 0) // we returned an iterator
+    // reserved memory maintained in IteratorUnrollMemoryMap
+    assert(memoryStore.currentIteratorUnrollMemory > 0) 
     assert(droppedBlocks.size === 1)
-    assert(droppedBlocks.head._1 === TestBlockId("someBlock2"))
+    assert(droppedBlocks.head._1 === TestBlockId("someBlock3"))
     droppedBlocks.clear()
   }
 
@@ -1095,10 +1102,12 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     val memOnly = StorageLevel.MEMORY_ONLY
     val memoryStore = store.memoryStore
     val smallList = List.fill(40)(new Array[Byte](100))
-    val bigList = List.fill(40)(new Array[Byte](1000))
+    val midList = List.fill(60)(new Array[Byte](100))
+    val bigList = List.fill(400)(new Array[Byte](100))
     def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
+    def midIterator: Iterator[Any] = midList.iterator.asInstanceOf[Iterator[Any]]
     def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
-    assert(memoryStore.currentUnrollMemoryForThisThread === 0)
+    assert(memoryStore.currentUnrollMemory === 0)
 
     // Unroll with plenty of space. This should succeed and cache both blocks.
     val result1 = memoryStore.putIterator("b1", smallIterator, memOnly, returnValues = true)
@@ -1109,7 +1118,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     assert(result2.size > 0)
     assert(result1.data.isLeft) // unroll did not drop this block to disk
     assert(result2.data.isLeft)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 0)
+    assert(memoryStore.currentUnrollMemory === 0)
 
     // Re-put these two blocks so block manager knows about them too. Otherwise, block manager
     // would not know how to drop them from memory later.
@@ -1125,19 +1134,23 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     assert(!memoryStore.contains("b1"))
     assert(memoryStore.contains("b2"))
     assert(memoryStore.contains("b3"))
-    assert(memoryStore.currentUnrollMemoryForThisThread === 0)
+    assert(memoryStore.currentUnrollMemory === 0)
+    assert(memoryStore.currentIteratorUnrollMemory === 0)
     memoryStore.remove("b3")
-    store.putIterator("b3", smallIterator, memOnly)
+    store.putIterator("b3", midIterator, memOnly)
 
-    // Unroll huge block with not enough space. This should fail and kick out b2 in the process.
+    // Unroll huge block with not enough space. This should fail and kick out b2 and b3 in 
+    // the process.
     val result4 = memoryStore.putIterator("b4", bigIterator, memOnly, returnValues = true)
     assert(result4.size === 0) // unroll was unsuccessful
     assert(result4.data.isLeft)
     assert(!memoryStore.contains("b1"))
     assert(!memoryStore.contains("b2"))
-    assert(memoryStore.contains("b3"))
+    assert(!memoryStore.contains("b3"))
     assert(!memoryStore.contains("b4"))
-    assert(memoryStore.currentUnrollMemoryForThisThread > 0) // we returned an iterator
+    assert(memoryStore.currentUnrollMemory === 0) // we returned an iterator
+    // iterator Unroll memory is not released because unrollSafely returned an iterator
+    assert(memoryStore.currentIteratorUnrollMemory > 0) 
   }
 
   /**
@@ -1149,10 +1162,12 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     val memoryStore = store.memoryStore
     val diskStore = store.diskStore
     val smallList = List.fill(40)(new Array[Byte](100))
-    val bigList = List.fill(40)(new Array[Byte](1000))
+    val midList = List.fill(60)(new Array[Byte](100))
+    val bigList = List.fill(400)(new Array[Byte](100))
     def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
+    def midIterator: Iterator[Any] = midList.iterator.asInstanceOf[Iterator[Any]]
     def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
-    assert(memoryStore.currentUnrollMemoryForThisThread === 0)
+    assert(memoryStore.currentUnrollMemory === 0)
 
     store.putIterator("b1", smallIterator, memAndDisk)
     store.putIterator("b2", smallIterator, memAndDisk)
@@ -1168,24 +1183,26 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     assert(!diskStore.contains("b2"))
     assert(!diskStore.contains("b3"))
     memoryStore.remove("b3")
-    store.putIterator("b3", smallIterator, StorageLevel.MEMORY_ONLY)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 0)
+    store.putIterator("b3", midIterator, StorageLevel.MEMORY_ONLY)
+    assert(memoryStore.currentUnrollMemory === 0)
 
     // Unroll huge block with not enough space. This should fail and drop the new block to disk
-    // directly in addition to kicking out b2 in the process. Memory store should contain only
-    // b3, while disk store should contain b1, b2 and b4.
+    // directly in addition to kicking out b2 and b3 in the process. Memory store should contain 
+    // nothing, while disk store should contain b1, b2 and b4.
     val result4 = memoryStore.putIterator("b4", bigIterator, memAndDisk, returnValues = true)
     assert(result4.size > 0)
     assert(result4.data.isRight) // unroll returned bytes from disk
     assert(!memoryStore.contains("b1"))
     assert(!memoryStore.contains("b2"))
-    assert(memoryStore.contains("b3"))
+    assert(!memoryStore.contains("b3"))
     assert(!memoryStore.contains("b4"))
     assert(diskStore.contains("b1"))
     assert(diskStore.contains("b2"))
     assert(!diskStore.contains("b3"))
     assert(diskStore.contains("b4"))
-    assert(memoryStore.currentUnrollMemoryForThisThread > 0) // we returned an iterator
+    assert(memoryStore.currentUnrollMemory === 0) // we returned an iterator
+    // iterator Unroll memory is not released because unrollSafely returned an iterator
+    assert(memoryStore.currentIteratorUnrollMemory > 0) 
   }
 
   test("multiple unrolls by the same thread") {
@@ -1194,32 +1211,29 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     val memoryStore = store.memoryStore
     val smallList = List.fill(40)(new Array[Byte](100))
     def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
-    assert(memoryStore.currentUnrollMemoryForThisThread === 0)
+    assert(memoryStore.currentUnrollMemory === 0)
 
     // All unroll memory used is released because unrollSafely returned an array
     memoryStore.putIterator("b1", smallIterator, memOnly, returnValues = true)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 0)
+    assert(memoryStore.currentUnrollMemory === 0)
     memoryStore.putIterator("b2", smallIterator, memOnly, returnValues = true)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 0)
+    assert(memoryStore.currentUnrollMemory === 0)
 
-    // Unroll memory is not released because unrollSafely returned an iterator
-    // that still depends on the underlying vector used in the process
+    // There will always be enouth space by dropping old blocks 
     memoryStore.putIterator("b3", smallIterator, memOnly, returnValues = true)
-    val unrollMemoryAfterB3 = memoryStore.currentUnrollMemoryForThisThread
-    assert(unrollMemoryAfterB3 > 0)
+    val unrollMemoryAfterB3 = memoryStore.currentUnrollMemory
+    assert(unrollMemoryAfterB3 === 0)
 
-    // The unroll memory owned by this thread builds on top of its value after the previous unrolls
     memoryStore.putIterator("b4", smallIterator, memOnly, returnValues = true)
-    val unrollMemoryAfterB4 = memoryStore.currentUnrollMemoryForThisThread
-    assert(unrollMemoryAfterB4 > unrollMemoryAfterB3)
+    val unrollMemoryAfterB4 = memoryStore.currentUnrollMemory
+    assert(unrollMemoryAfterB4 === unrollMemoryAfterB3)
 
-    // ... but only to a certain extent (until we run out of free space to grant new unroll memory)
     memoryStore.putIterator("b5", smallIterator, memOnly, returnValues = true)
-    val unrollMemoryAfterB5 = memoryStore.currentUnrollMemoryForThisThread
+    val unrollMemoryAfterB5 = memoryStore.currentUnrollMemory
     memoryStore.putIterator("b6", smallIterator, memOnly, returnValues = true)
-    val unrollMemoryAfterB6 = memoryStore.currentUnrollMemoryForThisThread
+    val unrollMemoryAfterB6 = memoryStore.currentUnrollMemory
     memoryStore.putIterator("b7", smallIterator, memOnly, returnValues = true)
-    val unrollMemoryAfterB7 = memoryStore.currentUnrollMemoryForThisThread
+    val unrollMemoryAfterB7 = memoryStore.currentUnrollMemory
     assert(unrollMemoryAfterB5 === unrollMemoryAfterB4)
     assert(unrollMemoryAfterB6 === unrollMemoryAfterB4)
     assert(unrollMemoryAfterB7 === unrollMemoryAfterB4)
