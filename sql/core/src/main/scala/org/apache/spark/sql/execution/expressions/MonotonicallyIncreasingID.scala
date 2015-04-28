@@ -31,10 +31,10 @@ import org.apache.spark.sql.types.{LongType, DataType}
  *
  * Since this expression is stateful, it cannot be a case object.
  */
-case class MonotonicallyIncreasingID() extends LeafExpression {
+private[sql] case class MonotonicallyIncreasingID() extends LeafExpression {
 
   /**
-   * Record ID within each partition. By being transient, count's value is reset to 0 everytime
+   * Record ID within each partition. By being transient, count's value is reset to 0 every time
    * we serialize and deserialize it.
    */
   @transient private[this] var count: Long = 0L

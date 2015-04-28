@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.{IntegerType, DataType}
 /**
  * Expression that returns the current partition id of the Spark task.
  */
-case object SparkPartitionID extends LeafExpression {
+private[sql] case object SparkPartitionID extends LeafExpression {
 
   override type EvaluatedType = Int
 
