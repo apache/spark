@@ -1225,6 +1225,72 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     assert(unrollMemoryAfterB7 === unrollMemoryAfterB4)
   }
 
+  /**
+   * Make sure unrolling triggers block evictions when the initial unroll threshold is not available
+   * otherwise.
+   */
+  test("unroll when memory store nearly full") {
+    store = makeBlockManager(12000)
+    val memOnly = StorageLevel.MEMORY_ONLY
+    val memoryStore = store.memoryStore
+    // Should take up 1145 * 10 + object headers > 12000 - unrollMemoryThreshold (512)
+    val mostList = List.fill(10)(new Array[Byte](1140))
+    val smallList = List.fill(40)(new Array[Byte](100))
+    val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
+    
+    store.putIterator("most", mostList.iterator, memOnly)
+    assert(memoryStore.contains("most"))
+    
+    var unrollResult = memoryStore.unrollSafely("small", smallList.iterator, droppedBlocks)  
+    verifyUnroll(smallList.iterator, unrollResult, shouldBeArray = true)
+    assert(memoryStore.currentUnrollMemoryForThisThread === 0)
+    assert(droppedBlocks.size === 1)
+    assert(droppedBlocks.head._1 === TestBlockId("most"))
+    droppedBlocks.clear()
+    memoryStore.releasePendingUnrollMemoryForThisThread()
+  }
+
+  test("unroll when memory store nearly full through putIterator") {
+    store = makeBlockManager(12000)
+    val memOnly = StorageLevel.MEMORY_ONLY
+    val memoryStore = store.memoryStore
+    val mostList = List.fill(10)(new Array[Byte](1140))
+    val smallList = List.fill(40)(new Array[Byte](100))
+  
+    // Fill almost the entire block manager
+    store.putIterator("most", mostList.iterator, memOnly)
+    assert(memoryStore.contains("most"))
+
+    // Attempt to compute a modestly size block; should evict most.
+    val smallResult = memoryStore.putIterator(
+        "small", smallList.iterator, memOnly, returnValues = true)
+    assert(memoryStore.contains("small"))
+    assert(smallResult.data.isLeft)
+    assert(smallResult.droppedBlocks.size === 1)
+    assert(smallResult.droppedBlocks.head._1 === TestBlockId("most"))
+  }
+
+  test("unroll fails when memory store nearly full with same RDD") {
+    store = makeBlockManager(12000)
+    val memOnly = StorageLevel.MEMORY_ONLY
+    val memoryStore = store.memoryStore
+    val mostList = List.fill(10)(new Array[Byte](1140))
+    val smallList = List.fill(40)(new Array[Byte](100))
+  
+    // Fill almost the entire block manager with split 1
+    store.putIterator(rdd(1, 1), mostList.iterator, memOnly)
+    assert(memoryStore.contains(rdd(1, 1)))
+
+    // Attempt to compute a modestly sized split 2, should not be allowed to evict
+    // split1
+    val smallResult = memoryStore.putIterator(
+        rdd(1, 2), smallList.iterator, memOnly, returnValues = true)
+    assert(memoryStore.contains(rdd(1, 1)))
+    assert(!memoryStore.contains(rdd(1, 2)))
+    assert(smallResult.droppedBlocks.size === 0)
+    assert(smallResult.data.isLeft)
+  }
+
   test("lazily create a big ByteBuffer to avoid OOM if it cannot be put into MemoryStore") {
     store = makeBlockManager(12000)
     val memoryStore = store.memoryStore
