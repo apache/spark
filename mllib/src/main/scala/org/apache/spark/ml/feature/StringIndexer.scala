@@ -39,7 +39,8 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
     val inputColName = map(inputCol)
     val inputDataType = schema(inputColName).dataType
     require(inputDataType == StringType || inputDataType.isInstanceOf[NumericType],
-      s"The input column $inputColName must be either string type or numeric type.")
+      s"The input column $inputColName must be either string type or numeric type, " +
+        s"but got $inputDataType.")
     val inputFields = schema.fields
     val outputColName = map(outputCol)
     require(inputFields.forall(_.name != outputColName),
