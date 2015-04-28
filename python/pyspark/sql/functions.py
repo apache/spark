@@ -32,17 +32,21 @@ from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
 
 __all__ = ['countDistinct', 'approxCountDistinct', 'udf']
 
+def _function_obj(sc, is_math=False):
+    if not is_math:
+        return sc._jvm.functions
+    else:
+        return sc._jvm.mathfunctions
 
-def _create_function(name, doc=""):
+def _create_function(name, doc="", is_math=False):
     """ Create a function for aggregator by name"""
     def _(col):
         sc = SparkContext._active_spark_context
-        jc = getattr(sc._jvm.functions, name)(col._jc if isinstance(col, Column) else col)
+        jc = getattr(_function_obj(sc, is_math), name)(col._jc if isinstance(col, Column) else col)
         return Column(jc)
     _.__name__ = name
     _.__doc__ = doc
     return _
-
 
 _functions = {
     'lit': 'Creates a :class:`Column` of literal value.',
@@ -54,7 +58,7 @@ _functions = {
     'upper': 'Converts a string expression to upper case.',
     'lower': 'Converts a string expression to upper case.',
     'sqrt': 'Computes the square root of the specified float value.',
-    'abs': 'Computes the absolutle value.',
+    'abs': 'Computes the absolute value.',
 
     'max': 'Aggregate function: returns the maximum value of the expression in a group.',
     'min': 'Aggregate function: returns the minimum value of the expression in a group.',
@@ -67,11 +71,48 @@ _functions = {
     'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
 }
 
+# math functions are found under another object therefore, they need to be handled separately
+_math_functions = {
+    'acos': 'Computes the cosine inverse of the given value; the returned angle is in the range' + \
+            '0.0 through pi.',
+    'asin': 'Computes the sine inverse of the given value; the returned angle is in the range' + \
+            '-pi/2 through pi/2.',
+    'atan': 'Computes the tangent inverse of the given value.',
+    'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' + \
+             'polar coordinates (r, theta).',
+    'cbrt': 'Computes the cube-root of the given value.',
+    'ceil': 'Computes the ceiling of the given value.',
+    'cos': 'Computes the cosine of the given value.',
+    'cosh': 'Computes the hyperbolic cosine of the given value.',
+    'exp': 'Computes the exponential of the given value.',
+    'expm1': 'Computes the exponential of the given value minus one.',
+    'floor': 'Computes the floor of the given value.',
+    'hypot': 'Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.',
+    'log': 'Computes the natural logarithm of the given value.',
+    'log10': 'Computes the logarithm of the given value in Base 10.',
+    'log1p': 'Computes the natural logarithm of the given value plus one.',
+    'pow': 'Returns the value of the first argument raised to the power of the second argument.',
+    'rint': 'Returns the double value that is closest in value to the argument and' + \
+            ' is equal to a mathematical integer.',
+    'signum': 'Computes the signum of the given value.',
+    'sin': 'Computes the sine of the given value.',
+    'sinh': 'Computes the hyperbolic sine of the given value.',
+    'tan': 'Computes the tangent of the given value.',
+    'tanh': 'Computes the hyperbolic tangent of the given value.',
+    'toDeg': 'Converts an angle measured in radians to an approximately equivalent angle ' + \
+             'measured in degrees.',
+    'toRad': 'Converts an angle measured in degrees to an approximately equivalent angle ' + \
+             'measured in radians.'
+}
+
 
 for _name, _doc in _functions.items():
     globals()[_name] = _create_function(_name, _doc)
+for _name, _doc in _math_functions.items():
+    globals()[_name] = _create_function(_name, _doc, True)
 del _name, _doc
 __all__ += _functions.keys()
+__all__ += _math_functions.keys()
 __all__.sort()
 
 
