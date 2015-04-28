@@ -91,6 +91,7 @@ export("sparkR.init")
 export("sparkR.stop")
 export("print.jobj")
 useDynLib(SparkR, stringHashCode)
+useDynLib(SparkR, getMissingArg)
 importFrom(methods, setGeneric, setMethod, setOldClass)
 
 # SparkRSQL
