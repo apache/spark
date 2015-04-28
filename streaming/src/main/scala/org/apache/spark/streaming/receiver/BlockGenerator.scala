@@ -132,7 +132,7 @@ private[streaming] class BlockGenerator(
    * will be periodically pushed into BlockManager. Note that all the data items is guaranteed
    * to be present in a single block.
    */
-  def addMultipleDataWithCallback(dataIterator: Iterator[Any], metadata: Any) = synchronized {
+  def addMultipleDataWithCallback(dataIterator: Iterator[Any], metadata: Any): Unit = synchronized {
     dataIterator.foreach { data =>
       waitToPush()
       currentBuffer += data
