@@ -298,7 +298,7 @@ class SparkHadoopUtil extends Logging {
         logDebug(text + " matched " + HADOOP_CONF_PATTERN)
         val key = matched.substring(13, matched.length() - 1) // remove ${hadoopconf- .. }
         val eval = Option[String](hadoopConf.get(key))
-            .map { value =>
+          .map { value =>
             logDebug("Substituted " + matched + " with " + value)
             text.replace(matched, value)
           }
