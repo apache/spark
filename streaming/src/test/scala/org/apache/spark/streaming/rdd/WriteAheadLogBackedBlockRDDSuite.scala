@@ -100,9 +100,9 @@ class WriteAheadLogBackedBlockRDDSuite
       blockManager.putIterator(blockId, block.iterator, StorageLevel.MEMORY_ONLY_SER)
     }
 
-    // Generate write ahead log segments
-    val segments = generateFakeSegments(numPartitionsInBM) ++
-      writeLogSegments(data.takeRight(numPartitionsInWAL), blockIds.takeRight(numPartitionsInWAL))
+    // Generate write ahead log file segments
+    val recordHandles = generateFakeRecordHandles(numPartitionsInBM) ++
+      generateWALRecordHandles(data.takeRight(numPartitionsInWAL), blockIds.takeRight(numPartitionsInWAL))
 
     // Make sure that the left `numPartitionsInBM` blocks are in block manager, and others are not
     require(
@@ -116,24 +116,24 @@ class WriteAheadLogBackedBlockRDDSuite
 
     // Make sure that the right `numPartitionsInWAL` blocks are in WALs, and other are not
     require(
-      segments.takeRight(numPartitionsInWAL).forall(s =>
+      recordHandles.takeRight(numPartitionsInWAL).forall(s =>
         new File(s.path.stripPrefix("file://")).exists()),
       "Expected blocks not in write ahead log"
     )
     require(
-      segments.take(numPartitionsInBM).forall(s =>
+      recordHandles.take(numPartitionsInBM).forall(s =>
         !new File(s.path.stripPrefix("file://")).exists()),
       "Unexpected blocks in write ahead log"
     )
 
     // Create the RDD and verify whether the returned data is correct
     val rdd = new WriteAheadLogBackedBlockRDD[String](sparkContext, blockIds.toArray,
-      segments.toArray, storeInBlockManager = false, StorageLevel.MEMORY_ONLY)
+      recordHandles.toArray, storeInBlockManager = false, StorageLevel.MEMORY_ONLY)
     assert(rdd.collect() === data.flatten)
 
     if (testStoreInBM) {
       val rdd2 = new WriteAheadLogBackedBlockRDD[String](sparkContext, blockIds.toArray,
-        segments.toArray, storeInBlockManager = true, StorageLevel.MEMORY_ONLY)
+        recordHandles.toArray, storeInBlockManager = true, StorageLevel.MEMORY_ONLY)
       assert(rdd2.collect() === data.flatten)
       assert(
         blockIds.forall(blockManager.get(_).nonEmpty),
@@ -142,7 +142,7 @@ class WriteAheadLogBackedBlockRDDSuite
     }
   }
 
-  private def writeLogSegments(
+  private def generateWALRecordHandles(
       blockData: Seq[Seq[String]],
       blockIds: Seq[BlockId]
     ): Seq[FileBasedWriteAheadLogSegment] = {
@@ -155,7 +155,7 @@ class WriteAheadLogBackedBlockRDDSuite
     segments
   }
 
-  private def generateFakeSegments(count: Int): Seq[FileBasedWriteAheadLogSegment] = {
+  private def generateFakeRecordHandles(count: Int): Seq[FileBasedWriteAheadLogSegment] = {
     Array.fill(count)(new FileBasedWriteAheadLogSegment("random", 0L, 0))
   }
 }

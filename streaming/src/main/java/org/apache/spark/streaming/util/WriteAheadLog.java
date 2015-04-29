@@ -29,15 +29,16 @@ import java.util.Iterator;
 @org.apache.spark.annotation.DeveloperApi
 public abstract class WriteAheadLog {
   /**
-   * Write the record to the log and return the segment information that is necessary to read
-   * back the written record. The time is used to the index the record, such that it can be
-   * cleaned later. Note that the written data must be durable and readable (using the
-   * segment info) by the time this function returns.
+   * Write the record to the log and return a record handle, which contains all the information
+   * necessary to read back the written record. The time is used to the index the record,
+   * such that it can be cleaned later. Note that implementations of this abstract class must
+   * ensure that the written data is durable and readable (using the record handle) by the
+   * time this function returns.
    */
   abstract public WriteAheadLogRecordHandle write(ByteBuffer record, long time);
 
   /**
-   * Read a written record based on the given segment information.
+   * Read a written record based on the given record handle.
    */
   abstract public ByteBuffer read(WriteAheadLogRecordHandle handle);
 

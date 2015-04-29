@@ -96,7 +96,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
  */
 private[streaming] case class WriteAheadLogBasedStoreResult(
     blockId: StreamBlockId,
-    segment: WriteAheadLogRecordHandle
+    walRecordHandle: WriteAheadLogRecordHandle
   ) extends ReceivedBlockStoreResult
 
 
@@ -178,10 +178,10 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
       writeAheadLog.write(serializedBlock, clock.getTimeMillis())
     }
 
-    // Combine the futures, wait for both to complete, and return the write ahead log segment
+    // Combine the futures, wait for both to complete, and return the write ahead log record handle
     val combinedFuture = storeInBlockManagerFuture.zip(storeInWriteAheadLogFuture).map(_._2)
-    val segment = Await.result(combinedFuture, blockStoreTimeout)
-    WriteAheadLogBasedStoreResult(blockId, segment)
+    val walRecordHandle = Await.result(combinedFuture, blockStoreTimeout)
+    WriteAheadLogBasedStoreResult(blockId, walRecordHandle)
   }
 
   def cleanupOldBlocks(threshTime: Long) {

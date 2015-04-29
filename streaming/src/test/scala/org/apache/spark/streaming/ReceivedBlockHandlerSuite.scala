@@ -130,7 +130,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
           "Unexpected store result type"
         )
         // Verify the data in write ahead log files is correct
-        val walSegments = storeResults.map { _.asInstanceOf[WriteAheadLogBasedStoreResult].segment}
+        val walSegments = storeResults.map { _.asInstanceOf[WriteAheadLogBasedStoreResult].walRecordHandle}
         val loggedData = walSegments.flatMap { walSegment =>
           val fileSegment = walSegment.asInstanceOf[FileBasedWriteAheadLogSegment]
           val reader = new FileBasedWriteAheadLogRandomReader(fileSegment.path, hadoopConf)
