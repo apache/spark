@@ -505,7 +505,8 @@ private[spark] class ExternalSorter[K, V, C](
           val k = elem._1
           var c = elem._2
           while (sorted.hasNext && sorted.head._1 == k) {
-            c = mergeCombiners(c, sorted.head._2)
+            val pair = sorted.next()
+            c = mergeCombiners(c, pair._2)
           }
           (k, c)
         }

@@ -507,7 +507,10 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
     val ord = implicitly[Ordering[Int]]
     val sorter = new ExternalSorter(Some(agg), Some(new HashPartitioner(3)), Some(ord), None)
-    sorter.insertAll((0 until 100000).iterator.map(i => (i / 2, i)))
+
+    // avoid combine before spill
+    sorter.insertAll((0 until 50000).iterator.map(i => (i , 2 * i)))
+    sorter.insertAll((0 until 50000).iterator.map(i => (i, 2 * i + 1)))
     val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
     val expected = (0 until 3).map(p => {
       (p, (0 until 50000).map(i => (i, i * 4 + 1)).filter(_._1 % 3 == p).toSet)
