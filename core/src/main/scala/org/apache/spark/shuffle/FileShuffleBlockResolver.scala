@@ -64,8 +64,7 @@ private[spark] trait ShuffleWriterGroup {
  */
 // Note: Changes to the format in this file should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getHashBasedShuffleBlockData().
-private[spark]
-class FileShuffleBlockResolver(conf: SparkConf)
+private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   extends ShuffleBlockResolver with Logging {
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf)
@@ -241,8 +240,7 @@ class FileShuffleBlockResolver(conf: SparkConf)
   }
 }
 
-private[spark]
-object FileShuffleBlockResolver {
+private[spark] object FileShuffleBlockResolver {
   /**
    * A group of shuffle files, one per reducer.
    * A particular mapper will be assigned a single ShuffleFileGroup to write its output to.
