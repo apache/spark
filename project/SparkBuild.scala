@@ -361,12 +361,20 @@ object PySparkAssembly {
     // to be included in the assembly. We can't just add "python/" to the assembly's resource dir
     // list since that will copy unneeded / unwanted files.
     resourceGenerators in Compile <+= resourceManaged in Compile map { outDir: File =>
+      val src = new File(BuildCommons.sparkHome, "python/pyspark")
+
+      val zipFile = new File(BuildCommons.sparkHome , "python/lib/pyspark.zip")
+      IO.delete(zipFile)
+      def entries(f: File):List[File] =
+        f :: (if (f.isDirectory) IO.listFiles(f).toList.flatMap(entries(_)) else Nil)
+      IO.zip(entries(src).map(
+        d => (d, d.getAbsolutePath.substring(src.getParent.length +1))),
+        zipFile)
+
       val dst = new File(outDir, "pyspark")
       if (!dst.isDirectory()) {
         require(dst.mkdirs())
       }
-
-      val src = new File(BuildCommons.sparkHome, "python/pyspark")
       copy(src, dst)
     }
   )

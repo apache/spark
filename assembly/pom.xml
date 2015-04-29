@@ -92,6 +92,27 @@
           <skip>true</skip>
         </configuration>
       </plugin>
+        <!-- zip pyspark archives to run python application on yarn mode -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <executions>
+              <execution>
+                <phase>package</phase>
+                  <goals>
+                    <goal>run</goal>
+                  </goals>
+              </execution>
+            </executions>
+            <configuration>
+              <target>
+                <delete dir="${basedir}/../python/lib/pyspark.zip"/>
+                <zip destfile="${basedir}/../python/lib/pyspark.zip">
+                  <fileset dir="${basedir}/../python/" includes="pyspark/**/*"/>
+                </zip>
+              </target>
+            </configuration>
+        </plugin>
       <!-- Use the shade plugin to create a big JAR with all the dependencies -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -196,6 +217,19 @@
             <artifactId>maven-assembly-plugin</artifactId>
             <version>2.4</version>
             <executions>
+              <!--execution>
+                    <id>pyspark-zip</id>
+                    <phase>package</phase>
+                    <goals>
+                        <goal>single</goal>
+                    </goals>
+                    <configuration>
+                        <skipAssembly>true</skipAssembly>
+                        <descriptors>
+                            <descriptor>src/main/assembly/pyspark-assembly.xml</descriptor>
+                        </descriptors>
+                    </configuration>
+                </execution-->
               <execution>
                 <id>dist</id>
                 <phase>package</phase>
@@ -208,7 +242,7 @@
                   </descriptors>
                 </configuration>
               </execution>
-            </executions>
+          </executions>
           </plugin>
         </plugins>
       </build>
