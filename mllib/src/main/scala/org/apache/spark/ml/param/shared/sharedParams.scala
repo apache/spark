@@ -265,18 +265,18 @@ private[ml] trait HasElasticNetParam extends Params {
 }
 
 /**
- * (private[ml]) Trait for shared param convergenceTol.
+ * (private[ml]) Trait for shared param tol.
  */
-private[ml] trait HasConvergenceTol extends Params {
+private[ml] trait HasTol extends Params {
 
   /**
    * Param for the convergence tolerance for iterative algorithms.
    * @group param
    */
-  final val convergenceTol: DoubleParam = new DoubleParam(this, "convergenceTol", "the convergence tolerance for iterative algorithms")
+  final val tol: DoubleParam = new DoubleParam(this, "tol", "the convergence tolerance for iterative algorithms")
 
   /** @group getParam */
-  final def getConvergenceTol: Double = getOrDefault(convergenceTol)
+  final def getTol: Double = getOrDefault(tol)
 }
 
 /**

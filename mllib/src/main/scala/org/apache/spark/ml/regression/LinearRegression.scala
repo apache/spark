@@ -25,7 +25,7 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction}
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param.{Params, ParamMap}
-import org.apache.spark.ml.param.shared.{HasConvergenceTol, HasElasticNetParam, HasMaxIter,
+import org.apache.spark.ml.param.shared.{HasTol, HasElasticNetParam, HasMaxIter,
   HasRegParam}
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -41,7 +41,7 @@ import org.apache.spark.Logging
  * Params for linear regression.
  */
 private[regression] trait LinearRegressionParams extends RegressorParams
-  with HasRegParam with HasElasticNetParam with HasMaxIter with HasConvergenceTol
+  with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
 
 /**
  * :: AlphaComponent ::
@@ -94,8 +94,8 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
    * Default is 1E-6.
    * @group setParam
    */
-  def setTol(value: Double): this.type = set(convergenceTol, value)
-  setDefault(convergenceTol -> 1E-6)
+  def setTol(value: Double): this.type = set(tol, value)
+  setDefault(tol -> 1E-6)
 
   override protected def train(dataset: DataFrame, paramMap: ParamMap): LinearRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist instances.
@@ -144,10 +144,10 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
       featuresStd, featuresMean, effectiveL2RegParam)
 
     val optimizer = if (paramMap(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
-      new BreezeLBFGS[BDV[Double]](paramMap(maxIter), 10, paramMap(convergenceTol))
+      new BreezeLBFGS[BDV[Double]](paramMap(maxIter), 10, paramMap(tol))
     } else {
       new BreezeOWLQN[Int, BDV[Double]](paramMap(maxIter), 10, effectiveL1RegParam,
-        paramMap(convergenceTol))
+        paramMap(tol))
     }
 
     val initialWeights = Vectors.zeros(numFeatures)
