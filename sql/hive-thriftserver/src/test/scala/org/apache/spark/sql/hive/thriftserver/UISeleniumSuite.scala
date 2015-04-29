@@ -32,7 +32,9 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.spark.sql.hive.HiveContext
 
 
-class UISeleniumSuite extends HiveThriftJdbcTest with WebBrowser with Matchers with BeforeAndAfterAll {
+class UISeleniumSuite
+  extends HiveThriftJdbcTest
+  with WebBrowser with Matchers with BeforeAndAfterAll {
 
   implicit var webDriver: WebDriver = _
   var server: HiveThriftServer2 = _
