@@ -24,3 +24,22 @@ def ds_add(ds, days):
     if days:
         ds = ds + timedelta(days)
     return ds.isoformat()[:10]
+
+def ds_format(ds, input_format, output_format):
+    '''
+    Takes an input string and outputs another string 
+    as specified in the output format
+
+    :param ds: input string which contains a date
+    :type ds: str
+    :param input_format: input string format. E.g. %Y-%m-%d
+    :type input_format: str
+    :param output_format: output string format  E.g. %Y-%m-%d
+    :type output_format: str
+
+    >>> ds_format('2015-01-01', "%Y-%m-%d", "%m-%d-%y")
+    '01-01-15'
+    >>> ds_format('2015-01-01', "%Y-%m-%d",  "%Y-%m-%d")
+    '2015-01-01'
+    '''
+    return datetime.datetime.strptime(ds, input_format).strftime(output_format)
