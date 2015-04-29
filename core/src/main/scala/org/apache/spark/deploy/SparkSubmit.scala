@@ -677,12 +677,32 @@ private[spark] object SparkSubmitUtils {
   /**
    * Extracts maven coordinates from a comma-delimited string
    * @param remoteRepos Comma-delimited string of remote repositories
+   * @param ivySettings The Ivy settings for this session
    * @return A ChainResolver used by Ivy to search for and resolve dependencies.
    */
-  private[spark] def createRepoResolvers(remoteRepos: Option[String]): ChainResolver = {
+  private[spark] def createRepoResolvers(
+      remoteRepos: Option[String],
+      ivySettings: IvySettings): ChainResolver = {
     // We need a chain resolver if we want to check multiple repositories
     val cr = new ChainResolver
     cr.setName("list")
+
+    val localM2 = new IBiblioResolver
+    localM2.setM2compatible(true)
+    val m2Path = ".m2" + File.separator + "repository" + File.separator
+    localM2.setRoot(new File(System.getProperty("user.home"), m2Path).toURI.toString)
+    localM2.setUsepoms(true)
+    localM2.setName("local-m2-cache")
+    cr.add(localM2)
+
+    val localIvy = new IBiblioResolver
+    localIvy.setRoot(new File(ivySettings.getDefaultIvyUserDir,
+      "local" + File.separator).toURI.toString)
+    val ivyPattern = Seq("[organisation]", "[module]", "[revision]", "[type]s",
+      "[artifact](-[classifier]).[ext]").mkString(File.separator)
+    localIvy.setPattern(ivyPattern)
+    localIvy.setName("local-ivy-cache")
+    cr.add(localIvy)
 
     // the biblio resolver resolves POM declared dependencies
     val br: IBiblioResolver = new IBiblioResolver
@@ -716,8 +736,7 @@ private[spark] object SparkSubmitUtils {
 
   /**
    * Output a comma-delimited list of paths for the downloaded jars to be added to the classpath
-   * (will append to jars in SparkSubmit). The name of the jar is given
-   * after a '!' by Ivy. It also sometimes contains '(bundle)' after '.jar'. Remove that as well.
+   * (will append to jars in SparkSubmit).
    * @param artifacts Sequence of dependencies that were resolved and retrieved
    * @param cacheDirectory directory where jars are cached
    * @return a comma-delimited list of paths for the dependencies
@@ -726,10 +745,9 @@ private[spark] object SparkSubmitUtils {
       artifacts: Array[AnyRef],
       cacheDirectory: File): String = {
     artifacts.map { artifactInfo =>
-      val artifactString = artifactInfo.toString
-      val jarName = artifactString.drop(artifactString.lastIndexOf("!") + 1)
+      val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
       cacheDirectory.getAbsolutePath + File.separator +
-        jarName.substring(0, jarName.lastIndexOf(".jar") + 4)
+        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}.jar"
     }.mkString(",")
   }
 
@@ -811,6 +829,7 @@ private[spark] object SparkSubmitUtils {
         if (alternateIvyCache.trim.isEmpty) {
           new File(ivySettings.getDefaultIvyUserDir, "jars")
         } else {
+          ivySettings.setDefaultIvyUserDir(new File(alternateIvyCache))
           ivySettings.setDefaultCache(new File(alternateIvyCache, "cache"))
           new File(alternateIvyCache, "jars")
         }
@@ -820,7 +839,7 @@ private[spark] object SparkSubmitUtils {
       // create a pattern matcher
       ivySettings.addMatcher(new GlobPatternMatcher)
       // create the dependency resolvers
-      val repoResolver = createRepoResolvers(remoteRepos)
+      val repoResolver = createRepoResolvers(remoteRepos, ivySettings)
       ivySettings.addResolver(repoResolver)
       ivySettings.setDefaultResolver(repoResolver.getName)
 
@@ -854,7 +873,8 @@ private[spark] object SparkSubmitUtils {
       }
       // retrieve all resolved dependencies
       ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId,
-        packagesDirectory.getAbsolutePath + File.separator + "[artifact](-[classifier]).[ext]",
+        packagesDirectory.getAbsolutePath + File.separator +
+          "[organization]_[artifact]-[revision].[ext]",
         retrieveOptions.setConfs(Array(ivyConfName)))
       System.setOut(sysOut)
       resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
