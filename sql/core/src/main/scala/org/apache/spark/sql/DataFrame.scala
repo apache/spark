@@ -623,17 +623,12 @@ class DataFrame private[sql](
   }
 
   /**
-   * (Scala-specific) Compute aggregates by specifying a map from column name to
-   * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
-   *
-   * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
-   * {{{
-   *   // Selects the age of the oldest employee and the aggregate expense for each department
-   *   df.groupBy("department").agg(
-   *     "age" -> "max",
-   *     "expense" -> "sum"
-   *   )
-   * }}}
+   * (Scala-specific) Aggregates on the entire [[DataFrame]] without groups.
+   * {{
+   *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
+   *   df.agg("age" -> "max", "salary" -> "avg")
+   *   df.groupBy().agg("age" -> "max", "salary" -> "avg")
+   * }}
    * @group dfops
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
