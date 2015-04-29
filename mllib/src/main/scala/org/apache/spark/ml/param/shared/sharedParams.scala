@@ -310,4 +310,21 @@ trait HasTol extends Params {
   /** @group getParam */
   final def getTol: Double = getOrDefault(tol)
 }
+
+/**
+ * :: DeveloperApi ::
+ * Trait for shared param stepSize.
+ */
+@DeveloperApi
+trait HasStepSize extends Params {
+
+  /**
+   * Param for Step size to be used for each iteration of optimization..
+   * @group param
+   */
+  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization.")
+
+  /** @group getParam */
+  final def getStepSize: Double = getOrDefault(stepSize)
+}
 // scalastyle:on
