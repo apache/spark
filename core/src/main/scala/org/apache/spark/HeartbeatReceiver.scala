@@ -17,10 +17,14 @@
 
 package org.apache.spark
 
-import akka.actor.Actor
+import scala.concurrent.duration._
+import scala.collection.mutable
+
+import akka.actor.{Actor, Cancellable}
+
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.scheduler.TaskScheduler
+import org.apache.spark.scheduler.{SlaveLost, TaskScheduler}
 import org.apache.spark.util.ActorLogReceive
 
 /**
@@ -32,18 +36,66 @@ private[spark] case class Heartbeat(
     taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
     blockManagerId: BlockManagerId)
 
+private[spark] case object ExpireDeadHosts
+
 private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 
 /**
  * Lives in the driver to receive heartbeats from executors..
  */
-private[spark] class HeartbeatReceiver(scheduler: TaskScheduler)
+private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskScheduler)
   extends Actor with ActorLogReceive with Logging {
+
+    // executor ID -> timestamp of when the last heartbeat from this executor was received
+    private val executorLastSeen = new mutable.HashMap[String, Long]
+
+    private val executorTimeoutMs = sc.conf.getLong("spark.network.timeout",
+      sc.conf.getLong("spark.storage.blockManagerSlaveTimeoutMs", 120)) * 1000
+
+    private val checkTimeoutIntervalMs = sc.conf.getLong("spark.network.timeoutInterval",
+      sc.conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60)) * 1000
+
+    private var timeoutCheckingTask: Cancellable = null
+
+    override def preStart(): Unit = {
+      import context.dispatcher
+      timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
+          checkTimeoutIntervalMs.milliseconds, self, ExpireDeadHosts)
+      super.preStart()
+    }
 
   override def receiveWithLogging = {
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>
-      val response = HeartbeatResponse(
-        !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId))
+      val unknownExecutor = !scheduler.executorHeartbeatReceived(
+        executorId, taskMetrics, blockManagerId)
+        val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
+        executorLastSeen(executorId) = System.currentTimeMillis()
       sender ! response
+    case ExpireDeadHosts =>
+      expireDeadHosts()
+  }
+
+  private def expireDeadHosts(): Unit = {
+    logTrace("Checking for hosts with no recent heartbeats in HeartbeatReceiver.")
+    val now = System.currentTimeMillis()
+    for ((executorId, lastSeenMs) <- executorLastSeen) {
+      if (now - lastSeenMs > executorTimeoutMs) {
+        logWarning(s"Removing executor $executorId with no recent heartbeats: " +
+          s"${now - lastSeenMs} ms exceeds timeout $executorTimeoutMs ms")
+        scheduler.executorLost(executorId, SlaveLost("Executor heartbeat " +
+          "timed out after ${now - lastSeenMs} ms"))
+        if (sc.supportDynamicAllocation) {
+          sc.killExecutor(executorId)
+        }
+        executorLastSeen.remove(executorId)
+      }
+    }
+  }
+
+  override def postStop(): Unit = {
+    if (timeoutCheckingTask != null) {
+      timeoutCheckingTask.cancel()
+    }
+    super.postStop()
   }
 }

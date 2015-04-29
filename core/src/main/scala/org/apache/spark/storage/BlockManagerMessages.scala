@@ -110,5 +110,4 @@ private[spark] object BlockManagerMessages {
 
   case class BlockManagerHeartbeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
-  case object ExpireDeadHosts extends ToBlockManagerMaster
 }
