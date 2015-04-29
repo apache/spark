@@ -621,7 +621,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   RDD[(String, String)] = {
     assertNotStopped()
     val job = new NewHadoopJob(hadoopConfiguration)
-    NewFileInputFormat.addInputPath(job, new Path(path))
+    // Use setInputPaths so that wholeTextFiles aligns with hadoopFile/textFile in taking
+    // comma separated files as input. (see SPARK-7155)
+    NewFileInputFormat.setInputPaths(job, path)
     val updateConf = job.getConfiguration
     new WholeTextFileRDD(
       this,
@@ -667,7 +669,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       RDD[(String, PortableDataStream)] = {
     assertNotStopped()
     val job = new NewHadoopJob(hadoopConfiguration)
-    NewFileInputFormat.addInputPath(job, new Path(path))
+    // Use setInputPaths so that binaryFiles aligns with hadoopFile/textFile in taking
+    // comma separated files as input. (see SPARK-7155)
+    NewFileInputFormat.setInputPaths(job, path)
     val updateConf = job.getConfiguration
     new BinaryFileRDD(
       this,
@@ -843,7 +847,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // The call to new NewHadoopJob automatically adds security credentials to conf,
     // so we don't need to explicitly add them ourselves
     val job = new NewHadoopJob(conf)
-    NewFileInputFormat.addInputPath(job, new Path(path))
+    // Use setInputPaths so that newAPIHadoopFile aligns with hadoopFile/textFile in taking
+    // comma separated files as input. (see SPARK-7155)
+    NewFileInputFormat.setInputPaths(job, path)
     val updatedConf = job.getConfiguration
     new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf).setName(path)
   }
