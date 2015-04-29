@@ -300,19 +300,26 @@ class CachedTableSuite extends QueryTest {
   }
 
   test("Clear accumulators when uncacheTable to prevent memory leaking") {
-    val accsSize = Accumulators.originals.size
-
     sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
     sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
-    cacheTable("t1")
-    cacheTable("t2")
-    sql("SELECT * FROM t1").count()
-    sql("SELECT * FROM t2").count()
-    sql("SELECT * FROM t1").count()
-    sql("SELECT * FROM t2").count()
-    uncacheTable("t1")
-    uncacheTable("t2")
 
-    assert(accsSize >= Accumulators.originals.size)
+    Accumulators.synchronized {
+      val accsSize = Accumulators.originals.size
+      cacheTable("t1")
+      cacheTable("t2")
+      assert((accsSize + 2) == Accumulators.originals.size)
+    }
+
+    sql("SELECT * FROM t1").count()
+    sql("SELECT * FROM t2").count()
+    sql("SELECT * FROM t1").count()
+    sql("SELECT * FROM t2").count()
+
+    Accumulators.synchronized {
+      val accsSize = Accumulators.originals.size
+      uncacheTable("t1")
+      uncacheTable("t2")
+      assert((accsSize - 2) == Accumulators.originals.size)
+    }
   }
 }

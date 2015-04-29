@@ -35,7 +35,6 @@ import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.google.common.io.{ByteStreams, Files}
 import com.google.common.net.InetAddresses
-import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
@@ -43,6 +42,8 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
+
+import tachyon.TachyonURI
 import tachyon.client.{TachyonFS, TachyonFile}
 
 import org.apache.spark._
@@ -65,6 +66,12 @@ private[spark] object Utils extends Logging {
   val random = new Random()
 
   val DEFAULT_SHUTDOWN_PRIORITY = 100
+
+  /**
+   * The shutdown priority of the SparkContext instance. This is lower than the default
+   * priority, so that by default hooks are run before the context is shut down.
+   */
+  val SPARK_CONTEXT_SHUTDOWN_PRIORITY = 50
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
@@ -897,34 +904,6 @@ private[spark] object Utils extends Logging {
     hostPortParseResults.get(hostPort)
   }
 
-  private val daemonThreadFactoryBuilder: ThreadFactoryBuilder =
-    new ThreadFactoryBuilder().setDaemon(true)
-
-  /**
-   * Create a thread factory that names threads with a prefix and also sets the threads to daemon.
-   */
-  def namedThreadFactory(prefix: String): ThreadFactory = {
-    daemonThreadFactoryBuilder.setNameFormat(prefix + "-%d").build()
-  }
-
-  /**
-   * Wrapper over newCachedThreadPool. Thread names are formatted as prefix-ID, where ID is a
-   * unique, sequentially assigned integer.
-   */
-  def newDaemonCachedThreadPool(prefix: String): ThreadPoolExecutor = {
-    val threadFactory = namedThreadFactory(prefix)
-    Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
-  }
-
-  /**
-   * Wrapper over newFixedThreadPool. Thread names are formatted as prefix-ID, where ID is a
-   * unique, sequentially assigned integer.
-   */
-  def newDaemonFixedThreadPool(nThreads: Int, prefix: String): ThreadPoolExecutor = {
-    val threadFactory = namedThreadFactory(prefix)
-    Executors.newFixedThreadPool(nThreads, threadFactory).asInstanceOf[ThreadPoolExecutor]
-  }
-
   /**
    * Return the string to tell how long has passed in milliseconds.
    */
@@ -984,7 +963,7 @@ private[spark] object Utils extends Logging {
    * Delete a file or directory and its contents recursively.
    */
   def deleteRecursively(dir: TachyonFile, client: TachyonFS) {
-    if (!client.delete(dir.getPath(), true)) {
+    if (!client.delete(new TachyonURI(dir.getPath()), true)) {
       throw new IOException("Failed to delete the tachyon dir: " + dir)
     }
   }
@@ -1041,21 +1020,48 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes.
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to bytes for internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in bytes.
+   */
+  def byteStringAsBytes(str: String): Long = {
+    JavaUtils.byteStringAsBytes(str)
+  }
+
+  /**
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to kibibytes for internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in kibibytes.
+   */
+  def byteStringAsKb(str: String): Long = {
+    JavaUtils.byteStringAsKb(str)
+  }
+
+  /**
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to mebibytes for internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in mebibytes.
+   */
+  def byteStringAsMb(str: String): Long = {
+    JavaUtils.byteStringAsMb(str)
+  }
+
+  /**
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m, 500g) to gibibytes for internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in gibibytes.
+   */
+  def byteStringAsGb(str: String): Long = {
+    JavaUtils.byteStringAsGb(str)
+  }
+
+  /**
+   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of mebibytes.
    */
   def memoryStringToMb(str: String): Int = {
-    val lower = str.toLowerCase
-    if (lower.endsWith("k")) {
-      (lower.substring(0, lower.length-1).toLong / 1024).toInt
-    } else if (lower.endsWith("m")) {
-      lower.substring(0, lower.length-1).toInt
-    } else if (lower.endsWith("g")) {
-      lower.substring(0, lower.length-1).toInt * 1024
-    } else if (lower.endsWith("t")) {
-      lower.substring(0, lower.length-1).toInt * 1024 * 1024
-    } else {// no suffix, so it's just a number in bytes
-      (lower.toLong / 1024 / 1024).toInt
-    }
+    // Convert to bytes, rather than directly to MB, because when no units are specified the unit
+    // is assumed to be bytes
+    (JavaUtils.byteStringAsBytes(str) / 1024 / 1024).toInt
   }
 
   /**
@@ -2159,7 +2165,7 @@ private[spark] object Utils extends Logging {
    * @return A handle that can be used to unregister the shutdown hook.
    */
   def addShutdownHook(hook: () => Unit): AnyRef = {
-    addShutdownHook(DEFAULT_SHUTDOWN_PRIORITY, hook)
+    addShutdownHook(DEFAULT_SHUTDOWN_PRIORITY)(hook)
   }
 
   /**
@@ -2169,7 +2175,7 @@ private[spark] object Utils extends Logging {
    * @param hook The code to run during shutdown.
    * @return A handle that can be used to unregister the shutdown hook.
    */
-  def addShutdownHook(priority: Int, hook: () => Unit): AnyRef = {
+  def addShutdownHook(priority: Int)(hook: () => Unit): AnyRef = {
     shutdownHooks.add(priority, hook)
   }
 
@@ -2215,7 +2221,7 @@ private [util] class SparkShutdownHookManager {
   def runAll(): Unit = synchronized {
     shuttingDown = true
     while (!hooks.isEmpty()) {
-      Utils.logUncaughtExceptions(hooks.poll().run())
+      Try(Utils.logUncaughtExceptions(hooks.poll().run()))
     }
   }
 
@@ -2227,7 +2233,6 @@ private [util] class SparkShutdownHookManager {
   }
 
   def remove(ref: AnyRef): Boolean = synchronized {
-    checkState()
     hooks.remove(ref)
   }
 

@@ -92,7 +92,7 @@ object PhysicalOperation extends PredicateHelper {
     }
 
   def collectAliases(fields: Seq[Expression]): Map[Attribute, Expression] = fields.collect {
-    case a @ Alias(child, _) => a.toAttribute.asInstanceOf[Attribute] -> child
+    case a @ Alias(child, _) => a.toAttribute -> child
   }.toMap
 
   def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {

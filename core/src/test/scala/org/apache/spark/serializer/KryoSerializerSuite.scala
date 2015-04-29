@@ -269,7 +269,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("serialization buffer overflow reporting") {
     import org.apache.spark.SparkException
-    val kryoBufferMaxProperty = "spark.kryoserializer.buffer.max.mb"
+    val kryoBufferMaxProperty = "spark.kryoserializer.buffer.max"
 
     val largeObject = (1 to 1000000).toArray
 

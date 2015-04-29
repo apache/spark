@@ -105,8 +105,8 @@ test_that("several transformations on RDD (a benchmark on PipelinedRDD)", {
   rdd2 <- rdd
   for (i in 1:12)
     rdd2 <- lapplyPartitionsWithIndex(
-              rdd2, function(split, part) {
-                part <- as.list(unlist(part) * split + i)
+              rdd2, function(partIndex, part) {
+                part <- as.list(unlist(part) * partIndex + i)
               })
   rdd2 <- lapply(rdd2, function(x) x + x)
   actual <- collect(rdd2)
@@ -121,8 +121,8 @@ test_that("PipelinedRDD support actions: cache(), persist(), unpersist(), checkp
   # PipelinedRDD
   rdd2 <- lapplyPartitionsWithIndex(
             rdd2,
-            function(split, part) {
-              part <- as.list(unlist(part) * split)
+            function(partIndex, part) {
+              part <- as.list(unlist(part) * partIndex)
             })
 
   cache(rdd2)
@@ -174,13 +174,13 @@ test_that("lapply with dependency", {
 })
 
 test_that("lapplyPartitionsWithIndex on RDDs", {
-  func <- function(splitIndex, part) { list(splitIndex, Reduce("+", part)) }
+  func <- function(partIndex, part) { list(partIndex, Reduce("+", part)) }
   actual <- collect(lapplyPartitionsWithIndex(rdd, func), flatten = FALSE)
   expect_equal(actual, list(list(0, 15), list(1, 40)))
 
   pairsRDD <- parallelize(sc, list(list(1, 2), list(3, 4), list(4, 8)), 1L)
   partitionByParity <- function(key) { if (key %% 2 == 1) 0 else 1 }
-  mkTup <- function(splitIndex, part) { list(splitIndex, part) }
+  mkTup <- function(partIndex, part) { list(partIndex, part) }
   actual <- collect(lapplyPartitionsWithIndex(
                       partitionBy(pairsRDD, 2L, partitionByParity),
                       mkTup),
@@ -757,6 +757,11 @@ test_that("collectAsMap() on a pairwise RDD", {
   rdd <- parallelize(sc, list(list(1, "a"), list(2, "b")))
   vals <- collectAsMap(rdd)
   expect_equal(vals, list(`1` = "a", `2` = "b"))
+})
+
+test_that("show()", {
+  rdd <- parallelize(sc, list(1:10))    
+  expect_output(show(rdd), "ParallelCollectionRDD\\[\\d+\\] at parallelize at RRDD\\.scala:\\d+")
 })
 
 test_that("sampleByKey() on pairwise RDDs", {

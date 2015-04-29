@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.apache.spark.sql.functions.*;
+import static org.apache.spark.sql.mathfunctions.*;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext jsc;
@@ -98,6 +99,14 @@ public class JavaDataFrameSuite {
     df.groupBy().agg(countDistinct("key", "value"));
     df.groupBy().agg(countDistinct(col("key"), col("value")));
     df.select(coalesce(col("key")));
+    
+    // Varargs with mathfunctions
+    DataFrame df2 = context.table("testData2");
+    df2.select(exp("a"), exp("b"));
+    df2.select(exp(log("a")));
+    df2.select(pow("a", "a"), pow("b", 2.0));
+    df2.select(pow(col("a"), col("b")), exp("b"));
+    df2.select(sin("a"), acos("b"));
   }
 
   @Ignore
@@ -162,7 +171,7 @@ public class JavaDataFrameSuite {
     Buffer<Integer> outputBuffer = (Buffer<Integer>) first.getJavaMap(2).get("hello");
     Assert.assertArrayEquals(
       bean.getC().get("hello"),
-      Ints.toArray(JavaConversions.asJavaList(outputBuffer)));
+      Ints.toArray(JavaConversions.bufferAsJavaList(outputBuffer)));
     Seq<String> d = first.getAs(3);
     Assert.assertEquals(bean.getD().size(), d.length());
     for (int i = 0; i < d.length(); i++) {

@@ -15,19 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml
-
-import java.util.UUID
+package org.apache.spark.sql.execution
 
 /**
- * Object with a unique id.
+ * Package containing expressions that are specific to Spark runtime.
  */
-private[ml] trait Identifiable extends Serializable {
-
-  /**
-   * A unique id for the object. The default implementation concatenates the class name, "_", and 8
-   * random hex chars.
-   */
-  private[ml] val uid: String =
-    this.getClass.getSimpleName + "_" + UUID.randomUUID().toString.take(8)
-}
+package object expressions

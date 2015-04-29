@@ -31,9 +31,7 @@ import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
 import org.apache.spark.util.Utils
 
 /**
- * A client that submits applications to the standalone Master using a REST protocol.
- * This client is intended to communicate with the [[StandaloneRestServer]] and is
- * currently used for cluster mode only.
+ * A client that submits applications to a [[RestSubmissionServer]].
  *
  * In protocol version v1, the REST URL takes the form http://[host:port]/v1/submissions/[action],
  * where [action] can be one of create, kill, or status. Each type of request is represented in
@@ -54,8 +52,10 @@ import org.apache.spark.util.Utils
  * implementation of this client can use that information to retry using the version specified
  * by the server.
  */
-private[deploy] class StandaloneRestClient(master: String) extends Logging {
-  import StandaloneRestClient._
+private[spark] class RestSubmissionClient(master: String) extends Logging {
+  import RestSubmissionClient._
+
+  private val supportedMasterPrefixes = Seq("spark://", "mesos://")
 
   private val masters: Array[String] = Utils.parseStandaloneMasterUrls(master)
 
@@ -69,8 +69,7 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
    * If the submission was successful, poll the status of the submission and report
    * it to the user. Otherwise, report the error message provided by the server.
    */
-  private[rest] def createSubmission(
-      request: CreateSubmissionRequest): SubmitRestProtocolResponse = {
+  def createSubmission(request: CreateSubmissionRequest): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request to launch an application in $master.")
     var handled: Boolean = false
     var response: SubmitRestProtocolResponse = null
@@ -161,7 +160,7 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
   }
 
   /** Construct a message that captures the specified parameters for submitting an application. */
-  private[rest] def constructSubmitRequest(
+  def constructSubmitRequest(
       appResource: String,
       mainClass: String,
       appArgs: Array[String],
@@ -276,14 +275,23 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
 
   /** Return the base URL for communicating with the server, including the protocol version. */
   private def getBaseUrl(master: String): String = {
-    val masterUrl = master.stripPrefix("spark://").stripSuffix("/")
+    var masterUrl = master
+    supportedMasterPrefixes.foreach { prefix =>
+      if (master.startsWith(prefix)) {
+        masterUrl = master.stripPrefix(prefix)
+      }
+    }
+    masterUrl = masterUrl.stripSuffix("/")
     s"http://$masterUrl/$PROTOCOL_VERSION/submissions"
   }
 
   /** Throw an exception if this is not standalone mode. */
   private def validateMaster(master: String): Unit = {
-    if (!master.startsWith("spark://")) {
-      throw new IllegalArgumentException("This REST client is only supported in standalone mode.")
+    val valid = supportedMasterPrefixes.exists { prefix => master.startsWith(prefix) }
+    if (!valid) {
+      throw new IllegalArgumentException(
+        "This REST client only supports master URLs that start with " +
+          "one of the following: " + supportedMasterPrefixes.mkString(","))
     }
   }
 
@@ -366,7 +374,7 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
   }
 }
 
-private[rest] object StandaloneRestClient {
+private[spark] object RestSubmissionClient {
   private val REPORT_DRIVER_STATUS_INTERVAL = 1000
   private val REPORT_DRIVER_STATUS_MAX_TRIES = 10
   val PROTOCOL_VERSION = "v1"
@@ -386,7 +394,7 @@ private[rest] object StandaloneRestClient {
     }
     val sparkProperties = conf.getAll.toMap
     val environmentVariables = env.filter { case (k, _) => k.startsWith("SPARK_") }
-    val client = new StandaloneRestClient(master)
+    val client = new RestSubmissionClient(master)
     val submitRequest = client.constructSubmitRequest(
       appResource, mainClass, appArgs, sparkProperties, environmentVariables)
     client.createSubmission(submitRequest)
@@ -394,7 +402,7 @@ private[rest] object StandaloneRestClient {
 
   def main(args: Array[String]): Unit = {
     if (args.size < 2) {
-      sys.error("Usage: StandaloneRestClient [app resource] [main class] [app args*]")
+      sys.error("Usage: RestSubmissionClient [app resource] [main class] [app args*]")
       sys.exit(1)
     }
     val appResource = args(0)
