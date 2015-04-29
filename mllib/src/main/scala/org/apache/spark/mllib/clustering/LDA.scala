@@ -90,14 +90,15 @@ class LDA private (
    * If set to -1, then docConcentration is set automatically.
    *  (default = -1 = automatic)
    *
-   * Automatic setting of parameter:
-   *  - For EM: default = (50 / k) + 1.
-   *     - The 50/k is common in LDA libraries.
-   *     - The +1 follows Asuncion et al. (2009), who recommend a +1 adjustment for EM.
-   *  - For Online: default = (1.0 / k).
-   *     - follows the implementation from: [[https://github.com/Blei-Lab/onlineldavb]].
-   *
-   * Note: For EM optimizer, This value should be > 1.0.
+   * Optimizer-specific parameter settings:
+   *  - EM
+   *     - Value should be > 1.0
+   *     - default = (50 / k) + 1, where 50/k is common in LDA libraries and +1 follows
+   *       Asuncion et al. (2009), who recommend a +1 adjustment for EM.
+   *  - Online
+   *     - Value should be >= 0
+   *     - default = (1.0 / k), following the implementation from
+   *       [[https://github.com/Blei-Lab/onlineldavb]].
    */
   def setDocConcentration(docConcentration: Double): this.type = {
     this.docConcentration = docConcentration
@@ -117,8 +118,7 @@ class LDA private (
    * This is the parameter to a symmetric Dirichlet distribution.
    *
    * Note: The topics' distributions over terms are called "beta" in the original LDA paper
-   * by Blei et al., but are ca
-   * lled "phi" in many later papers such as Asuncion et al., 2009.
+   * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    */
   def getTopicConcentration: Double = this.topicConcentration
 
@@ -134,14 +134,15 @@ class LDA private (
    * If set to -1, then topicConcentration is set automatically.
    *  (default = -1 = automatic)
    *
-   * Automatic setting of parameter:
-   *  - For EM: default = 0.1 + 1.
-   *     - The 0.1 gives a small amount of smoothing.
-   *     - The +1 follows Asuncion et al. (2009), who recommend a +1 adjustment for EM.
-   *  - For Online: default = (1.0 / k).
-   *     - follows the implementation from: [[https://github.com/Blei-Lab/onlineldavb]].
-   *
-   * Note: For EM optimizer, This value should be > 1.0.
+   * Optimizer-specific parameter settings:
+   *  - EM
+   *     - Value should be > 1.0
+   *     - default = 0.1 + 1, where 0.1 gives a small amount of smoothing and +1 follows
+   *       Asuncion et al. (2009), who recommend a +1 adjustment for EM.
+   *  - Online
+   *     - Value should be >= 0
+   *     - default = (1.0 / k), following the implementation from
+   *       [[https://github.com/Blei-Lab/onlineldavb]].
    */
   def setTopicConcentration(topicConcentration: Double): this.type = {
     this.topicConcentration = topicConcentration
