@@ -184,6 +184,13 @@ case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star {
   override def toString: String = expressions.mkString("ResolvedStar(", ", ", ")")
 }
 
+/**
+ * Get field of an expression
+ *
+ * @param child The expression to get field of, can be Map, Array, Struct or array of Struct.
+ * @param fieldExpr The expression to describe the field,
+ *                  can be key of Map, index of Array, field name of Struct.
+ */
 case class UnresolvedGetField(child: Expression, fieldExpr: Expression) extends UnaryExpression {
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
