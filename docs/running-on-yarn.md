@@ -137,7 +137,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.am.port</code></td>
   <td>(random)</td>
   <td>
-    Port for the YARN Application Master to listen on.
+    Port for the YARN Application Master to listen on. This is used for communicating with the executors.
   </td>
 </tr>
 <tr>
