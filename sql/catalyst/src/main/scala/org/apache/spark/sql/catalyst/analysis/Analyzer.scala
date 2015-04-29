@@ -46,11 +46,6 @@ class Analyzer(
   val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
 
   val fixedPoint = FixedPoint(maxIterations)
-
-  /**
-   * Override to provide additional rules for the "Substitution" batch.
-   */
-  val extendedSubstitutionRules: Seq[Rule[LogicalPlan]] = Nil
   
   /**
    * Override to provide additional rules for the "Resolution" batch.
@@ -60,8 +55,7 @@ class Analyzer(
   lazy val batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       CTESubstitution ::
-      Nil ++
-      extendedSubstitutionRules : _*),
+      Nil : _*),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
@@ -223,7 +217,7 @@ class Analyzer(
       case i@InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
         i.copy(table = EliminateSubQueries(getTable(u)))
       case u: UnresolvedRelation =>
-        getTable(u, cteRelations)
+        getTable(u)
     }
   }
 
