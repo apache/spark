@@ -50,7 +50,7 @@ def get_error_codes(err_code_file):
 
 def exit_from_command_with_retcode(cmd, retcode):
     print "[error] running", cmd, "; received return code", retcode
-    sys.exit(os.environ["BLOCK_CURRENT"])
+    sys.exit(os.environ.get("CURRENT_BLOCK", 255))
 
 
 def rm_r(path):
