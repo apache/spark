@@ -34,6 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.StatCounter
+import org.apache.spark.Logging
 
 /**
  * Params for linear regression.
@@ -48,7 +49,7 @@ private[regression] trait LinearRegressionParams extends RegressorParams
  */
 @AlphaComponent
 class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegressionModel]
-  with LinearRegressionParams {
+  with LinearRegressionParams with Logging {
 
   /**
    * Set the regularization parameter.
@@ -112,68 +113,64 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
 
     // If the yStd is zero, then the intercept is yMean with zero weights;
     // as a result, training is not needed.
-    val model = if (yStd != 0.0) {
-      val featuresMean = summarizer.mean.toArray
-      val featuresStd = summarizer.variance.toArray.map(math.sqrt)
+    if (yStd == 0.0) {
+      logWarning(s"The standard deviation of the label is zero, " +
+        s"so the weights will be zeros and intercept will be the mean of the label.")
+      if (handlePersistence) instances.unpersist()
+      return new LinearRegressionModel(this, paramMap, Vectors.sparse(numFeatures, Seq()), yMean)
+    }
 
-      // Since we implicitly do the feature scaling when we compute the cost function
-      // to improve the convergence, the effective regParam will be changed.
-      val effectiveRegParam = paramMap(regParam) / yStd
-      val effectiveL1RegParam = paramMap(elasticNetParam) * effectiveRegParam
-      val effectiveL2RegParam = (1.0 - paramMap(elasticNetParam)) * effectiveRegParam
+    val featuresMean = summarizer.mean.toArray
+    val featuresStd = summarizer.variance.toArray.map(math.sqrt)
 
-      val costFun = new LeastSquaresCostFun(instances, yStd, yMean,
-        featuresStd, featuresMean, effectiveL2RegParam)
+    // Since we implicitly do the feature scaling when we compute the cost function
+    // to improve the convergence, the effective regParam will be changed.
+    val effectiveRegParam = paramMap(regParam) / yStd
+    val effectiveL1RegParam = paramMap(elasticNetParam) * effectiveRegParam
+    val effectiveL2RegParam = (1.0 - paramMap(elasticNetParam)) * effectiveRegParam
 
-      val optimizer = if (paramMap(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
-        new BreezeLBFGS[BDV[Double]](paramMap(maxIter), 10, paramMap(tol))
-      } else {
-        new BreezeOWLQN[Int, BDV[Double]](paramMap(maxIter), 10,
-          effectiveL1RegParam, paramMap(tol))
-      }
+    val costFun = new LeastSquaresCostFun(instances, yStd, yMean,
+      featuresStd, featuresMean, effectiveL2RegParam)
 
-      val initialWeights = Vectors.zeros(numFeatures)
-      val states = optimizer.iterations(new CachedDiffFunction(costFun),
-        initialWeights.toBreeze.toDenseVector)
-
-      var state = states.next()
-      val lossHistory = mutable.ArrayBuilder.make[Double]
-
-      while (states.hasNext) {
-        lossHistory += state.value
-        state = states.next()
-      }
-      lossHistory += state.value
-
-      // The weights are trained in the scaled space; we're converting them back to
-      // the original space.
-      val weights = {
-        val rawWeights = state.x.toArray.clone()
-        var i = 0
-        while (i < rawWeights.length) {
-          rawWeights(i) *= {
-            if (featuresStd(i) != 0.0) yStd / featuresStd(i) else 0.0
-          }
-          i += 1
-        }
-        Vectors.dense(rawWeights)
-      }
-
-      // The intercept in R's GLMNET is computed using closed form after the coefficients are
-      // converged. See the following discussion for detail.
-      // http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
-      val intercept = yMean - dot(weights, Vectors.dense(featuresMean))
-
-      // TODO: We convert to sparse format based on the storage.
-      // But we may base on the prediction speed.
-      new LinearRegressionModel(this, paramMap, weights.compressed, intercept)
+    val optimizer = if (paramMap(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
+      new BreezeLBFGS[BDV[Double]](paramMap(maxIter), 10, paramMap(tol))
     } else {
-      new LinearRegressionModel(this, paramMap, Vectors.sparse(numFeatures, Seq()), yMean)
+      new BreezeOWLQN[Int, BDV[Double]](paramMap(maxIter), 10, effectiveL1RegParam, paramMap(tol))
     }
-    if (handlePersistence) {
-      instances.unpersist()
+
+    val initialWeights = Vectors.zeros(numFeatures)
+    val states =
+      optimizer.iterations(new CachedDiffFunction(costFun), initialWeights.toBreeze.toDenseVector)
+
+    var state = states.next()
+    val lossHistory = mutable.ArrayBuilder.make[Double]
+
+    while (states.hasNext) {
+      lossHistory += state.value
+      state = states.next()
     }
-    model
+    lossHistory += state.value
+
+    // The weights are trained in the scaled space; we're converting them back to
+    // the original space.
+    val weights = {
+      val rawWeights = state.x.toArray.clone()
+      var i = 0
+      while (i < rawWeights.length) {
+        rawWeights(i) *= { if (featuresStd(i) != 0.0) yStd / featuresStd(i) else 0.0 }
+        i += 1
+      }
+      Vectors.dense(rawWeights)
+    }
+
+    // The intercept in R's GLMNET is computed using closed form after the coefficients are
+    // converged. See the following discussion for detail.
+    // http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
+    val intercept = yMean - dot(weights, Vectors.dense(featuresMean))
+    if (handlePersistence) instances.unpersist()
+
+    // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
+    new LinearRegressionModel(this, paramMap, weights.compressed, intercept)
   }
 }
 
