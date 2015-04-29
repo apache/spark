@@ -280,11 +280,9 @@ private[ml] trait HasTol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param stepSize.
+ * (private[ml]) Trait for shared param stepSize.
  */
-@DeveloperApi
-trait HasStepSize extends Params {
+private[ml] trait HasStepSize extends Params {
 
   /**
    * Param for Step size to be used for each iteration of optimization..
