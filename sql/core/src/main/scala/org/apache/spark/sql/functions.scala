@@ -302,6 +302,22 @@ object functions {
   def lower(e: Column): Column = Lower(e.expr)
 
   /**
+   * A column expression that generates monotonically increasing 64-bit integers.
+   *
+   * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+   * The current implementation puts the partition ID in the upper 31 bits, and the record number
+   * within each partition in the lower 33 bits. The assumption is that the data frame has
+   * less than 1 billion partitions, and each partition has less than 8 billion records.
+   *
+   * As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+   * This expression would return the following IDs:
+   * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   *
+   * @group normal_funcs
+   */
+  def monotonicallyIncreasingId(): Column = execution.expressions.MonotonicallyIncreasingID()
+
+  /**
    * Unary minus, i.e. negate the expression.
    * {{{
    *   // Select the amount column and negates all values.

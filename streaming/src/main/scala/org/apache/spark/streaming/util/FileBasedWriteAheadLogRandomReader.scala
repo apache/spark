@@ -23,16 +23,16 @@ import org.apache.hadoop.conf.Configuration
 
 /**
  * A random access reader for reading write ahead log files written using
- * [[org.apache.spark.streaming.util.WriteAheadLogWriter]]. Given the file segment info,
- * this reads the record (bytebuffer) from the log file.
+ * [[org.apache.spark.streaming.util.FileBasedWriteAheadLogWriter]]. Given the file segment info,
+ * this reads the record (ByteBuffer) from the log file.
  */
-private[streaming] class WriteAheadLogRandomReader(path: String, conf: Configuration)
+private[streaming] class FileBasedWriteAheadLogRandomReader(path: String, conf: Configuration)
   extends Closeable {
 
   private val instream = HdfsUtils.getInputStream(path, conf)
   private var closed = false
 
-  def read(segment: WriteAheadLogFileSegment): ByteBuffer = synchronized {
+  def read(segment: FileBasedWriteAheadLogSegment): ByteBuffer = synchronized {
     assertOpen()
     instream.seek(segment.offset)
     val nextLength = instream.readInt()
