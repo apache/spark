@@ -161,7 +161,7 @@ class JsonProtocolSuite extends FunSuite {
     assertEquals(exceptionFailure, JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
-  test("StageInfo backward compatibility") {
+  test("StageInfo backward compatibility (details, accumulables)") {
     val info = makeStageInfo(1, 2, 3, 4L, 5L)
     val newJson = JsonProtocol.stageInfoToJson(info)
 
@@ -294,7 +294,7 @@ class JsonProtocolSuite extends FunSuite {
     val stageIds = Seq[Int](1, 2, 3, 4)
     val stageInfos = stageIds.map(x => makeStageInfo(x, x * 200, x * 300, x * 400, x * 500))
     val dummyStageInfos =
-      stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, "unknown"))
+      stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown"))
     val jobStart = SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
     val oldEvent = JsonProtocol.jobStartToJson(jobStart).removeField({_._1 == "Stage Infos"})
     val expectedJobStart =
@@ -320,14 +320,22 @@ class JsonProtocolSuite extends FunSuite {
     assertEquals(expectedJobEnd, JsonProtocol.jobEndFromJson(oldEndEvent))
   }
 
-  test("RDDInfo backward compatibility") {
-    // Prior to Spark 1.4.0, RDDInfo did not have a "Scope" and "Parent IDs" properties
+  test("RDDInfo backward compatibility (scope, parent IDs)") {
+    // Prior to Spark 1.4.0, RDDInfo did not have the "Scope" and "Parent IDs" properties
     val rddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, "fable", Seq(1, 6, 8))
     val oldRddInfoJson = JsonProtocol.rddInfoToJson(rddInfo)
       .removeField({ _._1 == "Scope"})
       .removeField({ _._1 == "Parent IDs"})
     val expectedRddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, null, Seq.empty)
     assertEquals(expectedRddInfo, JsonProtocol.rddInfoFromJson(oldRddInfoJson))
+  }
+
+  test("StageInfo backward compatibility (parent IDs)") {
+    // Prior to Spark 1.4.0, StageInfo did not have the "Parent IDs" property
+    val stageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq(1, 2, 3), "details")
+    val oldStageInfo = JsonProtocol.stageInfoToJson(stageInfo).removeField({ _._1 == "Parent IDs"})
+    val expectedStageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq.empty, "details")
+    assertEquals(expectedStageInfo, JsonProtocol.stageInfoFromJson(oldStageInfo))
   }
 
   /** -------------------------- *
@@ -661,7 +669,7 @@ class JsonProtocolSuite extends FunSuite {
 
   private def makeStageInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
     val rddInfos = (0 until a % 5).map { i => makeRddInfo(a + i, b + i, c + i, d + i, e + i) }
-    val stageInfo = new StageInfo(a, 0, "greetings", b, rddInfos, "details")
+    val stageInfo = new StageInfo(a, 0, "greetings", b, rddInfos, Seq(100, 200, 300), "details")
     val (acc1, acc2) = (makeAccumulableInfo(1), makeAccumulableInfo(2))
     stageInfo.accumulables(acc1.id) = acc1
     stageInfo.accumulables(acc2.id) = acc2
@@ -754,6 +762,7 @@ class JsonProtocolSuite extends FunSuite {
       |    "Stage Name": "greetings",
       |    "Number of Tasks": 200,
       |    "RDD Info": [],
+      |    "ParentIDs" : [100, 200, 300],
       |    "Details": "details",
       |    "Accumulables": [
       |      {
@@ -808,6 +817,7 @@ class JsonProtocolSuite extends FunSuite {
       |        "Disk Size": 501
       |      }
       |    ],
+      |    "ParentIDs" : [100, 200, 300],
       |    "Details": "details",
       |    "Accumulables": [
       |      {
@@ -1193,6 +1203,7 @@ class JsonProtocolSuite extends FunSuite {
       |          "Disk Size": 500
       |        }
       |      ],
+      |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
       |      "Accumulables": [
       |        {
@@ -1252,6 +1263,7 @@ class JsonProtocolSuite extends FunSuite {
       |          "Disk Size": 1001
       |        }
       |      ],
+      |      "ParentIDs" : [100, 200, 300],
       |      "Details": "details",
       |      "Accumulables": [
       |        {
@@ -1329,6 +1341,7 @@ class JsonProtocolSuite extends FunSuite {
       |          "Disk Size": 1502
       |        }
       |      ],
+      |      "ParentIDs" : [100, 200, 300],
       |      "Details": "details",
       |      "Accumulables": [
       |        {
@@ -1424,6 +1437,7 @@ class JsonProtocolSuite extends FunSuite {
       |          "Disk Size": 2003
       |        }
       |      ],
+      |      "ParentIDs" : [100, 200, 300],
       |      "Details": "details",
       |      "Accumulables": [
       |        {
