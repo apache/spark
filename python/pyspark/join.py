@@ -32,6 +32,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 from pyspark.resultiterable import ResultIterable
+from functools import reduce
 
 
 def _do_python_join(rdd, other, numPartitions, dispatch):
@@ -48,7 +49,7 @@ def python_join(rdd, other, numPartitions):
                 vbuf.append(v)
             elif n == 2:
                 wbuf.append(v)
-        return [(v, w) for v in vbuf for w in wbuf]
+        return ((v, w) for v in vbuf for w in wbuf)
     return _do_python_join(rdd, other, numPartitions, dispatch)
 
 
@@ -62,7 +63,7 @@ def python_right_outer_join(rdd, other, numPartitions):
                 wbuf.append(v)
         if not vbuf:
             vbuf.append(None)
-        return [(v, w) for v in vbuf for w in wbuf]
+        return ((v, w) for v in vbuf for w in wbuf)
     return _do_python_join(rdd, other, numPartitions, dispatch)
 
 
@@ -76,7 +77,7 @@ def python_left_outer_join(rdd, other, numPartitions):
                 wbuf.append(v)
         if not wbuf:
             wbuf.append(None)
-        return [(v, w) for v in vbuf for w in wbuf]
+        return ((v, w) for v in vbuf for w in wbuf)
     return _do_python_join(rdd, other, numPartitions, dispatch)
 
 
@@ -104,8 +105,9 @@ def python_cogroup(rdds, numPartitions):
     rdd_len = len(vrdds)
 
     def dispatch(seq):
-        bufs = [[] for i in range(rdd_len)]
-        for (n, v) in seq:
+        bufs = [[] for _ in range(rdd_len)]
+        for n, v in seq:
             bufs[n].append(v)
-        return tuple(map(ResultIterable, bufs))
+        return tuple(ResultIterable(vs) for vs in bufs)
+
     return union_vrdds.groupByKey(numPartitions).mapValues(dispatch)

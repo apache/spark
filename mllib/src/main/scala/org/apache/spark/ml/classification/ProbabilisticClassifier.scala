@@ -18,12 +18,13 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
-import org.apache.spark.ml.param.{HasProbabilityCol, ParamMap, Params}
+import org.apache.spark.ml.param.{ParamMap, Params}
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, StructType}
-
 
 /**
  * Params for probabilistic classification.
@@ -37,8 +38,8 @@ private[classification] trait ProbabilisticClassifierParams
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
     val parentSchema = super.validateAndTransformSchema(schema, paramMap, fitting, featuresDataType)
-    val map = this.paramMap ++ paramMap
-    addOutputColumn(parentSchema, map(probabilityCol), new VectorUDT)
+    val map = extractParamMap(paramMap)
+    SchemaUtils.appendColumn(parentSchema, map(probabilityCol), new VectorUDT)
   }
 }
 
@@ -102,7 +103,7 @@ private[spark] abstract class ProbabilisticClassificationModel[
 
     // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
 
     // Prepare model
     val tmpModel = if (paramMap.size != 0) {

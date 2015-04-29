@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.types._
 
 object Literal {
@@ -29,7 +30,7 @@ object Literal {
     case f: Float => Literal(f, FloatType)
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
-    case s: String => Literal(s, StringType)
+    case s: String => Literal(UTF8String(s), StringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
     case d: java.math.BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
@@ -40,6 +41,10 @@ object Literal {
     case null => Literal(null, NullType)
     case _ =>
       throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
+  }
+
+  def create(v: Any, dataType: DataType): Literal = {
+    Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
   }
 }
 
@@ -62,7 +67,10 @@ object IntegerLiteral {
   }
 }
 
-case class Literal(value: Any, dataType: DataType) extends LeafExpression {
+/**
+ * In order to do type checking, use Literal.create() instead of constructor
+ */
+case class Literal protected (value: Any, dataType: DataType) extends LeafExpression {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null

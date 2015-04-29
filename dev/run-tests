@@ -173,7 +173,7 @@ CURRENT_BLOCK=$BLOCK_BUILD
     build/mvn $HIVE_BUILD_ARGS clean package -DskipTests
   else
     echo -e "q\n" \
-      | build/sbt $HIVE_BUILD_ARGS package assembly/assembly  \
+      | build/sbt $HIVE_BUILD_ARGS package assembly/assembly streaming-kafka-assembly/assembly \
       | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
   fi
 }
@@ -235,4 +235,21 @@ echo "========================================================================="
 
 CURRENT_BLOCK=$BLOCK_PYSPARK_UNIT_TESTS
 
+# add path for python 3 in jenkins
+export PATH="${PATH}:/home/anaonda/envs/py3k/bin"
 ./python/run-tests
+
+echo ""
+echo "========================================================================="
+echo "Running SparkR tests"
+echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_SPARKR_UNIT_TESTS
+
+if [ $(command -v R) ]; then
+  ./R/install-dev.sh
+  ./R/run-tests.sh
+else
+  echo "Ignoring SparkR tests as R was not found in PATH"
+fi
+

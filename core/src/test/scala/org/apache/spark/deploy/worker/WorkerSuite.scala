@@ -24,8 +24,10 @@ import org.scalatest.{Matchers, FunSuite}
 
 class WorkerSuite extends FunSuite with Matchers {
 
-  def cmd(javaOpts: String*) = Command("", Seq.empty, Map.empty, Seq.empty, Seq.empty, Seq(javaOpts:_*))
-  def conf(opts: (String, String)*) = new SparkConf(loadDefaults = false).setAll(opts)
+  def cmd(javaOpts: String*): Command = {
+    Command("", Seq.empty, Map.empty, Seq.empty, Seq.empty, Seq(javaOpts:_*))
+  }
+  def conf(opts: (String, String)*): SparkConf = new SparkConf(loadDefaults = false).setAll(opts)
 
   test("test isUseLocalNodeSSLConfig") {
     Worker.isUseLocalNodeSSLConfig(cmd("-Dasdf=dfgh")) shouldBe false

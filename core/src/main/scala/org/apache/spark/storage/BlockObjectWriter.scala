@@ -21,8 +21,9 @@ import java.io.{BufferedOutputStream, FileOutputStream, File, OutputStream}
 import java.nio.channels.FileChannel
 
 import org.apache.spark.Logging
-import org.apache.spark.serializer.{SerializationStream, Serializer}
+import org.apache.spark.serializer.{SerializerInstance, SerializationStream}
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.util.Utils
 
 /**
  * An interface for writing JVM objects to some underlying storage. This interface allows
@@ -70,7 +71,7 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
 private[spark] class DiskBlockObjectWriter(
     blockId: BlockId,
     file: File,
-    serializer: Serializer,
+    serializerInstance: SerializerInstance,
     bufferSize: Int,
     compressStream: OutputStream => OutputStream,
     syncWrites: Boolean,
@@ -133,21 +134,24 @@ private[spark] class DiskBlockObjectWriter(
     ts = new TimeTrackingOutputStream(fos)
     channel = fos.getChannel()
     bs = compressStream(new BufferedOutputStream(ts, bufferSize))
-    objOut = serializer.newInstance().serializeStream(bs)
+    objOut = serializerInstance.serializeStream(bs)
     initialized = true
     this
   }
 
   override def close() {
     if (initialized) {
-      if (syncWrites) {
-        // Force outstanding writes to disk and track how long it takes
-        objOut.flush()
-        callWithTiming {
-          fos.getFD.sync()
+      Utils.tryWithSafeFinally {
+        if (syncWrites) {
+          // Force outstanding writes to disk and track how long it takes
+          objOut.flush()
+          callWithTiming {
+            fos.getFD.sync()
+          }
         }
+      } {
+        objOut.close()
       }
-      objOut.close()
 
       channel = null
       bs = null

@@ -34,7 +34,7 @@ import scala.collection.JavaConversions._
  * 1. The Underlying data type in catalyst and in Hive
  * In catalyst:
  *  Primitive  =>
- *     java.lang.String
+ *     UTF8String
  *     int / scala.Int
  *     boolean / scala.Boolean
  *     float / scala.Float
@@ -239,9 +239,10 @@ private[hive] trait HiveInspectors {
    */
   def unwrap(data: Any, oi: ObjectInspector): Any = oi match {
     case coi: ConstantObjectInspector if coi.getWritableConstantValue == null => null
-    case poi: WritableConstantStringObjectInspector => poi.getWritableConstantValue.toString
+    case poi: WritableConstantStringObjectInspector =>
+      UTF8String(poi.getWritableConstantValue.toString)
     case poi: WritableConstantHiveVarcharObjectInspector =>
-      poi.getWritableConstantValue.getHiveVarchar.getValue
+      UTF8String(poi.getWritableConstantValue.getHiveVarchar.getValue)
     case poi: WritableConstantHiveDecimalObjectInspector =>
       HiveShim.toCatalystDecimal(
         PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector,
@@ -284,10 +285,13 @@ private[hive] trait HiveInspectors {
     case pi: PrimitiveObjectInspector => pi match {
       // We think HiveVarchar is also a String
       case hvoi: HiveVarcharObjectInspector if hvoi.preferWritable() =>
-        hvoi.getPrimitiveWritableObject(data).getHiveVarchar.getValue
-      case hvoi: HiveVarcharObjectInspector => hvoi.getPrimitiveJavaObject(data).getValue
+        UTF8String(hvoi.getPrimitiveWritableObject(data).getHiveVarchar.getValue)
+      case hvoi: HiveVarcharObjectInspector =>
+        UTF8String(hvoi.getPrimitiveJavaObject(data).getValue)
       case x: StringObjectInspector if x.preferWritable() =>
-        x.getPrimitiveWritableObject(data).toString
+        UTF8String(x.getPrimitiveWritableObject(data).toString)
+      case x: StringObjectInspector =>
+        UTF8String(x.getPrimitiveJavaObject(data))
       case x: IntObjectInspector if x.preferWritable() => x.get(data)
       case x: BooleanObjectInspector if x.preferWritable() => x.get(data)
       case x: FloatObjectInspector if x.preferWritable() => x.get(data)
@@ -340,7 +344,9 @@ private[hive] trait HiveInspectors {
    */
   protected def wrapperFor(oi: ObjectInspector): Any => Any = oi match {
     case _: JavaHiveVarcharObjectInspector =>
-      (o: Any) => new HiveVarchar(o.asInstanceOf[String], o.asInstanceOf[String].size)
+      (o: Any) =>
+        val s = o.asInstanceOf[UTF8String].toString
+        new HiveVarchar(s, s.size)
 
     case _: JavaHiveDecimalObjectInspector =>
       (o: Any) => HiveShim.createDecimal(o.asInstanceOf[Decimal].toJavaBigDecimal)
@@ -409,7 +415,7 @@ private[hive] trait HiveInspectors {
     case x: PrimitiveObjectInspector => x match {
       // TODO we don't support the HiveVarcharObjectInspector yet.
       case _: StringObjectInspector if x.preferWritable() => HiveShim.getStringWritable(a)
-      case _: StringObjectInspector => a.asInstanceOf[java.lang.String]
+      case _: StringObjectInspector => a.asInstanceOf[UTF8String].toString()
       case _: IntObjectInspector if x.preferWritable() => HiveShim.getIntWritable(a)
       case _: IntObjectInspector => a.asInstanceOf[java.lang.Integer]
       case _: BooleanObjectInspector if x.preferWritable() => HiveShim.getBooleanWritable(a)
@@ -593,7 +599,7 @@ private[hive] trait HiveInspectors {
     case Literal(_, dt) => sys.error(s"Hive doesn't support the constant type [$dt].")
     // ideally, we don't test the foldable here(but in optimizer), however, some of the
     // Hive UDF / UDAF requires its argument to be constant objectinspector, we do it eagerly.
-    case _ if expr.foldable => toInspector(Literal(expr.eval(), expr.dataType))
+    case _ if expr.foldable => toInspector(Literal.create(expr.eval(), expr.dataType))
     // For those non constant expression, map to object inspector according to its data type
     case _ => toInspector(expr.dataType)
   }
