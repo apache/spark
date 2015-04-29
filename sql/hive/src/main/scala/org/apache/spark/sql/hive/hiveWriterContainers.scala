@@ -237,7 +237,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         val path = new Path(workPath, getOutputName)
         val fs = path.getFileSystem(conf.value)
         // this judgement is added for SPARK-6067
-        if (fs.exists(path) && path.toUri.toString.contains("part-")) {
+        if (path.toUri.toString.contains("part-") && fs.exists(path)) {
           fs.delete(path, false) // only delete the duplicate file, not dir
         }
         path
