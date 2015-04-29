@@ -592,21 +592,25 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def test_kafka_stream(self):
         """Test the Python Kafka stream API."""
+        print >> sys.stderr, "test_kafka_stream started"
         topic = "topic1"
         sendData = {"a": 3, "b": 5, "c": 10}
 
         self._kafkaTestUtils.createTopic(topic)
+        print >> sys.stderr, "test_kafka_stream created topic"
         self._kafkaTestUtils.sendMessages(topic, sendData)
+        print >> sys.stderr, "test_kafka_stream sent messages"
+        time.sleep(1)
 
         stream = KafkaUtils.createStream(self.ssc, self._kafkaTestUtils.zkAddress(),
                                          "test-streaming-consumer", {topic: 1},
                                          {"auto.offset.reset": "smallest"})
-
+        print >> sys.stderr, "test_kafka_stream created stream"
         result = {}
         for i in chain.from_iterable(self._collect(stream.map(lambda x: x[1]),
                                                    sum(sendData.values()))):
             result[i] = result.get(i, 0) + 1
-
+        print >> sys.stderr, "test_kafka_stream got results"
         self.assertEqual(sendData, result)
 
 if __name__ == "__main__":
