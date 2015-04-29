@@ -264,7 +264,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     var vector = new SizeTrackingVector[Any]
 
     // Request enough memory to begin unrolling
-    keepUnrolling = reserveUnrollMemoryForThisThread(initialMemoryThreshold)
+    val initialReserveResult =
+      reserveUnrollMemoryForThisThreadDroppingBlocks(blockId, initialMemoryThreshold)
+    droppedBlocks ++= initialReserveResult.droppedBlocks
+    keepUnrolling = initialReserveResult.success
 
     if (!keepUnrolling) {
       logWarning(s"Failed to reserve initial memory threshold of " +
@@ -280,20 +283,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
           val currentSize = vector.estimateSize()
           if (currentSize >= memoryThreshold) {
             val amountToRequest = (currentSize * memoryGrowthFactor - memoryThreshold).toLong
-            // Hold the accounting lock, in case another thread concurrently puts a block that
-            // takes up the unrolling space we just ensured here
-            accountingLock.synchronized {
-              if (!reserveUnrollMemoryForThisThread(amountToRequest)) {
-                // If the first request is not granted, try again after ensuring free space
-                // If there is still not enough space, give up and drop the partition
-                val spaceToEnsure = maxUnrollMemory - currentUnrollMemory
-                if (spaceToEnsure > 0) {
-                  val result = ensureFreeSpace(blockId, spaceToEnsure)
-                  droppedBlocks ++= result.droppedBlocks
-                }
-                keepUnrolling = reserveUnrollMemoryForThisThread(amountToRequest)
-              }
-            }
+            val reserveResult =
+              reserveUnrollMemoryForThisThreadDroppingBlocks(blockId, amountToRequest)
+            droppedBlocks ++= reserveResult.droppedBlocks
+            keepUnrolling = reserveResult.success
             // New threshold is currentSize * memoryGrowthFactor
             memoryThreshold += amountToRequest
           }
@@ -496,6 +489,34 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       granted
     }
   }
+
+  /**
+   * Reserve additional memory for unrolling blocks used by this thread, evicting blocks if
+   * necessary. If blocks are dropped, adds them to droppedBlocks. Returns whether the
+   * request was granted, and any blocks that were dropped trying to grant it.
+   */
+  def reserveUnrollMemoryForThisThreadDroppingBlocks(
+        blockToAdd: BlockId,
+        space: Long): ResultWithDroppedBlocks = {
+    var droppedBlocks = Seq.empty[(BlockId, BlockStatus)]
+    var success = true
+    accountingLock.synchronized {
+      if (!reserveUnrollMemoryForThisThread(space)) {
+        logInfo(s"Initial reserveUnrollMemoryForThisThread($space) failed")
+        // If the first request is not granted, try again after ensuring free space
+        // If there is still not enough space, give up and drop the partition
+        val spaceToEnsure = maxUnrollMemory - currentUnrollMemory
+        if (spaceToEnsure > 0) {
+          val result = ensureFreeSpace(blockToAdd, spaceToEnsure)
+          droppedBlocks = result.droppedBlocks
+        }
+        success = reserveUnrollMemoryForThisThread(space)
+        logInfo(s"Second reserveUnrollMemoryForThisThread: $success")
+      }
+    }
+    ResultWithDroppedBlocks(success, droppedBlocks)
+  }
+
 
   /**
    * Release memory used by this thread for unrolling blocks.
