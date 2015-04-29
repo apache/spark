@@ -755,6 +755,15 @@ class JavaSparkContext(val sc: SparkContext)
    */
   def getLocalProperty(key: String): String = sc.getLocalProperty(key)
 
+  /** Control our logLevel. This overrides any user-defined log settings.
+   * @param logLevel The desired log level as a string.
+   * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
+   * Invalid log level defaults to DEBUG
+   */
+  def setLoggingLevel(logLevel: String) = {
+    sc.setLoggingLevel(logLevel)
+  }
+
   /**
    * Assigns a group ID to all the jobs started by this thread until the group ID is set to a
    * different value or cleared.
