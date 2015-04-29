@@ -136,13 +136,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             partial = false,
             namedGroupingAttributes,
             rewrittenAggregateExpressions,
+            unsafeEnabled,
             execution.GeneratedAggregate(
               partial = true,
               groupingExpressions,
               partialComputation,
-              planLater(child),
-              unsafeEnabled),
-            unsafeEnabled) :: Nil
+              unsafeEnabled,
+              planLater(child))) :: Nil
 
       // Cases where some aggregate can not be codegened
       case PartialAggregation(

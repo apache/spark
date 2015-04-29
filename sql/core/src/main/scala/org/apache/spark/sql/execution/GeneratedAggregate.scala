@@ -41,16 +41,16 @@ case class AggregateEvaluation(
  *                ensure all values where `groupingExpressions` are equal are present.
  * @param groupingExpressions expressions that are evaluated to determine grouping.
  * @param aggregateExpressions expressions that are computed for each group.
- * @param child the input data source.
  * @param unsafeEnabled whether to allow Unsafe-based aggregation buffers to be used.
+ * @param child the input data source.
  */
 @DeveloperApi
 case class GeneratedAggregate(
     partial: Boolean,
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
-    child: SparkPlan,
-    unsafeEnabled: Boolean)
+    unsafeEnabled: Boolean,
+    child: SparkPlan)
   extends UnaryNode {
 
   override def requiredChildDistribution: Seq[Distribution] =
