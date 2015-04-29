@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql
 
-import scala.language.postfixOps
-
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, TestSQLContext}
-import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
 import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.sql.test.TestSQLContext.sql
+import org.apache.spark.sql.test.TestSQLContext.{logicalPlanToSparkQuery, sql}
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, TestSQLContext}
+import org.apache.spark.sql.types._
+
+import scala.language.postfixOps
 
 
 class DataFrameSuite extends QueryTest {
@@ -389,6 +388,23 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       emptyTableData.agg(avg('a), sumDistinct('b)), // non-partial
       Row(null, null))
+  }
+
+  test("SPARK-7156 add randomSplit") {
+    val n = 600
+    val data = TestSQLContext.sparkContext.parallelize(1 to n, 2).toDF("id")
+    for (seed <- 1 to 5) {
+      val splits = data.randomSplit(Array(1, 2, 3), seed)
+      assert(splits.length == 3, "wrong number of splits")
+
+      assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList == data.collect().toList,
+        "incomplete or wrong split")
+
+      val s = splits.map(_.count())
+      assert(math.abs(s(0) - 100) < 50) // std =  9.13
+      assert(math.abs(s(1) - 200) < 50) // std = 11.55
+      assert(math.abs(s(2) - 300) < 50) // std = 12.25
+    }
   }
 
   test("count") {

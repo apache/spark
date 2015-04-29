@@ -20,30 +20,29 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.sql.DriverManager
 
+import com.fasterxml.jackson.core.JsonFactory
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.python.SerDeUtil
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
+import org.apache.spark.sql.jdbc.JDBCWriteDetails
+import org.apache.spark.sql.json.JsonRDD
+import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, ResolvedDataSource}
+import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
-import com.fasterxml.jackson.core.JsonFactory
-
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.python.SerDeUtil
-import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation, ResolvedStar}
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
-import org.apache.spark.sql.jdbc.JDBCWriteDetails
-import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
-import org.apache.spark.util.Utils
 
 
 private[sql] object DataFrame {
@@ -711,7 +710,7 @@ class DataFrame private[sql](
    * @group dfops
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = {
-    Sample(fraction, withReplacement, seed, logicalPlan)
+    Sample(0.0, fraction, withReplacement, seed, logicalPlan)
   }
 
   /**
@@ -962,6 +961,33 @@ class DataFrame private[sql](
    */
   override def repartition(numPartitions: Int): DataFrame = {
     Repartition(numPartitions, shuffle = true, logicalPlan)
+  }
+
+  /**
+   * Randomly splits this DataFrame with the provided weights.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1
+   * @param seed random seed
+   *
+   * @return split DataFrames in an array
+   */
+  def randomSplit(weights: Array[Double], seed: Long = Utils.random.nextLong): Array[DataFrame] = {
+    val sum = weights.sum
+    val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
+    this.cache()
+    normalizedCumWeights.sliding(2).map { x =>
+      new DataFrame(sqlContext, Sample(x(0), x(1), false, seed, logicalPlan))
+    }.toArray
+  }
+
+  /**
+   * Randomly splits this [[DataFrame]] with the provided weights.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1
+   * @group dfops
+   */
+  def randomSplit(weights: Array[Double]): Array[DataFrame] = {
+    randomSplit(weights, Utils.random.nextLong)
   }
 
   /**
