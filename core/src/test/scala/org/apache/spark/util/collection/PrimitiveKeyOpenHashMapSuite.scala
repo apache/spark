@@ -22,7 +22,7 @@ import scala.collection.mutable.HashSet
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
-import org.apache.spark.util.SizeEstimator
+import org.apache.spark.SizeEstimator
 
 class PrimitiveKeyOpenHashMapSuite extends FunSuite with Matchers {
 

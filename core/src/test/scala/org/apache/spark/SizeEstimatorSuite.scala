@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, FunSuite, PrivateMethodTester}
+import org.apache.spark.util.ResetSystemProperties
 
 class DummyClass1 {}
 

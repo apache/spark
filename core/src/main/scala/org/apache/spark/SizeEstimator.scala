@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark
 
 import java.lang.management.ManagementFactory
 import java.lang.reflect.{Field, Modifier}
@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable.ArrayBuffer
 import scala.runtime.ScalaRunTime
 
-import org.apache.spark.Logging
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.collection.OpenHashSet
 
 
@@ -35,7 +35,8 @@ import org.apache.spark.util.collection.OpenHashSet
  * Based on the following JavaWorld article:
  * http://www.javaworld.com/javaworld/javaqa/2003-12/02-qa-1226-sizeof.html
  */
-private[spark] object SizeEstimator extends Logging {
+@DeveloperApi
+object SizeEstimator extends Logging {
 
   // Sizes of primitive types
   private val BYTE_SIZE    = 1
@@ -155,6 +156,18 @@ private[spark] object SizeEstimator extends Logging {
     val shellSize: Long,
     val pointerFields: List[Field]) {}
 
+  /**
+   * :: DeveloperApi ::
+   * Estimate the number of bytes that the given object takes up on the JVM heap. The estimate
+   * includes space taken up by objects referenced by the given object, their references, and so on
+   * and so forth.
+   *
+   * This is useful for determining the amount of heap space a broadcast variable will occupy on
+   * each executor or the amount of space each object will take when caching objects in
+   * deserialized form. This is not the same as the serialized size of the object, which will
+   * typically be much smaller.
+   */
+  @DeveloperApi
   def estimate(obj: AnyRef): Long = estimate(obj, new IdentityHashMap[AnyRef, AnyRef])
 
   private def estimate(obj: AnyRef, visited: IdentityHashMap[AnyRef, AnyRef]): Long = {
