@@ -32,5 +32,5 @@ abstract class RedistributeData extends UnaryNode {
 case class SortPartitions(sortExpressions: Seq[SortOrder], child: LogicalPlan)
   extends RedistributeData
 
-case class Repartition(partitionExpressions: Seq[Expression], child: LogicalPlan)
+case class RepartitionByExpression(partitionExpressions: Seq[Expression], child: LogicalPlan)
   extends RedistributeData

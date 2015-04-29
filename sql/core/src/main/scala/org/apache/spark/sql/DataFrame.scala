@@ -961,7 +961,7 @@ class DataFrame private[sql](
    * @group rdd
    */
   override def repartition(numPartitions: Int): DataFrame = {
-    CoalescePartitions(numPartitions, shuffle = true, logicalPlan)
+    Repartition(numPartitions, shuffle = true, logicalPlan)
   }
 
   /**
@@ -972,7 +972,7 @@ class DataFrame private[sql](
    * @group rdd
    */
   override def coalesce(numPartitions: Int): DataFrame = {
-    CoalescePartitions(numPartitions, shuffle = false, logicalPlan)
+    Repartition(numPartitions, shuffle = false, logicalPlan)
   }
 
   /**
