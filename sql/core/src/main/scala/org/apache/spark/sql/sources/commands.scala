@@ -132,28 +132,32 @@ private[sql] case class InsertIntoFSBasedRelation(
       df: DataFrame,
       partitionColumns: Array[String]): Unit = {
 
+    require(
+      df.schema == relation.schema,
+      s"""DataFrame must have the same schema as the relation to which is inserted.
+         |DataFrame schema: ${df.schema}
+         |Relation schema: ${relation.schema}
+       """.stripMargin)
+
     val sqlContext = df.sqlContext
 
     val (partitionRDD, dataRDD) = {
       val fieldNames = relation.schema.fieldNames
-      val (partitionCols, dataCols) = fieldNames.partition(partitionColumns.contains)
+      val dataCols = fieldNames.filterNot(partitionColumns.contains)
       val df = sqlContext.createDataFrame(
         DataFrame(sqlContext, query).queryExecution.toRdd,
         relation.schema,
         needsConversion = false)
 
-      assert(
-        partitionCols.sameElements(partitionColumns), {
-          val insertionPartitionCols = partitionColumns.mkString(",")
-          val relationPartitionCols =
-            relation.partitionSpec.partitionColumns.fieldNames.mkString(",")
-          s"""Partition columns mismatch.
-             |Expected: $relationPartitionCols
-             |Actual: $insertionPartitionCols
-           """.stripMargin
-        })
+      val partitionColumnsInSpec = relation.partitionSpec.partitionColumns.map(_.name)
+      require(
+        partitionColumnsInSpec.sameElements(partitionColumns),
+        s"""Partition columns mismatch.
+           |Expected: ${partitionColumnsInSpec.mkString(", ")}
+           |Actual: ${partitionColumns.mkString(", ")}
+         """.stripMargin)
 
-      val partitionDF = df.select(partitionCols.head, partitionCols.tail: _*)
+      val partitionDF = df.select(partitionColumns.head, partitionColumns.tail: _*)
       val dataDF = df.select(dataCols.head, dataCols.tail: _*)
 
       (partitionDF.rdd, dataDF.rdd)
