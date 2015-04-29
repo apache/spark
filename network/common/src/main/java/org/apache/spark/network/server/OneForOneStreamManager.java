@@ -20,9 +20,12 @@ package org.apache.spark.network.server;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.google.common.collect.Sets;
+import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +40,9 @@ public class OneForOneStreamManager extends StreamManager {
 
   private final AtomicLong nextStreamId;
   private final Map<Long, StreamState> streams;
+
+  /** List of all stream ids that are associated to specified channel. **/
+  private final Map<Channel, Set<Long>> streamIds;
 
   /** State of a single stream. */
   private static class StreamState {
@@ -56,11 +62,15 @@ public class OneForOneStreamManager extends StreamManager {
     // This does not need to be globally unique, only unique to this class.
     nextStreamId = new AtomicLong((long) new Random().nextInt(Integer.MAX_VALUE) * 1000);
     streams = new ConcurrentHashMap<Long, StreamState>();
+    streamIds = new ConcurrentHashMap<Channel, Set<Long>>();
   }
 
   @Override
-  public boolean streamHasNext(long streamId) {
-    return streams.containsKey(streamId);
+  public void registerChannel(Channel channel, long streamId) {
+    if (!streamIds.containsKey(channel)) {
+      streamIds.put(channel, Sets.newHashSet());
+    }
+    streamIds.get(channel).add(streamId);
   }
 
   @Override
@@ -82,6 +92,17 @@ public class OneForOneStreamManager extends StreamManager {
     }
 
     return nextChunk;
+  }
+
+  @Override
+  public void connectionTerminated(Channel channel) {
+    // Release all associated streams
+    if (streamIds.containsKey(channel)) {
+      for (long streamId : streamIds.get(channel)) {
+        connectionTerminated(streamId);
+      }
+      streamIds.remove(channel);
+    }
   }
 
   @Override

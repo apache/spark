@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.server;
 
+import io.netty.channel.Channel;
+
 import org.apache.spark.network.buffer.ManagedBuffer;
 
 /**
@@ -44,9 +46,15 @@ public abstract class StreamManager {
   public abstract ManagedBuffer getChunk(long streamId, int chunkIndex);
 
   /**
-   * Indicates that if the specified stream has next chunks to read further.
+   * Register the given stream to the associated channel. So these streams can be cleaned up later.
    */
-  public boolean streamHasNext(long streamId) { return true; }
+  public void registerChannel(Channel channel, long streamId) { }
+
+  /**
+   * Indicates that the given channel has been terminated. After this occurs, we are guaranteed not
+   * to read from the associated streams again, so any state can be cleaned up.
+   */
+  public void connectionTerminated(Channel channel) { }
 
   /**
    * Indicates that the TCP connection that was tied to the given stream has been terminated. After

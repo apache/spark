@@ -62,9 +62,6 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   /** Returns each chunk part of a stream. */
   private final StreamManager streamManager;
 
-  /** List of all stream ids that have been read on this handler, used for cleanup. */
-  private final Set<Long> streamIds;
-
   public TransportRequestHandler(
       Channel channel,
       TransportClient reverseClient,
@@ -73,7 +70,6 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     this.reverseClient = reverseClient;
     this.rpcHandler = rpcHandler;
     this.streamManager = rpcHandler.getStreamManager();
-    this.streamIds = Sets.newHashSet();
   }
 
   @Override
@@ -82,10 +78,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   @Override
   public void channelUnregistered() {
-    // Inform the StreamManager that these streams will no longer be read from.
-    for (long streamId : streamIds) {
-      streamManager.connectionTerminated(streamId);
-    }
+    // Inform the StreamManager that this channel is unregistered.
+    streamManager.connectionTerminated(channel);
     rpcHandler.connectionTerminated(reverseClient);
   }
 
@@ -102,16 +96,14 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   private void processFetchRequest(final ChunkFetchRequest req) {
     final String client = NettyUtils.getRemoteAddress(channel);
-    streamIds.add(req.streamChunkId.streamId);
+
+    streamManager.registerChannel(channel, req.streamChunkId.streamId);
 
     logger.trace("Received req from {} to fetch block {}", client, req.streamChunkId);
 
     ManagedBuffer buf;
     try {
       buf = streamManager.getChunk(req.streamChunkId.streamId, req.streamChunkId.chunkIndex);
-      if (!streamManager.streamHasNext(req.streamChunkId.streamId)) {
-        streamIds.remove(req.streamChunkId.streamId);
-      }
     } catch (Exception e) {
       logger.error(String.format(
         "Error opening block %s for request from %s", req.streamChunkId, client), e);
