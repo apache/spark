@@ -24,14 +24,13 @@ import org.apache.spark.streaming.ui.StreamingJobProgressListener._
 
 private[ui] case class OutputOpIdAndSparkJobId(outputOpId: OutputOpId, sparkJobId: SparkJobId)
 
-private[ui] class BatchUIData(
+private[ui] case class BatchUIData(
     val batchTime: Time,
     val receiverNumRecords: Map[Int, Long],
     val submissionTime: Long,
     val processingStartTime: Option[Long],
-    val processingEndTime: Option[Long]) {
-
-  var outputOpIdSparkJobIdPairs: Seq[OutputOpIdAndSparkJobId] = Seq.empty
+    val processingEndTime: Option[Long],
+    var outputOpIdSparkJobIdPairs: Seq[OutputOpIdAndSparkJobId] = Seq.empty) {
 
   /**
    * Time taken for the first job of this batch to start processing from the time this batch
@@ -60,26 +59,6 @@ private[ui] class BatchUIData(
    * The number of recorders received by the receivers in this batch.
    */
   def numRecords: Long = receiverNumRecords.map(_._2).sum
-
-  def canEqual(other: Any): Boolean = other.isInstanceOf[BatchUIData]
-
-  override def equals(other: Any): Boolean = other match {
-    case that: BatchUIData =>
-      (that canEqual this) &&
-        outputOpIdSparkJobIdPairs == that.outputOpIdSparkJobIdPairs &&
-        batchTime == that.batchTime &&
-        receiverNumRecords == that.receiverNumRecords &&
-        submissionTime == that.submissionTime &&
-        processingStartTime == that.processingStartTime &&
-        processingEndTime == that.processingEndTime
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    val state = Seq(outputOpIdSparkJobIdPairs, batchTime, receiverNumRecords, submissionTime,
-      processingStartTime, processingEndTime)
-    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
-  }
 }
 
 private[ui] object BatchUIData {

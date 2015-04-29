@@ -19,7 +19,6 @@ package org.apache.spark.streaming.ui
 
 import java.util.Properties
 
-import org.apache.spark.streaming.ui.OutputOpIdAndSparkJobId
 import org.scalatest.Matchers
 
 import org.apache.spark.scheduler.SparkListenerJobStart
