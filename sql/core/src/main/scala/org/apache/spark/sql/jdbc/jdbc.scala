@@ -19,8 +19,9 @@ package org.apache.spark.sql
 
 import java.sql.{Connection, Driver, DriverManager, DriverPropertyInfo, PreparedStatement}
 import java.util.Properties
+import java.util.concurrent.locks.ReentrantLock
 
-import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.types._
@@ -211,7 +212,9 @@ package object jdbc {
    */
   private [sql] object DriverRegistry extends Logging {
 
-    val wrapperMap: TrieMap[String, DriverWrapper] = TrieMap.empty
+    val wrapperMap: mutable.Map[String, DriverWrapper] = mutable.Map.empty
+
+    val lock = new ReentrantLock()
 
     def register(className: String): Unit = {
       val cls = Utils.getContextOrSparkClassLoader.loadClass(className)
@@ -220,10 +223,16 @@ package object jdbc {
       } else if (wrapperMap.get(className).isDefined) {
         logTrace(s"Wrapper for $className already exists")
       } else {
-        val wrapper = new DriverWrapper(cls.newInstance().asInstanceOf[Driver])
-        if (wrapperMap.putIfAbsent(className, wrapper).isEmpty) {
-          DriverManager.registerDriver(wrapper)
-          logTrace(s"Wrapper for $className registered")
+        lock.lock()
+        try {
+          if (wrapperMap.get(className).isEmpty) {
+            val wrapper = new DriverWrapper(cls.newInstance().asInstanceOf[Driver])
+            DriverManager.registerDriver(wrapper)
+            wrapperMap(className) = wrapper
+            logTrace(s"Wrapper for $className registered")
+          }
+        } finally {
+          lock.unlock()
         }
       }
     }
