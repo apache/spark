@@ -20,9 +20,8 @@ package org.apache.spark.deploy
 import java.io.{File, FileInputStream, FileOutputStream}
 import java.nio.file.{Files, Path}
 import java.util.jar.{JarEntry, JarOutputStream}
-import javax.tools.{JavaFileObject, SimpleJavaFileObject, StandardLocation, ToolProvider}
 
-import scala.collection.JavaConversions._
+import org.apache.spark.TestUtils.{createCompiledClass, JavaSourceFromString}
 
 import com.google.common.io.ByteStreams
 
@@ -74,12 +73,6 @@ private[deploy] object IvyTestUtils {
     writeFile(dir, "mylib.py", contents)
   }
 
-  /** Compilable Java Source File */
-  private class JavaSourceFromString(val file: File, val code: String)
-    extends SimpleJavaFileObject(file.toURI, JavaFileObject.Kind.SOURCE) {
-    override def getCharContent(ignoreEncodingErrors: Boolean) = code
-  }
-
   /** Create a simple testable Class. */
   private def createJavaClass(dir: File, className: String, packageName: String): File = {
     val contents =
@@ -96,18 +89,9 @@ private[deploy] object IvyTestUtils {
         | }
         |}
       """.stripMargin
-    val sourceFiles = Seq(new JavaSourceFromString(new File(dir, className + ".java"), contents))
-    val compiler = ToolProvider.getSystemJavaCompiler
-    val fileManager = compiler.getStandardFileManager(null, null, null)
-
-    fileManager.setLocation(StandardLocation.CLASS_OUTPUT, List(dir))
-
-    compiler.getTask(null, fileManager, null, null, null, sourceFiles).call()
-
-    val fileName = s"${packageName.replace(".", File.separator)}${File.separator}$className.class"
-    val result = new File(dir, fileName)
-    assert(result.exists(), "Compiled file not found: " + result.getAbsolutePath)
-    result
+    val sourceFile =
+      new JavaSourceFromString(new File(dir, className + ".java").getAbsolutePath, contents)
+    createCompiledClass(className, dir, sourceFile, Seq.empty)
   }
 
   /** Helper method to write artifact information in the pom. */
