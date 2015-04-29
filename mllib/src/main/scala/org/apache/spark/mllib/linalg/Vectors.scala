@@ -211,6 +211,17 @@ object Vectors {
   def dense(values: Array[Double]): Vector = new DenseVector(values)
 
   /**
+   * Creates a sparse vector providing its value array.
+   *
+   * @param values value array, must have the same length as indices.
+   */
+  def sparse(values: Array[Double]): Vector = {
+    val size = values.length
+    val (result, indices) = values.zipWithIndex.filter(_._1 != 0.0).unzip
+    new SparseVector(size, indices.toArray, result.toArray)
+  }
+
+  /**
    * Creates a sparse vector providing its index array and value array.
    *
    * @param size vector size.

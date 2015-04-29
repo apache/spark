@@ -68,6 +68,11 @@ class VectorsSuite extends FunSuite {
     assert(vec.toArray === arr)
   }
 
+  test("SPARK-7149 sparse to array") {
+    val vec = Vectors.sparse(arr).asInstanceOf[SparseVector]
+    assert(vec.toArray === arr)
+  }
+
   test("vector equals") {
     val dv1 = Vectors.dense(arr.clone())
     val dv2 = Vectors.dense(arr.clone())
