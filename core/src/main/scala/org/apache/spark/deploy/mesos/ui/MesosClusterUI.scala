@@ -27,7 +27,7 @@ import org.apache.spark.ui.{SparkUI, WebUI}
  */
 private[spark] class MesosClusterUI(
     securityManager: SecurityManager,
-    port: Int,
+    port: String,
     conf: SparkConf,
     dispatcherPublicAddress: String,
     val scheduler: MesosClusterScheduler)

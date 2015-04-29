@@ -40,7 +40,7 @@ import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
  */
 private[spark] class MesosRestServer(
     host: String,
-    requestedPort: Int,
+    requestedPort: String,
     masterConf: SparkConf,
     scheduler: MesosClusterScheduler)
   extends RestSubmissionServer(host, requestedPort, masterConf) {

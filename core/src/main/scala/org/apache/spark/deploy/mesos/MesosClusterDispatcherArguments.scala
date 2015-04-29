@@ -23,9 +23,9 @@ import org.apache.spark.util.{IntParam, Utils}
 
 private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: SparkConf) {
   var host = Utils.localHostName()
-  var port = 7077
+  var port = "7077"
   var name = "Spark Cluster"
-  var webUiPort = 8081
+  var webUiPort = "8081"
   var masterUrl: String = _
   var zookeeperUrl: Option[String] = None
   var propertiesFile: String = _
@@ -40,11 +40,11 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
       host = value
       parse(tail)
 
-    case ("--port" | "-p") :: IntParam(value) :: tail =>
+    case ("--port" | "-p") :: value :: tail =>
       port = value
       parse(tail)
 
-    case ("--webui-port" | "-p") :: IntParam(value) :: tail =>
+    case ("--webui-port" | "-p") :: value :: tail =>
       webUiPort = value
       parse(tail)
 
