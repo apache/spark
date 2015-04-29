@@ -984,11 +984,6 @@ class DAGScheduler(
                   job.numFinished += 1
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
-                    // Clear failure count for this stage, now that it's succeeded. 
-                    // This ensures that even if subsequent stages fail, triggering 
-                    // a recompute of this stage, we abort because of those failures. 
-                    stage.clearFailures()
-                    
                     markStageAsFinished(resultStage)
                     cleanupStateForJobAndIndependentStages(job)
                     listenerBus.post(
@@ -1216,10 +1211,17 @@ class DAGScheduler(
     if (errorMessage.isEmpty) {
       logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
       stage.latestInfo.completionTime = Some(clock.getTimeMillis())
+
+      // Clear failure count for this stage, now that it's succeeded. 
+      // We only limit consecutive failures of stage attempts, such that if this stage is a 
+      // dependency for downstream stages, e.g. in a long-running streaming app, we don't
+      // fail because of failures of this stage, but rather the failed downstage components.
+      stage.clearFailures()
     } else {
       stage.latestInfo.stageFailed(errorMessage.get)
       logInfo("%s (%s) failed in %s s".format(stage, stage.name, serviceTime))
     }
+    
     outputCommitCoordinator.stageEnd(stage.id)
     listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
     runningStages -= stage

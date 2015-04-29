@@ -477,11 +477,26 @@ class DAGSchedulerSuite
   }
   
   test("Test taskAbort after multiple stage failures.") {
+    // Create a new Listener to confirm that the listenerBus sees the JobEnd message 
+    // when we abort the stage. This message will also be consumed by the EventLoggingListener
+    // so this will propagate up to the user. 
+    var ended = false
+    var jobResult : JobResult = null
+    class EndListener extends SparkListener {
+      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+        jobResult = jobEnd.jobResult
+        ended = true
+      }
+    }
+
+    sc.listenerBus.addListener(new EndListener())
+    
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
     val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
     submit(reduceRdd, Array(0, 1))
+    sparkListener.failedStages.clear()
     scheduler.resubmitFailedStages()
     
     complete(taskSets(0), Seq(
@@ -499,8 +514,15 @@ class DAGSchedulerSuite
       scheduler.resubmitFailedStages()
       if (x < stage.maxStageFailures) {
         assert(scheduler.runningStages.nonEmpty)
+        assert(!ended)
+        assert(!jobResult.isInstanceOf[JobFailed])
       } else {
         assertDataStructuresEmpty()
+        // This should now contain the failed stage
+        
+        sc.listenerBus.waitUntilEmpty(1000)
+        assert(ended)
+        assert(jobResult.isInstanceOf[JobFailed])
       }
     }
   }

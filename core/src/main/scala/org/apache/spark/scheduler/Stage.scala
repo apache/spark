@@ -70,11 +70,11 @@ private[spark] abstract class Stage(
   /** Pointer to the latest [StageInfo] object, set by DAGScheduler. */
   var latestInfo: StageInfo = StageInfo.fromStage(this)
 
-  // The maximum number of times to retry a stage before aborting
-  val maxStageFailures = 4
+  // The maximum number of times to retry a stage before aborting 
+  private[scheduler] val maxStageFailures = 4
   
-  // To avoid cyclical stage failures (see SPARK-5945) we limit the number of times that a stage
-  // may be retried.
+  // Spark is resilient to executors dying by retrying stages on FetchFailures. This counter ensures
+  // that we don't retry stages indefinitely by aborting the stage if it fails too many times. 
   private var failCount = 0
   private[scheduler] def fail() : Unit = { failCount += 1 }
   private[scheduler] def shouldAbort(): Boolean = { failCount >= maxStageFailures }
