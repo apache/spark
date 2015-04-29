@@ -728,7 +728,7 @@ class DataFrame private[sql](
   /**
    * Randomly splits this [[DataFrame]] with the provided weights.
    *
-   * @param weights weights for splits, will be normalized if they don't sum to 1
+   * @param weights weights for splits, will be normalized if they don't sum to 1.
    * @param seed Seed for sampling.
    * @group dfops
    */
@@ -743,11 +743,22 @@ class DataFrame private[sql](
   /**
    * Randomly splits this [[DataFrame]] with the provided weights.
    *
-   * @param weights weights for splits, will be normalized if they don't sum to 1
+   * @param weights weights for splits, will be normalized if they don't sum to 1.
    * @group dfops
    */
   def randomSplit(weights: Array[Double]): Array[DataFrame] = {
     randomSplit(weights, Utils.random.nextLong)
+  }
+
+  /**
+   * Randomly splits this [[DataFrame]] with the provided weights. Provided for the Python Api.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1.
+   * @param seed Seed for sampling.
+   * @group dfops
+   */
+  def randomSplit(weights: List[Double], seed: Long): Array[DataFrame] = {
+    randomSplit(weights.toArray, seed)
   }
 
   /**
