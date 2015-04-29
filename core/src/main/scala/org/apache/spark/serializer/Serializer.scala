@@ -101,7 +101,12 @@ abstract class SerializerInstance {
  */
 @DeveloperApi
 abstract class SerializationStream {
+  /** The most general-purpose method to write an object. */
   def writeObject[T: ClassTag](t: T): SerializationStream
+  /** Writes the object representing the key of a key-value pair. */
+  def writeKey[T: ClassTag](key: T): SerializationStream = writeObject(key)
+  /** Writes the object representing the value of a key-value pair. */
+  def writeValue[T: ClassTag](value: T): SerializationStream = writeObject(value)
   def flush(): Unit
   def close(): Unit
 
@@ -120,7 +125,12 @@ abstract class SerializationStream {
  */
 @DeveloperApi
 abstract class DeserializationStream {
+  /** The most general-purpose method to read an object. */
   def readObject[T: ClassTag](): T
+  /** Reads the object representing the key of a key-value pair. */
+  def readKey[T: ClassTag](): T = readObject[T]()
+  /** Reads the object representing the value of a key-value pair. */
+  def readValue[T: ClassTag](): T = readObject[T]()
   def close(): Unit
 
   /**
