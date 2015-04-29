@@ -267,10 +267,20 @@ class LinearRegressionModel private[ml] (
  * }}},
  * where correction_i = - diffSum \bar{x_i}) / \hat{x_i}
  *
- * As a result, the first term in the first derivative of the total objective function
- * depends on training dataset, which can be computed in distributed fashion, and is sparse
- * format friendly. We only have to loop through the whole gradientSum vector one time
- * in the end for adding the correction terms back (in the driver, not in the executors).
+ * A simple math can show that diffSum is actually zero, so we don't even
+ * need to add the correction terms in the end. From the definition of diff,
+ * {{{
+ * diffSum = \sum_j (\sum_i w_i(x_{ij} - \bar{x_i}) / \hat{x_i} - (y_j - \bar{y}) / \hat{y})
+ *         = N * (\sum_i w_i(\bar{x_i} - \bar{x_i}) / \hat{x_i} - (\bar{y_j} - \bar{y}) / \hat{y})
+ *         = 0
+ * }}}
+ *
+ * As a result, the first derivative of the total objective function only depends on
+ * the training dataset, which can be easily computed in distributed fashion, and is
+ * sparse format friendly.
+ * {{{
+ * \frac{\partial L}{\partial\w_i} = 1/N ((\sum_j diff_j x_{ij} / \hat{x_i})
+ * }}},
  *
  * @param weights The weights/coefficients corresponding to the features.
  * @param labelStd The standard deviation value of the label.
@@ -371,17 +381,7 @@ private class LeastSquaresAggregator(
   def loss: Double = lossSum / totalCnt
 
   def gradient: Vector = {
-    val resultArray = gradientSumArray.clone()
-
-    // Adding the correction terms back to gradientSum;
-    // see the mathematical derivation for detail.
-    Vectors.dense(featuresMean).foreachActive { (index, value) =>
-      if (featuresStd(index) != 0.0 && value != 0.0) {
-        resultArray(index) -= diffSum * value / featuresStd(index)
-      }
-    }
-
-    val result = Vectors.dense(resultArray)
+    val result = Vectors.dense(gradientSumArray.clone())
     scal(1.0 / totalCnt, result)
     result
   }
