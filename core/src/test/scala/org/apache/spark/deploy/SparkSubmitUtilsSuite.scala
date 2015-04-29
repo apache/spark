@@ -117,14 +117,14 @@ class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
     // Local Ivy Repository
     val settings = new IvySettings
     val ivyLocal = new File(settings.getDefaultIvyUserDir, "local" + File.separator)
-    IvyTestUtils.withRepository(main, None, Some(ivyLocal.toPath)) { repo =>
+    IvyTestUtils.withRepository(main, None, Some(ivyLocal.toPath), true) { repo =>
       val jarPath = SparkSubmitUtils.resolveMavenCoordinates(main.toString, None, None, true)
       assert(jarPath.indexOf("mylib") >= 0, "should find artifact")
     }
     // Local ivy repository with modified home
     val dummyIvyPath = "dummy" + File.separator + "ivy"
     val dummyIvyLocal = new File(dummyIvyPath, "local" + File.separator)
-    IvyTestUtils.withRepository(main, None, Some(dummyIvyLocal.toPath)) { repo =>
+    IvyTestUtils.withRepository(main, None, Some(dummyIvyLocal.toPath), true) { repo =>
       val jarPath = SparkSubmitUtils.resolveMavenCoordinates(main.toString, None, 
         Some(dummyIvyPath), true)
       assert(jarPath.indexOf("mylib") >= 0, "should find artifact")
