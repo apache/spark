@@ -332,8 +332,9 @@ object SparkSubmit {
     // that can be distributed with the job
     if (args.isPython && clusterManager == YARN) {
       var pyArchives: String = null
-      if (sys.env.contains("PYSPARK_ARCHIVES_PATH")) {
-        pyArchives = sys.env.get("PYSPARK_ARCHIVES_PATH").get
+      val pyArchivesEnvOpt = sys.env.get("PYSPARK_ARCHIVES_PATH")
+      if (pyArchivesEnvOpt.isDefined) {
+        pyArchives = pyArchivesEnvOpt.get
       } else {
         if (!sys.env.contains("SPARK_HOME")) {
           printErrorAndExit("SPARK_HOME does not exist for python application in yarn mode.")
