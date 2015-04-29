@@ -145,7 +145,7 @@ class EMLDAOptimizer extends LDAOptimizer {
     this
   }
 
-  private[clustering] override def next(): EMLDAOptimizer = {
+  override private[clustering] def next(): EMLDAOptimizer = {
     require(graph != null, "graph is null, EMLDAOptimizer not initialized.")
 
     val eta = topicConcentration
@@ -202,7 +202,7 @@ class EMLDAOptimizer extends LDAOptimizer {
     graph.vertices.filter(isTermVertex).values.fold(BDV.zeros[Double](numTopics))(_ += _)
   }
 
-  private[clustering] override def getLDAModel(iterationTimes: Array[Double]): LDAModel = {
+  override private[clustering] def getLDAModel(iterationTimes: Array[Double]): LDAModel = {
     require(graph != null, "graph is null, EMLDAOptimizer not initialized.")
     this.graphCheckpointer.deleteAllCheckpoints()
     new DistributedLDAModel(this, iterationTimes)
@@ -295,7 +295,7 @@ class OnlineLDAOptimizer extends LDAOptimizer {
     this
   }
 
-  private[clustering] override def initialize(docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer = {
+  override private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer = {
     this.k = lda.getK
     this.corpusSize = docs.count()
     this.vocabSize = docs.first()._2.size
@@ -318,7 +318,7 @@ class OnlineLDAOptimizer extends LDAOptimizer {
    * model, and it will update the topic distribution adaptively for the terms appearing in the
    * subset.
    */
-  private[clustering] override def next(): OnlineLDAOptimizer = {
+  override private[clustering] def next(): OnlineLDAOptimizer = {
     iteration += 1
     val batch = docs.sample(withReplacement = true, miniBatchFraction, randomGenerator.nextLong())
     if (batch.isEmpty()) return this
