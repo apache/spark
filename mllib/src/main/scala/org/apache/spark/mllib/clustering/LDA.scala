@@ -95,7 +95,7 @@ class LDA private (
    *     - The 50/k is common in LDA libraries.
    *     - The +1 follows Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - For Online: default = (1.0 / k).
-   *     - follows the implementation from: https://github.com/Blei-Lab/onlineldavb.
+   *     - follows the implementation from: [[https://github.com/Blei-Lab/onlineldavb]].
    *
    * Note: For EM optimizer, This value should be > 1.0.
    */
@@ -117,7 +117,8 @@ class LDA private (
    * This is the parameter to a symmetric Dirichlet distribution.
    *
    * Note: The topics' distributions over terms are called "beta" in the original LDA paper
-   * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
+   * by Blei et al., but are ca
+   * lled "phi" in many later papers such as Asuncion et al., 2009.
    */
   def getTopicConcentration: Double = this.topicConcentration
 
@@ -138,7 +139,7 @@ class LDA private (
    *     - The 0.1 gives a small amount of smoothing.
    *     - The +1 follows Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - For Online: default = (1.0 / k).
-   *     - follows the implementation from: https://github.com/Blei-Lab/onlineldavb.
+   *     - follows the implementation from: [[https://github.com/Blei-Lab/onlineldavb]].
    *
    * Note: For EM optimizer, This value should be > 1.0.
    */
