@@ -33,7 +33,7 @@ from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
 __all__ = ['countDistinct', 'approxCountDistinct', 'udf']
 
 
-def _create_function(name, doc="", is_math=False):
+def _create_function(name, doc=""):
     """ Create a function for aggregator by name"""
     def _(col):
         sc = SparkContext._active_spark_context
