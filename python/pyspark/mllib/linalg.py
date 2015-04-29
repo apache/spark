@@ -39,7 +39,8 @@ from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayTyp
     IntegerType, ByteType
 
 
-__all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors', 'DenseMatrix', 'Matrices']
+__all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors',
+           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices']
 
 
 if sys.version_info[:2] == (2, 7):
