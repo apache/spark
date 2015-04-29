@@ -132,7 +132,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     )
 
   protected lazy val select: Parser[LogicalPlan] =
-    SELECT ~> DISTINCT.? ~
+    SELECT ~> (ALL | DISTINCT).? ~
       repsep(projection, ",") ~
       (FROM   ~> relations).? ~
       (WHERE  ~> expression).? ~
@@ -146,7 +146,8 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
           val withProjection = g
             .map(Aggregate(_, assignAliases(p), withFilter))
             .getOrElse(Project(assignAliases(p), withFilter))
-          val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
+          val withDistinct = d.filter(_ equalsIgnoreCase DISTINCT.str)
+            .map(_ => Distinct(withProjection)).getOrElse(withProjection)
           val withHaving = h.map(Filter(_, withDistinct)).getOrElse(withDistinct)
           val withOrder = o.map(_(withHaving)).getOrElse(withHaving)
           val withLimit = l.map(Limit(_, withOrder)).getOrElse(withOrder)
