@@ -165,6 +165,9 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri("/static/table.js")}></script>
     <script src={prependBaseUri("/static/additional-metrics.js")}></script>
+    <script src={prependBaseUri("/static/d3.min.js")}></script>
+    <script src={prependBaseUri("/static/dimple.min.js")}></script>
+    <script src={prependBaseUri("/static/jobs-graph.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
