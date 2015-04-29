@@ -102,6 +102,6 @@ private[stat] object PearsonCorrelation extends Correlation with Logging {
   }
 
   private def closeToZero(value: Double, threshold: Double = 1e-12): Boolean = {
-    math.abs(value) <= threshhold
+    math.abs(value) <= threshold
   }
 }
