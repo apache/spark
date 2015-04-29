@@ -961,9 +961,7 @@ class DataFrame private[sql](
    * @group rdd
    */
   override def repartition(numPartitions: Int): DataFrame = {
-    sqlContext.createDataFrame(
-      queryExecution.toRdd.map(_.copy()).repartition(numPartitions),
-      schema, needsConversion = false)
+    Repartition(numPartitions, shuffle = true, logicalPlan)
   }
 
   /**
@@ -974,10 +972,7 @@ class DataFrame private[sql](
    * @group rdd
    */
   override def coalesce(numPartitions: Int): DataFrame = {
-    sqlContext.createDataFrame(
-      queryExecution.toRdd.coalesce(numPartitions),
-      schema,
-      needsConversion = false)
+    Repartition(numPartitions, shuffle = false, logicalPlan)
   }
 
   /**
