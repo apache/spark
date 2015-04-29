@@ -509,7 +509,7 @@
       <dependency>
         <groupId>com.google.protobuf</groupId>
         <artifactId>protobuf-java</artifactId>
-        <version>2.5.0</version>
+        <version>${protobuf.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
