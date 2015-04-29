@@ -437,8 +437,8 @@ class DataFrame(object):
     def randomSplit(self, weights, seed=None):
         """Randomly splits this :class:`DataFrame` with the provided weights.
 
-        :param weights: list of doubles with which to split the DataFrame into. Weights will be
-            normalized if they don't sum up to 1.0.
+        :param weights: list of doubles as weights with which to split the DataFrame. Weights will
+            be normalized if they don't sum up to 1.0.
         :param seed: The seed for sampling.
 
         >>> splits = df4.randomSplit([1.0, 2.0], 24)
