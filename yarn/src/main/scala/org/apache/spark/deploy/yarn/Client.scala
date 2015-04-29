@@ -411,8 +411,9 @@ private[spark] class Client(
     // those will fail with an access control issue. So create new tokens with the logged in
     // user as renewer.
     val creds = new Credentials()
-    YarnSparkHadoopUtil.get.obtainTokensForNamenodes(Set(stagingDirPath), hadoopConf, creds,
-      Some(sparkConf.get("spark.yarn.principal")))
+    val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + stagingDirPath
+    YarnSparkHadoopUtil.get.obtainTokensForNamenodes(
+      nns, hadoopConf, creds, Some(sparkConf.get("spark.yarn.principal")))
     val t = creds.getAllTokens
       .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
       .head
