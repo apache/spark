@@ -34,6 +34,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
+import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 
@@ -643,8 +644,15 @@ class DAGScheduler(
     try {
       val rdd = job.finalStage.rdd
       val split = rdd.partitions(job.partitions(0))
-      val taskContext = new TaskContextImpl(job.finalStage.id, job.partitions(0), taskAttemptId = 0,
-        attemptNumber = 0, runningLocally = true)
+      val taskMemoryManager = new TaskMemoryManager(env.executorMemoryManager)
+      val taskContext =
+        new TaskContextImpl(
+          job.finalStage.id,
+          job.partitions(0),
+          taskAttemptId = 0,
+          attemptNumber = 0,
+          taskMemoryManager = taskMemoryManager,
+          runningLocally = true)
       TaskContext.setTaskContext(taskContext)
       try {
         val result = job.func(taskContext, rdd.iterator(split, taskContext))
@@ -652,6 +660,16 @@ class DAGScheduler(
       } finally {
         taskContext.markTaskCompleted()
         TaskContext.unset()
+        // Note: this memory freeing logic is duplicated in Executor.run(); when changing this,
+        // make sure to update both copies.
+        val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
+        if (freedMemory > 0) {
+          if (sc.getConf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false)) {
+            throw new SparkException(s"Managed memory leak detected; size = $freedMemory bytes")
+          } else {
+            logError(s"Managed memory leak detected; size = $freedMemory bytes")
+          }
+        }
       }
     } catch {
       case e: Exception =>

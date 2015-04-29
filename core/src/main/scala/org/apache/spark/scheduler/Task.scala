@@ -25,6 +25,7 @@ import scala.collection.mutable.HashMap
 import org.apache.spark.{TaskContextImpl, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.SerializerInstance
+import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util.ByteBufferInputStream
 import org.apache.spark.util.Utils
 
@@ -52,8 +53,13 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
    * @return the result of the task
    */
   final def run(taskAttemptId: Long, attemptNumber: Int): T = {
-    context = new TaskContextImpl(stageId = stageId, partitionId = partitionId,
-      taskAttemptId = taskAttemptId, attemptNumber = attemptNumber, runningLocally = false)
+    context = new TaskContextImpl(
+      stageId = stageId,
+      partitionId = partitionId,
+      taskAttemptId = taskAttemptId,
+      attemptNumber = attemptNumber,
+      taskMemoryManager = taskMemoryManager,
+      runningLocally = false)
     TaskContext.setTaskContext(context)
     context.taskMetrics.setHostname(Utils.localHostName())
     taskThread = Thread.currentThread()
@@ -66,6 +72,12 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
       context.markTaskCompleted()
       TaskContext.unset()
     }
+  }
+
+  private var taskMemoryManager: TaskMemoryManager = _
+
+  def setTaskMemoryManager(taskMemoryManager: TaskMemoryManager): Unit = {
+    this.taskMemoryManager = taskMemoryManager
   }
 
   def runTask(context: TaskContext): T
