@@ -18,10 +18,79 @@
 
 package org.apache.spark.streaming.ui
 
+import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.scheduler.BatchInfo
 import org.apache.spark.streaming.ui.StreamingJobProgressListener._
 
-private[ui] case class BatchUIData(
-    batchInfo: BatchInfo,
-    outputOpIdSparkJobIdPairs: Seq[(OutputOpId, SparkJobId)]) {
+private[ui] case class OutputOpIdAndSparkJobId(outputOpId: OutputOpId, sparkJobId: SparkJobId)
+
+private[ui] class BatchUIData(
+    val batchTime: Time,
+    val receiverNumRecords: Map[Int, Long],
+    val submissionTime: Long,
+    val processingStartTime: Option[Long],
+    val processingEndTime: Option[Long]) {
+
+  var outputOpIdSparkJobIdPairs: Seq[OutputOpIdAndSparkJobId] = Seq.empty
+
+  /**
+   * Time taken for the first job of this batch to start processing from the time this batch
+   * was submitted to the streaming scheduler. Essentially, it is
+   * `processingStartTime` - `submissionTime`.
+   */
+  def schedulingDelay: Option[Long] = processingStartTime.map(_ - submissionTime)
+
+  /**
+   * Time taken for the all jobs of this batch to finish processing from the time they started
+   * processing. Essentially, it is `processingEndTime` - `processingStartTime`.
+   */
+  def processingDelay: Option[Long] = {
+    for (start <- processingStartTime;
+         end <- processingEndTime)
+      yield end - start
+  }
+
+  /**
+   * Time taken for all the jobs of this batch to finish processing from the time they
+   * were submitted.  Essentially, it is `processingDelay` + `schedulingDelay`.
+   */
+  def totalDelay: Option[Long] = processingEndTime.map(_ - submissionTime)
+
+  /**
+   * The number of recorders received by the receivers in this batch.
+   */
+  def numRecords: Long = receiverNumRecords.map(_._2).sum
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[BatchUIData]
+
+  override def equals(other: Any): Boolean = other match {
+    case that: BatchUIData =>
+      (that canEqual this) &&
+        outputOpIdSparkJobIdPairs == that.outputOpIdSparkJobIdPairs &&
+        batchTime == that.batchTime &&
+        receiverNumRecords == that.receiverNumRecords &&
+        submissionTime == that.submissionTime &&
+        processingStartTime == that.processingStartTime &&
+        processingEndTime == that.processingEndTime
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(outputOpIdSparkJobIdPairs, batchTime, receiverNumRecords, submissionTime,
+      processingStartTime, processingEndTime)
+    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+  }
+}
+
+private[ui] object BatchUIData {
+
+  def apply(batchInfo: BatchInfo): BatchUIData = {
+    new BatchUIData(
+      batchInfo.batchTime,
+      batchInfo.receivedBlockInfo.mapValues(_.map(_.numRecords).sum),
+      batchInfo.submissionTime,
+      batchInfo.processingStartTime,
+      batchInfo.processingEndTime
+    )
+  }
 }

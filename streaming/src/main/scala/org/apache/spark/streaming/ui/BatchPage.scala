@@ -19,13 +19,11 @@ package org.apache.spark.streaming.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable.{ArrayBuffer, Map}
 import scala.xml.{NodeSeq, Node}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.streaming.Time
-import org.apache.spark.streaming.scheduler.BatchInfo
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.streaming.ui.StreamingJobProgressListener.{SparkJobId, OutputOpId}
 import org.apache.spark.ui.jobs.UIData.JobUIData
@@ -182,11 +180,11 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
    * Generate the job table for the batch.
    */
   private def generateJobTable(batchUIData: BatchUIData): Seq[Node] = {
-    val outputOpIdToSparkJobIds = batchUIData.outputOpIdSparkJobIdPairs.groupBy(_._1).toSeq.
+    val outputOpIdToSparkJobIds = batchUIData.outputOpIdSparkJobIdPairs.groupBy(_.outputOpId).toSeq.
       sortBy(_._1). // sorted by OutputOpId
-      map { case (outputOpId, outputOpIdAndSparkJobIdPairs) =>
+      map { case (outputOpId, outputOpIdAndSparkJobIds) =>
         // sort SparkJobIds for each OutputOpId
-        (outputOpId, outputOpIdAndSparkJobIdPairs.map(_._2).sorted)
+        (outputOpId, outputOpIdAndSparkJobIds.map(_.sparkJobId).sorted)
       }
     sparkListener.synchronized {
       val outputOpIdWithJobs: Seq[(OutputOpId, Seq[JobUIData])] =
@@ -219,13 +217,12 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     val batchUIData = streamingListener.getBatchUIData(batchTime).getOrElse {
       throw new IllegalArgumentException(s"Batch $formattedBatchTime does not exist")
     }
-    val batchInfo = batchUIData.batchInfo
 
     val formattedSchedulingDelay =
-      batchInfo.schedulingDelay.map(UIUtils.formatDuration).getOrElse("-")
+      batchUIData.schedulingDelay.map(UIUtils.formatDuration).getOrElse("-")
     val formattedProcessingTime =
-      batchInfo.processingDelay.map(UIUtils.formatDuration).getOrElse("-")
-    val formattedTotalDelay = batchInfo.totalDelay.map(UIUtils.formatDuration).getOrElse("-")
+      batchUIData.processingDelay.map(UIUtils.formatDuration).getOrElse("-")
+    val formattedTotalDelay = batchUIData.totalDelay.map(UIUtils.formatDuration).getOrElse("-")
 
     val summary: NodeSeq =
       <div>
@@ -236,7 +233,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
           </li>
           <li>
             <strong>Input data size: </strong>
-            {batchInfo.numRecords} records
+            {batchUIData.numRecords} records
           </li>
           <li>
             <strong>Scheduling delay: </strong>
