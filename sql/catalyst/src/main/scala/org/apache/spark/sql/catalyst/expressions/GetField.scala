@@ -27,6 +27,13 @@ object GetField {
   /**
    * Returns the resolved `GetField`. It will return one kind of concrete `GetField`,
    * depend on the type of `child` and `fieldExpr`.
+   *
+   *   `child`      |     `fieldExpr`    |    concrete `GetField`
+   * -------------------------------------------------------------
+   *    Struct      |   Literal String   |   SimpleStructGetField
+   * Array[Struct]  |   Literal String   |   ArrayStructGetField
+   *    Array       |   Integral type    |   ArrayOrdinalGetField
+   *     Map        |      Any type      |   MapOrdinalGetField
    */
   def apply(
       child: Expression,
@@ -45,22 +52,27 @@ object GetField {
       case (_: MapType, _) =>
         MapOrdinalGetField(child, fieldExpr)
       case (otherType, _) =>
-        throw new AnalysisException(
-          "GetField is not valid on child of type " +
-            s"$otherType with fieldExpr of type ${fieldExpr.dataType}")
+        val errorMsg = otherType match {
+          case StructType(_) | ArrayType(StructType(_), _) =>
+            s"Field name should be String Literal, but it's $fieldExpr"
+          case _: ArrayType =>
+            s"Array index should be integral type, but it's ${fieldExpr.dataType}"
+          case other =>
+            s"Can't get field on $child"
+        }
+        throw new AnalysisException(errorMsg)
     }
   }
 
   def unapply(g: GetField): Option[(Expression, Expression)] = {
     g match {
-      case _: StructGetField => Some((g.child, null))
       case o: OrdinalGetField => Some((o.child, o.ordinal))
-      case _ => None
+      case _ => Some((g.child, null))
     }
   }
 
   /**
-   * find the ordinal of StructField, report error if no desired field or over one
+   * Find the ordinal of StructField, report error if no desired field or over one
    * desired fields are found.
    */
   private def findField(fields: Array[StructField], fieldName: String, resolver: Resolver): Int = {
@@ -84,13 +96,45 @@ trait GetField extends UnaryExpression {
   type EvaluatedType = Any
 }
 
-abstract class StructGetField extends GetField {
-  self: Product =>
+/**
+ * Returns the value of fields in the Struct `child`.
+ */
+case class SimpleStructGetField(child: Expression, field: StructField, ordinal: Int)
+  extends GetField {
 
-  def field: StructField
-
+  override def dataType: DataType = field.dataType
+  override def nullable: Boolean = child.nullable || field.nullable
   override def foldable: Boolean = child.foldable
   override def toString: String = s"$child.${field.name}"
+
+  override def eval(input: Row): Any = {
+    val baseValue = child.eval(input).asInstanceOf[Row]
+    if (baseValue == null) null else baseValue(ordinal)
+  }
+}
+
+/**
+ * Returns the array of value of fields in the Array of Struct `child`.
+ */
+case class ArrayStructGetField(
+    child: Expression,
+    field: StructField,
+    ordinal: Int,
+    containsNull: Boolean) extends GetField {
+
+  override def dataType: DataType = ArrayType(field.dataType, containsNull)
+  override def nullable: Boolean = child.nullable
+  override def foldable: Boolean = child.foldable
+  override def toString: String = s"$child.${field.name}"
+
+  override def eval(input: Row): Any = {
+    val baseValue = child.eval(input).asInstanceOf[Seq[Row]]
+    if (baseValue == null) null else {
+      baseValue.map { row =>
+        if (row == null) null else row(ordinal)
+      }
+    }
+  }
 }
 
 abstract class OrdinalGetField extends GetField {
@@ -119,43 +163,6 @@ abstract class OrdinalGetField extends GetField {
   }
 
   protected def evalNotNull(value: Any, ordinal: Any): Any
-}
-
-/**
- * Returns the value of fields in the Struct `child`.
- */
-case class SimpleStructGetField(child: Expression, field: StructField, ordinal: Int)
-  extends StructGetField {
-
-  override def dataType: DataType = field.dataType
-  override def nullable: Boolean = child.nullable || field.nullable
-
-  override def eval(input: Row): Any = {
-    val baseValue = child.eval(input).asInstanceOf[Row]
-    if (baseValue == null) null else baseValue(ordinal)
-  }
-}
-
-/**
- * Returns the array of value of fields in the Array of Struct `child`.
- */
-case class ArrayStructGetField(
-    child: Expression,
-    field: StructField,
-    ordinal: Int,
-    containsNull: Boolean) extends StructGetField {
-
-  override def dataType: DataType = ArrayType(field.dataType, containsNull)
-  override def nullable: Boolean = child.nullable
-
-  override def eval(input: Row): Any = {
-    val baseValue = child.eval(input).asInstanceOf[Seq[Row]]
-    if (baseValue == null) null else {
-      baseValue.map { row =>
-        if (row == null) null else row(ordinal)
-      }
-    }
-  }
 }
 
 /**

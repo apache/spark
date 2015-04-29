@@ -200,5 +200,5 @@ case class UnresolvedGetField(child: Expression, fieldExpr: Expression) extends 
   override def eval(input: Row = null): EvaluatedType =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
-  override def toString: String = s"$child.getField($fieldExpr)"
+  override def toString: String = s"$child[$fieldExpr]"
 }
