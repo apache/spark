@@ -19,7 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.io.{IOException, File}
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{SQLContext, AnalysisException}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.util.Utils

@@ -17,18 +17,17 @@
 
 package org.apache.spark.sql.sources
 
-import scala.language.existentials
+import scala.language.{existentials, implicitConversions}
 import scala.util.matching.Regex
-import scala.language.implicitConversions
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{AnalysisException, SaveMode, DataFrame, SQLContext}
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext, SaveMode}
 import org.apache.spark.util.Utils
 
 /**
@@ -111,6 +110,7 @@ private[sql] class DDLParser(
           CreateTableUsingAsSelect(tableName,
             provider,
             temp.isDefined,
+            Array.empty[String],
             mode,
             options,
             queryPlan)
@@ -214,6 +214,7 @@ private[sql] object ResolvedDataSource {
   def apply(
       sqlContext: SQLContext,
       userSpecifiedSchema: Option[StructType],
+      partitionColumns: Array[String],
       provider: String,
       options: Map[String, String]): ResolvedDataSource = {
     val clazz: Class[_] = lookupDataSource(provider)
@@ -222,6 +223,12 @@ private[sql] object ResolvedDataSource {
       case Some(schema: StructType) => clazz.newInstance() match {
         case dataSource: SchemaRelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
+        case dataSource: FSBasedRelationProvider =>
+          dataSource.createRelation(
+            sqlContext,
+            Some(schema),
+            Some(partitionColumnsSchema(schema, partitionColumns)),
+            new CaseInsensitiveMap(options))
         case dataSource: org.apache.spark.sql.sources.RelationProvider =>
           throw new AnalysisException(s"$className does not allow user-specified schemas.")
         case _ =>
@@ -231,20 +238,34 @@ private[sql] object ResolvedDataSource {
       case None => clazz.newInstance() match {
         case dataSource: RelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
+        case dataSource: FSBasedRelationProvider =>
+          dataSource.createRelation(sqlContext, None, None, new CaseInsensitiveMap(options))
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
           throw new AnalysisException(
             s"A schema needs to be specified when using $className.")
         case _ =>
-          throw new AnalysisException(s"$className is not a RelationProvider.")
+          throw new AnalysisException(
+            s"$className is neither a RelationProvider nor a FSBasedRelationProvider.")
       }
     }
     new ResolvedDataSource(clazz, relation)
+  }
+
+  private def partitionColumnsSchema(
+      schema: StructType,
+      partitionColumns: Array[String]): StructType = {
+    StructType(partitionColumns.map { col =>
+      schema.find(_.name == col).getOrElse {
+        throw new RuntimeException(s"Partition column $col not found in schema $schema")
+      }
+    })
   }
 
   /** Create a [[ResolvedDataSource]] for saving the content of the given [[DataFrame]]. */
   def apply(
       sqlContext: SQLContext,
       provider: String,
+      partitionColumns: Array[String],
       mode: SaveMode,
       options: Map[String, String],
       data: DataFrame): ResolvedDataSource = {
@@ -252,6 +273,19 @@ private[sql] object ResolvedDataSource {
     val relation = clazz.newInstance() match {
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(sqlContext, mode, options, data)
+      case dataSource: FSBasedRelationProvider =>
+        val r = dataSource.createRelation(
+          sqlContext,
+          Some(data.schema),
+          Some(partitionColumnsSchema(data.schema, partitionColumns)),
+          options)
+        sqlContext.executePlan(
+          InsertIntoFSBasedRelation(
+            r.asInstanceOf[FSBasedRelation],
+            data.logicalPlan,
+            partitionColumns.toArray,
+            mode)).toRdd
+        r
       case _ =>
         sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
     }
@@ -310,6 +344,7 @@ private[sql] case class CreateTableUsingAsSelect(
     tableName: String,
     provider: String,
     temporary: Boolean,
+    partitionColumns: Array[String],
     mode: SaveMode,
     options: Map[String, String],
     child: LogicalPlan) extends UnaryNode {
@@ -324,8 +359,9 @@ private[sql] case class CreateTempTableUsing(
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
+  def run(sqlContext: SQLContext): Seq[Row] = {
+    val resolved = ResolvedDataSource(
+      sqlContext, userSpecifiedSchema, Array.empty[String], provider, options)
     sqlContext.registerDataFrameAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
     Seq.empty
@@ -335,13 +371,14 @@ private[sql] case class CreateTempTableUsing(
 private[sql] case class CreateTempTableUsingAsSelect(
     tableName: String,
     provider: String,
+    partitionColumns: Array[String],
     mode: SaveMode,
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val df = DataFrame(sqlContext, query)
-    val resolved = ResolvedDataSource(sqlContext, provider, mode, options, df)
+    val resolved = ResolvedDataSource(sqlContext, provider, partitionColumns, mode, options, df)
     sqlContext.registerDataFrameAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
 

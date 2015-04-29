@@ -27,23 +27,23 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonFactory
-
 import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation, ResolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
 import org.apache.spark.sql.jdbc.JDBCWriteDetails
 import org.apache.spark.sql.json.JacksonGenerator
+import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, ResolvedDataSource}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 
@@ -1372,6 +1372,7 @@ class DataFrame private[sql](
         tableName,
         source,
         temporary = false,
+        Array.empty[String],
         mode,
         options,
         logicalPlan)
@@ -1473,7 +1474,7 @@ class DataFrame private[sql](
       mode: SaveMode,
       options: java.util.Map[String, String],
       partitionColumns: java.util.List[String]): Unit = {
-    ???
+    save(source, mode, options.toMap, partitionColumns)
   }
 
   /**
@@ -1488,7 +1489,7 @@ class DataFrame private[sql](
       source: String,
       mode: SaveMode,
       options: Map[String, String]): Unit = {
-    ResolvedDataSource(sqlContext, source, mode, options, this)
+    ResolvedDataSource(sqlContext, source, Array.empty[String], mode, options, this)
   }
 
   /**
@@ -1503,7 +1504,7 @@ class DataFrame private[sql](
       mode: SaveMode,
       options: Map[String, String],
       partitionColumns: Seq[String]): Unit = {
-    ???
+    ResolvedDataSource(sqlContext, source, partitionColumns.toArray, mode, options, this)
   }
 
   /**

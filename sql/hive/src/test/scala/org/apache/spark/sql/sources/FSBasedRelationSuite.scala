@@ -19,41 +19,80 @@ package org.apache.spark.sql.sources
 
 import java.io.IOException
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 
+import com.google.common.base.Objects
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, SQLContext, SaveMode}
+import org.apache.spark.sql._
 import org.apache.spark.util.Utils
 
-class SimpleFSBasedSource extends RelationProvider {
+class SimpleFSBasedSource extends FSBasedRelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
+      schema: Option[StructType],
+      partitionColumns: Option[StructType],
       parameters: Map[String, String]): BaseRelation = {
-    SimpleFSBasedRelation(parameters)(sqlContext)
+    val path = parameters("path")
+
+    // Uses data sources options to simulate data schema
+    val dataSchema = DataType.fromJson(parameters("schema")).asInstanceOf[StructType]
+
+    // Uses data sources options to mock partition discovery
+    val maybePartitionSpec =
+      parameters.get("partitionColumns").map { json =>
+        new PartitionSpec(
+          DataType.fromJson(json).asInstanceOf[StructType],
+          Array.empty[Partition])
+      }
+
+    SimpleFSBasedRelation(path, dataSchema, maybePartitionSpec, parameters)(sqlContext)
+  }
+}
+
+class SimpleOutputWriter extends OutputWriter {
+  override def init(path: String, dataSchema: StructType, conf: Configuration): Unit = {
+    TestResult.synchronized {
+      TestResult.writerPaths += path
+    }
+  }
+
+  override def write(row: Row): Unit = {
+    TestResult.synchronized {
+      TestResult.writtenRows += row
+    }
   }
 }
 
 case class SimpleFSBasedRelation
-    (parameter: Map[String, String])
-    (val sqlContext: SQLContext)
-  extends FSBasedRelation {
+    (path: String,
+     dataSchema: StructType,
+     maybePartitionSpec: Option[PartitionSpec],
+     parameter: Map[String, String])
+    (@transient val sqlContext: SQLContext)
+  extends FSBasedRelation(Array(path), maybePartitionSpec) {
 
-  class SimpleOutputWriter extends OutputWriter {
-    override def write(row: Row): Unit = TestResult.writtenRows += row
+  override def equals(obj: scala.Any): Boolean = obj match {
+    case that: SimpleFSBasedRelation =>
+      this.path == that.path &&
+        this.dataSchema == that.dataSchema &&
+        this.maybePartitionSpec == that.maybePartitionSpec
+    case _ => false
   }
 
-  override val path = parameter("path")
-
-  override def dataSchema: StructType =
-    DataType.fromJson(parameter("schema")).asInstanceOf[StructType]
+  override def hashCode(): Int =
+    Objects.hashCode(path, dataSchema, maybePartitionSpec)
 
   override def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String]): RDD[Row] = {
+    val sqlContext = this.sqlContext
     val basePath = new Path(path)
     val fs = basePath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
 
@@ -61,11 +100,12 @@ case class SimpleFSBasedRelation
     // shouldn't be removed before scanning the data.
     assert(inputPaths.map(new Path(_)).forall(fs.exists))
 
-    TestResult.requiredColumns = requiredColumns
-    TestResult.filters = filters
-    TestResult.inputPaths = inputPaths
-
-    Option(TestResult.rowsToRead).getOrElse(sqlContext.emptyResult)
+    TestResult.synchronized {
+      TestResult.requiredColumns = requiredColumns
+      TestResult.filters = filters
+      TestResult.inputPaths = inputPaths
+      Option(TestResult.rowsToRead).getOrElse(sqlContext.emptyResult)
+    }
   }
 
   override def outputWriterClass: Class[_ <: OutputWriter] = classOf[SimpleOutputWriter]
@@ -76,20 +116,22 @@ object TestResult {
   var filters: Array[Filter] = _
   var inputPaths: Array[String] = _
   var rowsToRead: RDD[Row] = _
-  var writtenRows: ArrayBuffer[Row] = ArrayBuffer.empty[Row]
+  var writerPaths: mutable.Set[String] = mutable.Set.empty[String]
+  var writtenRows: mutable.Set[Row] = mutable.Set.empty[Row]
 
-  def reset(): Unit = {
+  def reset(): Unit = this.synchronized {
     requiredColumns = null
     filters = null
     inputPaths = null
     rowsToRead = null
+    writerPaths.clear()
     writtenRows.clear()
   }
 }
 
-class FSBasedRelationSuite extends DataSourceTest {
-  import caseInsensitiveContext._
-  import caseInsensitiveContext.implicits._
+class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
+  import TestHive._
+  import TestHive.implicits._
 
   var basePath: Path = _
 
@@ -101,6 +143,8 @@ class FSBasedRelationSuite extends DataSourceTest {
         StructField("a", IntegerType, nullable = false),
         StructField("b", StringType, nullable = false)))
 
+  val partitionColumns = StructType(StructField("p1", IntegerType, nullable = true) :: Nil)
+
   val testDF = (for {
     i <- 1 to 3
     p <- 1 to 2
@@ -109,10 +153,11 @@ class FSBasedRelationSuite extends DataSourceTest {
   before {
     basePath = new Path(Utils.createTempDir().getCanonicalPath)
     fs = basePath.getFileSystem(sparkContext.hadoopConfiguration)
+    basePath = fs.makeQualified(basePath)
     TestResult.reset()
   }
 
-  ignore("load() - partitioned table - partition column not included in data files") {
+  test("load() - partitioned table - partition column not included in data files") {
     fs.mkdirs(new Path(basePath, "p1=1/p2=hello"))
     fs.mkdirs(new Path(basePath, "p1=2/p2=world"))
 
@@ -137,15 +182,15 @@ class FSBasedRelationSuite extends DataSourceTest {
 
     assert(df.schema === expectedSchema)
 
-    df.select("b").where($"a" > 0 && $"p1" === 1).collect()
+    df.where($"a" > 0 && $"p1" === 1).select("b").collect()
 
     // Check for column pruning, filter push-down, and partition pruning
     assert(TestResult.requiredColumns.toSet === Set("a", "b"))
     assert(TestResult.filters === Seq(GreaterThan("a", 0)))
-    assert(TestResult.inputPaths === Seq(new Path(basePath, "p1=1").toString))
+    assert(TestResult.inputPaths === Seq(new Path(basePath, "p1=1/p2=hello").toString))
   }
 
-  ignore("load() - partitioned table - partition column included in data files") {
+  test("load() - partitioned table - partition column included in data files") {
     val data = sparkContext.parallelize(Seq.empty[String])
     data.saveAsTextFile(new Path(basePath, "p1=1/p2=hello").toString)
     data.saveAsTextFile(new Path(basePath, "p1=2/p2=world").toString)
@@ -180,26 +225,33 @@ class FSBasedRelationSuite extends DataSourceTest {
 
     assert(df.schema === expectedSchema)
 
-    df.select("b").where($"a" > 0 && $"p1" === 1).collect()
+    df.where($"a" > 0 && $"p1" === 1).select("b").collect()
 
     // Check for column pruning, filter push-down, and partition pruning
     assert(TestResult.requiredColumns.toSet === Set("a", "b"))
     assert(TestResult.filters === Seq(GreaterThan("a", 0)))
-    assert(TestResult.inputPaths === Seq(new Path(basePath, "p1=1").toString))
+    assert(TestResult.inputPaths === Seq(new Path(basePath, "p1=1/p2=hello").toString))
   }
 
-  ignore("save() - partitioned table - Overwrite") {
+  test("save() - partitioned table - Overwrite") {
     testDF.save(
       source = classOf[SimpleFSBasedSource].getCanonicalName,
       mode = SaveMode.Overwrite,
       options = Map(
         "path" -> basePath.toString,
-        "schema" -> dataSchema.json),
+        "schema" -> dataSchema.json,
+        "partitionColumns" -> partitionColumns.json),
       partitionColumns = Seq("p1"))
+
+    Thread.sleep(500)
 
     // Written rows shouldn't contain dynamic partition column
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
-    assert(TestResult.writtenRows.sameElements(expectedRows))
+
+    TestResult.synchronized {
+      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writtenRows === expectedRows.toSet)
+    }
   }
 
   ignore("save() - partitioned table - Overwrite - select and overwrite the same table") {
@@ -216,21 +268,27 @@ class FSBasedRelationSuite extends DataSourceTest {
       mode = SaveMode.Overwrite,
       options = Map(
         "path" -> basePath.toString,
-        "schema" -> dataSchema.json),
+        "schema" -> dataSchema.json,
+        "partitionColumns" -> partitionColumns.json),
       partitionColumns = Seq("p1"))
 
     // Written rows shouldn't contain dynamic partition column
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
-    assert(TestResult.writtenRows.sameElements(expectedRows))
+
+    TestResult.synchronized {
+      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writtenRows === expectedRows.toSet)
+    }
   }
 
-  ignore("save() - partitioned table - Append") {
+  test("save() - partitioned table - Append") {
     testDF.save(
       source = classOf[SimpleFSBasedSource].getCanonicalName,
       mode = SaveMode.Overwrite,
       options = Map(
         "path" -> basePath.toString,
-        "schema" -> dataSchema.json),
+        "schema" -> dataSchema.json,
+        "partitionColumns" -> partitionColumns.json),
       partitionColumns = Seq("p1"))
 
     testDF.save(
@@ -238,15 +296,20 @@ class FSBasedRelationSuite extends DataSourceTest {
       mode = SaveMode.Append,
       options = Map(
         "path" -> basePath.toString,
-        "schema" -> dataSchema.json),
+        "schema" -> dataSchema.json,
+        "partitionColumns" -> partitionColumns.json),
       partitionColumns = Seq("p1"))
 
     // Written rows shouldn't contain dynamic partition column
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 4) yield Row(i, s"val_$i")
-    assert(TestResult.writtenRows.sameElements(expectedRows))
+
+    TestResult.synchronized {
+      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writtenRows === expectedRows.toSet)
+    }
   }
 
-  ignore("save() - partitioned table - ErrorIfExists") {
+  test("save() - partitioned table - ErrorIfExists") {
     fs.delete(basePath, true)
 
     testDF.save(
@@ -254,23 +317,31 @@ class FSBasedRelationSuite extends DataSourceTest {
       mode = SaveMode.Overwrite,
       options = Map(
         "path" -> basePath.toString,
-        "schema" -> dataSchema.json),
+        "schema" -> dataSchema.json,
+        "partitionColumns" -> partitionColumns.json),
       partitionColumns = Seq("p1"))
 
-    assert(TestResult.writtenRows.sameElements(testDF.collect()))
+    // Written rows shouldn't contain dynamic partition column
+    val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
 
-    intercept[IOException] {
+    TestResult.synchronized {
+      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writtenRows === expectedRows.toSet)
+    }
+
+    intercept[RuntimeException] {
       testDF.save(
         source = classOf[SimpleFSBasedSource].getCanonicalName,
         mode = SaveMode.ErrorIfExists,
         options = Map(
           "path" -> basePath.toString,
-          "schema" -> dataSchema.json),
+          "schema" -> dataSchema.json,
+          "partitionColumns" -> partitionColumns.json),
         partitionColumns = Seq("p1"))
     }
   }
 
-  ignore("save() - partitioned table - Ignore") {
+  test("save() - partitioned table - Ignore") {
     testDF.save(
       source = classOf[SimpleFSBasedSource].getCanonicalName,
       mode = SaveMode.Ignore,
@@ -282,19 +353,34 @@ class FSBasedRelationSuite extends DataSourceTest {
     assert(TestResult.writtenRows.isEmpty)
   }
 
-  ignore("saveAsTable() - partitioned table - Overwrite") {
+  test("save() - data sources other than FSBasedRelation") {
+    val cause = intercept[RuntimeException] {
+      testDF.save(
+        source = classOf[FilteredScanSource].getCanonicalName,
+        mode = SaveMode.Overwrite,
+        options = Map("path" -> basePath.toString),
+        partitionColumns = Seq("p1"))
+    }
+  }
+
+  test("saveAsTable() - partitioned table - Overwrite") {
     testDF.saveAsTable(
       tableName = "t",
       source = classOf[SimpleFSBasedSource].getCanonicalName,
       mode = SaveMode.Overwrite,
       options = Map(
         "path" -> basePath.toString,
-        "schema" -> dataSchema.json),
+        "schema" -> dataSchema.json,
+        "partitionColumns" -> partitionColumns.json),
       partitionColumns = Seq("p1"))
 
     // Written rows shouldn't contain dynamic partition column
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
-    assert(TestResult.writtenRows.sameElements(expectedRows))
+
+    TestResult.synchronized {
+      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writtenRows === expectedRows.toSet)
+    }
 
     assertResult(table("t").schema) {
       StructType(
@@ -312,7 +398,8 @@ class FSBasedRelationSuite extends DataSourceTest {
       source = classOf[SimpleFSBasedSource].getCanonicalName,
       options = Map(
         "path" -> basePath.toString,
-        "schema" -> dataSchema.json))
+        "schema" -> dataSchema.json,
+        "partitionColumns" -> partitionColumns.json))
 
     df.saveAsTable(
       tableName = "t",
@@ -320,12 +407,17 @@ class FSBasedRelationSuite extends DataSourceTest {
       mode = SaveMode.Overwrite,
       options = Map(
         "path" -> basePath.toString,
-        "schema" -> dataSchema.json),
+        "schema" -> dataSchema.json,
+        "partitionColumns" -> partitionColumns.json),
       partitionColumns = Seq("p1"))
 
     // Written rows shouldn't contain dynamic partition column
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
-    assert(TestResult.writtenRows.sameElements(expectedRows))
+
+    TestResult.synchronized {
+      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writtenRows === expectedRows.toSet)
+    }
 
     assertResult(table("t").schema) {
       StructType(
@@ -336,14 +428,15 @@ class FSBasedRelationSuite extends DataSourceTest {
     sql("DROP TABLE t")
   }
 
-  ignore("saveAsTable() - partitioned table - Append") {
+  test("saveAsTable() - partitioned table - Append") {
     testDF.saveAsTable(
       tableName = "t",
       source = classOf[SimpleFSBasedSource].getCanonicalName,
       mode = SaveMode.Overwrite,
       options = Map(
         "path" -> basePath.toString,
-        "schema" -> dataSchema.json),
+        "schema" -> dataSchema.json,
+        "partitionColumns" -> partitionColumns.json),
       partitionColumns = Seq("p1"))
 
     testDF.saveAsTable(
@@ -352,12 +445,17 @@ class FSBasedRelationSuite extends DataSourceTest {
       mode = SaveMode.Append,
       options = Map(
         "path" -> basePath.toString,
-        "schema" -> dataSchema.json),
+        "schema" -> dataSchema.json,
+        "partitionColumns" -> partitionColumns.json),
       partitionColumns = Seq("p1"))
 
     // Written rows shouldn't contain dynamic partition column
-    val expectedRows = for (i <- 1 to 3; _ <- 1 to 4) yield Row(i, s"val_$i")
-    assert(TestResult.writtenRows.sameElements(expectedRows))
+    val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
+
+    TestResult.synchronized {
+      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writtenRows === expectedRows.toSet)
+    }
 
     assertResult(table("t").schema) {
       StructType(
@@ -368,7 +466,7 @@ class FSBasedRelationSuite extends DataSourceTest {
     sql("DROP TABLE t")
   }
 
-  ignore("saveAsTable() - partitioned table - ErrorIfExists") {
+  test("saveAsTable() - partitioned table - ErrorIfExists") {
     fs.delete(basePath, true)
 
     testDF.saveAsTable(
@@ -377,10 +475,17 @@ class FSBasedRelationSuite extends DataSourceTest {
       mode = SaveMode.ErrorIfExists,
       options = Map(
         "path" -> basePath.toString,
-        "schema" -> dataSchema.json),
+        "schema" -> dataSchema.json,
+        "partitionColumns" -> partitionColumns.json),
       partitionColumns = Seq("p1"))
 
-    assert(TestResult.writtenRows.sameElements(testDF.collect()))
+    // Written rows shouldn't contain dynamic partition column
+    val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
+
+    TestResult.synchronized {
+      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writtenRows === expectedRows.toSet)
+    }
 
     assertResult(table("t").schema) {
       StructType(
@@ -388,28 +493,30 @@ class FSBasedRelationSuite extends DataSourceTest {
           StructField("p1", IntegerType, nullable = true)))
     }
 
-    intercept[IOException] {
+    intercept[AnalysisException] {
       testDF.saveAsTable(
         tableName = "t",
         source = classOf[SimpleFSBasedSource].getCanonicalName,
-        mode = SaveMode.Overwrite,
+        mode = SaveMode.ErrorIfExists,
         options = Map(
           "path" -> basePath.toString,
-          "schema" -> dataSchema.json),
+          "schema" -> dataSchema.json,
+          "partitionColumns" -> partitionColumns.json),
         partitionColumns = Seq("p1"))
     }
 
     sql("DROP TABLE t")
   }
 
-  ignore("saveAsTable() - partitioned table - Ignore") {
+  test("saveAsTable() - partitioned table - Ignore") {
     testDF.saveAsTable(
       tableName = "t",
       source = classOf[SimpleFSBasedSource].getCanonicalName,
       mode = SaveMode.Ignore,
       options = Map(
         "path" -> basePath.toString,
-        "schema" -> dataSchema.json),
+        "schema" -> dataSchema.json,
+        "partitionColumns" -> partitionColumns.json),
       partitionColumns = Seq("p1"))
 
     assert(TestResult.writtenRows.isEmpty)
@@ -421,5 +528,16 @@ class FSBasedRelationSuite extends DataSourceTest {
     }
 
     sql("DROP TABLE t")
+  }
+
+  test("saveAsTable() - data sources other than FSBasedRelation") {
+    val cause = intercept[RuntimeException] {
+      testDF.saveAsTable(
+        tableName = "t",
+        source = classOf[FilteredScanSource].getCanonicalName,
+        mode = SaveMode.Overwrite,
+        options = Map("path" -> basePath.toString),
+        partitionColumns = Seq("p1"))
+    }
   }
 }

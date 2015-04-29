@@ -53,6 +53,25 @@ private[sql] object DataSourceStrategy extends Strategy {
         filters,
         (a, _) => t.buildScan(a)) :: Nil
 
+    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: FSBasedRelation)) =>
+      val selectedPartitions = prunePartitions(filters, t.partitionSpec)
+      val inputPaths = selectedPartitions.map(_.path).toArray
+
+      // Don't push down predicates that reference partition columns
+      val pushedFilters = {
+        val partitionColumnNames = t.partitionSpec.partitionColumns.map(_.name).toSet
+        filters.filter { f =>
+          val referencedColumnNames = f.references.map(_.name).toSet
+          referencedColumnNames.intersect(partitionColumnNames).isEmpty
+        }
+      }
+
+      pruneFilterProject(
+        l,
+        projectList,
+        pushedFilters,
+        (a, f) => t.buildScan(a, f, inputPaths)) :: Nil
+
     case l @ LogicalRelation(t: TableScan) =>
       createPhysicalRDD(l.relation, l.output, t.buildScan()) :: Nil
 
@@ -61,6 +80,33 @@ private[sql] object DataSourceStrategy extends Strategy {
       execution.ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case _ => Nil
+  }
+
+  protected def prunePartitions(
+      predicates: Seq[Expression],
+      partitionSpec: PartitionSpec): Seq[Partition] = {
+    val PartitionSpec(partitionColumns, partitions) = partitionSpec
+    val partitionColumnNames = partitionColumns.map(_.name).toSet
+    val partitionPruningPredicates = predicates.filter {
+      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+    }
+
+    if (partitionPruningPredicates.nonEmpty) {
+      val predicate =
+        partitionPruningPredicates
+          .reduceOption(expressions.And)
+          .getOrElse(Literal(true))
+
+      val boundPredicate = InterpretedPredicate(predicate.transform {
+        case a: AttributeReference =>
+          val index = partitionColumns.indexWhere(a.name == _.name)
+          BoundReference(index, partitionColumns(index).dataType, nullable = true)
+      })
+
+      partitions.filter { case Partition(values, _) => boundPredicate(values) }
+    } else {
+      partitions
+    }
   }
 
   // Based on Public API.

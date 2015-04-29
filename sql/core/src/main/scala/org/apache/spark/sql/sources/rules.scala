@@ -107,7 +107,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         // The relation in l is not an InsertableRelation.
         failAnalysis(s"$l does not allow insertion.")
 
-      case CreateTableUsingAsSelect(tableName, _, _, SaveMode.Overwrite, _, query) =>
+      case CreateTableUsingAsSelect(tableName, _, _, _, SaveMode.Overwrite, _, query) =>
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
         if (catalog.tableExists(Seq(tableName))) {

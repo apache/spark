@@ -762,7 +762,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def load(source: String, options: Map[String, String]): DataFrame = {
-    val resolved = ResolvedDataSource(this, None, source, options)
+    val resolved = ResolvedDataSource(this, None, Array.empty[String], source, options)
     DataFrame(this, LogicalRelation(resolved.relation))
   }
 
@@ -792,7 +792,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val resolved = ResolvedDataSource(this, Some(schema), source, options)
+    val resolved = ResolvedDataSource(this, Some(schema), Array.empty[String], source, options)
     DataFrame(this, LogicalRelation(resolved.relation))
   }
 

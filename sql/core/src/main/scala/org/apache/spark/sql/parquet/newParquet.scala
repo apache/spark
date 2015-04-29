@@ -136,10 +136,6 @@ private[sql] class DefaultSource
   }
 }
 
-private[sql] case class Partition(values: Row, path: String)
-
-private[sql] case class PartitionSpec(partitionColumns: StructType, partitions: Seq[Partition])
-
 /**
  * An alternative to [[ParquetRelation]] that plugs in using the data sources API.  This class is
  * intended as a full replacement of the Parquet support in Spark SQL.  The old implementation will
@@ -805,7 +801,7 @@ private[sql] object ParquetRelation2 extends Logging {
     val ordinalMap = metastoreSchema.zipWithIndex.map {
       case (field, index) => field.name.toLowerCase -> index
     }.toMap
-    val reorderedParquetSchema = mergedParquetSchema.sortBy(f => 
+    val reorderedParquetSchema = mergedParquetSchema.sortBy(f =>
       ordinalMap.getOrElse(f.name.toLowerCase, metastoreSchema.size + 1))
 
     StructType(metastoreSchema.zip(reorderedParquetSchema).map {

@@ -18,11 +18,13 @@
 package org.apache.spark.sql.sources
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 
 /**
@@ -109,9 +111,9 @@ trait FSBasedRelationProvider {
    */
   def createRelation(
       sqlContext: SQLContext,
-      parameters: Map[String, String],
-      schema: StructType,
-      partitionColumns: StructType): BaseRelation
+      schema: Option[StructType],
+      partitionColumns: Option[StructType],
+      parameters: Map[String, String]): BaseRelation
 }
 
 @DeveloperApi
@@ -259,13 +261,11 @@ abstract class OutputWriter {
    * @param path The file path to which this [[OutputWriter]] is supposed to write.
    * @param dataSchema Schema of the rows to be written. Partition columns are not included in the
    *        schema if the corresponding relation is partitioned.
-   * @param options Data source options inherited from driver side.
    * @param conf Hadoop configuration inherited from driver side.
    */
   def init(
       path: String,
       dataSchema: StructType,
-      options: java.util.Map[String, String],
       conf: Configuration): Unit = ()
 
   /**
@@ -294,18 +294,65 @@ abstract class OutputWriter {
  *
  * For the write path, it provides the ability to write to both non-partitioned and partitioned
  * tables.  Directory layout of the partitioned tables is compatible with Hive.
+ *
+ * @constructor This constructor is for internal uses only. The [[PartitionSpec]] argument is for
+ *              implementing metastore table conversion.
+ * @param paths Base paths of this relation.  For partitioned relations, it should be either root
+ *        directories of all partition directories.
+ * @param maybePartitionSpec An [[FSBasedRelation]] can be created with an optional
+ *        [[PartitionSpec]], so that partition discovery can be skipped.
  */
 @Experimental
-abstract class FSBasedRelation extends BaseRelation {
-  // Discovers partitioned columns, and merge them with `dataSchema`.  All partition columns not
-  // existed in `dataSchema` should be appended to `dataSchema`.
-  override val schema: StructType = ???
+abstract class FSBasedRelation private[sql](
+    val paths: Array[String],
+    maybePartitionSpec: Option[PartitionSpec])
+  extends BaseRelation {
 
   /**
-   * Base path of this relation.  For partitioned relations, `path` should be the root directory of
-   * all partition directories.
+   * Constructs an [[FSBasedRelation]].
+   *
+   * @param paths Base paths of this relation.  For partitioned relations, it should be either root
+   *        directories of all partition directories.
    */
-  def path: String
+  def this(paths: Array[String]) = this(paths, None)
+
+  private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+
+  private var _partitionSpec: PartitionSpec = _
+  refreshPartitions()
+
+  private[sql] def partitionSpec: PartitionSpec = _partitionSpec
+
+  private[sql] def refreshPartitions(): Unit = {
+    _partitionSpec = maybePartitionSpec.getOrElse {
+      val basePaths = paths.map(new Path(_))
+      val leafDirs = basePaths.flatMap { path =>
+        val fs = path.getFileSystem(hadoopConf)
+        if (fs.exists(path)) {
+          SparkHadoopUtil.get.listLeafDirStatuses(fs, path)
+        } else {
+          Seq.empty[FileStatus]
+        }
+      }.map(_.getPath)
+
+      if (leafDirs.nonEmpty) {
+        PartitioningUtils.parsePartitions(leafDirs, "__HIVE_DEFAULT_PARTITION__")
+      } else {
+        PartitionSpec(StructType(Array.empty[StructField]), Array.empty[Partition])
+      }
+    }
+  }
+
+  /**
+   * Schema of this relation.  It consists of [[dataSchema]] and all partition columns not appeared
+   * in [[dataSchema]].
+   */
+  override val schema: StructType = {
+    val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
+    StructType(dataSchema ++ partitionSpec.partitionColumns.filterNot { column =>
+      dataSchemaColumnNames.contains(column.name.toLowerCase)
+    })
+  }
 
   /**
    * Specifies schema of actual data files.  For partitioned relations, if one or more partitioned
