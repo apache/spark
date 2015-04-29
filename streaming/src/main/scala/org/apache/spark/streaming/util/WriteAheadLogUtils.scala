@@ -106,7 +106,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
     classNameOption.map { className =>
       try {
         instantiateClass(
-          Utils.classForName(className).asInstanceOf[Class[WriteAheadLog]], sparkConf)
+          Utils.classForName(className).asInstanceOf[Class[_ <: WriteAheadLog]], sparkConf)
       } catch {
         case NonFatal(e) =>
           throw new SparkException(s"Could not create a write ahead log of class $className", e)
@@ -118,7 +118,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
   }
 
   /** Instantiate the class, either using single arg constructor or zero arg constructor */
-  private def instantiateClass(cls: Class[WriteAheadLog], conf: SparkConf): WriteAheadLog = {
+  private def instantiateClass(cls: Class[_ <: WriteAheadLog], conf: SparkConf): WriteAheadLog = {
     try {
       cls.getConstructor(classOf[SparkConf]).newInstance(conf)
     } catch {
