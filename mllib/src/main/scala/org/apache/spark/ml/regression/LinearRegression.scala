@@ -110,6 +110,8 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     val yMean = statCounter.mean
     val yStd = math.sqrt(statCounter.variance)
 
+    // If the yStd is zero, then the intercept is yStd with zero weights.
+    // As a result, training is not required.
     val model = if (yStd != 0.0) {
       val featuresMean = summarizer.mean.toArray
       val featuresStd = summarizer.variance.toArray.map(math.sqrt)
@@ -143,7 +145,6 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
       }
       lossHistory += state.value
 
-      // TODO: Based on the sparsity of weights, we may convert the weights to the sparse vector.
       // The weights are trained in the scaled space; we're converting them back to
       // the original space.
       val weights = {
@@ -162,9 +163,12 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
       // converged. See the following discussion for detail.
       // http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
       val intercept = yMean - dot(weights, Vectors.dense(featuresMean))
-      new LinearRegressionModel(this, paramMap, weights, intercept)
+
+      // TODO: We convert to sparse format based on the storage.
+      // But we may base on the prediction speed.
+      new LinearRegressionModel(this, paramMap, weights.compressed, intercept)
     } else {
-      new LinearRegressionModel(this, paramMap, Vectors.zeros(numFeatures), yMean)
+      new LinearRegressionModel(this, paramMap, Vectors.sparse(numFeatures, Seq()), yMean)
     }
     if (handlePersistence) {
       instances.unpersist()
