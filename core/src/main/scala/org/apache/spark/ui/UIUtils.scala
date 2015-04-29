@@ -49,8 +49,8 @@ private[spark] object UIUtils extends Logging {
   }
 
   /**
-   * Find the best `TimeUnit` for converting milliseconds to a friendly string. Return the value after converting with
-   * the `TimeUnit`.
+   * Find the best `TimeUnit` for converting milliseconds to a friendly string. Return the value
+   * after converting, also with its TimeUnit.
    */
   def normalizeDuration(milliseconds: Long): (Double, TimeUnit) = {
     if (milliseconds < 1000) {
@@ -65,7 +65,11 @@ private[spark] object UIUtils extends Logging {
       return (minutes, TimeUnit.MINUTES)
     }
     val hours = minutes / 60
-    (hours, TimeUnit.HOURS)
+    if (hours < 24) {
+      return (hours, TimeUnit.HOURS)
+    }
+    val days = hours / 24
+    (days, TimeUnit.DAYS)
   }
 
   def formatDate(date: Date): String = dateFormat.get.format(date)

@@ -16,56 +16,82 @@
  */
 
 
-var timelineMarginLeft = 50;
-var distributionMinX = 0;
-var distributionMaxX = 0;
-var binCount = 10;
+// timeFormat: StreamingPage.scala will generate a global "timeFormat" dictionary to store the time
+// and its formatted string. Because we cannot specify a timezone in JavaScript, to make sure the
+// server and client use the same timezone, we use the "timeFormat" dictionary to format all time
+// values used in the graphs.
 
-// An invisible div to show details of a point in the graph
-var graphTooltip = d3.select("body").append("div")
-    .attr("class", "label")
-    .style("display", "inline-block")
-    .style("position", "absolute")
-    .style("z-index", "10")
-    .style("visibility", "hidden")
-    .text("");
+// A global margin left for all timeline graphs. It will be set in "registerTimeline". This will be
+// used to align all timeline graphs.
+var maxMarginLeftForTimeline = 0;
 
-// Show "text" at location (x, y)
-function showGraphTooltip(text, x, y) {
-    var left = x;
-    var top = y;
-    graphTooltip.style("visibility", "visible")
-        .style("top", top + "px")
-        .style("left", left + "px")
-        .text(text);
-}
+// The max X values for all histograms. It will be set in "registerHistogram".
+var maxXForHistogram = 0;
 
-// Hide "graphTooltip"
-function hideGraphTooltip() {
-    graphTooltip.style("visibility", "hidden");
-}
+var histogramBinCount = 10;
+var yValueFormat = d3.format(",.2f");
 
+// Show a tooltip "text" for "node"
 function showBootstrapTooltip(node, text) {
-    console.log(text);
-    $(node).tooltip({title: text, trigger: "manual", 'container': 'body'});
+    $(node).tooltip({title: text, trigger: "manual", container: "body"});
     $(node).tooltip("show");
-    console.log($(node));
 }
 
+// Hide the tooltip for "node"
 function hideBootstrapTooltip(node) {
     $(node).tooltip("destroy");
+}
+
+// Register a timeline graph. All timeline graphs should be register before calling any
+// "drawTimeline" so that we can determine the max margin left for all timeline graphs.
+function registerTimeline(minY, maxY) {
+    var numOfChars = yValueFormat(maxY).length;
+    // A least width for "maxY" in the graph
+    var pxForMaxY = numOfChars * 8 + 10;
+    // Make sure we have enough space to show the ticks in the y axis of timeline
+    maxMarginLeftForTimeline = pxForMaxY > maxMarginLeftForTimeline? pxForMaxY : maxMarginLeftForTimeline;
+}
+
+// Register a histogram graph. All histogram graphs should be register before calling any
+// "drawHistogram" so that we can determine the max X value for histograms.
+function registerHistogram(values, minY, maxY) {
+    var data = d3.layout.histogram().range([minY, maxY]).bins(histogramBinCount)(values);
+    // d.x is the y values while d.y is the x values
+    var maxX = d3.max(data, function(d) { return d.y; });
+    maxXForHistogram = maxX > maxXForHistogram ? maxX : maxXForHistogram;
+}
+
+// Draw a line between (x1, y1) and (x2, y2)
+function drawLine(svg, xFunc, yFunc, x1, y1, x2, y2) {
+    var line = d3.svg.line()
+        .x(function(d) { return xFunc(d.x); })
+        .y(function(d) { return yFunc(d.y); });
+    var data = [{x: x1, y: y1}, {x: x2, y: y2}];
+    svg.append("path")
+        .datum(data)
+        .style("stroke-dasharray", ("6, 6"))
+        .style("stroke", "lightblue")
+        .attr("class", "line")
+        .attr("d", line);
 }
 
 /**
  * @param id the `id` used in the html `div` tag
  * @param data the data for the timeline graph
+ * @param minX the min value of X axis
+ * @param maxX the max value of X axis
  * @param minY the min value of Y axis
  * @param maxY the max value of Y axis
  * @param unitY the unit of Y axis
+ * @param batchInterval if "batchInterval" is specified, we will draw a line for "batchInterval" in the graph
  */
-function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchTime) {
-    d3.select(d3.select(id).node().parentNode).style("padding", "8px 0 8px 8px").style("border-right", "0px solid white");
-    var margin = {top: 20, right: 27, bottom: 30, left: timelineMarginLeft};
+function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
+    // Hide the right border of "<td>". We cannot use "css" directly, or "sorttable.js" will override them.
+    d3.select(d3.select(id).node().parentNode)
+        .style("padding", "8px 0 8px 8px")
+        .style("border-right", "0px solid white");
+
+    var margin = {top: 20, right: 27, bottom: 30, left: maxMarginLeftForTimeline};
     var width = 500 - margin.left - margin.right;
     var height = 150 - margin.top - margin.bottom;
 
@@ -102,23 +128,8 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchTime) {
             .text(unitY);
 
 
-    if (batchTime) {
-        var batchTimeline = d3.svg.line()
-            .x(function(d) { return x(d.x); })
-            .y(function(d) { return y(d.y); });
-
-        console.log(batchTime);
-        var batchTimeData = [
-           {x: minX, y: batchTime}, {x: maxX, y: batchTime}
-        ];
-        console.log(batchTimeData);
-
-        svg.append("path")
-            .datum(batchTimeData)
-            .style("stroke-dasharray", ("6, 6"))
-            .style("stroke", "lightblue")
-            .attr("class", "line")
-            .attr("d", batchTimeline);
+    if (batchInterval && batchInterval <= maxY) {
+        drawLine(svg, x, y, minX, batchInterval, maxX, batchInterval);
     }
 
     svg.append("path")
@@ -131,58 +142,56 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchTime) {
     svg.selectAll(".point")
         .data(data)
         .enter().append("circle")
-                    .attr("stroke", "white") // white and opacity = 0 make it invisible
+            .attr("stroke", "white") // white and opacity = 0 make it invisible
+            .attr("fill", "white")
+            .attr("opacity", "0")
+            .attr("cx", function(d) { return x(d.x); })
+            .attr("cy", function(d) { return y(d.y); })
+            .attr("r", function(d) { return 3; })
+            .on('mouseover', function(d) {
+                var tip = formatYValue(d.y) + " " + unitY + " at " + timeFormat[d.x];
+                showBootstrapTooltip(d3.select(this).node(), tip);
+                // show the point
+                d3.select(this)
+                    .attr("stroke", "steelblue")
+                    .attr("fill", "steelblue")
+                    .attr("opacity", "1");
+            })
+            .on('mouseout',  function() {
+                hideBootstrapTooltip(d3.select(this).node());
+                // hide the point
+                d3.select(this)
+                    .attr("stroke", "white")
                     .attr("fill", "white")
-                    .attr("opacity", "0")
-                    .attr("cx", function(d) { return x(d.x); })
-                    .attr("cy", function(d) { return y(d.y); })
-                    .attr("r", function(d) { return 3; })
-                    .on('mouseover', function(d) {
-                        var tip = formatYValue(d.y) + " " + unitY + " at " + timeFormat[d.x];
-                        showBootstrapTooltip(d3.select(this).node(), tip);
-                        //showGraphTooltip(tip, d3.event.pageX + 5, d3.event.pageY - 25);
-                        // show the point
-                        d3.select(this)
-                            .attr("stroke", "steelblue")
-                            .attr("fill", "steelblue")
-                            .attr("opacity", "1");
-                    })
-                    .on('mouseout',  function() {
-                        hideBootstrapTooltip(d3.select(this).node());
-                        //hideGraphTooltip();
-                        // hide the point
-                        d3.select(this)
-                            .attr("stroke", "white")
-                            .attr("fill", "white")
-                            .attr("opacity", "0");
-                    });
-
+                    .attr("opacity", "0");
+            });
 }
 
 /**
  * @param id the `id` used in the html `div` tag
- * @param data the data for the distribution graph
+ * @param values the data for the histogram graph
  * @param minY the min value of Y axis
  * @param maxY the max value of Y axis
  * @param unitY the unit of Y axis
+ * @param batchInterval if "batchInterval" is specified, we will draw a line for "batchInterval" in the graph
  */
-function drawDistribution(id, values, minY, maxY, unitY, batchTime) {
-    d3.select(d3.select(id).node().parentNode).style("padding", "8px 8px 8px 0").style("border-left", "0px solid white");
+function drawHistogram(id, values, minY, maxY, unitY, batchInterval) {
+    // Hide the left border of "<td>". We cannot use "css" directly, or "sorttable.js" will override them.
+    d3.select(d3.select(id).node().parentNode)
+        .style("padding", "8px 8px 8px 0")
+        .style("border-left", "0px solid white");
+
     var margin = {top: 20, right: 30, bottom: 30, left: 10};
     var width = 300 - margin.left - margin.right;
     var height = 150 - margin.top - margin.bottom;
 
-    var formatBinValue = d3.format(",.2f");
-
+    var x = d3.scale.linear().domain([0, maxXForHistogram]).range([0, width]);
     var y = d3.scale.linear().domain([minY, maxY]).range([height, 0]);
-    var data = d3.layout.histogram().range([minY, maxY]).bins(binCount)(values);
-
-    var x = d3.scale.linear()
-        .domain([distributionMinX, distributionMaxX])
-        .range([0, width]);
 
     var xAxis = d3.svg.axis().scale(x).orient("top").ticks(5);
     var yAxis = d3.svg.axis().scale(y).orient("left").ticks(0).tickFormat(function(d) { return ""; });
+
+    var data = d3.layout.histogram().range([minY, maxY]).bins(histogramBinCount)(values);
 
     var svg = d3.select(id).append("svg")
         .attr("width", width + margin.left + margin.right)
@@ -190,28 +199,12 @@ function drawDistribution(id, values, minY, maxY, unitY, batchTime) {
         .append("g")
             .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-    if (batchTime) {
-        var batchTimeline = d3.svg.line()
-            .x(function(d) { return x(d.x); })
-            .y(function(d) { return y(d.y); });
-
-        console.log(batchTime);
-        var batchTimeData = [
-           {x: distributionMinX, y: batchTime}, {x: distributionMaxX, y: batchTime}
-        ];
-        console.log(batchTimeData);
-
-        svg.append("path")
-            .datum(batchTimeData)
-            .style("stroke-dasharray", ("6, 6"))
-            .style("stroke", "lightblue")
-            .attr("class", "line")
-            .attr("d", batchTimeline);
+    if (batchInterval && batchInterval <= maxY) {
+        drawLine(svg, x, y, 0, batchInterval, maxXForHistogram, batchInterval);
     }
 
     svg.append("g")
         .attr("class", "x axis")
-        .attr("transform", "translate(0," + 0 + ")")
         .call(xAxis)
 
     svg.append("g")
@@ -220,82 +213,58 @@ function drawDistribution(id, values, minY, maxY, unitY, batchTime) {
 
     var bar = svg.selectAll(".bar")
         .data(data)
-      .enter().append("g")
-                  .attr("transform", function(d) { return "translate(0," + (y(d.x) - height + y(d.dx))  + ")";})
-                  .attr("class", "bar").append("rect")
-                  .attr("width", function(d) { return x(d.y); })
-                  .attr("height", function(d) { return height - y(d.dx); })
-                  .on('mouseover', function(d) {
-                      var tip = d.y + " between " + formatBinValue(d.x) + " and " + formatBinValue(d.x + d.dx) + " " + unitY;
-                      showBootstrapTooltip(d3.select(this).node(), tip);
+        .enter()
+        .append("g")
+            .attr("transform", function(d) { return "translate(0," + (y(d.x) - height + y(d.dx))  + ")";})
+            .attr("class", "bar").append("rect")
+            .attr("width", function(d) { return x(d.y); })
+            .attr("height", function(d) { return height - y(d.dx); })
+            .on('mouseover', function(d) {
+                var percent = yValueFormat(d.y * 100.0 / values.length) + "%";
+                var tip = d.y + " batches (" + percent + ") between " + yValueFormat(d.x) + " and " + yValueFormat(d.x + d.dx) + " " + unitY;
+                showBootstrapTooltip(d3.select(this).node(), tip);
+            })
+            .on('mouseout',  function() {
+                hideBootstrapTooltip(d3.select(this).node());
+            });
 
-                      // Calculate the location for tip
-                      var scrollTop  = document.documentElement.scrollTop || document.body.scrollTop;
-                      var scrollLeft = document.documentElement.scrollLeft || document.body.scrollLeft;
-                      var target = d3.event.target;
-                      var matrix = target.getScreenCTM();
-                      var targetBBox = target.getBBox();
-                      var point = svg.node().ownerSVGElement.createSVGPoint();
-                      point.x = targetBBox.x;
-                      point.y = targetBBox.y;
-                      var bbox = point.matrixTransform(matrix);
-                      var tipX = bbox.x + scrollLeft;
-                      var tipY = bbox.y + scrollTop + 15;
-
-                      //showGraphTooltip(tip, tipX, tipY);
-                  })
-                  .on('mouseout',  function() {
-                      hideBootstrapTooltip(d3.select(this).node());
-                      //hideGraphTooltip();
-                  });
-
-    if (batchTime && batchTime <= maxY) {
+    if (batchInterval && batchInterval <= maxY) {
+        // Add the "stable" text to the graph below the batch interval line.
+        var stableXOffset = x(maxXForHistogram) - 20;
+        var stableYOffset = y(batchInterval) + 15;
         svg.append("text")
-          .style("fill", "lightblue")
-          .attr("class", "stable-text")
-          .attr("text-anchor", "middle")
-          .attr("transform", "translate(" + (x(distributionMaxX)-20) +"," + (y(batchTime) + 15) + ")")
-          .text("stable")
-                            .on('mouseover', function(d) {
-                                var tip = "Processing Time <= Batch Interval (" + formatBinValue(batchTime) +" " + unitY +")";
-                                showBootstrapTooltip(d3.select(this).node(), tip);
-                            })
-                            .on('mouseout',  function() {
-                                hideBootstrapTooltip(d3.select(this).node());
-                            });
-    }
-}
-
-function prepareTimeline(minY, maxY) {
-    var formatYValue = d3.format(",.2f");
-    var numOfChars = formatYValue(maxY).length;
-    var maxPx = numOfChars * 8 + 10;
-    // Make sure we have enough space to show the ticks in the y axis of timeline
-    timelineMarginLeft = maxPx > timelineMarginLeft? maxPx : timelineMarginLeft;
-}
-
-function prepareDistribution(values, minY, maxY) {
-    var data = d3.layout.histogram().range([minY, maxY]).bins(binCount)(values);
-    var maxBarSize = d3.max(data, function(d) { return d.y; });
-    distributionMaxX = maxBarSize > distributionMaxX? maxBarSize : distributionMaxX;
-}
-
-function getUrlParameter(sParam)
-{
-    var sPageURL = window.location.search.substring(1);
-    var sURLVariables = sPageURL.split('&');
-    for (var i = 0; i < sURLVariables.length; i++)
-    {
-        var sParameterName = sURLVariables[i].split('=');
-        if (sParameterName[0] == sParam)
-        {
-            return sParameterName[1];
-        }
+            .style("fill", "lightblue")
+            .attr("class", "stable-text")
+            .attr("text-anchor", "middle")
+            .attr("transform", "translate(" + stableXOffset + "," + stableYOffset + ")")
+            .text("stable")
+            .on('mouseover', function(d) {
+              var tip = "Processing Time <= Batch Interval (" + yValueFormat(batchInterval) +" " + unitY +")";
+              showBootstrapTooltip(d3.select(this).node(), tip);
+            })
+            .on('mouseout',  function() {
+              hideBootstrapTooltip(d3.select(this).node());
+            });
     }
 }
 
 $(function() {
-    if (getUrlParameter("show-receivers-detail") == "true") {
+    function getParameterFromURL(param)
+    {
+        var parameters = window.location.search.substring(1); // Remove "?"
+        var keyValues = parameters.split('&');
+        for (var i = 0; i < keyValues.length; i++)
+        {
+            var paramKeyValue = keyValues[i].split('=');
+            if (paramKeyValue[0] == param)
+            {
+                return paramKeyValue[1];
+            }
+        }
+    }
+
+    if (getParameterFromURL("show-receivers-detail") == "true") {
+        // Show the details for all receivers
         $('#inputs-table').toggle('collapsed');
         $('#triangle').html('&#9660;');
     }

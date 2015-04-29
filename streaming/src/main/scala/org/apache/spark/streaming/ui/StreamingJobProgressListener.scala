@@ -25,7 +25,6 @@ import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchStarted
 import org.apache.spark.streaming.scheduler.BatchInfo
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchSubmitted
-import org.apache.spark.util.Distribution
 
 
 private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
@@ -39,7 +38,6 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   private var totalReceivedRecords = 0L
   private var totalProcessedRecords = 0L
   private val receiverInfos = new HashMap[Int, ReceiverInfo]
-  private val receiverLastErrorTime = new HashMap[Int, Long]
 
   val batchDuration = ssc.graph.batchDuration.milliseconds
 
@@ -52,7 +50,6 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   override def onReceiverError(receiverError: StreamingListenerReceiverError) {
     synchronized {
       receiverInfos(receiverError.receiverInfo.streamId) = receiverError.receiverInfo
-      receiverLastErrorTime(receiverError.receiverInfo.streamId) = System.currentTimeMillis()
     }
   }
 
@@ -123,32 +120,8 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     completedBatchInfos.toSeq
   }
 
-  def processingDelayDistribution: Option[Distribution] = synchronized {
-    extractDistribution(_.processingDelay)
-  }
-
-  def schedulingDelayDistribution: Option[Distribution] = synchronized {
-    extractDistribution(_.schedulingDelay)
-  }
-
-  def totalDelayDistribution: Option[Distribution] = synchronized {
-    extractDistribution(_.totalDelay)
-  }
-
-  def receivedRecordsDistributions: Map[Int, Option[Distribution]] = synchronized {
-    val latestBatchInfos = retainedBatches.reverse.take(batchInfoLimit)
-    val latestBlockInfos = latestBatchInfos.map(_.receivedBlockInfo)
-    (0 until numReceivers).map { receiverId =>
-      val blockInfoOfParticularReceiver = latestBlockInfos.map { batchInfo =>
-        batchInfo.get(receiverId).getOrElse(Array.empty)
-      }
-      val recordsOfParticularReceiver = blockInfoOfParticularReceiver.map { blockInfo =>
-      // calculate records per second for each batch
-        blockInfo.map(_.numRecords).sum.toDouble * 1000 / batchDuration
-      }
-      val distributionOption = Distribution(recordsOfParticularReceiver)
-      (receiverId, distributionOption)
-    }.toMap
+  def allReceivers: Seq[Int] = synchronized {
+    receiverInfos.keys.toSeq
   }
 
   def receivedRecordsWithBatchTime: Map[Int, Seq[(Long, Double)]] = synchronized {
@@ -184,10 +157,6 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     receiverInfos.get(receiverId)
   }
 
-  def receiverLastErrorTime(receiverId: Int): Option[Long] = synchronized {
-    receiverLastErrorTime.get(receiverId)
-  }
-
   def lastCompletedBatch: Option[BatchInfo] = synchronized {
     completedBatchInfos.sortBy(_.batchTime)(Time.ordering).lastOption
   }
@@ -199,9 +168,5 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   def retainedBatches: Seq[BatchInfo] = synchronized {
     (waitingBatchInfos.values.toSeq ++
       runningBatchInfos.values.toSeq ++ completedBatchInfos).sortBy(_.batchTime)(Time.ordering)
-  }
-
-  private def extractDistribution(getMetric: BatchInfo => Option[Long]): Option[Distribution] = {
-    Distribution(completedBatchInfos.flatMap(getMetric(_)).map(_.toDouble))
   }
 }
