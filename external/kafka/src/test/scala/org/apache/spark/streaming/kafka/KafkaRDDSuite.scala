@@ -113,6 +113,8 @@ class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
     val sentOnlyOne = Map("d" -> 1)
 
     kafkaTestUtils.sendMessages(topic, sentOnlyOne)
+    kafkaTestUtils.waitUntilLeaderOffset(kc, topic, 0, sentCount + 1)
+
     assert(rdd2.isDefined)
     assert(rdd2.get.count === 0, "got messages when there shouldn't be any")
 
