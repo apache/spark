@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml
+package org.apache.spark.ml.util
 
 import java.util.UUID
 

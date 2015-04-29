@@ -217,6 +217,11 @@ setGeneric("unpersist", function(x, ...) { standardGeneric("unpersist") })
 #' @export
 setGeneric("zipRDD", function(x, other) { standardGeneric("zipRDD") })
 
+#' @rdname zipRDD
+#' @export
+setGeneric("zipPartitions", function(..., func) { standardGeneric("zipPartitions") }, 
+           signature = "...")
+
 #' @rdname zipWithIndex
 #' @seealso zipWithUniqueId
 #' @export

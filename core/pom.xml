@@ -478,7 +478,6 @@
           <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>exec-maven-plugin</artifactId>
-            <version>1.3.2</version>
             <executions>
               <execution>
                 <id>sparkr-pkg</id>
