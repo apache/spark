@@ -95,11 +95,15 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Test
   public void emptyMap() {
     BytesToBytesMap map = new BytesToBytesMap(memoryManager, 64);
-    Assert.assertEquals(0, map.size());
-    final int keyLengthInWords = 10;
-    final int keyLengthInBytes = keyLengthInWords * 8;
-    final byte[] key = getRandomByteArray(keyLengthInWords);
-    Assert.assertFalse(map.lookup(key, BYTE_ARRAY_OFFSET, keyLengthInBytes).isDefined());
+    try {
+      Assert.assertEquals(0, map.size());
+      final int keyLengthInWords = 10;
+      final int keyLengthInBytes = keyLengthInWords * 8;
+      final byte[] key = getRandomByteArray(keyLengthInWords);
+      Assert.assertFalse(map.lookup(key, BYTE_ARRAY_OFFSET, keyLengthInBytes).isDefined());
+    } finally {
+      map.free();
+    }
   }
 
   @Test

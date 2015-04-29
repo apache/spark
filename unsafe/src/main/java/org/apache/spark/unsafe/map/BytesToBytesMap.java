@@ -157,16 +157,6 @@ public final class BytesToBytesMap {
     this(memoryManager, initialCapacity, 0.70, enablePerfMetrics);
   }
 
-  @Override
-  protected void finalize() throws Throwable {
-    try {
-      // In case the programmer forgot to call `free()`, try to perform that cleanup now:
-      free();
-    } finally {
-      super.finalize();
-    }
-  }
-
   /**
    * Returns the number of keys defined in the map.
    */
