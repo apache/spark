@@ -296,11 +296,6 @@ private[hive] object HiveShim {
 
   def getStatsSetupConstRawDataSize = StatsSetupConst.RAW_DATA_SIZE
 
-  def createDefaultDBIfNeeded(context: HiveContext) = {
-    context.runSqlHive("CREATE DATABASE default")
-    context.runSqlHive("USE default")
-  }
-
   def getCommandProcessor(cmd: Array[String], conf: HiveConf) = {
     CommandProcessorFactory.get(cmd, conf)
   }
