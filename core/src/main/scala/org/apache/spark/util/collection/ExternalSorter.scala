@@ -53,7 +53,18 @@ import org.apache.spark.storage.{BlockObjectWriter, BlockId}
  * probably want to pass None as the ordering to avoid extra sorting. On the other hand, if you do
  * want to do combining, having an Ordering is more efficient than not having it.
  *
- * At a high level, this class works as follows:
+ * Users interact with this class in the following way:
+ *
+ * 1. Instantiate an ExternalSorter.
+ *
+ * 2. Call insertAll() with a set of records.
+ *
+ * 3. Request an iterator() back to traverse sorted/aggregated records.
+ *     - or -
+ *    Invoke writePartitionedFile() to create a file containing sorted/aggregated outputs
+ *    that can be used in Spark's sort shuffle.
+ *
+ * At a high level, this class works internally as follows:
  *
  * - We repeatedly fill up buffers of in-memory data, using either a SizeTrackingAppendOnlyMap if
  *   we want to combine by key, or an simple SizeTrackingBuffer if we don't. Inside these buffers,
@@ -65,11 +76,11 @@ import org.apache.spark.storage.{BlockObjectWriter, BlockId}
  *   aggregation. For each file, we track how many objects were in each partition in memory, so we
  *   don't have to write out the partition ID for every element.
  *
- * - When the user requests an iterator, the spilled files are merged, along with any remaining
- *   in-memory data, using the same sort order defined above (unless both sorting and aggregation
- *   are disabled). If we need to aggregate by key, we either use a total ordering from the
- *   ordering parameter, or read the keys with the same hash code and compare them with each other
- *   for equality to merge values.
+ * - When the user requests an iterator or file output, the spilled files are merged, along with
+ *   any remaining in-memory data, using the same sort order defined above (unless both sorting
+ *   and aggregation are disabled). If we need to aggregate by key, we either use a total ordering
+ *   from the ordering parameter, or read the keys with the same hash code and compare them with
+ *   each other for equality to merge values.
  *
  * - Users are expected to call stop() at the end to delete all the intermediate files.
  *
@@ -97,7 +108,9 @@ private[spark] class ExternalSorter[K, V, C](
 
   private val conf = SparkEnv.get.conf
   private val spillingEnabled = conf.getBoolean("spark.shuffle.spill", true)
-  private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
+  
+  // Use getSizeAsKb (not bytes) to maintain backwards compatibility of on units are provided
+  private val fileBufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
   private val transferToEnabled = conf.getBoolean("spark.file.transferTo", true)
 
   // Size of object batches when reading/writing from serializers.
@@ -259,8 +272,8 @@ private[spark] class ExternalSorter[K, V, C](
    * Spill our in-memory collection to a sorted file that we can merge later (normal code path).
    * We add this file into spilledFiles to find it later.
    *
-   * Alternatively, if bypassMergeSort is true, we spill to separate files for each partition.
-   * See spillToPartitionedFiles() for that code path.
+   * This should not be invoked if bypassMergeSort is true. In that case, spillToPartitionedFiles()
+   * is used to write files for each partition.
    *
    * @param collection whichever collection we're using (map or buffer)
    */
@@ -272,7 +285,8 @@ private[spark] class ExternalSorter[K, V, C](
     // createTempShuffleBlock here; see SPARK-3426 for more context.
     val (blockId, file) = diskBlockManager.createTempShuffleBlock()
     curWriteMetrics = new ShuffleWriteMetrics()
-    var writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
+    var writer = blockManager.getDiskWriter(
+      blockId, file, serInstance, fileBufferSize, curWriteMetrics)
     var objectsWritten = 0   // Objects written since the last flush
 
     // List of batch sizes (bytes) in the order they are written to disk
@@ -308,7 +322,8 @@ private[spark] class ExternalSorter[K, V, C](
         if (objectsWritten == serializerBatchSize) {
           flush()
           curWriteMetrics = new ShuffleWriteMetrics()
-          writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
+          writer = blockManager.getDiskWriter(
+            blockId, file, serInstance, fileBufferSize, curWriteMetrics)
         }
       }
       if (objectsWritten > 0) {
@@ -358,7 +373,9 @@ private[spark] class ExternalSorter[K, V, C](
         // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
         // createTempShuffleBlock here; see SPARK-3426 for more context.
         val (blockId, file) = diskBlockManager.createTempShuffleBlock()
-        blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics).open()
+        val writer = blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize,
+          curWriteMetrics)
+        writer.open()
       }
       // Creating the file to write to and creating a disk writer both involve interacting with
       // the disk, and can take a long time in aggregate when we open many files, so should be
@@ -749,8 +766,8 @@ private[spark] class ExternalSorter[K, V, C](
       // partition and just write everything directly.
       for ((id, elements) <- this.partitionedIterator) {
         if (elements.hasNext) {
-          val writer = blockManager.getDiskWriter(
-            blockId, outputFile, ser, fileBufferSize, context.taskMetrics.shuffleWriteMetrics.get)
+          val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
+            context.taskMetrics.shuffleWriteMetrics.get)
           for (elem <- elements) {
             writer.write(elem)
           }
