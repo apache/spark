@@ -1651,7 +1651,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       partitions: Seq[Int],
       allowLocal: Boolean
       ): Array[U] = {
-    runJob(rdd, (context: TaskContext, iter: Iterator[T]) => func(iter), partitions, allowLocal)
+    // We must clean `func` here before using it in another closure below
+    // Otherwise, the closure cleaner will only clean the outer closure but not `func`
+    val cleanedFunc = clean(func)
+    runJob(rdd, (ctx: TaskContext, iter: Iterator[T]) => cleanedFunc(iter), partitions, allowLocal)
   }
 
   /**
@@ -1776,7 +1779,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *   serializable
    */
   private[spark] def clean[F <: AnyRef](f: F, checkSerializable: Boolean = true): F = {
-    ClosureCleaner.clean(f, checkSerializable)
+    val cleanTransitively = conf.getBoolean("spark.closureCleaner.transitive", true)
+    ClosureCleaner.clean(f, checkSerializable, cleanTransitively)
     f
   }
 
