@@ -118,7 +118,8 @@ sealed trait Vector extends Serializable {
   private[spark] def foreachActive(f: (Int, Double) => Unit)
 
   /**
-   * Number of active entries. Inactive entries are all zeros, while active entries could be zero.
+   * Number of active entries.  An "active entry" is an element which is explicitly stored,
+   * regardless of its value.  Note that inactive entries have value 0.
    */
   def numActives: Int
 
