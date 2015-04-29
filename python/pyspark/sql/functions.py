@@ -40,11 +40,24 @@ def _function_obj(sc, is_math=False):
         return sc._jvm.mathfunctions
 
 
-def _create_function(name, doc="", is_math=False):
+def _create_function(name, doc="", is_math=False, binary=False):
     """ Create a function for aggregator by name"""
-    def _(col):
+    def _(col1, col2=None):
         sc = SparkContext._active_spark_context
-        jc = getattr(_function_obj(sc, is_math), name)(col._jc if isinstance(col, Column) else col)
+        if not binary:
+            jc = getattr(_function_obj(sc, is_math), name)(col1._jc if isinstance(col1, Column)
+                                                           else col1)
+        else:
+            assert col2, "The second column for %s not provided!" % name
+            # users might write ints for simplicity. This would throw an error on the JVM side.
+            if type(col1) is int:
+                col1 = col1 * 1.0
+            if type(col2) is int:
+                col2 = col2 * 1.0
+            jc = getattr(_function_obj(sc, is_math), name)(col1._jc if isinstance(col1, Column)
+                                                           else col1,
+                                                           col2._jc if isinstance(col2, Column)
+                                                           else col2)
         return Column(jc)
     _.__name__ = name
     _.__doc__ = doc
@@ -107,14 +120,25 @@ _math_functions = {
              'measured in radians.'
 }
 
+# math functions that take two arguments as input
+_binary_math_functions = {
+    'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
+             'polar coordinates (r, theta).',
+    'hypot': 'Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.',
+    'pow': 'Returns the value of the first argument raised to the power of the second argument.'
+}
+
 
 for _name, _doc in _functions.items():
     globals()[_name] = _create_function(_name, _doc)
 for _name, _doc in _math_functions.items():
     globals()[_name] = _create_function(_name, _doc, True)
+for _name, _doc in _binary_math_functions.items():
+    globals()[_name] = _create_function(_name, _doc, True, True)
 del _name, _doc
 __all__ += _functions.keys()
 __all__ += _math_functions.keys()
+__all__ += _binary_math_functions.keys()
 __all__.sort()
 
 
