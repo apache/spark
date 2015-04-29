@@ -24,7 +24,7 @@ import org.apache.hadoop.conf.Configuration
 /**
  * A random access reader for reading write ahead log files written using
  * [[org.apache.spark.streaming.util.FileBasedWriteAheadLogWriter]]. Given the file segment info,
- * this reads the record (bytebuffer) from the log file.
+ * this reads the record (ByteBuffer) from the log file.
  */
 private[streaming] class FileBasedWriteAheadLogRandomReader(path: String, conf: Configuration)
   extends Closeable {

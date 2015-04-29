@@ -103,6 +103,11 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
         var dataRead: ByteBuffer = null
         var writeAheadLog: WriteAheadLog = null
         try {
+          // The WriteAheadLogUtils.createLog*** method needs a directory to create a
+          // WriteAheadLog object as the default FileBasedWriteAheadLog needs a directory for
+          // writing log data. However, the directory is not needed if data needs to be read, hence
+          // a dummy path is provided to satisfy the method parameter requirements.
+          // FileBasedWriteAheadLog will not create any file or directory at that path. 
           val dummyDirectory = FileUtils.getTempDirectoryPath()
           writeAheadLog = WriteAheadLogUtils.createLogForReceiver(
             SparkEnv.get.conf, dummyDirectory, hadoopConf)
@@ -114,6 +119,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
         } finally {
           if (writeAheadLog != null) {
             writeAheadLog.close()
+            writeAheadLog = null
           }
         }
         if (dataRead == null) {

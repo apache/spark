@@ -288,6 +288,19 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     val readData = readDataUsingWriteAheadLog(testDir)
     assert(readData === dataToWrite2)
   }
+
+  test("FileBasedWriteAheadLog - do not create directories or files unless write") {
+    val nonexistentTempPath = File.createTempFile("test", "")
+    nonexistentTempPath.delete()
+    assert(!nonexistentTempPath.exists())
+
+    val writtenSegment = writeDataManually(generateRandomData(), testFile)
+    val wal = new FileBasedWriteAheadLog(
+      new SparkConf(), tempDir.getAbsolutePath, new Configuration(), 1, 1)
+    assert(!nonexistentTempPath.exists(), "Directory created just by creating log object")
+    wal.read(writtenSegment.head)
+    assert(!nonexistentTempPath.exists(), "Directory created just by attempting to read segment")
+  }
 }
 
 object WriteAheadLogSuite {
