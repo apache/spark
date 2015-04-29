@@ -23,7 +23,7 @@ import java.util.{ArrayList => JArrayList, Collections, List => JList}
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
 
-import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
+import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Scheduler => MScheduler, _}
 import org.apache.spark.executor.MesosExecutorBackend
@@ -56,7 +56,7 @@ private[spark] class MesosSchedulerBackend(
 
   // The listener bus to publish executor added/removed events.
   val listenerBus = sc.listenerBus
-  
+
   private[mesos] val mesosExecutorCores = sc.conf.getDouble("spark.mesos.mesosExecutor.cores", 1)
 
   @volatile var appId: String = _
