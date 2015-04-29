@@ -232,8 +232,8 @@ public class SparkSaslSuite {
 
   @Test
   public void testFileRegionEncryption() throws Exception {
-    final String blockSizeConf = "spark.network.sasl.maxEncryptedBlockSizeKb";
-    System.setProperty(blockSizeConf, "1");
+    final String blockSizeConf = "spark.network.sasl.maxEncryptedBlockSize";
+    System.setProperty(blockSizeConf, "1k");
 
     final AtomicReference<ManagedBuffer> response = new AtomicReference();
     final File file = File.createTempFile("sasltest", ".txt");

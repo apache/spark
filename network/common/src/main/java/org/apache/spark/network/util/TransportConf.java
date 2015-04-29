@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.util;
 
+import com.google.common.primitives.Ints;
+
 /**
  * A central location that tracks all the settings we expose to users.
  */
@@ -117,7 +119,8 @@ public class TransportConf {
    * Maximum number of bytes to be encrypted at a time when SASL encryption is enabled.
    */
   public int maxSaslEncryptedBlockSize() {
-    return conf.getInt("spark.network.sasl.maxEncryptedBlockSizeKb", 64) * 1024;
+    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+      conf.get("spark.network.sasl.maxEncryptedBlockSize", "64k")));
   }
 
   /**
