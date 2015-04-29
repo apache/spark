@@ -279,10 +279,11 @@ package object dsl {
       Filter(ScalaUdf(udf, BooleanType, Seq(UnresolvedAttribute(arg1.name))), logicalPlan)
 
     def sample(
-        fraction: Double,
+        lowerBound: Double,
+        upperBound: Double,
         withReplacement: Boolean = true,
         seed: Int = (math.random * 1000).toInt): LogicalPlan =
-      Sample(fraction, withReplacement, seed, logicalPlan)
+      Sample(lowerBound, upperBound, withReplacement, seed, logicalPlan)
 
     // TODO specify the output column names
     def generate(
