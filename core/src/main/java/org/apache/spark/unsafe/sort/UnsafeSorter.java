@@ -20,12 +20,23 @@ package org.apache.spark.unsafe.sort;
 import java.util.Comparator;
 import java.util.Iterator;
 
-import org.apache.spark.unsafe.memory.MemoryLocation;
 import org.apache.spark.util.collection.Sorter;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
-import static org.apache.spark.unsafe.sort.UnsafeSortDataFormat.KeyPointerAndPrefix;
 
 public final class UnsafeSorter {
+
+  public static final class KeyPointerAndPrefix {
+    /**
+     * A pointer to a record; see {@link org.apache.spark.unsafe.memory.TaskMemoryManager} for a
+     * description of how these addresses are encoded.
+     */
+    long recordPointer;
+
+    /**
+     * A key prefix, for use in comparisons.
+     */
+    long keyPrefix;
+  }
 
   public static abstract class RecordComparator {
     public abstract int compare(
@@ -105,11 +116,11 @@ public final class UnsafeSorter {
     sortBufferInsertPosition += 2;
   }
 
-  public Iterator<MemoryLocation> getSortedIterator() {
-    final MemoryLocation memoryLocation = new MemoryLocation();
+  public Iterator<KeyPointerAndPrefix> getSortedIterator() {
     sorter.sort(sortBuffer, 0, sortBufferInsertPosition, sortComparator);
-    return new Iterator<MemoryLocation>() {
-      int position = 0;
+    return new Iterator<KeyPointerAndPrefix>() {
+      private int position = 0;
+      private final KeyPointerAndPrefix keyPointerAndPrefix = new KeyPointerAndPrefix();
 
       @Override
       public boolean hasNext() {
@@ -117,13 +128,11 @@ public final class UnsafeSorter {
       }
 
       @Override
-      public MemoryLocation next() {
-        final long address = sortBuffer[position];
+      public KeyPointerAndPrefix next() {
+        keyPointerAndPrefix.recordPointer = sortBuffer[position];
+        keyPointerAndPrefix.keyPrefix = sortBuffer[position + 1];
         position += 2;
-        final Object baseObject = memoryManager.getPage(address);
-        final long baseOffset = memoryManager.getOffsetInPage(address);
-        memoryLocation.setObjAndOffset(baseObject, baseOffset);
-        return memoryLocation;
+        return keyPointerAndPrefix;
       }
 
       @Override

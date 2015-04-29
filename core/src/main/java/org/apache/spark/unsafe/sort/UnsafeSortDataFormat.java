@@ -17,6 +17,7 @@
 
 package org.apache.spark.unsafe.sort;
 
+import static org.apache.spark.unsafe.sort.UnsafeSorter.KeyPointerAndPrefix;
 import org.apache.spark.util.collection.SortDataFormat;
 
 /**
@@ -26,24 +27,11 @@ import org.apache.spark.util.collection.SortDataFormat;
  * index {@code i}, while position {@code 2 * i + 1} in the array holds an 8-byte key prefix.
  */
 final class UnsafeSortDataFormat
-  extends SortDataFormat<UnsafeSortDataFormat.KeyPointerAndPrefix, long[]> {
+  extends SortDataFormat<KeyPointerAndPrefix, long[]> {
 
   public static final UnsafeSortDataFormat INSTANCE = new UnsafeSortDataFormat();
 
-  private UnsafeSortDataFormat() { };
-
-  public static final class KeyPointerAndPrefix {
-    /**
-     * A pointer to a record; see {@link org.apache.spark.unsafe.memory.TaskMemoryManager} for a
-     * description of how these addresses are encoded.
-     */
-    long recordPointer;
-
-    /**
-     * A key prefix, for use in comparisons.
-     */
-    long keyPrefix;
-  }
+  private UnsafeSortDataFormat() { }
 
   @Override
   public KeyPointerAndPrefix getKey(long[] data, int pos) {
