@@ -147,7 +147,7 @@ class UISeleniumSuite
         findAll(cssSelector(""".progress-cell""")).map(_.text).toSeq should be
           (List("1/1", "1/1", "1/1", "0/1 (1 failed)"))
 
-        // Check stacktrack
+        // Check stacktrace
         val errorCells = findAll(cssSelector(""".stacktrace-details""")).map(_.text).toSeq
         errorCells should have size 1
         errorCells(0) should include("java.lang.RuntimeException: Oops")

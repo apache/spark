@@ -32,6 +32,17 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
   val input = (1 to 4).map(Seq(_)).toSeq
   val operation = (d: DStream[Int]) => d.map(x => x)
 
+  private def createJobStart(
+      batchTime: Time, outputOpId: Int, jobId: Int): SparkListenerJobStart = {
+    val properties = new Properties()
+    properties.setProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, batchTime.milliseconds.toString)
+    properties.setProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, outputOpId.toString)
+    SparkListenerJobStart(jobId = jobId,
+      0L, // unused
+      Nil, // unused
+      properties)
+  }
+
   override def batchDuration: Duration = Milliseconds(100)
 
   test("onBatchSubmitted, onBatchStarted, onBatchCompleted, " +
@@ -69,40 +80,16 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     listener.numTotalReceivedRecords should be (600)
 
     // onJobStart
-    val properties1 = new Properties()
-    properties1.setProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, Time(1000).milliseconds.toString)
-    properties1.setProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, 0.toString)
-    val jobStart1 = SparkListenerJobStart(jobId = 0,
-      0L, // unused
-      Nil, // unused
-      properties1)
+    val jobStart1 = createJobStart(Time(1000), outputOpId = 0, jobId = 0)
     listener.onJobStart(jobStart1)
 
-    val properties2 = new Properties()
-    properties2.setProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, Time(1000).milliseconds.toString)
-    properties2.setProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, 0.toString)
-    val jobStart2 = SparkListenerJobStart(jobId = 1,
-      0L, // unused
-      Nil, // unused
-      properties2)
+    val jobStart2 = createJobStart(Time(1000), outputOpId = 0, jobId = 1)
     listener.onJobStart(jobStart2)
 
-    val properties3 = new Properties()
-    properties3.setProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, Time(1000).milliseconds.toString)
-    properties3.setProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, 1.toString)
-    val jobStart3 = SparkListenerJobStart(jobId = 0,
-      0L, // unused
-      Nil, // unused
-      properties3)
+    val jobStart3 = createJobStart(Time(1000), outputOpId = 1, jobId = 0)
     listener.onJobStart(jobStart3)
 
-    val properties4 = new Properties()
-    properties4.setProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, Time(1000).milliseconds.toString)
-    properties4.setProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, 1.toString)
-    val jobStart4 = SparkListenerJobStart(jobId = 1,
-      0L, // unused
-      Nil, // unused
-      properties4)
+    val jobStart4 = createJobStart(Time(1000), outputOpId = 1, jobId = 1)
     listener.onJobStart(jobStart4)
 
     val batchUIData = listener.getBatchUIData(Time(1000))
@@ -172,7 +159,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     listener.numTotalCompletedBatches should be(limit + 10)
   }
 
-  test("disorder onJobStart and onBatchXXX") {
+  test("out-of-order onJobStart and onBatchXXX") {
     val ssc = setupStreams(input, operation)
     val limit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 100)
     val listener = new StreamingJobProgressListener(ssc)
@@ -181,25 +168,13 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     for(i <- 0 until limit) {
       val batchInfoCompleted =
         BatchInfo(Time(1000 + i * 100), Map.empty, 1000 + i * 100, Some(2000 + i * 100), None)
-      val properties = new Properties()
-      properties.setProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, (1000 + i * 100).toString)
-      properties.setProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, "0")
-      val jobStart = SparkListenerJobStart(jobId = 1,
-        0L, // unused
-        Nil, // unused
-        properties)
       listener.onBatchCompleted(StreamingListenerBatchCompleted(batchInfoCompleted))
+      val jobStart = createJobStart(Time(1000 + i * 100), outputOpId = 0, jobId = 1)
       listener.onJobStart(jobStart)
     }
 
     // onJobStart happens before onBatchSubmitted
-    val properties = new Properties()
-    properties.setProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, (1000 + limit * 100).toString)
-    properties.setProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, "0")
-    val jobStart = SparkListenerJobStart(jobId = 0,
-      0L, // unused
-      Nil, // unused
-      properties)
+    val jobStart = createJobStart(Time(1000 + limit * 100), outputOpId = 0, jobId = 0)
     listener.onJobStart(jobStart)
 
     val batchInfoSubmitted =
@@ -225,13 +200,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     }
 
     for(i <- limit + 1 to limit * 2) {
-      val properties = new Properties()
-      properties.setProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, (1000 + i * 100).toString)
-      properties.setProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, "0")
-      val jobStart = SparkListenerJobStart(jobId = 1,
-        0L, // unused
-        Nil, // unused
-        properties)
+      val jobStart = createJobStart(Time(1000 + i * 100), outputOpId = 0, jobId = 1)
       listener.onJobStart(jobStart)
     }
 
