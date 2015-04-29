@@ -17,10 +17,7 @@
 
 package org.apache.spark.network.server;
 
-import java.util.Set;
-
 import com.google.common.base.Throwables;
-import com.google.common.collect.Sets;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;

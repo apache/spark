@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.server;
 
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Random;
@@ -24,7 +25,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.google.common.collect.Sets;
 import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,7 +68,7 @@ public class OneForOneStreamManager extends StreamManager {
   @Override
   public void registerChannel(Channel channel, long streamId) {
     if (!streamIds.containsKey(channel)) {
-      streamIds.put(channel, Sets.newHashSet());
+      streamIds.put(channel, new HashSet<Long>());
     }
     streamIds.get(channel).add(streamId);
   }
