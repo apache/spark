@@ -30,6 +30,7 @@ import scala.util.control.NonFatal
 
 import kafka.admin.AdminUtils
 import kafka.api.Request
+import kafka.common.TopicAndPartition
 import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
 import kafka.serializer.StringEncoder
 import kafka.server.{KafkaConfig, KafkaServer}
@@ -226,6 +227,20 @@ private class KafkaTestUtils extends Logging {
     }
 
     tryAgain(1)
+  }
+
+  def waitUntilLeaderOffset(
+      kc: KafkaCluster,
+      topic: String,
+      partition: Int,
+      offset: Long): Unit = {
+    eventually(Time(10000), Time(100)) {
+      val tp = TopicAndPartition(topic, partition)
+      val llo = kc.getLatestLeaderOffsets(Set(tp)).right.get.apply(tp).offset
+      assert(
+        llo == offset,
+        s"$topic $partition $offset not reached after timeout")
+    }
   }
 
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {

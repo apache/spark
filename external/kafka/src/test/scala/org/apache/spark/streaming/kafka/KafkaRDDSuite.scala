@@ -58,9 +58,11 @@ class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
     val messages = Set("the", "quick", "brown", "fox")
     kafkaTestUtils.sendMessages(topic, messages.toArray)
 
-
     val kafkaParams = Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress,
       "group.id" -> s"test-consumer-${Random.nextInt}")
+
+    val kc = new KafkaCluster(kafkaParams)
+    kafkaTestUtils.waitUntilLeaderOffset(kc, topic, 0, messages.size)
 
     val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
 
@@ -84,6 +86,9 @@ class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
 
     // this is the "lots of messages" case
     kafkaTestUtils.sendMessages(topic, sent)
+    val sentCount = sent.values.sum
+    kafkaTestUtils.waitUntilLeaderOffset(kc, topic, 0, sentCount)
+
     // rdd defined from leaders after sending messages, should get the number sent
     val rdd = getRdd(kc, Set(topic))
 
@@ -91,7 +96,6 @@ class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
 
     val ranges = rdd.get.asInstanceOf[HasOffsetRanges].offsetRanges
     val rangeCount = ranges.map(o => o.untilOffset - o.fromOffset).sum
-    val sentCount = sent.values.sum
 
     assert(rangeCount === sentCount, "offset range didn't include all sent messages")
     assert(rdd.get.count === sentCount, "didn't get all sent messages")
