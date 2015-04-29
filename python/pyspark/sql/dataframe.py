@@ -1275,7 +1275,7 @@ class Column(object):
 
     # container operators
     __contains__ = _bin_op("contains")
-    __getitem__ = _bin_op("getItem")
+    __getitem__ = getItem
 
     # bitwise operators
     bitwiseOR = _bin_op("bitwiseOR")
@@ -1300,7 +1300,7 @@ class Column(object):
         |   1| value|
         +----+------+
         """
-        return self[key]
+        return Column(self._jc.getItem(key))
 
     def getField(self, name):
         """An expression that gets a field by name in a StructField.
