@@ -94,13 +94,14 @@ public final class UnsafeRow implements MutableRow {
     settableFieldTypes = Collections.unmodifiableSet(
       new HashSet<DataType>(
         Arrays.asList(new DataType[] {
+          NullType,
+          BooleanType,
+          ByteType,
+          ShortType,
           IntegerType,
           LongType,
-          DoubleType,
-          BooleanType,
-          ShortType,
-          ByteType,
-          FloatType
+          FloatType,
+          DoubleType
     })));
 
     // We support get() on a superset of the types for which we support set():

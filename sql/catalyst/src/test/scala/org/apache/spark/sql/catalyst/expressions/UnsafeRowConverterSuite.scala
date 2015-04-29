@@ -74,12 +74,20 @@ class UnsafeRowConverterSuite extends FunSuite with Matchers {
   }
 
   test("null handling") {
-    val fieldTypes: Array[DataType] = Array(IntegerType, LongType, FloatType, DoubleType)
+    val fieldTypes: Array[DataType] = Array(
+      NullType,
+      BooleanType,
+      ByteType,
+      ShortType,
+      IntegerType,
+      LongType,
+      FloatType,
+      DoubleType)
     val converter = new UnsafeRowConverter(fieldTypes)
 
     val rowWithAllNullColumns: Row = {
       val r = new SpecificMutableRow(fieldTypes)
-      for (i <- 0 to 3) {
+      for (i <- 0 to fieldTypes.length - 1) {
         r.setNullAt(i)
       }
       r
@@ -94,23 +102,30 @@ class UnsafeRowConverterSuite extends FunSuite with Matchers {
     val createdFromNull = new UnsafeRow()
     createdFromNull.pointTo(
       createdFromNullBuffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, null)
-    for (i <- 0 to 3) {
+    for (i <- 0 to fieldTypes.length - 1) {
       assert(createdFromNull.isNullAt(i))
     }
-    createdFromNull.getInt(0) should be (0)
-    createdFromNull.getLong(1) should be (0)
-    assert(java.lang.Float.isNaN(createdFromNull.getFloat(2)))
-    assert(java.lang.Double.isNaN(createdFromNull.getFloat(3)))
+    createdFromNull.getBoolean(1) should be (false)
+    createdFromNull.getByte(2) should be (0)
+    createdFromNull.getShort(3) should be (0)
+    createdFromNull.getInt(4) should be (0)
+    createdFromNull.getLong(5) should be (0)
+    assert(java.lang.Float.isNaN(createdFromNull.getFloat(6)))
+    assert(java.lang.Double.isNaN(createdFromNull.getFloat(7)))
 
     // If we have an UnsafeRow with columns that are initially non-null and we null out those
     // columns, then the serialized row representation should be identical to what we would get by
     // creating an entirely null row via the converter
     val rowWithNoNullColumns: Row = {
       val r = new SpecificMutableRow(fieldTypes)
-      r.setInt(0, 100)
-      r.setLong(1, 200)
-      r.setFloat(2, 300)
-      r.setDouble(3, 400)
+      r.setNullAt(0)
+      r.setBoolean(1, false)
+      r.setByte(2, 20)
+      r.setShort(3, 30)
+      r.setInt(4, 400)
+      r.setLong(5, 500)
+      r.setFloat(6, 600)
+      r.setDouble(7, 700)
       r
     }
     val setToNullAfterCreationBuffer: Array[Long] = new Array[Long](sizeRequired / 8)
@@ -119,12 +134,17 @@ class UnsafeRowConverterSuite extends FunSuite with Matchers {
     val setToNullAfterCreation = new UnsafeRow()
     setToNullAfterCreation.pointTo(
       setToNullAfterCreationBuffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, null)
-    setToNullAfterCreation.getInt(0) should be (rowWithNoNullColumns.getInt(0))
-    setToNullAfterCreation.getLong(1) should be (rowWithNoNullColumns.getLong(1))
-    setToNullAfterCreation.getFloat(2) should be (rowWithNoNullColumns.getFloat(2))
-    setToNullAfterCreation.getDouble(3) should be (rowWithNoNullColumns.getDouble(3))
 
-    for (i <- 0 to 3) {
+    setToNullAfterCreation.isNullAt(0) should be (rowWithNoNullColumns.isNullAt(0))
+    setToNullAfterCreation.getBoolean(1) should be (rowWithNoNullColumns.getBoolean(1))
+    setToNullAfterCreation.getByte(2) should be (rowWithNoNullColumns.getByte(2))
+    setToNullAfterCreation.getShort(3) should be (rowWithNoNullColumns.getShort(3))
+    setToNullAfterCreation.getInt(4) should be (rowWithNoNullColumns.getInt(4))
+    setToNullAfterCreation.getLong(5) should be (rowWithNoNullColumns.getLong(5))
+    setToNullAfterCreation.getFloat(6) should be (rowWithNoNullColumns.getFloat(6))
+    setToNullAfterCreation.getDouble(7) should be (rowWithNoNullColumns.getDouble(7))
+
+    for (i <- 0 to fieldTypes.length - 1) {
       setToNullAfterCreation.setNullAt(i)
     }
     assert(Arrays.equals(createdFromNullBuffer, setToNullAfterCreationBuffer))

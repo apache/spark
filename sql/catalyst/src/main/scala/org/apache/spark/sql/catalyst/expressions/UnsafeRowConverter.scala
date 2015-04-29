@@ -110,6 +110,10 @@ private object UnsafeColumnWriter {
 
   def forType(dataType: DataType): UnsafeColumnWriter = {
     dataType match {
+      case NullType => NullUnsafeColumnWriter
+      case BooleanType => BooleanUnsafeColumnWriter
+      case ByteType => ByteUnsafeColumnWriter
+      case ShortType => ShortUnsafeColumnWriter
       case IntegerType => IntUnsafeColumnWriter
       case LongType => LongUnsafeColumnWriter
       case FloatType => FloatUnsafeColumnWriter
@@ -123,6 +127,10 @@ private object UnsafeColumnWriter {
 
 // ------------------------------------------------------------------------------------------------
 
+private object NullUnsafeColumnWriter extends NullUnsafeColumnWriter
+private object BooleanUnsafeColumnWriter extends BooleanUnsafeColumnWriter
+private object ByteUnsafeColumnWriter extends ByteUnsafeColumnWriter
+private object ShortUnsafeColumnWriter extends ShortUnsafeColumnWriter
 private object IntUnsafeColumnWriter extends IntUnsafeColumnWriter
 private object LongUnsafeColumnWriter extends LongUnsafeColumnWriter
 private object FloatUnsafeColumnWriter extends FloatUnsafeColumnWriter
@@ -132,6 +140,34 @@ private object StringUnsafeColumnWriter extends StringUnsafeColumnWriter
 private abstract class PrimitiveUnsafeColumnWriter extends UnsafeColumnWriter {
   // Primitives don't write to the variable-length region:
   def getSize(sourceRow: Row, column: Int): Int = 0
+}
+
+private class NullUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
+  override def write(source: Row, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+    target.setNullAt(column)
+    0
+  }
+}
+
+private class BooleanUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
+  override def write(source: Row, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+    target.setBoolean(column, source.getBoolean(column))
+    0
+  }
+}
+
+private class ByteUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
+  override def write(source: Row, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+    target.setByte(column, source.getByte(column))
+    0
+  }
+}
+
+private class ShortUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
+  override def write(source: Row, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+    target.setShort(column, source.getShort(column))
+    0
+  }
 }
 
 private class IntUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
