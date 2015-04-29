@@ -97,7 +97,7 @@ private[sql] object DataSourceStrategy extends Strategy {
           .reduceOption(expressions.And)
           .getOrElse(Literal(true))
 
-      val boundPredicate = InterpretedPredicate(predicate.transform {
+      val boundPredicate = InterpretedPredicate.create(predicate.transform {
         case a: AttributeReference =>
           val index = partitionColumns.indexWhere(a.name == _.name)
           BoundReference(index, partitionColumns(index).dataType, nullable = true)

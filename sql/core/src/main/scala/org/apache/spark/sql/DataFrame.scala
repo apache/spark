@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
+import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
 import org.apache.spark.sql.jdbc.JDBCWriteDetails
 import org.apache.spark.sql.json.JacksonGenerator
@@ -400,7 +400,9 @@ class DataFrame private[sql](
         joined.left,
         joined.right,
         joinType = Inner,
-        Some(EqualTo(joined.left.resolve(usingColumn), joined.right.resolve(usingColumn))))
+        Some(expressions.EqualTo(
+          joined.left.resolve(usingColumn),
+          joined.right.resolve(usingColumn))))
     )
   }
 
@@ -1343,7 +1345,7 @@ class DataFrame private[sql](
       mode: SaveMode,
       options: java.util.Map[String, String],
       partitionColumns: java.util.List[String]): Unit = {
-    ???
+    saveAsTable(tableName, source, mode, options.toMap, partitionColumns)
   }
 
   /**
@@ -1399,7 +1401,15 @@ class DataFrame private[sql](
       mode: SaveMode,
       options: Map[String, String],
       partitionColumns: Seq[String]): Unit = {
-    ???
+    sqlContext.executePlan(
+      CreateTableUsingAsSelect(
+        tableName,
+        source,
+        temporary = false,
+        partitionColumns.toArray,
+        mode,
+        options,
+        logicalPlan)).toRdd
   }
 
   /**
