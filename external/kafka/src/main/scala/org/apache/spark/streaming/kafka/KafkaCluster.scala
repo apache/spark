@@ -20,6 +20,7 @@ package org.apache.spark.streaming.kafka
 import scala.util.control.NonFatal
 import scala.util.Random
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConverters._
 import java.util.Properties
 import kafka.api._
 import kafka.common.{ErrorMapping, OffsetAndMetadata, OffsetMetadataAndError, TopicAndPartition}
@@ -36,6 +37,11 @@ import org.apache.spark.SparkException
 private[spark]
 class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   import KafkaCluster.{Err, LeaderOffset, SimpleConsumerConfig}
+
+  /** Constructor that takes a Java map */
+  def this(kafkaParams: java.util.Map[String, String]) {
+    this(kafkaParams.asScala.toMap)
+  }
 
   // ConsumerConfig isn't serializable
   @transient private var _config: SimpleConsumerConfig = null
