@@ -21,9 +21,6 @@ import java.io._
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
-import org.apache.hadoop.security.token.TokenIdentifier
-
-import scala.collection.JavaConversions._
 import scala.collection.mutable.HashMap
 import scala.util.Try
 
@@ -116,10 +113,10 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     paths: Set[Path],
     conf: Configuration,
     creds: Credentials,
-    replaceExisting: Boolean = false
+    renewer: Option[String] = None
   ): Unit = {
     if (UserGroupInformation.isSecurityEnabled()) {
-      val delegTokenRenewer = getTokenRenewer(conf)
+      val delegTokenRenewer = renewer.getOrElse(getTokenRenewer(conf))
       paths.foreach { dst =>
         val dstFs = dst.getFileSystem(conf)
         logInfo("getting token for namenode: " + dst)

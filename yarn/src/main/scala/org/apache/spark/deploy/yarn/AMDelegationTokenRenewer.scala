@@ -32,12 +32,12 @@ import org.apache.spark.util.ThreadUtils
  * Streaming apps can run without interruption while writing to secure HDFS. The
  * scheduleLoginFromKeytab method is called on the driver when the
  * CoarseGrainedScheduledBackend starts up. This method wakes up a thread that logs into the KDC
- * once 75% of the expiry time of the original delegation tokens used for the container
+ * once 75% of the renewal interval of the original delegation tokens used for the container
  * has elapsed. It then creates new delegation tokens and writes them to HDFS in a
  * pre-specified location - the prefix of which is specified in the sparkConf by
  * spark.yarn.credentials.file (so the file(s) would be named c-1, c-2 etc. - each update goes
  * to a new file, with a monotonically increasing suffix). After this, the credentials are
- * updated once 75% of the new tokens validity has elapsed.
+ * updated once 75% of the new tokens renewal interval has elapsed.
  *
  * On the executor side, the updateCredentialsIfRequired method is called once 80% of the
  * validity of the original tokens has elapsed. At that time the executor finds the
@@ -72,13 +72,12 @@ private[yarn] class AMDelegationTokenRenewer(
     val keytab = sparkConf.get("spark.yarn.keytab")
 
     /**
-     * Schedule the renewal of the tokens. If tokens have already expired, this method will
-     * synchronously renew them.
-     * @param runnable
+     * Schedule re-login and creation of new tokens. If tokens have already expired, this method
+     * will synchronously create new ones.
      */
     def scheduleRenewal(runnable: Runnable): Unit = {
       val credentials = UserGroupInformation.getCurrentUser.getCredentials
-      val renewalInterval = hadoopUtil.getTimeFromNowToRenewal(0.75, credentials)
+      val renewalInterval = hadoopUtil.getTimeFromNowToRenewal(sparkConf, 0.75, credentials)
       // Run now!
       if (renewalInterval <= 0) {
         logInfo("HDFS tokens have expired, creating new tokens now.")
@@ -164,7 +163,7 @@ private[yarn] class AMDelegationTokenRenewer(
       // Get a copy of the credentials
       override def run(): Void = {
         val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + dst
-        hadoopUtil.obtainTokensForNamenodes(nns, hadoopConf, tempCreds, replaceExisting = true)
+        hadoopUtil.obtainTokensForNamenodes(nns, hadoopConf, tempCreds)
         null
       }
     })

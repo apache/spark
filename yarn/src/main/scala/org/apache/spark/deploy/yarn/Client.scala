@@ -17,9 +17,10 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{File, FileOutputStream}
+import java.io.{ByteArrayInputStream, DataInputStream, File, FileOutputStream}
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
+import java.security.PrivilegedExceptionAction
 import java.util.UUID
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
@@ -403,6 +404,27 @@ private[spark] class Client(
   }
 
   /**
+   * Get the renewal interval for tokens.
+   */
+  private def getTokenRenewalInterval(stagingDirPath: Path): Long = {
+    // We cannot use the tokens generated above since those have renewer yarn. Trying to renew
+    // those will fail with an access control issue. So create new tokens with the logged in
+    // user as renewer.
+    val creds = new Credentials()
+    YarnSparkHadoopUtil.get.obtainTokensForNamenodes(Set(stagingDirPath), hadoopConf, creds,
+      Some(sparkConf.get("spark.yarn.principal")))
+    val t = creds.getAllTokens
+      .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
+      .head
+    val newExpiration = t.renew(hadoopConf)
+    val identifier = new DelegationTokenIdentifier()
+    identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
+    val interval = newExpiration - identifier.getIssueDate
+    logInfo(s"Renewal Interval set to $interval")
+    interval
+  }
+
+  /**
    * Set up the environment for launching our ApplicationMaster container.
    */
   private def setupLaunchEnv(stagingDir: String): HashMap[String, String] = {
@@ -420,8 +442,9 @@ private[spark] class Client(
       sparkConf.set(
         "spark.yarn.credentials.file", new Path(stagingDirPath, credentialsFile).toString)
       logInfo(s"Credentials file set to: $credentialsFile")
+      val renewalInterval = getTokenRenewalInterval(stagingDirPath)
+      sparkConf.set("spark.yarn.renewal.interval", renewalInterval.toString)
     }
-
     // Set the environment variables to be passed on to the executors.
     distCacheMgr.setDistFilesEnv(env)
     distCacheMgr.setDistArchivesEnv(env)

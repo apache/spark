@@ -283,9 +283,6 @@ private[spark] class ApplicationMaster(
     rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, 0, sparkConf, securityMgr)
     waitForSparkDriver()
     addAmIpFilter()
-    // If a principal and keytab have been set, use that to create new credentials for executors
-    // periodically
-    delegationTokenRenewerOption.foreach(_.scheduleLoginFromKeytab())
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
 
     // In client mode the actor will stop the reporter thread.

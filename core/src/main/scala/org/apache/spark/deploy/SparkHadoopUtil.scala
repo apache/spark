@@ -31,7 +31,7 @@ import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.JobContext
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark._
+import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
@@ -47,8 +47,6 @@ class SparkHadoopUtil extends Logging {
   private val sparkConf = new SparkConf()
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
-  private lazy val renewalInterval =
-    conf.getLong("dfs.namenode.delegation.token.renew-interval", (24 hours).toMillis)
 
   /**
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
@@ -213,9 +211,6 @@ class SparkHadoopUtil extends Logging {
    * Lists all the files in a directory with the specified prefix, and does not end with the
    * given suffix. The returned {{FileStatus}} instances are sorted by the modification times of
    * the respective files.
-   * @param remoteFs
-   * @param prefix
-   * @return
    */
   def listFilesSorted(
       remoteFs: FileSystem,
@@ -242,8 +237,12 @@ class SparkHadoopUtil extends Logging {
    * is valid the latest)?
    * This will return -ve (or 0) value if the fraction of validity has already expired.
    */
-  def getTimeFromNowToRenewal(fraction: Double, credentials: Credentials): Long = {
+  def getTimeFromNowToRenewal(
+      sparkConf: SparkConf,
+      fraction: Double,
+      credentials: Credentials): Long = {
     val now = System.currentTimeMillis()
+    val renewalInterval = sparkConf.getLong("spark.yarn.renewal.interval", (24 hours).toMillis)
     credentials.getAllTokens.filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
       .map { t =>
       val identifier = new DelegationTokenIdentifier()

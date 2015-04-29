@@ -70,7 +70,7 @@ private[spark] class ExecutorDelegationTokenUpdater(
       }
       val timeFromNowToRenewal =
         SparkHadoopUtil.get.getTimeFromNowToRenewal(
-          0.8, UserGroupInformation.getCurrentUser.getCredentials)
+          sparkConf, 0.8, UserGroupInformation.getCurrentUser.getCredentials)
       if (timeFromNowToRenewal <= 0) {
         executorUpdaterRunnable.run()
       } else {

@@ -17,14 +17,11 @@
 
 package org.apache.spark.executor
 
-import java.io.{ByteArrayInputStream, DataInputStream}
 import java.net.URL
 import java.nio.ByteBuffer
 
 import scala.collection.mutable
 import scala.util.{Failure, Success}
-
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.rpc._
 import org.apache.spark._
@@ -77,7 +74,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def receive: PartialFunction[Any, Unit] = {
-    case RegisteredExecutor=>
+    case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
       val (hostname, _) = Utils.parseHostPort(hostPort)
       executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)
@@ -195,7 +192,6 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
-      env.actorSystem.awaitTermination()
       tokenUpdaterOption.foreach(_.stop())
       env.rpcEnv.awaitTermination()
     }
