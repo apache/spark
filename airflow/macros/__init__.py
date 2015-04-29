@@ -37,9 +37,9 @@ def ds_format(ds, input_format, output_format):
     :param output_format: output string format  E.g. %Y-%m-%d
     :type output_format: str
 
-    >>> ds_add('2015-01-01', 5)
-    '2015-01-06'
-    >>> ds_add('2015-01-06', -5)
+    >>> ds_format('2015-01-01', "%Y-%m-%d", "%m-%d-%y")
+    '01-01-15'
+    >>> ds_format('2015-01-01', "%Y-%m-%d",  "%Y-%m-%d")
     '2015-01-01'
     '''
     return datetime.datetime.strptime(ds, input_format).strftime(output_format)
