@@ -114,8 +114,8 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     // If the yStd is zero, then the intercept is yMean with zero weights;
     // as a result, training is not needed.
     if (yStd == 0.0) {
-      logWarning(s"The standard deviation of the label is zero, " +
-        s"so the weights will be zeros and intercept will be the mean of the label.")
+      logWarning(s"The standard deviation of the label is zero, so the weights will be zeros " +
+        s"and the intercept will be the mean of the label; as a result, training is not needed.")
       if (handlePersistence) instances.unpersist()
       return new LinearRegressionModel(this, paramMap, Vectors.sparse(numFeatures, Seq()), yMean)
     }
