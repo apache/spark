@@ -195,6 +195,9 @@ private[spark] object ClosureCleaner extends Logging {
   }
 }
 
+private[spark] class ReturnStatementInClosureException
+  extends SparkException("Return statements aren't allowed in Spark closures")
+
 private[spark]
 class ReturnStatementFinder extends ClassVisitor(ASM4) {
   override def visitMethod(access: Int, name: String, desc: String,
@@ -203,7 +206,7 @@ class ReturnStatementFinder extends ClassVisitor(ASM4) {
       new MethodVisitor(ASM4) {
         override def visitTypeInsn(op: Int, tp: String) {
           if (op == NEW && tp.contains("scala/runtime/NonLocalReturnControl")) {
-            throw new SparkException("Return statements aren't allowed in Spark closures")
+            throw new ReturnStatementInClosureException
           }
         }
       }
