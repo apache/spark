@@ -47,13 +47,14 @@ private[mllib] object PMMLModelExportFactory {
           svm, "linear SVM", RegressionNormalizationMethodType.NONE, 
           svm.getThreshold.getOrElse(0.0))
       case logistic: LogisticRegressionModel =>
-        if (logistic.numClasses == 2)
+        if (logistic.numClasses == 2) {
           new BinaryClassificationPMMLModelExport(
             logistic, "logistic regression", RegressionNormalizationMethodType.LOGIT,
             logistic.getThreshold.getOrElse(0.5))
-        else
+        } else {
           throw new IllegalArgumentException(
             "PMML Export not supported for Multinomial Logistic Regression")
+        }
       case _ =>
         throw new IllegalArgumentException(
           "PMML Export not supported for model: " + model.getClass.getName)
