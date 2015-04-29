@@ -227,8 +227,8 @@ class OnlineLDAOptimizer extends LDAOptimizer {
   private var k: Int = 0
   private var corpusSize: Long = 0
   private var vocabSize: Int = 0
-  private var alpha: Double = 0
-  private var eta: Double = 0
+  private[clustering] var alpha: Double = 0
+  private[clustering] var eta: Double = 0
   private var randomGenerator: java.util.Random = null
 
   // Online LDA specific parameters
@@ -238,12 +238,11 @@ class OnlineLDAOptimizer extends LDAOptimizer {
 
   // internal data structure
   private var docs: RDD[(Long, Vector)] = null
-  private var lambda: BDM[Double] = null
-  private var Elogbeta: BDM[Double] = null
-  private var expElogbeta: BDM[Double] = null
+  private[clustering] var lambda: BDM[Double] = null
 
   // count of invocation to next, which helps deciding the weight for each iteration
   private var iteration: Int = 0
+  private var gammaShape: Double = 100
 
   /**
    * A (positive) learning parameter that downweights early iterations. Larger values make early
@@ -295,7 +294,24 @@ class OnlineLDAOptimizer extends LDAOptimizer {
     this
   }
 
-  override private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer = {
+  /**
+   * The function is for test only now. In the future, it can help support training strop/resume
+   */
+  private[clustering] def setLambda(lambda: BDM[Double]): this.type = {
+    this.lambda = lambda
+    this
+  }
+
+  /**
+   * Used to control the gamma distribution. Larger value produces values closer to 1.0.
+   */
+  private[clustering] def setGammaShape(shape: Double): this.type = {
+    this.gammaShape = shape
+    this
+  }
+
+  override private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA):
+  OnlineLDAOptimizer = {
     this.k = lda.getK
     this.corpusSize = docs.count()
     this.vocabSize = docs.first()._2.size
@@ -307,26 +323,30 @@ class OnlineLDAOptimizer extends LDAOptimizer {
 
     // Initialize the variational distribution q(beta|lambda)
     this.lambda = getGammaMatrix(k, vocabSize)
-    this.Elogbeta = dirichletExpectation(lambda)
-    this.expElogbeta = exp(Elogbeta)
     this.iteration = 0
     this
   }
+
+  override private[clustering] def next(): OnlineLDAOptimizer = {
+    val batch = docs.sample(withReplacement = true, miniBatchFraction, randomGenerator.nextLong())
+    if (batch.isEmpty()) return this
+    submitMiniBatch(batch)
+  }
+
 
   /**
    * Submit a subset (like 1%, decide by the miniBatchFraction) of the corpus to the Online LDA
    * model, and it will update the topic distribution adaptively for the terms appearing in the
    * subset.
    */
-  override private[clustering] def next(): OnlineLDAOptimizer = {
+  private[clustering] def submitMiniBatch(batch: RDD[(Long, Vector)]): OnlineLDAOptimizer = {
     iteration += 1
-    val batch = docs.sample(withReplacement = true, miniBatchFraction, randomGenerator.nextLong())
-    if (batch.isEmpty()) return this
-
     val k = this.k
     val vocabSize = this.vocabSize
-    val expElogbeta = this.expElogbeta
+    val Elogbeta = dirichletExpectation(lambda)
+    val expElogbeta = exp(Elogbeta)
     val alpha = this.alpha
+    val gammaShape = this.gammaShape
 
     val stats: RDD[BDM[Double]] = batch.mapPartitions { docs =>
       val stat = BDM.zeros[Double](k, vocabSize)
@@ -340,7 +360,7 @@ class OnlineLDAOptimizer extends LDAOptimizer {
         }
 
         // Initialize the variational distribution q(theta|gamma) for the mini-batch
-        var gammad = new Gamma(100, 1.0 / 100.0).samplesVector(k).t // 1 * K
+        var gammad = new Gamma(gammaShape, 1.0 / gammaShape).samplesVector(k).t // 1 * K
         var Elogthetad = digamma(gammad) - digamma(sum(gammad))     // 1 * K
         var expElogthetad = exp(Elogthetad)                         // 1 * K
         val expElogbetad = expElogbeta(::, ids).toDenseMatrix       // K * ids
@@ -350,7 +370,7 @@ class OnlineLDAOptimizer extends LDAOptimizer {
         val ctsVector = new BDV[Double](cts).t                      // 1 * ids
 
         // Iterate between gamma and phi until convergence
-        while (meanchange > 1e-5) {
+        while (meanchange > 1e-3) {
           val lastgamma = gammad
           //        1*K                  1 * ids               ids * k
           gammad = (expElogthetad :* ((ctsVector / phinorm) * expElogbetad.t)) + alpha
@@ -372,7 +392,10 @@ class OnlineLDAOptimizer extends LDAOptimizer {
       Iterator(stat)
     }
 
-    val batchResult: BDM[Double] = stats.reduce(_ += _)
+    val statsSum: BDM[Double] = stats.reduce(_ += _)
+    val batchResult = statsSum :* expElogbeta
+
+    // Note that this is an optimization to avoid batch.count
     update(batchResult, iteration, (miniBatchFraction * corpusSize).toInt)
     this
   }
@@ -384,28 +407,23 @@ class OnlineLDAOptimizer extends LDAOptimizer {
   /**
    * Update lambda based on the batch submitted. batchSize can be different for each iteration.
    */
-  private def update(raw: BDM[Double], iter: Int, batchSize: Int): Unit = {
+  private[clustering] def update(stat: BDM[Double], iter: Int, batchSize: Int): Unit = {
     val tau_0 = this.getTau_0
     val kappa = this.getKappa
 
     // weight of the mini-batch.
     val weight = math.pow(tau_0 + iter, -kappa)
 
-    // This step finishes computing the sufficient statistics for the M step
-    val stat = raw :* expElogbeta
-
     // Update lambda based on documents.
     lambda = lambda * (1 - weight) +
       (stat * (corpusSize.toDouble / batchSize.toDouble) + eta) * weight
-    Elogbeta = dirichletExpectation(lambda)
-    expElogbeta = exp(Elogbeta)
   }
 
   /**
    * Get a random matrix to initialize lambda
    */
   private def getGammaMatrix(row: Int, col: Int): BDM[Double] = {
-    val gammaRandomGenerator = new Gamma(100, 1.0 / 100.0)
+    val gammaRandomGenerator = new Gamma(gammaShape, 1.0 / gammaShape)
     val temp = gammaRandomGenerator.sample(row * col).toArray
     new BDM[Double](col, row, temp).t
   }
