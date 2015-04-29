@@ -555,7 +555,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
           SparkEnv.executorActorSystemName,
           RpcAddress(host, port),
           ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME)
-        Some(endpointRef.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump))
+        Some(endpointRef.askWithRetry[Array[ThreadStackTrace]](TriggerThreadDump))
       }
     } catch {
       case e: Exception =>
@@ -1396,6 +1396,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Register an RDD to be persisted in memory and/or disk storage
    */
   private[spark] def persistRDD(rdd: RDD[_]) {
+    _executorAllocationManager.foreach { _ =>
+      logWarning(
+        s"Dynamic allocation currently does not support cached RDDs. Cached data for RDD " +
+        s"${rdd.id} will be lost when executors are removed.")
+    }
     persistentRdds(rdd.id) = rdd
   }
 

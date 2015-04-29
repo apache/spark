@@ -15,19 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml
+package org.apache.spark.unsafe.map;
 
-import java.util.UUID
+import org.apache.spark.unsafe.memory.MemoryAllocator;
 
-/**
- * Object with a unique id.
- */
-private[ml] trait Identifiable extends Serializable {
+public class BytesToBytesMapOnHeapSuite extends AbstractBytesToBytesMapSuite {
 
-  /**
-   * A unique id for the object. The default implementation concatenates the class name, "_", and 8
-   * random hex chars.
-   */
-  private[ml] val uid: String =
-    this.getClass.getSimpleName + "_" + UUID.randomUUID().toString.take(8)
+  @Override
+  protected MemoryAllocator getMemoryAllocator() {
+    return MemoryAllocator.HEAP;
+  }
+
 }
