@@ -110,8 +110,8 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     val yMean = statCounter.mean
     val yStd = math.sqrt(statCounter.variance)
 
-    // If the yStd is zero, then the intercept is yStd with zero weights.
-    // As a result, training is not required.
+    // If the yStd is zero, then the intercept is yMean with zero weights;
+    // as a result, training is not needed.
     val model = if (yStd != 0.0) {
       val featuresMean = summarizer.mean.toArray
       val featuresStd = summarizer.variance.toArray.map(math.sqrt)
