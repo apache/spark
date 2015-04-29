@@ -280,6 +280,8 @@ abstract class RDD[T: ClassTag](
   /**
    * Execute a block of code in a scope.
    * All new RDDs created in this body will be part of the same scope.
+   *
+   * Note: Return statements are NOT allowed in the given body.
    */
   private[spark] def withScope[U](body: => U): U = RDDScope.withScope[U](sc)(body)
 
@@ -1199,38 +1201,38 @@ abstract class RDD[T: ClassTag](
    */
   def take(num: Int): Array[T] = withScope {
     if (num == 0) {
-      return new Array[T](0)
-    }
-
-    val buf = new ArrayBuffer[T]
-    val totalParts = this.partitions.length
-    var partsScanned = 0
-    while (buf.size < num && partsScanned < totalParts) {
-      // The number of partitions to try in this iteration. It is ok for this number to be
-      // greater than totalParts because we actually cap it at totalParts in runJob.
-      var numPartsToTry = 1
-      if (partsScanned > 0) {
-        // If we didn't find any rows after the previous iteration, quadruple and retry. Otherwise,
-        // interpolate the number of partitions we need to try, but overestimate it by 50%.
-        // We also cap the estimation in the end.
-        if (buf.size == 0) {
-          numPartsToTry = partsScanned * 4
-        } else {
-          // the left side of max is >=1 whenever partsScanned >= 2
-          numPartsToTry = Math.max((1.5 * num * partsScanned / buf.size).toInt - partsScanned, 1)
-          numPartsToTry = Math.min(numPartsToTry, partsScanned * 4)
+      new Array[T](0)
+    } else {
+      val buf = new ArrayBuffer[T]
+      val totalParts = this.partitions.length
+      var partsScanned = 0
+      while (buf.size < num && partsScanned < totalParts) {
+        // The number of partitions to try in this iteration. It is ok for this number to be
+        // greater than totalParts because we actually cap it at totalParts in runJob.
+        var numPartsToTry = 1
+        if (partsScanned > 0) {
+          // If we didn't find any rows after the previous iteration, quadruple and retry. Otherwise,
+          // interpolate the number of partitions we need to try, but overestimate it by 50%.
+          // We also cap the estimation in the end.
+          if (buf.size == 0) {
+            numPartsToTry = partsScanned * 4
+          } else {
+            // the left side of max is >=1 whenever partsScanned >= 2
+            numPartsToTry = Math.max((1.5 * num * partsScanned / buf.size).toInt - partsScanned, 1)
+            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4)
+          }
         }
+
+        val left = num - buf.size
+        val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+        val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p, allowLocal = true)
+
+        res.foreach(buf ++= _.take(num - buf.size))
+        partsScanned += numPartsToTry
       }
 
-      val left = num - buf.size
-      val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
-      val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p, allowLocal = true)
-
-      res.foreach(buf ++= _.take(num - buf.size))
-      partsScanned += numPartsToTry
+      buf.toArray
     }
-
-    buf.toArray
   }
 
   /**

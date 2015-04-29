@@ -54,6 +54,8 @@ private[spark] object RDDScope {
   /**
    * Execute the given body such that all RDDs created in this body will have the same scope.
    * The name of the scope will be the name of the method that immediately encloses this one.
+   *
+   * Note: Return statements are NOT allowed in body.
    */
   private[spark] def withScope[T](
       sc: SparkContext,
@@ -68,6 +70,8 @@ private[spark] object RDDScope {
    * If nesting is allowed, this concatenates the previous scope with the new one in a way that
    * signifies the hierarchy. Otherwise, if nesting is not allowed, then any children calls to
    * this method executed in the body will have no effect.
+   *
+   * Note: Return statements are NOT allowed in body.
    */
   private[spark] def withScope[T](
       sc: SparkContext,
