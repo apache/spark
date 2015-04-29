@@ -20,6 +20,7 @@ package org.apache.spark.deploy.master
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.curator.framework.CuratorFramework
 import org.apache.curator.framework.recipes.leader.{LeaderLatchListener, LeaderLatch}
+import org.apache.spark.deploy.SparkCuratorUtil
 
 private[master] class ZooKeeperLeaderElectionAgent(val masterActor: LeaderElectable,
     conf: SparkConf) extends LeaderLatchListener with LeaderElectionAgent with Logging  {

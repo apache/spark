@@ -243,7 +243,7 @@ private[spark] class AppClient(
   def stop() {
     if (endpoint != null) {
       try {
-        endpoint.askWithReply[Boolean](StopAppClient)
+        endpoint.askWithRetry[Boolean](StopAppClient)
       } catch {
         case e: TimeoutException =>
           logInfo("Stop request to Master timed out; it may already be shut down.")

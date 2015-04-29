@@ -100,7 +100,7 @@ private class ClientEndpoint(
    * Send the message to master and forward the reply to self asynchronously.
    */
   private def ayncSendToMasterAndForwardReply[T: ClassTag](message: Any): Unit = {
-    masterEndpoint.sendWithReply[T](message).onComplete {
+    masterEndpoint.ask[T](message).onComplete {
       case Success(v) => self.send(v)
       case Failure(e) =>
         println(s"Error sending messages to master ${driverArgs.master}, exiting.")
@@ -117,7 +117,7 @@ private class ClientEndpoint(
     Thread.sleep(5000)
     println("... polling master for driver state")
     val statusResponse =
-      masterEndpoint.askWithReply[DriverStatusResponse](RequestDriverStatus(driverId))
+      masterEndpoint.askWithRetry[DriverStatusResponse](RequestDriverStatus(driverId))
 
     statusResponse.found match {
       case false =>

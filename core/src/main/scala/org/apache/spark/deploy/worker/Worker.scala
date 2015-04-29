@@ -32,6 +32,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.{Command, ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
@@ -89,7 +90,7 @@ private[worker] class Worker(
 
   private val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", false)
   // How often worker will clean up old app folders
-  private val CLEANUP_INTERVAL_MILLIS = 
+  private val CLEANUP_INTERVAL_MILLIS =
     conf.getLong("spark.worker.cleanup.interval", 60 * 30) * 1000
   // TTL for app folders/data;  after TTL expires it will be cleaned up
   private val APP_DATA_RETENTION_SECS =
@@ -110,7 +111,7 @@ private[worker] class Worker(
     } else {
       new File(sys.env.get("SPARK_HOME").getOrElse("."))
     }
-  
+
   var workDir: File = null
   val finishedExecutors = new HashMap[String, ExecutorRunner]
   val drivers = new HashMap[String, DriverRunner]
@@ -120,7 +121,7 @@ private[worker] class Worker(
   val finishedApps = new HashSet[String]
 
   // The shuffle service is not actually started unless configured.
-  private val shuffleService = new StandaloneWorkerShuffleService(conf, securityMgr)
+  private val shuffleService = new ExternalShuffleService(conf, securityMgr)
 
   private val publicAddress = {
     val envVar = conf.getenv("SPARK_PUBLIC_DNS")
@@ -132,7 +133,7 @@ private[worker] class Worker(
 
   private val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
   private val workerSource = new WorkerSource(this)
-  
+
   private var registerMasterFutures: Array[Future[_]] = null
   private var registrationRetryTimer: Option[ScheduledFuture[_]] = None
 

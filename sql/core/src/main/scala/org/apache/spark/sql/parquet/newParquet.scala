@@ -634,12 +634,13 @@ private[sql] case class ParquetRelation2(
     // before calling execute().
 
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
-    val writeSupport = if (parquetSchema.map(_.dataType).forall(_.isPrimitive)) {
-      log.debug("Initializing MutableRowWriteSupport")
-      classOf[MutableRowWriteSupport]
-    } else {
-      classOf[RowWriteSupport]
-    }
+    val writeSupport =
+      if (parquetSchema.map(_.dataType).forall(ParquetTypesConverter.isPrimitiveType)) {
+        log.debug("Initializing MutableRowWriteSupport")
+        classOf[MutableRowWriteSupport]
+      } else {
+        classOf[RowWriteSupport]
+      }
 
     ParquetOutputFormat.setWriteSupportClass(job, writeSupport)
 

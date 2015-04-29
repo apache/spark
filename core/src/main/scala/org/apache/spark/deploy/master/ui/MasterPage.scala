@@ -33,7 +33,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private val master = parent.masterEndpointRef
 
   override def renderJson(request: HttpServletRequest): JValue = {
-    val state = master.askWithReply[MasterStateResponse](RequestMasterState)
+    val state = master.askWithRetry[MasterStateResponse](RequestMasterState)
     JsonProtocol.writeMasterState(state)
   }
 
@@ -47,7 +47,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
   def handleDriverKillRequest(request: HttpServletRequest): Unit = {
     handleKillRequest(request, id => {
-      master.sendWithReply[KillDriverResponse](RequestKillDriver(id))
+      master.ask[KillDriverResponse](RequestKillDriver(id))
     })
   }
 
@@ -66,7 +66,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val state = master.askWithReply[MasterStateResponse](RequestMasterState)
+    val state = master.askWithRetry[MasterStateResponse](RequestMasterState)
 
     val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory")
     val workers = state.workers.sortBy(_.id)

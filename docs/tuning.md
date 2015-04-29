@@ -60,7 +60,7 @@ val sc = new SparkContext(conf)
 The [Kryo documentation](https://github.com/EsotericSoftware/kryo) describes more advanced
 registration options, such as adding custom serialization code.
 
-If your objects are large, you may also need to increase the `spark.kryoserializer.buffer.mb`
+If your objects are large, you may also need to increase the `spark.kryoserializer.buffer`
 config property. The default is 2, but this value needs to be large enough to hold the *largest*
 object you will serialize.
 

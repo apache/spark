@@ -126,6 +126,20 @@ private[streaming] class BlockGenerator(
     listener.onAddData(data, metadata)
   }
 
+  /**
+   * Push multiple data items into the buffer. After buffering the data, the
+   * `BlockGeneratorListener.onAddData` callback will be called. All received data items
+   * will be periodically pushed into BlockManager. Note that all the data items is guaranteed
+   * to be present in a single block.
+   */
+  def addMultipleDataWithCallback(dataIterator: Iterator[Any], metadata: Any): Unit = synchronized {
+    dataIterator.foreach { data =>
+      waitToPush()
+      currentBuffer += data
+    }
+    listener.onAddData(dataIterator, metadata)
+  }
+
   /** Change the buffer to which single records are added to. */
   private def updateCurrentBuffer(time: Long): Unit = synchronized {
     try {

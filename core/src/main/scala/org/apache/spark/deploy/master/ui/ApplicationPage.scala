@@ -37,7 +37,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
   /** Executor details for a particular application */
   override def renderJson(request: HttpServletRequest): JValue = {
     val appId = request.getParameter("appId")
-    val state = master.askWithReply[MasterStateResponse](RequestMasterState)
+    val state = master.askWithRetry[MasterStateResponse](RequestMasterState)
     val app = state.activeApps.find(_.id == appId).getOrElse({
       state.completedApps.find(_.id == appId).getOrElse(null)
     })
@@ -51,7 +51,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
   /** Executor details for a particular application */
   def render(request: HttpServletRequest): Seq[Node] = {
     val appId = request.getParameter("appId")
-    val state = master.askWithReply[MasterStateResponse](RequestMasterState)
+    val state = master.askWithRetry[MasterStateResponse](RequestMasterState)
     val app = state.activeApps.find(_.id == appId).getOrElse({
       state.completedApps.find(_.id == appId).getOrElse(null)
     })

@@ -24,7 +24,7 @@ import scala.annotation.varargs
 import scala.collection.mutable
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
-import org.apache.spark.ml.Identifiable
+import org.apache.spark.ml.util.Identifiable
 
 /**
  * :: AlphaComponent ::
