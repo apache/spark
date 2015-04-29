@@ -16,18 +16,11 @@
 #
 
 """
-A collections of builtin functions
+A collection of builtin math functions
 """
-import sys
-
-if sys.version < "3":
-    from itertools import imap as map
 
 from pyspark import SparkContext
-from pyspark.rdd import _prepare_for_python_RDD
-from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.sql.types import StringType
-from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
+from pyspark.sql.dataframe import Column
 
 __all__ = []
 
