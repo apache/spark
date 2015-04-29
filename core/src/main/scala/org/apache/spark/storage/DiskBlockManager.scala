@@ -138,24 +138,21 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     }
   }
 
-  private def addShutdownHook(): Thread = {
-    val shutdownHook = new Thread("delete Spark local dirs") {
-      override def run(): Unit = Utils.logUncaughtExceptions {
-        logDebug("Shutdown hook called")
-        DiskBlockManager.this.doStop()
-      }
+  private def addShutdownHook(): AnyRef = {
+    Utils.addShutdownHook { () =>
+      logDebug("Shutdown hook called")
+      DiskBlockManager.this.doStop()
     }
-    Runtime.getRuntime.addShutdownHook(shutdownHook)
-    shutdownHook
   }
 
   /** Cleanup local dirs and stop shuffle sender. */
   private[spark] def stop() {
     // Remove the shutdown hook.  It causes memory leaks if we leave it around.
     try {
-      Runtime.getRuntime.removeShutdownHook(shutdownHook)
+      Utils.removeShutdownHook(shutdownHook)
     } catch {
-      case e: IllegalStateException => None
+      case e: Exception => 
+        logError(s"Exception while removing shutdown hook.", e)
     }
     doStop()
   }

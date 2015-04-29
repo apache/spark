@@ -26,6 +26,7 @@ import shutil
 import tempfile
 import pickle
 import functools
+import datetime
 
 import py4j
 
@@ -108,7 +109,7 @@ class SQLTests(ReusedPySparkTestCase):
         os.unlink(cls.tempdir.name)
         cls.sqlCtx = SQLContext(cls.sc)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
-        rdd = cls.sc.parallelize(cls.testData)
+        rdd = cls.sc.parallelize(cls.testData, 2)
         cls.df = rdd.toDF()
 
     @classmethod
@@ -302,7 +303,7 @@ class SQLTests(ReusedPySparkTestCase):
         abstract = "byte1 short1 float1 time1 map1{} struct1(b) list1[]"
         schema = _parse_schema_abstract(abstract)
         typedSchema = _infer_schema_type(rdd.first(), schema)
-        df = self.sqlCtx.applySchema(rdd, typedSchema)
+        df = self.sqlCtx.createDataFrame(rdd, typedSchema)
         r = (127, -32768, 1.0, datetime(2010, 1, 1, 1, 1, 1), {"a": 1}, Row(b=2), [1, 2, 3])
         self.assertEqual(r, tuple(df.first()))
 
@@ -386,6 +387,35 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(95 < g.agg(functions.approxCountDistinct(df.key)).first()[0])
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
+    def test_math_functions(self):
+        df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
+        from pyspark.sql import mathfunctions as functions
+        import math
+
+        def get_values(l):
+            return [j[0] for j in l]
+
+        def assert_close(a, b):
+            c = get_values(b)
+            diff = [abs(v - c[k]) < 1e-6 for k, v in enumerate(a)]
+            return sum(diff) == len(a)
+        assert_close([math.cos(i) for i in range(10)],
+                     df.select(functions.cos(df.a)).collect())
+        assert_close([math.cos(i) for i in range(10)],
+                     df.select(functions.cos("a")).collect())
+        assert_close([math.sin(i) for i in range(10)],
+                     df.select(functions.sin(df.a)).collect())
+        assert_close([math.sin(i) for i in range(10)],
+                     df.select(functions.sin(df['a'])).collect())
+        assert_close([math.pow(i, 2 * i) for i in range(10)],
+                     df.select(functions.pow(df.a, df.b)).collect())
+        assert_close([math.pow(i, 2) for i in range(10)],
+                     df.select(functions.pow(df.a, 2)).collect())
+        assert_close([math.pow(i, 2) for i in range(10)],
+                     df.select(functions.pow(df.a, 2.0)).collect())
+        assert_close([math.hypot(i, 2 * i) for i in range(10)],
+                     df.select(functions.hypot(df.a, df.b)).collect())
+
     def test_save_and_load(self):
         df = self.df
         tmpPath = tempfile.mkdtemp()
@@ -463,6 +493,16 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(_infer_type(2**31), LongType())
         self.assertEqual(_infer_type(2**61), LongType())
         self.assertEqual(_infer_type(2**71), LongType())
+
+    def test_filter_with_datetime(self):
+        time = datetime.datetime(2015, 4, 17, 23, 1, 2, 3000)
+        date = time.date()
+        row = Row(date=date, time=time)
+        df = self.sqlCtx.createDataFrame([row])
+        self.assertEqual(1, df.filter(df.date == date).count())
+        self.assertEqual(1, df.filter(df.time == time).count())
+        self.assertEqual(0, df.filter(df.date > date).count())
+        self.assertEqual(0, df.filter(df.time > time).count())
 
     def test_dropna(self):
         schema = StructType([

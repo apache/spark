@@ -245,6 +245,20 @@ case class Distinct(partial: Boolean, child: SparkPlan) extends UnaryNode {
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ * Return a new RDD that has exactly `numPartitions` partitions.
+ */
+@DeveloperApi
+case class Repartition(numPartitions: Int, shuffle: Boolean, child: SparkPlan)
+  extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+
+  override def execute(): RDD[Row] = {
+    child.execute().map(_.copy()).coalesce(numPartitions, shuffle)
+  }
+}
+
 
 /**
  * :: DeveloperApi ::
