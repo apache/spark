@@ -376,9 +376,6 @@ private[spark] class Client(
             hadoopConfStream.closeEntry()
           }
         }
-      } catch {
-        case e: Exception => 
-          logError(s"Exception while copying Hadoop config files.", e)
       } finally {
         hadoopConfStream.close()
       }
