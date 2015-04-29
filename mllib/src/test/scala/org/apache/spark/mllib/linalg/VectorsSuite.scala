@@ -68,7 +68,7 @@ class VectorsSuite extends FunSuite {
     assert(vec.toArray === arr)
   }
 
-  test("SPARK-7149 sparse to array") {
+  test("SPARK-7194 sparse to array") {
     val vec = Vectors.sparse(arr).asInstanceOf[SparseVector]
     assert(vec.toArray === arr)
   }
