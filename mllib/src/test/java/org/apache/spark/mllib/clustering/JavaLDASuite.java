@@ -88,7 +88,7 @@ public class JavaLDASuite implements Serializable {
       .setMaxIterations(5)
       .setSeed(12345);
 
-    DistributedLDAModel model = lda.run(corpus);
+    DistributedLDAModel model = (DistributedLDAModel)lda.run(corpus);
 
     // Check: basic parameters
     LocalLDAModel localModel = model.toLocal();
