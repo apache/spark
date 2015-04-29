@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
-import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.FullOuter
@@ -235,7 +234,7 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ Count(expr) if !expr.nullable => Count(Literal(1))
 
       // For Coalesce, remove null literals.
-      case e @ expressions.Coalesce(children) =>
+      case e @ Coalesce(children) =>
         val newChildren = children.filter {
           case Literal(null, _) => false
           case _ => true
@@ -245,7 +244,7 @@ object NullPropagation extends Rule[LogicalPlan] {
         } else if (newChildren.length == 1) {
           newChildren(0)
         } else {
-          expressions.Coalesce(newChildren)
+          Coalesce(newChildren)
         }
 
       case e @ Substring(Literal(null, _), _, _) => Literal.create(null, e.dataType)

@@ -250,7 +250,8 @@ case class Distinct(partial: Boolean, child: SparkPlan) extends UnaryNode {
  * Return a new RDD that has exactly `numPartitions` partitions.
  */
 @DeveloperApi
-case class Coalesce(numPartitions: Int, shuffle: Boolean, child: SparkPlan) extends UnaryNode {
+case class CoalescePartitions(numPartitions: Int, shuffle: Boolean, child: SparkPlan)
+  extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override def execute(): RDD[Row] = {

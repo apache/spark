@@ -310,7 +310,8 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
-case class Coalesce(numPartitions: Int, shuffle: Boolean, child: LogicalPlan) extends UnaryNode {
+case class CoalescePartitions(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
+  extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
