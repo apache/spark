@@ -48,6 +48,11 @@ def get_error_codes(err_code_file):
         return dict(err_codes)
 
 
+def exit_from_command_with_retcode(cmd, retcode):
+    print "[error] running", cmd, "; received return code", retcode
+    sys.exit(os.environ["BLOCK_CURRENT"])
+
+
 def rm_r(path):
     """Given an arbitrary path properly remove it with the correct python
     construct if it exists
@@ -75,8 +80,7 @@ def run_cmd(cmd):
     try:
         subprocess.check_call(cmd)
     except subprocess.CalledProcessError as e:
-        print "[error] running", e.cmd, "; received return code", e.returncode
-        sys.exit(e.returncode)
+        exit_from_command_with_retcode(e.cmd, e.returncode)
 
 
 def set_sbt_maven_profile_args():
@@ -249,19 +253,24 @@ def exec_sbt(sbt_args=[]):
     """Will call SBT in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
+    sbt_cmd = ["./build/sbt"] + sbt_args
+
     # NOTE: echo "q" is needed because sbt on encountering a build file
     # with failure (either resolution or compilation) prompts the user for
     # input either q, r, etc to quit or retry. This echo is there to make it
     # not block.
     echo_proc = subprocess.Popen(["echo", "\"q\n\""], stdout=subprocess.PIPE)
-    sbt_proc = subprocess.Popen(["./build/sbt"] + sbt_args,
+    sbt_proc = subprocess.Popen(sbt_cmd,
                                 stdin=echo_proc.stdout,
                                 stdout=subprocess.PIPE)
     echo_proc.wait()
     for line in iter(sbt_proc.stdout.readline, ''):
         if not SBT_OUTPUT_FILTER.match(line):
             print line,    
-    sbt_proc.wait()
+    retcode = sbt_proc.wait()
+
+    if retcode > 0:
+        exit_from_command_with_retcode(sbt_cmd, retcode)
 
 
 def build_apache_spark():
