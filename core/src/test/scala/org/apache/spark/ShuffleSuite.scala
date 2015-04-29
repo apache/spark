@@ -84,8 +84,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
       NonJavaSerializableClass,
       NonJavaSerializableClass](b, new HashPartitioner(3))
     c.setSerializer(new KryoSerializer(conf))
-    // assert(c.count === 10)
-    assert(c.count === 42)
+    assert(c.count === 10)
   }
 
   test("zero sized blocks") {
