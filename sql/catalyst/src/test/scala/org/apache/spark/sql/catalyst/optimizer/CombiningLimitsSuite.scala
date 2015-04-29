@@ -88,5 +88,4 @@ class CombiningLimitsSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
-  
 }
