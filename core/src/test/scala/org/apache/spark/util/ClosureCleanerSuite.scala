@@ -23,6 +23,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.{TaskContext, SparkContext, SparkException}
+import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.rdd.RDD
 
 class ClosureCleanerSuite extends FunSuite {
@@ -110,6 +111,8 @@ class ClosureCleanerSuite extends FunSuite {
       expectCorrectException { TestUserClosuresActuallyCleaned.testForeachPartitionAsync(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testRunJob1(sc) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testRunJob2(sc) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testRunApproximateJob(sc) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testSubmitJob(sc) }
     }
   }
 }
@@ -298,5 +301,21 @@ private object TestUserClosuresActuallyCleaned {
   def testRunJob2(sc: SparkContext): Unit = {
     val rdd = sc.parallelize(1 to 10, 10)
     sc.runJob(rdd, { iter: Iterator[Int] => return; 1 } )
+  }
+  def testRunApproximateJob(sc: SparkContext): Unit = {
+    val rdd = sc.parallelize(1 to 10, 10)
+    val evaluator = new CountEvaluator(1, 0.5)
+    sc.runApproximateJob(
+      rdd, { (ctx: TaskContext, iter: Iterator[Int]) => return; 1L }, evaluator, 1000)
+  }
+  def testSubmitJob(sc: SparkContext): Unit = {
+    val rdd = sc.parallelize(1 to 10, 10)
+    sc.submitJob(
+      rdd,
+      { _ => return; 1 }: Iterator[Int] => Int,
+      Seq.empty,
+      { case (_, _) => return }: (Int, Int) => Unit,
+      { return }
+    )
   }
 }
