@@ -41,7 +41,7 @@ public class OneForOneStreamManager extends StreamManager {
   private final AtomicLong nextStreamId;
   private final Map<Long, StreamState> streams;
 
-  /** List of all stream ids that are associated to specified channel. **/
+  /** List of all stream ids that are associated to specified channel. */
   private final Map<Channel, Set<Long>> streamIds;
 
   /** State of a single stream. */
