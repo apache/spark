@@ -229,6 +229,7 @@ private class KafkaTestUtils extends Logging {
     tryAgain(1)
   }
 
+  /** wait until the leader offset for the given topic / partition equals the specified offset */
   def waitUntilLeaderOffset(
       kc: KafkaCluster,
       topic: String,

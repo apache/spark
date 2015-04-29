@@ -233,9 +233,9 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   def getConsumerOffsets(
       groupId: String,
       topicAndPartitions: Set[TopicAndPartition],
-      versionId: Short
+      consumerApiVersion: Short
     ): Either[Err, Map[TopicAndPartition, Long]] = {
-    getConsumerOffsetMetadata(groupId, topicAndPartitions, versionId).right.map { r =>
+    getConsumerOffsetMetadata(groupId, topicAndPartitions, consumerApiVersion).right.map { r =>
       r.map { kv =>
         kv._1 -> kv._2.offset
       }
@@ -252,10 +252,10 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   def getConsumerOffsetMetadata(
       groupId: String,
       topicAndPartitions: Set[TopicAndPartition],
-      versionId: Short
+      consumerApiVersion: Short
     ): Either[Err, Map[TopicAndPartition, OffsetMetadataAndError]] = {
     var result = Map[TopicAndPartition, OffsetMetadataAndError]()
-    val req = OffsetFetchRequest(groupId, topicAndPartitions.toSeq, versionId)
+    val req = OffsetFetchRequest(groupId, topicAndPartitions.toSeq, consumerApiVersion)
     val errs = new Err
     withBrokers(Random.shuffle(config.seedBrokers), errs) { consumer =>
       val resp = consumer.fetchOffsets(req)
@@ -289,12 +289,12 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   def setConsumerOffsets(
       groupId: String,
       offsets: Map[TopicAndPartition, Long],
-      versionId: Short
+      consumerApiVersion: Short
     ): Either[Err, Map[TopicAndPartition, Short]] = {
     val meta = offsets.map { kv =>
       kv._1 -> OffsetAndMetadata(kv._2)
     }
-    setConsumerOffsetMetadata(groupId, meta, versionId)
+    setConsumerOffsetMetadata(groupId, meta, consumerApiVersion)
   }
 
   /** Requires Kafka >= 0.8.1.1 */
@@ -307,10 +307,10 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   def setConsumerOffsetMetadata(
       groupId: String,
       metadata: Map[TopicAndPartition, OffsetAndMetadata],
-      versionId: Short
+      consumerApiVersion: Short
     ): Either[Err, Map[TopicAndPartition, Short]] = {
     var result = Map[TopicAndPartition, Short]()
-    val req = OffsetCommitRequest(groupId, metadata, versionId)
+    val req = OffsetCommitRequest(groupId, metadata, consumerApiVersion)
     val errs = new Err
     val topicAndPartitions = metadata.keySet
     withBrokers(Random.shuffle(config.seedBrokers), errs) { consumer =>
