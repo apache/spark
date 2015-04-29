@@ -114,7 +114,8 @@ private[spark] class ExecutorAllocationManager(
 
   // The desired number of executors at this moment in time. If all our executors were to die, this
   // is the number of executors we would immediately want from the cluster manager.
-  private var numExecutorsTarget = 0
+  private var numExecutorsTarget =
+    conf.getInt("spark.dynamicAllocation.initialExecutors", minNumExecutors)
 
   // Executors that have been requested to be removed but have not been killed yet
   private val executorsPendingToRemove = new mutable.HashSet[String]
@@ -228,7 +229,7 @@ private[spark] class ExecutorAllocationManager(
   private def schedule(): Unit = synchronized {
     val now = clock.getTimeMillis
 
-    addOrCancelExecutorRequests(now)
+    updateAndSyncNumExecutorsTarget(now)
 
     removeTimes.retain { case (executorId, expireTime) =>
       val expired = now >= expireTime
@@ -240,6 +241,8 @@ private[spark] class ExecutorAllocationManager(
   }
 
   /**
+   * Updates our target number of executors and syncs the result with the cluster manager.
+   *
    * Check to see whether our existing allocation and the requests we've made previously exceed our
    * current needs. If so, truncate our target and let the cluster manager know so that it can
    * cancel pending requests that are unneeded.
@@ -249,7 +252,7 @@ private[spark] class ExecutorAllocationManager(
    *
    * @return the delta in the target number of executors.
    */
-  private def addOrCancelExecutorRequests(now: Long): Int = synchronized {
+  private def updateAndSyncNumExecutorsTarget(now: Long): Int = synchronized {
     val maxNeeded = maxNumExecutorsNeeded
 
     if (maxNeeded < numExecutorsTarget) {
@@ -290,9 +293,17 @@ private[spark] class ExecutorAllocationManager(
       return 0
     }
 
-    val actualMaxNumExecutors = math.min(maxNumExecutors, maxNumExecutorsNeeded)
     val oldNumExecutorsTarget = numExecutorsTarget
-    numExecutorsTarget = math.min(numExecutorsTarget + numExecutorsToAdd, actualMaxNumExecutors)
+    // There's no point in wasting time ramping up to the number of executors we already have, so
+    // make sure our target is at least as much as our current allocation:
+    numExecutorsTarget = math.max(numExecutorsTarget, executorIds.size)
+    // Boost our target with the amount to add for this round:
+    numExecutorsTarget += numExecutorsToAdd
+    // Ensure that our target doesn't exceed what we need at the present moment:
+    numExecutorsTarget = math.min(numExecutorsTarget, maxNumExecutorsNeeded)
+    // Ensure that our target fits within configured bounds:
+    numExecutorsTarget = math.max(math.min(numExecutorsTarget, maxNumExecutors), minNumExecutors)
+
     val addRequestAcknowledged = testing || client.requestTotalExecutors(numExecutorsTarget)
     if (addRequestAcknowledged) {
       val delta = numExecutorsTarget - oldNumExecutorsTarget

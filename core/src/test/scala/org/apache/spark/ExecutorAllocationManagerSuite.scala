@@ -78,7 +78,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
   test("starting state") {
     sc = createSparkContext()
     val manager = sc.executorAllocationManager.get
-    assert(numExecutorsTarget(manager) === 0)
+    assert(numExecutorsTarget(manager) === 1)
     assert(executorsPendingToRemove(manager).isEmpty)
     assert(executorIds(manager).isEmpty)
     assert(addTime(manager) === ExecutorAllocationManager.NOT_SET)
@@ -91,18 +91,18 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
 
     // Keep adding until the limit is reached
-    assert(numExecutorsTarget(manager) === 0)
+    assert(numExecutorsTarget(manager) === 1)
     assert(numExecutorsToAdd(manager) === 1)
     assert(addExecutors(manager) === 1)
-    assert(numExecutorsTarget(manager) === 1)
+    assert(numExecutorsTarget(manager) === 2)
     assert(numExecutorsToAdd(manager) === 2)
     assert(addExecutors(manager) === 2)
-    assert(numExecutorsTarget(manager) === 3)
+    assert(numExecutorsTarget(manager) === 4)
     assert(numExecutorsToAdd(manager) === 4)
     assert(addExecutors(manager) === 4)
-    assert(numExecutorsTarget(manager) === 7)
+    assert(numExecutorsTarget(manager) === 8)
     assert(numExecutorsToAdd(manager) === 8)
-    assert(addExecutors(manager) === 3) // reached the limit of 10
+    assert(addExecutors(manager) === 2) // reached the limit of 10
     assert(numExecutorsTarget(manager) === 10)
     assert(numExecutorsToAdd(manager) === 1)
     assert(addExecutors(manager) === 0)
@@ -131,7 +131,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
   }
 
   test("add executors capped by num pending tasks") {
-    sc = createSparkContext(1, 10)
+    sc = createSparkContext(0, 10)
     val manager = sc.executorAllocationManager.get
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 5)))
 
@@ -182,7 +182,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
   }
 
   test("cancel pending executors when no longer needed") {
-    sc = createSparkContext(1, 10)
+    sc = createSparkContext(0, 10)
     val manager = sc.executorAllocationManager.get
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(2, 5)))
 
@@ -266,7 +266,6 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
     // Add a few executors
     assert(addExecutors(manager) === 1)
     assert(addExecutors(manager) === 2)
-    assert(addExecutors(manager) === 4)
     onExecutorAdded(manager, "1")
     onExecutorAdded(manager, "2")
     onExecutorAdded(manager, "3")
@@ -274,52 +273,55 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
     onExecutorAdded(manager, "5")
     onExecutorAdded(manager, "6")
     onExecutorAdded(manager, "7")
-    assert(executorIds(manager).size === 7)
+    onExecutorAdded(manager, "8")
+    assert(executorIds(manager).size === 8)
 
     // Remove until limit
     assert(removeExecutor(manager, "1"))
     assert(removeExecutor(manager, "2"))
-    assert(!removeExecutor(manager, "3")) // lower limit reached
-    assert(!removeExecutor(manager, "4"))
+    assert(removeExecutor(manager, "3"))
+    assert(!removeExecutor(manager, "4")) // lower limit reached
+    assert(!removeExecutor(manager, "5"))
     onExecutorRemoved(manager, "1")
     onExecutorRemoved(manager, "2")
+    onExecutorRemoved(manager, "3")
     assert(executorIds(manager).size === 5)
 
     // Add until limit
-    assert(addExecutors(manager) === 3) // upper limit reached
+    assert(addExecutors(manager) === 2) // upper limit reached
     assert(addExecutors(manager) === 0)
-    assert(!removeExecutor(manager, "3")) // still at lower limit
-    assert(!removeExecutor(manager, "4"))
-    onExecutorAdded(manager, "8")
+    assert(!removeExecutor(manager, "4")) // still at lower limit
+    assert(!removeExecutor(manager, "5"))
     onExecutorAdded(manager, "9")
     onExecutorAdded(manager, "10")
     onExecutorAdded(manager, "11")
     onExecutorAdded(manager, "12")
+    onExecutorAdded(manager, "13")
     assert(executorIds(manager).size === 10)
 
     // Remove succeeds again, now that we are no longer at the lower limit
-    assert(removeExecutor(manager, "3"))
     assert(removeExecutor(manager, "4"))
     assert(removeExecutor(manager, "5"))
     assert(removeExecutor(manager, "6"))
+    assert(removeExecutor(manager, "7"))
     assert(executorIds(manager).size === 10)
     assert(addExecutors(manager) === 0)
-    onExecutorRemoved(manager, "3")
     onExecutorRemoved(manager, "4")
+    onExecutorRemoved(manager, "5")
     assert(executorIds(manager).size === 8)
 
     // Number of executors pending restarts at 1
     assert(numExecutorsToAdd(manager) === 1)
     assert(addExecutors(manager) === 0)
     assert(executorIds(manager).size === 8)
-    onExecutorRemoved(manager, "5")
     onExecutorRemoved(manager, "6")
-    onExecutorAdded(manager, "13")
+    onExecutorRemoved(manager, "7")
     onExecutorAdded(manager, "14")
+    onExecutorAdded(manager, "15")
     assert(executorIds(manager).size === 8)
     assert(addExecutors(manager) === 0) // still at upper limit
-    onExecutorAdded(manager, "15")
     onExecutorAdded(manager, "16")
+    onExecutorAdded(manager, "17")
     assert(executorIds(manager).size === 10)
     assert(numExecutorsTarget(manager) === 10)
   }
@@ -404,7 +406,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
   }
 
   test("mock polling loop with no events") {
-    sc = createSparkContext(1, 20)
+    sc = createSparkContext(0, 20)
     val manager = sc.executorAllocationManager.get
     val clock = new ManualClock(2020L)
     manager.setClock(clock)
@@ -430,7 +432,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
   }
 
   test("mock polling loop add behavior") {
-    sc = createSparkContext(1, 20)
+    sc = createSparkContext(0, 20)
     val clock = new ManualClock(2020L)
     val manager = sc.executorAllocationManager.get
     manager.setClock(clock)
@@ -670,6 +672,31 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
     assert(!removeTimes(manager).contains("executor-1"))
   }
 
+  test("avoid ramp up when target < running executors") {
+    sc = createSparkContext(0, 100000)
+    val manager = sc.executorAllocationManager.get
+    val stage1 = createStageInfo(0, 1000)
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage1))
+
+    assert(addExecutors(manager) === 1)
+    assert(addExecutors(manager) === 2)
+    assert(addExecutors(manager) === 4)
+    assert(addExecutors(manager) === 8)
+    assert(numExecutorsTarget(manager) === 15)
+    (0 until 15).foreach { i =>
+      onExecutorAdded(manager, s"executor-$i")
+    }
+    assert(executorIds(manager).size === 15)
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage1))
+
+    adjustRequestedExecutors(manager)
+    assert(numExecutorsTarget(manager) === 0)
+
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(1, 1000)))
+    addExecutors(manager)
+    assert(numExecutorsTarget(manager) === 16)
+  }
+
   private def createSparkContext(minExecutors: Int = 1, maxExecutors: Int = 5): SparkContext = {
     val conf = new SparkConf()
       .setMaster("local")
@@ -721,7 +748,8 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _removeTimes = PrivateMethod[collection.Map[String, Long]]('removeTimes)
   private val _schedule = PrivateMethod[Unit]('schedule)
   private val _addExecutors = PrivateMethod[Int]('addExecutors)
-  private val _addOrCancelExecutorRequests = PrivateMethod[Int]('addOrCancelExecutorRequests)
+  private val _updateAndSyncNumExecutorsTarget =
+    PrivateMethod[Int]('updateAndSyncNumExecutorsTarget)
   private val _removeExecutor = PrivateMethod[Boolean]('removeExecutor)
   private val _onExecutorAdded = PrivateMethod[Unit]('onExecutorAdded)
   private val _onExecutorRemoved = PrivateMethod[Unit]('onExecutorRemoved)
@@ -765,7 +793,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   }
 
   private def adjustRequestedExecutors(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _addOrCancelExecutorRequests(0L)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(0L)
   }
 
   private def removeExecutor(manager: ExecutorAllocationManager, id: String): Boolean = {
