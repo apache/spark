@@ -20,7 +20,8 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, DriverManager, ResultSet, ResultSetMetaData, SQLException}
 import java.util.Properties
 
-import org.apache.commons.lang.StringEscapeUtils.escapeSql
+import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Row, SpecificMutableRow}
@@ -238,6 +239,9 @@ private[sql] class JDBCRDD(
     case stringValue: UTF8String => s"'${escapeSql(stringValue.toString)}'"
     case _ => value
   }
+
+  private def escapeSql(value: String): String =
+    if (value == null) null else  StringUtils.replace(value, "'", "''")
 
   /**
    * Turns a single Filter into a String representing a SQL expression.

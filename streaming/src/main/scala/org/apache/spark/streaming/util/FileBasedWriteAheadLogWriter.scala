@@ -17,18 +17,17 @@
 package org.apache.spark.streaming.util
 
 import java.io._
-import java.net.URI
 import java.nio.ByteBuffer
 
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FSDataOutputStream, FileSystem}
+import org.apache.hadoop.fs.FSDataOutputStream
 
 /**
  * A writer for writing byte-buffers to a write ahead log file.
  */
-private[streaming] class WriteAheadLogWriter(path: String, hadoopConf: Configuration)
+private[streaming] class FileBasedWriteAheadLogWriter(path: String, hadoopConf: Configuration)
   extends Closeable {
 
   private lazy val stream = HdfsUtils.getOutputStream(path, hadoopConf)
@@ -43,11 +42,11 @@ private[streaming] class WriteAheadLogWriter(path: String, hadoopConf: Configura
   private var closed = false
 
   /** Write the bytebuffer to the log file */
-  def write(data: ByteBuffer): WriteAheadLogFileSegment = synchronized {
+  def write(data: ByteBuffer): FileBasedWriteAheadLogSegment = synchronized {
     assertOpen()
     data.rewind() // Rewind to ensure all data in the buffer is retrieved
     val lengthToWrite = data.remaining()
-    val segment = new WriteAheadLogFileSegment(path, nextOffset, lengthToWrite)
+    val segment = new FileBasedWriteAheadLogSegment(path, nextOffset, lengthToWrite)
     stream.writeInt(lengthToWrite)
     if (data.hasArray) {
       stream.write(data.array())

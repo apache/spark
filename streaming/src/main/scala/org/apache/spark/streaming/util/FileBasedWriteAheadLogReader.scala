@@ -24,11 +24,11 @@ import org.apache.spark.Logging
 
 /**
  * A reader for reading write ahead log files written using
- * [[org.apache.spark.streaming.util.WriteAheadLogWriter]]. This reads
+ * [[org.apache.spark.streaming.util.FileBasedWriteAheadLogWriter]]. This reads
  * the records (bytebuffers) in the log file sequentially and return them as an
  * iterator of bytebuffers.
  */
-private[streaming] class WriteAheadLogReader(path: String, conf: Configuration)
+private[streaming] class FileBasedWriteAheadLogReader(path: String, conf: Configuration)
   extends Iterator[ByteBuffer] with Closeable with Logging {
 
   private val instream = HdfsUtils.getInputStream(path, conf)

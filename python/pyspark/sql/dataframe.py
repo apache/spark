@@ -237,7 +237,8 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
-        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at mapPartitions at SQLContext.scala:...
+        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at applySchemaToPythonRDD at\
+          NativeMethodAccessorImpl.java:...
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -632,7 +633,8 @@ class DataFrame(object):
         [Row(age=2), Row(age=5)]
         """
         if name not in self.columns:
-            raise AttributeError("No such column: %s" % name)
+            raise AttributeError(
+                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name))
         jc = self._jdf.apply(name)
         return Column(jc)
 
