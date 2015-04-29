@@ -217,19 +217,6 @@
             <artifactId>maven-assembly-plugin</artifactId>
             <version>2.4</version>
             <executions>
-              <!--execution>
-                    <id>pyspark-zip</id>
-                    <phase>package</phase>
-                    <goals>
-                        <goal>single</goal>
-                    </goals>
-                    <configuration>
-                        <skipAssembly>true</skipAssembly>
-                        <descriptors>
-                            <descriptor>src/main/assembly/pyspark-assembly.xml</descriptor>
-                        </descriptors>
-                    </configuration>
-                </execution-->
               <execution>
                 <id>dist</id>
                 <phase>package</phase>
@@ -242,7 +229,7 @@
                   </descriptors>
                 </configuration>
               </execution>
-          </executions>
+            </executions>
           </plugin>
         </plugins>
       </build>
