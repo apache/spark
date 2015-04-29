@@ -72,12 +72,14 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     val resources = List(createResource("cpus", 4), createResource("mem", 1024))
     // uri is null.
     val (executorInfo, _) = mesosSchedulerBackend.createExecutorInfo(resources, "test-id")
-    assert(executorInfo.getCommand.getValue === s" /mesos-home/bin/spark-class ${classOf[MesosExecutorBackend].getName}")
+    assert(executorInfo.getCommand.getValue ===
+      s" /mesos-home/bin/spark-class ${classOf[MesosExecutorBackend].getName}")
 
     // uri exists.
     conf.set("spark.executor.uri", "hdfs:///test-app-1.0.0.tgz")
     val (executorInfo1, _) = mesosSchedulerBackend.createExecutorInfo(resources, "test-id")
-    assert(executorInfo1.getCommand.getValue === s"cd test-app-1*;  ./bin/spark-class ${classOf[MesosExecutorBackend].getName}")
+    assert(executorInfo1.getCommand.getValue ===
+      s"cd test-app-1*;  ./bin/spark-class ${classOf[MesosExecutorBackend].getName}")
   }
 
   test("spark docker properties correctly populate the DockerInfo message") {

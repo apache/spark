@@ -295,20 +295,24 @@ private[spark] class MesosClusterScheduler(
   def start(): Unit = {
     // TODO: Implement leader election to make sure only one framework running in the cluster.
     val fwId = schedulerState.fetch[String]("frameworkId")
-    val builder = FrameworkInfo.newBuilder()
-      .setUser(Utils.getCurrentUserName())
-      .setName(appName)
-      .setWebuiUrl(frameworkUrl)
-      .setCheckpoint(true)
-      .setFailoverTimeout(Integer.MAX_VALUE) // Setting to max so tasks keep running on crash
     fwId.foreach { id =>
-      builder.setId(FrameworkID.newBuilder().setValue(id).build())
       frameworkId = id
     }
     recoverState()
     metricsSystem.registerSource(new MesosClusterSchedulerSource(this))
     metricsSystem.start()
-    startScheduler(master, MesosClusterScheduler.this, builder.build())
+    val driver = createSchedulerDriver(
+      master,
+      MesosClusterScheduler.this,
+      Utils.getCurrentUserName(),
+      appName,
+      conf,
+      Some(frameworkUrl),
+      Some(true),
+      Some(Integer.MAX_VALUE),
+      fwId)
+
+    startScheduler(driver)
     ready = true
   }
 

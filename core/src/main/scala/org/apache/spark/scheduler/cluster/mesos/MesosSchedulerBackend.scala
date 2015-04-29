@@ -32,6 +32,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.Utils
 
+
 /**
  * A SchedulerBackend for running fine-grained tasks on Mesos. Each Spark task is mapped to a
  * separate Mesos task, allowing multiple applications to share cluster nodes both in space (tasks
@@ -66,9 +67,10 @@ private[spark] class MesosSchedulerBackend(
   @volatile var appId: String = _
 
   override def start() {
-    val fwInfo = FrameworkInfo.newBuilder().setUser(sc.sparkUser).setName(sc.appName).build()
     classLoader = Thread.currentThread.getContextClassLoader
-    startScheduler(master, MesosSchedulerBackend.this, fwInfo)
+    val driver = createSchedulerDriver(
+      master, MesosSchedulerBackend.this, sc.sparkUser, sc.appName, sc.conf)
+    startScheduler(driver)
   }
 
   def createExecutorInfo(
@@ -119,10 +121,10 @@ private[spark] class MesosSchedulerBackend(
     }
     val builder = MesosExecutorInfo.newBuilder()
     val (resourcesAfterCpu, usedCpuResources) =
-      MesosSchedulerUtils.partitionResources(resources, "cpus", scheduler.CPUS_PER_TASK)
+      partitionResources(resources, "cpus", scheduler.CPUS_PER_TASK)
     builder.addAllResources(usedCpuResources)
     val (resourcesAfterMem, usedMemResources) =
-      MesosSchedulerUtils.partitionResources(resourcesAfterCpu, "mem", MemoryUtils.calculateTotalMemory(sc))
+      partitionResources(resourcesAfterCpu, "mem", MemoryUtils.calculateTotalMemory(sc))
     builder.addAllResources(usedMemResources)
     val executorInfo = builder
       .setExecutorId(ExecutorID.newBuilder().setValue(execId).build())
@@ -307,7 +309,7 @@ private[spark] class MesosSchedulerBackend(
     }
     slaveIdsWithExecutors(slaveId) = executorInfo
     val (finalResources, cpuResources) =
-      MesosSchedulerUtils.partitionResources(remainingResources, "cpus", scheduler.CPUS_PER_TASK)
+      partitionResources(remainingResources, "cpus", scheduler.CPUS_PER_TASK)
     val taskInfo = MesosTaskInfo.newBuilder()
       .setTaskId(taskId)
       .setSlaveId(SlaveID.newBuilder().setValue(slaveId).build())

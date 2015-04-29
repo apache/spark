@@ -40,14 +40,24 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   // Driver for talking to Mesos
   protected var mesosDriver: SchedulerDriver = null
 
-  def createSchedulerDriver(
+  protected def createSchedulerDriver(
+      masterUrl: String,
       scheduler: Scheduler,
       sparkUser: String,
       appName: String,
-      masterUrl: String,
-      conf: SparkConf): SchedulerDriver = {
+      conf: SparkConf,
+      webuiUrl: Option[String] = None,
+      checkpoint: Option[Boolean] = None,
+      failoverTimeout: Option[Double] = None,
+      frameworkId: Option[String] = None): MesosSchedulerDriver = {
     val fwInfoBuilder = FrameworkInfo.newBuilder().setUser(sparkUser).setName(appName)
     val credBuilder = Credential.newBuilder()
+    webuiUrl.foreach { url => fwInfoBuilder.setWebuiUrl(url) }
+    checkpoint.foreach { checkpoint => fwInfoBuilder.setCheckpoint(checkpoint) }
+    failoverTimeout.foreach { timeout => fwInfoBuilder.setFailoverTimeout(timeout) }
+    frameworkId.foreach { id =>
+      fwInfoBuilder.setId(FrameworkID.newBuilder().setValue(id).build())
+    }
     conf.getOption("spark.mesos.principal").foreach { principal =>
       fwInfoBuilder.setPrincipal(principal)
       credBuilder.setPrincipal(principal)
@@ -77,7 +87,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    * @param scheduler Scheduler object
    * @param fwInfo FrameworkInfo to pass to the Mesos master
    */
-  def startScheduler(masterUrl: String, scheduler: Scheduler, fwInfo: FrameworkInfo): Unit = {
+  def startScheduler(newDriver: MesosSchedulerDriver): Unit = {
     synchronized {
       if (mesosDriver != null) {
         registerLatch.await()
@@ -88,7 +98,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
         setDaemon(true)
 
         override def run() {
-          mesosDriver = new MesosSchedulerDriver(scheduler, fwInfo, masterUrl)
+          mesosDriver = newDriver
           try {
             val ret = mesosDriver.run()
             logInfo("driver.run() returned with code " + ret)
@@ -111,7 +121,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   /**
    * Signal that the scheduler has registered with Mesos.
    */
-  def getResource(res: List[Resource], name: String): Double = {
+  protected def getResource(res: List[Resource], name: String): Double = {
     // A resource can have multiple values in the offer since it can either be from
     // a specific role or wildcard.
     res.filter(_.getName == name).map(_.getScalar.getValue).sum
