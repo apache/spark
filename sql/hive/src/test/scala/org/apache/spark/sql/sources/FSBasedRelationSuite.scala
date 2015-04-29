@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import java.io.IOException
-
 import scala.collection.mutable
 
 import com.google.common.base.Objects
@@ -27,9 +25,9 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.types._
-import org.apache.spark.sql._
 import org.apache.spark.util.Utils
 
 class SimpleFSBasedSource extends FSBasedRelationProvider {
@@ -143,7 +141,14 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
         StructField("a", IntegerType, nullable = false),
         StructField("b", StringType, nullable = false)))
 
-  val partitionColumns = StructType(StructField("p1", IntegerType, nullable = true) :: Nil)
+  val singlePartitionColumn = StructType(
+    Seq(
+      StructField("p1", IntegerType, nullable = true)))
+
+  val doublePartitionColumns = StructType(
+    Seq(
+      StructField("p1", IntegerType, nullable = true),
+      StructField("p2", StringType, nullable = true)))
 
   val testDF = (for {
     i <- 1 to 3
@@ -240,7 +245,7 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
       options = Map(
         "path" -> basePath.toString,
         "schema" -> dataSchema.json,
-        "partitionColumns" -> partitionColumns.json),
+        "partitionColumns" -> singlePartitionColumn.json),
       partitionColumns = Seq("p1"))
 
     Thread.sleep(500)
@@ -269,7 +274,7 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
       options = Map(
         "path" -> basePath.toString,
         "schema" -> dataSchema.json,
-        "partitionColumns" -> partitionColumns.json),
+        "partitionColumns" -> singlePartitionColumn.json),
       partitionColumns = Seq("p1"))
 
     // Written rows shouldn't contain dynamic partition column
@@ -281,31 +286,68 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
     }
   }
 
-  test("save() - partitioned table - Append") {
+  test("save() - partitioned table - Append - new partition values") {
     testDF.save(
       source = classOf[SimpleFSBasedSource].getCanonicalName,
       mode = SaveMode.Overwrite,
       options = Map(
         "path" -> basePath.toString,
         "schema" -> dataSchema.json,
-        "partitionColumns" -> partitionColumns.json),
+        "partitionColumns" -> singlePartitionColumn.json),
       partitionColumns = Seq("p1"))
 
-    testDF.save(
+    val moreData = (for {
+      i <- 1 to 3
+      p <- 3 to 4
+    } yield (i, s"val_$i", p)).toDF("a", "b", "p1")
+
+    moreData.save(
       source = classOf[SimpleFSBasedSource].getCanonicalName,
       mode = SaveMode.Append,
       options = Map(
         "path" -> basePath.toString,
         "schema" -> dataSchema.json,
-        "partitionColumns" -> partitionColumns.json),
+        "partitionColumns" -> singlePartitionColumn.json),
       partitionColumns = Seq("p1"))
 
     // Written rows shouldn't contain dynamic partition column
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 4) yield Row(i, s"val_$i")
 
     TestResult.synchronized {
-      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writerPaths.size === 4)
       assert(TestResult.writtenRows === expectedRows.toSet)
+    }
+  }
+
+  test("save() - partitioned table - Append - mismatched partition columns") {
+    val data = (for {
+      i <- 1 to 3
+      p1 <- 1 to 2
+      p2 <- Array("hello", "world")
+    } yield (i, s"val_$i", p1, p2)).toDF("a", "b", "p1", "p2")
+
+    // Using only a subset of all partition columns
+    intercept[IllegalArgumentException] {
+      data.save(
+        source = classOf[SimpleFSBasedSource].getCanonicalName,
+        mode = SaveMode.Append,
+        options = Map(
+          "path" -> basePath.toString,
+          "schema" -> dataSchema.json,
+          "partitionColumns" -> doublePartitionColumns.json),
+        partitionColumns = Seq("p1"))
+    }
+
+    // Using different order of partition columns
+    intercept[IllegalArgumentException] {
+      data.save(
+        source = classOf[SimpleFSBasedSource].getCanonicalName,
+        mode = SaveMode.Append,
+        options = Map(
+          "path" -> basePath.toString,
+          "schema" -> dataSchema.json,
+          "partitionColumns" -> doublePartitionColumns.json),
+        partitionColumns = Seq("p2", "p1"))
     }
   }
 
@@ -318,7 +360,7 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
       options = Map(
         "path" -> basePath.toString,
         "schema" -> dataSchema.json,
-        "partitionColumns" -> partitionColumns.json),
+        "partitionColumns" -> singlePartitionColumn.json),
       partitionColumns = Seq("p1"))
 
     // Written rows shouldn't contain dynamic partition column
@@ -336,7 +378,7 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
         options = Map(
           "path" -> basePath.toString,
           "schema" -> dataSchema.json,
-          "partitionColumns" -> partitionColumns.json),
+          "partitionColumns" -> singlePartitionColumn.json),
         partitionColumns = Seq("p1"))
     }
   }
@@ -354,7 +396,7 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
   }
 
   test("save() - data sources other than FSBasedRelation") {
-    val cause = intercept[RuntimeException] {
+    intercept[RuntimeException] {
       testDF.save(
         source = classOf[FilteredScanSource].getCanonicalName,
         mode = SaveMode.Overwrite,
@@ -363,16 +405,25 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
     }
   }
 
-  test("saveAsTable() - partitioned table - Overwrite") {
-    testDF.saveAsTable(
-      tableName = "t",
+  def saveToPartitionedTable(
+      df: DataFrame,
+      tableName: String,
+      relationPartitionColumns: StructType,
+      partitionedBy: Seq[String],
+      mode: SaveMode): Unit = {
+    df.saveAsTable(
+      tableName = tableName,
       source = classOf[SimpleFSBasedSource].getCanonicalName,
-      mode = SaveMode.Overwrite,
+      mode = mode,
       options = Map(
         "path" -> basePath.toString,
         "schema" -> dataSchema.json,
-        "partitionColumns" -> partitionColumns.json),
-      partitionColumns = Seq("p1"))
+        "partitionColumns" -> relationPartitionColumns.json),
+      partitionColumns = partitionedBy)
+  }
+
+  test("saveAsTable() - partitioned table - Overwrite") {
+    saveToPartitionedTable(testDF, "t", singlePartitionColumn, Array("p1"), SaveMode.Overwrite)
 
     // Written rows shouldn't contain dynamic partition column
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
@@ -399,17 +450,9 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
       options = Map(
         "path" -> basePath.toString,
         "schema" -> dataSchema.json,
-        "partitionColumns" -> partitionColumns.json))
+        "partitionColumns" -> singlePartitionColumn.json))
 
-    df.saveAsTable(
-      tableName = "t",
-      source = classOf[SimpleFSBasedSource].getCanonicalName,
-      mode = SaveMode.Overwrite,
-      options = Map(
-        "path" -> basePath.toString,
-        "schema" -> dataSchema.json,
-        "partitionColumns" -> partitionColumns.json),
-      partitionColumns = Seq("p1"))
+    saveToPartitionedTable(df, "t", singlePartitionColumn, Seq("p1"), SaveMode.Overwrite)
 
     // Written rows shouldn't contain dynamic partition column
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
@@ -429,25 +472,8 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
   }
 
   test("saveAsTable() - partitioned table - Append") {
-    testDF.saveAsTable(
-      tableName = "t",
-      source = classOf[SimpleFSBasedSource].getCanonicalName,
-      mode = SaveMode.Overwrite,
-      options = Map(
-        "path" -> basePath.toString,
-        "schema" -> dataSchema.json,
-        "partitionColumns" -> partitionColumns.json),
-      partitionColumns = Seq("p1"))
-
-    testDF.saveAsTable(
-      tableName = "t",
-      source = classOf[SimpleFSBasedSource].getCanonicalName,
-      mode = SaveMode.Append,
-      options = Map(
-        "path" -> basePath.toString,
-        "schema" -> dataSchema.json,
-        "partitionColumns" -> partitionColumns.json),
-      partitionColumns = Seq("p1"))
+    saveToPartitionedTable(testDF, "t", singlePartitionColumn, Seq("p1"), SaveMode.Overwrite)
+    saveToPartitionedTable(testDF, "t", singlePartitionColumn, Seq("p1"), SaveMode.Append)
 
     // Written rows shouldn't contain dynamic partition column
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
@@ -466,18 +492,30 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
     sql("DROP TABLE t")
   }
 
+  test("saveAsTable() - partitioned table - Append - mismatched partition columns") {
+    val data = (for {
+      i <- 1 to 3
+      p1 <- 1 to 2
+      p2 <- Array("hello", "world")
+    } yield (i, s"val_$i", p1, p2)).toDF("a", "b", "p1", "p2")
+
+    // Using only a subset of all partition columns
+    intercept[IllegalArgumentException] {
+      saveToPartitionedTable(data, "t", doublePartitionColumns, Seq("p1"), SaveMode.Append)
+    }
+
+    // Using different order of partition columns
+    intercept[IllegalArgumentException] {
+      saveToPartitionedTable(data, "t", doublePartitionColumns, Seq("p2", "p1"), SaveMode.Append)
+    }
+
+    sql("DROP TABLE t")
+  }
+
   test("saveAsTable() - partitioned table - ErrorIfExists") {
     fs.delete(basePath, true)
 
-    testDF.saveAsTable(
-      tableName = "t",
-      source = classOf[SimpleFSBasedSource].getCanonicalName,
-      mode = SaveMode.ErrorIfExists,
-      options = Map(
-        "path" -> basePath.toString,
-        "schema" -> dataSchema.json,
-        "partitionColumns" -> partitionColumns.json),
-      partitionColumns = Seq("p1"))
+    saveToPartitionedTable(testDF, "t", singlePartitionColumn, Seq("p1"), SaveMode.ErrorIfExists)
 
     // Written rows shouldn't contain dynamic partition column
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
@@ -494,33 +532,16 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
     }
 
     intercept[AnalysisException] {
-      testDF.saveAsTable(
-        tableName = "t",
-        source = classOf[SimpleFSBasedSource].getCanonicalName,
-        mode = SaveMode.ErrorIfExists,
-        options = Map(
-          "path" -> basePath.toString,
-          "schema" -> dataSchema.json,
-          "partitionColumns" -> partitionColumns.json),
-        partitionColumns = Seq("p1"))
+      saveToPartitionedTable(testDF, "t", singlePartitionColumn, Seq("p1"), SaveMode.ErrorIfExists)
     }
 
     sql("DROP TABLE t")
   }
 
   test("saveAsTable() - partitioned table - Ignore") {
-    testDF.saveAsTable(
-      tableName = "t",
-      source = classOf[SimpleFSBasedSource].getCanonicalName,
-      mode = SaveMode.Ignore,
-      options = Map(
-        "path" -> basePath.toString,
-        "schema" -> dataSchema.json,
-        "partitionColumns" -> partitionColumns.json),
-      partitionColumns = Seq("p1"))
+    saveToPartitionedTable(testDF, "t", singlePartitionColumn, Seq("p1"), SaveMode.Ignore)
 
     assert(TestResult.writtenRows.isEmpty)
-
     assertResult(table("t").schema) {
       StructType(
         dataSchema ++ Seq(
@@ -531,7 +552,7 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
   }
 
   test("saveAsTable() - data sources other than FSBasedRelation") {
-    val cause = intercept[RuntimeException] {
+    intercept[RuntimeException] {
       testDF.saveAsTable(
         tableName = "t",
         source = classOf[FilteredScanSource].getCanonicalName,
