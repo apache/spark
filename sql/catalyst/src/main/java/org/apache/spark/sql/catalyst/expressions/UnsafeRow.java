@@ -54,6 +54,9 @@ public final class UnsafeRow implements MutableRow {
   private Object baseObject;
   private long baseOffset;
 
+  Object getBaseObject() { return baseObject; }
+  long getBaseOffset() { return baseOffset; }
+
   /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
   private int numFields;
 
