@@ -514,7 +514,7 @@ class DataFrameSuite extends QueryTest {
     val n = 600
     val data = TestSQLContext.sparkContext.parallelize(1 to n, 2).toDF("id")
     for (seed <- 1 to 5) {
-      val splits = data.randomSplit(Array(1, 2, 3), seed)
+      val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
       assert(splits.length == 3, "wrong number of splits")
 
       assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList ==
