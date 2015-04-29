@@ -637,8 +637,11 @@ abstract class RDD[T: ClassTag](
    */
   def mapPartitions[U: ClassTag](
       f: Iterator[T] => Iterator[U], preservesPartitioning: Boolean = false): RDD[U] = {
-    val func = (context: TaskContext, index: Int, iter: Iterator[T]) => f(iter)
-    new MapPartitionsRDD(this, sc.clean(func), preservesPartitioning)
+    val cleanedF = sc.clean(f)
+    new MapPartitionsRDD(
+      this,
+      (context: TaskContext, index: Int, iter: Iterator[T]) => cleanedF(iter),
+      preservesPartitioning)
   }
 
   /**
@@ -650,8 +653,11 @@ abstract class RDD[T: ClassTag](
    */
   def mapPartitionsWithIndex[U: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U], preservesPartitioning: Boolean = false): RDD[U] = {
-    val func = (context: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter)
-    new MapPartitionsRDD(this, sc.clean(func), preservesPartitioning)
+    val cleanedF = sc.clean(f)
+    new MapPartitionsRDD(
+      this,
+      (context: TaskContext, index: Int, iter: Iterator[T]) => cleanedF(index, iter),
+      preservesPartitioning)
   }
 
   /**
@@ -1334,7 +1340,8 @@ abstract class RDD[T: ClassTag](
    * Creates tuples of the elements in this RDD by applying `f`.
    */
   def keyBy[K](f: T => K): RDD[(K, T)] = {
-    map(x => (f(x), x))
+    val cleanedF = sc.clean(f)
+    map(x => (cleanedF(x), x))
   }
 
   /** A private method for tests, to look at the contents of each partition */
