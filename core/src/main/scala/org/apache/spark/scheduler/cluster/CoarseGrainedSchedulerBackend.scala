@@ -252,7 +252,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     try {
       if (driverEndpoint != null) {
         logInfo("Shutting down all executors")
-        driverEndpoint.askWithReply[Boolean](StopExecutors)
+        driverEndpoint.askWithRetry[Boolean](StopExecutors)
       }
     } catch {
       case e: Exception =>
@@ -264,7 +264,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     stopExecutors()
     try {
       if (driverEndpoint != null) {
-        driverEndpoint.askWithReply[Boolean](StopDriver)
+        driverEndpoint.askWithRetry[Boolean](StopDriver)
       }
     } catch {
       case e: Exception =>
@@ -287,7 +287,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Called by subclasses when notified of a lost worker
   def removeExecutor(executorId: String, reason: String) {
     try {
-      driverEndpoint.askWithReply[Boolean](RemoveExecutor(executorId, reason))
+      driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
     } catch {
       case e: Exception =>
         throw new SparkException("Error notifying standalone scheduler's driver endpoint", e)
