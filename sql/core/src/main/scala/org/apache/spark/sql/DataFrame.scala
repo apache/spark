@@ -115,7 +115,7 @@ private[sql] object DataFrame {
 @Experimental
 class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
-    @DeveloperApi @transient val queryExecution: SQLContext#QueryExecution)
+    @DeveloperApi @transient var queryExecution: SQLContext#QueryExecution)
   extends RDDApi[Row] with Serializable {
 
   /**
@@ -1302,8 +1302,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   override def persist(): this.type = {
-    sqlContext.cacheManager.cacheQuery(this)
-    this
+    persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
   }
 
   /**
@@ -1318,6 +1317,7 @@ class DataFrame private[sql](
    */
   override def persist(newLevel: StorageLevel): this.type = {
     sqlContext.cacheManager.cacheQuery(this, None, newLevel)
+    this.queryExecution = new sqlContext.QueryExecution(this.queryExecution.logical)
     this
   }
 
@@ -1327,6 +1327,7 @@ class DataFrame private[sql](
    */
   override def unpersist(blocking: Boolean): this.type = {
     sqlContext.cacheManager.tryUncacheQuery(this, blocking)
+    this.queryExecution = new sqlContext.QueryExecution(this.queryExecution.logical)
     this
   }
 

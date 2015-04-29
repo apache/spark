@@ -117,6 +117,27 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     )
   }
 
+  test("SPARK-7158 collect and take return different results") {
+    import java.util.UUID
+    import org.apache.spark.sql.types._
+
+    val df = Seq(Tuple1(1), Tuple1(2), Tuple1(3)).toDF("index")
+    def id:() => String = () => { UUID.randomUUID().toString() }
+
+    // Expect the ID to have materialized at this point
+    val dfWithId = df.withColumn("id", callUDF(id, StringType))
+    val cached = dfWithId.cache()
+    val d0 = dfWithId.collect()
+    val d1 = cached.collect()
+    val d2 = cached.collect()
+
+    assert(d0.map(_(0)) === d2.map(_(0)))
+    assert(d0.map(_(1)) === d2.map(_(1)))
+
+    assert(d1.map(_(0)) === d2.map(_(0)))
+    assert(d1.map(_(1)) === d2.map(_(1)))
+  }
+
   test("grouping on nested fields") {
     read.json(sparkContext.parallelize("""{"nested": {"attribute": 1}, "value": 2}""" :: Nil))
      .registerTempTable("rows")
