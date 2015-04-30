@@ -31,7 +31,7 @@ import org.apache.spark.streaming.util._
 /**
  * Partition class for [[org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD]].
  * It contains information about the id of the blocks having this partition's data and
- * the segment of the write ahead log that backs the partition.
+ * the corresponding record handle in the write ahead log that backs the partition.
  * @param index index of the partition
  * @param blockId id of the block having the partition data
  * @param walRecordHandle Handle of the record in a write ahead log having the partition data
@@ -49,9 +49,9 @@ class WriteAheadLogBackedBlockRDDPartition(
  * This class represents a special case of the BlockRDD where the data blocks in
  * the block manager are also backed by data in write ahead logs. For reading
  * the data, this RDD first looks up the blocks by their ids in the block manager.
- * If it does not find them, it looks up the corresponding file segment. The finding
- * of the blocks by their ids can be skipped by setting the corresponding element in
- * isBlockIdValid to false. This is a performance optimization which does not affect
+ * If it does not find them, it looks up the WAL using the corresponding record handle.
+ * The lookup of the blocks from the block manager can be skipped by setting the corresponding
+ * element in isBlockIdValid to false. This is a performance optimization which does not affect
  * correctness, and it can be used in situations where it is known that the block
  * does not exist in the Spark executors (e.g. after a failed driver is restarted).
  *
@@ -62,7 +62,8 @@ class WriteAheadLogBackedBlockRDDPartition(
  * @param isBlockIdValid Whether the block Ids are valid (i.e., the blocks are present in the Spark
  *                         executors). If not, then block lookups by the block ids will be skipped.
  *                         By default, this is an empty array signifying true for all the blocks.
- * @param storeInBlockManager Whether to store in the block manager after reading from the segment
+ * @param storeInBlockManager Whether to store a block in the block manager
+ *                            after reading it from the WAL
  * @param storageLevel storage level to store when storing in block manager
  *                     (applicable when storeInBlockManager = true)
  */
@@ -79,7 +80,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
   require(
     blockIds.length == walRecordHandles.length,
     s"Number of block Ids (${blockIds.length}) must be " +
-      s" same as number of segments (${walRecordHandles.length}})")
+      s" same as number of WAL record handles (${walRecordHandles.length}})")
 
   require(
     isBlockIdValid.isEmpty || isBlockIdValid.length == blockIds.length,

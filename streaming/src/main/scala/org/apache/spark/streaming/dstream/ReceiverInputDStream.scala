@@ -71,15 +71,15 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
         val blockInfos = receiverTracker.getBlocksOfBatch(validTime).getOrElse(id, Seq.empty)
         val blockIds = blockInfos.map { _.blockId.asInstanceOf[BlockId] }.toArray
 
-        // Is WAL segment info present with all the blocks
-        val isWALSegmentInfoPresent = blockInfos.forall { _.walRecordHandleOption.nonEmpty }
+        // Are WAL record handles present with all the blocks
+        val areWALRecordHandlesPresent = blockInfos.forall { _.walRecordHandleOption.nonEmpty }
 
-        if (isWALSegmentInfoPresent) {
-          // If all the blocks have WAL segment info, then create a WALBackedBlockRDD
+        if (areWALRecordHandlesPresent) {
+          // If all the blocks have WAL record handle, then create a WALBackedBlockRDD
           val isBlockIdValid = blockInfos.map { _.isBlockIdValid() }.toArray
-          val blockWALSegments = blockInfos.map { _.walRecordHandleOption.get }.toArray
+          val walRecordHandles = blockInfos.map { _.walRecordHandleOption.get }.toArray
           new WriteAheadLogBackedBlockRDD[T](
-            ssc.sparkContext, blockIds, blockWALSegments, isBlockIdValid)
+            ssc.sparkContext, blockIds, walRecordHandles, isBlockIdValid)
         } else {
           // Else, create a BlockRDD. However, if there are some blocks with WAL info but not others
           // then that is unexpected and log a warning accordingly.

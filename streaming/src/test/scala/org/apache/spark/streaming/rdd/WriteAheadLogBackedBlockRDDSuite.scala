@@ -100,7 +100,7 @@ class WriteAheadLogBackedBlockRDDSuite
       blockManager.putIterator(blockId, block.iterator, StorageLevel.MEMORY_ONLY_SER)
     }
 
-    // Generate write ahead log file segments
+    // Generate write ahead log record handles
     val recordHandles = generateFakeRecordHandles(numPartitionsInBM) ++
       generateWALRecordHandles(data.takeRight(numPartitionsInWAL),
         blockIds.takeRight(numPartitionsInWAL))
