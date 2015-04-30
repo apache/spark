@@ -27,39 +27,36 @@ import org.apache.spark.sql.DataFrame
 
 class PipelineSuite extends FunSuite {
 
-  abstract class MyModel extends Model[MyModel] {
-    override def copy(extra: ParamMap): MyModel = this
-  }
-
-  abstract class MyTransformer extends Transformer {
-    override def copy(extra: ParamMap): MyTransformer = this
-  }
-
-  abstract class MyEstimator extends Estimator[MyModel] {
-    override def copy(extra: ParamMap): MyEstimator = this
-  }
+  abstract class MyModel extends Model[MyModel]
 
   test("pipeline") {
     val estimator0 = mock[Estimator[MyModel]]
     val model0 = mock[MyModel]
-    val transformer1 = mock[MyTransformer]
-    val estimator2 = mock[MyEstimator]
+    val transformer1 = mock[Transformer]
+    val estimator2 = mock[Estimator[MyModel]]
     val model2 = mock[MyModel]
-    val transformer3 = mock[MyTransformer]
+    val transformer3 = mock[Transformer]
     val dataset0 = mock[DataFrame]
     val dataset1 = mock[DataFrame]
     val dataset2 = mock[DataFrame]
     val dataset3 = mock[DataFrame]
     val dataset4 = mock[DataFrame]
 
-    when(estimator0.fit(meq(dataset0), any[ParamMap]())).thenReturn(model0)
-    when(model0.transform(meq(dataset0), any[ParamMap]())).thenReturn(dataset1)
+    when(estimator0.copy(any[ParamMap])).thenReturn(estimator0)
+    when(model0.copy(any[ParamMap])).thenReturn(model0)
+    when(transformer1.copy(any[ParamMap])).thenReturn(transformer1)
+    when(estimator2.copy(any[ParamMap])).thenReturn(estimator2)
+    when(model2.copy(any[ParamMap])).thenReturn(model2)
+    when(transformer3.copy(any[ParamMap])).thenReturn(transformer3)
+
+    when(estimator0.fit(meq(dataset0))).thenReturn(model0)
+    when(model0.transform(meq(dataset0))).thenReturn(dataset1)
     when(model0.parent).thenReturn(estimator0)
-    when(transformer1.transform(meq(dataset1), any[ParamMap])).thenReturn(dataset2)
-    when(estimator2.fit(meq(dataset2), any[ParamMap]())).thenReturn(model2)
-    when(model2.transform(meq(dataset2), any[ParamMap]())).thenReturn(dataset3)
+    when(transformer1.transform(meq(dataset1))).thenReturn(dataset2)
+    when(estimator2.fit(meq(dataset2))).thenReturn(model2)
+    when(model2.transform(meq(dataset2))).thenReturn(dataset3)
     when(model2.parent).thenReturn(estimator2)
-    when(transformer3.transform(meq(dataset3), any[ParamMap]())).thenReturn(dataset4)
+    when(transformer3.transform(meq(dataset3))).thenReturn(dataset4)
 
     val pipeline = new Pipeline()
       .setStages(Array(estimator0, transformer1, estimator2, transformer3))
@@ -71,11 +68,6 @@ class PipelineSuite extends FunSuite {
     assert(pipelineModel.stages(2).eq(model2))
     assert(pipelineModel.stages(3).eq(transformer3))
 
-    assert(pipelineModel.getModel(estimator0).eq(model0))
-    assert(pipelineModel.getModel(estimator2).eq(model2))
-    intercept[NoSuchElementException] {
-      pipelineModel.getModel(mock[Estimator[MyModel]])
-    }
     val output = pipelineModel.transform(dataset0)
     assert(output.eq(dataset4))
   }

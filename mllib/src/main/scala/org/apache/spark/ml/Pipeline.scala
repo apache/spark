@@ -153,7 +153,7 @@ class Pipeline extends Estimator[PipelineModel] {
 
   override def copy(extra: ParamMap): Pipeline = {
     val map = extractParamMap(extra)
-    val newStages = map(stages).map(_.copy(map))
+    val newStages = map(stages).map(_.copy(extra))
     new Pipeline().setStages(newStages)
   }
 
@@ -175,7 +175,8 @@ class PipelineModel private[ml] (
     private[ml] val stages: Array[Transformer])
   extends Model[PipelineModel] with Logging {
 
-  override def validateParams(paramMap: ParamMap): Unit = {
+  override def validateParams(): Unit = {
+    super.validateParams()
     stages.foreach(_.validateParams())
   }
 
@@ -196,6 +197,11 @@ class PipelineModel private[ml] (
       matched.head.asInstanceOf[M]
     }
   }
+
+  /**
+   * Gets a stage by index.
+   */
+  def getStage[T <: Transformer](i: Int): T = stages(i).asInstanceOf[T]
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
