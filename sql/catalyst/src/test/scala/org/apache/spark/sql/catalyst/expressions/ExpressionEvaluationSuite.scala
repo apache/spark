@@ -909,7 +909,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(ArrayOrdinalGetField(BoundReference(4, typeArray, true),
       Literal.create(null, IntegerType)), null, row)
 
-    def quickBuildGetField(expr: Expression, fieldName: String): StructGetField = {
+    def quickBuildGetField(expr: Expression, fieldName: String): GetField = {
       expr.dataType match {
         case StructType(fields) =>
           val field = fields.find(_.name == fieldName).get
