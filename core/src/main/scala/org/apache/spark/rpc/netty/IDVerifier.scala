@@ -14,28 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.rpc.netty
 
-package org.apache.spark.rpc
+import org.apache.spark.rpc.{RpcCallContext, RpcEnv, RpcEndpoint}
 
 /**
- * A callback that [[RpcEndpoint]] can use it to send back a message or failure. It's thread-safe
- * and can be called in any thread.
+ * A message used to ask the remote [[IDVerifier]] if an [[RpcEndpoint]] exists
  */
-private[spark] trait RpcCallContext {
+private[netty] case class ID(name: String)
 
-  /**
-   * Reply a message to the sender. If the sender is [[RpcEndpoint]], its [[RpcEndpoint.receive]]
-   * will be called.
-   */
-  def reply(response: Any): Unit
+/**
+ * An [[RpcEndpoint]] for remote [[RpcEnv]]s to query if a [[RpcEndpoint]] exists in this [[RpcEnv]]
+ */
+private[netty] class IDVerifier(
+    override val rpcEnv: RpcEnv, dispatcher: Dispatcher) extends RpcEndpoint {
 
-  /**
-   * Report a failure to the sender.
-   */
-  def sendFailure(e: Throwable): Unit
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case ID(name) => context.reply(dispatcher.verify(name))
+  }
+}
 
-  /**
-   * The sender of this message.
-   */
-  def senderAddress: RpcAddress
+private[netty] object IDVerifier {
+  val NAME = "id-verifier"
 }

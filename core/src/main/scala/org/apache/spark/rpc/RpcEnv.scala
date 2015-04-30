@@ -34,8 +34,11 @@ private[spark] object RpcEnv {
 
   private def getRpcEnvFactory(conf: SparkConf): RpcEnvFactory = {
     // Add more RpcEnv implementations here
-    val rpcEnvNames = Map("akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnvFactory")
-    val rpcEnvName = conf.get("spark.rpc", "akka")
+    val rpcEnvNames = Map("akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnvFactory",
+      "netty" -> "org.apache.spark.rpc.netty.NettyRpcEnvFactory")
+    // Use "netty" by default so that Jenkins can run all tests using NettyRpcEnv.
+    // Will change it back to "akka" before merging the new implementation.
+    val rpcEnvName = conf.get("spark.rpc", "netty")
     val rpcEnvFactoryClassName = rpcEnvNames.getOrElse(rpcEnvName.toLowerCase, rpcEnvName)
     Class.forName(rpcEnvFactoryClassName, true, Utils.getContextOrSparkClassLoader).
       newInstance().asInstanceOf[RpcEnvFactory]

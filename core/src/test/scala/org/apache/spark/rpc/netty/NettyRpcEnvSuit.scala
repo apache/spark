@@ -15,27 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rpc
+package org.apache.spark.rpc.netty
 
-/**
- * A callback that [[RpcEndpoint]] can use it to send back a message or failure. It's thread-safe
- * and can be called in any thread.
- */
-private[spark] trait RpcCallContext {
+import org.apache.spark.rpc._
+import org.apache.spark.{SecurityManager, SparkConf}
 
-  /**
-   * Reply a message to the sender. If the sender is [[RpcEndpoint]], its [[RpcEndpoint.receive]]
-   * will be called.
-   */
-  def reply(response: Any): Unit
+class NettyRpcEnvSuite extends RpcEnvSuite {
 
-  /**
-   * Report a failure to the sender.
-   */
-  def sendFailure(e: Throwable): Unit
+  override def createRpcEnv(conf: SparkConf, name: String, port: Int): RpcEnv = {
+    val config = RpcEnvConfig(conf, "test", "localhost", port, new SecurityManager(conf))
+    new NettyRpcEnvFactory().create(config)
+  }
 
-  /**
-   * The sender of this message.
-   */
-  def senderAddress: RpcAddress
+  test("nonexist-endpoint") {
+    val uri = env.uriOf("test", env.address, "nonexist-endpoint")
+    val e = intercept[RpcEndpointNotFoundException] {
+      env.setupEndpointRef("test", env.address, "nonexist-endpoint")
+    }
+    assert(e.getMessage.contains(uri))
+  }
+
 }

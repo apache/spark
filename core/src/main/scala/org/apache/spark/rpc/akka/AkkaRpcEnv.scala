@@ -167,9 +167,9 @@ private[spark] class AkkaRpcEnv private[akka] (
             _sender ! AkkaMessage(response, false)
           }
 
-          // Some RpcEndpoints need to know the sender's address
-          override val sender: RpcEndpointRef =
-            new AkkaRpcEndpointRef(defaultAddress, _sender, conf)
+          // Use "lazy" because most of RpcEndpoints don't need "senderAddress"
+          override lazy val senderAddress: RpcAddress =
+            new AkkaRpcEndpointRef(defaultAddress, _sender, conf).address
         })
       } else {
         endpoint.receive

@@ -80,7 +80,7 @@ class BlockManagerSlaveEndpoint(
     future.onSuccess { case response =>
       logDebug("Done " + actionMessage + ", response is " + response)
       context.reply(response)
-      logDebug("Sent response: " + response + " to " + context.sender)
+      logDebug("Sent response: " + response + " to " + context.senderAddress)
     }
     future.onFailure { case t: Throwable =>
       logError("Error in " + actionMessage, t)

@@ -216,7 +216,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case RegisterReceiver(streamId, typ, host, receiverEndpoint) =>
-        registerReceiver(streamId, typ, host, receiverEndpoint, context.sender.address)
+        registerReceiver(streamId, typ, host, receiverEndpoint, context.senderAddress)
         context.reply(true)
       case AddBlock(receivedBlockInfo) =>
         context.reply(addBlock(receivedBlockInfo))

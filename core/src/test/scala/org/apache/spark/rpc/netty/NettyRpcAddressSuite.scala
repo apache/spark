@@ -15,27 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rpc
+package org.apache.spark.rpc.netty
 
-/**
- * A callback that [[RpcEndpoint]] can use it to send back a message or failure. It's thread-safe
- * and can be called in any thread.
- */
-private[spark] trait RpcCallContext {
+import org.scalatest.FunSuite
 
-  /**
-   * Reply a message to the sender. If the sender is [[RpcEndpoint]], its [[RpcEndpoint.receive]]
-   * will be called.
-   */
-  def reply(response: Any): Unit
+class NettyRpcAddressSuite extends FunSuite {
 
-  /**
-   * Report a failure to the sender.
-   */
-  def sendFailure(e: Throwable): Unit
+  test("toString") {
+    val addr =  NettyRpcAddress("localhost", 12345, "test")
+    assert(addr.toString === "spark://test@localhost:12345")
+  }
 
-  /**
-   * The sender of this message.
-   */
-  def senderAddress: RpcAddress
 }
