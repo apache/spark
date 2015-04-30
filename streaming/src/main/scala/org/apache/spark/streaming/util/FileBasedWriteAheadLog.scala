@@ -17,6 +17,7 @@
 package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
+import java.util.{Iterator => JIterator}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -24,9 +25,9 @@ import scala.language.postfixOps
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.spark.Logging
-import org.apache.spark.util.{ThreadUtils, Clock, SystemClock}
-import WriteAheadLogManager._
+
+import org.apache.spark.util.ThreadUtils
+import org.apache.spark.{Logging, SparkConf}
 
 /**
  * This class manages write ahead log files.
@@ -34,37 +35,32 @@ import WriteAheadLogManager._
  * - Recovers the log files and the reads the recovered records upon failures.
  * - Cleans up old log files.
  *
- * Uses [[org.apache.spark.streaming.util.WriteAheadLogWriter]] to write
- * and [[org.apache.spark.streaming.util.WriteAheadLogReader]] to read.
+ * Uses [[org.apache.spark.streaming.util.FileBasedWriteAheadLogWriter]] to write
+ * and [[org.apache.spark.streaming.util.FileBasedWriteAheadLogReader]] to read.
  *
  * @param logDirectory Directory when rotating log files will be created.
  * @param hadoopConf Hadoop configuration for reading/writing log files.
- * @param rollingIntervalSecs The interval in seconds with which logs will be rolled over.
- *                            Default is one minute.
- * @param maxFailures Max number of failures that is tolerated for every attempt to write to log.
- *                    Default is three.
- * @param callerName Optional name of the class who is using this manager.
- * @param clock Optional clock that is used to check for rotation interval.
  */
-private[streaming] class WriteAheadLogManager(
+private[streaming] class FileBasedWriteAheadLog(
+    conf: SparkConf,
     logDirectory: String,
     hadoopConf: Configuration,
-    rollingIntervalSecs: Int = 60,
-    maxFailures: Int = 3,
-    callerName: String = "",
-    clock: Clock = new SystemClock
-  ) extends Logging {
+    rollingIntervalSecs: Int,
+    maxFailures: Int
+  ) extends WriteAheadLog with Logging {
+
+  import FileBasedWriteAheadLog._
 
   private val pastLogs = new ArrayBuffer[LogInfo]
-  private val callerNameTag =
-    if (callerName.nonEmpty) s" for $callerName" else ""
+  private val callerNameTag = getCallerName.map(c => s" for $c").getOrElse("")
+
   private val threadpoolName = s"WriteAheadLogManager $callerNameTag"
   implicit private val executionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonSingleThreadExecutor(threadpoolName))
   override protected val logName = s"WriteAheadLogManager $callerNameTag"
 
   private var currentLogPath: Option[String] = None
-  private var currentLogWriter: WriteAheadLogWriter = null
+  private var currentLogWriter: FileBasedWriteAheadLogWriter = null
   private var currentLogWriterStartTime: Long = -1L
   private var currentLogWriterStopTime: Long = -1L
 
@@ -75,14 +71,14 @@ private[streaming] class WriteAheadLogManager(
    * ByteBuffer to HDFS. When this method returns, the data is guaranteed to have been flushed
    * to HDFS, and will be available for readers to read.
    */
-  def writeToLog(byteBuffer: ByteBuffer): WriteAheadLogFileSegment = synchronized {
-    var fileSegment: WriteAheadLogFileSegment = null
+  def write(byteBuffer: ByteBuffer, time: Long): FileBasedWriteAheadLogSegment = synchronized {
+    var fileSegment: FileBasedWriteAheadLogSegment = null
     var failures = 0
     var lastException: Exception = null
     var succeeded = false
     while (!succeeded && failures < maxFailures) {
       try {
-        fileSegment = getLogWriter(clock.getTimeMillis()).write(byteBuffer)
+        fileSegment = getLogWriter(time).write(byteBuffer)
         succeeded = true
       } catch {
         case ex: Exception =>
@@ -99,6 +95,19 @@ private[streaming] class WriteAheadLogManager(
     fileSegment
   }
 
+  def read(segment: WriteAheadLogRecordHandle): ByteBuffer = {
+    val fileSegment = segment.asInstanceOf[FileBasedWriteAheadLogSegment]
+    var reader: FileBasedWriteAheadLogRandomReader = null
+    var byteBuffer: ByteBuffer = null
+    try {
+      reader = new FileBasedWriteAheadLogRandomReader(fileSegment.path, hadoopConf)
+      byteBuffer = reader.read(fileSegment)
+    } finally {
+      reader.close()
+    }
+    byteBuffer
+  }
+
   /**
    * Read all the existing logs from the log directory.
    *
@@ -108,12 +117,14 @@ private[streaming] class WriteAheadLogManager(
    * the latest the records. This does not deal with currently active log files, and
    * hence the implementation is kept simple.
    */
-  def readFromLog(): Iterator[ByteBuffer] = synchronized {
+  def readAll(): JIterator[ByteBuffer] = synchronized {
+    import scala.collection.JavaConversions._
     val logFilesToRead = pastLogs.map{ _.path} ++ currentLogPath
     logInfo("Reading from the logs: " + logFilesToRead.mkString("\n"))
+
     logFilesToRead.iterator.map { file =>
       logDebug(s"Creating log reader with $file")
-      new WriteAheadLogReader(file, hadoopConf)
+      new FileBasedWriteAheadLogReader(file, hadoopConf)
     } flatMap { x => x }
   }
 
@@ -129,7 +140,7 @@ private[streaming] class WriteAheadLogManager(
    * deleted. This should be set to true only for testing. Else the files will be deleted
    * asynchronously.
    */
-  def cleanupOldLogs(threshTime: Long, waitForCompletion: Boolean): Unit = {
+  def clean(threshTime: Long, waitForCompletion: Boolean): Unit = {
     val oldLogFiles = synchronized { pastLogs.filter { _.endTime < threshTime } }
     logInfo(s"Attempting to clear ${oldLogFiles.size} old log files in $logDirectory " +
       s"older than $threshTime: ${oldLogFiles.map { _.path }.mkString("\n")}")
@@ -160,7 +171,7 @@ private[streaming] class WriteAheadLogManager(
 
 
   /** Stop the manager, close any open log writer */
-  def stop(): Unit = synchronized {
+  def close(): Unit = synchronized {
     if (currentLogWriter != null) {
       currentLogWriter.close()
     }
@@ -169,7 +180,7 @@ private[streaming] class WriteAheadLogManager(
   }
 
   /** Get the current log writer while taking care of rotation */
-  private def getLogWriter(currentTime: Long): WriteAheadLogWriter = synchronized {
+  private def getLogWriter(currentTime: Long): FileBasedWriteAheadLogWriter = synchronized {
     if (currentLogWriter == null || currentTime > currentLogWriterStopTime) {
       resetWriter()
       currentLogPath.foreach {
@@ -180,7 +191,7 @@ private[streaming] class WriteAheadLogManager(
       val newLogPath = new Path(logDirectory,
         timeToLogFile(currentLogWriterStartTime, currentLogWriterStopTime))
       currentLogPath = Some(newLogPath.toString)
-      currentLogWriter = new WriteAheadLogWriter(currentLogPath.get, hadoopConf)
+      currentLogWriter = new FileBasedWriteAheadLogWriter(currentLogPath.get, hadoopConf)
     }
     currentLogWriter
   }
@@ -207,7 +218,7 @@ private[streaming] class WriteAheadLogManager(
   }
 }
 
-private[util] object WriteAheadLogManager {
+private[streaming] object FileBasedWriteAheadLog {
 
   case class LogInfo(startTime: Long, endTime: Long, path: String)
 
@@ -215,6 +226,11 @@ private[util] object WriteAheadLogManager {
 
   def timeToLogFile(startTime: Long, stopTime: Long): String = {
     s"log-$startTime-$stopTime"
+  }
+
+  def getCallerName(): Option[String] = {
+    val stackTraceClasses = Thread.currentThread.getStackTrace().map(_.getClassName)
+    stackTraceClasses.find(!_.contains("WriteAheadLog")).flatMap(_.split(".").lastOption)
   }
 
   /** Convert a sequence of files to a sequence of sorted LogInfo objects */

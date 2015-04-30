@@ -57,7 +57,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     logInfo("Connecting to driver: " + driverUrl)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       driver = Some(ref)
-      ref.sendWithReply[RegisteredExecutor.type](
+      ref.ask[RegisteredExecutor.type](
         RegisterExecutor(executorId, self, hostPort, cores, extractLogUrls))
     } onComplete {
       case Success(msg) => Utils.tryLogNonFatalError {
@@ -154,7 +154,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         executorConf,
         new SecurityManager(executorConf))
       val driver = fetcher.setupEndpointRefByURI(driverUrl)
-      val props = driver.askWithReply[Seq[(String, String)]](RetrieveSparkProps) ++
+      val props = driver.askWithRetry[Seq[(String, String)]](RetrieveSparkProps) ++
         Seq[(String, String)](("spark.app.id", appId))
       fetcher.shutdown()
 

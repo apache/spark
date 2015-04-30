@@ -36,7 +36,13 @@ object DefaultOptimizer extends Optimizer {
     // SubQueries are only needed for analysis and can be removed before execution.
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
-    Batch("Combine Limits", FixedPoint(100),
+    Batch("Operator Reordering", FixedPoint(100),
+      UnionPushdown,
+      CombineFilters,
+      PushPredicateThroughProject,
+      PushPredicateThroughJoin,
+      PushPredicateThroughGenerate,
+      ColumnPruning,
       CombineLimits) ::
     Batch("ConstantFolding", FixedPoint(100),
       NullPropagation,
@@ -49,13 +55,6 @@ object DefaultOptimizer extends Optimizer {
       OptimizeIn) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
-    Batch("Filter Pushdown", FixedPoint(100),
-      UnionPushdown,
-      CombineFilters,
-      PushPredicateThroughProject,
-      PushPredicateThroughJoin,
-      PushPredicateThroughGenerate,
-      ColumnPruning) ::
     Batch("LocalRelation", FixedPoint(100),
       ConvertToLocalRelation) :: Nil
 }

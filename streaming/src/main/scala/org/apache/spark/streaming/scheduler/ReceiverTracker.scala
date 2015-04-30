@@ -20,6 +20,7 @@ package org.apache.spark.streaming.scheduler
 import scala.collection.mutable.{HashMap, SynchronizedMap}
 import scala.language.existentials
 
+import org.apache.spark.streaming.util.WriteAheadLogUtils
 import org.apache.spark.{Logging, SerializableWritable, SparkEnv, SparkException}
 import org.apache.spark.rpc._
 import org.apache.spark.streaming.{StreamingContext, Time}
@@ -125,7 +126,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     receivedBlockTracker.cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
 
     // Signal the receivers to delete old block data
-    if (ssc.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)) {
+    if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
       logInfo(s"Cleanup old received batch data: $cleanupThreshTime")
       receiverInfo.values.flatMap { info => Option(info.endpoint) }
         .foreach { _.send(CleanupOldBlocks(cleanupThreshTime)) }
