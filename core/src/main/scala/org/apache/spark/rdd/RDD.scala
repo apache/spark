@@ -407,9 +407,24 @@ abstract class RDD[T: ClassTag](
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
-      new PartitionwiseSampledRDD[T, T](
-        this, new BernoulliCellSampler[T](x(0), x(1)), true, seed)
+      randomSampleWithRange(x(0), x(1), seed)
     }.toArray
+  }
+
+  /**
+   * Internal method exposed for Random Splits in DataFrames. Samples an RDD given a probability
+   * range.
+   * @param lb lower bound to use for the Bernoulli sampler
+   * @param ub upper bound to use for the Bernoulli sampler
+   * @param seed the seed for the Random number generator
+   * @return A random sub-sample of the RDD without replacement.
+   */
+  private[spark] def randomSampleWithRange(lb: Double, ub: Double, seed: Long): RDD[T] = {
+    this.mapPartitionsWithIndex { case (index, partition) =>
+      val sampler = new BernoulliCellSampler[T](lb, ub)
+      sampler.setSeed(seed + index)
+      sampler.sample(partition)
+    }
   }
 
   /**

@@ -17,10 +17,11 @@
 
 package org.apache.spark
 
-import java.util.concurrent.Semaphore
+import java.util.concurrent.{TimeUnit, Semaphore}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.spark.scheduler._
 import org.scalatest.FunSuite
 
 /**
@@ -188,5 +189,48 @@ class ThreadingSuite extends FunSuite with LocalSparkContext {
     sem.acquire(5)
     assert(sc.getLocalProperty("test") === "parent")
     assert(sc.getLocalProperty("Foo") === null)
+  }
+
+  test("mutations to local properties should not affect submitted jobs (SPARK-6629)") {
+    val jobStarted = new Semaphore(0)
+    val jobEnded = new Semaphore(0)
+    @volatile var jobResult: JobResult = null
+
+    sc = new SparkContext("local", "test")
+    sc.setJobGroup("originalJobGroupId", "description")
+    sc.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        jobStarted.release()
+      }
+      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+        jobResult = jobEnd.jobResult
+        jobEnded.release()
+      }
+    })
+
+    // Create a new thread which will inherit the current thread's properties
+    val thread = new Thread() {
+      override def run(): Unit = {
+        assert(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID) === "originalJobGroupId")
+        // Sleeps for a total of 10 seconds, but allows cancellation to interrupt the task
+        try {
+          sc.parallelize(1 to 100).foreach { x =>
+            Thread.sleep(100)
+          }
+        } catch {
+          case s: SparkException => // ignored so that we don't print noise in test logs
+        }
+      }
+    }
+    thread.start()
+    // Wait for the job to start, then mutate the original properties, which should have been
+    // inherited by the running job but hopefully defensively copied or snapshotted:
+    jobStarted.tryAcquire(10, TimeUnit.SECONDS)
+    sc.setJobGroup("modifiedJobGroupId", "description")
+    // Canceling the original job group should cancel the running job. In other words, the
+    // modification of the properties object should not affect the properties of running jobs
+    sc.cancelJobGroup("originalJobGroupId")
+    jobEnded.tryAcquire(10, TimeUnit.SECONDS)
+    assert(jobResult.isInstanceOf[JobFailed])
   }
 }
