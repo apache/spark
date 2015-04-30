@@ -29,7 +29,7 @@
 #   SPARK_NICENESS The scheduling priority for daemons. Defaults to 0.
 ##
 
-usage="Usage: spark-daemon.sh [--config <conf-dir>] (start|stop) <spark-command> <spark-instance-number> <args...>"
+usage="Usage: spark-daemon.sh [--config <conf-dir>] (start|stop|status) <spark-command> <spark-instance-number> <args...>"
 
 # if no args specified, show usage
 if [ $# -le 1 ]; then
@@ -121,45 +121,63 @@ if [ "$SPARK_NICENESS" = "" ]; then
     export SPARK_NICENESS=0
 fi
 
+run_command() {
+  mode="$1"
+  shift
+
+  mkdir -p "$SPARK_PID_DIR"
+
+  if [ -f "$pid" ]; then
+    TARGET_ID="$(cat "$pid")"
+    if [[ $(ps -p "$TARGET_ID" -o comm=) =~ "java" ]]; then
+      echo "$command running as process $TARGET_ID.  Stop it first."
+      exit 1
+    fi
+  fi
+
+  if [ "$SPARK_MASTER" != "" ]; then
+    echo rsync from "$SPARK_MASTER"
+    rsync -a -e ssh --delete --exclude=.svn --exclude='logs/*' --exclude='contrib/hod/logs/*' "$SPARK_MASTER/" "$SPARK_HOME"
+  fi
+
+  spark_rotate_log "$log"
+  echo "starting $command, logging to $log"
+
+  case "$mode" in
+    (class)
+      nohup nice -n "$SPARK_NICENESS" "$SPARK_PREFIX"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
+      newpid="$!"
+      ;;
+
+    (submit)
+      nohup nice -n "$SPARK_NICENESS" "$SPARK_PREFIX"/bin/spark-submit --class $command "$@" >> "$log" 2>&1 < /dev/null &
+      newpid="$!"
+      ;;
+
+    (*)
+      echo "unknown mode: $mode"
+      exit 1
+      ;;
+  esac
+
+  echo "$newpid" > "$pid"
+  sleep 2
+  # Check if the process has died; in that case we'll tail the log so the user can see
+  if [[ ! $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
+    echo "failed to launch $command:"
+    tail -2 "$log" | sed 's/^/  /'
+    echo "full log in $log"
+  fi
+}
 
 case $option in
 
-  (start|spark-submit)
+  (submit)
+    run_command submit "$@"
+    ;;
 
-    mkdir -p "$SPARK_PID_DIR"
-
-    if [ -f $pid ]; then
-      TARGET_ID="$(cat "$pid")"
-      if [[ $(ps -p "$TARGET_ID" -o args=) =~ $command ]]; then
-        echo "$command running as process $TARGET_ID.  Stop it first."
-        exit 1
-      fi
-    fi
-
-    if [ "$SPARK_MASTER" != "" ]; then
-      echo rsync from "$SPARK_MASTER"
-      rsync -a -e ssh --delete --exclude=.svn --exclude='logs/*' --exclude='contrib/hod/logs/*' $SPARK_MASTER/ "$SPARK_HOME"
-    fi
-
-    spark_rotate_log "$log"
-    echo "starting $command, logging to $log"
-    if [ $option == spark-submit ]; then
-      source "$SPARK_HOME"/bin/utils.sh
-      gatherSparkSubmitOpts "$@"
-      nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-submit --class $command \
-        "${SUBMISSION_OPTS[@]}" spark-internal "${APPLICATION_OPTS[@]}" >> "$log" 2>&1 < /dev/null &
-    else
-      nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
-    fi
-    newpid=$!
-    echo $newpid > $pid
-    sleep 2
-    # Check if the process has died; in that case we'll tail the log so the user can see
-    if [[ ! $(ps -p "$newpid" -o args=) =~ $command ]]; then
-      echo "failed to launch $command:"
-      tail -2 "$log" | sed 's/^/  /'
-      echo "full log in $log"
-    fi
+  (start)
+    run_command class "$@"
     ;;
 
   (stop)
@@ -177,6 +195,23 @@ case $option in
     fi
     ;;
 
+  (status)
+
+    if [ -f $pid ]; then
+      TARGET_ID="$(cat "$pid")"
+      if [[ $(ps -p "$TARGET_ID" -o comm=) =~ "java" ]]; then
+        echo $command is running.
+        exit 0
+      else
+        echo $pid file is present but $command not running
+        exit 1
+      fi  
+    else
+      echo $command not running.
+      exit 2
+    fi  
+    ;;
+  
   (*)
     echo $usage
     exit 1

@@ -39,7 +39,7 @@ class Estimator(Params):
         Fits a model to the input dataset with optional parameters.
 
         :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.SchemaRDD`
+                        :py:class:`pyspark.sql.DataFrame`
         :param params: an optional param map that overwrites embedded
                        params
         :returns: fitted model
@@ -62,7 +62,7 @@ class Transformer(Params):
         Transforms the input dataset with optional parameters.
 
         :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.SchemaRDD`
+                        :py:class:`pyspark.sql.DataFrame`
         :param params: an optional param map that overwrites embedded
                        params
         :returns: transformed dataset
@@ -124,15 +124,15 @@ class Pipeline(Estimator):
         Sets params for Pipeline.
         """
         kwargs = self.setParams._input_kwargs
-        return self._set_params(**kwargs)
+        return self._set(**kwargs)
 
     def fit(self, dataset, params={}):
-        paramMap = self._merge_params(params)
+        paramMap = self.extractParamMap(params)
         stages = paramMap[self.stages]
         for stage in stages:
             if not (isinstance(stage, Estimator) or isinstance(stage, Transformer)):
-                raise ValueError(
-                    "Cannot recognize a pipeline stage of type %s." % type(stage).__name__)
+                raise TypeError(
+                    "Cannot recognize a pipeline stage of type %s." % type(stage))
         indexOfLastEstimator = -1
         for i, stage in enumerate(stages):
             if isinstance(stage, Estimator):
@@ -164,7 +164,7 @@ class PipelineModel(Transformer):
         self.transformers = transformers
 
     def transform(self, dataset, params={}):
-        paramMap = self._merge_params(params)
+        paramMap = self.extractParamMap(params)
         for t in self.transformers:
             dataset = t.transform(dataset, paramMap)
         return dataset

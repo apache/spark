@@ -32,6 +32,7 @@ private[spark] object SQLConf {
   val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val CODEGEN_ENABLED = "spark.sql.codegen"
+  val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
   val DIALECT = "spark.sql.dialect"
 
   val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
@@ -41,21 +42,32 @@ private[spark] object SQLConf {
   val PARQUET_FILTER_PUSHDOWN_ENABLED = "spark.sql.parquet.filterPushdown"
   val PARQUET_USE_DATA_SOURCE_API = "spark.sql.parquet.useDataSourceApi"
 
+  val HIVE_VERIFY_PARTITIONPATH = "spark.sql.hive.verifyPartitionPath"
+
   val COLUMN_NAME_OF_CORRUPT_RECORD = "spark.sql.columnNameOfCorruptRecord"
   val BROADCAST_TIMEOUT = "spark.sql.broadcastTimeout"
 
   // Options that control which operators can be chosen by the query planner.  These should be
   // considered hints and may be ignored by future versions of Spark SQL.
   val EXTERNAL_SORT = "spark.sql.planner.externalSort"
+  val SORTMERGE_JOIN = "spark.sql.planner.sortMergeJoin"
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = "spark.sql.sources.default"
+  // This is used to control the when we will split a schema's JSON string to multiple pieces
+  // in order to fit the JSON string in metastore's table property (by default, the value has
+  // a length restriction of 4000 characters). We will split the JSON string of a schema
+  // to its length exceeds the threshold.
+  val SCHEMA_STRING_LENGTH_THRESHOLD = "spark.sql.sources.schemaStringLengthThreshold"
 
-  // Whether to perform eager analysis on a DataFrame.
-  val DATAFRAME_EAGER_ANALYSIS = "spark.sql.dataframe.eagerAnalysis"
+  // Whether to perform eager analysis when constructing a dataframe.
+  // Set to false when debugging requires the ability to look at invalid query plans.
+  val DATAFRAME_EAGER_ANALYSIS = "spark.sql.eagerAnalysis"
+
+  val USE_SQL_SERIALIZER2 = "spark.sql.useSerializer2"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -116,8 +128,19 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def parquetUseDataSourceApi =
     getConf(PARQUET_USE_DATA_SOURCE_API, "true").toBoolean
 
+  /** When true uses verifyPartitionPath to prune the path which is not exists. */
+  private[spark] def verifyPartitionPath =
+    getConf(HIVE_VERIFY_PARTITIONPATH, "true").toBoolean
+
   /** When true the planner will use the external sort, which may spill to disk. */
   private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT, "false").toBoolean
+
+  /**
+   * Sort merge join would sort the two side of join first, and then iterate both sides together
+   * only once to get all matches. Using sort merge join can save a lot of memory usage compared
+   * to HashJoin.
+   */
+  private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN, "false").toBoolean
 
   /**
    * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode
@@ -129,6 +152,21 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
    * Defaults to false as this feature is currently experimental.
    */
   private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, "false").toBoolean
+
+  /**
+   * caseSensitive analysis true by default
+   */
+  def caseSensitiveAnalysis: Boolean = getConf(CatalystConf.CASE_SENSITIVE, "true").toBoolean
+
+  /**
+   * When set to true, Spark SQL will use managed memory for certain operations.  This option only
+   * takes effect if codegen is enabled.
+   *
+   * Defaults to false as this feature is currently experimental.
+   */
+  private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, "false").toBoolean
+
+  private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2, "true").toBoolean
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
@@ -178,6 +216,11 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def defaultDataSourceName: String =
     getConf(DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.parquet")
+
+  // Do not use a value larger than 4000 as the default value of this property.
+  // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
+  private[spark] def schemaStringLengthThreshold: Int =
+    getConf(SCHEMA_STRING_LENGTH_THRESHOLD, "4000").toInt
 
   private[spark] def dataFrameEagerAnalysis: Boolean =
     getConf(DATAFRAME_EAGER_ANALYSIS, "true").toBoolean

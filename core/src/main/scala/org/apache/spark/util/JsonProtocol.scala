@@ -89,6 +89,8 @@ private[spark] object JsonProtocol {
         executorAddedToJson(executorAdded)
       case executorRemoved: SparkListenerExecutorRemoved =>
         executorRemovedToJson(executorRemoved)
+      case logStart: SparkListenerLogStart =>
+        logStartToJson(logStart)
       // These aren't used, but keeps compiler happy
       case SparkListenerExecutorMetricsUpdate(_, _) => JNothing
     }
@@ -214,6 +216,11 @@ private[spark] object JsonProtocol {
     ("Removed Reason" -> executorRemoved.reason)
   }
 
+  def logStartToJson(logStart: SparkListenerLogStart): JValue = {
+    ("Event" -> Utils.getFormattedClassName(logStart)) ~
+    ("Spark Version" -> SPARK_VERSION)
+  }
+
   /** ------------------------------------------------------------------- *
    * JSON serialization methods for classes SparkListenerEvents depend on |
    * -------------------------------------------------------------------- */
@@ -294,7 +301,6 @@ private[spark] object JsonProtocol {
     ("Local Blocks Fetched" -> shuffleReadMetrics.localBlocksFetched) ~
     ("Fetch Wait Time" -> shuffleReadMetrics.fetchWaitTime) ~
     ("Remote Bytes Read" -> shuffleReadMetrics.remoteBytesRead) ~
-    ("Local Read Time" -> shuffleReadMetrics.localReadTime) ~
     ("Local Bytes Read" -> shuffleReadMetrics.localBytesRead) ~
     ("Total Records Read" -> shuffleReadMetrics.recordsRead)
   }
@@ -448,6 +454,7 @@ private[spark] object JsonProtocol {
     val applicationEnd = Utils.getFormattedClassName(SparkListenerApplicationEnd)
     val executorAdded = Utils.getFormattedClassName(SparkListenerExecutorAdded)
     val executorRemoved = Utils.getFormattedClassName(SparkListenerExecutorRemoved)
+    val logStart = Utils.getFormattedClassName(SparkListenerLogStart)
 
     (json \ "Event").extract[String] match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
@@ -465,6 +472,7 @@ private[spark] object JsonProtocol {
       case `applicationEnd` => applicationEndFromJson(json)
       case `executorAdded` => executorAddedFromJson(json)
       case `executorRemoved` => executorRemovedFromJson(json)
+      case `logStart` => logStartFromJson(json)
     }
   }
 
@@ -575,6 +583,11 @@ private[spark] object JsonProtocol {
     SparkListenerExecutorRemoved(time, executorId, reason)
   }
 
+  def logStartFromJson(json: JValue): SparkListenerLogStart = {
+    val sparkVersion = (json \ "Spark Version").extract[String]
+    SparkListenerLogStart(sparkVersion)
+  }
+
   /** --------------------------------------------------------------------- *
    * JSON deserialization methods for classes SparkListenerEvents depend on |
    * ---------------------------------------------------------------------- */
@@ -676,7 +689,6 @@ private[spark] object JsonProtocol {
     metrics.incLocalBlocksFetched((json \ "Local Blocks Fetched").extract[Int])
     metrics.incFetchWaitTime((json \ "Fetch Wait Time").extract[Long])
     metrics.incRemoteBytesRead((json \ "Remote Bytes Read").extract[Long])
-    metrics.incLocalReadTime((json \ "Local Read Time").extractOpt[Long].getOrElse(0))
     metrics.incLocalBytesRead((json \ "Local Bytes Read").extractOpt[Long].getOrElse(0))
     metrics.incRecordsRead((json \ "Total Records Read").extractOpt[Long].getOrElse(0))
     metrics

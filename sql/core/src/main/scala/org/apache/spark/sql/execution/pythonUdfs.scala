@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import java.util.{List => JList, Map => JMap}
 
+import org.apache.spark.rdd.RDD
+
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
@@ -48,11 +50,13 @@ private[spark] case class PythonUDF(
     dataType: DataType,
     children: Seq[Expression]) extends Expression with SparkLogging {
 
-  override def toString = s"PythonUDF#$name(${children.mkString(",")})"
+  override def toString: String = s"PythonUDF#$name(${children.mkString(",")})"
 
   def nullable: Boolean = true
 
-  override def eval(input: Row) = sys.error("PythonUDFs can not be directly evaluated.")
+  override def eval(input: Row): PythonUDF.this.EvaluatedType = {
+    sys.error("PythonUDFs can not be directly evaluated.")
+  }
 }
 
 /**
@@ -63,7 +67,7 @@ private[spark] case class PythonUDF(
  * multiple child operators.
  */
 private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan) = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Skip EvaluatePython nodes.
     case p: EvaluatePython => p
 
@@ -107,7 +111,7 @@ private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
 }
 
 object EvaluatePython {
-  def apply(udf: PythonUDF, child: LogicalPlan) =
+  def apply(udf: PythonUDF, child: LogicalPlan): EvaluatePython =
     new EvaluatePython(udf, child, AttributeReference("pythonUDF", udf.dataType)())
 
   /**
@@ -136,6 +140,7 @@ object EvaluatePython {
     case (ud, udt: UserDefinedType[_]) => toJava(udt.serialize(ud), udt.sqlType)
 
     case (date: Int, DateType) => DateUtils.toJavaDate(date)
+    case (s: UTF8String, StringType) => s.toString
 
     // Pyrolite can handle Timestamp and Decimal
     case (other, _) => other
@@ -188,7 +193,8 @@ object EvaluatePython {
     case (c: Long, IntegerType) => c.toInt
     case (c: Int, LongType) => c.toLong
     case (c: Double, FloatType) => c.toFloat
-    case (c, StringType) if !c.isInstanceOf[String] => c.toString
+    case (c: String, StringType) => UTF8String(c)
+    case (c, StringType) if !c.isInstanceOf[String] => UTF8String(c.toString)
 
     case (c, _) => c
   }
@@ -205,10 +211,10 @@ case class EvaluatePython(
     resultAttribute: AttributeReference)
   extends logical.UnaryNode {
 
-  def output = child.output :+ resultAttribute
+  def output: Seq[Attribute] = child.output :+ resultAttribute
 
   // References should not include the produced attribute.
-  override def references = udf.references
+  override def references: AttributeSet = udf.references
 }
 
 /**
@@ -219,9 +225,10 @@ case class EvaluatePython(
 @DeveloperApi
 case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: SparkPlan)
   extends SparkPlan {
-  def children = child :: Nil
 
-  def execute() = {
+  def children: Seq[SparkPlan] = child :: Nil
+
+  def execute(): RDD[Row] = {
     // TODO: Clean up after ourselves?
     val childResults = child.execute().map(_.copy()).cache()
 

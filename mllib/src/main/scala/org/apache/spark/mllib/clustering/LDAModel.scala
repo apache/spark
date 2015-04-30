@@ -130,7 +130,7 @@ abstract class LDAModel private[clustering] {
 
   /* TODO
    * Compute the estimated topic distribution for each document.
-   * This is often called “theta” in the literature.
+   * This is often called 'theta' in the literature.
    *
    * @param documents  RDD of documents, which are term (word) count vectors paired with IDs.
    *                   The term count vectors are "bags of words" with a fixed-size vocabulary
@@ -203,7 +203,7 @@ class DistributedLDAModel private (
 
   import LDA._
 
-  private[clustering] def this(state: LDA.EMOptimizer, iterationTimes: Array[Double]) = {
+  private[clustering] def this(state: EMLDAOptimizer, iterationTimes: Array[Double]) = {
     this(state.graph, state.globalTopicTotals, state.k, state.vocabSize, state.docConcentration,
       state.topicConcentration, iterationTimes)
   }

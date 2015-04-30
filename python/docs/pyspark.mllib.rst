@@ -16,6 +16,13 @@ pyspark.mllib.clustering module
     :members:
     :undoc-members:
 
+pyspark.mllib.evaluation module
+-------------------------------
+
+.. automodule:: pyspark.mllib.evaluation
+      :members:
+      :undoc-members:
+
 pyspark.mllib.feature module
 -------------------------------
 
@@ -23,6 +30,13 @@ pyspark.mllib.feature module
     :members:
     :undoc-members:
     :show-inheritance:
+
+pyspark.mllib.fpm module
+------------------------
+
+.. automodule:: pyspark.mllib.fpm
+    :members:
+    :undoc-members:
 
 pyspark.mllib.linalg module
 ---------------------------

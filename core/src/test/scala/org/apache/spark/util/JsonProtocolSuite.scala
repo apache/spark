@@ -270,7 +270,6 @@ class JsonProtocolSuite extends FunSuite {
       .removeField { case (field, _) => field == "Local Read Time" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
     assert(newMetrics.shuffleReadMetrics.get.localBytesRead == 0)
-    assert(newMetrics.shuffleReadMetrics.get.localReadTime == 0)
   }
 
   test("SparkListenerApplicationStart backwards compatibility") {
@@ -708,7 +707,6 @@ class JsonProtocolSuite extends FunSuite {
       sr.incFetchWaitTime(a + d)
       sr.incRemoteBlocksFetched(f)
       sr.incRecordsRead(if (hasRecords) (b + d) / 100 else -1)
-      sr.incLocalReadTime(a + e)
       sr.incLocalBytesRead(a + f)
       t.setShuffleReadMetrics(Some(sr))
     }
@@ -956,7 +954,6 @@ class JsonProtocolSuite extends FunSuite {
       |      "Local Blocks Fetched": 700,
       |      "Fetch Wait Time": 900,
       |      "Remote Bytes Read": 1000,
-      |      "Local Read Time": 1000,
       |      "Local Bytes Read": 1100,
       |      "Total Records Read" : 10
       |    },

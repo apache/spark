@@ -158,6 +158,52 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
       }
     }
   }
+
+  test("runWithValidation stops early and performs better on a validation dataset") {
+    // Set numIterations large enough so that it stops early.
+    val numIterations = 20
+    val trainRdd = sc.parallelize(GradientBoostedTreesSuite.trainData, 2)
+    val validateRdd = sc.parallelize(GradientBoostedTreesSuite.validateData, 2)
+
+    val algos = Array(Regression, Regression, Classification)
+    val losses = Array(SquaredError, AbsoluteError, LogLoss)
+    (algos zip losses) map {
+      case (algo, loss) => {
+        val treeStrategy = new Strategy(algo = algo, impurity = Variance, maxDepth = 2,
+          categoricalFeaturesInfo = Map.empty)
+        val boostingStrategy =
+          new BoostingStrategy(treeStrategy, loss, numIterations, validationTol = 0.0)
+        val gbtValidate = new GradientBoostedTrees(boostingStrategy)
+          .runWithValidation(trainRdd, validateRdd)
+        val numTrees = gbtValidate.numTrees
+        assert(numTrees !== numIterations)
+
+        // Test that it performs better on the validation dataset.
+        val gbt = new GradientBoostedTrees(boostingStrategy).run(trainRdd)
+        val (errorWithoutValidation, errorWithValidation) = {
+          if (algo == Classification) {
+            val remappedRdd = validateRdd.map(x => new LabeledPoint(2 * x.label - 1, x.features))
+            (loss.computeError(gbt, remappedRdd), loss.computeError(gbtValidate, remappedRdd))
+          } else {
+            (loss.computeError(gbt, validateRdd), loss.computeError(gbtValidate, validateRdd))
+          }
+        }
+        assert(errorWithValidation <= errorWithoutValidation)
+
+        // Test that results from evaluateEachIteration comply with runWithValidation.
+        // Note that convergenceTol is set to 0.0
+        val evaluationArray = gbt.evaluateEachIteration(validateRdd, loss)
+        assert(evaluationArray.length === numIterations)
+        assert(evaluationArray(numTrees) > evaluationArray(numTrees - 1))
+        var i = 1
+        while (i < numTrees) {
+          assert(evaluationArray(i) <= evaluationArray(i - 1))
+          i += 1
+        }
+      }
+    }
+  }
+
 }
 
 private object GradientBoostedTreesSuite {
@@ -166,4 +212,6 @@ private object GradientBoostedTreesSuite {
   val testCombinations = Array((10, 1.0, 1.0), (10, 0.1, 1.0), (10, 0.5, 0.75), (10, 0.1, 0.75))
 
   val data = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100)
+  val trainData = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 120)
+  val validateData = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80)
 }

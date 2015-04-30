@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.sources
 
 import org.apache.spark.annotation.{Experimental, DeveloperApi}
@@ -90,12 +91,6 @@ trait CreatableRelationProvider {
     * existing data is expected to be overwritten by the contents of the DataFrame.
     * ErrorIfExists mode means that when saving a DataFrame to a data source,
     * if data already exists, an exception is expected to be thrown.
-    *
-    * @param sqlContext
-    * @param mode
-    * @param parameters
-    * @param data
-    * @return
     */
   def createRelation(
       sqlContext: SQLContext,
@@ -131,6 +126,16 @@ abstract class BaseRelation {
    * could lead to execution plans that are suboptimal (i.e. broadcasting a very large table).
    */
   def sizeInBytes: Long = sqlContext.conf.defaultSizeInBytes
+
+  /**
+   * Whether does it need to convert the objects in Row to internal representation, for example:
+   *  java.lang.String -> UTF8String
+   *  java.lang.Decimal -> Decimal
+   *
+   * Note: The internal representation is not stable across releases and thus data sources outside
+   * of Spark SQL should leave this as true.
+   */
+  def needConversion: Boolean = true
 }
 
 /**
@@ -138,7 +143,7 @@ abstract class BaseRelation {
  * A BaseRelation that can produce all of its tuples as an RDD of Row objects.
  */
 @DeveloperApi
-trait TableScan extends BaseRelation {
+trait TableScan {
   def buildScan(): RDD[Row]
 }
 
@@ -148,7 +153,7 @@ trait TableScan extends BaseRelation {
  * containing all of its tuples as Row objects.
  */
 @DeveloperApi
-trait PrunedScan extends BaseRelation {
+trait PrunedScan {
   def buildScan(requiredColumns: Array[String]): RDD[Row]
 }
 
@@ -157,29 +162,18 @@ trait PrunedScan extends BaseRelation {
  * A BaseRelation that can eliminate unneeded columns and filter using selected
  * predicates before producing an RDD containing all matching tuples as Row objects.
  *
+ * The actual filter should be the conjunction of all `filters`,
+ * i.e. they should be "and" together.
+ *
  * The pushed down filters are currently purely an optimization as they will all be evaluated
  * again.  This means it is safe to use them with methods that produce false positives such
  * as filtering partitions based on a bloom filter.
  */
 @DeveloperApi
-trait PrunedFilteredScan extends BaseRelation {
+trait PrunedFilteredScan {
   def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row]
 }
 
-/**
- * ::Experimental::
- * An interface for experimenting with a more direct connection to the query planner.  Compared to
- * [[PrunedFilteredScan]], this operator receives the raw expressions from the
- * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].  Unlike the other APIs this
- * interface is not designed to be binary compatible across releases and thus should only be used
- * for experimentation.
- */
-@Experimental
-trait CatalystScan extends BaseRelation {
-  def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row]
-}
-
-@DeveloperApi
 /**
  * ::DeveloperApi::
  * A BaseRelation that can be used to insert data into it through the insert method.
@@ -196,6 +190,20 @@ trait CatalystScan extends BaseRelation {
  * If a data source needs to check the actual nullability of a field, it needs to do it in the
  * insert method.
  */
-trait InsertableRelation extends BaseRelation {
+@DeveloperApi
+trait InsertableRelation {
   def insert(data: DataFrame, overwrite: Boolean): Unit
+}
+
+/**
+ * ::Experimental::
+ * An interface for experimenting with a more direct connection to the query planner.  Compared to
+ * [[PrunedFilteredScan]], this operator receives the raw expressions from the
+ * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].  Unlike the other APIs this
+ * interface is NOT designed to be binary compatible across releases and thus should only be used
+ * for experimentation.
+ */
+@Experimental
+trait CatalystScan {
+  def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row]
 }

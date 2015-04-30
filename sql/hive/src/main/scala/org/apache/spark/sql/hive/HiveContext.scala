@@ -54,9 +54,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
   }
 
-  /* By default it should be case insensitive to match Hive */
-  conf.setConf(CatalystConf.CASE_SENSITIVE, "false")
-
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
    * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
@@ -64,6 +61,15 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   protected[sql] def convertMetastoreParquet: Boolean =
     getConf("spark.sql.hive.convertMetastoreParquet", "true") == "true"
+
+  /**
+   * When true, also tries to merge possibly different but compatible Parquet schemas in different
+   * Parquet data files.
+   *
+   * This configuration is only effective when "spark.sql.hive.convertMetastoreParquet" is true.
+   */
+  protected[sql] def convertMetastoreParquetWithSchemaMerging: Boolean =
+    getConf("spark.sql.hive.convertMetastoreParquet.mergeSchema", "false") == "true"
 
   /**
    * When true, a table created by a Hive CTAS statement (no USING clause) will be
@@ -92,7 +98,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     if (conf.dialect == "sql") {
       super.sql(substituted)
     } else if (conf.dialect == "hiveql") {
-      val ddlPlan = ddlParserWithHiveQL(sqlText, exceptionOnError = false)
+      val ddlPlan = ddlParserWithHiveQL.parse(sqlText, exceptionOnError = false)
       DataFrame(this, ddlPlan.getOrElse(HiveQl.parseSql(substituted)))
     }  else {
       sys.error(s"Unsupported SQL dialect: ${conf.dialect}. Try 'sql' or 'hiveql'")
@@ -180,18 +186,19 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           val tableFullName =
             relation.hiveQlTable.getDbName + "." + relation.hiveQlTable.getTableName
 
-          catalog.client.alterTable(tableFullName, new Table(hiveTTable))
+          catalog.synchronized {
+            catalog.client.alterTable(tableFullName, new Table(hiveTTable))
+          }
         }
       case otherRelation =>
-        throw new NotImplementedError(
-          s"Analyze has only implemented for Hive tables, " +
-            s"but $tableName is a ${otherRelation.nodeName}")
+        throw new UnsupportedOperationException(
+          s"Analyze only works for Hive tables, but $tableName is a ${otherRelation.nodeName}")
     }
   }
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   @transient
-  protected lazy val outputBuffer =  new java.io.OutputStream {
+  protected lazy val outputBuffer = new java.io.OutputStream {
     var pos: Int = 0
     var buffer = new Array[Int](10240)
     def write(i: Int): Unit = {
@@ -199,7 +206,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       pos = (pos + 1) % buffer.size
     }
 
-    override def toString = {
+    override def toString: String = {
       val (end, start) = buffer.splitAt(pos)
       val input = new java.io.InputStream {
         val iterator = (start ++ end).iterator
@@ -218,33 +225,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
-  /**
-   * SQLConf and HiveConf contracts:
-   *
-   * 1. reuse existing started SessionState if any
-   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
-   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
-   *    set in the SQLConf *as well as* in the HiveConf.
-   */
-  @transient protected[hive] lazy val sessionState: SessionState = {
-    var state = SessionState.get()
-    if (state == null) {
-      state = new SessionState(new HiveConf(classOf[SessionState]))
-      SessionState.start(state)
-    }
-    if (state.out == null) {
-      state.out = new PrintStream(outputBuffer, true, "UTF-8")
-    }
-    if (state.err == null) {
-      state.err = new PrintStream(outputBuffer, true, "UTF-8")
-    }
-    state
-  }
+  protected[hive] def sessionState = tlSession.get().asInstanceOf[this.SQLSession].sessionState
 
-  @transient protected[hive] lazy val hiveconf: HiveConf = {
-    setConf(sessionState.getConf.getAllProperties)
-    sessionState.getConf
-  }
+  protected[hive] def hiveconf = tlSession.get().asInstanceOf[this.SQLSession].hiveconf
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
@@ -260,7 +243,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient
   override protected[sql] lazy val functionRegistry =
     new HiveFunctionRegistry with OverrideFunctionRegistry {
-      def caseSensitive = false
+      def caseSensitive: Boolean = false
     }
 
   /* An analyzer that uses the Hive metastore. */
@@ -272,11 +255,47 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
         ExtractPythonUdfs ::
-        ResolveUdtfsAlias ::
-        sources.PreWriteCheck(catalog) ::
         sources.PreInsertCastAndRename ::
         Nil
     }
+
+  override protected[sql] def createSession(): SQLSession = {
+    new this.SQLSession()
+  }
+
+  protected[hive] class SQLSession extends super.SQLSession {
+    protected[sql] override lazy val conf: SQLConf = new SQLConf {
+      override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+    }
+
+    protected[hive] lazy val hiveconf: HiveConf = {
+      setConf(sessionState.getConf.getAllProperties)
+      sessionState.getConf
+    }
+
+    /**
+     * SQLConf and HiveConf contracts:
+     *
+     * 1. reuse existing started SessionState if any
+     * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
+     *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
+     *    set in the SQLConf *as well as* in the HiveConf.
+     */
+    protected[hive] lazy val sessionState: SessionState = {
+      var state = SessionState.get()
+      if (state == null) {
+        state = new SessionState(new HiveConf(classOf[SessionState]))
+        SessionState.start(state)
+      }
+      if (state.out == null) {
+        state.out = new PrintStream(outputBuffer, true, "UTF-8")
+      }
+      if (state.err == null) {
+        state.err = new PrintStream(outputBuffer, true, "UTF-8")
+      }
+      state
+    }
+  }
 
   /**
    * Runs the specified SQL query using Hive.

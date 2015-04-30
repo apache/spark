@@ -23,7 +23,7 @@ import scala.collection.immutable
 import scala.collection.mutable
 
 /** A CatalystConf that can be used for local testing. */
-class SimpleConf extends CatalystConf{
+class SimpleConf(caseSensitiveAnalysis: Boolean) extends CatalystConf {
   val map = mutable.Map[String, String]()
 
   def setConf(key: String, value: String) : Unit = {

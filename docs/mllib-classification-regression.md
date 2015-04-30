@@ -17,13 +17,13 @@ the supported algorithms for each type of problem.
   </thead>
   <tbody>
     <tr>
-      <td>Binary Classification</td><td>linear SVMs, logistic regression, decision trees, naive Bayes</td>
+      <td>Binary Classification</td><td>linear SVMs, logistic regression, decision trees, random forests, gradient-boosted trees, naive Bayes</td>
     </tr>
     <tr>
-      <td>Multiclass Classification</td><td>decision trees, naive Bayes</td>
+      <td>Multiclass Classification</td><td>decision trees, random forests, naive Bayes</td>
     </tr>
     <tr>
-      <td>Regression</td><td>linear least squares, Lasso, ridge regression, decision trees, isotonic regression</td>
+      <td>Regression</td><td>linear least squares, Lasso, ridge regression, decision trees, random forests, gradient-boosted trees, isotonic regression</td>
     </tr>
   </tbody>
 </table>
@@ -34,5 +34,8 @@ More details for these methods can be found here:
   * [binary classification (SVMs, logistic regression)](mllib-linear-methods.html#binary-classification)
   * [linear regression (least squares, Lasso, ridge)](mllib-linear-methods.html#linear-least-squares-lasso-and-ridge-regression)
 * [Decision trees](mllib-decision-tree.html)
+* [Ensembles of decision trees](mllib-ensembles.html)
+  * [random forests](mllib-ensembles.html#random-forests)
+  * [gradient-boosted trees](mllib-ensembles.html#gradient-boosted-trees-gbts)
 * [Naive Bayes](mllib-naive-bayes.html)
 * [Isotonic regression](mllib-isotonic-regression.html)

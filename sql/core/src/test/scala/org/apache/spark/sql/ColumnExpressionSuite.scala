@@ -20,8 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
-
+import org.apache.spark.sql.types._
 
 class ColumnExpressionSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
@@ -308,5 +307,46 @@ class ColumnExpressionSuite extends QueryTest {
       testData.select(lower(lit(null))),
       (1 to 100).map(n => Row(null))
     )
+  }
+
+  test("monotonicallyIncreasingId") {
+    // Make sure we have 2 partitions, each with 2 records.
+    val df = TestSQLContext.sparkContext.parallelize(1 to 2, 2).mapPartitions { iter =>
+      Iterator(Tuple1(1), Tuple1(2))
+    }.toDF("a")
+    checkAnswer(
+      df.select(monotonicallyIncreasingId()),
+      Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
+    )
+  }
+
+  test("sparkPartitionId") {
+    val df = TestSQLContext.sparkContext.parallelize(1 to 1, 1).map(i => (i, i)).toDF("a", "b")
+    checkAnswer(
+      df.select(sparkPartitionId()),
+      Row(0)
+    )
+  }
+
+  test("lift alias out of cast") {
+    compareExpressions(
+      col("1234").as("name").cast("int").expr,
+      col("1234").cast("int").as("name").expr)
+  }
+
+  test("columns can be compared") {
+    assert('key.desc == 'key.desc)
+    assert('key.desc != 'key.asc)
+  }
+
+  test("alias with metadata") {
+    val metadata = new MetadataBuilder()
+      .putString("originName", "value")
+      .build()
+    val schema = testData
+      .select($"*", col("value").as("abc", metadata))
+      .schema
+    assert(schema("value").metadata === Metadata.empty)
+    assert(schema("abc").metadata === metadata)
   }
 }

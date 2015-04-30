@@ -48,7 +48,11 @@ private[sql] object JsonRDD extends Logging {
     require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
     val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
     val allKeys =
-      parseJson(schemaData, columnNameOfCorruptRecords).map(allKeysWithValueTypes).reduce(_ ++ _)
+      if (schemaData.isEmpty()) {
+        Set.empty[(String, DataType)]
+      } else {
+        parseJson(schemaData, columnNameOfCorruptRecords).map(allKeysWithValueTypes).reduce(_ ++ _)
+      }
     createSchema(allKeys)
   }
 
@@ -179,7 +183,7 @@ private[sql] object JsonRDD extends Logging {
   private def typeOfPrimitiveValue: PartialFunction[Any, DataType] = {
     // For Integer values, use LongType by default.
     val useLongType: PartialFunction[Any, DataType] = {
-      case value: IntegerType.JvmType => LongType
+      case value: IntegerType.InternalType => LongType
     }
 
     useLongType orElse ScalaReflection.typeOfObject orElse {
@@ -199,13 +203,12 @@ private[sql] object JsonRDD extends Logging {
    * type conflicts.
    */
   private def typeOfArray(l: Seq[Any]): ArrayType = {
-    val containsNull = l.exists(v => v == null)
     val elements = l.flatMap(v => Option(v))
     if (elements.isEmpty) {
       // If this JSON array is empty, we use NullType as a placeholder.
       // If this array is not empty in other JSON objects, we can resolve
       // the type after we have passed through all JSON objects.
-      ArrayType(NullType, containsNull)
+      ArrayType(NullType, containsNull = true)
     } else {
       val elementType = elements.map {
         e => e match {
@@ -217,7 +220,7 @@ private[sql] object JsonRDD extends Logging {
         }
       }.reduce((type1: DataType, type2: DataType) => compatibleType(type1, type2))
 
-      ArrayType(elementType, containsNull)
+      ArrayType(elementType, containsNull = true)
     }
   }
 
@@ -245,7 +248,7 @@ private[sql] object JsonRDD extends Logging {
         // The value associated with the key is an array.
         // Handle inner structs of an array.
         def buildKeyPathForInnerStructs(v: Any, t: DataType): Seq[(String, DataType)] = t match {
-          case ArrayType(e: StructType, containsNull) => {
+          case ArrayType(e: StructType, _) => {
             // The elements of this arrays are structs.
             v.asInstanceOf[Seq[Map[String, Any]]].flatMap(Option(_)).flatMap {
               element => allKeysWithValueTypes(element)
@@ -253,7 +256,7 @@ private[sql] object JsonRDD extends Logging {
               case (k, t) => (s"$key.$k", t)
             }
           }
-          case ArrayType(t1, containsNull) =>
+          case ArrayType(t1, _) =>
             v.asInstanceOf[Seq[Any]].flatMap(Option(_)).flatMap {
               element => buildKeyPathForInnerStructs(element, t1)
             }
@@ -388,7 +391,7 @@ private[sql] object JsonRDD extends Logging {
     value match {
       // only support string as date
       case value: java.lang.String =>
-        DateUtils.millisToDays(DataTypeConversions.stringToTime(value).getTime)
+        DateUtils.millisToDays(DateUtils.stringToTime(value).getTime)
       case value: java.sql.Date => DateUtils.fromJavaDate(value)
     }
   }
@@ -397,7 +400,7 @@ private[sql] object JsonRDD extends Logging {
     value match {
       case value: java.lang.Integer => new Timestamp(value.asInstanceOf[Int].toLong)
       case value: java.lang.Long => new Timestamp(value)
-      case value: java.lang.String => toTimestamp(DataTypeConversions.stringToTime(value).getTime)
+      case value: java.lang.String => toTimestamp(DateUtils.stringToTime(value).getTime)
     }
   }
 
@@ -406,16 +409,19 @@ private[sql] object JsonRDD extends Logging {
       null
     } else {
       desiredType match {
-        case StringType => toString(value)
+        case StringType => UTF8String(toString(value))
         case _ if value == null || value == "" => null // guard the non string type
-        case IntegerType => value.asInstanceOf[IntegerType.JvmType]
+        case IntegerType => value.asInstanceOf[IntegerType.InternalType]
         case LongType => toLong(value)
         case DoubleType => toDouble(value)
         case DecimalType() => toDecimal(value)
-        case BooleanType => value.asInstanceOf[BooleanType.JvmType]
+        case BooleanType => value.asInstanceOf[BooleanType.InternalType]
         case NullType => null
         case ArrayType(elementType, _) =>
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
+        case MapType(StringType, valueType, _) =>
+          val map = value.asInstanceOf[Map[String, Any]]
+          map.mapValues(enforceCorrectType(_, valueType)).map(identity)
         case struct: StructType => asRow(value.asInstanceOf[Map[String, Any]], struct)
         case DateType => toDate(value)
         case TimestampType => toTimestamp(value)

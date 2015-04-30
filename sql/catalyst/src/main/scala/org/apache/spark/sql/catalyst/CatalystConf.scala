@@ -24,6 +24,7 @@ private[spark] object CatalystConf{
 }
 
 private[spark] trait CatalystConf {
+  def caseSensitiveAnalysis: Boolean
   def setConf(key: String, value: String) : Unit
   def getConf(key: String) : String
   def getConf(key: String, defaultValue: String) : String

@@ -17,16 +17,11 @@
 
 package org.apache.spark.mllib.clustering
 
-import java.util.Random
-
-import breeze.linalg.{DenseVector => BDV, normalize, axpy => brzAxpy}
-
+import breeze.linalg.{DenseVector => BDV}
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.impl.GraphImpl
-import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -42,16 +37,9 @@ import org.apache.spark.util.Utils
  *  - "token": instance of a term appearing in a document
  *  - "topic": multinomial distribution over words representing some concept
  *
- * Currently, the underlying implementation uses Expectation-Maximization (EM), implemented
- * according to the Asuncion et al. (2009) paper referenced below.
- *
  * References:
  *  - Original LDA paper (journal version):
  *    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
- *     - This class implements their "smoothed" LDA model.
- *  - Paper which clearly explains several algorithms, including EM:
- *    Asuncion, Welling, Smyth, and Teh.
- *    "On Smoothing and Inference for Topic Models."  UAI, 2009.
  *
  * @see [[http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation Latent Dirichlet allocation
  *       (Wikipedia)]]
@@ -63,10 +51,11 @@ class LDA private (
     private var docConcentration: Double,
     private var topicConcentration: Double,
     private var seed: Long,
-    private var checkpointInterval: Int) extends Logging {
+    private var checkpointInterval: Int,
+    private var ldaOptimizer: LDAOptimizer) extends Logging {
 
   def this() = this(k = 10, maxIterations = 20, docConcentration = -1, topicConcentration = -1,
-    seed = Utils.random.nextLong(), checkpointInterval = 10)
+    seed = Utils.random.nextLong(), checkpointInterval = 10, ldaOptimizer = new EMLDAOptimizer)
 
   /**
    * Number of topics to infer.  I.e., the number of soft cluster centers.
@@ -177,7 +166,7 @@ class LDA private (
   def getBeta: Double = getTopicConcentration
 
   /** Alias for [[setTopicConcentration()]] */
-  def setBeta(beta: Double): this.type = setBeta(beta)
+  def setBeta(beta: Double): this.type = setTopicConcentration(beta)
 
   /**
    * Maximum number of iterations for learning.
@@ -220,6 +209,32 @@ class LDA private (
     this
   }
 
+
+  /** LDAOptimizer used to perform the actual calculation */
+  def getOptimizer: LDAOptimizer = ldaOptimizer
+
+  /**
+   * LDAOptimizer used to perform the actual calculation (default = EMLDAOptimizer)
+   */
+  def setOptimizer(optimizer: LDAOptimizer): this.type = {
+    this.ldaOptimizer = optimizer
+    this
+  }
+
+  /**
+   * Set the LDAOptimizer used to perform the actual calculation by algorithm name.
+   * Currently "em" is supported.
+   */
+  def setOptimizer(optimizerName: String): this.type = {
+    this.ldaOptimizer =
+      optimizerName.toLowerCase match {
+        case "em" => new EMLDAOptimizer
+        case other =>
+          throw new IllegalArgumentException(s"Only em is supported but got $other.")
+      }
+    this
+  }
+
   /**
    * Learn an LDA model using the given dataset.
    *
@@ -229,9 +244,9 @@ class LDA private (
    *                   Document IDs must be unique and >= 0.
    * @return  Inferred LDA model
    */
-  def run(documents: RDD[(Long, Vector)]): DistributedLDAModel = {
-    val state = LDA.initialState(documents, k, getDocConcentration, getTopicConcentration, seed,
-      checkpointInterval)
+  def run(documents: RDD[(Long, Vector)]): LDAModel = {
+    val state = ldaOptimizer.initialState(documents, k, getDocConcentration, getTopicConcentration,
+      seed, checkpointInterval)
     var iter = 0
     val iterationTimes = Array.fill[Double](maxIterations)(0)
     while (iter < maxIterations) {
@@ -241,12 +256,11 @@ class LDA private (
       iterationTimes(iter) = elapsedSeconds
       iter += 1
     }
-    state.graphCheckpointer.deleteAllCheckpoints()
-    new DistributedLDAModel(state, iterationTimes)
+    state.getLDAModel(iterationTimes)
   }
 
   /** Java-friendly version of [[run()]] */
-  def run(documents: JavaPairRDD[java.lang.Long, Vector]): DistributedLDAModel = {
+  def run(documents: JavaPairRDD[java.lang.Long, Vector]): LDAModel = {
     run(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
   }
 }
@@ -321,87 +335,9 @@ private[clustering] object LDA {
   private[clustering] def isTermVertex(v: (VertexId, _)): Boolean = v._1 < 0
 
   /**
-   * Optimizer for EM algorithm which stores data + parameter graph, plus algorithm parameters.
-   *
-   * @param graph  EM graph, storing current parameter estimates in vertex descriptors and
-   *               data (token counts) in edge descriptors.
-   * @param k  Number of topics
-   * @param vocabSize  Number of unique terms
-   * @param docConcentration  "alpha"
-   * @param topicConcentration  "beta" or "eta"
-   */
-  private[clustering] class EMOptimizer(
-      var graph: Graph[TopicCounts, TokenCount],
-      val k: Int,
-      val vocabSize: Int,
-      val docConcentration: Double,
-      val topicConcentration: Double,
-      checkpointInterval: Int) {
-
-    private[LDA] val graphCheckpointer = new PeriodicGraphCheckpointer[TopicCounts, TokenCount](
-      graph, checkpointInterval)
-
-    def next(): EMOptimizer = {
-      val eta = topicConcentration
-      val W = vocabSize
-      val alpha = docConcentration
-
-      val N_k = globalTopicTotals
-      val sendMsg: EdgeContext[TopicCounts, TokenCount, (Boolean, TopicCounts)] => Unit =
-        (edgeContext) => {
-          // Compute N_{wj} gamma_{wjk}
-          val N_wj = edgeContext.attr
-          // E-STEP: Compute gamma_{wjk} (smoothed topic distributions), scaled by token count
-          // N_{wj}.
-          val scaledTopicDistribution: TopicCounts =
-            computePTopic(edgeContext.srcAttr, edgeContext.dstAttr, N_k, W, eta, alpha) *= N_wj
-          edgeContext.sendToDst((false, scaledTopicDistribution))
-          edgeContext.sendToSrc((false, scaledTopicDistribution))
-        }
-      // This is a hack to detect whether we could modify the values in-place.
-      // TODO: Add zero/seqOp/combOp option to aggregateMessages. (SPARK-5438)
-      val mergeMsg: ((Boolean, TopicCounts), (Boolean, TopicCounts)) => (Boolean, TopicCounts) =
-        (m0, m1) => {
-          val sum =
-            if (m0._1) {
-              m0._2 += m1._2
-            } else if (m1._1) {
-              m1._2 += m0._2
-            } else {
-              m0._2 + m1._2
-            }
-          (true, sum)
-        }
-      // M-STEP: Aggregation computes new N_{kj}, N_{wk} counts.
-      val docTopicDistributions: VertexRDD[TopicCounts] =
-        graph.aggregateMessages[(Boolean, TopicCounts)](sendMsg, mergeMsg)
-          .mapValues(_._2)
-      // Update the vertex descriptors with the new counts.
-      val newGraph = GraphImpl.fromExistingRDDs(docTopicDistributions, graph.edges)
-      graph = newGraph
-      graphCheckpointer.updateGraph(newGraph)
-      globalTopicTotals = computeGlobalTopicTotals()
-      this
-    }
-
-    /**
-     * Aggregate distributions over topics from all term vertices.
-     *
-     * Note: This executes an action on the graph RDDs.
-     */
-    var globalTopicTotals: TopicCounts = computeGlobalTopicTotals()
-
-    private def computeGlobalTopicTotals(): TopicCounts = {
-      val numTopics = k
-      graph.vertices.filter(isTermVertex).values.fold(BDV.zeros[Double](numTopics))(_ += _)
-    }
-
-  }
-
-  /**
    * Compute gamma_{wjk}, a distribution over topics k.
    */
-  private def computePTopic(
+  private[clustering] def computePTopic(
       docTopicCounts: TopicCounts,
       termTopicCounts: TopicCounts,
       totalTopicCounts: TopicCounts,
@@ -427,49 +363,4 @@ private[clustering] object LDA {
     // normalize
     BDV(gamma_wj) /= sum
   }
-
-  /**
-   * Compute bipartite term/doc graph.
-   */
-  private def initialState(
-      docs: RDD[(Long, Vector)],
-      k: Int,
-      docConcentration: Double,
-      topicConcentration: Double,
-      randomSeed: Long,
-      checkpointInterval: Int): EMOptimizer = {
-    // For each document, create an edge (Document -> Term) for each unique term in the document.
-    val edges: RDD[Edge[TokenCount]] = docs.flatMap { case (docID: Long, termCounts: Vector) =>
-      // Add edges for terms with non-zero counts.
-      termCounts.toBreeze.activeIterator.filter(_._2 != 0.0).map { case (term, cnt) =>
-        Edge(docID, term2index(term), cnt)
-      }
-    }
-
-    val vocabSize = docs.take(1).head._2.size
-
-    // Create vertices.
-    // Initially, we use random soft assignments of tokens to topics (random gamma).
-    def createVertices(): RDD[(VertexId, TopicCounts)] = {
-      val verticesTMP: RDD[(VertexId, TopicCounts)] =
-        edges.mapPartitionsWithIndex { case (partIndex, partEdges) =>
-          val random = new Random(partIndex + randomSeed)
-          partEdges.flatMap { edge =>
-            val gamma = normalize(BDV.fill[Double](k)(random.nextDouble()), 1.0)
-            val sum = gamma * edge.attr
-            Seq((edge.srcId, sum), (edge.dstId, sum))
-          }
-        }
-      verticesTMP.reduceByKey(_ + _)
-    }
-
-    val docTermVertices = createVertices()
-
-    // Partition such that edges are grouped by document
-    val graph = Graph(docTermVertices, edges)
-      .partitionBy(PartitionStrategy.EdgePartition1D)
-
-    new EMOptimizer(graph, k, vocabSize, docConcentration, topicConcentration, checkpointInterval)
-  }
-
 }

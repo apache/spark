@@ -25,32 +25,49 @@ import com.google.common.collect.Lists;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.fpm.FPGrowth;
 import org.apache.spark.mllib.fpm.FPGrowthModel;
 
 /**
  * Java example for mining frequent itemsets using FP-growth.
+ * Example usage:  ./bin/run-example mllib.JavaFPGrowthExample ./data/mllib/sample_fpgrowth.txt
  */
 public class JavaFPGrowthExample {
 
   public static void main(String[] args) {
+    String inputFile;
+    double minSupport = 0.3;
+    int numPartition = -1;
+    if (args.length < 1) {
+      System.err.println(
+        "Usage: JavaFPGrowth <input_file> [minSupport] [numPartition]");
+      System.exit(1);
+    }
+    inputFile = args[0];
+    if (args.length >= 2) {
+      minSupport = Double.parseDouble(args[1]);
+    }
+    if (args.length >= 3) {
+      numPartition = Integer.parseInt(args[2]);
+    }
+
     SparkConf sparkConf = new SparkConf().setAppName("JavaFPGrowthExample");
     JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
+    JavaRDD<ArrayList<String>> transactions = sc.textFile(inputFile).map(
+      new Function<String, ArrayList<String>>() {
+        @Override
+        public ArrayList<String> call(String s) {
+          return Lists.newArrayList(s.split(" "));
+        }
+      }
+    );
 
-    // TODO: Read a user-specified input file.
-    @SuppressWarnings("unchecked")
-    JavaRDD<ArrayList<String>> transactions = sc.parallelize(Lists.newArrayList(
-      Lists.newArrayList("r z h k p".split(" ")),
-      Lists.newArrayList("z y x w v u t s".split(" ")),
-      Lists.newArrayList("s x o n r".split(" ")),
-      Lists.newArrayList("x z y m t s q e".split(" ")),
-      Lists.newArrayList("z".split(" ")),
-      Lists.newArrayList("x z y r q t p".split(" "))), 2);
-
-    FPGrowth fpg = new FPGrowth()
-      .setMinSupport(0.3);
-    FPGrowthModel<String> model = fpg.run(transactions);
+    FPGrowthModel<String> model = new FPGrowth()
+      .setMinSupport(minSupport)
+      .setNumPartitions(numPartition)
+      .run(transactions);
 
     for (FPGrowth.FreqItemset<String> s: model.freqItemsets().toJavaRDD().collect()) {
       System.out.println("[" + Joiner.on(",").join(s.javaItems()) + "], " + s.freq());
