@@ -63,13 +63,6 @@ class InputInfoTrackerSuite extends FunSuite with BeforeAndAfter {
     assert(ssc.graph.getReceiverInputStreams() === receiverInputStreams)
     assert(ssc.graph.getInputStreams().map(_.id) === Array(0, 1, 2, 3, 4))
     assert(receiverInputStreams.map(_.id) === Array(0, 1))
-
-    // Build a fake DAG
-    ssc.union(receiverInputStreams ++ inputStreams).foreachRDD(_.foreach(_ => Unit))
-    ssc.start()
-
-    assert(ssc.scheduler.inputInfoTracker.inputStreams === receiverInputStreams ++ inputStreams)
-    assert(ssc.scheduler.inputInfoTracker.inputStreamIds === Array(0, 1, 2, 3, 4))
   }
 
   test("test report and get InputInfo from InputInfoTracker") {
