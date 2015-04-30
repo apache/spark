@@ -218,7 +218,7 @@ def webserver(args):
         # simple multi-process server
         server = HTTPServer(WSGIContainer(app))
         server.bind(args.port)
-        server.start(0)  # Forks multiple sub-processes
+        server.start(4)  # Forks multiple sub-processes
         IOLoop.instance().start()
 
 
