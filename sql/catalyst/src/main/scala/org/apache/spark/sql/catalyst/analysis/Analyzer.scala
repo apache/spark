@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.test.SimpleConf
+import org.apache.spark.sql.catalyst.test.SimpleCatalystConf
 import org.apache.spark.sql.types._
 
 /**
@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
  * when all relations are already filled in and the analyzer needs only to resolve attribute
  * references.
  */
-object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, new SimpleConf(true))
+object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, new SimpleCatalystConf(true))
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
