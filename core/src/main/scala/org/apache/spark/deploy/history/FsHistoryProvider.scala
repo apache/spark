@@ -32,9 +32,8 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
-
 
 /**
  * A class that provides application history from event logs stored in the file system.
@@ -76,6 +75,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   @volatile private var applications: mutable.LinkedHashMap[String, FsApplicationHistoryInfo]
     = new mutable.LinkedHashMap()
 
+  // List of applications to be deleted by event log cleaner.
+  private var appsToClean = new mutable.ListBuffer[FsApplicationHistoryInfo]
+
   // Constants used to parse Spark 1.0.0 log directories.
   private[history] val LOG_PREFIX = "EVENT_LOG_"
   private[history] val SPARK_VERSION_PREFIX = EventLoggingListener.SPARK_VERSION_KEY + "_"
@@ -99,7 +101,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    */
   private val replayExecutor: ExecutorService = {
     if (!conf.contains("spark.testing")) {
-      Executors.newSingleThreadExecutor(Utils.namedThreadFactory("log-replay-executor"))
+      ThreadUtils.newDaemonSingleThreadExecutor("log-replay-executor")
     } else {
       MoreExecutors.sameThreadExecutor()
     }
@@ -266,34 +268,40 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    */
   private def cleanLogs(): Unit = {
     try {
-      val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
-        .getOrElse(Seq[FileStatus]())
       val maxAge = conf.getTimeAsSeconds("spark.history.fs.cleaner.maxAge", "7d") * 1000
 
       val now = System.currentTimeMillis()
       val appsToRetain = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
 
+      // Scan all logs from the log directory.
+      // Only completed applications older than the specified max age will be deleted.
       applications.values.foreach { info =>
-        if (now - info.lastUpdated <= maxAge) {
+        if (now - info.lastUpdated <= maxAge || !info.completed) {
           appsToRetain += (info.id -> info)
+        } else {
+          appsToClean += info
         }
       }
 
       applications = appsToRetain
 
-      // Scan all logs from the log directory.
-      // Only directories older than the specified max age will be deleted
-      statusList.foreach { dir =>
+      val leftToClean = new mutable.ListBuffer[FsApplicationHistoryInfo]
+      appsToClean.foreach { info =>
         try {
-          if (now - dir.getModificationTime() > maxAge) {
-            // if path is a directory and set to  true,
-            // the directory is deleted else throws an exception
-            fs.delete(dir.getPath, true)
+          val path = new Path(logDir, info.logPath)
+          if (fs.exists(path)) {
+            fs.delete(path, true)
           }
         } catch {
-          case t: IOException => logError(s"IOException in cleaning logs of $dir", t)
+          case e: AccessControlException =>
+            logInfo(s"No permission to delete ${info.logPath}, ignoring.")
+          case t: IOException =>
+            logError(s"IOException in cleaning logs of ${info.logPath}", t)
+            leftToClean += info
         }
       }
+
+      appsToClean = leftToClean
     } catch {
       case t: Exception => logError("Exception in cleaning logs", t)
     }
@@ -325,8 +333,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       }
     try {
       val appListener = new ApplicationEventListener
+      val appCompleted = isApplicationCompleted(eventLog)
       bus.addListener(appListener)
-      bus.replay(logInput, logPath.toString)
+      bus.replay(logInput, logPath.toString, !appCompleted)
       new FsApplicationHistoryInfo(
         logPath.getName(),
         appListener.appId.getOrElse(logPath.getName()),
@@ -335,7 +344,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         appListener.endTime.getOrElse(-1L),
         getModificationTime(eventLog).get,
         appListener.sparkUser.getOrElse(NOT_STARTED),
-        isApplicationCompleted(eventLog))
+        appCompleted)
     } finally {
       logInput.close()
     }

@@ -101,16 +101,16 @@ private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
   override def toString: String = getClass.getSimpleName.stripSuffix("$")
 }
 
-private[sql] abstract class NativeColumnType[T <: NativeType](
+private[sql] abstract class NativeColumnType[T <: AtomicType](
     val dataType: T,
     typeId: Int,
     defaultSize: Int)
-  extends ColumnType[T, T#JvmType](typeId, defaultSize) {
+  extends ColumnType[T, T#InternalType](typeId, defaultSize) {
 
   /**
    * Scala TypeTag. Can be used to create primitive arrays and hash tables.
    */
-  def scalaTag: TypeTag[dataType.JvmType] = dataType.tag
+  def scalaTag: TypeTag[dataType.InternalType] = dataType.tag
 }
 
 private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {

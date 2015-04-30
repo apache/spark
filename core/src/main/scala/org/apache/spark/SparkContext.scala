@@ -223,6 +223,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _listenerBusStarted: Boolean = false
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
+  private var _shutdownHookRef: AnyRef = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -517,6 +518,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _taskScheduler.postStartHook()
     _env.metricsSystem.registerSource(new DAGSchedulerSource(dagScheduler))
     _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
+
+    // Make sure the context is stopped if the user forgets about it. This avoids leaving
+    // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
+    // is killed, though.
+    _shutdownHookRef = Utils.addShutdownHook(Utils.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
+      logInfo("Invoking stop() from shutdown hook")
+      stop()
+    }
   } catch {
     case NonFatal(e) =>
       logError("Error initializing SparkContext.", e)
@@ -546,7 +555,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
           SparkEnv.executorActorSystemName,
           RpcAddress(host, port),
           ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME)
-        Some(endpointRef.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump))
+        Some(endpointRef.askWithRetry[Array[ThreadStackTrace]](TriggerThreadDump))
       }
     } catch {
       case e: Exception =>
@@ -704,7 +713,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   RDD[(String, String)] = {
     assertNotStopped()
     val job = new NewHadoopJob(hadoopConfiguration)
-    NewFileInputFormat.addInputPath(job, new Path(path))
+    // Use setInputPaths so that wholeTextFiles aligns with hadoopFile/textFile in taking
+    // comma separated files as input. (see SPARK-7155)
+    NewFileInputFormat.setInputPaths(job, path)
     val updateConf = job.getConfiguration
     new WholeTextFileRDD(
       this,
@@ -750,7 +761,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       RDD[(String, PortableDataStream)] = {
     assertNotStopped()
     val job = new NewHadoopJob(hadoopConfiguration)
-    NewFileInputFormat.addInputPath(job, new Path(path))
+    // Use setInputPaths so that binaryFiles aligns with hadoopFile/textFile in taking
+    // comma separated files as input. (see SPARK-7155)
+    NewFileInputFormat.setInputPaths(job, path)
     val updateConf = job.getConfiguration
     new BinaryFileRDD(
       this,
@@ -926,7 +939,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // The call to new NewHadoopJob automatically adds security credentials to conf,
     // so we don't need to explicitly add them ourselves
     val job = new NewHadoopJob(conf)
-    NewFileInputFormat.addInputPath(job, new Path(path))
+    // Use setInputPaths so that newAPIHadoopFile aligns with hadoopFile/textFile in taking
+    // comma separated files as input. (see SPARK-7155)
+    NewFileInputFormat.setInputPaths(job, path)
     val updatedConf = job.getConfiguration
     new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf).setName(path)
   }
@@ -1055,7 +1070,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /** Build the union of a list of RDDs. */
   def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = {
     val partitioners = rdds.flatMap(_.partitioner).toSet
-    if (partitioners.size == 1) {
+    if (rdds.forall(_.partitioner.isDefined) && partitioners.size == 1) {
       new PartitionerAwareUnionRDD(this, rdds)
     } else {
       new UnionRDD(this, rdds)
@@ -1387,6 +1402,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Register an RDD to be persisted in memory and/or disk storage
    */
   private[spark] def persistRDD(rdd: RDD[_]) {
+    _executorAllocationManager.foreach { _ =>
+      logWarning(
+        s"Dynamic allocation currently does not support cached RDDs. Cached data for RDD " +
+        s"${rdd.id} will be lost when executors are removed.")
+    }
     persistentRdds(rdd.id) = rdd
   }
 
@@ -1480,6 +1500,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     if (!stopped.compareAndSet(false, true)) {
       logInfo("SparkContext already stopped.")
       return
+    }
+    if (_shutdownHookRef != null) {
+      Utils.removeShutdownHook(_shutdownHookRef)
     }
 
     postApplicationEnd()
@@ -1891,7 +1914,7 @@ object SparkContext extends Logging {
    *
    * Access to this field is guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK.
    */
-  private val activeContext: AtomicReference[SparkContext] = 
+  private val activeContext: AtomicReference[SparkContext] =
     new AtomicReference[SparkContext](null)
 
   /**
@@ -1944,11 +1967,11 @@ object SparkContext extends Logging {
   }
 
   /**
-   * This function may be used to get or instantiate a SparkContext and register it as a 
-   * singleton object. Because we can only have one active SparkContext per JVM, 
-   * this is useful when applications may wish to share a SparkContext. 
+   * This function may be used to get or instantiate a SparkContext and register it as a
+   * singleton object. Because we can only have one active SparkContext per JVM,
+   * this is useful when applications may wish to share a SparkContext.
    *
-   * Note: This function cannot be used to create multiple SparkContext instances 
+   * Note: This function cannot be used to create multiple SparkContext instances
    * even if multiple contexts are allowed.
    */
   def getOrCreate(config: SparkConf): SparkContext = {
@@ -1961,17 +1984,17 @@ object SparkContext extends Logging {
       activeContext.get()
     }
   }
-  
+
   /**
-   * This function may be used to get or instantiate a SparkContext and register it as a 
-   * singleton object. Because we can only have one active SparkContext per JVM, 
+   * This function may be used to get or instantiate a SparkContext and register it as a
+   * singleton object. Because we can only have one active SparkContext per JVM,
    * this is useful when applications may wish to share a SparkContext.
-   * 
+   *
    * This method allows not passing a SparkConf (useful if just retrieving).
-   * 
-   * Note: This function cannot be used to create multiple SparkContext instances 
-   * even if multiple contexts are allowed. 
-   */ 
+   *
+   * Note: This function cannot be used to create multiple SparkContext instances
+   * even if multiple contexts are allowed.
+   */
   def getOrCreate(): SparkContext = {
     getOrCreate(new SparkConf())
   }

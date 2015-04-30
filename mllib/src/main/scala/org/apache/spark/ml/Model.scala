@@ -30,11 +30,13 @@ import org.apache.spark.ml.param.ParamMap
 abstract class Model[M <: Model[M]] extends Transformer {
   /**
    * The parent estimator that produced this model.
+   * Note: For ensembles' component Models, this value can be null.
    */
   val parent: Estimator[M]
 
   /**
    * Fitting parameters, such that parent.fit(..., fittingParamMap) could reproduce the model.
+   * Note: For ensembles' component Models, this value can be null.
    */
   val fittingParamMap: ParamMap
 }

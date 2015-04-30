@@ -54,7 +54,7 @@ _functions = {
     'upper': 'Converts a string expression to upper case.',
     'lower': 'Converts a string expression to upper case.',
     'sqrt': 'Computes the square root of the specified float value.',
-    'abs': 'Computes the absolutle value.',
+    'abs': 'Computes the absolute value.',
 
     'max': 'Aggregate function: returns the maximum value of the expression in a group.',
     'min': 'Aggregate function: returns the minimum value of the expression in a group.',
@@ -75,6 +75,20 @@ __all__ += _functions.keys()
 __all__.sort()
 
 
+def approxCountDistinct(col, rsd=None):
+    """Returns a new :class:`Column` for approximate distinct count of ``col``.
+
+    >>> df.agg(approxCountDistinct(df.age).alias('c')).collect()
+    [Row(c=2)]
+    """
+    sc = SparkContext._active_spark_context
+    if rsd is None:
+        jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col))
+    else:
+        jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col), rsd)
+    return Column(jc)
+
+
 def countDistinct(col, *cols):
     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
 
@@ -89,18 +103,36 @@ def countDistinct(col, *cols):
     return Column(jc)
 
 
-def approxCountDistinct(col, rsd=None):
-    """Returns a new :class:`Column` for approximate distinct count of ``col``.
+def monotonicallyIncreasingId():
+    """A column that generates monotonically increasing 64-bit integers.
 
-    >>> df.agg(approxCountDistinct(df.age).alias('c')).collect()
-    [Row(c=2)]
+    The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+    The current implementation puts the partition ID in the upper 31 bits, and the record number
+    within each partition in the lower 33 bits. The assumption is that the data frame has
+    less than 1 billion partitions, and each partition has less than 8 billion records.
+
+    As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+    This expression would return the following IDs:
+    0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+
+    >>> df0 = sc.parallelize(range(2), 2).mapPartitions(lambda x: [(1,), (2,), (3,)]).toDF(['col1'])
+    >>> df0.select(monotonicallyIncreasingId().alias('id')).collect()
+    [Row(id=0), Row(id=1), Row(id=2), Row(id=8589934592), Row(id=8589934593), Row(id=8589934594)]
     """
     sc = SparkContext._active_spark_context
-    if rsd is None:
-        jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col))
-    else:
-        jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col), rsd)
-    return Column(jc)
+    return Column(sc._jvm.functions.monotonicallyIncreasingId())
+
+
+def sparkPartitionId():
+    """A column for partition ID of the Spark task.
+
+    Note that this is indeterministic because it depends on data partitioning and task scheduling.
+
+    >>> df.repartition(1).select(sparkPartitionId().alias("pid")).collect()
+    [Row(pid=0), Row(pid=0)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.sparkPartitionId())
 
 
 class UserDefinedFunction(object):
