@@ -98,7 +98,7 @@ class FilterPushdownSuite extends PlanTest {
         .limit(2)
         .select('a)
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .select('a)
