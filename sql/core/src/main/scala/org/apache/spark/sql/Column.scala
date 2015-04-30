@@ -68,6 +68,16 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   override def hashCode: Int = this.expr.hashCode
 
   /**
+   * An expression that gets an item at a position out of an [[ArrayType]],
+   * or gets a value by key in a [[MapType]],
+   * or gets a field by name in a [[StructType]],
+   * or gets an array of fields by name in an array of [[StructType]].
+   *
+   * @group expr_ops
+   */
+  def apply(field: Any): Column = UnresolvedGetField(expr, Literal(field))
+
+  /**
    * Unary minus, i.e. negate the expression.
    * {{{
    *   // Scala: select the amount column and negates all values.

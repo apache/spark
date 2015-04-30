@@ -1275,7 +1275,7 @@ class Column(object):
 
     # container operators
     __contains__ = _bin_op("contains")
-    __getitem__ = _bin_op("getItem")
+    __getitem__ = _bin_op("apply")
 
     # bitwise operators
     bitwiseOR = _bin_op("bitwiseOR")

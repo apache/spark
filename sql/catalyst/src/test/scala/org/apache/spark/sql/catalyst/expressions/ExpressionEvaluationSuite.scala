@@ -941,6 +941,31 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(resolveGetField('c.struct(typeS).at(2).getField("a")), "aa", row)
   }
 
+  test("error message of GetField") {
+    val structType = StructType(StructField("a", StringType, true) :: Nil)
+    val arrayStructType = ArrayType(structType)
+    val arrayType = ArrayType(StringType)
+    val otherType = StringType
+
+    def checkErrorMessage(
+        childDataType: DataType,
+        fieldDataType: DataType,
+        errorMesage: String): Unit = {
+      val e = intercept[org.apache.spark.sql.AnalysisException] {
+        GetField(
+          Literal.create(null, childDataType),
+          Literal.create(null, fieldDataType),
+          _ == _)
+      }
+      assert(e.getMessage().contains(errorMesage))
+    }
+
+    checkErrorMessage(structType, IntegerType, "Field name should be String Literal")
+    checkErrorMessage(arrayStructType, BooleanType, "Field name should be String Literal")
+    checkErrorMessage(arrayType, StringType, "Array index should be integral type")
+    checkErrorMessage(otherType, StringType, "Can't get field on")
+  }
+
   test("arithmetic") {
     val row = create_row(1, 2, 3, null)
     val c1 = 'a.int.at(0)
