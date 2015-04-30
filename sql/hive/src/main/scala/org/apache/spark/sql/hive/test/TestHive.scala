@@ -39,6 +39,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 import scala.collection.mutable
 import scala.language.implicitConversions
+import org.apache.spark.sql.catalyst.CatalystConf
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -108,6 +109,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
       override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+      setConf(CatalystConf.CASE_SENSITIVE, "false")
     }
   }
 
