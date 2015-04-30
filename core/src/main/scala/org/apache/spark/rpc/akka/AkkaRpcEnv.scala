@@ -178,12 +178,8 @@ private[spark] class AkkaRpcEnv private[akka] (
       })
     } catch {
       case NonFatal(e) =>
-        if (needReply) {
-          // If the sender asks a reply, we should send the error back to the sender
-          _sender ! AkkaFailure(e)
-        } else {
-          throw e
-        }
+        logError(e.getMessage, e)
+        _sender ! AkkaFailure(e)
     }
   }
 
