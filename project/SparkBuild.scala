@@ -364,12 +364,13 @@ object PySparkAssembly {
       val src = new File(BuildCommons.sparkHome, "python/pyspark")
 
       val zipFile = new File(BuildCommons.sparkHome , "python/lib/pyspark.zip")
-      IO.delete(zipFile)
+      zipFile.delete()
       def entries(f: File):List[File] =
         f :: (if (f.isDirectory) IO.listFiles(f).toList.flatMap(entries(_)) else Nil)
-      IO.zip(entries(src).map(
-        d => (d, d.getAbsolutePath.substring(src.getParent.length +1))),
-        zipFile)
+      val sources = entries(src).map { d =>
+        (d, d.getAbsolutePath.substring(src.getParent.length +1))
+      }
+      IO.zip(sources, zipFile)
 
       val dst = new File(outDir, "pyspark")
       if (!dst.isDirectory()) {

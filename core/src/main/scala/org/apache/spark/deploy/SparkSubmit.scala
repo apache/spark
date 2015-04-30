@@ -361,9 +361,9 @@ object SparkSubmit {
         val localURI = Utils.resolveURI(localPath)
         if (localURI.getScheme != "local") {
           args.files = mergeFileLists(args.files, localURI.toString)
-          (new Path(localPath)).getName
+          new Path(localPath).getName
         } else {
-          localURI.getPath.toString
+          localURI.getPath
         }
       }.mkString(File.pathSeparator)
       sysProps("spark.submit.pyArchives") = pyArchives
