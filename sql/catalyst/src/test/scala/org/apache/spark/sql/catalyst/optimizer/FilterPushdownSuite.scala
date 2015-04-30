@@ -207,7 +207,7 @@ class FilterPushdownSuite extends PlanTest {
       x.join(y, LeftSemi, Option("x.a".attr === "y.d".attr && "x.b".attr >= 1 && "y.d".attr >= 2))
     }
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.apply(originalQuery.analyze)
     val left = testRelation.where('b >= 1)
     val right = testRelation1.where('d >= 2)
     val correctAnswer =
