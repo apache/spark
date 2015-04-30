@@ -31,11 +31,6 @@ case class InputInfo(batchTime: Time, inputStreamId: Int, numRecords: Long)
  */
 private[streaming] class InputInfoTracker(ssc: StreamingContext) extends Logging {
 
-  /** Track all the input streams registered in DStreamGraph */
-  val inputStreams = ssc.graph.getInputStreams()
-  /** Track all the id of input streams registered in DStreamGraph */
-  val inputStreamIds = inputStreams.map(_.id)
-
   // Map to track all the InputInfo related to specific batch time and input stream.
   private val batchTimeToInputInfos = new mutable.HashMap[Time, mutable.HashMap[Int, InputInfo]]
 

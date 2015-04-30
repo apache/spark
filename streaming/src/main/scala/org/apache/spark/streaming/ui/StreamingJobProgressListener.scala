@@ -189,14 +189,14 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   }
 
   def receivedRecordsDistributions: Map[Int, Option[Distribution]] = synchronized {
-    val latestBatchInfos = retainedBatches.reverse.take(batchInfoLimit)
+    val latestBatchInfos = retainedBatches.reverse.take(batchUIDataLimit)
 
     // TODO. this should be fixed when receiver-less input stream is mixed into BatchInfo
-    val latestInputInfos = latestBatchInfos.map(_.streamIdToNumRecords)
-    val streamIds = latestInputInfos.flatMap(_.keys).toSet
+    val latestStreamIdToNumRecords = latestBatchInfos.map(_.receiverNumRecords)
+    val streamIds = latestStreamIdToNumRecords.flatMap(_.keys).toSet
     streamIds.map { id =>
      val recordsOfParticularReceiver =
-       latestInputInfos.map(v => v.getOrElse(id, 0L).toDouble * 1000 / batchDuration)
+       latestStreamIdToNumRecords.map(v => v.getOrElse(id, 0L).toDouble * 1000 / batchDuration)
       val distribution = Distribution(recordsOfParticularReceiver)
       (id, distribution)
     }.toMap
@@ -204,7 +204,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
 
   def lastReceivedBatchRecords: Map[Int, Long] = synchronized {
     // TODO. this should be fixed when receiver-less input stream is mixed into BatchInfo
-    val streamIdToNumRecords = lastReceivedBatch.map(_.streamIdToNumRecords).getOrElse(Map.empty)
+    val streamIdToNumRecords = lastReceivedBatch.map(_.receiverNumRecords).getOrElse(Map.empty)
     if (streamIdToNumRecords.isEmpty) {
       ssc.graph.getInputStreams().map(_.id).map((_, 0L)).toMap
     } else {

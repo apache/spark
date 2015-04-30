@@ -52,6 +52,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   var receiverTracker: ReceiverTracker = null
   // A tracker to track all the input stream information as well as processed record number
   var inputInfoTracker: InputInfoTracker = null
+
   private var eventLoop: EventLoop[JobSchedulerEvent] = null
 
   def start(): Unit = synchronized {
