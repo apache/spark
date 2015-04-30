@@ -108,8 +108,14 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       list.size should be (5)
       list.count(_.attempts.head.completed) should be (3)
 
-      def makeAppInfo(id: String, name: String, start: Long, end: Long, lastMod: Long,
-        user: String, completed: Boolean): ApplicationHistoryInfo = {
+      def makeAppInfo(
+          id: String,
+          name: String,
+          start: Long,
+          end: Long,
+          lastMod: Long,
+          user: String,
+          completed: Boolean): ApplicationHistoryInfo = {
         ApplicationHistoryInfo(id, name,
           List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed)))
       }

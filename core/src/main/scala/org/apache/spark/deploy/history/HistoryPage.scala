@@ -22,9 +22,6 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.ui.{WebUIPage, UIUtils}
-import scala.collection.immutable.ListMap
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.ArrayBuffer
 
 private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 

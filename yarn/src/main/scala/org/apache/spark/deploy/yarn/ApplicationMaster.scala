@@ -92,7 +92,7 @@ private[spark] class ApplicationMaster(
 
         // Propagate the attempt if, so that in case of event logging,
         // different attempt's logs gets created in different directory
-        System.setProperty("spark.yarn.app.attemptid", appAttemptId.getAttemptId().toString())
+        System.setProperty("spark.yarn.app.attemptId", appAttemptId.getAttemptId().toString())
       }
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
