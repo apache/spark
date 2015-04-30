@@ -511,7 +511,6 @@ class DAGSchedulerSuite
       if (x < Stage.maxStageFailures) {
         assert(scheduler.runningStages.nonEmpty)
         assert(!ended)
-        assert(!jobResult.isInstanceOf[JobFailed])
       } else {
         // Stage has been aborted and removed from running stages
         assertDataStructuresEmpty()
