@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.sql.{Connection, Driver, DriverManager, DriverPropertyInfo, PreparedStatement}
 import java.util.Properties
-import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.mutable
 
@@ -185,7 +184,7 @@ package object jdbc {
 
   }
 
-  private [sql] case class DriverWrapper(wrapped: Driver) extends Driver {
+  private [sql] class DriverWrapper(val wrapped: Driver) extends Driver {
     override def acceptsURL(url: String): Boolean = wrapped.acceptsURL(url)
 
     override def jdbcCompliant(): Boolean = wrapped.jdbcCompliant()
@@ -212,9 +211,7 @@ package object jdbc {
    */
   private [sql] object DriverRegistry extends Logging {
 
-    val wrapperMap: mutable.Map[String, DriverWrapper] = mutable.Map.empty
-
-    val lock = new ReentrantLock()
+    private val wrapperMap: mutable.Map[String, DriverWrapper] = mutable.Map.empty
 
     def register(className: String): Unit = {
       val cls = Utils.getContextOrSparkClassLoader.loadClass(className)
@@ -223,22 +220,19 @@ package object jdbc {
       } else if (wrapperMap.get(className).isDefined) {
         logTrace(s"Wrapper for $className already exists")
       } else {
-        lock.lock()
-        try {
+        synchronized {
           if (wrapperMap.get(className).isEmpty) {
             val wrapper = new DriverWrapper(cls.newInstance().asInstanceOf[Driver])
             DriverManager.registerDriver(wrapper)
             wrapperMap(className) = wrapper
             logTrace(s"Wrapper for $className registered")
           }
-        } finally {
-          lock.unlock()
         }
       }
     }
     
     def getDriverClassName(url: String): String = DriverManager.getDriver(url) match {
-      case DriverWrapper(wrapped) => wrapped.getClass.getCanonicalName
+      case wrapper: DriverWrapper => wrapper.wrapped.getClass.getCanonicalName
       case driver => driver.getClass.getCanonicalName  
     }
   }
