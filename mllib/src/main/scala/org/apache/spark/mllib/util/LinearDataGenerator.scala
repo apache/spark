@@ -106,11 +106,11 @@ object LinearDataGenerator {
       Array.fill[Double](weights.length)(rnd.nextDouble()))
 
     x.foreach { v =>
-        var i = 0
-        while (i < v.length) {
-          v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
-          i += 1
-        }
+      var i = 0
+      while (i < v.length) {
+        v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
+        i += 1
+      }
     }
 
     val y = x.map { xi =>
