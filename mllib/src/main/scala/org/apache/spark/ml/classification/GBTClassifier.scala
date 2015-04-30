@@ -23,7 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
 import org.apache.spark.ml.impl.tree._
-import org.apache.spark.ml.param.{Param, Params, ParamMap}
+import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.MetadataUtils
@@ -112,7 +112,7 @@ final class GBTClassifier
   def setLossType(value: String): this.type = set(lossType, value)
 
   /** @group getParam */
-  def getLossType: String = getOrDefault(lossType).toLowerCase
+  def getLossType: String = $(lossType).toLowerCase
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {
@@ -124,25 +124,23 @@ final class GBTClassifier
     }
   }
 
-  override protected def train(
-      dataset: DataFrame,
-      paramMap: ParamMap): GBTClassificationModel = {
+  override protected def train(dataset: DataFrame): GBTClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
-      MetadataUtils.getCategoricalFeatures(dataset.schema(paramMap(featuresCol)))
-    val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema(paramMap(labelCol))) match {
+      MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+    val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
       case Some(n: Int) => n
       case None => throw new IllegalArgumentException("GBTClassifier was given input" +
-        s" with invalid label column ${paramMap(labelCol)}, without the number of classes" +
+        s" with invalid label column ${$(labelCol)}, without the number of classes" +
         " specified. See StringIndexer.")
       // TODO: Automatically index labels: SPARK-7126
     }
     require(numClasses == 2,
       s"GBTClassifier only supports binary classification but was given numClasses = $numClasses")
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, paramMap)
+    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
     val oldGBT = new OldGBT(boostingStrategy)
     val oldModel = oldGBT.run(oldDataset)
-    GBTClassificationModel.fromOld(oldModel, this, paramMap, categoricalFeatures)
+    GBTClassificationModel.fromOld(oldModel, this, categoricalFeatures)
   }
 }
 
@@ -165,7 +163,6 @@ object GBTClassifier {
 @AlphaComponent
 final class GBTClassificationModel(
     override val parent: GBTClassifier,
-    override val fittingParamMap: ParamMap,
     private val _trees: Array[DecisionTreeRegressionModel],
     private val _treeWeights: Array[Double])
   extends PredictionModel[Vector, GBTClassificationModel]
@@ -189,7 +186,7 @@ final class GBTClassificationModel(
   }
 
   override protected def copy(): GBTClassificationModel = {
-    val m = new GBTClassificationModel(parent, fittingParamMap, _trees, _treeWeights)
+    val m = new GBTClassificationModel(parent, _trees, _treeWeights)
     Params.inheritValues(this.extractParamMap(), this, m)
     m
   }
@@ -210,14 +207,13 @@ private[ml] object GBTClassificationModel {
   def fromOld(
       oldModel: OldGBTModel,
       parent: GBTClassifier,
-      fittingParamMap: ParamMap,
       categoricalFeatures: Map[Int, Int]): GBTClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification, "Cannot convert GradientBoostedTreesModel" +
       s" with algo=${oldModel.algo} (old API) to GBTClassificationModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
       // parent, fittingParamMap for each tree is null since there are no good ways to set these.
-      DecisionTreeRegressionModel.fromOld(tree, null, null, categoricalFeatures)
+      DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
-    new GBTClassificationModel(parent, fittingParamMap, newTrees, oldModel.treeWeights)
+    new GBTClassificationModel(parent, newTrees, oldModel.treeWeights)
   }
 }

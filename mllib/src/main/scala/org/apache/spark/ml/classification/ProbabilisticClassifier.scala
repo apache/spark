@@ -18,7 +18,6 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
-import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
@@ -34,12 +33,10 @@ private[classification] trait ProbabilisticClassifierParams
 
   override protected def validateAndTransformSchema(
       schema: StructType,
-      paramMap: ParamMap,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    val parentSchema = super.validateAndTransformSchema(schema, paramMap, fitting, featuresDataType)
-    val map = extractParamMap(paramMap)
-    SchemaUtils.appendColumn(parentSchema, map(probabilityCol), new VectorUDT)
+    val parentSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    SchemaUtils.appendColumn(parentSchema, $(probabilityCol), new VectorUDT)
   }
 }
 
@@ -95,36 +92,22 @@ private[spark] abstract class ProbabilisticClassificationModel[
    *  - probability of each class as [[probabilityCol]] of type [[Vector]].
    *
    * @param dataset input dataset
-   * @param paramMap additional parameters, overwrite embedded params
    * @return transformed dataset
    */
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
+  override def transform(dataset: DataFrame): DataFrame = {
     // This default implementation should be overridden as needed.
 
     // Check schema
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
-
-    // Prepare model
-    val tmpModel = if (paramMap.size != 0) {
-      val tmpModel = this.copy()
-      Params.inheritValues(paramMap, parent, tmpModel)
-      tmpModel
-    } else {
-      this
-    }
+    transformSchema(dataset.schema, logging = true)
 
     val (numColsOutput, outputData) =
-      ClassificationModel.transformColumnsImpl[FeaturesType](dataset, tmpModel, map)
+      ClassificationModel.transformColumnsImpl[FeaturesType](dataset, this)
 
     // Output selected columns only.
-    if (map(probabilityCol) != "") {
+    if ($(probabilityCol) != "") {
       // output probabilities
-      val features2probs: FeaturesType => Vector = (features) => {
-        tmpModel.predictProbabilities(features)
-      }
-      outputData.withColumn(map(probabilityCol),
-        callUDF(features2probs, new VectorUDT, col(map(featuresCol))))
+      outputData.withColumn($(probabilityCol),
+        callUDF(predictProbabilities _, new VectorUDT, col($(featuresCol))))
     } else {
       if (numColsOutput == 0) {
         this.logWarning(s"$uid: ProbabilisticClassificationModel.transform() was called as NOOP" +

@@ -258,7 +258,9 @@ trait Params extends Identifiable with Serializable {
    * [[Param.validate()]].  This method does not handle input/output column parameters;
    * those are checked during schema validation.
    */
-  def validate(paramMap: ParamMap): Unit = { }
+  def validate(paramMap: ParamMap): Unit = {
+    copyWith(paramMap).validate()
+  }
 
   /**
    * Validates parameter values stored internally.
@@ -269,7 +271,11 @@ trait Params extends Identifiable with Serializable {
    * [[Param.validate()]].  This method does not handle input/output column parameters;
    * those are checked during schema validation.
    */
-  def validate(): Unit = validate(ParamMap.empty)
+  def validate(): Unit = {
+    params.filter(isDefined _).foreach { param =>
+      param.asInstanceOf[Param[Any]].validate($(param))
+    }
+  }
 
   /**
    * Returns the documentation of all params.
@@ -338,6 +344,11 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
+   * An alias for [[getOrDefault()]].
+   */
+  protected final def $[T](param: Param[T]): T = getOrDefault(param)
+
+  /**
    * Sets a default value for a param.
    * @param param  param to set the default value. Make sure that this param is initialized before
    *               this method gets called.
@@ -380,6 +391,18 @@ trait Params extends Identifiable with Serializable {
   final def hasDefault[T](param: Param[T]): Boolean = {
     shouldOwn(param)
     defaultParamMap.contains(param)
+  }
+
+  /**
+   * Creates a copy of this instance with a randomly generated uid and some extra params.
+   * The default implementation calls the default constructor to create a new instance, then
+   * copies the embedded and extra parameters over and returns the new instance.
+   * Subclasses should override this method if the default approach is not sufficient.
+   */
+  def copyWith(extra: ParamMap): Params = {
+    val that = this.getClass.newInstance()
+    Params.inheritValues(extra, this, that)
+    that
   }
 
   /**

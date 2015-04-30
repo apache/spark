@@ -64,22 +64,20 @@ final class DecisionTreeClassifier
 
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
-  override protected def train(
-      dataset: DataFrame,
-      paramMap: ParamMap): DecisionTreeClassificationModel = {
+  override protected def train(dataset: DataFrame): DecisionTreeClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
-      MetadataUtils.getCategoricalFeatures(dataset.schema(paramMap(featuresCol)))
-    val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema(paramMap(labelCol))) match {
+      MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+    val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
       case Some(n: Int) => n
       case None => throw new IllegalArgumentException("DecisionTreeClassifier was given input" +
-        s" with invalid label column ${paramMap(labelCol)}, without the number of classes" +
+        s" with invalid label column ${$(labelCol)}, without the number of classes" +
         " specified. See StringIndexer.")
         // TODO: Automatically index labels: SPARK-7126
     }
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, paramMap)
+    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     val oldModel = OldDecisionTree.train(oldDataset, strategy)
-    DecisionTreeClassificationModel.fromOld(oldModel, this, paramMap, categoricalFeatures)
+    DecisionTreeClassificationModel.fromOld(oldModel, this, categoricalFeatures)
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
@@ -106,7 +104,6 @@ object DecisionTreeClassifier {
 @AlphaComponent
 final class DecisionTreeClassificationModel private[ml] (
     override val parent: DecisionTreeClassifier,
-    override val fittingParamMap: ParamMap,
     override val rootNode: Node)
   extends PredictionModel[Vector, DecisionTreeClassificationModel]
   with DecisionTreeModel with Serializable {
@@ -119,7 +116,7 @@ final class DecisionTreeClassificationModel private[ml] (
   }
 
   override protected def copy(): DecisionTreeClassificationModel = {
-    val m = new DecisionTreeClassificationModel(parent, fittingParamMap, rootNode)
+    val m = new DecisionTreeClassificationModel(parent, rootNode)
     Params.inheritValues(this.extractParamMap(), this, m)
     m
   }
@@ -140,12 +137,11 @@ private[ml] object DecisionTreeClassificationModel {
   def fromOld(
       oldModel: OldDecisionTreeModel,
       parent: DecisionTreeClassifier,
-      fittingParamMap: ParamMap,
       categoricalFeatures: Map[Int, Int]): DecisionTreeClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification,
       s"Cannot convert non-classification DecisionTreeModel (old API) to" +
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
-    new DecisionTreeClassificationModel(parent, fittingParamMap, rootNode)
+    new DecisionTreeClassificationModel(parent, rootNode)
   }
 }

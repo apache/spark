@@ -44,13 +44,12 @@ class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    val map = extractParamMap(paramMap)
+  override def transform(dataset: DataFrame): DataFrame = {
     val assembleFunc = udf { r: Row =>
       VectorAssembler.assemble(r.toSeq: _*)
     }
     val schema = dataset.schema
-    val inputColNames = map(inputCols)
+    val inputColNames = $(inputCols)
     val args = inputColNames.map { c =>
       schema(c).dataType match {
         case DoubleType => UnresolvedAttribute(c)
@@ -59,13 +58,12 @@ class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
           Alias(Cast(UnresolvedAttribute(c), DoubleType), s"${c}_double_$uid")()
       }
     }
-    dataset.select(col("*"), assembleFunc(new Column(CreateStruct(args))).as(map(outputCol)))
+    dataset.select(col("*"), assembleFunc(new Column(CreateStruct(args))).as($(outputCol)))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
-    val inputColNames = map(inputCols)
-    val outputColName = map(outputCol)
+  override def transformSchema(schema: StructType): StructType = {
+    val inputColNames = $(inputCols)
+    val outputColName = $(outputCol)
     val inputDataTypes = inputColNames.map(name => schema(name).dataType)
     inputDataTypes.foreach {
       case _: NumericType | BooleanType =>

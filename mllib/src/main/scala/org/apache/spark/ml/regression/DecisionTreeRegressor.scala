@@ -20,7 +20,7 @@ package org.apache.spark.ml.regression
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
 import org.apache.spark.ml.impl.tree._
-import org.apache.spark.ml.param.{Params, ParamMap}
+import org.apache.spark.ml.param.Params
 import org.apache.spark.ml.tree.{DecisionTreeModel, Node}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
@@ -63,15 +63,13 @@ final class DecisionTreeRegressor
 
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
-  override protected def train(
-      dataset: DataFrame,
-      paramMap: ParamMap): DecisionTreeRegressionModel = {
+  override protected def train(dataset: DataFrame): DecisionTreeRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
-      MetadataUtils.getCategoricalFeatures(dataset.schema(paramMap(featuresCol)))
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, paramMap)
+      MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy = getOldStrategy(categoricalFeatures)
     val oldModel = OldDecisionTree.train(oldDataset, strategy)
-    DecisionTreeRegressionModel.fromOld(oldModel, this, paramMap, categoricalFeatures)
+    DecisionTreeRegressionModel.fromOld(oldModel, this, categoricalFeatures)
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
@@ -96,7 +94,6 @@ object DecisionTreeRegressor {
 @AlphaComponent
 final class DecisionTreeRegressionModel private[ml] (
     override val parent: DecisionTreeRegressor,
-    override val fittingParamMap: ParamMap,
     override val rootNode: Node)
   extends PredictionModel[Vector, DecisionTreeRegressionModel]
   with DecisionTreeModel with Serializable {
@@ -109,7 +106,7 @@ final class DecisionTreeRegressionModel private[ml] (
   }
 
   override protected def copy(): DecisionTreeRegressionModel = {
-    val m = new DecisionTreeRegressionModel(parent, fittingParamMap, rootNode)
+    val m = new DecisionTreeRegressionModel(parent, rootNode)
     Params.inheritValues(this.extractParamMap(), this, m)
     m
   }
@@ -130,12 +127,11 @@ private[ml] object DecisionTreeRegressionModel {
   def fromOld(
       oldModel: OldDecisionTreeModel,
       parent: DecisionTreeRegressor,
-      fittingParamMap: ParamMap,
       categoricalFeatures: Map[Int, Int]): DecisionTreeRegressionModel = {
     require(oldModel.algo == OldAlgo.Regression,
       s"Cannot convert non-regression DecisionTreeModel (old API) to" +
         s" DecisionTreeRegressionModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
-    new DecisionTreeRegressionModel(parent, fittingParamMap, rootNode)
+    new DecisionTreeRegressionModel(parent, rootNode)
   }
 }
