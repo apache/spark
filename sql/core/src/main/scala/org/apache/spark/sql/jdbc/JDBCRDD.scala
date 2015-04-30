@@ -37,7 +37,7 @@ private[sql] object JDBCRDD extends Logging {
    * @param sqlType - A field of java.sql.Types
    * @return The Catalyst type corresponding to sqlType.
    */
-  private def getCatalystType(sqlType: Int): DataType = {
+  private def getCatalystType(sqlType: Int, precision: Int, scale: Int): DataType = {
     val answer = sqlType match {
       case java.sql.Types.ARRAY         => null
       case java.sql.Types.BIGINT        => LongType
@@ -49,6 +49,8 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.CLOB          => StringType
       case java.sql.Types.DATALINK      => null
       case java.sql.Types.DATE          => DateType
+      case java.sql.Types.DECIMAL
+        if precision != 0 || scale != 0 => DecimalType(precision, scale)
       case java.sql.Types.DECIMAL       => DecimalType.Unlimited
       case java.sql.Types.DISTINCT      => null
       case java.sql.Types.DOUBLE        => DoubleType
@@ -61,6 +63,8 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.NCHAR         => StringType
       case java.sql.Types.NCLOB         => StringType
       case java.sql.Types.NULL          => null
+      case java.sql.Types.NUMERIC
+        if precision != 0 || scale != 0 => DecimalType(precision, scale)
       case java.sql.Types.NUMERIC       => DecimalType.Unlimited
       case java.sql.Types.NVARCHAR      => StringType
       case java.sql.Types.OTHER         => null
@@ -109,10 +113,11 @@ private[sql] object JDBCRDD extends Logging {
           val dataType = rsmd.getColumnType(i + 1)
           val typeName = rsmd.getColumnTypeName(i + 1)
           val fieldSize = rsmd.getPrecision(i + 1)
+          val fieldScale = rsmd.getScale(i + 1)
           val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
           val metadata = new MetadataBuilder().putString("name", columnName)
           var columnType = quirks.getCatalystType(dataType, typeName, fieldSize, metadata)
-          if (columnType == null) columnType = getCatalystType(dataType)
+          if (columnType == null) columnType = getCatalystType(dataType, fieldSize, fieldScale)
           fields(i) = StructField(columnName, columnType, nullable, metadata.build())
           i = i + 1
         }
@@ -307,6 +312,7 @@ private[sql] class JDBCRDD(
       case BooleanType           => BooleanConversion
       case DateType              => DateConversion
       case DecimalType.Unlimited => DecimalConversion
+      case DecimalType.Fixed(d)  => DecimalConversion
       case DoubleType            => DoubleConversion
       case FloatType             => FloatConversion
       case IntegerType           => IntegerConversion
