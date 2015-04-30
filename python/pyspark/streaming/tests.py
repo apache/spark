@@ -612,7 +612,6 @@ class KafkaStreamTests(PySparkStreamingTestCase):
     duration = 1
 
     def setUp(self):
-        print >> sys.stderr, "KafkaStreamTests setUp started"
         super(KafkaStreamTests, self).setUp()
 
         kafkaTestUtilsClz = self.ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader()\
@@ -640,9 +639,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def _validateRddResult(self, sendData, rdd):
         result = {}
+        print >> sys.stderr, "_validateRddResult started"
         for i in rdd.map(lambda x: x[1]).collect():
             result[i] = result.get(i, 0) + 1
-
         self.assertEqual(sendData, result)
 
     def test_kafka_stream(self):
@@ -655,7 +654,7 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         print >> sys.stderr, "test_kafka_stream created topic"
         self._kafkaTestUtils.sendMessages(topic, sendData)
         print >> sys.stderr, "test_kafka_stream sent messages"
-        time.sleep(1)
+        time.sleep(5)
 
         stream = KafkaUtils.createStream(self.ssc, self._kafkaTestUtils.zkAddress(),
                                          "test-streaming-consumer", {topic: 1},
@@ -702,8 +701,10 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
 
         self._kafkaTestUtils.createTopic(topic)
+        print >> sys.stderr, "test_kafka_rdd created topic"
         self._kafkaTestUtils.sendMessages(topic, sendData)
-
+        print >> sys.stderr, "test_kafka_rdd sent data"
+        time.sleep(5)
         rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges)
         self._validateRddResult(sendData, rdd)
 
@@ -719,9 +720,12 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         leaders = {TopicAndPartition(topic, 0): Broker(address[0], int(address[1]))}
 
         self._kafkaTestUtils.createTopic(topic)
+        print >> sys.stderr, "test_kafka_rdd_with_leaders created topic"
         self._kafkaTestUtils.sendMessages(topic, sendData)
-
+        print >> sys.stderr, "test_kafka_rdd_with_leaders sent data"
+        time.sleep(5)
         rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges, leaders)
+        print >> sys.stderr, "test_kafka_rdd_with_leaders created rdd"
         self._validateRddResult(sendData, rdd)
 
 if __name__ == "__main__":
