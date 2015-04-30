@@ -318,6 +318,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
         maxTime,
         formattedUnit).toHtml(jsCollector)
 
+    val hasReceiver = listener.allReceivers.nonEmpty
+
     val numCompletedBatches = listener.retainedCompletedBatches.size
     val numActiveBatches = batchTimes.length - numCompletedBatches
     val table =
@@ -334,7 +336,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
               <div>
+              {if (hasReceiver) {
                 <span id="triangle" onclick={Unparsed(triangleJs)}>{Unparsed(BLACK_RIGHT_TRIANGLE_HTML)}</span>
+              }}
                 <strong>Input Rate</strong>
               </div>
               <div>Avg: {eventRateForAllReceivers.formattedAvg} events/sec</div>
@@ -343,11 +347,13 @@ private[ui] class StreamingPage(parent: StreamingTab)
           <td class="timeline">{timelineDataForEventRateOfAllReceivers}</td>
           <td class="histogram">{histogramDataForEventRateOfAllReceivers}</td>
         </tr>
+      {if (hasReceiver) {
         <tr id="inputs-table" style="display: none;" >
           <td colspan="3">
-          {generateInputReceiversTable(jsCollector, minBatchTime, maxBatchTime, minEventRate, maxEventRate)}
+            {generateInputReceiversTable(jsCollector, minBatchTime, maxBatchTime, minEventRate, maxEventRate)}
           </td>
         </tr>
+      }}
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
