@@ -387,6 +387,35 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(95 < g.agg(functions.approxCountDistinct(df.key)).first()[0])
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
+    def test_math_functions(self):
+        df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
+        from pyspark.sql import mathfunctions as functions
+        import math
+
+        def get_values(l):
+            return [j[0] for j in l]
+
+        def assert_close(a, b):
+            c = get_values(b)
+            diff = [abs(v - c[k]) < 1e-6 for k, v in enumerate(a)]
+            return sum(diff) == len(a)
+        assert_close([math.cos(i) for i in range(10)],
+                     df.select(functions.cos(df.a)).collect())
+        assert_close([math.cos(i) for i in range(10)],
+                     df.select(functions.cos("a")).collect())
+        assert_close([math.sin(i) for i in range(10)],
+                     df.select(functions.sin(df.a)).collect())
+        assert_close([math.sin(i) for i in range(10)],
+                     df.select(functions.sin(df['a'])).collect())
+        assert_close([math.pow(i, 2 * i) for i in range(10)],
+                     df.select(functions.pow(df.a, df.b)).collect())
+        assert_close([math.pow(i, 2) for i in range(10)],
+                     df.select(functions.pow(df.a, 2)).collect())
+        assert_close([math.pow(i, 2) for i in range(10)],
+                     df.select(functions.pow(df.a, 2.0)).collect())
+        assert_close([math.hypot(i, 2 * i) for i in range(10)],
+                     df.select(functions.hypot(df.a, df.b)).collect())
+
     def test_save_and_load(self):
         df = self.df
         tmpPath = tempfile.mkdtemp()

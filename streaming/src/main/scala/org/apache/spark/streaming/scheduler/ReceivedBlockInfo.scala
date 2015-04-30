@@ -18,8 +18,8 @@
 package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.storage.StreamBlockId
-import org.apache.spark.streaming.receiver.{WriteAheadLogBasedStoreResult, ReceivedBlockStoreResult}
-import org.apache.spark.streaming.util.WriteAheadLogFileSegment
+import org.apache.spark.streaming.receiver.{ReceivedBlockStoreResult, WriteAheadLogBasedStoreResult}
+import org.apache.spark.streaming.util.WriteAheadLogRecordHandle
 
 /** Information about blocks received by the receiver */
 private[streaming] case class ReceivedBlockInfo(
@@ -33,9 +33,9 @@ private[streaming] case class ReceivedBlockInfo(
 
   def blockId: StreamBlockId = blockStoreResult.blockId
 
-  def writeAheadLogSegmentOption: Option[WriteAheadLogFileSegment] = {
+  def walRecordHandleOption: Option[WriteAheadLogRecordHandle] = {
     blockStoreResult match {
-      case walStoreResult: WriteAheadLogBasedStoreResult => Some(walStoreResult.segment)
+      case walStoreResult: WriteAheadLogBasedStoreResult => Some(walStoreResult.walRecordHandle)
       case _ => None
     }
   }

@@ -32,7 +32,7 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.util.WriteAheadLogReader
+import org.apache.spark.streaming.util.{WriteAheadLogUtils, FileBasedWriteAheadLogReader}
 import org.apache.spark.streaming.util.WriteAheadLogSuite._
 import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
@@ -59,7 +59,7 @@ class ReceivedBlockTrackerSuite
 
   test("block addition, and block to batch allocation") {
     val receivedBlockTracker = createTracker(setCheckpointDir = false)
-    receivedBlockTracker.isLogManagerEnabled should be (false)  // should be disable by default
+    receivedBlockTracker.isWriteAheadLogEnabled should be (false)  // should be disable by default
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual Seq.empty
 
     val blockInfos = generateBlockInfos()
@@ -118,10 +118,13 @@ class ReceivedBlockTrackerSuite
       logInfo(s"\n\n=====================\n$message\n$fileContents\n=====================\n")
     }
 
+    // Set WAL configuration
+    conf.set("spark.streaming.driver.writeAheadLog.rollingIntervalSecs", "1")
+    require(WriteAheadLogUtils.getRollingIntervalSecs(conf, isDriver = true) === 1)
+
     // Start tracker and add blocks
-    conf.set("spark.streaming.receivedBlockTracker.writeAheadLog.rotationIntervalSecs", "1")
     val tracker1 = createTracker(clock = manualClock)
-    tracker1.isLogManagerEnabled should be (true)
+    tracker1.isWriteAheadLogEnabled should be (true)
 
     val blockInfos1 = addBlockInfos(tracker1)
     tracker1.getUnallocatedBlocks(streamId).toList shouldEqual blockInfos1
@@ -187,7 +190,7 @@ class ReceivedBlockTrackerSuite
     eventually(timeout(10 seconds), interval(10 millisecond)) {
       getWriteAheadLogFiles() should not contain oldestLogFile
     }
-    printLogFiles("After cleanup")
+    printLogFiles("After clean")
 
     // Restart tracker and verify recovered state, specifically whether info about the first
     // batch has been removed, but not the second batch
@@ -201,12 +204,12 @@ class ReceivedBlockTrackerSuite
   test("disable write ahead log when checkpoint directory is not set") {
     // When checkpoint is disabled, then the write ahead log is disabled
     val tracker1 = createTracker(setCheckpointDir = false)
-    tracker1.isLogManagerEnabled should be (false)
+    tracker1.isWriteAheadLogEnabled should be (false)
   }
 
   /**
    * Create tracker object with the optional provided clock. Use fake clock if you
-   * want to control time by manually incrementing it to test log cleanup.
+   * want to control time by manually incrementing it to test log clean.
    */
   def createTracker(
       setCheckpointDir: Boolean = true,
@@ -237,7 +240,7 @@ class ReceivedBlockTrackerSuite
   def getWrittenLogData(logFiles: Seq[String] = getWriteAheadLogFiles)
     : Seq[ReceivedBlockTrackerLogEvent] = {
     logFiles.flatMap {
-      file => new WriteAheadLogReader(file, hadoopConf).toSeq
+      file => new FileBasedWriteAheadLogReader(file, hadoopConf).toSeq
     }.map { byteBuffer =>
       Utils.deserialize[ReceivedBlockTrackerLogEvent](byteBuffer.array)
     }.toList
@@ -256,7 +259,7 @@ class ReceivedBlockTrackerSuite
     BatchAllocationEvent(time, AllocatedBlocks(Map((streamId -> blockInfos))))
   }
 
-  /** Create batch cleanup object from the given info */
+  /** Create batch clean object from the given info */
   def createBatchCleanup(time: Long, moreTimes: Long*): BatchCleanupEvent = {
     BatchCleanupEvent((Seq(time) ++ moreTimes).map(Time.apply))
   }

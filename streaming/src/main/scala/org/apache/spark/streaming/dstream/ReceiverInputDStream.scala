@@ -72,18 +72,18 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
         val blockIds = blockInfos.map { _.blockId.asInstanceOf[BlockId] }.toArray
 
         // Is WAL segment info present with all the blocks
-        val isWALSegmentInfoPresent = blockInfos.forall { _.writeAheadLogSegmentOption.nonEmpty }
+        val isWALSegmentInfoPresent = blockInfos.forall { _.walRecordHandleOption.nonEmpty }
 
         if (isWALSegmentInfoPresent) {
           // If all the blocks have WAL segment info, then create a WALBackedBlockRDD
           val isBlockIdValid = blockInfos.map { _.isBlockIdValid() }.toArray
-          val blockWALSegments = blockInfos.map { _.writeAheadLogSegmentOption.get }.toArray
+          val blockWALSegments = blockInfos.map { _.walRecordHandleOption.get }.toArray
           new WriteAheadLogBackedBlockRDD[T](
             ssc.sparkContext, blockIds, blockWALSegments, isBlockIdValid)
         } else {
           // Else, create a BlockRDD. However, if there are some blocks with WAL info but not others
           // then that is unexpected and log a warning accordingly.
-          if (blockInfos.find(_.writeAheadLogSegmentOption.nonEmpty).nonEmpty) {
+          if (blockInfos.find(_.walRecordHandleOption.nonEmpty).nonEmpty) {
             logWarning("Could not find Write Ahead Log information on some of the blocks, " +
               "data may not be recoverable after driver failures")
           }

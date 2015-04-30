@@ -20,9 +20,12 @@ package org.apache.spark.ml.impl.tree
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.impl.estimator.PredictorParams
 import org.apache.spark.ml.param._
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
+import org.apache.spark.ml.param.shared.{HasSeed, HasMaxIter}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo,
+  BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Gini => OldGini, Entropy => OldEntropy,
   Impurity => OldImpurity, Variance => OldVariance}
+import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
 
 
 /**
@@ -117,79 +120,68 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   def setMaxDepth(value: Int): this.type = {
     require(value >= 0, s"maxDepth parameter must be >= 0.  Given bad value: $value")
     set(maxDepth, value)
-    this
   }
 
   /** @group getParam */
-  def getMaxDepth: Int = getOrDefault(maxDepth)
+  final def getMaxDepth: Int = getOrDefault(maxDepth)
 
   /** @group setParam */
   def setMaxBins(value: Int): this.type = {
     require(value >= 2, s"maxBins parameter must be >= 2.  Given bad value: $value")
     set(maxBins, value)
-    this
   }
 
   /** @group getParam */
-  def getMaxBins: Int = getOrDefault(maxBins)
+  final def getMaxBins: Int = getOrDefault(maxBins)
 
   /** @group setParam */
   def setMinInstancesPerNode(value: Int): this.type = {
     require(value >= 1, s"minInstancesPerNode parameter must be >= 1.  Given bad value: $value")
     set(minInstancesPerNode, value)
-    this
   }
 
   /** @group getParam */
-  def getMinInstancesPerNode: Int = getOrDefault(minInstancesPerNode)
+  final def getMinInstancesPerNode: Int = getOrDefault(minInstancesPerNode)
 
   /** @group setParam */
-  def setMinInfoGain(value: Double): this.type = {
-    set(minInfoGain, value)
-    this
-  }
+  def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
   /** @group getParam */
-  def getMinInfoGain: Double = getOrDefault(minInfoGain)
+  final def getMinInfoGain: Double = getOrDefault(minInfoGain)
 
   /** @group expertSetParam */
   def setMaxMemoryInMB(value: Int): this.type = {
     require(value > 0, s"maxMemoryInMB parameter must be > 0.  Given bad value: $value")
     set(maxMemoryInMB, value)
-    this
   }
 
   /** @group expertGetParam */
-  def getMaxMemoryInMB: Int = getOrDefault(maxMemoryInMB)
+  final def getMaxMemoryInMB: Int = getOrDefault(maxMemoryInMB)
 
   /** @group expertSetParam */
-  def setCacheNodeIds(value: Boolean): this.type = {
-    set(cacheNodeIds, value)
-    this
-  }
+  def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
 
   /** @group expertGetParam */
-  def getCacheNodeIds: Boolean = getOrDefault(cacheNodeIds)
+  final def getCacheNodeIds: Boolean = getOrDefault(cacheNodeIds)
 
   /** @group expertSetParam */
   def setCheckpointInterval(value: Int): this.type = {
     require(value >= 1, s"checkpointInterval parameter must be >= 1.  Given bad value: $value")
     set(checkpointInterval, value)
-    this
   }
 
   /** @group expertGetParam */
-  def getCheckpointInterval: Int = getOrDefault(checkpointInterval)
+  final def getCheckpointInterval: Int = getOrDefault(checkpointInterval)
 
-  /**
-   * Create a Strategy instance to use with the old API.
-   * NOTE: The caller should set impurity and subsamplingRate (which is set to 1.0,
-   *       the default for single trees).
-   */
+  /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
-      numClasses: Int): OldStrategy = {
-    val strategy = OldStrategy.defaultStategy(OldAlgo.Classification)
+      numClasses: Int,
+      oldAlgo: OldAlgo.Algo,
+      oldImpurity: OldImpurity,
+      subsamplingRate: Double): OldStrategy = {
+    val strategy = OldStrategy.defaultStategy(oldAlgo)
+    strategy.impurity = oldImpurity
     strategy.checkpointInterval = getCheckpointInterval
     strategy.maxBins = getMaxBins
     strategy.maxDepth = getMaxDepth
@@ -199,13 +191,13 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
     strategy.useNodeIdCache = getCacheNodeIds
     strategy.numClasses = numClasses
     strategy.categoricalFeaturesInfo = categoricalFeatures
-    strategy.subsamplingRate = 1.0 // default for individual trees
+    strategy.subsamplingRate = subsamplingRate
     strategy
   }
 }
 
 /**
- * (private trait) Parameters for Decision Tree-based classification algorithms.
+ * Parameters for Decision Tree-based classification algorithms.
  */
 private[ml] trait TreeClassifierParams extends Params {
 
@@ -215,7 +207,7 @@ private[ml] trait TreeClassifierParams extends Params {
    * (default = gini)
    * @group param
    */
-  val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
+  final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
     s" ${TreeClassifierParams.supportedImpurities.mkString(", ")}")
 
@@ -228,11 +220,10 @@ private[ml] trait TreeClassifierParams extends Params {
       s"Tree-based classifier was given unrecognized impurity: $value." +
       s"  Supported options: ${TreeClassifierParams.supportedImpurities.mkString(", ")}")
     set(impurity, impurityStr)
-    this
   }
 
   /** @group getParam */
-  def getImpurity: String = getOrDefault(impurity)
+  final def getImpurity: String = getOrDefault(impurity)
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -249,11 +240,11 @@ private[ml] trait TreeClassifierParams extends Params {
 
 private[ml] object TreeClassifierParams {
   // These options should be lowercase.
-  val supportedImpurities: Array[String] = Array("entropy", "gini").map(_.toLowerCase)
+  final val supportedImpurities: Array[String] = Array("entropy", "gini").map(_.toLowerCase)
 }
 
 /**
- * (private trait) Parameters for Decision Tree-based regression algorithms.
+ * Parameters for Decision Tree-based regression algorithms.
  */
 private[ml] trait TreeRegressorParams extends Params {
 
@@ -263,7 +254,7 @@ private[ml] trait TreeRegressorParams extends Params {
    * (default = variance)
    * @group param
    */
-  val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
+  final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
     s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}")
 
@@ -276,11 +267,10 @@ private[ml] trait TreeRegressorParams extends Params {
       s"Tree-based regressor was given unrecognized impurity: $value." +
         s"  Supported options: ${TreeRegressorParams.supportedImpurities.mkString(", ")}")
     set(impurity, impurityStr)
-    this
   }
 
   /** @group getParam */
-  def getImpurity: String = getOrDefault(impurity)
+  final def getImpurity: String = getOrDefault(impurity)
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -296,5 +286,186 @@ private[ml] trait TreeRegressorParams extends Params {
 
 private[ml] object TreeRegressorParams {
   // These options should be lowercase.
-  val supportedImpurities: Array[String] = Array("variance").map(_.toLowerCase)
+  final val supportedImpurities: Array[String] = Array("variance").map(_.toLowerCase)
+}
+
+/**
+ * :: DeveloperApi ::
+ * Parameters for Decision Tree-based ensemble algorithms.
+ *
+ * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ */
+@DeveloperApi
+private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
+
+  /**
+   * Fraction of the training data used for learning each decision tree.
+   * (default = 1.0)
+   * @group param
+   */
+  final val subsamplingRate: DoubleParam = new DoubleParam(this, "subsamplingRate",
+    "Fraction of the training data used for learning each decision tree.")
+
+  setDefault(subsamplingRate -> 1.0)
+
+  /** @group setParam */
+  def setSubsamplingRate(value: Double): this.type = {
+    require(value > 0.0 && value <= 1.0,
+      s"Subsampling rate must be in range (0,1]. Bad rate: $value")
+    set(subsamplingRate, value)
+  }
+
+  /** @group getParam */
+  final def getSubsamplingRate: Double = getOrDefault(subsamplingRate)
+
+  /** @group setParam */
+  def setSeed(value: Long): this.type = set(seed, value)
+
+  /**
+   * Create a Strategy instance to use with the old API.
+   * NOTE: The caller should set impurity and seed.
+   */
+  private[ml] def getOldStrategy(
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int,
+      oldAlgo: OldAlgo.Algo,
+      oldImpurity: OldImpurity): OldStrategy = {
+    super.getOldStrategy(categoricalFeatures, numClasses, oldAlgo, oldImpurity, getSubsamplingRate)
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Parameters for Random Forest algorithms.
+ *
+ * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ */
+@DeveloperApi
+private[ml] trait RandomForestParams extends TreeEnsembleParams {
+
+  /**
+   * Number of trees to train (>= 1).
+   * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
+   * TODO: Change to always do bootstrapping (simpler).  SPARK-7130
+   * (default = 20)
+   * @group param
+   */
+  final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)")
+
+  /**
+   * The number of features to consider for splits at each tree node.
+   * Supported options:
+   *  - "auto": Choose automatically for task:
+   *            If numTrees == 1, set to "all."
+   *            If numTrees > 1 (forest), set to "sqrt" for classification and
+   *              to "onethird" for regression.
+   *  - "all": use all features
+   *  - "onethird": use 1/3 of the features
+   *  - "sqrt": use sqrt(number of features)
+   *  - "log2": use log2(number of features)
+   * (default = "auto")
+   *
+   * These various settings are based on the following references:
+   *  - log2: tested in Breiman (2001)
+   *  - sqrt: recommended by Breiman manual for random forests
+   *  - The defaults of sqrt (classification) and onethird (regression) match the R randomForest
+   *    package.
+   * @see [[http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf  Breiman (2001)]]
+   * @see [[http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf  Breiman manual for
+   *     random forests]]
+   *
+   * @group param
+   */
+  final val featureSubsetStrategy: Param[String] = new Param[String](this, "featureSubsetStrategy",
+    "The number of features to consider for splits at each tree node." +
+      s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}")
+
+  setDefault(numTrees -> 20, featureSubsetStrategy -> "auto")
+
+  /** @group setParam */
+  def setNumTrees(value: Int): this.type = {
+    require(value >= 1, s"Random Forest numTrees parameter cannot be $value; it must be >= 1.")
+    set(numTrees, value)
+  }
+
+  /** @group getParam */
+  final def getNumTrees: Int = getOrDefault(numTrees)
+
+  /** @group setParam */
+  def setFeatureSubsetStrategy(value: String): this.type = {
+    val strategyStr = value.toLowerCase
+    require(RandomForestParams.supportedFeatureSubsetStrategies.contains(strategyStr),
+      s"RandomForestParams was given unrecognized featureSubsetStrategy: $value. Supported" +
+        s" options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}")
+    set(featureSubsetStrategy, strategyStr)
+  }
+
+  /** @group getParam */
+  final def getFeatureSubsetStrategy: String = getOrDefault(featureSubsetStrategy)
+}
+
+private[ml] object RandomForestParams {
+  // These options should be lowercase.
+  final val supportedFeatureSubsetStrategies: Array[String] =
+    Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase)
+}
+
+/**
+ * :: DeveloperApi ::
+ * Parameters for Gradient-Boosted Tree algorithms.
+ *
+ * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ */
+@DeveloperApi
+private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
+
+  /**
+   * Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each
+   * estimator.
+   * (default = 0.1)
+   * @group param
+   */
+  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size (a.k.a." +
+    " learning rate) in interval (0, 1] for shrinking the contribution of each estimator")
+
+  /* TODO: Add this doc when we add this param.  SPARK-7132
+   * Threshold for stopping early when runWithValidation is used.
+   * If the error rate on the validation input changes by less than the validationTol,
+   * then learning will stop early (before [[numIterations]]).
+   * This parameter is ignored when run is used.
+   * (default = 1e-5)
+   * @group param
+   */
+  // final val validationTol: DoubleParam = new DoubleParam(this, "validationTol", "")
+  // validationTol -> 1e-5
+
+  setDefault(maxIter -> 20, stepSize -> 0.1)
+
+  /** @group setParam */
+  def setMaxIter(value: Int): this.type = {
+    require(value >= 1, s"Gradient Boosting maxIter parameter cannot be $value; it must be >= 1.")
+    set(maxIter, value)
+  }
+
+  /** @group setParam */
+  def setStepSize(value: Double): this.type = {
+    require(value > 0.0 && value <= 1.0,
+      s"GBT given invalid step size ($value).  Value should be in (0,1].")
+    set(stepSize, value)
+  }
+
+  /** @group getParam */
+  final def getStepSize: Double = getOrDefault(stepSize)
+
+  /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
+  private[ml] def getOldBoostingStrategy(
+      categoricalFeatures: Map[Int, Int],
+      oldAlgo: OldAlgo.Algo): OldBoostingStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 2, oldAlgo, OldVariance)
+    // NOTE: The old API does not support "seed" so we ignore it.
+    new OldBoostingStrategy(strategy, getOldLossType, getMaxIter, getStepSize)
+  }
+
+  /** Get old Gradient Boosting Loss type */
+  private[ml] def getOldLossType: OldLoss
 }

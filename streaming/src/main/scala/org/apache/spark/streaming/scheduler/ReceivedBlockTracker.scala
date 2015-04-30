@@ -26,7 +26,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.streaming.Time
-import org.apache.spark.streaming.util.WriteAheadLogManager
+import org.apache.spark.streaming.util.{WriteAheadLog, WriteAheadLogUtils}
 import org.apache.spark.util.{Clock, Utils}
 import org.apache.spark.{Logging, SparkConf, SparkException}
 
@@ -71,7 +71,7 @@ private[streaming] class ReceivedBlockTracker(
 
   private val streamIdToUnallocatedBlockQueues = new mutable.HashMap[Int, ReceivedBlockQueue]
   private val timeToAllocatedBlocks = new mutable.HashMap[Time, AllocatedBlocks]
-  private val logManagerOption = createLogManager()
+  private val writeAheadLogOption = createWriteAheadLog()
 
   private var lastAllocatedBatchTime: Time = null
 
@@ -158,12 +158,12 @@ private[streaming] class ReceivedBlockTracker(
     logInfo("Deleting batches " + timesToCleanup)
     writeToLog(BatchCleanupEvent(timesToCleanup))
     timeToAllocatedBlocks --= timesToCleanup
-    logManagerOption.foreach(_.cleanupOldLogs(cleanupThreshTime.milliseconds, waitForCompletion))
+    writeAheadLogOption.foreach(_.clean(cleanupThreshTime.milliseconds, waitForCompletion))
   }
 
   /** Stop the block tracker. */
   def stop() {
-    logManagerOption.foreach { _.stop() }
+    writeAheadLogOption.foreach { _.close() }
   }
 
   /**
@@ -194,9 +194,10 @@ private[streaming] class ReceivedBlockTracker(
       timeToAllocatedBlocks --= batchTimes
     }
 
-    logManagerOption.foreach { logManager =>
+    writeAheadLogOption.foreach { writeAheadLog =>
       logInfo(s"Recovering from write ahead logs in ${checkpointDirOption.get}")
-      logManager.readFromLog().foreach { byteBuffer =>
+      import scala.collection.JavaConversions._
+      writeAheadLog.readAll().foreach { byteBuffer =>
         logTrace("Recovering record " + byteBuffer)
         Utils.deserialize[ReceivedBlockTrackerLogEvent](byteBuffer.array) match {
           case BlockAdditionEvent(receivedBlockInfo) =>
@@ -212,10 +213,10 @@ private[streaming] class ReceivedBlockTracker(
 
   /** Write an update to the tracker to the write ahead log */
   private def writeToLog(record: ReceivedBlockTrackerLogEvent) {
-    if (isLogManagerEnabled) {
+    if (isWriteAheadLogEnabled) {
       logDebug(s"Writing to log $record")
-      logManagerOption.foreach { logManager =>
-        logManager.writeToLog(ByteBuffer.wrap(Utils.serialize(record)))
+      writeAheadLogOption.foreach { logManager =>
+        logManager.write(ByteBuffer.wrap(Utils.serialize(record)), clock.getTimeMillis())
       }
     }
   }
@@ -226,19 +227,15 @@ private[streaming] class ReceivedBlockTracker(
   }
 
   /** Optionally create the write ahead log manager only if the feature is enabled */
-  private def createLogManager(): Option[WriteAheadLogManager] = {
+  private def createWriteAheadLog(): Option[WriteAheadLog] = {
     checkpointDirOption.map { checkpointDir =>
-      val logDir = ReceivedBlockTracker.checkpointDirToLogDir(checkpointDir)
-      val rollingIntervalSecs = conf.getInt(
-        "spark.streaming.receivedBlockTracker.writeAheadLog.rotationIntervalSecs", 60)
-      new WriteAheadLogManager(logDir, hadoopConf,
-        rollingIntervalSecs = rollingIntervalSecs, clock = clock,
-        callerName = "ReceivedBlockHandlerMaster")
+      val logDir = ReceivedBlockTracker.checkpointDirToLogDir(checkpointDirOption.get)
+      WriteAheadLogUtils.createLogForDriver(conf, logDir, hadoopConf)
     }
   }
 
-  /** Check if the log manager is enabled. This is only used for testing purposes. */
-  private[streaming] def isLogManagerEnabled: Boolean = logManagerOption.nonEmpty
+  /** Check if the write ahead log is enabled. This is only used for testing purposes. */
+  private[streaming] def isWriteAheadLogEnabled: Boolean = writeAheadLogOption.nonEmpty
 }
 
 private[streaming] object ReceivedBlockTracker {

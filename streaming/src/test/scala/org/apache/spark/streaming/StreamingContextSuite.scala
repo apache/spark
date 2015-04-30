@@ -522,7 +522,7 @@ class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging 
   }
 
   def onStop() {
-    // no cleanup to be done, the receiving thread should stop on it own
+    // no clean to be done, the receiving thread should stop on it own
   }
 }
 
@@ -555,7 +555,7 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
   def onStop() {
     // Simulate slow receiver by waiting for all records to be produced
     while(!SlowTestReceiver.receivedAllRecords) Thread.sleep(100)
-    // no cleanup to be done, the receiving thread should stop on it own
+    // no clean to be done, the receiving thread should stop on it own
   }
 }
 
