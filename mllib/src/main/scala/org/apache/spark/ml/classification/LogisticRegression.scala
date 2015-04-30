@@ -79,7 +79,7 @@ class LogisticRegression
     if (handlePersistence) {
       oldDataset.unpersist()
     }
-    lrm
+    copyValues(lrm)
   }
 }
 

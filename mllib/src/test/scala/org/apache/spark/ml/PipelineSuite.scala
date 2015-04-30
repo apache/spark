@@ -27,15 +27,25 @@ import org.apache.spark.sql.DataFrame
 
 class PipelineSuite extends FunSuite {
 
-  abstract class MyModel extends Model[MyModel]
+  abstract class MyModel extends Model[MyModel] {
+    override def copy(extra: ParamMap): MyModel = this
+  }
+
+  abstract class MyTransformer extends Transformer {
+    override def copy(extra: ParamMap): MyTransformer = this
+  }
+
+  abstract class MyEstimator extends Estimator[MyModel] {
+    override def copy(extra: ParamMap): MyEstimator = this
+  }
 
   test("pipeline") {
     val estimator0 = mock[Estimator[MyModel]]
     val model0 = mock[MyModel]
-    val transformer1 = mock[Transformer]
-    val estimator2 = mock[Estimator[MyModel]]
+    val transformer1 = mock[MyTransformer]
+    val estimator2 = mock[MyEstimator]
     val model2 = mock[MyModel]
-    val transformer3 = mock[Transformer]
+    val transformer3 = mock[MyTransformer]
     val dataset0 = mock[DataFrame]
     val dataset1 = mock[DataFrame]
     val dataset2 = mock[DataFrame]
@@ -55,7 +65,7 @@ class PipelineSuite extends FunSuite {
       .setStages(Array(estimator0, transformer1, estimator2, transformer3))
     val pipelineModel = pipeline.fit(dataset0)
 
-    assert(pipelineModel.stages.size === 4)
+    assert(pipelineModel.stages.length === 4)
     assert(pipelineModel.stages(0).eq(model0))
     assert(pipelineModel.stages(1).eq(transformer1))
     assert(pipelineModel.stages(2).eq(model2))

@@ -444,8 +444,8 @@ trait Params extends Identifiable with Serializable {
   protected def copyValues[T <: Params](to: T, extra: ParamMap = ParamMap.empty): T = {
     val map = extractParamMap(extra)
     params.foreach { param =>
-      if (paramMap.contains(param) && to.hasParam(param.name)) {
-        to.set(to.getParam(param.name), paramMap(param))
+      if (map.contains(param) && to.hasParam(param.name)) {
+        to.set(param.name, map(param))
       }
     }
     to
