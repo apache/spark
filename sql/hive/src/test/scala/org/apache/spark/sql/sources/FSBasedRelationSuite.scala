@@ -49,7 +49,7 @@ class SimpleFSBasedSource extends FSBasedRelationProvider {
           Array.empty[Partition])
       }
 
-    SimpleFSBasedRelation(path, dataSchema, maybePartitionSpec, parameters)(sqlContext)
+    new SimpleFSBasedRelation(path, dataSchema, maybePartitionSpec, parameters)(sqlContext)
   }
 }
 
@@ -67,11 +67,11 @@ class SimpleOutputWriter extends OutputWriter {
   }
 }
 
-case class SimpleFSBasedRelation
-    (path: String,
-     dataSchema: StructType,
-     maybePartitionSpec: Option[PartitionSpec],
-     parameter: Map[String, String])
+class SimpleFSBasedRelation
+    (val path: String,
+     val dataSchema: StructType,
+     val maybePartitionSpec: Option[PartitionSpec],
+     val parameter: Map[String, String])
     (@transient val sqlContext: SQLContext)
   extends FSBasedRelation(Array(path), maybePartitionSpec) {
 
@@ -163,8 +163,10 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
   }
 
   test("load() - partitioned table - partition column not included in data files") {
-    fs.mkdirs(new Path(basePath, "p1=1/p2=hello"))
-    fs.mkdirs(new Path(basePath, "p1=2/p2=world"))
+    // Mocks partition directory layout.
+    val fakeData = sparkContext.parallelize(Seq("placeholder"))
+    fakeData.saveAsTextFile(new Path(basePath, "p1=1/p2=hello").toString)
+    fakeData.saveAsTextFile(new Path(basePath, "p1=2/p2=world").toString)
 
     val df = load(
       source = classOf[SimpleFSBasedSource].getCanonicalName,
@@ -192,13 +194,16 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
     // Check for column pruning, filter push-down, and partition pruning
     assert(TestResult.requiredColumns.toSet === Set("a", "b"))
     assert(TestResult.filters === Seq(GreaterThan("a", 0)))
-    assert(TestResult.inputPaths === Seq(new Path(basePath, "p1=1/p2=hello").toString))
+    assertResult(Array(new Path(basePath, "p1=1/p2=hello"))) {
+      TestResult.inputPaths.map(new Path(_).getParent)
+    }
   }
 
   test("load() - partitioned table - partition column included in data files") {
-    val data = sparkContext.parallelize(Seq.empty[String])
-    data.saveAsTextFile(new Path(basePath, "p1=1/p2=hello").toString)
-    data.saveAsTextFile(new Path(basePath, "p1=2/p2=world").toString)
+    // Mocks partition directory layout.
+    val fakeData = sparkContext.parallelize(Seq("placeholder"))
+    fakeData.saveAsTextFile(new Path(basePath, "p1=1/p2=hello").toString)
+    fakeData.saveAsTextFile(new Path(basePath, "p1=2/p2=world").toString)
 
     val dataSchema =
       StructType(
@@ -235,7 +240,9 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
     // Check for column pruning, filter push-down, and partition pruning
     assert(TestResult.requiredColumns.toSet === Set("a", "b"))
     assert(TestResult.filters === Seq(GreaterThan("a", 0)))
-    assert(TestResult.inputPaths === Seq(new Path(basePath, "p1=1/p2=hello").toString))
+    assertResult(Array(new Path(basePath, "p1=1/p2=hello"))) {
+      TestResult.inputPaths.map(new Path(_).getParent)
+    }
   }
 
   test("save() - partitioned table - Overwrite") {

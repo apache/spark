@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
@@ -24,7 +27,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.types.{UTF8String, StringType}
+import org.apache.spark.sql.types.{StructType, UTF8String, StringType}
 import org.apache.spark.sql.{Row, Strategy, execution, sources}
 
 /**
@@ -53,11 +56,12 @@ private[sql] object DataSourceStrategy extends Strategy {
         filters,
         (a, _) => t.buildScan(a)) :: Nil
 
-    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: FSBasedRelation)) =>
-      val selectedPartitions = prunePartitions(filters, t.partitionSpec)
-      val inputPaths = selectedPartitions.map(_.path).toArray
+    // Scanning partitioned FSBasedRelation
+    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: FSBasedRelation))
+        if t.partitionSpec.partitionColumns.nonEmpty =>
+      val selectedPartition = prunePartitions(filters, t.partitionSpec).toArray
 
-      // Don't push down predicates that reference partition columns
+      // Only pushes down predicates that do not reference partition columns.
       val pushedFilters = {
         val partitionColumnNames = t.partitionSpec.partitionColumns.map(_.name).toSet
         filters.filter { f =>
@@ -66,10 +70,25 @@ private[sql] object DataSourceStrategy extends Strategy {
         }
       }
 
-      pruneFilterProject(
+      buildPartitionedTableScan(
         l,
         projectList,
         pushedFilters,
+        t.partitionSpec.partitionColumns,
+        selectedPartition) :: Nil
+
+    // Scanning non-partitioned FSBasedRelation
+    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: FSBasedRelation)) =>
+      val inputPaths = t.paths.map(new Path(_)).flatMap { path =>
+        val fs = path.getFileSystem(t.sqlContext.sparkContext.hadoopConfiguration)
+        val qualifiedPath = fs.makeQualified(path)
+        SparkHadoopUtil.get.listLeafStatuses(fs, qualifiedPath).map(_.getPath.toString)
+      }
+
+      pruneFilterProject(
+        l,
+        projectList,
+        filters,
         (a, f) => t.buildScan(a, f, inputPaths)) :: Nil
 
     case l @ LogicalRelation(t: TableScan) =>
@@ -80,6 +99,94 @@ private[sql] object DataSourceStrategy extends Strategy {
       execution.ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case _ => Nil
+  }
+
+  private def buildPartitionedTableScan(
+      logicalRelation: LogicalRelation,
+      projections: Seq[NamedExpression],
+      filters: Seq[Expression],
+      partitionColumns: StructType,
+      partitions: Array[Partition]) = {
+    val output = projections.map(_.toAttribute)
+    val relation = logicalRelation.relation.asInstanceOf[FSBasedRelation]
+    val dataSchema = relation.dataSchema
+
+    // Builds RDD[Row]s for each selected partition.
+    val perPartitionRows = partitions.map { case Partition(partitionValues, dir) =>
+      // Paths to all data files within this partition
+      val dataFilePaths = {
+        val dirPath = new Path(dir)
+        val fs = dirPath.getFileSystem(SparkHadoopUtil.get.conf)
+        fs.listStatus(dirPath)
+          .map(_.getPath)
+          .filter { path =>
+            val name = path.getName
+            name.startsWith("_") || name.startsWith(".")
+          }
+          .map(fs.makeQualified(_).toString)
+      }
+
+      // The table scan operator (PhysicalRDD) which retrieves required columns from data files.
+      // Notice that the schema of data files, represented by `relation.dataSchema`, may contain
+      // some partition column(s). Those partition columns that are only encoded in partition
+      // directory paths are not covered by this table scan operator.
+      val scan =
+        pruneFilterProject(
+          logicalRelation,
+          projections,
+          filters,
+          (requiredColumns, filters) => {
+            // Only columns appear in actual data, which possibly include some partition column(s)
+            relation.buildScan(
+              requiredColumns.filter(dataSchema.fieldNames.contains),
+              filters,
+              dataFilePaths)
+          })
+
+      // Merges in those partition values that are not contained in data rows.
+      mergePartitionValues(output, partitionValues, scan)
+    }
+
+    val unionedRows = perPartitionRows.reduceOption(_ ++ _).getOrElse(relation.sqlContext.emptyResult)
+    createPhysicalRDD(logicalRelation.relation, output, unionedRows)
+  }
+
+  private def mergePartitionValues(
+      output: Seq[Attribute],
+      partitionValues: Row,
+      scan: SparkPlan): RDD[Row] = {
+    val mergeWithPartitionValues = {
+      val outputColNames = output.map(_.name)
+      val outputDataColNames = scan.schema.fieldNames
+
+      outputColNames.zipWithIndex.map { case (name, index) =>
+        val i = outputDataColNames.indexOf(name)
+        if (i > -1) {
+          // Column appears in data files, retrieve it from data rows
+          (mutableRow: MutableRow, dataRow: expressions.Row, ordinal: Int) => {
+            mutableRow(ordinal) = dataRow(i)
+          }
+        } else {
+          // Column doesn't appear in data file (must be a partition column), retrieve it from
+          // partition values of this partition.
+          (mutableRow: MutableRow, dataRow: expressions.Row, ordinal: Int) => {
+            mutableRow(ordinal) = partitionValues(i)
+          }
+        }
+      }
+    }
+
+    scan.execute().mapPartitions { iterator =>
+      val mutableRow = new SpecificMutableRow(output.map(_.dataType))
+      iterator.map { row =>
+        var i = 0
+        while (i < mutableRow.length) {
+          mergeWithPartitionValues(i)(mutableRow, row, i)
+          i += 1
+        }
+        mutableRow.asInstanceOf[expressions.Row]
+      }
+    }
   }
 
   protected def prunePartitions(
@@ -225,13 +332,13 @@ private[sql] object DataSourceStrategy extends Strategy {
         translate(child).map(sources.Not)
 
       case expressions.StartsWith(a: Attribute, Literal(v: UTF8String, StringType)) =>
-        Some(sources.StringStartsWith(a.name, v.toString))
+        Some(sources.StringStartsWith(a.name, v.toString()))
 
       case expressions.EndsWith(a: Attribute, Literal(v: UTF8String, StringType)) =>
-        Some(sources.StringEndsWith(a.name, v.toString))
+        Some(sources.StringEndsWith(a.name, v.toString()))
 
       case expressions.Contains(a: Attribute, Literal(v: UTF8String, StringType)) =>
-        Some(sources.StringContains(a.name, v.toString))
+        Some(sources.StringContains(a.name, v.toString()))
 
       case _ => None
     }

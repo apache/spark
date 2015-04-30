@@ -361,10 +361,13 @@ abstract class FSBasedRelation private[sql](
   def dataSchema: StructType
 
   /**
-   * Builds an `RDD[Row]` containing all rows within this relation.
+   * For a non-partitioned relation, this method builds an `RDD[Row]` containing all rows within
+   * this relation. For partitioned relations, this method is called for each selected partition,
+   * and builds an `RDD[Row]` containg all rows within that single partition.
    *
-   * @param inputPaths Data files to be read. If the underlying relation is partitioned, only data
-   *        files within required partition directories are included.
+   * @param inputPaths For a non-partitioned relation, it contains paths of all data files in the
+   *        relation. For a partitioned relation, it contains paths of all data files in a single
+   *        selected partition.
    */
   def buildScan(inputPaths: Array[String]): RDD[Row] = {
     throw new RuntimeException(
@@ -372,26 +375,32 @@ abstract class FSBasedRelation private[sql](
   }
 
   /**
-   * Builds an `RDD[Row]` containing all rows within this relation.
+   * For a non-partitioned relation, this method builds an `RDD[Row]` containing all rows within
+   * this relation. For partitioned relations, this method is called for each selected partition,
+   * and builds an `RDD[Row]` containg all rows within that single partition.
    *
    * @param requiredColumns Required columns.
-   * @param inputPaths Data files to be read. If the underlying relation is partitioned, only data
-   *        files within required partition directories are included.
+   * @param inputPaths For a non-partitioned relation, it contains paths of all data files in the
+   *        relation. For a partitioned relation, it contains paths of all data files in a single
+   *        selected partition.
    */
   def buildScan(requiredColumns: Array[String], inputPaths: Array[String]): RDD[Row] = {
     buildScan(inputPaths)
   }
 
   /**
-   * Builds an `RDD[Row]` containing all rows within this relation.
+   * For a non-partitioned relation, this method builds an `RDD[Row]` containing all rows within
+   * this relation. For partitioned relations, this method is called for each selected partition,
+   * and builds an `RDD[Row]` containg all rows within that single partition.
    *
    * @param requiredColumns Required columns.
    * @param filters Candidate filters to be pushed down. The actual filter should be the conjunction
    *        of all `filters`.  The pushed down filters are currently purely an optimization as they
    *        will all be evaluated again. This means it is safe to use them with methods that produce
    *        false positives such as filtering partitions based on a bloom filter.
-   * @param inputPaths Data files to be read. If the underlying relation is partitioned, only data
-   *        files within required partition directories are included.
+   * @param inputPaths For a non-partitioned relation, it contains paths of all data files in the
+   *        relation. For a partitioned relation, it contains paths of all data files in a single
+   *        selected partition.
    */
   def buildScan(
       requiredColumns: Array[String],
