@@ -150,7 +150,8 @@ class MergerTests(unittest.TestCase):
         def gen_gs(N, step=1):
             return shuffle.GroupByKey(gen_data(N, step))
 
-        self.assertEqual(1, len(list(gen_gs(1))))
+        self.assertEqual(42, len(list(gen_gs(1))))
+        # self.assertEqual(1, len(list(gen_gs(1))))
         self.assertEqual(2, len(list(gen_gs(2))))
         self.assertEqual(100, len(list(gen_gs(100))))
         self.assertEqual(list(range(1, 101)), [k for k, _ in gen_gs(100)])

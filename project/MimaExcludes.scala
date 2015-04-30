@@ -85,9 +85,9 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Vector.numNonzeros"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.Vector.toSparse")
-            // ProblemFilters.exclude[MissingMethodProblem](
-            //  "org.apache.spark.mllib.linalg.Vector.numActives")
+              "org.apache.spark.mllib.linalg.Vector.toSparse"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.numActives")
           )
 
         case v if v.startsWith("1.3") =>
