@@ -22,6 +22,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.{UUID, Date}
 import java.util.concurrent._
+import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
@@ -134,8 +135,8 @@ private[worker] class Worker(
   private val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
   private val workerSource = new WorkerSource(this)
 
-  private var registerMasterFutures: Array[Future[_]] = null
-  private var registrationRetryTimer: Option[ScheduledFuture[_]] = None
+  private var registerMasterFutures: Array[JFuture[_]] = null
+  private var registrationRetryTimer: Option[JScheduledFuture[_]] = None
 
   // A thread pool for registering with masters. Because registering with a master is a blocking
   // action, this thread pool must be able to create "masterRpcAddresses.size" threads at the same
@@ -199,7 +200,7 @@ private[worker] class Worker(
     cancelLastRegistrationRetry()
   }
 
-  private def tryRegisterAllMasters(): Array[Future[_]] = {
+  private def tryRegisterAllMasters(): Array[JFuture[_]] = {
     for (masterAddress <- masterRpcAddresses) yield {
       registerMasterThreadPool.submit(new Runnable {
         override def run(): Unit =

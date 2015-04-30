@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.client
 
 import java.util.concurrent._
+import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 
 import scala.util.control.NonFatal
 
@@ -59,8 +60,8 @@ private[spark] class AppClient(
     // To avoid calling listener.disconnected() multiple times
     private var alreadyDisconnected = false
     @volatile private var alreadyDead = false // To avoid calling listener.dead() multiple times
-    @volatile private var registerMasterFutures: Array[Future[_]] = null
-    @volatile private var registrationRetryTimer: ScheduledFuture[_] = null
+    @volatile private var registerMasterFutures: Array[JFuture[_]] = null
+    @volatile private var registrationRetryTimer: JScheduledFuture[_] = null
 
     // A thread pool for registering with masters. Because registering with a master is a blocking
     // action, this thread pool must be able to create "masterRpcAddresses.size" threads at the same
@@ -90,7 +91,7 @@ private[spark] class AppClient(
     /**
      *  Register with all masters asynchronously and returns an array `Future`s for cancellation.
      */
-    private def tryRegisterAllMasters(): Array[Future[_]] = {
+    private def tryRegisterAllMasters(): Array[JFuture[_]] = {
       for (masterAddress <- masterRpcAddresses) yield {
         registerMasterThreadPool.submit(new Runnable {
           override def run(): Unit = try {
