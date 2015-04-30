@@ -436,7 +436,7 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  def executorLost(executorId: String, reason: ExecutorLossReason) {
+  override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {
     var failedExecutor: Option[String] = None
 
     synchronized {
