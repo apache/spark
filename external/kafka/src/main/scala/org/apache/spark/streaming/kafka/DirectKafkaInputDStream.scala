@@ -30,7 +30,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.scheduler.DirectBlockInfo
 
 /**
  *  A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
@@ -65,8 +64,6 @@ class DirectKafkaInputDStream[
 ) extends InputDStream[R](ssc_) with Logging {
   val maxRetries = context.sparkContext.getConf.getInt(
     "spark.streaming.kafka.maxRetries", 1)
-
-  private[streaming] override def isDirectInputStream: Boolean = true
 
   protected[streaming] override val checkpointData =
     new DirectKafkaInputDStreamCheckpointData
@@ -118,16 +115,6 @@ class DirectKafkaInputDStream[
     val untilOffsets = clamp(latestLeaderOffsets(maxRetries))
     val rdd = KafkaRDD[K, V, U, T, R](
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
-
-    val directBlockInfos = currentOffsets.map { case (k, v) =>
-      val startOffset = v
-      val endOffset = untilOffsets.get(k).map(_.offset)
-        .getOrElse(throw new IllegalStateException(s"End offset for partition $k is not existed"))
-
-      new DirectBlockInfo(id, endOffset - startOffset, startOffset, endOffset)
-    }
-
-    ssc.scheduler.directStreamTracker.addBlock(validTime, id, directBlockInfos.toSeq)
 
     currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
     Some(rdd)

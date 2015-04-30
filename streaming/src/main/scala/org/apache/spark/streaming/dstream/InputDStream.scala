@@ -72,8 +72,6 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
     ssc.graph.batchDuration
   }
 
-  private[streaming] def isDirectInputStream: Boolean = false
-
   /** Method called to start receiving data. Subclasses must implement this method. */
   def start()
 
