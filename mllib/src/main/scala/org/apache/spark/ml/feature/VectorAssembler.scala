@@ -52,7 +52,7 @@ class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
     val args = inputColNames.map { c =>
       schema(c).dataType match {
         case DoubleType => dataset(c)
-        case t if t.isInstanceOf[VectorUDT] => dataset(c)
+        case t: VectorUDT => dataset(c)
         case _: NumericType | BooleanType => dataset(c).cast(DoubleType).as(s"${c}_double_$uid")
       }
     }
