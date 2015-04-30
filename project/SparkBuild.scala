@@ -365,7 +365,7 @@ object PySparkAssembly {
 
       val zipFile = new File(BuildCommons.sparkHome , "python/lib/pyspark.zip")
       zipFile.delete()
-      def entries(f: File):List[File] =
+      def entries(f: File): List[File] =
         f :: (if (f.isDirectory) IO.listFiles(f).toList.flatMap(entries(_)) else Nil)
       val sources = entries(src).map { d =>
         (d, d.getAbsolutePath.substring(src.getParent.length +1))
