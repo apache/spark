@@ -1243,7 +1243,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("TOK_FUNCTION", Token(ARRAY(), Nil) :: children) =>
       CreateArray(children.map(nodeToExpr))
     case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand()
-    case Token("TOK_FUNCTION", Token(RAND(seed), Nil) :: Nil) => Rand(seed.toLong)
+    case Token("TOK_FUNCTION", Token(RAND(), Nil) :: seed :: Nil) => Rand(seed.toString.toLong)
     case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: Nil) =>
       Substring(nodeToExpr(string), nodeToExpr(pos), Literal.create(Integer.MAX_VALUE, IntegerType))
     case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: length :: Nil) =>

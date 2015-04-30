@@ -422,7 +422,7 @@ class SQLTests(ReusedPySparkTestCase):
         rnd = df.select('key', functions.rand()).collect()
         for row in rnd:
             assert row[1] >= 0.0 and row[1] <= 1.0, "got: %s" % row[1]
-        rndn = df.select('key', functions.randn(5L)).collect()
+        rndn = df.select('key', functions.randn(5)).collect()
         for row in rndn:
             assert row[1] >= -4.0 and row[1] <= 4.0, "got: %s" % row[1]
 
