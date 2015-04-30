@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.CatalystConf
+import java.util.Properties
 
 import scala.collection.immutable
 import scala.collection.JavaConversions._
 
-import java.util.Properties
+import org.apache.spark.sql.catalyst.CatalystConf
 
 private[spark] object SQLConf {
   val COMPRESS_CACHED = "spark.sql.inMemoryColumnarStorage.compressed"
@@ -266,3 +266,4 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     settings.clear()
   }
 }
+

@@ -50,10 +50,6 @@ import org.apache.spark.sql.types._
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
-  protected[sql] override lazy val conf: SQLConf = new SQLConf {
-    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
-  }
-
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
    * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
@@ -266,6 +262,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[hive] class SQLSession extends super.SQLSession {
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+      setConf(CatalystConf.CASE_SENSITIVE, "false")
     }
 
     protected[hive] lazy val hiveconf: HiveConf = {
