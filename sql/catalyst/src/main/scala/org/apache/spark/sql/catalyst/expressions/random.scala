@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions.randfuncs
+package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{DoubleType, DataType}
+import org.apache.spark.sql.types.{DataType, DoubleType}
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -29,7 +28,7 @@ import org.apache.spark.util.random.XORShiftRandom
  *
  * Since this expression is stateful, it cannot be a case object.
  */
-private[sql] abstract class RDG(seed: Long) extends LeafExpression with Serializable { 
+abstract class RDG(seed: Long) extends LeafExpression with Serializable {
   self: Product =>
 
   /**
@@ -52,11 +51,11 @@ private[sql] abstract class RDG(seed: Long) extends LeafExpression with Serializ
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
-private[sql] case class Rand(seed: Long) extends RDG(seed) {
+case class Rand(seed: Long) extends RDG(seed) {
   override def generateNumber(random: XORShiftRandom): Double = random.nextDouble()
 }
 
 /** Generate a random column with i.i.d. gaussian random distribution. */
-private[sql] case class Randn(seed: Long) extends RDG(seed) {
+case class Randn(seed: Long) extends RDG(seed) {
   override def generateNumber(random: XORShiftRandom): Double = random.nextGaussian()
 }

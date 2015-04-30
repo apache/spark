@@ -44,20 +44,6 @@ def _create_function(name, doc=""):
     return _
 
 
-def _create_zero_arg_function(name, doc=""):
-    """ Create a zero arg function by name"""
-    def _(val=None):
-        sc = SparkContext._active_spark_context
-        if val:
-            jc = getattr(sc._jvm.functions, name)(val)
-        else:
-            jc = getattr(sc._jvm.functions, name)()
-        return Column(jc)
-    _.__name__ = name
-    _.__doc__ = doc
-    return _
-
-
 _functions = {
     'lit': 'Creates a :class:`Column` of literal value.',
     'col': 'Returns a :class:`Column` based on the given column name.',
@@ -81,19 +67,35 @@ _functions = {
     'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
 }
 
-_randfunctions = {
-    'rand': 'Generate a random column with i.i.d. samples from U[0.0, 1.0].',
-    'randn': 'Generate a column with i.i.d. samples from the standard normal distribution.'
-}
-
 for _name, _doc in _functions.items():
     globals()[_name] = _create_function(_name, _doc)
-for _name, _doc in _randfunctions.items():
-    globals()[_name] = _create_zero_arg_function(_name, _doc)
 del _name, _doc
 __all__ += _functions.keys()
-__all__ += _randfunctions.keys()
 __all__.sort()
+
+
+def rand(seed=None):
+    """
+    Generate a random column with i.i.d. samples from U[0.0, 1.0].
+    """
+    sc = SparkContext._active_spark_context
+    if seed:
+        jc = sc._jvm.functions.rand(seed)
+    else:
+        jc = sc._jvm.functions.rand()
+    return Column(jc)
+
+
+def randn(seed=None):
+    """
+    Generate a column with i.i.d. samples from the standard normal distribution.
+    """
+    sc = SparkContext._active_spark_context
+    if seed:
+        jc = sc._jvm.functions.randn(seed)
+    else:
+        jc = sc._jvm.functions.randn()
+    return Column(jc)
 
 
 def approxCountDistinct(col, rsd=None):
