@@ -75,16 +75,15 @@ private[sql] object FrequentItems extends Logging {
    *
    * @param df The input DataFrame
    * @param cols the names of the columns to search frequent items in
-   * @param support The minimum frequency for an item to be considered `frequent`
+   * @param support The minimum frequency for an item to be considered `frequent`. Should be greater
+   *                than 1e-4.
    * @return A Local DataFrame with the Array of frequent items for each column.
    */
   private[sql] def singlePassFreqItems(
       df: DataFrame, 
       cols: Seq[String],
       support: Double): DataFrame = {
-    if (support < 1e-6) {
-      logWarning(s"The selected support ($support) is too small, and might cause memory problems.")
-    }
+    require(support >= 1e-4, s"support ($support) must be greater than 1e-4.")
     val numCols = cols.length
     // number of max items to keep counts for
     val sizeOfMap = (1 / support).toInt

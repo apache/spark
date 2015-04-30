@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.types._
 import org.scalatest.FunSuite
+import org.scalatest.Matchers._
+
+import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 
 class DataFrameStatSuite extends FunSuite  {
 
@@ -27,17 +29,19 @@ class DataFrameStatSuite extends FunSuite  {
 
   test("Frequent Items") {
     def toLetter(i: Int): String = (i + 96).toChar.toString
-    val rows = Array.tabulate(1000)(i => if (i % 3 == 0) (1, toLetter(1)) else (i, toLetter(i)))
-    val rowRdd = sqlCtx.sparkContext.parallelize(rows.map(v => Row(v._1, v._2)))
-    val schema = StructType(StructField("numbers", IntegerType, false) ::
-                            StructField("letters", StringType, false) :: Nil)
-    val df = sqlCtx.createDataFrame(rowRdd, schema)
+    val rows = Array.tabulate(1000) { i =>
+      if (i % 3 == 0) (1, toLetter(1), -1.0) else (i, toLetter(i), i * -1.0)
+    }
+    val df = sqlCtx.sparkContext.parallelize(rows).toDF("numbers", "letters", "negDoubles")
 
     val results = df.stat.freqItems(Array("numbers", "letters"), 0.1)
     val items = results.collect().head
-    assert(items.getSeq(0).contains(1),
-      "1 should be the frequent item for column 'numbers")
-    assert(items.getSeq(1).contains(toLetter(1)),
-      s"${toLetter(1)} should be the frequent item for column 'letters'")
+    items.getSeq[Int](0) should contain (1)
+    items.getSeq[String](1) should contain (toLetter(1))
+
+    val singleColResults = df.stat.freqItems(Array("negDoubles"), 0.1)
+    val items2 = singleColResults.collect().head
+    items2.getSeq[Double](0) should contain (-1.0)
+
   }
 }

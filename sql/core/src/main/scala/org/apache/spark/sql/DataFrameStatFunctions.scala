@@ -33,7 +33,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
    *
    * @param cols the names of the columns to search frequent items in
-   * @param support The minimum frequency for an item to be considered `frequent`
+   * @param support The minimum frequency for an item to be considered `frequent` Should be greater
+   *                than 1e-4.
    * @return A Local DataFrame with the Array of frequent items for each column.
    */
   def freqItems(cols: Seq[String], support: Double): DataFrame = {
@@ -44,12 +45,39 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
    * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
-   * Returns items more frequent than 1/1000'th of the time.
+   * Returns items more frequent than 1 percent.
    *
    * @param cols the names of the columns to search frequent items in
    * @return A Local DataFrame with the Array of frequent items for each column.
    */
   def freqItems(cols: Seq[String]): DataFrame = {
-    FrequentItems.singlePassFreqItems(df, cols, 0.001)
+    FrequentItems.singlePassFreqItems(df, cols, 0.01)
+  }
+
+  /**
+   * Finding frequent items for columns, possibly with false positives. Using the
+   * frequent element count algorithm described in
+   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   *
+   * @param cols the names of the columns to search frequent items in
+   * @param support The minimum frequency for an item to be considered `frequent` Should be greater
+   *                than 1e-4.
+   * @return A Local DataFrame with the Array of frequent items for each column.
+   */
+  def freqItems(cols: List[String], support: Double): DataFrame = {
+    FrequentItems.singlePassFreqItems(df, cols, support)
+  }
+
+  /**
+   * Finding frequent items for columns, possibly with false positives. Using the
+   * frequent element count algorithm described in
+   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * Returns items more frequent than 1 percent of the time.
+   *
+   * @param cols the names of the columns to search frequent items in
+   * @return A Local DataFrame with the Array of frequent items for each column.
+   */
+  def freqItems(cols: List[String]): DataFrame = {
+    FrequentItems.singlePassFreqItems(df, cols, 0.01)
   }
 }
