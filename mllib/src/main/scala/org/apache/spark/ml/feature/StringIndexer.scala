@@ -73,7 +73,7 @@ class StringIndexer extends Estimator[StringIndexerModel] with StringIndexerBase
       .map(_.getString(0))
       .countByValue()
     val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
-    new StringIndexerModel(this, labels)
+    copyValues(new StringIndexerModel(this, labels))
   }
 
   override def transformSchema(schema: StructType): StructType = {

@@ -122,7 +122,7 @@ final class Word2Vec extends Estimator[Word2VecModel] with Word2VecBase {
       .setSeed($(seed))
       .setVectorSize($(vectorSize))
       .fit(input)
-    new Word2VecModel(this, wordVectors)
+    copyValues(new Word2VecModel(this, wordVectors))
   }
 
   override def transformSchema(schema: StructType): StructType = {

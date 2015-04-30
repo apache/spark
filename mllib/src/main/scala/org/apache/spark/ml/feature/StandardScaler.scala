@@ -76,7 +76,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
     val scaler = new feature.StandardScaler(withMean = $(withMean), withStd = $(withStd))
     val scalerModel = scaler.fit(input)
-    new StandardScalerModel(this, scalerModel)
+    copyValues(new StandardScalerModel(this, scalerModel))
   }
 
   override def transformSchema(schema: StructType): StructType = {

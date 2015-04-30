@@ -112,7 +112,7 @@ class VectorIndexer extends Estimator[VectorIndexerModel] with VectorIndexerPara
       iter.foreach(localCatStats.addVector)
       Iterator(localCatStats)
     }.reduce((stats1, stats2) => stats1.merge(stats2))
-    new VectorIndexerModel(this, numFeatures, categoryStats.getCategoryMaps)
+    copyValues(new VectorIndexerModel(this, numFeatures, categoryStats.getCategoryMaps))
   }
 
   override def transformSchema(schema: StructType): StructType = {

@@ -299,7 +299,7 @@ class ALS extends Estimator[ALSModel] with ALSParams {
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
       alpha = $(alpha), nonnegative = $(nonnegative),
       checkpointInterval = $(checkpointInterval))
-    new ALSModel(this, $(rank), userFactors, itemFactors)
+    copyValues(new ALSModel(this, $(rank), userFactors, itemFactors))
   }
 
   override def transformSchema(schema: StructType): StructType = {
