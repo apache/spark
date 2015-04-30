@@ -19,7 +19,6 @@ package org.apache.spark.streaming.ui
 
 import scala.xml.Node
 
-import org.apache.spark.streaming.scheduler.BatchInfo
 import org.apache.spark.ui.UIUtils
 
 private[ui] abstract class BatchTableBase(tableId: String) {
@@ -31,18 +30,20 @@ private[ui] abstract class BatchTableBase(tableId: String) {
       <th>Processing Time</th>
   }
 
-  protected def baseRow(batch: BatchInfo): Seq[Node] = {
+  protected def baseRow(batch: BatchUIData): Seq[Node] = {
     val batchTime = batch.batchTime.milliseconds
     val formattedBatchTime = UIUtils.formatDate(batch.batchTime.milliseconds)
-    val eventCount = batch.receivedBlockInfo.values.map {
-      receivers => receivers.map(_.numRecords).sum
-    }.sum
+    val eventCount = batch.numRecords
     val schedulingDelay = batch.schedulingDelay
     val formattedSchedulingDelay = schedulingDelay.map(UIUtils.formatDuration).getOrElse("-")
     val processingTime = batch.processingDelay
     val formattedProcessingTime = processingTime.map(UIUtils.formatDuration).getOrElse("-")
 
-    <td sorttable_customkey={batchTime.toString}>{formattedBatchTime}</td>
+    <td sorttable_customkey={batchTime.toString}>
+      <a href={s"batch?id=$batchTime"}>
+        {formattedBatchTime}
+      </a>
+    </td>
       <td sorttable_customkey={eventCount.toString}>{eventCount.toString} events</td>
       <td sorttable_customkey={schedulingDelay.getOrElse(Long.MaxValue).toString}>
         {formattedSchedulingDelay}
@@ -73,8 +74,9 @@ private[ui] abstract class BatchTableBase(tableId: String) {
   protected def renderRows: Seq[Node]
 }
 
-private[ui] class ActiveBatchTable(runningBatches: Seq[BatchInfo], waitingBatches: Seq[BatchInfo])
-  extends BatchTableBase("active-batches-table") {
+private[ui] class ActiveBatchTable(
+    runningBatches: Seq[BatchUIData],
+    waitingBatches: Seq[BatchUIData]) extends BatchTableBase("active-batches-table") {
 
   override protected def columns: Seq[Node] = super.columns ++ <th>Status</th>
 
@@ -85,16 +87,16 @@ private[ui] class ActiveBatchTable(runningBatches: Seq[BatchInfo], waitingBatche
       runningBatches.flatMap(batch => <tr>{runningBatchRow(batch)}</tr>)
   }
 
-  private def runningBatchRow(batch: BatchInfo): Seq[Node] = {
+  private def runningBatchRow(batch: BatchUIData): Seq[Node] = {
     baseRow(batch) ++ <td>processing</td>
   }
 
-  private def waitingBatchRow(batch: BatchInfo): Seq[Node] = {
+  private def waitingBatchRow(batch: BatchUIData): Seq[Node] = {
     baseRow(batch) ++ <td>queued</td>
   }
 }
 
-private[ui] class CompletedBatchTable(batches: Seq[BatchInfo])
+private[ui] class CompletedBatchTable(batches: Seq[BatchUIData])
   extends BatchTableBase("completed-batches-table") {
 
   override protected def columns: Seq[Node] = super.columns ++ <th>Total Delay</th>
@@ -103,7 +105,7 @@ private[ui] class CompletedBatchTable(batches: Seq[BatchInfo])
     batches.flatMap(batch => <tr>{completedBatchRow(batch)}</tr>)
   }
 
-  private def completedBatchRow(batch: BatchInfo): Seq[Node] = {
+  private def completedBatchRow(batch: BatchUIData): Seq[Node] = {
     val totalDelay = batch.totalDelay
     val formattedTotalDelay = totalDelay.map(UIUtils.formatDuration).getOrElse("-")
     baseRow(batch) ++

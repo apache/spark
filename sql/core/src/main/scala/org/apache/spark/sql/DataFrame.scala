@@ -752,7 +752,7 @@ class DataFrame private[sql](
    * @param seed Seed for sampling.
    * @group dfops
    */
-  def randomSplit(weights: List[Double], seed: Long): Array[DataFrame] = {
+  private[spark] def randomSplit(weights: List[Double], seed: Long): Array[DataFrame] = {
     randomSplit(weights.toArray, seed)
   }
 

@@ -174,7 +174,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         {UIUtils.formatDate(startTime)}
       </strong>
     </div>
-    <div> </div>
+    <br />
   }
 
   /**
@@ -434,7 +434,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       r => if (r.lastErrorTime < 0) "-" else UIUtils.formatDate(r.lastErrorTime)
     }.getOrElse(emptyCell)
     val receivedRecords =
-      new EventRateUIData(listener.receivedRecordsWithBatchTime.get(receiverId).getOrElse(Seq()))
+      new EventRateUIData(listener.receivedEventRateWithBatchTime.get(receiverId).getOrElse(Seq()))
 
     val timelineForEventRate =
       new TimelineUIData(
