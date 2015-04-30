@@ -214,7 +214,29 @@ class SchedulerJob(BaseJob):
         self.heartrate = conf.getint('scheduler', 'SCHEDULER_HEARTBEAT_SEC')
 
     def process_dag(self, dag, executor):
+        """
+        This moethod schedules a single DAG by looking at the latest
+        run for eachtask and attempting to schedule the following run.
+
+        As multiple schedulers may be running for redundancy, this
+        function takes a lock on the DAG and timestamps the last run
+        in ``last_scheduler_run``.
+        """
         session = settings.Session()
+
+        DAG = models.DAG
+        db_dag = session.query(DAG).filter(DAG.dag_id==dag.dag_id).first()
+        secs_since_last = datetime.now() - db_dag.last_scheduler_run.seconds()
+        if db_dag.scheduler_lock or secs_since_last < self.heartrate:
+            session.commit()
+            session.close()
+            return None
+        else:
+            # Taking a lock
+            db_dag.scheduler_lock = True
+            db_dag.last_scheduler_run = datetime.now()
+            session.commit()
+
         TI = models.TaskInstance
         logging.info(
             "Getting latest instance "
@@ -280,6 +302,11 @@ class SchedulerJob(BaseJob):
                         logging.debug('Queuing next run: ' + str(ti))
                         cmd = ti.command(local=True)
                         executor.queue_command(ti.key, cmd)
+        # Releasing the lock
+        db_dag = session.query(DAG).filter(DAG.dag_id==dag.dag_id).first()
+        db_dag.scheduler_lock = False
+        session.merge(db_dag)
+
         executor.heartbeat()
         session.close()
 

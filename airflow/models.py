@@ -1197,15 +1197,24 @@ class DAG(Base):
     """
 
     __tablename__ = "dag"
-
+    """
+    These items are stored in the database for state related information
+    """
     dag_id = Column(String(ID_LEN), primary_key=True)
+    # A DAG can be paused from the UI / DB
     is_paused = Column(Boolean, default=False)
+    # Last time the scheduler started
     last_scheduler_run = Column(DateTime)
+    # Last time this DAG was pickled
     last_pickled = Column(DateTime)
-    last_loaded = Column(DateTime)
+    # When the DAG received a refreshed signal last, used to know when
+    # we need to force refresh
     last_expired = Column(DateTime)
+    # Whether (one  of) the scheduler is scheduling this DAG at the moment
+    scheduler_lock = Column(Boolean)
+    # Foreign key to the latest pickle_id
     pickle_id = Column(Integer)
-    pickle_size = Column(Integer)
+    # The location of the file containing the DAG object
     fileloc = Column(String(2000))
 
     def __init__(
@@ -1232,6 +1241,7 @@ class DAG(Base):
             template_searchpath = [template_searchpath]
         self.template_searchpath = template_searchpath
         self.parent_dag = None  # Gets set when DAGs are loaded
+        self.last_loaded = datetime.now()
 
     def __repr__(self):
         return "<DAG: {self.dag_id}>".format(self=self)
