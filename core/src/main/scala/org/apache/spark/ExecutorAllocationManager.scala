@@ -148,7 +148,7 @@ private[spark] class ExecutorAllocationManager(
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("spark-dynamic-executor-allocation")
 
   // Metric source for ExecutorAllocationManager to expose internal status to MetricsSystem.
-  private[spark] val executorAllocationManagerSource = new ExecutorAllocationManagerSource
+  val executorAllocationManagerSource = new ExecutorAllocationManagerSource
 
   /**
    * Verify that the settings specified through the config are valid.
@@ -585,9 +585,11 @@ private[spark] class ExecutorAllocationManager(
     }
   }
 
-  // Metric source for ExecutorAllocationManager to expose the its internal executor allocation
-  // status to MetricsSystem.
-  // Note: these metrics may not be stable across Spark version.
+  /**
+   * Metric source for ExecutorAllocationManager to expose its internal executor allocation
+   * status to MetricsSystem.
+   * Note: These metrics may not be stable across Spark version.
+   */
   private[spark] class ExecutorAllocationManagerSource extends Source {
     val sourceName = "ExecutorAllocationManager"
     val metricRegistry = new MetricRegistry()
