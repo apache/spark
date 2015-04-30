@@ -315,6 +315,30 @@ class RowMatrix(
   }
 
   /**
+    * Computes the inverse matrix using SVD
+    * @return a DenseMatrix
+    */
+  def computeInverse(): DenseMatrix = {
+  val nCoef = X.numCols.toInt
+  val svd = X.computeSVD(nCoef, computeU = true, rCond = 1e-9)
+  if (svd.size < nCoef) {
+    sys.error(s"RowMatrix.computeInverse called on singular matrix.")
+  }
+  // inv(X) = V*inv(S)*transpose(U)
+  
+  // Create the inv diagonal matrix from S 
+  val invS = DenseMatrix.diag(new DenseVector(svd.s.toArray.map(x => math.pow(x,-1))))
+  
+  // U cannot be a RowMatrix
+  val U = new DenseMatrix(svd.U.numRows().toInt,svd.U.numCols().toInt,svd.U.rows.collect.flatMap(x => x.toArray))
+  
+  // put it all together
+  
+  (svd.V.multiply(invS)).multiply(U)
+  }
+
+
+  /**
    * Computes the covariance matrix, treating each row as an observation.
    * @return a local dense matrix of size n x n
    */
