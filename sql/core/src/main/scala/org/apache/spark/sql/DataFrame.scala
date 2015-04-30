@@ -1435,5 +1435,17 @@ class DataFrame private[sql](
     def freqItems(cols: Array[String], support: Double): DataFrame = {
       FrequentItems.singlePassFreqItems(toDF(), cols, support)
     }
+
+    /**
+     * Finding frequent items for columns, possibly with false positives. Using the algorithm
+     * described in `http://www.cs.umd.edu/~samir/498/karp.pdf`.
+     * Returns items more frequent than 1/1000'th of the time.
+     *
+     * @param cols the names of the columns to search frequent items in
+     * @return A Local DataFrame with the Array of frequent items for each column.
+     */
+    def freqItems(cols: Array[String]): DataFrame = {
+      FrequentItems.singlePassFreqItems(toDF(), cols, 0.001)
+    }
   }
 }
