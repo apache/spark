@@ -192,8 +192,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
-      tokenUpdaterOption.foreach(_.stop())
       env.rpcEnv.awaitTermination()
+      tokenUpdaterOption.foreach(_.stop())
     }
   }
 

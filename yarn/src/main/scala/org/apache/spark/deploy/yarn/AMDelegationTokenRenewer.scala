@@ -64,8 +64,9 @@ private[yarn] class AMDelegationTokenRenewer(
   /**
    * Schedule a login from the keytab and principal set using the --principal and --keytab
    * arguments to spark-submit. This login happens only when the credentials of the current user
-   * are about to expire. This method reads SPARK_PRINCIPAL and SPARK_KEYTAB from the environment
-   * to do the login. This method is a no-op in non-YARN mode.
+   * are about to expire. This method reads spark.yarn.principal and spark.yarn.keytab from
+   * SparkConf to do the login. This method is a no-op in non-YARN mode.
+   *
    */
   private[spark] def scheduleLoginFromKeytab(): Unit = {
     val principal = sparkConf.get("spark.yarn.principal")

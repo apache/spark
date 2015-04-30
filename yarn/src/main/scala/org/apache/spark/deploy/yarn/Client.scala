@@ -444,7 +444,7 @@ private[spark] class Client(
         "spark.yarn.credentials.file", new Path(stagingDirPath, credentialsFile).toString)
       logInfo(s"Credentials file set to: $credentialsFile")
       val renewalInterval = getTokenRenewalInterval(stagingDirPath)
-      sparkConf.set("spark.yarn.renewal.interval", renewalInterval.toString)
+      sparkConf.set("spark.yarn.token.renewal.interval", renewalInterval.toString)
     }
     // Set the environment variables to be passed on to the executors.
     distCacheMgr.setDistFilesEnv(env)
