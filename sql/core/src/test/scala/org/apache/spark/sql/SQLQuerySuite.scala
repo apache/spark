@@ -21,13 +21,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
-<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types._
-=======
->>>>>>> 254e0509762937acc9c72b432d5d953bf72c3c52
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}

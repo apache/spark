@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.test.SimpleConf
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
-  val conf = new SimpleConf
+  val conf = new SimpleConf(true)
   val catalog = new SimpleCatalog(conf)
   val analyzer = new Analyzer(catalog, EmptyFunctionRegistry, conf)
 

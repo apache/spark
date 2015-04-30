@@ -36,19 +36,21 @@ private[spark] trait CatalystConf {
  * relations are already filled in and the analyser needs only to resolve attribute references.
  */
 object EmptyConf extends CatalystConf {
-  def setConf(key: String, value: String) : Unit = {
+  override def caseSensitiveAnalysis: Boolean = true
+
+  override def setConf(key: String, value: String) : Unit = {
     throw new UnsupportedOperationException
   }
 
-  def getConf(key: String) : String = {
+  override def getConf(key: String) : String = {
     throw new UnsupportedOperationException
   }
 
-  def getConf(key: String, defaultValue: String) : String = {
+  override def getConf(key: String, defaultValue: String) : String = {
     throw new UnsupportedOperationException
   }
 
-  def getAllConfs: immutable.Map[String, String] = {
+  override def getAllConfs: immutable.Map[String, String] = {
     throw new UnsupportedOperationException
   }
 }
