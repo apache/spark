@@ -1456,6 +1456,14 @@ Apart from these, the following properties are also available, and may be useful
     for more details.
   </td>
 </tr>
+<tr>
+  <td><code>spark.streaming.kafka.maxRetries</code></td>
+  <td>1</td>
+  <td>
+    Maximum number of trials the driver will make in order to find the latest
+    offsets on the leader of each partition.
+  </td>
+</tr>
 </table>
 
 #### Cluster Managers
