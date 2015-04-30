@@ -33,7 +33,6 @@ import scala.collection.Seq;
 import scala.collection.mutable.Buffer;
 
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -181,8 +180,7 @@ public class JavaDataFrameSuite {
   public void testFrequentItems() {
     DataFrame df = context.table("testData2");
     List<String> cols = Arrays.asList("a");
-    DataFrame results = df.stat().freqItems(JavaConversions.asScalaIterable(cols).toList(), 0.2);
-    System.out.println(results.collect()[0].getSeq(0));
+    DataFrame results = df.stat().freqItems(cols, 0.2);
     Assert.assertTrue(results.collect()[0].getSeq(0).contains(1));
   }
 }

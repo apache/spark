@@ -54,23 +54,18 @@ private[sql] object FrequentItems extends Logging {
      * @param other The map containing the counts for that partition
      */
     def merge(other: FreqItemCounter): this.type = {
-      other.toSeq.foreach { case (k, v) =>
+      other.baseMap.toSeq.foreach { case (k, v) =>
         add(k, v)
       }
       this
     }
-    
-    def toSeq: Seq[(Any, Long)] = baseMap.toSeq
-    
-    def foldLeft[A, B](start: A)(f: (A, (Any, Long)) => A): A = baseMap.foldLeft(start)(f)
-    
-    def freqItems: Seq[Any] = baseMap.keys.toSeq
   }
 
   /**
    * Finding frequent items for columns, possibly with false positives. Using the 
    * frequent element count algorithm described in
    * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * The `support` should be greater than 1e-4.
    * For Internal use only.
    *
    * @param df The input DataFrame
@@ -114,7 +109,7 @@ private[sql] object FrequentItems extends Logging {
         baseCounts
       }
     )
-    val justItems = freqItems.map(m => m.freqItems)
+    val justItems = freqItems.map(m => m.baseMap.keys.toSeq)
     val resultRow = Row(justItems:_*)
     // append frequent Items to the column name for easy debugging
     val outputCols = colInfo.map{ v =>
