@@ -46,7 +46,7 @@ class Analyzer(
   val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
 
   val fixedPoint = FixedPoint(maxIterations)
-  
+
   /**
    * Override to provide additional rules for the "Resolution" batch.
    */
@@ -72,16 +72,12 @@ class Analyzer(
   )
 
   /**
-   * Substitute CTE definitions
+   * Substitute child plan with cte definitions
    */
   object CTESubstitution extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = {
-      val (realPlan, cteRelations) = plan match {
-        case With(child, relations) =>
-          (child, relations)
-        case other => (other, Map.empty[String, LogicalPlan])
-      }
-      substituteCTE(realPlan, cteRelations)
+    def apply(plan: LogicalPlan): LogicalPlan = plan match {
+      case With(child, relations) => substituteCTE(child, relations)
+      case other => other
     }
 
     def substituteCTE(plan: LogicalPlan, cteRelations: Map[String, LogicalPlan]): LogicalPlan = {
@@ -91,9 +87,11 @@ class Analyzer(
           // hive will use the table in database, not the CTE one.
           // Taking into account the reasonableness and the implementation complexity,
           // here use the CTE definition first, check table name only and ignore database name
-          val relation = cteRelations.get(u.tableIdentifier.last)
-            .map(relation => u.alias.map(Subquery(_, relation)).getOrElse(relation))
-            .getOrElse(u)
+          val substituted = cteRelations.get(u.tableIdentifier.last).map { relation =>
+            val withAlias = u.alias.map(Subquery(_, relation))
+            withAlias.getOrElse(relation)
+          }
+          substituted.getOrElse(u)
           i.copy(table = relation)
         case u : UnresolvedRelation =>
           cteRelations.get(u.tableIdentifier.last)
