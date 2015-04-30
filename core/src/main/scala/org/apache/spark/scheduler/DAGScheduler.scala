@@ -682,6 +682,7 @@ class DAGScheduler(
           taskAttemptId = 0,
           attemptNumber = 0,
           taskMemoryManager = taskMemoryManager,
+          metricsSystem = env.metricsSystem,
           runningLocally = true)
       TaskContext.setTaskContext(taskContext)
       try {

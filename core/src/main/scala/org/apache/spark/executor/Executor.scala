@@ -210,7 +210,10 @@ private[spark] class Executor(
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
         val (value, accumUpdates) = try {
-          task.run(taskAttemptId = taskId, attemptNumber = attemptNumber)
+          task.run(
+            taskAttemptId = taskId,
+            attemptNumber = attemptNumber,
+            metricsSystem = env.metricsSystem)
         } finally {
           // Note: this memory freeing logic is duplicated in DAGScheduler.runLocallyWithinThread;
           // when changing this, make sure to update both copies.
