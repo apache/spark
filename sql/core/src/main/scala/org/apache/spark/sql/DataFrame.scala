@@ -852,6 +852,27 @@ class DataFrame private[sql](
   }
 
   /**
+   * Returns a new [[DataFrame]] with a column dropped.
+   * @group dfops
+   */
+  def drop(col: String, cols: String*): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
+    val shouldDrop =
+      schema.exists(f =>
+        (col +: cols).exists(c =>
+          resolver(f.name, c)))
+    if(shouldDrop) {
+      val colsAfterDrop = schema.filter { field =>
+        val name = field.name
+        !(col +: cols).exists(c => resolver(name, c))
+      }.map(f => Column(f.name))
+      select(colsAfterDrop:_*)
+    } else {
+      select(Column("*"))
+    }
+  }
+
+  /**
    * Computes statistics for numeric columns, including count, mean, stddev, min, and max.
    * If no columns are given, this function computes statistics for all numerical columns.
    *

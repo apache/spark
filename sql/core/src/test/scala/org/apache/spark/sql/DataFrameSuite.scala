@@ -499,6 +499,22 @@ class DataFrameSuite extends QueryTest {
       Row(2) :: Row(3) :: Row(4) :: Nil)
   }
 
+  test("drop column using drop") {
+    val df = testData.drop("key")
+    checkAnswer(
+      df,
+      testData.collect().map(x => Row(x.getString(1))).toSeq)
+    assert(df.schema.map(_.name) === Seq("value"))
+  }
+
+  test("drop multiple columns using drop") {
+    val df = testData.withColumn("newCol", col("key") + 1).drop("key", "newCol")
+    checkAnswer(
+      df,
+      testData.collect().map(x => Row(x.getString(1))).toSeq)
+    assert(df.schema.map(_.name) === Seq("value"))
+  }
+
   test("withColumnRenamed") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
       .withColumnRenamed("value", "valueRenamed")
