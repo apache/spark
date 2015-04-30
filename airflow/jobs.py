@@ -226,8 +226,11 @@ class SchedulerJob(BaseJob):
 
         DAG = models.DAG
         db_dag = session.query(DAG).filter(DAG.dag_id==dag.dag_id).first()
-        secs_since_last = datetime.now() - db_dag.last_scheduler_run.seconds()
-        if db_dag.scheduler_lock or secs_since_last < self.heartrate:
+        last_scheduler_run = db_dag.last_scheduler_run or datetime(2000, 1, 1)
+        secs_since_last = (
+            datetime.now() - last_scheduler_run).total_seconds()
+        #if db_dag.scheduler_lock or
+        if secs_since_last < self.heartrate:
             session.commit()
             session.close()
             return None
@@ -349,7 +352,7 @@ class SchedulerJob(BaseJob):
                 try:
                     self.process_dag(dag, executor)
                 except Exception as e:
-                    logging.exeption(e)
+                    logging.exception(e)
             self.heartbeat()
         executor.end()
 

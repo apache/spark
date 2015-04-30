@@ -1455,7 +1455,7 @@ admin.add_view(ConfigurationView(name='Configuration', category="Admin"))
 class DagModelView(SuperUserMixin, ModelView):
     column_list = (
         'dag_id', 'is_paused', 'last_scheduler_run',
-        'last_expired', 'last_loaded',  'pickle_id')
+        'last_expired', 'last_loaded', 'scheduler_lock', 'pickle_id')
     column_editable_list = ('is_paused',)
     form_widget_args = {
         'last_scheduler_run':{'disabled':True},
