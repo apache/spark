@@ -147,7 +147,8 @@ private[sql] object DataSourceStrategy extends Strategy {
       mergePartitionValues(output, partitionValues, scan)
     }
 
-    val unionedRows = perPartitionRows.reduceOption(_ ++ _).getOrElse(relation.sqlContext.emptyResult)
+    val unionedRows =
+      perPartitionRows.reduceOption(_ ++ _).getOrElse(relation.sqlContext.emptyResult)
     createPhysicalRDD(logicalRelation.relation, output, unionedRows)
   }
 
