@@ -865,7 +865,7 @@ class DataFrame private[sql](
       }.map(f => Column(f.name))
       select(colsAfterDrop:_*)
     } else {
-      select(Column("*"))
+      this
     }
   }
 
