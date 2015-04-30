@@ -26,7 +26,7 @@ import scala.util.{Failure, Success}
 import org.apache.spark.rpc._
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.{ExecutorDelegationTokenUpdater, SparkHadoopUtil}
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -57,7 +57,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     logInfo("Connecting to driver: " + driverUrl)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       driver = Some(ref)
-      ref.sendWithReply[RegisteredExecutor.type](
+      ref.ask[RegisteredExecutor.type](
         RegisterExecutor(executorId, self, hostPort, cores, extractLogUrls))
     } onComplete {
       case Success(msg) => Utils.tryLogNonFatalError {
@@ -154,7 +154,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         executorConf,
         new SecurityManager(executorConf))
       val driver = fetcher.setupEndpointRefByURI(driverUrl)
-      val props = driver.askWithReply[Seq[(String, String)]](RetrieveSparkProps) ++
+      val props = driver.askWithRetry[Seq[(String, String)]](RetrieveSparkProps) ++
         Seq[(String, String)](("spark.app.id", appId))
       fetcher.shutdown()
 
@@ -168,6 +168,16 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           driverConf.set(key, value)
         }
       }
+      var tokenUpdaterOption: Option[ExecutorDelegationTokenUpdater] = None
+      if (driverConf.contains("spark.yarn.credentials.file")) {
+        logInfo("Will periodically update credentials from: " +
+          driverConf.get("spark.yarn.credentials.file"))
+        // Periodically update the credentials for this user to ensure HDFS tokens get updated.
+        tokenUpdaterOption =
+          Some(new ExecutorDelegationTokenUpdater(driverConf, SparkHadoopUtil.get.conf))
+        tokenUpdaterOption.get.updateCredentialsIfRequired()
+      }
+
       val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, port, cores, isLocal = false)
 
@@ -183,6 +193,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
       env.rpcEnv.awaitTermination()
+      tokenUpdaterOption.foreach(_.stop())
     }
   }
 

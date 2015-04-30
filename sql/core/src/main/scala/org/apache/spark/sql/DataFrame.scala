@@ -623,17 +623,12 @@ class DataFrame private[sql](
   }
 
   /**
-   * (Scala-specific) Compute aggregates by specifying a map from column name to
-   * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
-   *
-   * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
-   * {{{
-   *   // Selects the age of the oldest employee and the aggregate expense for each department
-   *   df.groupBy("department").agg(
-   *     "age" -> "max",
-   *     "expense" -> "sum"
-   *   )
-   * }}}
+   * (Scala-specific) Aggregates on the entire [[DataFrame]] without groups.
+   * {{
+   *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
+   *   df.agg("age" -> "max", "salary" -> "avg")
+   *   df.groupBy().agg("age" -> "max", "salary" -> "avg")
+   * }}
    * @group dfops
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
@@ -711,7 +706,7 @@ class DataFrame private[sql](
    * @group dfops
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = {
-    Sample(fraction, withReplacement, seed, logicalPlan)
+    Sample(0.0, fraction, withReplacement, seed, logicalPlan)
   }
 
   /**
@@ -723,6 +718,42 @@ class DataFrame private[sql](
    */
   def sample(withReplacement: Boolean, fraction: Double): DataFrame = {
     sample(withReplacement, fraction, Utils.random.nextLong)
+  }
+
+  /**
+   * Randomly splits this [[DataFrame]] with the provided weights.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1.
+   * @param seed Seed for sampling.
+   * @group dfops
+   */
+  def randomSplit(weights: Array[Double], seed: Long): Array[DataFrame] = {
+    val sum = weights.sum
+    val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
+    normalizedCumWeights.sliding(2).map { x =>
+      new DataFrame(sqlContext, Sample(x(0), x(1), false, seed, logicalPlan))
+    }.toArray
+  }
+
+  /**
+   * Randomly splits this [[DataFrame]] with the provided weights.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1.
+   * @group dfops
+   */
+  def randomSplit(weights: Array[Double]): Array[DataFrame] = {
+    randomSplit(weights, Utils.random.nextLong)
+  }
+
+  /**
+   * Randomly splits this [[DataFrame]] with the provided weights. Provided for the Python Api.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1.
+   * @param seed Seed for sampling.
+   * @group dfops
+   */
+  private[spark] def randomSplit(weights: List[Double], seed: Long): Array[DataFrame] = {
+    randomSplit(weights.toArray, seed)
   }
 
   /**
@@ -961,9 +992,7 @@ class DataFrame private[sql](
    * @group rdd
    */
   override def repartition(numPartitions: Int): DataFrame = {
-    sqlContext.createDataFrame(
-      queryExecution.toRdd.map(_.copy()).repartition(numPartitions),
-      schema, needsConversion = false)
+    Repartition(numPartitions, shuffle = true, logicalPlan)
   }
 
   /**
@@ -974,10 +1003,7 @@ class DataFrame private[sql](
    * @group rdd
    */
   override def coalesce(numPartitions: Int): DataFrame = {
-    sqlContext.createDataFrame(
-      queryExecution.toRdd.coalesce(numPartitions),
-      schema,
-      needsConversion = false)
+    Repartition(numPartitions, shuffle = false, logicalPlan)
   }
 
   /**

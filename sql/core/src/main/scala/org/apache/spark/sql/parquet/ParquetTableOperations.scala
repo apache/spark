@@ -381,6 +381,7 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
   extends parquet.hadoop.ParquetOutputFormat[Row] {
   // override to accept existing directories as valid output directory
   override def checkOutputSpecs(job: JobContext): Unit = {}
+  var committer: OutputCommitter = null
 
   // override to choose output filename so not overwrite existing ones
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
@@ -402,6 +403,26 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
   // the opcode of method call for class is INVOKEVIRTUAL and for interface is INVOKEINTERFACE.
   private def getTaskAttemptID(context: TaskAttemptContext): TaskAttemptID = {
     context.getClass.getMethod("getTaskAttemptID").invoke(context).asInstanceOf[TaskAttemptID]
+  }
+
+  // override to create output committer from configuration
+  override def getOutputCommitter(context: TaskAttemptContext): OutputCommitter = {
+    if (committer == null) {
+      val output = getOutputPath(context)
+      val cls = context.getConfiguration.getClass("spark.sql.parquet.output.committer.class",
+        classOf[ParquetOutputCommitter], classOf[ParquetOutputCommitter])
+      val ctor = cls.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
+      committer = ctor.newInstance(output, context).asInstanceOf[ParquetOutputCommitter]
+    }
+    committer
+  }
+
+  // FileOutputFormat.getOutputPath takes JobConf in hadoop-1 but JobContext in hadoop-2
+  private def getOutputPath(context: TaskAttemptContext): Path = {
+    context.getConfiguration().get("mapred.output.dir") match {
+      case null => null
+      case name => new Path(name)
+    }
   }
 }
 

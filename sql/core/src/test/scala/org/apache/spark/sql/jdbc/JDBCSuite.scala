@@ -256,6 +256,15 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
   }
 
+  test("test DATE types in cache") {
+    val rows = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.TIMETYPES").collect()
+    TestSQLContext
+      .jdbc(urlWithUserAndPass, "TEST.TIMETYPES").cache().registerTempTable("mycached_date")
+    val cachedRows = sql("select * from mycached_date").collect()
+    assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+    assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+  }
+
   test("H2 floating-point types") {
     val rows = sql("SELECT * FROM flttypes").collect()
     assert(rows(0).getDouble(0) === 1.00000000000000022) // Yes, I meant ==.
