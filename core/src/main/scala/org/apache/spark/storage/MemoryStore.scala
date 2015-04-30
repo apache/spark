@@ -500,6 +500,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         space: Long): ResultWithDroppedBlocks = {
     var droppedBlocks = Seq.empty[(BlockId, BlockStatus)]
     var success = true
+    // Hold the accounting lock, in case another thread concurrently puts a block that
+    // takes up the unrolling space we just ensured here
     accountingLock.synchronized {
       if (!reserveUnrollMemoryForThisThread(space)) {
         logInfo(s"Initial reserveUnrollMemoryForThisThread($space) failed")
