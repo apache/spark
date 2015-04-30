@@ -17,26 +17,25 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io._
+import java.io.File
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
 import scala.collection.mutable.HashMap
 import scala.util.Try
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs._
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapred.{Master, JobConf}
+import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records.{Priority, ApplicationAccessType}
+import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.util.Utils
 
 /**
@@ -83,48 +82,6 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     if (credentials != null) credentials.getSecretKey(new Text(key)) else null
   }
 
-  /**
-   * Get the list of namenodes the user may access.
-   */
-  def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
-    sparkConf.get("spark.yarn.access.namenodes", "")
-      .split(",")
-      .map(_.trim())
-      .filter(!_.isEmpty)
-      .map(new Path(_))
-      .toSet
-  }
-
-  def getTokenRenewer(conf: Configuration): String = {
-    val delegTokenRenewer = Master.getMasterPrincipal(conf)
-    logDebug("delegation token renewer is: " + delegTokenRenewer)
-    if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
-      val errorMessage = "Can't get Master Kerberos principal for use as renewer"
-      logError(errorMessage)
-      throw new SparkException(errorMessage)
-    }
-    delegTokenRenewer
-  }
-
-  /**
-   * Obtains tokens for the namenodes passed in and adds them to the credentials.
-   */
-  def obtainTokensForNamenodes(
-    paths: Set[Path],
-    conf: Configuration,
-    creds: Credentials,
-    renewer: Option[String] = None
-  ): Unit = {
-    if (UserGroupInformation.isSecurityEnabled()) {
-      val delegTokenRenewer = renewer.getOrElse(getTokenRenewer(conf))
-      paths.foreach { dst =>
-        val dstFs = dst.getFileSystem(conf)
-        logInfo("getting token for namenode: " + dst)
-        dstFs.addDelegationTokens(delegTokenRenewer, creds)
-      }
-    }
-  }
-
 }
 
 object YarnSparkHadoopUtil {
@@ -143,14 +100,6 @@ object YarnSparkHadoopUtil {
   // request types (like map/reduce in hadoop for example)
   val RM_REQUEST_PRIORITY = Priority.newInstance(1)
 
-  def get: YarnSparkHadoopUtil = {
-    val yarnMode = java.lang.Boolean.valueOf(
-      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
-    if (!yarnMode) {
-      throw new SparkException("YarnSparkHadoopUtil is not available in non-YARN mode!")
-    }
-    SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil]
-  }
   /**
    * Add a path variable to the given environment map.
    * If the map already contains this key, append the value to the existing value instead.
@@ -263,4 +212,3 @@ object YarnSparkHadoopUtil {
     classPathSeparatorField.get(null).asInstanceOf[String]
   }
 }
-
