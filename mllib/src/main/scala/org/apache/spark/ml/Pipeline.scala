@@ -172,36 +172,13 @@ class Pipeline extends Estimator[PipelineModel] {
 @AlphaComponent
 class PipelineModel private[ml] (
     override val parent: Pipeline,
-    private[ml] val stages: Array[Transformer])
+    val stages: Array[Transformer])
   extends Model[PipelineModel] with Logging {
 
   override def validateParams(): Unit = {
     super.validateParams()
     stages.foreach(_.validateParams())
   }
-
-  /**
-   * Gets the model produced by the input estimator. Throws an NoSuchElementException is the input
-   * estimator does not exist in the pipeline.
-   */
-  def getModel[M <: Model[M]](stage: Estimator[M]): M = {
-    val matched = stages.filter {
-      case m: Model[_] => m.parent.eq(stage)
-      case _ => false
-    }
-    if (matched.isEmpty) {
-      throw new NoSuchElementException(s"Cannot find stage $stage from the pipeline.")
-    } else if (matched.length > 1) {
-      throw new IllegalStateException(s"Cannot have duplicate estimators in the sample pipeline.")
-    } else {
-      matched.head.asInstanceOf[M]
-    }
-  }
-
-  /**
-   * Gets a stage by index.
-   */
-  def getStage[T <: Transformer](i: Int): T = stages(i).asInstanceOf[T]
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
@@ -210,5 +187,9 @@ class PipelineModel private[ml] (
 
   override def transformSchema(schema: StructType): StructType = {
     stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur))
+  }
+
+  override def copy(extra: ParamMap): PipelineModel = {
+    new PipelineModel(parent, stages)
   }
 }

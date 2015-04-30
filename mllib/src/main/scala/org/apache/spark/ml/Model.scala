@@ -34,5 +34,8 @@ abstract class Model[M <: Model[M]] extends Transformer {
    */
   val parent: Estimator[M]
 
-  override def copy(extra: ParamMap): M = ???
+  override def copy(extra: ParamMap): M = {
+    // The default implementation of Params.copy doesn't work for models.
+    throw new NotImplementedError(s"${this.getClass} doesn't implement copy(extra: ParamMap)")
+  }
 }
