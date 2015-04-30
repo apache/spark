@@ -65,6 +65,13 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> model.userFeatures().collect()
     [(1, array('d', [...])), (2, array('d', [...]))]
 
+    >>> model.recommendUsers(1, 2)
+    (Rating(user=2, product=1, rating=1.9...), Rating(user=1, product=1, rating=1.0...))
+    >>> model.recommendProducts(1, 2)
+    (Rating(user=1, product=2, rating=1.9...), Rating(user=1, product=1, rating=1.0...))
+    >>> model.rank
+    4
+
     >>> first_user = model.userFeatures().take(1)[0]
     >>> latents = first_user[1]
     >>> len(latents) == 4
@@ -105,9 +112,15 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     ...     pass
     """
     def predict(self, user, product):
+        """
+        Predicts rating for a given user and product.
+        """
         return self._java_model.predict(int(user), int(product))
 
     def predictAll(self, user_product):
+        """
+        Returns a list of predicted Ratings for a user and many products.
+        """
         assert isinstance(user_product, RDD), "user_product should be RDD of (user, product)"
         first = user_product.first()
         assert len(first) == 2, "user_product should be RDD of (user, product)"
@@ -115,10 +128,38 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         return self.call("predict", user_product)
 
     def userFeatures(self):
+        """
+        Returns a coupled RDD, where the first element is the user and the
+        second is an array of features corresponding to that user.
+        """
         return self.call("getUserFeatures").mapValues(lambda v: array.array('d', v))
 
     def productFeatures(self):
+        """
+        Returns a coupled RDD, where the first element is the product and the
+        second is an array of features corresponding to that product.
+        """
         return self.call("getProductFeatures").mapValues(lambda v: array.array('d', v))
+
+    def recommendUsers(self, product, num):
+        """
+        Recommends the top "num" number of products for a given user.
+        This is done by returning a tuple of Rating objects, the second id (product)
+        being constant and sorted according to the rating.
+        """
+        return self.call("recommendUsers", product, num)
+
+    def recommendProducts(self, user, num):
+        """
+        Recommends the top "num" number of products for a given user.
+        This is done by returning a tuple of Rating objects, the first id (user)
+        being constant and sorted according to the rating.
+        """
+        return self.call("recommendProducts", user, num)
+
+    @property
+    def rank(self):
+        return self.call("rank")
 
     @classmethod
     def load(cls, sc, path):
