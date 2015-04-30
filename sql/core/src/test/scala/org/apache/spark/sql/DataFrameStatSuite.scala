@@ -15,15 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.ml
+package org.apache.spark.sql
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.test.TestSQLContext
-
-class FrequentItemsSuite extends FunSuite  {
+class DataFrameStatSuite extends FunSuite  {
 
   val sqlCtx = TestSQLContext
 

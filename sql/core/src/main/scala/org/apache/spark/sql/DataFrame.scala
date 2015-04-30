@@ -20,6 +20,8 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.sql.DriverManager
 
+import org.apache.spark.sql.execution.stat.FrequentItems
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -41,7 +43,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
 import org.apache.spark.sql.jdbc.JDBCWriteDetails
 import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.ml.FrequentItems
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
 import org.apache.spark.util.Utils
@@ -330,6 +331,17 @@ class DataFrame private[sql](
    * @group dfops
    */
   def na: DataFrameNaFunctions = new DataFrameNaFunctions(this)
+
+  /**
+   * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
+   * {{{
+   *   // Finding frequent items in column with name 'a'.
+   *   df.stat.freqItems(Seq("a"))
+   * }}}
+   *
+   * @group dfops
+   */
+  def stat: DataFrameStatFunctions = new DataFrameStatFunctions(this)
 
   /**
    * Cartesian join with another [[DataFrame]].
@@ -1414,38 +1426,5 @@ class DataFrame private[sql](
     val fieldTypes = schema.fields.map(_.dataType)
     val jrdd = rdd.map(EvaluatePython.rowToArray(_, fieldTypes)).toJavaRDD()
     SerDeUtil.javaToPython(jrdd)
-  }
-
-  /////////////////////////////////////////////////////////////////////////////
-  // Statistic functions
-  /////////////////////////////////////////////////////////////////////////////
-
-  // scalastyle:off
-  object stat {
-  // scalastyle:on
-
-    /**
-     * Finding frequent items for columns, possibly with false positives. Using the algorithm
-     * described in `http://www.cs.umd.edu/~samir/498/karp.pdf`.
-     *
-     * @param cols the names of the columns to search frequent items in
-     * @param support The minimum frequency for an item to be considered `frequent`
-     * @return A Local DataFrame with the Array of frequent items for each column.
-     */
-    def freqItems(cols: Array[String], support: Double): DataFrame = {
-      FrequentItems.singlePassFreqItems(toDF(), cols, support)
-    }
-
-    /**
-     * Finding frequent items for columns, possibly with false positives. Using the algorithm
-     * described in `http://www.cs.umd.edu/~samir/498/karp.pdf`.
-     * Returns items more frequent than 1/1000'th of the time.
-     *
-     * @param cols the names of the columns to search frequent items in
-     * @return A Local DataFrame with the Array of frequent items for each column.
-     */
-    def freqItems(cols: Array[String]): DataFrame = {
-      FrequentItems.singlePassFreqItems(toDF(), cols, 0.001)
-    }
   }
 }

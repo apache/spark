@@ -178,5 +178,4 @@ public class JavaDataFrameSuite {
       Assert.assertEquals(bean.getD().get(i), d.apply(i));
     }
   }
-
 }
