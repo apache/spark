@@ -97,6 +97,21 @@ class UISeleniumSuite
         val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
         h3Text should contain("Streaming Statistics")
 
+        // Check stat table
+        val statTableHeaders = findAll(cssSelector("#stat-table th")).map(_.text).toSeq
+        statTableHeaders.exists(
+          _.matches("Timelines \\(Last \\d+ batches, \\d+ active, \\d+ completed\\)")) should be
+          (true)
+        statTableHeaders should contain ("Histograms")
+
+        val statTableCells = findAll(cssSelector("#stat-table td")).map(_.text).toSeq
+        println(statTableCells.toList)
+        statTableCells.exists(_.contains("Input Rate")) should be (true)
+        statTableCells.exists(_.contains("Streaming Scheduling Delay")) should be (true)
+        statTableCells.exists(_.contains("Processing Time")) should be (true)
+        statTableCells.exists(_.contains("Total Delay")) should be (true)
+
+        // Check batch tables
         val h4Text = findAll(cssSelector("h4")).map(_.text).toSeq
         h4Text.exists(_.matches("Active Batches \\(\\d+\\)")) should be (true)
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
