@@ -507,14 +507,6 @@ class DataFrameSuite extends QueryTest {
     assert(df.schema.map(_.name) === Seq("value"))
   }
 
-  test("drop multiple columns using drop") {
-    val df = testData.withColumn("newCol", col("key") + 1).drop("key", "newCol")
-    checkAnswer(
-      df,
-      testData.collect().map(x => Row(x.getString(1))).toSeq)
-    assert(df.schema.map(_.name) === Seq("value"))
-  }
-
   test("withColumnRenamed") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
       .withColumnRenamed("value", "valueRenamed")

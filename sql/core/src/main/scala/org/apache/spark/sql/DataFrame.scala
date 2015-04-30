@@ -855,16 +855,13 @@ class DataFrame private[sql](
    * Returns a new [[DataFrame]] with a column dropped.
    * @group dfops
    */
-  def drop(col: String, cols: String*): DataFrame = {
+  def drop(col: String): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val shouldDrop =
-      schema.exists(f =>
-        (col +: cols).exists(c =>
-          resolver(f.name, c)))
+    val shouldDrop = schema.exists(f => resolver(f.name, col))
     if(shouldDrop) {
       val colsAfterDrop = schema.filter { field =>
         val name = field.name
-        !(col +: cols).exists(c => resolver(name, c))
+        !resolver(name, col)
       }.map(f => Column(f.name))
       select(colsAfterDrop:_*)
     } else {
