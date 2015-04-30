@@ -23,7 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
 import org.apache.spark.ml.impl.tree._
-import org.apache.spark.ml.param.{Param, Params}
+import org.apache.spark.ml.param.{ParamMap, Param, Params}
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
@@ -174,9 +174,9 @@ final class GBTRegressionModel(
     if (prediction > 0.0) 1.0 else 0.0
   }
 
-  override protected def copy(): GBTRegressionModel = {
+  override def copy(extra: ParamMap): GBTRegressionModel = {
     val m = new GBTRegressionModel(parent, _trees, _treeWeights)
-    Params.inheritValues(this.extractParamMap(), this, m)
+    Params.inheritValues(this, m, extra)
     m
   }
 

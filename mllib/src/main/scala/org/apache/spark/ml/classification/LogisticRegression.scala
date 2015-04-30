@@ -190,9 +190,9 @@ class LogisticRegressionModel private[ml] (
     Vectors.dense(0.0, m)
   }
 
-  override protected def copy(): LogisticRegressionModel = {
+  override def copy(extra: ParamMap): LogisticRegressionModel = {
     val m = new LogisticRegressionModel(parent, weights, intercept)
-    Params.inheritValues(this.extractParamMap(), this, m)
+    Params.inheritValues(this, m, extra)
     m
   }
 }

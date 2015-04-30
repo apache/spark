@@ -95,9 +95,9 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
   /** @group setParam */
   def setNumFolds(value: Int): this.type = set(numFolds, value)
 
-  override def validate(paramMap: ParamMap): Unit = {
+  override def validateParams(paramMap: ParamMap): Unit = {
     getEstimatorParamMaps.foreach { eMap =>
-      getEstimator.validate(eMap ++ paramMap)
+      getEstimator.validateParams(eMap ++ paramMap)
     }
   }
 
@@ -151,8 +151,8 @@ class CrossValidatorModel private[ml] (
     val bestModel: Model[_])
   extends Model[CrossValidatorModel] with CrossValidatorParams {
 
-  override def validate(paramMap: ParamMap): Unit = {
-    bestModel.validate(paramMap)
+  override def validateParams(paramMap: ParamMap): Unit = {
+    bestModel.validateParams(paramMap)
   }
 
   override def transform(dataset: DataFrame): DataFrame = {

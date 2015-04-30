@@ -62,8 +62,8 @@ abstract class PipelineStage extends Params with Logging {
     outputSchema
   }
 
-  override def copyWith(extra: ParamMap): PipelineStage = {
-    super.copyWith(extra).asInstanceOf[PipelineStage]
+  override def copy(extra: ParamMap): PipelineStage = {
+    super.copy(extra).asInstanceOf[PipelineStage]
   }
 }
 
@@ -92,12 +92,12 @@ class Pipeline extends Estimator[PipelineModel] {
   def setStages(value: Array[PipelineStage]): this.type = { set(stages, value); this }
 
   /** @group getParam */
-  def getStages: Array[PipelineStage] = getOrDefault(stages)
+  def getStages: Array[PipelineStage] = $(stages).clone()
 
-  override def validate(paramMap: ParamMap): Unit = {
+  override def validateParams(paramMap: ParamMap): Unit = {
     val map = extractParamMap(paramMap)
     getStages.foreach {
-      case pStage: Params => pStage.validate(map)
+      case pStage: Params => pStage.validateParams(map)
       case _ =>
     }
   }
@@ -151,9 +151,9 @@ class Pipeline extends Estimator[PipelineModel] {
     new PipelineModel(this, transformers.toArray)
   }
 
-  override def copyWith(extra: ParamMap): Pipeline = {
+  override def copy(extra: ParamMap): Pipeline = {
     val map = extractParamMap(extra)
-    val newStages = map(stages).map(_.copyWith(map))
+    val newStages = map(stages).map(_.copy(map))
     new Pipeline().setStages(newStages)
   }
 
@@ -175,8 +175,8 @@ class PipelineModel private[ml] (
     private[ml] val stages: Array[Transformer])
   extends Model[PipelineModel] with Logging {
 
-  override def validate(paramMap: ParamMap): Unit = {
-    stages.foreach(_.validate())
+  override def validateParams(paramMap: ParamMap): Unit = {
+    stages.foreach(_.validateParams())
   }
 
   /**

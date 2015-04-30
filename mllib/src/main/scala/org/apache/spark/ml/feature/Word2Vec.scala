@@ -27,7 +27,7 @@ import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.linalg.{VectorUDT, Vectors}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.DataFrame
 
 /**
  * Params for [[Word2Vec]] and [[Word2VecModel]].
@@ -113,7 +113,7 @@ final class Word2Vec extends Estimator[Word2VecModel] with Word2VecBase {
 
   override def fit(dataset: DataFrame): Word2VecModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).map { case Row(v: Seq[String]) => v }
+    val input = dataset.select($(inputCol)).map(_.getAs[Seq[String]](0))
     val wordVectors = new feature.Word2Vec()
       .setLearningRate($(stepSize))
       .setMinCount($(minCount))

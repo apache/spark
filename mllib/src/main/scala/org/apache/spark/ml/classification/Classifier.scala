@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor, PredictorParams}
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
@@ -143,7 +144,6 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    */
   @DeveloperApi
   protected def predictRaw(features: FeaturesType): Vector
-
 }
 
 private[ml] object ClassificationModel {

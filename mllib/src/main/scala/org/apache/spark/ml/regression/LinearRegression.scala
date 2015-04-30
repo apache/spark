@@ -24,7 +24,7 @@ import breeze.optimize.{LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 import breeze.optimize.{CachedDiffFunction, DiffFunction}
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.param.Params
+import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasTol, HasElasticNetParam, HasMaxIter, HasRegParam}
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -201,9 +201,9 @@ class LinearRegressionModel private[ml] (
     dot(features, weights) + intercept
   }
 
-  override protected def copy(): LinearRegressionModel = {
+  override def copy(extra: ParamMap): LinearRegressionModel = {
     val m = new LinearRegressionModel(parent, weights, intercept)
-    Params.inheritValues(extractParamMap(), this, m)
+    Params.inheritValues(this, m, extra)
     m
   }
 }

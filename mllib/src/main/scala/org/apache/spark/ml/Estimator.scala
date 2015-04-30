@@ -56,7 +56,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage with Params {
    * @return fitted model
    */
   def fit(dataset: DataFrame, paramMap: ParamMap): M = {
-    copyWith(paramMap).fit(dataset)
+    copy(paramMap).fit(dataset)
   }
 
   /**
@@ -78,7 +78,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage with Params {
     paramMaps.map(fit(dataset, _))
   }
 
-  override def copyWith(extra: ParamMap): Estimator[M] = {
-    super.copyWith(extra).asInstanceOf[Estimator[M]]
+  override def copy(extra: ParamMap): Estimator[M] = {
+    super.copy(extra).asInstanceOf[Estimator[M]]
   }
 }

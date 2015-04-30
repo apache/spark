@@ -115,9 +115,9 @@ final class DecisionTreeClassificationModel private[ml] (
     rootNode.predict(features)
   }
 
-  override protected def copy(): DecisionTreeClassificationModel = {
+  override def copy(extra: ParamMap): DecisionTreeClassificationModel = {
     val m = new DecisionTreeClassificationModel(parent, rootNode)
-    Params.inheritValues(this.extractParamMap(), this, m)
+    Params.inheritValues(this, m, extra)
     m
   }
 

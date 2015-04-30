@@ -127,14 +127,14 @@ class ParamsSuite extends FunSuite {
     }
 
     intercept[IllegalArgumentException] {
-      solver.validate()
+      solver.validateParams()
     }
-    solver.validate(ParamMap(inputCol -> "input"))
+    solver.validateParams(ParamMap(inputCol -> "input"))
     solver.setInputCol("input")
     assert(solver.isSet(inputCol))
     assert(solver.isDefined(inputCol))
     assert(solver.getInputCol === "input")
-    solver.validate()
+    solver.validateParams()
     intercept[IllegalArgumentException] {
       ParamMap(maxIter -> -10)
     }

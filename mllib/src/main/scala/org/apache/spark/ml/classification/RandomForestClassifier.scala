@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
 import org.apache.spark.ml.impl.tree._
-import org.apache.spark.ml.param.Params
+import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
@@ -146,9 +146,9 @@ final class RandomForestClassificationModel private[ml] (
     votes.maxBy(_._2)._1
   }
 
-  override protected def copy(): RandomForestClassificationModel = {
+  override def copy(extra: ParamMap): RandomForestClassificationModel = {
     val m = new RandomForestClassificationModel(parent, _trees)
-    Params.inheritValues(this.extractParamMap(), this, m)
+    Params.inheritValues(this, m, extra)
     m
   }
 

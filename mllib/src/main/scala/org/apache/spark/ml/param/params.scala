@@ -49,7 +49,7 @@ class Param[T] (val parent: Params, val name: String, val doc: String, val isVal
    * Assert that the given value is valid for this parameter.
    *
    * Note: Parameter checks involving interactions between multiple parameters should be
-   *       implemented in [[Params.validate()]].  Checks for input/output columns should be
+   *       implemented in [[Params.validateParams()]].  Checks for input/output columns should be
    *       implemented in [[org.apache.spark.ml.PipelineStage.transformSchema()]].
    *
    * DEVELOPERS: This method is only called by [[ParamPair]], which means that all parameters
@@ -258,8 +258,8 @@ trait Params extends Identifiable with Serializable {
    * [[Param.validate()]].  This method does not handle input/output column parameters;
    * those are checked during schema validation.
    */
-  def validate(paramMap: ParamMap): Unit = {
-    copyWith(paramMap).validate()
+  def validateParams(paramMap: ParamMap): Unit = {
+    copy(paramMap).validateParams()
   }
 
   /**
@@ -271,7 +271,7 @@ trait Params extends Identifiable with Serializable {
    * [[Param.validate()]].  This method does not handle input/output column parameters;
    * those are checked during schema validation.
    */
-  def validate(): Unit = {
+  def validateParams(): Unit = {
     params.filter(isDefined _).foreach { param =>
       param.asInstanceOf[Param[Any]].validate($(param))
     }
@@ -292,6 +292,11 @@ trait Params extends Identifiable with Serializable {
   final def isDefined(param: Param[_]): Boolean = {
     shouldOwn(param)
     defaultParamMap.contains(param) || paramMap.contains(param)
+  }
+
+  /** Tests whether this instance contains a param with a given name. */
+  def hasParam(paramName: String): Boolean = {
+    params.exists(_.name == paramName)
   }
 
   /** Gets a param by its name. */
@@ -343,9 +348,7 @@ trait Params extends Identifiable with Serializable {
     get(param).orElse(getDefault(param)).get
   }
 
-  /**
-   * An alias for [[getOrDefault()]].
-   */
+  /** An alias for [[getOrDefault()]]. */
   protected final def $[T](param: Param[T]): T = getOrDefault(param)
 
   /**
@@ -399,9 +402,9 @@ trait Params extends Identifiable with Serializable {
    * copies the embedded and extra parameters over and returns the new instance.
    * Subclasses should override this method if the default approach is not sufficient.
    */
-  def copyWith(extra: ParamMap): Params = {
+  def copy(extra: ParamMap): Params = {
     val that = this.getClass.newInstance()
-    Params.inheritValues(extra, this, that)
+    Params.inheritValues(this, that, extra)
     that
   }
 
@@ -445,17 +448,17 @@ private[spark] object Params {
 
   /**
    * Copies parameter values from the parent estimator to the child model it produced.
-   * @param paramMap the param map that holds parameters of the parent
    * @param parent the parent estimator
    * @param child the child model
+   * @param paramMap the param map that holds parameters of the parent
    */
   def inheritValues[E <: Params, M <: E](
-      paramMap: ParamMap,
       parent: E,
-      child: M): Unit = {
-    val childParams = child.params.map(_.name).toSet
+      child: M,
+      paramMap: ParamMap): Unit = {
+    val map = parent.extractParamMap(paramMap)
     parent.params.foreach { param =>
-      if (paramMap.contains(param) && childParams.contains(param.name)) {
+      if (paramMap.contains(param) && child.hasParam(param.name)) {
         child.set(child.getParam(param.name), paramMap(param))
       }
     }

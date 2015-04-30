@@ -36,7 +36,7 @@ abstract class Evaluator extends Params {
    * @return metric
    */
   def evaluate(dataset: DataFrame, paramMap: ParamMap): Double = {
-    this.copyWith(paramMap).evaluate(dataset)
+    this.copy(paramMap).evaluate(dataset)
   }
 
   /**
@@ -46,7 +46,7 @@ abstract class Evaluator extends Params {
    */
   def evaluate(dataset: DataFrame): Double
 
-  override def copyWith(extra: ParamMap): Evaluator = {
-    super.copyWith(extra).asInstanceOf[Evaluator]
+  override def copy(extra: ParamMap): Evaluator = {
+    super.copy(extra).asInstanceOf[Evaluator]
   }
 }

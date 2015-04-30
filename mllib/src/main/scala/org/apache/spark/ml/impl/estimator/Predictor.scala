@@ -100,6 +100,10 @@ private[spark] abstract class Predictor[
     train(dataset)
   }
 
+  override def copy(extra: ParamMap): Learner = {
+    super.copy(extra).asInstanceOf[Learner]
+  }
+
   /**
    * :: DeveloperApi ::
    *
@@ -211,10 +215,4 @@ private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel
    */
   @DeveloperApi
   protected def predict(features: FeaturesType): Double
-
-  /**
-   * Create a copy of the model.
-   * The copy is shallow, except for the embedded paramMap, which gets a deep copy.
-   */
-  protected def copy(): M
 }

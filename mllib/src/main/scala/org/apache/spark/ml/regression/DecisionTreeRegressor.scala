@@ -20,7 +20,7 @@ package org.apache.spark.ml.regression
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
 import org.apache.spark.ml.impl.tree._
-import org.apache.spark.ml.param.Params
+import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.tree.{DecisionTreeModel, Node}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
@@ -105,9 +105,9 @@ final class DecisionTreeRegressionModel private[ml] (
     rootNode.predict(features)
   }
 
-  override protected def copy(): DecisionTreeRegressionModel = {
+  override def copy(extra: ParamMap): DecisionTreeRegressionModel = {
     val m = new DecisionTreeRegressionModel(parent, rootNode)
-    Params.inheritValues(this.extractParamMap(), this, m)
+    Params.inheritValues(this, m, extra)
     m
   }
 
