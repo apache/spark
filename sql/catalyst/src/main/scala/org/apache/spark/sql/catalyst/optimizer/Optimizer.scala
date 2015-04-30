@@ -36,14 +36,13 @@ object DefaultOptimizer extends Optimizer {
     // SubQueries are only needed for analysis and can be removed before execution.
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
-    Batch("Filter Pushdown", FixedPoint(100),
+    Batch("Operator Reordering", FixedPoint(100),
       UnionPushdown,
       CombineFilters,
       PushPredicateThroughProject,
       PushPredicateThroughJoin,
       PushPredicateThroughGenerate,
-      ColumnPruning) ::
-    Batch("Combine Limits", FixedPoint(100),
+      ColumnPruning,
       CombineLimits) ::
     Batch("ConstantFolding", FixedPoint(100),
       NullPropagation,
