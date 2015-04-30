@@ -82,10 +82,7 @@ private[spark] abstract class Stage(
    * This method updates the running count of failures for a particular stage and returns 
    * true if the number of failures exceeds the allowable number of failures.
    */
-  private[scheduler] def failAndShouldAbort(): Boolean = {
-    fail()
-    shouldAbort()
-  }
+  private[scheduler] def failAndShouldAbort(): Boolean = { fail(); shouldAbort() }
   
   /** Return a new attempt id, starting with 0. */
   def newAttemptId(): Int = {
