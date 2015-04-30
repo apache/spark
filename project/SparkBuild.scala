@@ -140,9 +140,7 @@ object SparkBuild extends PomBuild {
     javacOptions in (Compile, doc) ++= {
       val Array(major, minor, _) = System.getProperty("java.version").split("\\.", 3)
       if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
-    },
-    // This option is needed to suppress warnings from sun.misc.Unsafe usage
-    javacOptions in Compile += "-XDignore.symbol.file"
+    }
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
@@ -164,6 +162,9 @@ object SparkBuild extends PomBuild {
     networkCommon, networkShuffle, networkYarn, launcher, unsafe).contains(x)).foreach {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
+
+  /* Unsafe settings */
+  enable(Unsafe.settings)(unsafe)
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
@@ -216,6 +217,13 @@ object SparkBuild extends PomBuild {
     } ++ Seq[Project](OldDeps.project)
   }
 
+}
+
+object Unsafe {
+  lazy val settings = Seq(
+    // This option is needed to suppress warnings from sun.misc.Unsafe usage
+    javacOptions in Compile += "-XDignore.symbol.file"
+  )
 }
 
 object Flume {

@@ -1162,8 +1162,6 @@
               <javacArg>${java.version}</javacArg>
               <javacArg>-target</javacArg>
               <javacArg>${java.version}</javacArg>
-              <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
-              <javacArg>-XDignore.symbol.file</javacArg>
             </javacArgs>
             <!-- The following plugin is required to use quasiquotes in Scala 2.10 and is used
                  by Spark SQL for code generation. -->
@@ -1186,10 +1184,6 @@
             <encoding>UTF-8</encoding>
             <maxmem>1024m</maxmem>
             <fork>true</fork>
-            <compilerArgs>
-              <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
-              <arg>-XDignore.symbol.file</arg>
-            </compilerArgs>
           </configuration>
         </plugin>
         <!-- Surefire runs all Java tests -->
