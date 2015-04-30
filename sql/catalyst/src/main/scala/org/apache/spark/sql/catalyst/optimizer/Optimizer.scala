@@ -170,6 +170,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
       Project(substitutedProjection, child)
 
+    case Project(projectList, Limit(exp, child)) =>
+      Limit(exp, Project(projectList, child))
+      
     // Eliminate no-op Projects
     case Project(projectList, child) if child.output == projectList => child
   }
