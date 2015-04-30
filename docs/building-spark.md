@@ -59,7 +59,7 @@ You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
 
 # Specifying the Hadoop Version
 
-Because HDFS is not protocol-compatible across versions, if you want to read from HDFS, you'll need to build Spark against the specific HDFS version in your environment. You can do this through the "hadoop.version" property. If unset, Spark will build against Hadoop 1.0.4 by default. Note that certain build profiles are required for particular Hadoop versions:
+Because HDFS is not protocol-compatible across versions, if you want to read from HDFS, you'll need to build Spark against the specific HDFS version in your environment. You can do this through the "hadoop.version" property. If unset, Spark will build against Hadoop 2.2.0 by default. Note that certain build profiles are required for particular Hadoop versions:
 
 <table class="table">
   <thead>
@@ -67,8 +67,8 @@ Because HDFS is not protocol-compatible across versions, if you want to read fro
   </thead>
   <tbody>
     <tr><td>0.23.x</td><td>hadoop-0.23</td></tr>
-    <tr><td>1.x to 2.1.x</td><td>(none)</td></tr>
-    <tr><td>2.2.x</td><td>hadoop-2.2</td></tr>
+    <tr><td>1.x to 2.1.x</td><td>hadoop-1</td></tr>
+    <tr><td>2.2.x</td><td>(none)</td></tr>
     <tr><td>2.3.x</td><td>hadoop-2.3</td></tr>
     <tr><td>2.4.x</td><td>hadoop-2.4</td></tr>
   </tbody>
@@ -82,6 +82,10 @@ mvn -Dhadoop.version=1.2.1 -DskipTests clean package
 
 # Cloudera CDH 4.2.0 with MapReduce v1
 mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -DskipTests clean package
+
+#Cloudera CDH 5.3.3 without MapReduce
+
+mvn -Dhadoop.version=2.5.0-cdh5.3.3 -DskipTests clean package
 
 # Apache Hadoop 0.23.x
 mvn -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
