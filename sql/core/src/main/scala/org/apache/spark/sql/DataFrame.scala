@@ -862,13 +862,13 @@ class DataFrame private[sql](
    * This is a no-op if schema doesn't contain column name.
    * @group dfops
    */
-  def drop(col: String): DataFrame = {
+  def drop(colName: String): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val shouldDrop = schema.exists(f => resolver(f.name, col))
+    val shouldDrop = schema.exists(f => resolver(f.name, colName))
     if (shouldDrop) {
       val colsAfterDrop = schema.filter { field =>
         val name = field.name
-        !resolver(name, col)
+        !resolver(name, colName)
       }.map(f => Column(f.name))
       select(colsAfterDrop : _*)
     } else {
