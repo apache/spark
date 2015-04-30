@@ -24,8 +24,8 @@ complicated, a line by line explanation follows below.
 
     default_args = {
         'owner': 'airflow',
-        'depends_on_past': True,
-        'start_date': datetime(2015, 01, 23),
+        'depends_on_past': False,
+        'start_date': datetime(2015, 1, 1),
         'email': ['airflow@airflow.com'],
         'email_on_failure': False,
         'email_on_retry': False,
@@ -40,7 +40,6 @@ complicated, a line by line explanation follows below.
 
     t2 = BashOperator(
         task_id='sleep',
-        depends_on_past=False,
         bash_command='sleep 5',
         dag=dag)
 
@@ -54,7 +53,6 @@ complicated, a line by line explanation follows below.
 
     t3 = BashOperator(
         task_id='templated',
-        depends_on_past=False,
         bash_command=templated_command,
         params={'my_param': 'Paramater I passed in'},
         dag=dag)
@@ -90,8 +88,8 @@ of default parameters that we can use when creating tasks.
 
     args = {
         'owner': 'airflow',
-        'depends_on_past': True,
-        'start_date': datetime(2015, 01, 23),
+        'depends_on_past': False,
+        'start_date': datetime(2015, 1, 1),
         'email': ['airflow@airflow.com',],
         'email_on_failure': True,
         'email_on_retry': True,
@@ -130,15 +128,15 @@ argument ``task_id`` acts as a unique identifier for the task.
 
     t2 = BashOperator(
         task_id='sleep', 
-        depends_on_past=False,
+        email_on_failure=False,
         bash_command='sleep 5', 
         dag=dag)
 
 Notice how we pass a mix of operator specific arguments (``bash_command``) and
-an argument common to all operators (``depends_on_past``) inherited 
+an argument common to all operators (``email_on_failure``) inherited 
 from BaseOperator to the operators constructor. This is simpler than 
 passing every argument for every constructor call. Also, notice that in 
-the second call we override ``depends_on_past`` parameter with ``False``.
+the second call we override ``email_on_failure`` parameter with ``False``.
 
 The precendence rules for operator is:
 
@@ -174,7 +172,6 @@ curly brackets, and point to the most common template variable: ``{{ ds }}``.
 
     t3 = BashOperator(
         task_id='templated',
-        depends_on_past=False,
         bash_command=templated_command,
         params={'my_param': 'Paramater I passed in'},
         dag=dag)
@@ -244,8 +241,8 @@ something like this:
 
     default_args = {
         'owner': 'airflow',
-        'depends_on_past': True,
-        'start_date': datetime(2015, 01, 23),
+        'depends_on_past': False,
+        'start_date': datetime(2015, 1, 1),
         'email': ['airflow@airflow.com'],
         'email_on_failure': False,
         'email_on_retry': False,
@@ -260,7 +257,7 @@ something like this:
 
     t2 = BashOperator(
         task_id='sleep',
-        depends_on_past=False,
+        email_on_failure=False,
         bash_command='sleep 5',
         dag=dag)
 
@@ -274,7 +271,6 @@ something like this:
 
     t3 = BashOperator(
         task_id='templated',
-        depends_on_past=False,
         bash_command=templated_command,
         params={'my_param': 'Paramater I passed in'},
         dag=dag)
@@ -354,6 +350,10 @@ Everything looks like it's running fine so let's run a backfill.
 database to record status. If you do have a webserver up, you'll be able to
 track the progress. ``airflow webserver`` will start a web server if you
 are interested in tracking the progress visually as you backfill progresses.
+
+Note that if you use ``depend_on_past=True``, individual task instances 
+depends the success of the preceding task instance, except for the
+start_date specified itself, for which this dependency is disregarded.
 
 .. code-block:: bash
 

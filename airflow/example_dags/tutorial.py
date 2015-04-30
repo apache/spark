@@ -8,8 +8,8 @@ from datetime import datetime
 
 default_args = {
     'owner': 'airflow',
-    'depends_on_past': True,
-    'start_date': datetime(2015, 01, 23),
+    'depends_on_past': False,
+    'start_date': datetime(2015, 1, 1),
     'email': ['airflow@airflow.com'],
     'email_on_failure': False,
     'email_on_retry': False,
