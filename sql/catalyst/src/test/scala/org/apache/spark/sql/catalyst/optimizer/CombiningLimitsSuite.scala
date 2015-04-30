@@ -80,7 +80,7 @@ class CombiningLimitsSuite extends PlanTest {
         .select('a)
         .limit(5)
         
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .select('a)
