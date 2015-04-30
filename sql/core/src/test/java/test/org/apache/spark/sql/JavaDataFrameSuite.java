@@ -179,7 +179,7 @@ public class JavaDataFrameSuite {
   @Test
   public void testFrequentItems() {
     DataFrame df = context.table("testData2");
-    List<String> cols = Arrays.asList("a");
+    String[] cols = new String[]{"a"};
     DataFrame results = df.stat().freqItems(cols, 0.2);
     Assert.assertTrue(results.collect()[0].getSeq(0).contains(1));
   }

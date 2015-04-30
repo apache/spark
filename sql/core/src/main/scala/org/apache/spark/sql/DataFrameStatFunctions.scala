@@ -17,11 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.lang.{String => JavaString}
-import java.util.{List => JavaList}
-
-import scala.collection.JavaConversions._
-
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.execution.stat.FrequentItems
 
@@ -43,48 +38,31 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *                than 1e-4.
    * @return A Local DataFrame with the Array of frequent items for each column.
    */
-  def freqItems(cols: Seq[String], support: Double): DataFrame = {
+  def freqItems(cols: Array[String], support: Double): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, support)
   }
 
   /**
-   * Finding frequent items for columns, possibly with false positives. Using the
-   * frequent element count algorithm described in
-   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
-   * Returns items more frequent than 1 percent.
+   * Runs `freqItems` with a default `support` of 1%.
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
    */
-  def freqItems(cols: Seq[String]): DataFrame = {
+  def freqItems(cols: Array[String]): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, 0.01)
   }
 
   /**
-   * Finding frequent items for columns, possibly with false positives. Using the
-   * frequent element count algorithm described in
-   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
-   * The `support` should be greater than 1e-4.
-   *
-   * @param cols the names of the columns to search frequent items in.
-   * @param support The minimum frequency for an item to be considered `frequent`. Should be greater
-   *                than 1e-4.
-   * @return A Local DataFrame with the Array of frequent items for each column.
+   * Python friendly implementation for `freqItems`
    */
-  def freqItems(cols: JavaList[JavaString], support: Double): DataFrame = {
+  def freqItems(cols: List[String], support: Double): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, support)
   }
 
   /**
-   * Finding frequent items for columns, possibly with false positives. Using the
-   * frequent element count algorithm described in
-   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
-   * Returns items more frequent than 1 percent of the time.
-   *
-   * @param cols the names of the columns to search frequent items in.
-   * @return A Local DataFrame with the Array of frequent items for each column.
+   * Python friendly implementation for `freqItems` with a default `support` of 1%.
    */
-  def freqItems(cols: JavaList[JavaString]): DataFrame = {
+  def freqItems(cols: List[String]): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, 0.01)
   }
 }
