@@ -117,15 +117,6 @@ private[spark] object ClosureCleaner extends Logging {
       getClassReader(cls).accept(new FieldAccessFinder(accessedFields), 0)
     // logInfo("accessedFields: " + accessedFields)
 
-    val inInterpreter = {
-      try {
-        val interpClass = Class.forName("spark.repl.Main")
-        interpClass.getMethod("interp").invoke(null) != null
-      } catch {
-        case _: ClassNotFoundException => true
-      }
-    }
-
     var outerPairs: List[(Class[_], AnyRef)] = (outerClasses zip outerObjects).reverse
     var outer: AnyRef = null
     if (outerPairs.size > 0 && !isClosure(outerPairs.head._1)) {
@@ -137,7 +128,7 @@ private[spark] object ClosureCleaner extends Logging {
     // Clone the closure objects themselves, nulling out any fields that are not
     // used in the closure we're working on or any of its inner closures.
     for ((cls, obj) <- outerPairs) {
-      outer = instantiateClass(cls, outer, inInterpreter)
+      outer = instantiateClass(cls, outer, Utils.isInInterpreter)
       for (fieldName <- accessedFields(cls)) {
         val field = cls.getDeclaredField(fieldName)
         field.setAccessible(true)

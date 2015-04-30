@@ -1800,6 +1800,15 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  lazy val isInInterpreter: Boolean = {
+    try {
+      val interpClass = classForName("spark.repl.Main")
+      interpClass.getMethod("interp").invoke(null) != null
+    } catch {
+      case _: ClassNotFoundException => false
+    }
+  }
+
   /**
    * Return a well-formed URI for the file described by a user input string.
    *
