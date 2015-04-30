@@ -19,14 +19,11 @@ package org.apache.spark.sql.hive
 
 import java.sql.Date
 
-
-import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
-import org.apache.spark.util.Utils
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
+import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse._
@@ -1245,7 +1242,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     /* Other functions */
     case Token("TOK_FUNCTION", Token(ARRAY(), Nil) :: children) =>
       CreateArray(children.map(nodeToExpr))
-    case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand(Utils.random.nextLong())
+    case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand()
     case Token("TOK_FUNCTION", Token(RAND(seed), Nil) :: Nil) => Rand(seed.toLong)
     case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: Nil) =>
       Substring(nodeToExpr(string), nodeToExpr(pos), Literal.create(Integer.MAX_VALUE, IntegerType))

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.types.{DataType, DoubleType}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -35,27 +36,21 @@ abstract class RDG(seed: Long) extends LeafExpression with Serializable {
    * Record ID within each partition. By being transient, the Random Number Generator is
    * reset every time we serialize and deserialize it.
    */
-  @transient private[this] lazy val rng = new XORShiftRandom(seed + TaskContext.get().partitionId())
+  @transient protected lazy val rng = new XORShiftRandom(seed + TaskContext.get().partitionId())
 
   override type EvaluatedType = Double
 
   override def nullable: Boolean = false
 
   override def dataType: DataType = DoubleType
-
-  def generateNumber(random: XORShiftRandom): Double
-
-  override def eval(input: Row): Double = {
-    generateNumber(rng)
-  }
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
-case class Rand(seed: Long) extends RDG(seed) {
-  override def generateNumber(random: XORShiftRandom): Double = random.nextDouble()
+case class Rand(seed: Long = Utils.random.nextLong()) extends RDG(seed) {
+  override def eval(input: Row): Double = rng.nextDouble()
 }
 
 /** Generate a random column with i.i.d. gaussian random distribution. */
-case class Randn(seed: Long) extends RDG(seed) {
-  override def generateNumber(random: XORShiftRandom): Double = random.nextGaussian()
+case class Randn(seed: Long = Utils.random.nextLong()) extends RDG(seed) {
+  override def eval(input: Row): Double = rng.nextGaussian()
 }
