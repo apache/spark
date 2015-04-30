@@ -237,7 +237,8 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
-        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at mapPartitions at SQLContext.scala:...
+        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at applySchemaToPythonRDD at\
+          NativeMethodAccessorImpl.java:...
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -425,13 +426,29 @@ class DataFrame(object):
     def sample(self, withReplacement, fraction, seed=None):
         """Returns a sampled subset of this :class:`DataFrame`.
 
-        >>> df.sample(False, 0.5, 97).count()
+        >>> df.sample(False, 0.5, 42).count()
         1
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         rdd = self._jdf.sample(withReplacement, fraction, long(seed))
         return DataFrame(rdd, self.sql_ctx)
+
+    def randomSplit(self, weights, seed=None):
+        """Randomly splits this :class:`DataFrame` with the provided weights.
+
+        >>> splits = df4.randomSplit([1.0, 2.0], 24)
+        >>> splits[0].count()
+        1
+
+        >>> splits[1].count()
+        3
+        """
+        for w in weights:
+            assert w >= 0.0, "Negative weight value: %s" % w
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
+        rdd_array = self._jdf.randomSplit(_to_seq(self.sql_ctx._sc, weights), long(seed))
+        return [DataFrame(rdd, self.sql_ctx) for rdd in rdd_array]
 
     @property
     def dtypes(self):
@@ -451,6 +468,20 @@ class DataFrame(object):
         [u'age', u'name']
         """
         return [f.name for f in self.schema.fields]
+
+    @ignore_unicode_prefix
+    def alias(self, alias):
+        """Returns a new :class:`DataFrame` with an alias set.
+
+        >>> from pyspark.sql.functions import *
+        >>> df_as1 = df.alias("df_as1")
+        >>> df_as2 = df.alias("df_as2")
+        >>> joined_df = df_as1.join(df_as2, col("df_as1.name") == col("df_as2.name"), 'inner')
+        >>> joined_df.select(col("df_as1.name"), col("df_as2.name"), col("df_as2.age")).collect()
+        [Row(name=u'Alice', name=u'Alice', age=2), Row(name=u'Bob', name=u'Bob', age=5)]
+        """
+        assert isinstance(alias, basestring), "alias should be a string"
+        return DataFrame(getattr(self._jdf, "as")(alias), self.sql_ctx)
 
     @ignore_unicode_prefix
     def join(self, other, joinExprs=None, joinType=None):
@@ -618,7 +649,8 @@ class DataFrame(object):
         [Row(age=2), Row(age=5)]
         """
         if name not in self.columns:
-            raise AttributeError("No such column: %s" % name)
+            raise AttributeError(
+                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name))
         jc = self._jdf.apply(name)
         return Column(jc)
 

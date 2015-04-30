@@ -77,12 +77,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
     Option(propertiesFile).foreach { filename =>
       Utils.getPropertiesFromFile(filename).foreach { case (k, v) =>
-        if (k.startsWith("spark.")) {
-          defaultProperties(k) = v
-          if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
-        } else {
-          SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
-        }
+        defaultProperties(k) = v
+        if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
       }
     }
     defaultProperties
@@ -97,6 +93,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
   // Populate `sparkProperties` map from properties file
   mergeDefaultSparkProperties()
+  // Remove keys that don't start with "spark." from `sparkProperties`.
+  ignoreNonSparkProperties()
   // Use `sparkProperties` map along with env vars to fill in any missing parameters
   loadEnvironmentArguments()
 
@@ -113,6 +111,18 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     defaultSparkProperties.foreach { case (k, v) =>
       if (!sparkProperties.contains(k)) {
         sparkProperties(k) = v
+      }
+    }
+  }
+
+  /**
+   * Remove keys that don't start with "spark." from `sparkProperties`.
+   */
+  private def ignoreNonSparkProperties(): Unit = {
+    sparkProperties.foreach { case (k, v) =>
+      if (!k.startsWith("spark.")) {
+        sparkProperties -= k
+        SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
       }
     }
   }
@@ -231,8 +241,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
 
   private def validateKillArguments(): Unit = {
-    if (!master.startsWith("spark://")) {
-      SparkSubmit.printErrorAndExit("Killing submissions is only supported in standalone mode!")
+    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
+      SparkSubmit.printErrorAndExit(
+        "Killing submissions is only supported in standalone or Mesos mode!")
     }
     if (submissionToKill == null) {
       SparkSubmit.printErrorAndExit("Please specify a submission to kill.")
@@ -240,9 +251,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
 
   private def validateStatusRequestArguments(): Unit = {
-    if (!master.startsWith("spark://")) {
+    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
       SparkSubmit.printErrorAndExit(
-        "Requesting submission statuses is only supported in standalone mode!")
+        "Requesting submission statuses is only supported in standalone or Mesos mode!")
     }
     if (submissionToRequestStatusFor == null) {
       SparkSubmit.printErrorAndExit("Please specify a submission to request status for.")
@@ -475,6 +486,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
+        |
+        | Spark standalone or Mesos with cluster deploy mode only:
         |  --supervise                 If given, restarts the driver on failure.
         |  --kill SUBMISSION_ID        If given, kills the driver specified.
         |  --status SUBMISSION_ID      If given, requests the status of the driver specified.

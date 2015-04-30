@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.{DataType, BinaryType, BooleanType, NativeType}
+import org.apache.spark.sql.types.{DataType, BinaryType, BooleanType, AtomicType}
 
 object InterpretedPredicate {
   def create(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
@@ -211,7 +211,7 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
         s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
-      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case other => sys.error(s"Type $other does not support ordered operations")
     }
   }
@@ -240,7 +240,7 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
         s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
-      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case other => sys.error(s"Type $other does not support ordered operations")
     }
   }
@@ -269,7 +269,7 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
         s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
-      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case other => sys.error(s"Type $other does not support ordered operations")
     }
   }
@@ -298,7 +298,7 @@ case class GreaterThanOrEqual(left: Expression, right: Expression) extends Binar
         s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
-      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case other => sys.error(s"Type $other does not support ordered operations")
     }
   }

@@ -26,7 +26,7 @@ import scopt.OptionParser
 import org.apache.log4j.{Level, Logger}
 
 import org.apache.spark.{SparkContext, SparkConf}
-import org.apache.spark.mllib.clustering.LDA
+import org.apache.spark.mllib.clustering.{DistributedLDAModel, LDA}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 
@@ -137,7 +137,7 @@ object LDAExample {
       sc.setCheckpointDir(params.checkpointDir.get)
     }
     val startTime = System.nanoTime()
-    val ldaModel = lda.run(corpus)
+    val ldaModel = lda.run(corpus).asInstanceOf[DistributedLDAModel]
     val elapsed = (System.nanoTime() - startTime) / 1e9
 
     println(s"Finished training LDA model.  Summary:")
