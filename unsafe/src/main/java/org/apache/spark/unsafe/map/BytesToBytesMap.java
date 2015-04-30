@@ -401,11 +401,11 @@ public final class BytesToBytesMap {
 
       // Copy the key
       PlatformDependent.UNSAFE.putLong(pageBaseObject, keySizeOffsetInPage, keyLengthBytes);
-      PlatformDependent.UNSAFE.copyMemory(
+      PlatformDependent.copyMemory(
         keyBaseObject, keyBaseOffset, pageBaseObject, keyDataOffsetInPage, keyLengthBytes);
       // Copy the value
       PlatformDependent.UNSAFE.putLong(pageBaseObject, valueSizeOffsetInPage, valueLengthBytes);
-      PlatformDependent.UNSAFE.copyMemory(
+      PlatformDependent.copyMemory(
         valueBaseObject, valueBaseOffset, pageBaseObject, valueDataOffsetInPage, valueLengthBytes);
 
       final long storedKeyAddress = memoryManager.encodePageNumberAndOffset(
