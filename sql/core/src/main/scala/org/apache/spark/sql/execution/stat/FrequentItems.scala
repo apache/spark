@@ -54,7 +54,7 @@ private[sql] object FrequentItems extends Logging {
      * @param other The map containing the counts for that partition
      */
     def merge(other: FreqItemCounter): this.type = {
-      other.baseMap.toSeq.foreach { case (k, v) =>
+      other.baseMap.foreach { case (k, v) =>
         add(k, v)
       }
       this
