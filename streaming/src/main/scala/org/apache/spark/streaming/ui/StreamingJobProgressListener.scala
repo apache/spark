@@ -182,8 +182,8 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
    * Return all of the event rates for each receiver in each batch.
    */
   def receivedEventRateWithBatchTime: Map[Int, Seq[(Long, Double)]] = synchronized {
-    val latestBatches = retainedBatches.map { batchInfo =>
-      (batchInfo.batchTime.milliseconds, batchInfo.receiverNumRecords)
+    val latestBatches = retainedBatches.map { batchUIData =>
+      (batchUIData.batchTime.milliseconds, batchUIData.receiverNumRecords)
     }
     (0 until numReceivers).map { receiverId =>
       val eventRates = latestBatches.map {
