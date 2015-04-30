@@ -12,12 +12,12 @@ defaults = {
         'web_server_host': '0.0.0.0',
         'web_server_port': '8080',
     },
-    'master': {
+    'scheduler': {
         'statsd_on': False,
         'statsd_host': 'localhost',
         'statsd_port': 8125,
         'job_heartbeat_sec': 5,
-        'master_heartbeat_sec': 60,
+        'scheduler_heartbeat_sec': 60,
         'authenticate': False,
     },
 }
@@ -50,9 +50,9 @@ broker_url = sqla+mysql://airflow:airflow@localhost:3306/airflow
 celery_result_backend = db+mysql://airflow:airflow@localhost:3306/airflow
 flower_port = 8383
 
-[master]
+[scheduler]
 job_heartbeat_sec = 5
-master_heartbeat_sec = 60
+scheduler_heartbeat_sec = 60
 """
 
 TEST_CONFIG = """\
@@ -84,9 +84,9 @@ broker_url = sqla+mysql://airflow:airflow@localhost:3306/airflow
 celery_result_backend = db+mysql://airflow:airflow@localhost:3306/airflow
 flower_port = 5555
 
-[master]
+[scheduler]
 job_heartbeat_sec = 1
-master_heartbeat_sec = 5
+scheduler_heartbeat_sec = 5
 authenticate = true
 """
 
