@@ -496,30 +496,25 @@ class DAGSchedulerSuite
     val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
     submit(reduceRdd, Array(0, 1))
-    sparkListener.failedStages.clear()
-    scheduler.resubmitFailedStages()
     
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostA", 1)),
       (Success, makeMapStatus("hostB", 1))))
     
-    // Create stage object to get maxStageFailures
-    val stage = new ResultStage(0, reduceRdd, 0, null, 0, new CallSite("blah","blah"))
-    for (x <- 1 to stage.maxStageFailures) {
+    for (x <- 1 to Stage.maxStageFailures) {
       // the 2nd ResultTask failed
       complete(taskSets(1), Seq(
         (Success, 42),
         (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null)))
 
       scheduler.resubmitFailedStages()
-      if (x < stage.maxStageFailures) {
+      if (x < Stage.maxStageFailures) {
         assert(scheduler.runningStages.nonEmpty)
         assert(!ended)
         assert(!jobResult.isInstanceOf[JobFailed])
       } else {
+        // Stage has been aborted and removed from running stages
         assertDataStructuresEmpty()
-        // This should now contain the failed stage
-        
         sc.listenerBus.waitUntilEmpty(1000)
         assert(ended)
         assert(jobResult.isInstanceOf[JobFailed])
