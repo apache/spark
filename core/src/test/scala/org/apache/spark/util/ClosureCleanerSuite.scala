@@ -88,6 +88,7 @@ class ClosureCleanerSuite extends FunSuite {
       expectCorrectException { TestUserClosuresActuallyCleaned.testFlatMap(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testFilter(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testSortBy(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testGroupBy(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testKeyBy(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitions(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitionsWithIndex(rdd) }
