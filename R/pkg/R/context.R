@@ -17,12 +17,12 @@
 
 # context.R: SparkContext driven functions
 
-getMinSplits <- function(sc, minSplits) {
-  if (is.null(minSplits)) {
+getMinPartitions <- function(sc, minPartitions) {
+  if (is.null(minPartitions)) {
     defaultParallelism <- callJMethod(sc, "defaultParallelism")
-    minSplits <- min(defaultParallelism, 2)
+    minPartitions <- min(defaultParallelism, 2)
   }
-  as.integer(minSplits)
+  as.integer(minPartitions)
 }
 
 #' Create an RDD from a text file.
@@ -33,7 +33,7 @@ getMinSplits <- function(sc, minSplits) {
 #'
 #' @param sc SparkContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
-#' @param minSplits Minimum number of splits to be created. If NULL, the default
+#' @param minPartitions Minimum number of partitions to be created. If NULL, the default
 #'  value is chosen based on available parallelism.
 #' @return RDD where each item is of type \code{character}
 #' @export
@@ -42,13 +42,13 @@ getMinSplits <- function(sc, minSplits) {
 #'  sc <- sparkR.init()
 #'  lines <- textFile(sc, "myfile.txt")
 #'}
-textFile <- function(sc, path, minSplits = NULL) {
+textFile <- function(sc, path, minPartitions = NULL) {
   # Allow the user to have a more flexible definiton of the text file path
   path <- suppressWarnings(normalizePath(path))
   #' Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
 
-  jrdd <- callJMethod(sc, "textFile", path, getMinSplits(sc, minSplits))
+  jrdd <- callJMethod(sc, "textFile", path, getMinPartitions(sc, minPartitions))
   # jrdd is of type JavaRDD[String]
   RDD(jrdd, "string")
 }
@@ -60,7 +60,7 @@ textFile <- function(sc, path, minSplits = NULL) {
 #'
 #' @param sc SparkContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
-#' @param minSplits Minimum number of splits to be created. If NULL, the default
+#' @param minPartitions Minimum number of partitions to be created. If NULL, the default
 #'  value is chosen based on available parallelism.
 #' @return RDD containing serialized R objects.
 #' @seealso saveAsObjectFile
@@ -70,13 +70,13 @@ textFile <- function(sc, path, minSplits = NULL) {
 #'  sc <- sparkR.init()
 #'  rdd <- objectFile(sc, "myfile")
 #'}
-objectFile <- function(sc, path, minSplits = NULL) {
+objectFile <- function(sc, path, minPartitions = NULL) {
   # Allow the user to have a more flexible definiton of the text file path
   path <- suppressWarnings(normalizePath(path))
   #' Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
 
-  jrdd <- callJMethod(sc, "objectFile", path, getMinSplits(sc, minSplits))
+  jrdd <- callJMethod(sc, "objectFile", path, getMinPartitions(sc, minPartitions))
   # Assume the RDD contains serialized R objects.
   RDD(jrdd, "byte")
 }

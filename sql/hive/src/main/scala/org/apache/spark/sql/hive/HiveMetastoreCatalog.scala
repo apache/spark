@@ -871,7 +871,7 @@ private[hive] case class MetastoreRelation
 
 
 private[hive] object HiveMetastoreTypes {
-  def toDataType(metastoreType: String): DataType = DataTypeParser(metastoreType)
+  def toDataType(metastoreType: String): DataType = DataTypeParser.parse(metastoreType)
 
   def toMetastoreType(dt: DataType): String = dt match {
     case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"

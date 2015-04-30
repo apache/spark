@@ -86,6 +86,12 @@ class DataFrameSuite extends QueryTest {
     TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
   }
 
+  test("access complex data") {
+    assert(complexData.filter(complexData("a").getItem(0) === 2).count() == 1)
+    assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
+    assert(complexData.filter(complexData("s").getField("key") === 1).count() == 1)
+  }
+
   test("table scan") {
     checkAnswer(
       testData,
@@ -103,15 +109,6 @@ class DataFrameSuite extends QueryTest {
     assert(testData.head(2).head.schema === testData.schema)
   }
 
-  test("self join") {
-    val df1 = testData.select(testData("key")).as('df1)
-    val df2 = testData.select(testData("key")).as('df2)
-
-    checkAnswer(
-      df1.join(df2, $"df1.key" === $"df2.key"),
-      sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key").collect().toSeq)
-  }
-
   test("simple explode") {
     val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
 
@@ -121,8 +118,35 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
-  test("self join with aliases") {
-    val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
+  test("join - join using") {
+    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
+    val df2 = Seq(1, 2, 3).map(i => (i, (i + 1).toString)).toDF("int", "str")
+
+    checkAnswer(
+      df.join(df2, "int"),
+      Row(1, "1", "2") :: Row(2, "2", "3") :: Row(3, "3", "4") :: Nil)
+  }
+
+  test("join - join using self join") {
+    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
+
+    // self join
+    checkAnswer(
+      df.join(df, "int"),
+      Row(1, "1", "1") :: Row(2, "2", "2") :: Row(3, "3", "3") :: Nil)
+  }
+
+  test("join - self join") {
+    val df1 = testData.select(testData("key")).as('df1)
+    val df2 = testData.select(testData("key")).as('df2)
+
+    checkAnswer(
+      df1.join(df2, $"df1.key" === $"df2.key"),
+      sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key").collect().toSeq)
+  }
+
+  test("join - using aliases after self join") {
+    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
     checkAnswer(
       df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
@@ -169,6 +193,14 @@ class DataFrameSuite extends QueryTest {
   test("repartition") {
     checkAnswer(
       testData.select('key).repartition(10).select('key),
+      testData.select('key).collect().toSeq)
+  }
+
+  test("coalesce") {
+    assert(testData.select('key).coalesce(1).rdd.partitions.size === 1)
+
+    checkAnswer(
+      testData.select('key).coalesce(1).select('key),
       testData.select('key).collect().toSeq)
   }
 
@@ -459,6 +491,14 @@ class DataFrameSuite extends QueryTest {
     assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
   }
 
+  test("replace column using withColumn") {
+    val df2 = TestSQLContext.sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df3 = df2.withColumn("x", df2("x") + 1)
+    checkAnswer(
+      df3.select("x"),
+      Row(2) :: Row(3) :: Row(4) :: Nil)
+  }
+
   test("withColumnRenamed") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
       .withColumnRenamed("value", "valueRenamed")
@@ -468,6 +508,23 @@ class DataFrameSuite extends QueryTest {
         Row(key, value, key + 1)
       }.toSeq)
     assert(df.schema.map(_.name).toSeq === Seq("key", "valueRenamed", "newCol"))
+  }
+
+  test("randomSplit") {
+    val n = 600
+    val data = TestSQLContext.sparkContext.parallelize(1 to n, 2).toDF("id")
+    for (seed <- 1 to 5) {
+      val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
+      assert(splits.length == 3, "wrong number of splits")
+
+      assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList ==
+        data.collect().toList, "incomplete or wrong split")
+
+      val s = splits.map(_.count())
+      assert(math.abs(s(0) - 100) < 50) // std =  9.13
+      assert(math.abs(s(1) - 200) < 50) // std = 11.55
+      assert(math.abs(s(2) - 300) < 50) // std = 12.25
+    }
   }
 
   test("describe") {
@@ -530,5 +587,14 @@ class DataFrameSuite extends QueryTest {
     val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
     val df = TestSQLContext.createDataFrame(rowRDD, schema)
     df.rdd.collect()
+  }
+
+  test("SPARK-6899") {
+    val originalValue = TestSQLContext.conf.codegenEnabled
+    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
+    checkAnswer(
+      decimalData.agg(avg('a)),
+      Row(new java.math.BigDecimal(2.0)))
+    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
 }

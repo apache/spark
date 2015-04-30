@@ -41,6 +41,8 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
     val resuableProjection = buildProjection()
     iter.map(resuableProjection)
   }
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
 
 /**
@@ -55,20 +57,38 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def execute(): RDD[Row] = child.execute().mapPartitions { iter =>
     iter.filter(conditionEvaluator)
   }
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
 
 /**
  * :: DeveloperApi ::
+ * Sample the dataset.
+ * @param lowerBound Lower-bound of the sampling probability (usually 0.0)
+ * @param upperBound Upper-bound of the sampling probability. The expected fraction sampled 
+ *                   will be ub - lb.
+ * @param withReplacement Whether to sample with replacement.
+ * @param seed the random seed
+ * @param child the QueryPlan
  */
 @DeveloperApi
-case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child: SparkPlan)
+case class Sample(
+    lowerBound: Double,
+    upperBound: Double,
+    withReplacement: Boolean,
+    seed: Long,
+    child: SparkPlan)
   extends UnaryNode
 {
   override def output: Seq[Attribute] = child.output
 
   // TODO: How to pick seed?
   override def execute(): RDD[Row] = {
-    child.execute().map(_.copy()).sample(withReplacement, fraction, seed)
+    if (withReplacement) {
+      child.execute().map(_.copy()).sample(withReplacement, upperBound - lowerBound, seed)
+    } else {
+      child.execute().map(_.copy()).randomSampleWithRange(lowerBound, upperBound, seed)
+    }
   }
 }
 
@@ -117,7 +137,7 @@ case class Limit(limit: Int, child: SparkPlan)
     }
     val part = new HashPartitioner(1)
     val shuffled = new ShuffledRDD[Boolean, Row, Row](rdd, part)
-    shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
+    shuffled.setSerializer(new SparkSqlSerializer(child.sqlContext.sparkContext.getConf))
     shuffled.mapPartitions(_.take(limit).map(_._2))
   }
 }
@@ -147,6 +167,8 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
   override def execute(): RDD[Row] = sparkContext.makeRDD(collectData(), 1)
+
+  override def outputOrdering: Seq[SortOrder] = sortOrder
 }
 
 /**
@@ -172,6 +194,8 @@ case class Sort(
   }
 
   override def output: Seq[Attribute] = child.output
+
+  override def outputOrdering: Seq[SortOrder] = sortOrder
 }
 
 /**
@@ -202,6 +226,8 @@ case class ExternalSort(
   }
 
   override def output: Seq[Attribute] = child.output
+
+  override def outputOrdering: Seq[SortOrder] = sortOrder
 }
 
 /**
@@ -232,6 +258,20 @@ case class Distinct(partial: Boolean, child: SparkPlan) extends UnaryNode {
 
       hashSet.iterator
     }
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Return a new RDD that has exactly `numPartitions` partitions.
+ */
+@DeveloperApi
+case class Repartition(numPartitions: Int, shuffle: Boolean, child: SparkPlan)
+  extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+
+  override def execute(): RDD[Row] = {
+    child.execute().map(_.copy()).coalesce(numPartitions, shuffle)
   }
 }
 

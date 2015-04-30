@@ -72,6 +72,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def requiredChildDistribution: Seq[Distribution] =
     Seq.fill(children.size)(UnspecifiedDistribution)
 
+  /** Specifies how data is ordered in each partition. */
+  def outputOrdering: Seq[SortOrder] = Nil
+
+  /** Specifies sort order for each partition requirements on the input data for this operator. */
+  def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
+
   /**
    * Runs this query returning the result as an RDD.
    */
@@ -138,7 +144,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if (codegenEnabled) {
-      GenerateProjection(expressions, inputSchema)
+      GenerateProjection.generate(expressions, inputSchema)
     } else {
       new InterpretedProjection(expressions, inputSchema)
     }
@@ -150,7 +156,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     log.debug(
       s"Creating MutableProj: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if(codegenEnabled) {
-      GenerateMutableProjection(expressions, inputSchema)
+      GenerateMutableProjection.generate(expressions, inputSchema)
     } else {
       () => new InterpretedMutableProjection(expressions, inputSchema)
     }
@@ -160,15 +166,15 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def newPredicate(
       expression: Expression, inputSchema: Seq[Attribute]): (Row) => Boolean = {
     if (codegenEnabled) {
-      GeneratePredicate(expression, inputSchema)
+      GeneratePredicate.generate(expression, inputSchema)
     } else {
-      InterpretedPredicate(expression, inputSchema)
+      InterpretedPredicate.create(expression, inputSchema)
     }
   }
 
   protected def newOrdering(order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[Row] = {
     if (codegenEnabled) {
-      GenerateOrdering(order, inputSchema)
+      GenerateOrdering.generate(order, inputSchema)
     } else {
       new RowOrdering(order, inputSchema)
     }

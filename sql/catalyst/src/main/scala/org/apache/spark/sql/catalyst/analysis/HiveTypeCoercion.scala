@@ -79,6 +79,7 @@ trait HiveTypeCoercion {
     CaseWhenCoercion ::
     Division ::
     PropagateTypes ::
+    ExpectedInputConversion ::
     Nil
 
   /**
@@ -115,7 +116,7 @@ trait HiveTypeCoercion {
    * the appropriate numeric equivalent.
    */
   object ConvertNaNs extends Rule[LogicalPlan] {
-    val stringNaN = Literal.create("NaN", StringType)
+    val stringNaN = Literal("NaN")
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan => q transformExpressions {
@@ -563,6 +564,10 @@ trait HiveTypeCoercion {
       case Sum(e @ TimestampType()) => Sum(Cast(e, DoubleType))
       case Average(e @ TimestampType()) => Average(Cast(e, DoubleType))
 
+      // Compatible with Hive
+      case Substring(e, start, len) if e.dataType != StringType =>
+        Substring(Cast(e, StringType), start, len)
+
       // Coalesce should return the first non-null value, which could be any column
       // from the list. So we need to make sure the return type is deterministic and
       // compatible with every child column.
@@ -639,4 +644,22 @@ trait HiveTypeCoercion {
     }
   }
 
+  /**
+   * Casts types according to the expected input types for Expressions that have the trait
+   * `ExpectsInputTypes`.
+   */
+  object ExpectedInputConversion extends Rule[LogicalPlan] {
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      case e: ExpectsInputTypes if e.children.map(_.dataType) != e.expectedChildTypes =>
+        val newC = (e.children, e.children.map(_.dataType), e.expectedChildTypes).zipped.map {
+          case (child, actual, expected) =>
+            if (actual == expected) child else Cast(child, expected)
+        }
+        e.withNewChildren(newC)
+    }
+  }
 }

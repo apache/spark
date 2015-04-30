@@ -26,6 +26,7 @@ import org.apache.curator.framework.CuratorFramework
 import org.apache.zookeeper.CreateMode
 
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.deploy.SparkCuratorUtil
 
 
 private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serialization: Serialization)

@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -59,6 +58,7 @@ class Analyzer(
       ResolveReferences ::
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
+      ResolveGenerate ::
       ImplicitGenerate ::
       ResolveFunctions ::
       GlobalAggregates ::
@@ -297,14 +297,15 @@ class Analyzer(
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressionsUp  {
-          case u @ UnresolvedAttribute(name) if resolver(name, VirtualColumn.groupingIdName) &&
+          case u @ UnresolvedAttribute(nameParts) if nameParts.length == 1 &&
+            resolver(nameParts(0), VirtualColumn.groupingIdName) &&
             q.isInstanceOf[GroupingAnalytics] =>
             // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
             q.asInstanceOf[GroupingAnalytics].gid
-          case u @ UnresolvedAttribute(name) =>
+          case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result =
-              withPosition(u) { q.resolveChildren(name, resolver).getOrElse(u) }
+              withPosition(u) { q.resolveChildren(nameParts, resolver).getOrElse(u) }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedGetField(child, fieldName) if child.resolved =>
@@ -383,12 +384,12 @@ class Analyzer(
         child: LogicalPlan,
         grandchild: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
       // Find any attributes that remain unresolved in the sort.
-      val unresolved: Seq[String] =
-        ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
+      val unresolved: Seq[Seq[String]] =
+        ordering.flatMap(_.collect { case UnresolvedAttribute(nameParts) => nameParts })
 
       // Create a map from name, to resolved attributes, when the desired name can be found
       // prior to the projection.
-      val resolved: Map[String, NamedExpression] =
+      val resolved: Map[Seq[String], NamedExpression] =
         unresolved.flatMap(u => grandchild.resolve(u, resolver).map(a => u -> a)).toMap
 
       // Construct a set that contains all of the attributes that we need to evaluate the
@@ -473,8 +474,59 @@ class Analyzer(
    */
   object ImplicitGenerate extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case Project(Seq(Alias(g: Generator, _)), child) =>
-        Generate(g, join = false, outer = false, None, child)
+      case Project(Seq(Alias(g: Generator, name)), child) =>
+        Generate(g, join = false, outer = false,
+          qualifier = None, UnresolvedAttribute(name) :: Nil, child)
+      case Project(Seq(MultiAlias(g: Generator, names)), child) =>
+        Generate(g, join = false, outer = false,
+          qualifier = None, names.map(UnresolvedAttribute(_)), child)
+    }
+  }
+
+  /**
+   * Resolve the Generate, if the output names specified, we will take them, otherwise
+   * we will try to provide the default names, which follow the same rule with Hive.
+   */
+  object ResolveGenerate extends Rule[LogicalPlan] {
+    // Construct the output attributes for the generator,
+    // The output attribute names can be either specified or
+    // auto generated.
+    private def makeGeneratorOutput(
+        generator: Generator,
+        generatorOutput: Seq[Attribute]): Seq[Attribute] = {
+      val elementTypes = generator.elementTypes
+
+      if (generatorOutput.length == elementTypes.length) {
+        generatorOutput.zip(elementTypes).map {
+          case (a, (t, nullable)) if !a.resolved =>
+            AttributeReference(a.name, t, nullable)()
+          case (a, _) => a
+        }
+      } else if (generatorOutput.length == 0) {
+        elementTypes.zipWithIndex.map {
+          // keep the default column names as Hive does _c0, _c1, _cN
+          case ((t, nullable), i) => AttributeReference(s"_c$i", t, nullable)()
+        }
+      } else {
+        throw new AnalysisException(
+          s"""
+             |The number of aliases supplied in the AS clause does not match
+             |the number of columns output by the UDTF expected
+             |${elementTypes.size} aliases but got ${generatorOutput.size}
+           """.stripMargin)
+      }
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p: Generate if !p.child.resolved || !p.generator.resolved => p
+      case p: Generate if p.resolved == false =>
+        // if the generator output names are not specified, we will use the default ones.
+        Generate(
+          p.generator,
+          join = p.join,
+          outer = p.outer,
+          p.qualifier,
+          makeGeneratorOutput(p.generator, p.generatorOutput), p.child)
     }
   }
 }

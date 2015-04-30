@@ -28,6 +28,7 @@ cd "$FWDIR/python"
 
 FAILED=0
 LOG_FILE=unit-tests.log
+START=$(date +"%s")
 
 rm -f $LOG_FILE
 
@@ -35,8 +36,8 @@ rm -f $LOG_FILE
 rm -rf metastore warehouse
 
 function run_test() {
-    echo "Running test: $1" | tee -a $LOG_FILE
-
+    echo -en "Running test: $1 ... " | tee -a $LOG_FILE
+    start=$(date +"%s")
     SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 > $LOG_FILE 2>&1
 
     FAILED=$((PIPESTATUS[0]||$FAILED))
@@ -48,6 +49,9 @@ function run_test() {
         echo "Had test failures; see logs."
         echo -en "\033[0m"  # No color
         exit -1
+    else
+        now=$(date +"%s")
+        echo "ok ($(($now - $start))s)"
     fi
 }
 
@@ -66,7 +70,7 @@ function run_core_tests() {
 
 function run_sql_tests() {
     echo "Run sql tests ..."
-    run_test "pyspark/sql/types.py"
+    run_test "pyspark/sql/_types.py"
     run_test "pyspark/sql/context.py"
     run_test "pyspark/sql/dataframe.py"
     run_test "pyspark/sql/functions.py"
@@ -136,6 +140,19 @@ run_mllib_tests
 run_ml_tests
 run_streaming_tests
 
+# Try to test with Python 3
+if [ $(which python3.4) ]; then
+    export PYSPARK_PYTHON="python3.4"
+    echo "Testing with Python3.4 version:"
+    $PYSPARK_PYTHON --version
+
+    run_core_tests
+    run_sql_tests
+    run_mllib_tests
+    run_ml_tests
+    run_streaming_tests
+fi
+
 # Try to test with PyPy
 if [ $(which pypy) ]; then
     export PYSPARK_PYTHON="pypy"
@@ -148,9 +165,8 @@ if [ $(which pypy) ]; then
 fi
 
 if [[ $FAILED == 0 ]]; then
-    echo -en "\033[32m"  # Green
-    echo "Tests passed."
-    echo -en "\033[0m"  # No color
+    now=$(date +"%s")
+    echo -e "\033[32mTests passed \033[0min $(($now - $START)) seconds"
 fi
 
 # TODO: in the long-run, it would be nice to use a test runner like `nose`.

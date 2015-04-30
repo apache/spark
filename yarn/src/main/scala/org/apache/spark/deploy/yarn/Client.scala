@@ -17,15 +17,18 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.{File, FileOutputStream}
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.reflect.runtime.universe
 import scala.util.{Try, Success, Failure}
 
 import com.google.common.base.Objects
+import com.google.common.io.Files
 
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.conf.Configuration
@@ -36,7 +39,7 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.security.token.Token
+import org.apache.hadoop.security.token.{TokenIdentifier, Token}
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
@@ -76,12 +79,6 @@ private[spark] class Client(
 
 
   def stop(): Unit = yarnClient.stop()
-
-  /* ------------------------------------------------------------------------------------- *
-   | The following methods have much in common in the stable and alpha versions of Client, |
-   | but cannot be implemented in the parent trait due to subtle API differences across    |
-   | hadoop versions.                                                                      |
-   * ------------------------------------------------------------------------------------- */
 
   /**
    * Submit an application running our ApplicationMaster to the ResourceManager.
@@ -223,8 +220,13 @@ private[spark] class Client(
     val fs = FileSystem.get(hadoopConf)
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
     val nns = getNameNodesToAccess(sparkConf) + dst
+    // Used to keep track of URIs added to the distributed cache. If the same URI is added
+    // multiple times, YARN will fail to launch containers for the app with an internal
+    // error.
+    val distributedUris = new HashSet[String]
     obtainTokensForNamenodes(nns, hadoopConf, credentials)
     obtainTokenForHiveMetastore(hadoopConf, credentials)
+    obtainTokenForHBase(hadoopConf, credentials)
 
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
       fs.getDefaultReplication(dst)).toShort
@@ -239,6 +241,17 @@ private[spark] class Client(
         "SPARK_LOG4J_CONF detected in the system environment. This variable has been " +
           "deprecated. Please refer to the \"Launching Spark on YARN\" documentation " +
           "for alternatives.")
+    }
+
+    def addDistributedUri(uri: URI): Boolean = {
+      val uriStr = uri.toString()
+      if (distributedUris.contains(uriStr)) {
+        logWarning(s"Resource $uri added multiple times to distributed cache.")
+        false
+      } else {
+        distributedUris += uriStr
+        true
+      }
     }
 
     /**
@@ -258,17 +271,26 @@ private[spark] class Client(
       if (!localPath.isEmpty()) {
         val localURI = new URI(localPath)
         if (localURI.getScheme != LOCAL_SCHEME) {
-          val src = getQualifiedLocalPath(localURI, hadoopConf)
-          val destPath = copyFileToRemote(dst, src, replication)
-          val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
-          distCacheMgr.addResource(destFs, hadoopConf, destPath,
-            localResources, LocalResourceType.FILE, destName, statCache)
+          if (addDistributedUri(localURI)) {
+            val src = getQualifiedLocalPath(localURI, hadoopConf)
+            val destPath = copyFileToRemote(dst, src, replication)
+            val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
+            distCacheMgr.addResource(destFs, hadoopConf, destPath,
+              localResources, LocalResourceType.FILE, destName, statCache)
+          }
         } else if (confKey != null) {
           // If the resource is intended for local use only, handle this downstream
           // by setting the appropriate property
           sparkConf.set(confKey, localPath)
         }
       }
+    }
+
+    createConfArchive().foreach { file =>
+      require(addDistributedUri(file.toURI()))
+      val destPath = copyFileToRemote(dst, new Path(file.toURI()), replication)
+      distCacheMgr.addResource(fs, hadoopConf, destPath, localResources, LocalResourceType.ARCHIVE,
+        LOCALIZED_HADOOP_CONF_DIR, statCache, appMasterOnly = true)
     }
 
     /**
@@ -288,13 +310,15 @@ private[spark] class Client(
         flist.split(',').foreach { file =>
           val localURI = new URI(file.trim())
           if (localURI.getScheme != LOCAL_SCHEME) {
-            val localPath = new Path(localURI)
-            val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
-            val destPath = copyFileToRemote(dst, localPath, replication)
-            distCacheMgr.addResource(
-              fs, hadoopConf, destPath, localResources, resType, linkname, statCache)
-            if (addToClasspath) {
-              cachedSecondaryJarLinks += linkname
+            if (addDistributedUri(localURI)) {
+              val localPath = new Path(localURI)
+              val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
+              val destPath = copyFileToRemote(dst, localPath, replication)
+              distCacheMgr.addResource(
+                fs, hadoopConf, destPath, localResources, resType, linkname, statCache)
+              if (addToClasspath) {
+                cachedSecondaryJarLinks += linkname
+              }
             }
           } else if (addToClasspath) {
             // Resource is intended for local use only and should be added to the class path
@@ -311,13 +335,64 @@ private[spark] class Client(
   }
 
   /**
+   * Create an archive with the Hadoop config files for distribution.
+   *
+   * These are only used by the AM, since executors will use the configuration object broadcast by
+   * the driver. The files are zipped and added to the job as an archive, so that YARN will explode
+   * it when distributing to the AM. This directory is then added to the classpath of the AM
+   * process, just to make sure that everybody is using the same default config.
+   *
+   * This follows the order of precedence set by the startup scripts, in which HADOOP_CONF_DIR
+   * shows up in the classpath before YARN_CONF_DIR.
+   *
+   * Currently this makes a shallow copy of the conf directory. If there are cases where a
+   * Hadoop config directory contains subdirectories, this code will have to be fixed.
+   */
+  private def createConfArchive(): Option[File] = {
+    val hadoopConfFiles = new HashMap[String, File]()
+    Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
+      sys.env.get(envKey).foreach { path =>
+        val dir = new File(path)
+        if (dir.isDirectory()) {
+          dir.listFiles().foreach { file =>
+            if (file.isFile && !hadoopConfFiles.contains(file.getName())) {
+              hadoopConfFiles(file.getName()) = file
+            }
+          }
+        }
+      }
+    }
+
+    if (!hadoopConfFiles.isEmpty) {
+      val hadoopConfArchive = File.createTempFile(LOCALIZED_HADOOP_CONF_DIR, ".zip",
+        new File(Utils.getLocalDir(sparkConf)))
+
+      val hadoopConfStream = new ZipOutputStream(new FileOutputStream(hadoopConfArchive))
+      try {
+        hadoopConfStream.setLevel(0)
+        hadoopConfFiles.foreach { case (name, file) =>
+          hadoopConfStream.putNextEntry(new ZipEntry(name))
+          Files.copy(file, hadoopConfStream)
+          hadoopConfStream.closeEntry()
+        }
+      } finally {
+        hadoopConfStream.close()
+      }
+
+      Some(hadoopConfArchive)
+    } else {
+      None
+    }
+  }
+
+  /**
    * Set up the environment for launching our ApplicationMaster container.
    */
   private def setupLaunchEnv(stagingDir: String): HashMap[String, String] = {
     logInfo("Setting up the launch environment for our AM container")
     val env = new HashMap[String, String]()
     val extraCp = sparkConf.getOption("spark.driver.extraClassPath")
-    populateClasspath(args, yarnConf, sparkConf, env, extraCp)
+    populateClasspath(args, yarnConf, sparkConf, env, true, extraCp)
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
@@ -718,6 +793,9 @@ object Client extends Logging {
   // Distribution-defined classpath to add to processes
   val ENV_DIST_CLASSPATH = "SPARK_DIST_CLASSPATH"
 
+  // Subdirectory where the user's hadoop config files will be placed.
+  val LOCALIZED_HADOOP_CONF_DIR = "__hadoop_conf__"
+
   /**
    * Find the user-defined Spark jar if configured, or return the jar containing this
    * class if not.
@@ -831,11 +909,19 @@ object Client extends Logging {
       conf: Configuration,
       sparkConf: SparkConf,
       env: HashMap[String, String],
+      isAM: Boolean,
       extraClassPath: Option[String] = None): Unit = {
     extraClassPath.foreach(addClasspathEntry(_, env))
     addClasspathEntry(
       YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env
     )
+
+    if (isAM) {
+      addClasspathEntry(
+        YarnSparkHadoopUtil.expandEnvironment(Environment.PWD) + Path.SEPARATOR +
+          LOCALIZED_HADOOP_CONF_DIR, env)
+    }
+
     if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
       val userClassPath =
         if (args != null) {
@@ -1000,6 +1086,41 @@ object Client extends Logging {
   }
 
   /**
+   * Obtain security token for HBase.
+   */
+  def obtainTokenForHBase(conf: Configuration, credentials: Credentials): Unit = {
+    if (UserGroupInformation.isSecurityEnabled) {
+      val mirror = universe.runtimeMirror(getClass.getClassLoader)
+
+      try {
+        val confCreate = mirror.classLoader.
+          loadClass("org.apache.hadoop.hbase.HBaseConfiguration").
+          getMethod("create", classOf[Configuration])
+        val obtainToken = mirror.classLoader.
+          loadClass("org.apache.hadoop.hbase.security.token.TokenUtil").
+          getMethod("obtainToken", classOf[Configuration])
+
+        logDebug("Attempting to fetch HBase security token.")
+
+        val hbaseConf = confCreate.invoke(null, conf)
+        val token = obtainToken.invoke(null, hbaseConf).asInstanceOf[Token[TokenIdentifier]]
+        credentials.addToken(token.getService, token)
+
+        logInfo("Added HBase security token to credentials.")
+      } catch {
+        case e:java.lang.NoSuchMethodException =>
+          logInfo("HBase Method not found: " + e)
+        case e:java.lang.ClassNotFoundException =>
+          logDebug("HBase Class not found: " + e)
+        case e:java.lang.NoClassDefFoundError =>
+          logDebug("HBase Class not found: " + e)
+        case e:Exception =>
+          logError("Exception when obtaining HBase security token: " + e)
+      }
+    }
+  }
+
+  /**
    * Return whether the two file systems are the same.
    */
   private def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
@@ -1052,8 +1173,7 @@ object Client extends Logging {
     if (isDriver) {
       conf.getBoolean("spark.driver.userClassPathFirst", false)
     } else {
-      conf.getBoolean("spark.executor.userClassPathFirst",
-        conf.getBoolean("spark.files.userClassPathFirst", false))
+      conf.getBoolean("spark.executor.userClassPathFirst", false)
     }
   }
 
