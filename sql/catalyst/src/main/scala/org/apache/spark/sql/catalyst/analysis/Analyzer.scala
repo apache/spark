@@ -91,12 +91,13 @@ class Analyzer(
             val withAlias = u.alias.map(Subquery(_, relation))
             withAlias.getOrElse(relation)
           }
-          substituted.getOrElse(u)
-          i.copy(table = relation)
+          i.copy(table = substituted.getOrElse(u))
         case u : UnresolvedRelation =>
-          cteRelations.get(u.tableIdentifier.last)
-            .map(relation => u.alias.map(Subquery(_, relation)).getOrElse(relation))
-            .getOrElse(u)
+          val substituted = cteRelations.get(u.tableIdentifier.last).map { relation =>
+            val withAlias = u.alias.map(Subquery(_, relation))
+            withAlias.getOrElse(relation)
+          }
+          substituted.getOrElse(u)
       }
     }
   }
