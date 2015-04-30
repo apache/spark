@@ -67,7 +67,7 @@ public final class UnsafeSorter {
    * Within this buffer, position {@code 2 * i} holds a pointer pointer to the record at
    * index {@code i}, while position {@code 2 * i + 1} in the array holds an 8-byte key prefix.
    */
-  private long[] sortBuffer = new long[1024];
+  private long[] sortBuffer;
 
   private int sortBufferInsertPosition = 0;
 
@@ -82,7 +82,10 @@ public final class UnsafeSorter {
       final TaskMemoryManager memoryManager,
       final RecordComparator recordComparator,
       PrefixComputer prefixComputer,
-      final PrefixComparator prefixComparator) {
+      final PrefixComparator prefixComparator,
+      int initialSize) {
+    assert (initialSize > 0);
+    this.sortBuffer = new long[initialSize * 2];
     this.memoryManager = memoryManager;
     this.prefixComputer = prefixComputer;
     this.sorter =
