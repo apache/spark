@@ -163,6 +163,9 @@ object SparkBuild extends PomBuild {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
 
+  /* Unsafe settings */
+  enable(Unsafe.settings)(unsafe)
+
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
 
@@ -214,6 +217,13 @@ object SparkBuild extends PomBuild {
     } ++ Seq[Project](OldDeps.project)
   }
 
+}
+
+object Unsafe {
+  lazy val settings = Seq(
+    // This option is needed to suppress warnings from sun.misc.Unsafe usage
+    javacOptions in Compile += "-XDignore.symbol.file"
+  )
 }
 
 object Flume {
@@ -424,6 +434,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/network")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/shuffle")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/executor")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/unsafe")))
       .map(_.filterNot(_.getCanonicalPath.contains("python")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
