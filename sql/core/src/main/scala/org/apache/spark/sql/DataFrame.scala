@@ -20,8 +20,6 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.sql.DriverManager
 
-import org.apache.spark.sql.execution.stat.FrequentItems
-
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
