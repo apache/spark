@@ -1087,7 +1087,7 @@ class DAGScheduler(
           abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
         } else if (failedStage.failAndShouldAbort()) {
           abortStage(failedStage, s"Fetch failure - aborting stage. Stage ${failedStage.name} " +
-            s"has failed the maximum allowable number of times: ${failedStage.maxStageFailures}. " +
+            s"has failed the maximum allowable number of times: ${Stage.maxStageFailures}. " +
             s"Failure reason: ${failureMessage}")
         } else if (failedStages.isEmpty) {
           // Don't schedule an event to resubmit failed stages if failed isn't empty, because
