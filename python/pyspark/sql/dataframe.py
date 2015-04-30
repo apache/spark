@@ -1309,13 +1309,13 @@ class Column(object):
         >>> df = sc.parallelize([Row(r=Row(a=1, b="b"))]).toDF()
         >>> df.select(df.r.getField("b")).show()
         +---+
-        |r.b|
+        |r[b]|
         +---+
         |  b|
         +---+
         >>> df.select(df.r.a).show()
         +---+
-        |r.a|
+        |r[a]|
         +---+
         |  1|
         +---+
