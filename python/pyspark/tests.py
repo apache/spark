@@ -1832,6 +1832,17 @@ class NumPyTests(PySparkTestCase):
         self.assertSequenceEqual([3.0, 3.0], s.max().tolist())
         self.assertSequenceEqual([1.0, 1.0], s.sampleStdev().tolist())
 
+        y = self.sc.parallelize(np.arange(10))
+        rev = lambda x: -x
+        self.assertSequenceEqual([0.0, 9.0], [round(y.percentile(0), 2), round(y.percentile(0, rev), 2)])
+        self.assertSequenceEqual([9.0, 0.0], [round(y.percentile(100), 2), round(y.percentile(100, rev), 2)])
+        self.assertSequenceEqual([0.09, 8.91], [round(y.percentile(1), 2), round(y.percentile(1, rev), 2)])
+        self.assertSequenceEqual([8.91, 0.09], [round(y.percentile(99), 2), round(y.percentile(99, rev), 2)])
+        self.assertSequenceEqual([0.9, 8.1], [round(y.percentile(10), 2), round(y.percentile(10, rev), 2)])
+        self.assertSequenceEqual([8.1, 0.9], [round(y.percentile(90), 2), round(y.percentile(90, rev), 2)])
+        self.assertSequenceEqual([4.5, 4.5], [round(y.percentile(50), 2), round(y.percentile(50, rev), 2)])
+
+
 
 if __name__ == "__main__":
     if not _have_scipy:

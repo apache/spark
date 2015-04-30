@@ -32,7 +32,7 @@ from threading import Thread
 from collections import defaultdict
 from itertools import chain
 from functools import reduce
-from math import sqrt, log, isinf, isnan, pow, ceil
+from math import sqrt, log, isinf, isnan, pow, ceil, floor
 
 if sys.version > '3':
     basestring = unicode = str
@@ -1148,6 +1148,25 @@ class RDD(object):
         1.0
         """
         return self.stats().sampleVariance()
+
+    def percentile(self, k, key=None):
+        """
+        Returns the kth percentile of this RDD's elements given a key.
+
+        >>> sc.parallelize(xrange(10)).percentile(0)
+        0.0
+        """
+        assert 0 <= k <= 100
+        c = self.count()
+        if c == 1:
+            return float(self.first())
+        else:
+            idx = (k / 100.) * (c - 1.)
+            idx_below = int(floor(idx))
+            idx_above = min(idx_below + 1, c-1)
+            weights_above = idx - idx_below
+            weights_below = 1.0 - weights_above
+            return float(weights_below * self.takeOrdered(idx_below+1, key)[-1] + self.takeOrdered(idx_above+1, key)[-1] * weights_above)
 
     def countByValue(self):
         """
