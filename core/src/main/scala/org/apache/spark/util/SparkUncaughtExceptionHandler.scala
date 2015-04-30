@@ -29,7 +29,9 @@ private[spark] object SparkUncaughtExceptionHandler
 
   override def uncaughtException(thread: Thread, exception: Throwable) {
     try {
-      if (exception.isInstanceOf[InterruptedException]) {
+      if (exception.isInstanceOf[InterruptedException] ||
+        (exception.isInstanceOf[Error] && exception.getCause != null &&
+          exception.getCause.isInstanceOf[InterruptedException])) {
         // InterruptedException means other threads try to stop this thread intentionally. It's
         // a normal exit approach and we should not call "System.exit".
         return
