@@ -36,7 +36,9 @@ private[spark] trait CatalystConf {
  * relations are already filled in and the analyser needs only to resolve attribute references.
  */
 object EmptyConf extends CatalystConf {
-  override def caseSensitiveAnalysis: Boolean = true
+  override def caseSensitiveAnalysis: Boolean = {
+    throw new UnsupportedOperationException
+  }
 
   override def setConf(key: String, value: String) : Unit = {
     throw new UnsupportedOperationException
