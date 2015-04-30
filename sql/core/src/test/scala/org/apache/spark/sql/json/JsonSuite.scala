@@ -580,19 +580,19 @@ class JsonSuite extends QueryTest {
     val analyzed = jsonDF.queryExecution.analyzed
     assert(
       analyzed.isInstanceOf[LogicalRelation],
-      "The DataFrame returned by jsonFile should be based on JSONRelation.")
+      "The DataFrame returned by jsonFile should be based on LogicalRelation.")
     val relation = analyzed.asInstanceOf[LogicalRelation].relation
     assert(
       relation.isInstanceOf[JSONRelation],
       "The DataFrame returned by jsonFile should be based on JSONRelation.")
-    assert(relation.asInstanceOf[JSONRelation].path === path)
+    assert(relation.asInstanceOf[JSONRelation].path === Some(path))
     assert(relation.asInstanceOf[JSONRelation].samplingRatio === (0.49 +- 0.001))
 
     val schema = StructType(StructField("a", LongType, true) :: Nil)
     val logicalRelation =
       jsonFile(path, schema).queryExecution.analyzed.asInstanceOf[LogicalRelation]
     val relationWithSchema = logicalRelation.relation.asInstanceOf[JSONRelation]
-    assert(relationWithSchema.path === path)
+    assert(relationWithSchema.path === Some(path))
     assert(relationWithSchema.schema === schema)
     assert(relationWithSchema.samplingRatio > 0.99)
   }
@@ -1034,15 +1034,24 @@ class JsonSuite extends QueryTest {
   }
 
   test("JSONRelation equality test") {
-    val relation1 =
-      JSONRelation("path", 1.0, Some(StructType(StructField("a", IntegerType, true) :: Nil)))(null)
+    val context = org.apache.spark.sql.test.TestSQLContext
+    val relation1 = new JSONRelation(
+      "path",
+      1.0,
+      Some(StructType(StructField("a", IntegerType, true) :: Nil)),
+      context)
     val logicalRelation1 = LogicalRelation(relation1)
-    val relation2 =
-      JSONRelation("path", 0.5, Some(StructType(StructField("a", IntegerType, true) :: Nil)))(
-        org.apache.spark.sql.test.TestSQLContext)
+    val relation2 = new JSONRelation(
+      "path",
+      0.5,
+      Some(StructType(StructField("a", IntegerType, true) :: Nil)),
+      context)
     val logicalRelation2 = LogicalRelation(relation2)
-    val relation3 =
-      JSONRelation("path", 1.0, Some(StructType(StructField("b", StringType, true) :: Nil)))(null)
+    val relation3 = new JSONRelation(
+      "path",
+      1.0,
+      Some(StructType(StructField("b", StringType, true) :: Nil)),
+      context)
     val logicalRelation3 = LogicalRelation(relation3)
 
     assert(relation1 === relation2)

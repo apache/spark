@@ -22,14 +22,16 @@ import java.io.IOException
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.expressions.{Expression, Attribute, Row}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 
 
 private[sql] class DefaultSource
-  extends RelationProvider with SchemaRelationProvider with CreatableRelationProvider {
+  extends RelationProvider
+  with SchemaRelationProvider
+  with CreatableRelationProvider {
 
   private def checkPath(parameters: Map[String, String]): String = {
     parameters.getOrElse("path", sys.error("'path' must be specified for json data."))
@@ -42,7 +44,7 @@ private[sql] class DefaultSource
     val path = checkPath(parameters)
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
-    JSONRelation(path, samplingRatio, None)(sqlContext)
+    new JSONRelation(path, samplingRatio, None, sqlContext)
   }
 
   /** Returns a new base relation with the given schema and parameters. */
@@ -53,7 +55,7 @@ private[sql] class DefaultSource
     val path = checkPath(parameters)
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
-    JSONRelation(path, samplingRatio, Some(schema))(sqlContext)
+    new JSONRelation(path, samplingRatio, Some(schema), sqlContext)
   }
 
   override def createRelation(
@@ -101,32 +103,69 @@ private[sql] class DefaultSource
   }
 }
 
-private[sql] case class JSONRelation(
-    path: String,
-    samplingRatio: Double,
+private[sql] class JSONRelation(
+    baseRDD: => RDD[String],
+    val path: Option[String],
+    val samplingRatio: Double,
     userSpecifiedSchema: Option[StructType])(
     @transient val sqlContext: SQLContext)
   extends BaseRelation
   with TableScan
   with InsertableRelation {
 
-  // TODO: Support partitioned JSON relation.
-  private def baseRDD = sqlContext.sparkContext.textFile(path)
+  def this(
+      path: String,
+      samplingRatio: Double,
+      userSpecifiedSchema: Option[StructType],
+      sqlContext: SQLContext) =
+    this(
+      sqlContext.sparkContext.textFile(path),
+      Some(path),
+      samplingRatio,
+      userSpecifiedSchema)(sqlContext)
+
+  private val useJsonRDD2: Boolean = sqlContext.conf.useJsonRDD2
 
   override val needConversion: Boolean = false
 
-  override val schema = userSpecifiedSchema.getOrElse(
-    JsonRDD.nullTypeToStringType(
-      JsonRDD.inferSchema(
-        baseRDD,
-        samplingRatio,
-        sqlContext.conf.columnNameOfCorruptRecord)))
+  override lazy val schema = userSpecifiedSchema.getOrElse {
+    if (useJsonRDD2) {
+      JsonRDD2.nullTypeToStringType(
+        JsonRDD2.inferSchema(
+          baseRDD,
+          samplingRatio,
+          sqlContext.conf.columnNameOfCorruptRecord))
+    } else {
+      JsonRDD.nullTypeToStringType(
+        JsonRDD.inferSchema(
+          baseRDD,
+          samplingRatio,
+          sqlContext.conf.columnNameOfCorruptRecord))
+    }
+  }
 
-  override def buildScan(): RDD[Row] =
-    JsonRDD.jsonStringToRow(baseRDD, schema, sqlContext.conf.columnNameOfCorruptRecord)
+  override def buildScan(): RDD[Row] = {
+    if (useJsonRDD2) {
+      JsonRDD2.jsonStringToRow(
+        baseRDD,
+        schema,
+        sqlContext.conf.columnNameOfCorruptRecord)
+    } else {
+      JsonRDD.jsonStringToRow(
+        baseRDD,
+        schema,
+        sqlContext.conf.columnNameOfCorruptRecord)
+    }
+  }
+
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
-    val filesystemPath = new Path(path)
+    val filesystemPath = path match {
+      case Some(p) => new Path(p)
+      case None =>
+        throw new IOException(s"Cannot INSERT into table with no path defined")
+    }
+
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
 
     if (overwrite) {
@@ -147,7 +186,7 @@ private[sql] case class JSONRelation(
         }
       }
       // Write the data.
-      data.toJSON.saveAsTextFile(path)
+      data.toJSON.saveAsTextFile(filesystemPath.toString)
       // Right now, we assume that the schema is not changed. We will not update the schema.
       // schema = data.schema
     } else {
