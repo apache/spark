@@ -735,7 +735,7 @@ private[deploy] object SparkSubmitUtils {
   }
 
   /** Path of the local Maven cache. */
-  def m2Path: JavaPath = new File(System.getProperty("user.home"),
+  private[spark] def m2Path: JavaPath = new File(System.getProperty("user.home"),
     ".m2" + File.separator + "repository" + File.separator).toPath
 
   /**
