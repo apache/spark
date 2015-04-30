@@ -58,7 +58,6 @@ class VisiblePasswordField(PasswordField):
     widget = VisiblePasswordInput()
 
 
-
 def superuser_required(f):
     '''
     Decorator for views requiring superuser access
@@ -536,7 +535,7 @@ class Airflow(BaseView):
     @login_required
     def code(self):
         dag_id = request.args.get('dag_id')
-        dag = dagbag.dags[dag_id]
+        dag = dagbag.get_dag(dag_id)
         code = "".join(open(dag.full_filepath, 'r').readlines())
         title = dag.filepath
         html_code = highlight(
@@ -601,7 +600,7 @@ class Airflow(BaseView):
         execution_date = request.args.get('execution_date')
         dttm = dateutil.parser.parse(execution_date)
         form = DateTimeForm(data={'execution_date': dttm})
-        dag = dagbag.dags[dag_id]
+        dag = dagbag.get_dag(dag_id)
         task = copy.copy(dag.get_task(task_id))
         ti = models.TaskInstance(task=task, execution_date=dttm)
         try:
@@ -639,7 +638,7 @@ class Airflow(BaseView):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
         execution_date = request.args.get('execution_date')
-        dag = dagbag.dags[dag_id]
+        dag = dagbag.get_dag(dag_id)
         log_relative = "/{dag_id}/{task_id}/{execution_date}".format(
             **locals())
         loc = BASE_LOG_FOLDER + log_relative
@@ -695,7 +694,7 @@ class Airflow(BaseView):
         execution_date = request.args.get('execution_date')
         dttm = dateutil.parser.parse(execution_date)
         form = DateTimeForm(data={'execution_date': dttm})
-        dag = dagbag.dags[dag_id]
+        dag = dagbag.get_dag(dag_id)
         task = dag.get_task(task_id)
         task = copy.copy(task)
         task.resolve_template_files()
@@ -736,7 +735,7 @@ class Airflow(BaseView):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
         origin = request.args.get('origin')
-        dag = dagbag.dags[dag_id]
+        dag = dagbag.get_dag(dag_id)
         task = dag.get_task(task_id)
 
         execution_date = request.args.get('execution_date')
@@ -852,7 +851,7 @@ class Airflow(BaseView):
     def tree(self):
         dag_id = request.args.get('dag_id')
         blur = request.args.get('blur') == 'true'
-        dag = dagbag.dags[dag_id]
+        dag = dagbag.get_dag(dag_id)
         root = request.args.get('root')
         if root:
             dag = dag.sub_dag(
@@ -952,7 +951,7 @@ class Airflow(BaseView):
             flash('DAG "{0}" seems to be missing.'.format(dag_id), "error")
             return redirect(url_for('index'))
 
-        dag = dagbag.dags[dag_id]
+        dag = dagbag.get_dag(dag_id)
         root = request.args.get('root')
         if root:
             dag = dag.sub_dag(
@@ -1028,7 +1027,7 @@ class Airflow(BaseView):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
         days = int(request.args.get('days', 30))
-        dag = dagbag.dags[dag_id]
+        dag = dagbag.get_dag(dag_id)
         from_date = (datetime.today()-timedelta(days)).date()
         from_date = datetime.combine(from_date, datetime.min.time())
 
@@ -1061,7 +1060,7 @@ class Airflow(BaseView):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
         days = int(request.args.get('days', 30))
-        dag = dagbag.dags[dag_id]
+        dag = dagbag.get_dag(dag_id)
         from_date = (datetime.today()-timedelta(days)).date()
         from_date = datetime.combine(from_date, datetime.min.time())
 
@@ -1089,13 +1088,31 @@ class Airflow(BaseView):
             chart_options={'yAxis': {'title': {'text': 'hours after 00:00'}}},
         )
 
+    @expose('/refresh')
+    @login_required
+    def refresh(self):
+        DAG = models.DAG
+        dag_id = request.args.get('dag_id')
+        session = settings.Session()
+        dag = session.query(DAG).filter(DAG.dag_id==dag_id).all()[0]
+
+        if dag:
+            dag.last_expired = datetime.now()
+            session.merge(dag)
+        session.commit()
+        session.close()
+
+        dag = dagbag.get_dag(dag_id)
+        flash("DAG [{}] is now fresh as a daisy".format(dag_id))
+        return redirect(url_for('index'))
+
     @expose('/gantt')
     @login_required
     def gantt(self):
 
         session = settings.Session()
         dag_id = request.args.get('dag_id')
-        dag = dagbag.dags[dag_id]
+        dag = dagbag.get_dag(dag_id)
 
         dttm = request.args.get('execution_date')
         if dttm:
@@ -1382,16 +1399,6 @@ mv = UserModelView(models.User, Session, name="Users", category="Admin")
 admin.add_view(mv)
 
 
-class ReloadTaskView(SuperUserMixin, BaseView):
-    @expose('/')
-    def index(self):
-        logging.info("Reloading the dags")
-        dagbag.collect_dags(only_if_updated=False)
-        dagbag.merge_dags()
-        return redirect(url_for('index'))
-admin.add_view(ReloadTaskView(name='Reload DAGs', category="Admin"))
-
-
 class ConfigurationView(SuperUserMixin, BaseView):
     @expose('/')
     def conf(self):
@@ -1424,13 +1431,16 @@ admin.add_view(ConfigurationView(name='Configuration', category="Admin"))
 class DagModelView(SuperUserMixin, ModelView):
     column_list = (
         'dag_id', 'is_paused', 'last_scheduler_run',
-        'last_pickled', 'pickle_id')
+        'last_expired', 'last_loaded',  'pickle_id')
     column_editable_list = ('is_paused',)
     form_widget_args = {
         'last_scheduler_run':{'disabled':True},
         'fileloc':{'disabled':True},
         'last_pickled':{'disabled':True},
         'pickle_id':{'disabled':True},
+        'last_loaded':{'disabled':True},
+        'last_expired':{'disabled':True},
+        'pickle_size':{'disabled':True},
     }
 mv = DagModelView(
     models.DAG, Session, name="Pause DAGs", category="Admin")
@@ -1572,15 +1582,17 @@ admin.add_view(mv)
 
 class KnowEventTypeView(DataProfilingMixin, ModelView):
     pass
+
 '''
+# For debugging / troubleshooting
 mv = KnowEventTypeView(
     models.KnownEventType,
     Session, name="Known Event Types", category="Manage")
 admin.add_view(mv)
-'''
 class DagPickleView(SuperUserMixin, ModelView):
     pass
 mv = DagPickleView(
     models.DagPickle,
     Session, name="Pickles", category="Manage")
 admin.add_view(mv)
+'''

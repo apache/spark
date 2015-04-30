@@ -85,6 +85,17 @@ class DagBag(object):
             self.collect_dags(example_dag_folder)
         self.merge_dags()
 
+    def get_dag(self, dag_id):
+        # Gets the DAG out of the dictionary, and refreshes it if expired
+        dag = self.dags[dag_id]
+
+        if dag.last_loaded < (dag.last_expired_live or datetime(2100,1,1)):
+            self.process_file(
+                filepath=dag.full_filepath, only_if_updated=False)
+            dag = self.dags[dag_id]
+        return dag
+
+
     def process_file(self, filepath, only_if_updated=True, safe_mode=True):
         """
         Given a path to a python module, this method imports the module and
@@ -110,6 +121,7 @@ class DagBag(object):
                 m = imp.load_source(mod_name, filepath)
             except:
                 logging.error("Failed to import: " + filepath)
+                logging.exception("")
                 self.file_last_changed[filepath] = dttm
                 return
 
@@ -117,8 +129,9 @@ class DagBag(object):
                 if type(dag) == DAG:
                     dag.full_filepath = filepath
                     dag.fileloc = filepath
+                    dag.last_loaded = datetime.now()
                     self.bag_dag(dag)
-                    dag.pickle()
+                    #dag.pickle()
 
             self.file_last_changed[filepath] = dttm
 
@@ -197,6 +210,10 @@ class BaseUser(Base):
 
     def get_id(self):
         return unicode(self.id)
+
+
+class User(BaseUser):
+    pass
 
 
 class Connection(Base):
@@ -917,14 +934,16 @@ class BaseOperator(Base):
             return self._schedule_interval
 
     def __cmp__(self, other):
-        #logging.info("comparing: " + str(self.task_id))
-        blacklist = {'_sa_instance_state', '_upstream_list', '_downstream_list', 'dag'}
+        blacklist = {
+            '_sa_instance_state', '_upstream_list', '_downstream_list', 'dag'}
         for k in set(self.__dict__) - blacklist:
             if self.__dict__[k] != other.__dict__[k]:
-                print(self.dag_id)
-                print(self.task_id)
-                print(k)
-                print "differen!!!!!!!!!!!!!!!!!!!t"
+                logging.debug(str(
+                    self.dag_id,
+                    self.task_id,
+                    k,
+                    self.__dict__[k],
+                    other.__dict__[k]))
                 return -1
         return 0
 
@@ -1062,7 +1081,7 @@ class BaseOperator(Base):
         if not task:
             task = self
         for t in self.get_direct_relatives():
-            if task == t:
+            if task is t:
                 msg = "Cycle detect in DAG. Faulty task: {0}".format(task)
                 raise Exception(msg)
             else:
@@ -1099,7 +1118,7 @@ class BaseOperator(Base):
         return "<Task({self.task_type}): {self.task_id}>".format(self=self)
 
     def append_only_new(self, l, item):
-        if item in l:
+        if any([item is t for t in l]):
             raise Exception(
                 'Dependency {self}, {item} already registered'
                 ''.format(**locals()))
@@ -1175,9 +1194,6 @@ class DAG(Base):
         accessible in templates, namespaced under `params`. These
         params can be overriden at the task level.
     :type params: dict
-    :param expires_every: timedelta at which the DAG definition gets
-        re-parsed
-    :type expires_every: datetime.timedelta
     """
 
     __tablename__ = "dag"
@@ -1186,6 +1202,8 @@ class DAG(Base):
     is_paused = Column(Boolean, default=False)
     last_scheduler_run = Column(DateTime)
     last_pickled = Column(DateTime)
+    last_loaded = Column(DateTime)
+    last_expired = Column(DateTime)
     pickle_id = Column(Integer)
     pickle_size = Column(Integer)
     fileloc = Column(String(2000))
@@ -1198,8 +1216,7 @@ class DAG(Base):
             template_searchpath=None,
             user_defined_macros=None,
             default_args=None,
-            params=None,
-            expires_every=timedelta(minutes=10)):
+            params=None):
 
         self.user_defined_macros = user_defined_macros
         self.default_args = default_args or {}
@@ -1263,6 +1280,16 @@ class DAG(Base):
     def resolve_template_files(self):
         for t in self.tasks:
             t.resolve_template_files()
+
+    @property
+    def last_expired_live(self):
+        session = settings.Session()
+        dag = session.query(
+            DAG.last_expired).filter(DAG.dag_id==self.dag_id).first()
+        session.commit()
+        session.expunge_all()
+        session.close()
+        return dag.last_expired
 
     def crawl_for_tasks(objects):
         """
@@ -1441,7 +1468,6 @@ class DAG(Base):
         raise Exception("Task {task_id} not found".format(**locals()))
 
     def __cmp__(self, other):
-        logging.info("comparing: " + str(self.dag_id))
         blacklist = {'_sa_instance_state', 'end_date', 'last_pickled', 'tasks'}
         for k in set(self.__dict__) - blacklist:
             if self.__dict__[k] != other.__dict__[k]:
@@ -1449,9 +1475,11 @@ class DAG(Base):
 
         if len(self.tasks) != len(other.tasks):
             return -1
-        for i, task in list(enumerate(self.tasks)):
+        i = 0
+        for task in self.tasks:
             if task != other.tasks[i]:
                 return -1
+            i += 1
         logging.info("Same as before")
         return 0
 

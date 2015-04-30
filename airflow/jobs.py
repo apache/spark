@@ -316,6 +316,7 @@ class SchedulerJob(BaseJob):
                     dag for dag in dagbag.dags.values() if not dag.parent_dag]
             paused_dag_ids = dagbag.paused_dags()
             for dag in dags:
+                dag = dagbag.get_dag(dag.dag_id)
                 if dag.dag_id in paused_dag_ids:
                     continue
                 try:
