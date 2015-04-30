@@ -169,9 +169,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
       }).asInstanceOf[Seq[NamedExpression]]
 
       Project(substitutedProjection, child)
-
-    case Project(projectList, Limit(exp, child)) =>
-      Limit(exp, Project(projectList, child))
       
     // Eliminate no-op Projects
     case Project(projectList, child) if child.output == projectList => child
@@ -618,6 +615,12 @@ object CombineLimits extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ll @ Limit(le, nl @ Limit(ne, grandChild)) =>
       Limit(If(LessThan(ne, le), ne, le), grandChild)
+
+    case Project(projectList, Limit(exp, child)) =>
+      Limit(exp, Project(projectList, child))
+
+    case s @ Sort(_, _, Limit(exp, grandChild)) =>
+      Limit(exp, s.copy(child = grandChild))
   }
 }
 

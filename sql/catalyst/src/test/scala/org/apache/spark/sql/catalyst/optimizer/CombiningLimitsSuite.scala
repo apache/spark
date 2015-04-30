@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.rules._
@@ -88,4 +89,24 @@ class CombiningLimitsSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("limits: combines two limits with sort") {
+    val originalQuery =
+      testRelation
+        .select('a)
+        .limit(2)
+        .select('a)
+        .sortBy(SortOrder('a, Ascending))
+        .limit(5)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select('a)
+        .sortBy(SortOrder('a, Ascending))
+        .limit(2).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
 }
