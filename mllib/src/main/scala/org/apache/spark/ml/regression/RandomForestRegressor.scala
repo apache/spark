@@ -130,9 +130,7 @@ final class RandomForestRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): RandomForestRegressionModel = {
-    val m = new RandomForestRegressionModel(parent, _trees)
-    Params.inheritValues(this, m, extra)
-    m
+    copyValues(new RandomForestRegressionModel(parent, _trees), extra)
   }
 
   override def toString: String = {

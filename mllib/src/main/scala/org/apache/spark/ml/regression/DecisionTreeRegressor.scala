@@ -106,9 +106,7 @@ final class DecisionTreeRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): DecisionTreeRegressionModel = {
-    val m = new DecisionTreeRegressionModel(parent, rootNode)
-    Params.inheritValues(this, m, extra)
-    m
+    copyValues(new DecisionTreeRegressionModel(parent, rootNode), extra)
   }
 
   override def toString: String = {

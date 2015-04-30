@@ -186,9 +186,7 @@ final class GBTClassificationModel(
   }
 
   override def copy(extra: ParamMap): GBTClassificationModel = {
-    val m = new GBTClassificationModel(parent, _trees, _treeWeights)
-    Params.inheritValues(this, m, extra)
-    m
+    copyValues(new GBTClassificationModel(parent, _trees, _treeWeights), extra)
   }
 
   override def toString: String = {

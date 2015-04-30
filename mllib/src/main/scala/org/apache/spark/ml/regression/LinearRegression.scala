@@ -202,9 +202,7 @@ class LinearRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LinearRegressionModel = {
-    val m = new LinearRegressionModel(parent, weights, intercept)
-    Params.inheritValues(this, m, extra)
-    m
+    copyValues(new LinearRegressionModel(parent, weights, intercept), extra)
   }
 }
 

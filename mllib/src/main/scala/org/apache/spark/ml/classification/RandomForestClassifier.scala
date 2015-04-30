@@ -147,9 +147,7 @@ final class RandomForestClassificationModel private[ml] (
   }
 
   override def copy(extra: ParamMap): RandomForestClassificationModel = {
-    val m = new RandomForestClassificationModel(parent, _trees)
-    Params.inheritValues(this, m, extra)
-    m
+    copyValues(new RandomForestClassificationModel(parent, _trees), extra)
   }
 
   override def toString: String = {

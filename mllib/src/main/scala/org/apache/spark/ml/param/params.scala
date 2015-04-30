@@ -23,7 +23,7 @@ import java.util.NoSuchElementException
 import scala.annotation.varargs
 import scala.collection.mutable
 
-import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.util.Identifiable
 
 /**
@@ -404,7 +404,7 @@ trait Params extends Identifiable with Serializable {
    */
   def copy(extra: ParamMap): Params = {
     val that = this.getClass.newInstance()
-    Params.inheritValues(this, that, extra)
+    copyValues(that, extra)
     that
   }
 
@@ -434,34 +434,21 @@ trait Params extends Identifiable with Serializable {
   private def shouldOwn(param: Param[_]): Unit = {
     require(param.parent.eq(this), s"Param $param does not belong to $this.")
   }
-}
-
-/**
- * :: DeveloperApi ::
- *
- * Helper functionality for developers.
- *
- * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
- */
-@DeveloperApi
-private[spark] object Params {
 
   /**
-   * Copies parameter values from the parent estimator to the child model it produced.
-   * @param parent the parent estimator
-   * @param child the child model
-   * @param paramMap the param map that holds parameters of the parent
+   * Copies param values from this instance to another instance for params shared by them.
+   * @param to the target instance
+   * @param extra extra params to be copied
+   * @return the target instance with param values copied
    */
-  def inheritValues[E <: Params, M <: E](
-      parent: E,
-      child: M,
-      paramMap: ParamMap): Unit = {
-    val map = parent.extractParamMap(paramMap)
-    parent.params.foreach { param =>
-      if (paramMap.contains(param) && child.hasParam(param.name)) {
-        child.set(child.getParam(param.name), paramMap(param))
+  protected def copyValues[T <: Params](to: T, extra: ParamMap = ParamMap.empty): T = {
+    val map = extractParamMap(extra)
+    params.foreach { param =>
+      if (paramMap.contains(param) && to.hasParam(param.name)) {
+        to.set(to.getParam(param.name), paramMap(param))
       }
     }
+    to
   }
 }
 
