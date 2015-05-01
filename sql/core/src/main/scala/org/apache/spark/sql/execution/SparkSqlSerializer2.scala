@@ -154,6 +154,8 @@ private[sql] class SparkSqlSerializer2(keySchema: Array[DataType], valueSchema: 
   with Serializable{
 
   def newInstance(): SerializerInstance = new ShuffleSerializerInstance(keySchema, valueSchema)
+
+  override def supportsRelocationOfSerializedObjects: Boolean = true
 }
 
 private[sql] object SparkSqlSerializer2 {
