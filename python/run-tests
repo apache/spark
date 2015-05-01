@@ -134,10 +134,10 @@ fi
 echo "Testing with Python version:"
 $PYSPARK_PYTHON --version
 
-run_core_tests
-run_sql_tests
-run_mllib_tests
-run_ml_tests
+# run_core_tests
+# run_sql_tests
+# run_mllib_tests
+# run_ml_tests
 run_streaming_tests
 
 # Try to test with Python 3
@@ -146,10 +146,10 @@ if [ $(which python3.4) ]; then
     echo "Testing with Python3.4 version:"
     $PYSPARK_PYTHON --version
 
-    run_core_tests
-    run_sql_tests
-    run_mllib_tests
-    run_ml_tests
+    # run_core_tests
+    # run_sql_tests
+    # run_mllib_tests
+    # run_ml_tests
     run_streaming_tests
 fi
 
@@ -159,8 +159,8 @@ if [ $(which pypy) ]; then
     echo "Testing with PyPy version:"
     $PYSPARK_PYTHON --version
 
-    run_core_tests
-    run_sql_tests
+    # run_core_tests
+    # run_sql_tests
     run_streaming_tests
 fi
 
