@@ -1289,6 +1289,18 @@ class Column(object):
             raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
 
+    @ignore_unicode_prefix
+    def between(self, col1, col2):
+        """ A boolean expression that is evaluated to true if the value of this
+        expression is between the given columns.
+
+        >>> df[df.col1.between(col2, col3)].collect()
+        [Row(col1=5, col2=6, col3=8)]
+        """
+        #sc = SparkContext._active_spark_context
+        jc = self > col1 & self < col2
+        return Column(jc)
+
     def __repr__(self):
         return 'Column<%s>' % self._jc.toString().encode('utf8')
 
