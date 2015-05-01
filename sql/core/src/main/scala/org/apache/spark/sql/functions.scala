@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -284,6 +284,23 @@ object functions {
   def abs(e: Column): Column = Abs(e.expr)
 
   /**
+   * Creates a new array column. The input columns must all have the same data type.
+   *
+   * @group normal_funcs
+   */
+  @scala.annotation.varargs
+  def array(cols: Column*): Column = CreateArray(cols.map(_.expr))
+
+  /**
+   * Creates a new array column. The input columns must all have the same data type.
+   *
+   * @group normal_funcs
+   */
+  def array(colName: String, colNames: String*): Column = {
+    array((colName +: colNames).map(col) : _*)
+  }
+
+  /**
    * Returns the first column that is not null.
    * {{{
    *   df.select(coalesce(df("a"), df("b")))
@@ -389,6 +406,28 @@ object functions {
    * @group normal_funcs
    */
   def sqrt(e: Column): Column = Sqrt(e.expr)
+
+  /**
+   * Creates a new struct column. The input column must be a column in a [[DataFrame]], or
+   * a derived column expression that is named (i.e. aliased).
+   *
+   * @group normal_funcs
+   */
+  @scala.annotation.varargs
+  def struct(cols: Column*): Column = {
+    require(cols.forall(_.expr.isInstanceOf[NamedExpression]),
+      s"struct input columns must all be named or aliased ($cols)")
+    CreateStruct(cols.map(_.expr.asInstanceOf[NamedExpression]))
+  }
+
+  /**
+   * Creates a new struct column that composes multiple input columns.
+   *
+   * @group normal_funcs
+   */
+  def struct(colName: String, colNames: String*): Column = {
+    struct((colName +: colNames).map(col) : _*)
+  }
 
   /**
    * Converts a string expression to upper case.
