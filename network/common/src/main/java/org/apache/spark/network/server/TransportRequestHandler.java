@@ -75,7 +75,6 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   @Override
   public void channelUnregistered() {
-    // Inform the StreamManager that this channel is unregistered.
     streamManager.connectionTerminated(channel);
     rpcHandler.connectionTerminated(reverseClient);
   }
@@ -94,12 +93,11 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   private void processFetchRequest(final ChunkFetchRequest req) {
     final String client = NettyUtils.getRemoteAddress(channel);
 
-    streamManager.registerChannel(channel, req.streamChunkId.streamId);
-
     logger.trace("Received req from {} to fetch block {}", client, req.streamChunkId);
 
     ManagedBuffer buf;
     try {
+      streamManager.registerChannel(channel, req.streamChunkId.streamId);
       buf = streamManager.getChunk(req.streamChunkId.streamId, req.streamChunkId.chunkIndex);
     } catch (Exception e) {
       logger.error(String.format(

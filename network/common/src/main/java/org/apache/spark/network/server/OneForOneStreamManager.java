@@ -40,7 +40,7 @@ public class OneForOneStreamManager extends StreamManager {
   private final Logger logger = LoggerFactory.getLogger(OneForOneStreamManager.class);
 
   private final AtomicLong nextStreamId;
-  private final Map<Long, StreamState> streams;
+  private final ConcurrentHashMap<Long, StreamState> streams;
 
   /** State of a single stream. */
   private static class StreamState {
@@ -54,8 +54,7 @@ public class OneForOneStreamManager extends StreamManager {
     int curChunk = 0;
 
     StreamState(Iterator<ManagedBuffer> buffers) {
-      Preconditions.checkNotNull(buffers);
-      this.buffers = buffers;
+      this.buffers = Preconditions.checkNotNull(buffers);
     }
   }
 
