@@ -346,9 +346,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /** Control our logLevel. This overrides any user-defined log settings.
    * @param logLevel The desired log level as a string.
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
-   * Invalid log level defaults to DEBUG
    */
   def setLogLevel(logLevel: String) {
+    val logLevels = Seq("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
+    if (!logLevels.contains(logLevel)) {
+      throw new InvalidArgumentException(
+    s"Supplied level $logLevel did not match one of: ${validLevels.mkString(',')}")
+    }
     Utils.setLogLevel(org.apache.log4j.Level.toLevel(logLevel))
   }
 

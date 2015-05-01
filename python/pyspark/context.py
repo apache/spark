@@ -271,7 +271,6 @@ class SparkContext(object):
         """
         Control our logLevel. This overrides any user-defined log settings.
         Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
-        Invalid log level defaults to DEBUG
         """
         self._jsc.setLogLevel(logLevel)
 
