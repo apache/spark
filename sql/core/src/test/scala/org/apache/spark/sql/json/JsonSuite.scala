@@ -25,7 +25,7 @@ import org.scalactic.Tolerance._
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.json.JsonRDD.compatibleType
+import org.apache.spark.sql.json.JsonRDD2.compatibleType
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
@@ -1069,7 +1069,7 @@ class JsonSuite extends QueryTest {
 
   test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val emptySchema = JsonRDD.inferSchema(empty, 1.0, "")
+    val emptySchema = JsonRDD2.inferSchema(empty, 1.0, "")
     assert(StructType(Seq()) === emptySchema)
   }
 
