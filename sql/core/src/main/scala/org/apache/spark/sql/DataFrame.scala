@@ -565,7 +565,24 @@ class DataFrame private[sql](
       case Column(expr: NamedExpression) => expr
       case Column(expr: Expression) => Alias(expr, expr.prettyString)()
     }
-    Project(namedExpressions.toSeq, logicalPlan)
+    val result = Project(namedExpressions.toSeq, logicalPlan)
+    if (logicalPlan.isInstanceOf[Project]) {
+      // When user continuously call `select`, speed up analysis by collapsing `Project`
+      val qe = sqlContext.executePlan(Project(namedExpressions.toSeq, logicalPlan))
+      qe.analyzed match {
+        case Project(projectList1, Project(projectList2, child)) =>
+          val aliasMap = AttributeMap(projectList2.collect {
+            case a @ Alias(e, _) => (a.toAttribute, a)
+          })
+          val substitutedProjection = projectList1.map(_.transform {
+            case a: Attribute if aliasMap.contains(a) => aliasMap(a)
+          }).asInstanceOf[Seq[NamedExpression]]
+          Project(substitutedProjection, child)
+        case _ => new DataFrame(sqlContext, qe)
+      }
+    } else {
+      result
+    }
   }
 
   /**
