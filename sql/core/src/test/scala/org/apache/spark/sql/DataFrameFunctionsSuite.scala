@@ -32,10 +32,7 @@ class DataFrameFunctionsSuite extends QueryTest {
 
     val expectedType = ArrayType(IntegerType, containsNull = false)
     assert(row.schema(0).dataType === expectedType)
-
-    val s = row.getAs[Seq[Int]](0)
-    assert(s(0) === 0)
-    assert(s(1) === 1)
+    assert(row.getAs[Seq[Int]](0) === Seq(0, 1))
   }
 
   test("array with column expression") {
@@ -44,10 +41,7 @@ class DataFrameFunctionsSuite extends QueryTest {
 
     val expectedType = ArrayType(IntegerType, containsNull = false)
     assert(row.schema(0).dataType === expectedType)
-
-    val s = row.getAs[Seq[Int]](0)
-    assert(s(0) === 0)
-    assert(s(1) === 2)
+    assert(row.getAs[Seq[Int]](0) === Seq(0, 2))
   }
 
   // Turn this on once we add a rule to the analyzer to throw a friendly exception
@@ -67,10 +61,7 @@ class DataFrameFunctionsSuite extends QueryTest {
       StructField("b", StringType)
     ))
     assert(row.schema(0).dataType === expectedType)
-
-    val s = row.getAs[Row](0)
-    assert(s.getInt(0) === 1)
-    assert(s.getString(1) === "str")
+    assert(row.getAs[Row](0) === Row(1, "str"))
   }
 
   test("struct with column expression") {
@@ -82,10 +73,7 @@ class DataFrameFunctionsSuite extends QueryTest {
       StructField("b", StringType)
     ))
     assert(row.schema(0).dataType === expectedType)
-
-    val s = row.getAs[Row](0)
-    assert(s.getInt(0) === 2)
-    assert(s.getString(1) === "str")
+    assert(row.getAs[Row](0) === Row(2, "str"))
   }
 
   test("struct: must use named column expression") {
