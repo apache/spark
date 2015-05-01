@@ -20,22 +20,21 @@ import javax.ws.rs.{PathParam, GET, Produces}
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.JobUIData
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class OneJobResource(uiRoot: UIRoot) {
+private[v1] class OneJobResource(ui: SparkUI) {
 
   @GET
-  def jobsList(@PathParam("appId") appId: String, @PathParam("jobId") jobId: Int): JobData = {
-    uiRoot.withSparkUI(appId) { ui =>
-      val statusToJobs: Seq[(JobExecutionStatus, Seq[JobUIData])] =
-        AllJobsResource.getStatusToJobs(ui)
-      val jobOpt = statusToJobs.map {_._2} .flatten.find { jobInfo => jobInfo.jobId == jobId}
-      jobOpt.map { job =>
-        AllJobsResource.convertJobData(job, ui.jobProgressListener, false)
-      }.getOrElse {
-        throw new NotFoundException("unknown job: " + jobId)
-      }
+  def oneJob(@PathParam("jobId") jobId: Int): JobData = {
+    val statusToJobs: Seq[(JobExecutionStatus, Seq[JobUIData])] =
+      AllJobsResource.getStatusToJobs(ui)
+    val jobOpt = statusToJobs.map {_._2} .flatten.find { jobInfo => jobInfo.jobId == jobId}
+    jobOpt.map { job =>
+      AllJobsResource.convertJobData(job, ui.jobProgressListener, false)
+    }.getOrElse {
+      throw new NotFoundException("unknown job: " + jobId)
     }
   }
 

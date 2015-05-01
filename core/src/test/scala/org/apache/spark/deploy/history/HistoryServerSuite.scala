@@ -84,7 +84,10 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "maxDate app list json" -> "applications?maxDate=2015-02-10",
     "maxDate2 app list json" -> "applications?maxDate=2015-02-03T10:42:40.000CST",
     "one app json" -> "applications/local-1422981780767",
+    "one app multi-attempt json" -> "applications/local-1426533911241",
     "job list json" -> "applications/local-1422981780767/jobs",
+    "job list from multi-attempt app json(1)" -> "applications/local-1426533911241/1/jobs",
+    "job list from multi-attempt app json(2)" -> "applications/local-1426533911241/2/jobs",
     "one job json" -> "applications/local-1422981780767/jobs/0",
     "succeeded job list json" -> "applications/local-1422981780767/jobs?status=succeeded",
     "succeeded&failed job list json" ->
@@ -110,8 +113,13 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "stage task list w/ sortBy short names: runtime" ->
       "applications/local-1427397477963/stages/20/0/taskList?sortBy=runtime",
 
-    "stage list with accumulable json" -> "applications/local-1426533911241/stages",
-    "stage with accumulable json" -> "applications/local-1426533911241/stages/0/0",
+    "stage list with accumulable json" -> "applications/local-1426533911241/1/stages",
+    "stage with accumulable json" -> "applications/local-1426533911241/1/stages/0/0",
+    "stage task list from multi-attempt app json(1)" ->
+      "applications/local-1426533911241/1/stages/0/0/taskList",
+    "stage task list from multi-attempt app json(2)" ->
+      "applications/local-1426533911241/2/stages/0/0/taskList",
+
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
     "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
   )

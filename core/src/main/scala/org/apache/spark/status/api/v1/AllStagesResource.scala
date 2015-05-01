@@ -27,32 +27,27 @@ import org.apache.spark.ui.jobs.UIData.{StageUIData, TaskUIData}
 import org.apache.spark.util.Distribution
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class AllStagesResource(uiRoot: UIRoot) {
+private[v1] class AllStagesResource(ui: SparkUI) {
 
   @GET
-  def stageList(
-      @PathParam("appId") appId: String,
-      @QueryParam("status") statuses: JList[StageStatus]
-  ): Seq[StageData] = {
-    uiRoot.withSparkUI(appId) { ui =>
-      val listener = ui.jobProgressListener
-      val stageAndStatus = AllStagesResource.stagesAndStatus(ui)
-      val adjStatuses = {
-        if (statuses.isEmpty()) {
-          Arrays.asList(StageStatus.values(): _*)
-        } else {
-          statuses
-        }
+  def stageList(@QueryParam("status") statuses: JList[StageStatus]): Seq[StageData] = {
+    val listener = ui.jobProgressListener
+    val stageAndStatus = AllStagesResource.stagesAndStatus(ui)
+    val adjStatuses = {
+      if (statuses.isEmpty()) {
+        Arrays.asList(StageStatus.values(): _*)
+      } else {
+        statuses
       }
-      for {
-        (status, stageList) <- stageAndStatus
-        stageInfo: StageInfo <- stageList if adjStatuses.contains(status)
-        stageUiData: StageUIData <- listener.synchronized {
-          listener.stageIdToData.get((stageInfo.stageId, stageInfo.attemptId))
-        }
-      } yield {
-        AllStagesResource.stageUiToStageData(status, stageInfo, stageUiData, includeDetails = false)
+    }
+    for {
+      (status, stageList) <- stageAndStatus
+      stageInfo: StageInfo <- stageList if adjStatuses.contains(status)
+      stageUiData: StageUIData <- listener.synchronized {
+        listener.stageIdToData.get((stageInfo.stageId, stageInfo.attemptId))
       }
+    } yield {
+      AllStagesResource.stageUiToStageData(status, stageInfo, stageUiData, includeDetails = false)
     }
   }
 }

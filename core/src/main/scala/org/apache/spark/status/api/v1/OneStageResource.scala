@@ -23,18 +23,17 @@ import org.apache.spark.SparkException
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.status.api.v1.StageStatus._
 import org.apache.spark.status.api.v1.TaskSorting._
+import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.ui.jobs.UIData.StageUIData
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class OneStageResource(uiRoot: UIRoot) {
+private[v1] class OneStageResource(ui: SparkUI) {
 
   @GET
   @Path("")
-  def stageData(
-      @PathParam("appId") appId: String,
-      @PathParam("stageId") stageId: Int): Seq[StageData] = {
-    withStage(appId, stageId){ stageAttempts =>
+  def stageData(@PathParam("stageId") stageId: Int): Seq[StageData] = {
+    withStage(stageId){ stageAttempts =>
       stageAttempts.map { stage =>
         AllStagesResource.stageUiToStageData(stage.status, stage.info, stage.ui,
           includeDetails = true)
@@ -43,26 +42,24 @@ private[v1] class OneStageResource(uiRoot: UIRoot) {
   }
 
   @GET
-  @Path("/{attemptId: \\d+}")
+  @Path("/{stageAttemptId: \\d+}")
   def oneAttemptData(
-      @PathParam("appId") appId: String,
       @PathParam("stageId") stageId: Int,
-      @PathParam("attemptId") attemptId: Int): StageData = {
-    withStageAttempt(appId, stageId, attemptId) { stage =>
+      @PathParam("stageAttemptId") stageAttemptId: Int): StageData = {
+    withStageAttempt(stageId, stageAttemptId) { stage =>
       AllStagesResource.stageUiToStageData(stage.status, stage.info, stage.ui,
         includeDetails = true)
     }
   }
 
   @GET
-  @Path("/{attemptId: \\d+}/taskSummary")
-  def stageData(
-      @PathParam("appId") appId: String,
+  @Path("/{stageAttemptId: \\d+}/taskSummary")
+  def taskSummary(
       @PathParam("stageId") stageId: Int,
-      @PathParam("attemptId") attemptId: Int,
+      @PathParam("stageAttemptId") stageAttemptId: Int,
       @DefaultValue("0.05,0.25,0.5,0.75,0.95") @QueryParam("quantiles") quantileString: String)
   : TaskMetricDistributions = {
-    withStageAttempt(appId, stageId, attemptId) { stage =>
+    withStageAttempt(stageId, stageAttemptId) { stage =>
       val quantiles = quantileString.split(",").map { s =>
         try {
           s.toDouble
@@ -76,15 +73,14 @@ private[v1] class OneStageResource(uiRoot: UIRoot) {
   }
 
   @GET
-  @Path("/{attemptId: \\d+}/taskList")
+  @Path("/{stageAttemptId: \\d+}/taskList")
   def taskList(
-      @PathParam("appId") appId: String,
       @PathParam("stageId") stageId: Int,
-      @PathParam("attemptId") attemptId: Int,
+      @PathParam("stageAttemptId") stageAttemptId: Int,
       @DefaultValue("0") @QueryParam("offset") offset: Int,
       @DefaultValue("20") @QueryParam("length") length: Int,
       @DefaultValue("ID") @QueryParam("sortBy") sortBy: TaskSorting): Seq[TaskData] = {
-    withStageAttempt(appId, stageId, attemptId) { stage =>
+    withStageAttempt(stageId, stageAttemptId) { stage =>
       val tasks = stage.ui.taskData.values.map{AllStagesResource.convertTaskData}.toIndexedSeq
         .sorted(OneStageResource.ordering(sortBy))
       tasks.slice(offset, offset + length)  
@@ -93,15 +89,12 @@ private[v1] class OneStageResource(uiRoot: UIRoot) {
 
   private case class StageStatusInfoUi(status: StageStatus, info: StageInfo, ui: StageUIData)
 
-  private def withStage[T](appId: String, stageId: Int)
-      (f: Seq[StageStatusInfoUi] => T): T = {
-    uiRoot.withSparkUI(appId) { ui =>
-      val stageAttempts = findStageStatusUIData(ui.jobProgressListener, stageId)
-      if (stageAttempts.isEmpty) {
-        throw new NotFoundException("unknown stage: " + stageId)
-      } else {
-        f(stageAttempts)
-      }
+  private def withStage[T](stageId: Int)(f: Seq[StageStatusInfoUi] => T): T = {
+    val stageAttempts = findStageStatusUIData(ui.jobProgressListener, stageId)
+    if (stageAttempts.isEmpty) {
+      throw new NotFoundException("unknown stage: " + stageId)
+    } else {
+      f(stageAttempts)
     }
   }
 
@@ -126,10 +119,12 @@ private[v1] class OneStageResource(uiRoot: UIRoot) {
     }
   }
 
-  private def withStageAttempt[T](appId: String, stageId: Int, attemptId: Int)
+  private def withStageAttempt[T](
+      stageId: Int,
+      stageAttemptId: Int)
       (f: StageStatusInfoUi => T): T = {
-    withStage(appId, stageId) { attempts =>
-        val oneAttempt = attempts.find { stage => stage.info.attemptId == attemptId }
+    withStage(stageId) { attempts =>
+        val oneAttempt = attempts.find { stage => stage.info.attemptId == stageAttemptId }
         oneAttempt match {
           case Some(stage) =>
             f(stage)

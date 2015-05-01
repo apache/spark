@@ -19,18 +19,16 @@ package org.apache.spark.status.api.v1
 import javax.ws.rs.{PathParam, GET, Produces}
 import javax.ws.rs.core.MediaType
 
-@Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class OneRDDResource(uiRoot: UIRoot) {
+import org.apache.spark.ui.SparkUI
 
-    @GET
-    def rddData(
-        @PathParam("appId") appId: String,
-        @PathParam("rddId") rddId: Int): RDDStorageInfo  = {
-      uiRoot.withSparkUI(appId) { ui =>
-        AllRDDResource.getRDDStorageInfo(rddId, ui.storageListener, true).getOrElse(
-          throw new NotFoundException(s"no rdd found w/ id $rddId")
-        )
-      }
-    }
+@Produces(Array(MediaType.APPLICATION_JSON))
+private[v1] class OneRDDResource(ui: SparkUI) {
+
+  @GET
+  def rddData(@PathParam("rddId") rddId: Int): RDDStorageInfo  = {
+    AllRDDResource.getRDDStorageInfo(rddId, ui.storageListener, true).getOrElse(
+      throw new NotFoundException(s"no rdd found w/ id $rddId")
+    )
+  }
 
 }

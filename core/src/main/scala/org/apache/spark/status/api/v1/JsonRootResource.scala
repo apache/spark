@@ -51,39 +51,117 @@ private[v1] class JsonRootResource extends UIRootFromServletContext {
     new OneApplicationResource(uiRoot)
   }
 
+  @Path("applications/{appId}/{attemptId}/jobs")
+  def getJobs(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): AllJobsResource = {
+    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+      new AllJobsResource(ui)
+    }
+  }
+
   @Path("applications/{appId}/jobs")
-  def getJobs(): AllJobsResource = {
-    new AllJobsResource(uiRoot)
+  def getJobs(@PathParam("appId") appId: String): AllJobsResource = {
+    uiRoot.withSparkUI(appId, None) { ui =>
+      new AllJobsResource(ui)
+    }
   }
 
   @Path("applications/{appId}/jobs/{jobId: \\d+}")
-  def getJob(): OneJobResource = {
-    new OneJobResource(uiRoot)
+  def getJob(@PathParam("appId") appId: String): OneJobResource = {
+    uiRoot.withSparkUI(appId, None) { ui =>
+      new OneJobResource(ui)
+    }
+  }
+
+  @Path("applications/{appId}/{attemptId}/jobs/{jobId: \\d+}")
+  def getJob(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): OneJobResource = {
+    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+      new OneJobResource(ui)
+    }
   }
 
   @Path("applications/{appId}/executors")
-  def getExecutors(): ExecutorListResource = {
-    new ExecutorListResource(uiRoot)
+  def getExecutors(@PathParam("appId") appId: String): ExecutorListResource = {
+    uiRoot.withSparkUI(appId, None) { ui =>
+      new ExecutorListResource(ui)
+    }
   }
 
+  @Path("applications/{appId}/{attemptId}/executors")
+  def getExecutors(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): ExecutorListResource = {
+    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+      new ExecutorListResource(ui)
+    }
+  }
+
+
   @Path("applications/{appId}/stages")
-  def getStages(): AllStagesResource= {
-    new AllStagesResource(uiRoot)
+  def getStages(@PathParam("appId") appId: String): AllStagesResource= {
+    uiRoot.withSparkUI(appId, None) { ui =>
+      new AllStagesResource(ui)
+    }
+  }
+
+  @Path("applications/{appId}/{attemptId}/stages")
+  def getStages(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): AllStagesResource= {
+    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+      new AllStagesResource(ui)
+    }
   }
 
   @Path("applications/{appId}/stages/{stageId: \\d+}")
-  def getStage(): OneStageResource= {
-    new OneStageResource(uiRoot)
+  def getStage(@PathParam("appId") appId: String): OneStageResource= {
+    uiRoot.withSparkUI(appId, None) { ui =>
+      new OneStageResource(ui)
+    }
+  }
+
+  @Path("applications/{appId}/{attemptId}/stages/{stageId: \\d+}")
+  def getStage(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): OneStageResource = {
+    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+      new OneStageResource(ui)
+    }
   }
 
   @Path("applications/{appId}/storage/rdd")
-  def getRdds(): AllRDDResource = {
-    new AllRDDResource(uiRoot)
+  def getRdds(@PathParam("appId") appId: String): AllRDDResource = {
+    uiRoot.withSparkUI(appId, None) { ui =>
+      new AllRDDResource(ui)
+    }
+  }
+
+  @Path("applications/{appId}/{attemptId}/storage/rdd")
+  def getRdds(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): AllRDDResource = {
+    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+      new AllRDDResource(ui)
+    }
   }
 
   @Path("applications/{appId}/storage/rdd/{rddId: \\d+}")
-  def getRdd(): OneRDDResource = {
-    new OneRDDResource(uiRoot)
+  def getRdd(@PathParam("appId") appId: String): OneRDDResource = {
+    uiRoot.withSparkUI(appId, None) { ui =>
+      new OneRDDResource(ui)
+    }
+  }
+
+  @Path("applications/{appId}/{attemptId}/storage/rdd/{rddId: \\d+}")
+  def getRdd(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): OneRDDResource = {
+    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+      new OneRDDResource(ui)
+    }
   }
 
 }
@@ -119,8 +197,9 @@ private[spark] trait UIRoot {
    * Get the spark UI with the given appID, and apply a function
    * to it.  If there is no such app, throw an appropriate exception
    */
-  def withSparkUI[T](appId: String)(f: SparkUI => T): T = {
-    getSparkUI(appId) match {
+  def withSparkUI[T](appId: String, attemptId: Option[String])(f: SparkUI => T): T = {
+    val appKey = attemptId.map(appId + "/" + _).getOrElse(appId)
+    getSparkUI(appKey) match {
       case Some(ui) =>
         f(ui)
       case None => throw new NotFoundException("no such app: " + appId)
@@ -130,10 +209,13 @@ private[spark] trait UIRoot {
 }
 
 private[v1] object UIRootFromServletContext {
+
   private val attribute = getClass.getCanonicalName
+
   def setUiRoot(contextHandler: ContextHandler, uiRoot: UIRoot): Unit = {
     contextHandler.setAttribute(attribute, uiRoot)
   }
+
   def getUiRoot(context: ServletContext): UIRoot = {
     context.getAttribute(attribute).asInstanceOf[UIRoot]
   }

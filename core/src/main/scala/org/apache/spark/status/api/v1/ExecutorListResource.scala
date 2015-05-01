@@ -19,19 +19,18 @@ package org.apache.spark.status.api.v1
 import javax.ws.rs.{GET, PathParam, Produces}
 import javax.ws.rs.core.MediaType
 
+import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.exec.ExecutorsPage
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class ExecutorListResource(uiRoot: UIRoot) {
+private[v1] class ExecutorListResource(ui: SparkUI) {
 
   @GET
-  def jobsList(@PathParam("appId") appId: String): Seq[ExecutorSummary] = {
-    uiRoot.withSparkUI(appId) { ui =>
-      val listener = ui.executorsListener
-      val storageStatusList = listener.storageStatusList
-      (0 until storageStatusList.size).map { statusId =>
-        ExecutorsPage.getExecInfo(listener, statusId)
-      }
+  def executorList(): Seq[ExecutorSummary] = {
+    val listener = ui.executorsListener
+    val storageStatusList = listener.storageStatusList
+    (0 until storageStatusList.size).map { statusId =>
+      ExecutorsPage.getExecInfo(listener, statusId)
     }
   }
 }

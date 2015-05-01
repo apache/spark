@@ -26,30 +26,26 @@ import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.ui.jobs.UIData.JobUIData
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class AllJobsResource(uiRoot: UIRoot) {
+private[v1] class AllJobsResource(ui: SparkUI) {
 
   @GET
-  def jobsList(
-      @PathParam("appId") appId: String,
-      @QueryParam("status") statuses: JList[JobExecutionStatus]): Seq[JobData] = {
-    uiRoot.withSparkUI(appId) { ui =>
-      val statusToJobs: Seq[(JobExecutionStatus, Seq[JobUIData])] =
-        AllJobsResource.getStatusToJobs(ui)
-      val adjStatuses: JList[JobExecutionStatus] = {
-        if (statuses.isEmpty) {
-          Arrays.asList(JobExecutionStatus.values(): _*)
-        } else {
-          statuses
-        }
+  def jobsList(@QueryParam("status") statuses: JList[JobExecutionStatus]): Seq[JobData] = {
+    val statusToJobs: Seq[(JobExecutionStatus, Seq[JobUIData])] =
+      AllJobsResource.getStatusToJobs(ui)
+    val adjStatuses: JList[JobExecutionStatus] = {
+      if (statuses.isEmpty) {
+        Arrays.asList(JobExecutionStatus.values(): _*)
+      } else {
+        statuses
       }
-      val jobInfos = for {
-        (status, jobs) <- statusToJobs
-        job <- jobs if adjStatuses.contains(status)
-      } yield {
-        AllJobsResource.convertJobData(job, ui.jobProgressListener, false)
-      }
-      jobInfos.sortBy{- _.jobId}
     }
+    val jobInfos = for {
+      (status, jobs) <- statusToJobs
+      job <- jobs if adjStatuses.contains(status)
+    } yield {
+      AllJobsResource.convertJobData(job, ui.jobProgressListener, false)
+    }
+    jobInfos.sortBy{- _.jobId}
   }
 
 }
