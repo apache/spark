@@ -36,7 +36,7 @@ public class UnsafeSorterSuite {
   private static String getStringFromDataPage(Object baseObject, long baseOffset) {
     final int strLength = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset);
     final byte[] strBytes = new byte[strLength];
-    PlatformDependent.UNSAFE.copyMemory(
+    PlatformDependent.copyMemory(
       baseObject,
       baseOffset + 8,
       strBytes,
