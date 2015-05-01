@@ -150,7 +150,7 @@ if [ $(which python3.4) ]; then
     # run_sql_tests
     # run_mllib_tests
     # run_ml_tests
-    run_streaming_tests
+    # run_streaming_tests
 fi
 
 # Try to test with PyPy
@@ -161,7 +161,7 @@ if [ $(which pypy) ]; then
 
     # run_core_tests
     # run_sql_tests
-    run_streaming_tests
+    # run_streaming_tests
 fi
 
 if [[ $FAILED == 0 ]]; then

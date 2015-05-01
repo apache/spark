@@ -654,7 +654,6 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         print >> sys.stderr, "test_kafka_stream created topic"
         self._kafkaTestUtils.sendMessages(topic, sendData)
         print >> sys.stderr, "test_kafka_stream sent messages"
-        time.sleep(5)
 
         stream = KafkaUtils.createStream(self.ssc, self._kafkaTestUtils.zkAddress(),
                                          "test-streaming-consumer", {topic: 1},
@@ -704,7 +703,6 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         print >> sys.stderr, "test_kafka_rdd created topic"
         self._kafkaTestUtils.sendMessages(topic, sendData)
         print >> sys.stderr, "test_kafka_rdd sent data"
-        time.sleep(5)
         rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges)
         self._validateRddResult(sendData, rdd)
 
@@ -723,7 +721,6 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         print >> sys.stderr, "test_kafka_rdd_with_leaders created topic"
         self._kafkaTestUtils.sendMessages(topic, sendData)
         print >> sys.stderr, "test_kafka_rdd_with_leaders sent data"
-        time.sleep(5)
         rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges, leaders)
         print >> sys.stderr, "test_kafka_rdd_with_leaders created rdd"
         self._validateRddResult(sendData, rdd)
