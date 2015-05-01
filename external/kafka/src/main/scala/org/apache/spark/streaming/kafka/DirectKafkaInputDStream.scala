@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.kafka
 
+
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.reflect.{classTag, ClassTag}

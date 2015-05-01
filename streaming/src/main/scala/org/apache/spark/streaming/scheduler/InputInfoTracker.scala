@@ -23,11 +23,11 @@ import org.apache.spark.Logging
 import org.apache.spark.streaming.{Time, StreamingContext}
 
 /** To track the information of input stream at specified batch time. */
-case class InputInfo(batchTime: Time, inputStreamId: Int, numRecords: Long)
+private[streaming] case class InputInfo(inputStreamId: Int, numRecords: Long)
 
 /**
  * This class manages all the input streams as well as their input data statistics. The information
- * will output to StreamingListener for better monitoring.
+ * will be exposed through StreamingListener for monitoring.
  */
 private[streaming] class InputInfoTracker(ssc: StreamingContext) extends Logging {
 

@@ -101,7 +101,6 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     runningBatchUIData(batchStarted.batchInfo.batchTime) = BatchUIData(batchStarted.batchInfo)
     waitingBatchUIData.remove(batchStarted.batchInfo.batchTime)
 
-    // TODO. this should be fixed when input stream is not receiver based stream.
     totalReceivedRecords += batchUIData.numRecords
   }
 
@@ -190,25 +189,25 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
 
   def receivedRecordsDistributions: Map[Int, Option[Distribution]] = synchronized {
     val latestBatchInfos = retainedBatches.reverse.take(batchUIDataLimit)
-
-    // TODO. this should be fixed when receiver-less input stream is mixed into BatchInfo
-    val latestStreamIdToNumRecords = latestBatchInfos.map(_.receiverNumRecords)
-    val streamIds = latestStreamIdToNumRecords.flatMap(_.keys).toSet
+    val latestReceiverNumRecords = latestBatchInfos.map(_.receiverNumRecords)
+    val streamIds = ssc.graph.getInputStreams().map(_.id)
     streamIds.map { id =>
      val recordsOfParticularReceiver =
-       latestStreamIdToNumRecords.map(v => v.getOrElse(id, 0L).toDouble * 1000 / batchDuration)
+       latestReceiverNumRecords.map(v => v.getOrElse(id, 0L).toDouble * 1000 / batchDuration)
       val distribution = Distribution(recordsOfParticularReceiver)
       (id, distribution)
     }.toMap
   }
 
   def lastReceivedBatchRecords: Map[Int, Long] = synchronized {
-    // TODO. this should be fixed when receiver-less input stream is mixed into BatchInfo
-    val streamIdToNumRecords = lastReceivedBatch.map(_.receiverNumRecords).getOrElse(Map.empty)
-    if (streamIdToNumRecords.isEmpty) {
-      ssc.graph.getInputStreams().map(_.id).map((_, 0L)).toMap
-    } else {
-      streamIdToNumRecords
+    val lastReceiverNumRecords = lastReceivedBatch.map(_.receiverNumRecords)
+    val streamIds = ssc.graph.getInputStreams().map(_.id)
+    lastReceiverNumRecords.map { receiverNumRecords =>
+      streamIds.map { id =>
+        (id, receiverNumRecords.getOrElse(id, 0L))
+      }.toMap
+    }.getOrElse {
+      streamIds.map(id => (id, 0L)).toMap
     }
   }
 
@@ -216,7 +215,9 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     receiverInfos.get(receiverId)
   }
 
-  def receiverIds(): Iterable[Int] = synchronized { receiverInfos.keys }
+  def receiverIds(): Iterable[Int] = synchronized {
+    receiverInfos.keys
+  }
 
   def lastCompletedBatch: Option[BatchUIData] = synchronized {
     completedBatchUIData.sortBy(_.batchTime)(Time.ordering).lastOption

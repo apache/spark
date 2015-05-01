@@ -20,10 +20,7 @@ package org.apache.spark.streaming.scheduler
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Time, Duration, StreamingContext}
-import org.apache.spark.streaming.dstream.{ReceiverInputDStream, InputDStream}
-import org.apache.spark.streaming.receiver.Receiver
 
 class InputInfoTrackerSuite extends FunSuite with BeforeAndAfter {
 
@@ -43,38 +40,16 @@ class InputInfoTrackerSuite extends FunSuite with BeforeAndAfter {
     }
   }
 
-  test("test track the number of input stream") {
-    class TestInputDStream extends InputDStream[String](ssc) {
-      def start() { }
-      def stop() { }
-      def compute(validTime: Time): Option[RDD[String]] = ???
-    }
-
-    class TestReceiverInputDStream extends ReceiverInputDStream[String](ssc) {
-      def getReceiver: Receiver[String] = ???
-    }
-
-    // Register input streams
-    val receiverInputStreams = Array(new TestReceiverInputDStream, new TestReceiverInputDStream)
-    val inputStreams = Array(new TestInputDStream, new TestInputDStream, new TestInputDStream)
-
-    assert(ssc.graph.getInputStreams().length == 5)
-    assert(ssc.graph.getReceiverInputStreams().length == 2)
-    assert(ssc.graph.getReceiverInputStreams() === receiverInputStreams)
-    assert(ssc.graph.getInputStreams().map(_.id) === Array(0, 1, 2, 3, 4))
-    assert(receiverInputStreams.map(_.id) === Array(0, 1))
-  }
-
   test("test report and get InputInfo from InputInfoTracker") {
     val inputInfoTracker = new InputInfoTracker(ssc)
 
     val streamId1 = 0
     val streamId2 = 1
     val time = Time(0L)
-    val inputInfo1 = InputInfo(time, streamId1, 100L)
-    val inputInfo2 = InputInfo(time, streamId2, 300L)
-    inputInfoTracker.reportInfo(inputInfo1.batchTime, inputInfo1)
-    inputInfoTracker.reportInfo(inputInfo2.batchTime, inputInfo2)
+    val inputInfo1 = InputInfo(streamId1, 100L)
+    val inputInfo2 = InputInfo(streamId2, 300L)
+    inputInfoTracker.reportInfo(time, inputInfo1)
+    inputInfoTracker.reportInfo(time, inputInfo2)
 
     val batchTimeToInputInfos = inputInfoTracker.getInfo(time)
     assert(batchTimeToInputInfos.size == 2)
@@ -88,10 +63,10 @@ class InputInfoTrackerSuite extends FunSuite with BeforeAndAfter {
     val inputInfoTracker = new InputInfoTracker(ssc)
 
     val streamId1 = 0
-    val inputInfo1 = InputInfo(Time(0), streamId1, 100L)
-    val inputInfo2 = InputInfo(Time(1), streamId1, 300L)
-    inputInfoTracker.reportInfo(inputInfo1.batchTime, inputInfo1)
-    inputInfoTracker.reportInfo(inputInfo2.batchTime, inputInfo2)
+    val inputInfo1 = InputInfo(streamId1, 100L)
+    val inputInfo2 = InputInfo(streamId1, 300L)
+    inputInfoTracker.reportInfo(Time(0), inputInfo1)
+    inputInfoTracker.reportInfo(Time(1), inputInfo2)
 
     inputInfoTracker.cleanup(Time(0))
     assert(inputInfoTracker.getInfo(Time(0))(streamId1) === inputInfo1)
