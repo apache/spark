@@ -173,7 +173,7 @@ CURRENT_BLOCK=$BLOCK_BUILD
     build/mvn $HIVE_BUILD_ARGS clean package -DskipTests
   else
     echo -e "q\n" \
-      | build/sbt package assembly/assembly streaming-kafka-assembly/assembly \
+      | build/sbt -Dhadoop.version=1.0.4 package assembly/assembly streaming-kafka-assembly/assembly \
       | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
   fi
 }
@@ -225,7 +225,7 @@ CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
 
     echo "Running this"
 
-    build/sbt "streaming/test-only *WriteAheadLog*" "streaming/test-only *JobGenerator*"
+    build/sbt -Dhadoop.version=1.0.4 "streaming/test-only *WriteAheadLog*" "streaming/test-only *JobGenerator*"
   fi
 }
 
