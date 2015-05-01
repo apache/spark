@@ -63,8 +63,10 @@ private[spark] class SparkUI private (
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
     attachHandler(createRedirectHandler("/", "/jobs", basePath = basePath))
     attachHandler(JsonRootResource.getJsonServlet(this))
+    // This should be POST only, but, the YARN AM proxy won't proxy POSTs
     attachHandler(createRedirectHandler(
-      "/stages/stage/kill", "/stages", stagesTab.handleKillRequest, httpMethod = "POST"))
+      "/stages/stage/kill", "/stages", stagesTab.handleKillRequest,
+      httpMethods = Set("GET", "POST")))
   }
   initialize()
 

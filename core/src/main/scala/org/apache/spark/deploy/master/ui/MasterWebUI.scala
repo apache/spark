@@ -49,9 +49,9 @@ class MasterWebUI(val master: Master, requestedPort: Int)
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
     attachHandler(JsonRootResource.getJsonServlet(this))
     attachHandler(createRedirectHandler(
-      "/app/kill", "/", masterPage.handleAppKillRequest, httpMethod = "POST"))
+      "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST")))
     attachHandler(createRedirectHandler(
-      "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethod = "POST"))
+      "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethods = Set("POST")))
   }
 
   /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */

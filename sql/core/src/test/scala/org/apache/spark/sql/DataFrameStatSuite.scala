@@ -25,10 +25,11 @@ import org.apache.spark.sql.test.TestSQLContext.implicits._
 
 class DataFrameStatSuite extends FunSuite  {
 
+  import TestData._
   val sqlCtx = TestSQLContext
-
+  def toLetter(i: Int): String = (i + 97).toChar.toString
+  
   test("Frequent Items") {
-    def toLetter(i: Int): String = (i + 96).toChar.toString
     val rows = Array.tabulate(1000) { i =>
       if (i % 3 == 0) (1, toLetter(1), -1.0) else (i, toLetter(i), i * -1.0)
     }
@@ -43,5 +44,18 @@ class DataFrameStatSuite extends FunSuite  {
     val items2 = singleColResults.collect().head
     items2.getSeq[Double](0) should contain (-1.0)
 
+  }
+
+  test("covariance") {
+    val rows = Array.tabulate(10)(i => (i, 2.0 * i, toLetter(i)))
+    val df = sqlCtx.sparkContext.parallelize(rows).toDF("singles", "doubles", "letters")
+
+    val results = df.stat.cov("singles", "doubles")
+    assert(math.abs(results - 55.0 / 3) < 1e-6)
+    intercept[IllegalArgumentException] {
+      df.stat.cov("singles", "letters") // doesn't accept non-numerical dataTypes
+    }
+    val decimalRes = decimalData.stat.cov("a", "b")
+    assert(math.abs(decimalRes) < 1e-6)
   }
 }
