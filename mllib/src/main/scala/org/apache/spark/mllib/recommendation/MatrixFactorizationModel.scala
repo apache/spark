@@ -142,7 +142,7 @@ class MatrixFactorizationModel(
   }
 
     /**
-   * Recommends topK products for all users
+   * Recommends topK products for all users.
    *
    * @param num how many products to return for every user.
    * @return [(Int, Array[Rating])] objects, where every tuple contains a userID and an array of
@@ -159,7 +159,7 @@ class MatrixFactorizationModel(
 
 
   /**
-   * Recommends topK users for all products
+   * Recommends topK users for all products.
    *
    * @param num how many users to return for every product.
    * @return [(Int, Array[Rating])] objects, where every tuple contains a productID and an array
@@ -216,7 +216,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
         val output = new Array[(Int, (Double, Int))](m * n)
         var k = 0
         ratings.foreachActive { (i, j, r) =>
-          output(k) = (i, (r, j))
+          output(k) = (srcIds(i), (r, dstIds(j)))
           k += 1
         }
         output.toSeq

@@ -39,7 +39,7 @@ class MLPairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)]) extends Se
    * @return an RDD that contains the top k values for each key
    */
   def topByKey(num: Int)(implicit ord: Ordering[V]): RDD[(K, Array[V])] = {
-    self.aggregateByKey(new BoundedPriorityQueue[V](num)(ord))(
+    self.aggregateByKey(new BoundedPriorityQueue[V](num)(ord.reverse))(
       seqOp = (queue, item) => {
         queue += item
         queue
