@@ -142,7 +142,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_map(self):
         """Basic operation test for DStream.map."""
-        print >> sys.stderr, "test_map started"
         input = [range(1, 5), range(5, 9), range(9, 13)]
 
         def func(dstream):
@@ -152,7 +151,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_flatMap(self):
         """Basic operation test for DStream.faltMap."""
-        print >> sys.stderr, "test_flatMap started"
         input = [range(1, 5), range(5, 9), range(9, 13)]
 
         def func(dstream):
@@ -163,7 +161,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_filter(self):
         """Basic operation test for DStream.filter."""
-        print >> sys.stderr, "test_filter started"
         input = [range(1, 5), range(5, 9), range(9, 13)]
 
         def func(dstream):
@@ -173,7 +170,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_count(self):
         """Basic operation test for DStream.count."""
-        print >> sys.stderr, "test_count started"
         input = [range(5), range(10), range(20)]
 
         def func(dstream):
@@ -183,7 +179,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_reduce(self):
         """Basic operation test for DStream.reduce."""
-        print >> sys.stderr, "test_reduce started"
         input = [range(1, 5), range(5, 9), range(9, 13)]
 
         def func(dstream):
@@ -193,7 +188,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_reduceByKey(self):
         """Basic operation test for DStream.reduceByKey."""
-        print >> sys.stderr, "test_reduceByKey started"
         input = [[("a", 1), ("a", 1), ("b", 1), ("b", 1)],
                  [("", 1), ("", 1), ("", 1), ("", 1)],
                  [(1, 1), (1, 1), (2, 1), (2, 1), (3, 1)]]
@@ -205,7 +199,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_mapValues(self):
         """Basic operation test for DStream.mapValues."""
-        print >> sys.stderr, "test_mapValues started"
         input = [[("a", 2), ("b", 2), ("c", 1), ("d", 1)],
                  [(0, 4), (1, 1), (2, 2), (3, 3)],
                  [(1, 1), (2, 1), (3, 1), (4, 1)]]
@@ -219,7 +212,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_flatMapValues(self):
         """Basic operation test for DStream.flatMapValues."""
-        print >> sys.stderr, "test_flatMapValues started"
         input = [[("a", 2), ("b", 2), ("c", 1), ("d", 1)],
                  [(0, 4), (1, 1), (2, 1), (3, 1)],
                  [(1, 1), (2, 1), (3, 1), (4, 1)]]
@@ -234,7 +226,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_glom(self):
         """Basic operation test for DStream.glom."""
-        print >> sys.stderr, "test_glom started"
         input = [range(1, 5), range(5, 9), range(9, 13)]
         rdds = [self.sc.parallelize(r, 2) for r in input]
 
@@ -245,7 +236,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_mapPartitions(self):
         """Basic operation test for DStream.mapPartitions."""
-        print >> sys.stderr, "test_mapPartitions started"
         input = [range(1, 5), range(5, 9), range(9, 13)]
         rdds = [self.sc.parallelize(r, 2) for r in input]
 
@@ -258,7 +248,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_countByValue(self):
         """Basic operation test for DStream.countByValue."""
-        print >> sys.stderr, "test_countByValue started"
         input = [list(range(1, 5)) * 2, list(range(5, 7)) + list(range(5, 9)), ["a", "a", "b", ""]]
 
         def func(dstream):
@@ -268,7 +257,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_groupByKey(self):
         """Basic operation test for DStream.groupByKey."""
-        print >> sys.stderr, "test_groupByKey started"
         input = [[(1, 1), (2, 1), (3, 1), (4, 1)],
                  [(1, 1), (1, 1), (1, 1), (2, 1), (2, 1), (3, 1)],
                  [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 1), ("", 1)]]
@@ -283,7 +271,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_combineByKey(self):
         """Basic operation test for DStream.combineByKey."""
-        print >> sys.stderr, "test_combineByKey started"
         input = [[(1, 1), (2, 1), (3, 1), (4, 1)],
                  [(1, 1), (1, 1), (1, 1), (2, 1), (2, 1), (3, 1)],
                  [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 1), ("", 1)]]
@@ -298,7 +285,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected, sort=True)
 
     def test_repartition(self):
-        print >> sys.stderr, "test_repartition started"
         input = [range(1, 5), range(5, 9)]
         rdds = [self.sc.parallelize(r, 2) for r in input]
 
@@ -308,7 +294,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self._test_func(rdds, func, expected)
 
     def test_union(self):
-        print >> sys.stderr, "test_union started"
         input1 = [range(3), range(5), range(6)]
         input2 = [range(3, 6), range(5, 6)]
 
@@ -319,7 +304,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self._test_func(input1, func, expected, input2=input2)
 
     def test_cogroup(self):
-        print >> sys.stderr, "test_cogroup started"
         input = [[(1, 1), (2, 1), (3, 1)],
                  [(1, 1), (1, 1), (1, 1), (2, 1)],
                  [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 1)]]
@@ -336,7 +320,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected, sort=True, input2=input2)
 
     def test_join(self):
-        print >> sys.stderr, "test_join started"
         input = [[('a', 1), ('b', 2)]]
         input2 = [[('b', 3), ('c', 4)]]
 
@@ -347,7 +330,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected, True, input2)
 
     def test_left_outer_join(self):
-        print >> sys.stderr, "test_left_outer_join started"
         input = [[('a', 1), ('b', 2)]]
         input2 = [[('b', 3), ('c', 4)]]
 
@@ -358,7 +340,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected, True, input2)
 
     def test_right_outer_join(self):
-        print >> sys.stderr, "test_right_outer_join started"
         input = [[('a', 1), ('b', 2)]]
         input2 = [[('b', 3), ('c', 4)]]
 
@@ -369,7 +350,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected, True, input2)
 
     def test_full_outer_join(self):
-        print >> sys.stderr, "test_full_outer_join started"
         input = [[('a', 1), ('b', 2)]]
         input2 = [[('b', 3), ('c', 4)]]
 
@@ -380,7 +360,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected, True, input2)
 
     def test_update_state_by_key(self):
-        print >> sys.stderr, "test_update_state_by_key started"
 
         def updater(vs, s):
             if not s:
@@ -403,7 +382,6 @@ class WindowFunctionTests(PySparkStreamingTestCase):
     timeout = 5
 
     def test_window(self):
-        print >> sys.stderr, "test_window started"
         input = [range(1), range(2), range(3), range(4), range(5)]
 
         def func(dstream):
@@ -413,7 +391,6 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected)
 
     def test_count_by_window(self):
-        print >> sys.stderr, "test_count_by_window started"
         input = [range(1), range(2), range(3), range(4), range(5)]
 
         def func(dstream):
@@ -423,7 +400,6 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected)
 
     def test_count_by_window_large(self):
-        print >> sys.stderr, "test_count_by_window_large started"
         input = [range(1), range(2), range(3), range(4), range(5), range(6)]
 
         def func(dstream):
@@ -433,7 +409,6 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected)
 
     def test_count_by_value_and_window(self):
-        print >> sys.stderr, "test_count_by_value_and_window started"
         input = [range(1), range(2), range(3), range(4), range(5), range(6)]
 
         def func(dstream):
@@ -443,7 +418,6 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected)
 
     def test_group_by_key_and_window(self):
-        print >> sys.stderr, "test_group_by_key_and_window started"
         input = [[('a', i)] for i in range(5)]
 
         def func(dstream):
@@ -454,7 +428,6 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected)
 
     def test_reduce_by_invalid_window(self):
-        print >> sys.stderr, "test_reduce_by_invalid_window started"
         input1 = [range(3), range(5), range(1), range(6)]
         d1 = self.ssc.queueStream(input1)
         self.assertRaises(ValueError, lambda: d1.reduceByKeyAndWindow(None, None, 0.1, 0.1))
@@ -471,28 +444,24 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self._collect(stream, 1, block=False)
 
     def test_stop_only_streaming_context(self):
-        print >> sys.stderr, "test_stop_only_streaming_context started"
         self._add_input_stream()
         self.ssc.start()
         self.ssc.stop(False)
         self.assertEqual(len(self.sc.parallelize(range(5), 5).glom().collect()), 5)
 
     def test_stop_multiple_times(self):
-        print >> sys.stderr, "test_stop_multiple_times started"
         self._add_input_stream()
         self.ssc.start()
         self.ssc.stop(False)
         self.ssc.stop(False)
 
     def test_queue_stream(self):
-        print >> sys.stderr, "test_queue_stream started"
         input = [list(range(i + 1)) for i in range(3)]
         dstream = self.ssc.queueStream(input)
         result = self._collect(dstream, 3)
         self.assertEqual(input, result)
 
     def test_text_file_stream(self):
-        print >> sys.stderr, "test_text_file_stream started"
         d = tempfile.mkdtemp()
         self.ssc = StreamingContext(self.sc, self.duration)
         dstream2 = self.ssc.textFileStream(d).map(int)
@@ -506,7 +475,6 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.assertEqual([list(range(10)), list(range(10))], result)
 
     def test_binary_records_stream(self):
-        print >> sys.stderr, "test_binary_records_stream started"
         d = tempfile.mkdtemp()
         self.ssc = StreamingContext(self.sc, self.duration)
         dstream = self.ssc.binaryRecordsStream(d, 10).map(
@@ -521,7 +489,6 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.assertEqual([list(range(10)), list(range(10))], [list(v[0]) for v in result])
 
     def test_union(self):
-        print >> sys.stderr, "test_union started"
         input = [list(range(i + 1)) for i in range(3)]
         dstream = self.ssc.queueStream(input)
         dstream2 = self.ssc.queueStream(input)
@@ -531,7 +498,6 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.assertEqual(expected, result)
 
     def test_transform(self):
-        print >> sys.stderr, "test_transform started"
         dstream1 = self.ssc.queueStream([[1]])
         dstream2 = self.ssc.queueStream([[2]])
         dstream3 = self.ssc.queueStream([[3]])
@@ -548,7 +514,6 @@ class StreamingContextTests(PySparkStreamingTestCase):
 class CheckpointTests(unittest.TestCase):
 
     def test_get_or_create(self):
-        print >> sys.stderr, "test_get_or_create started"
         inputd = tempfile.mkdtemp()
         outputd = tempfile.mkdtemp() + "/"
 
@@ -639,32 +604,26 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def _validateRddResult(self, sendData, rdd):
         result = {}
-        print >> sys.stderr, "_validateRddResult started"
         for i in rdd.map(lambda x: x[1]).collect():
             result[i] = result.get(i, 0) + 1
         self.assertEqual(sendData, result)
 
     def test_kafka_stream(self):
         """Test the Python Kafka stream API."""
-        print >> sys.stderr, "test_kafka_stream started"
         topic = self._randomTopic()
         sendData = {"a": 3, "b": 5, "c": 10}
 
         self._kafkaTestUtils.createTopic(topic)
-        print >> sys.stderr, "test_kafka_stream created topic"
         self._kafkaTestUtils.sendMessages(topic, sendData)
-        print >> sys.stderr, "test_kafka_stream sent messages"
         time.sleep(5)
 
         stream = KafkaUtils.createStream(self.ssc, self._kafkaTestUtils.zkAddress(),
                                          "test-streaming-consumer", {topic: 1},
                                          {"auto.offset.reset": "smallest"})
-        print >> sys.stderr, "test_kafka_stream created stream"
         self._validateStreamResult(sendData, stream)
 
     def test_kafka_direct_stream(self):
         """Test the Python direct Kafka stream API."""
-        print >> sys.stderr, "test_kafka_direct_stream started"
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
@@ -679,7 +638,6 @@ class KafkaStreamTests(PySparkStreamingTestCase):
     @unittest.skipIf(sys.version >= "3", "long type not support")
     def test_kafka_direct_stream_from_offset(self):
         """Test the Python direct Kafka stream API with start offset specified."""
-        print >> sys.stderr, "test_kafka_direct_stream_from_offset started"
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
         fromOffsets = {TopicAndPartition(topic, 0): long(0)}
@@ -694,16 +652,13 @@ class KafkaStreamTests(PySparkStreamingTestCase):
     @unittest.skipIf(sys.version >= "3", "long type not support")
     def test_kafka_rdd(self):
         """Test the Python direct Kafka RDD API."""
-        print >> sys.stderr, "test_kafka_rdd started"
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2}
         offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
 
         self._kafkaTestUtils.createTopic(topic)
-        print >> sys.stderr, "test_kafka_rdd created topic"
         self._kafkaTestUtils.sendMessages(topic, sendData)
-        print >> sys.stderr, "test_kafka_rdd sent data"
         time.sleep(5)
         rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges)
         self._validateRddResult(sendData, rdd)
@@ -711,7 +666,6 @@ class KafkaStreamTests(PySparkStreamingTestCase):
     @unittest.skipIf(sys.version >= "3", "long type not support")
     def test_kafka_rdd_with_leaders(self):
         """Test the Python direct Kafka RDD API with leaders."""
-        print >> sys.stderr, "test_kafka_rdd_with_leaders started"
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
         offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
@@ -720,12 +674,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         leaders = {TopicAndPartition(topic, 0): Broker(address[0], int(address[1]))}
 
         self._kafkaTestUtils.createTopic(topic)
-        print >> sys.stderr, "test_kafka_rdd_with_leaders created topic"
         self._kafkaTestUtils.sendMessages(topic, sendData)
-        print >> sys.stderr, "test_kafka_rdd_with_leaders sent data"
         time.sleep(5)
         rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges, leaders)
-        print >> sys.stderr, "test_kafka_rdd_with_leaders created rdd"
         self._validateRddResult(sendData, rdd)
 
 if __name__ == "__main__":
