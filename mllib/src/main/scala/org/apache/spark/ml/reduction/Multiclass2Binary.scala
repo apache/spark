@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.ml.reduction
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
@@ -15,8 +32,7 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Params for [[Multiclass2Binary]].
  */
-private[ml] trait Multiclass2BinaryParams
-  extends ClassifierParams {
+private[ml] trait Multiclass2BinaryParams extends ClassifierParams {
 
   /**
    * param for prediction column name
@@ -64,11 +80,10 @@ private[ml] trait Multiclass2BinaryParams
  */
 @AlphaComponent
 private[ml] class Multiclass2BinaryModel(
-                                          override val parent: Multiclass2Binary,
-                                          override val fittingParamMap: ParamMap,
-                                          val baseClassificationModels: Seq[Model[_]])
-  extends Model[Multiclass2BinaryModel]
-  with Multiclass2BinaryParams {
+    override val parent: Multiclass2Binary,
+    override val fittingParamMap: ParamMap,
+    val baseClassificationModels: Seq[Model[_]])
+  extends Model[Multiclass2BinaryModel] with Multiclass2BinaryParams {
 
   /**
    * Transforms the dataset with provided parameter map as additional parameters.
@@ -114,7 +129,7 @@ private[ml] class Multiclass2BinaryModel(
  * Currently implements One vs All reduction.
  */
 class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
-with Multiclass2BinaryParams {
+  with Multiclass2BinaryParams {
 
   @DeveloperApi
   protected def featuresDataType: DataType = new VectorUDT
@@ -125,7 +140,7 @@ with Multiclass2BinaryParams {
   /** @group setParam */
   def setNumClasses(value: Int): this.type = set(k, value)
 
-  override def fit(dataset: DataFrame, paramMap: ParamMap) = {
+  override def fit(dataset: DataFrame, paramMap: ParamMap): Multiclass2BinaryModel = {
     val map = extractParamMap(paramMap)
     val sqlCtx = dataset.sqlContext
     val schema = dataset.schema
