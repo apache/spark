@@ -30,10 +30,10 @@
                     </a>
                 </td>
                 <td>{{ dag.owner }}</td>
-                <td style="padding:0 0 0 0;">
-                    <svg height="0" width="0" id='{{ dag.dag_id }}'></svg>
+                <td style="padding:0px; width:90px; height:10px;">
+                    <svg height="10" width="10" id='{{ dag.dag_id }}' style="display: block;"></svg>
                 </td>
-                <td class="text-center">
+                <td class="text-center" style="width:160px;">
     <a href="{{ url_for("airflow.tree", dag_id=dag.dag_id, num_runs=25) }}" title="Tree View">
         <span class="glyphicon glyphicon-tree-deciduous" aria-hidden="true"></span>
     </a>
@@ -80,7 +80,7 @@
             states = json[dag_id];
             g = d3.select('svg#' + dag_id)
               .attr('height', diameter + (stroke_width_hover * 2))
-              .attr('width', 4 * (diameter + stroke_width_hover))
+              .attr('width', '90px')
               .selectAll("g")
               .data(states)
               .enter()
