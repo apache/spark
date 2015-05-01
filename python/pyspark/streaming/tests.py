@@ -605,7 +605,7 @@ class CheckpointTests(unittest.TestCase):
         ssc.start()
         check_output(3)
         ssc.stop(True, True)
-
+'''
 
 class KafkaStreamTests(PySparkStreamingTestCase):
     timeout = 20  # seconds
