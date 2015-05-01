@@ -830,6 +830,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     conf.clear()
   }
 
+  test("SET commands with illegal or inappropriate argument") {
+    conf.clear()
+    // mapred.reduce.tasks=-1 for automatically determing the number of reducers is not supported
+    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
+    conf.clear()
+  }
+
   test("apply schema") {
     val schema1 = StructType(
       StructField("f1", IntegerType, false) ::
