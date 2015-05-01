@@ -1241,7 +1241,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store.putIterator("most", mostList.iterator, memOnly)
     assert(memoryStore.contains("most"))
     
-    var unrollResult = memoryStore.unrollSafely("small", smallList.iterator, droppedBlocks)  
+    val unrollResult = memoryStore.unrollSafely("small", smallList.iterator, droppedBlocks)
     verifyUnroll(smallList.iterator, unrollResult, shouldBeArray = true)
     assert(memoryStore.currentUnrollMemoryForThisThread === 0)
     assert(droppedBlocks.size === 1)
