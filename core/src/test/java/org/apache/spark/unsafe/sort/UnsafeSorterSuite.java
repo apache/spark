@@ -22,6 +22,7 @@ import java.util.Iterator;
 
 import org.junit.Assert;
 import org.junit.Test;
+import static org.mockito.Mockito.*;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.unsafe.PlatformDependent;
@@ -41,6 +42,18 @@ public class UnsafeSorterSuite {
       strBytes,
       PlatformDependent.BYTE_ARRAY_OFFSET, strLength);
     return new String(strBytes);
+  }
+
+  @Test
+  public void testSortingEmptyInput() {
+    final UnsafeSorter sorter = new UnsafeSorter(
+      new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP)),
+      mock(UnsafeSorter.RecordComparator.class),
+      mock(UnsafeSorter.PrefixComputer.class),
+      mock(UnsafeSorter.PrefixComparator.class),
+      100);
+    final Iterator<UnsafeSorter.KeyPointerAndPrefix> iter = sorter.getSortedIterator();
+    assert(!iter.hasNext());
   }
 
   /**
