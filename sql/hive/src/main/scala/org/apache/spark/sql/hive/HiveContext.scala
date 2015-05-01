@@ -36,11 +36,27 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateSubQueries, OverrideCatalog, OverrideFunctionRegistry}
+import org.apache.spark.sql.catalyst.Dialect
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, QueryExecutionException, SetCommand}
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.sources.{DDLParser, DataSourceStrategy}
 import org.apache.spark.sql.types._
+
+/**
+ * This is the HiveQL Dialect, this dialect is strongly bind with HiveContext
+ */
+private[hive] class HiveQLDialect extends Dialect {
+  @transient
+  protected val sqlParser = {
+    val hiveParser = new ExtendedHiveQlParser
+    new SparkSQLParser(hiveParser.parse)
+  }
+
+  override def parse(sqlText: String): LogicalPlan = {
+    sqlParser.parse(sqlText)
+  }
+}
 
 /**
  * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
@@ -105,25 +121,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           Nil
     }
 
-  @transient
-  override protected[sql] val sqlParser = {
-    val fallback = new ExtendedHiveQlParser
-    new SparkSQLParser(fallback.parse(_))
-  }
-
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
 
-  override def sql(sqlText: String): DataFrame = {
-    val substituted = new VariableSubstitution().substitute(hiveconf, sqlText)
-    // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
-    if (conf.dialect == "sql") {
-      super.sql(substituted)
-    } else if (conf.dialect == "hiveql") {
-      DataFrame(this, parseSql(substituted))
-    }  else {
-      sys.error(s"Unsupported SQL dialect: ${conf.dialect}. Try 'sql' or 'hiveql'")
-    }
+  @transient
+  protected[sql] lazy val substitutor = new VariableSubstitution()
+
+  protected[sql] override def parseSql(sql: String): LogicalPlan = {
+    super.parseSql(substitutor.substitute(hiveconf, sql))
   }
 
   /**
@@ -356,6 +361,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           """.stripMargin)
         throw e
     }
+  }
+
+  override protected[sql] def dialectClassName = if (conf.dialect == "hiveql") {
+    classOf[HiveQLDialect].getCanonicalName
+  } else {
+    super.dialectClassName
   }
 
   @transient

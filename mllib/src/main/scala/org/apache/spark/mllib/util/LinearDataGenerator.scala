@@ -75,8 +75,8 @@ object LinearDataGenerator {
       seed: Int,
       eps: Double = 0.1): Seq[LabeledPoint] = {
     generateLinearInput(intercept, weights,
-      Array.fill[Double](weights.size)(0.0),
-      Array.fill[Double](weights.size)(1.0 / 3.0),
+      Array.fill[Double](weights.length)(0.0),
+      Array.fill[Double](weights.length)(1.0 / 3.0),
       nPoints, seed, eps)}
 
   /**
@@ -105,13 +105,12 @@ object LinearDataGenerator {
     val x = Array.fill[Array[Double]](nPoints)(
       Array.fill[Double](weights.length)(rnd.nextDouble()))
 
-    x.foreach {
-      case v =>
-        var i = 0
-        while (i < v.length) {
-          v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
-          i += 1
-        }
+    x.foreach { v =>
+      var i = 0
+      while (i < v.length) {
+        v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
+        i += 1
+      }
     }
 
     val y = x.map { xi =>

@@ -27,7 +27,7 @@ public class BitSetSuite {
 
   private static BitSet createBitSet(int capacity) {
     assert capacity % 64 == 0;
-    return new BitSet(MemoryBlock.fromLongArray(new long[capacity / 64]).zero());
+    return new BitSet(MemoryBlock.fromLongArray(new long[capacity / 64]));
   }
 
   @Test

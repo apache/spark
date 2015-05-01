@@ -33,7 +33,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
   test("parse analyze commands") {
     def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
-      val parsed = sqlParser.parse(analyzeCommand)
+      val parsed = getSQLDialect().parse(analyzeCommand)
       val operators = parsed.collect {
         case a: AnalyzeTable => a
         case o => o

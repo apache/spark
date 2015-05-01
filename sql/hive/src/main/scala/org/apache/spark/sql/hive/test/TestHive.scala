@@ -107,7 +107,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     /** Fewer partitions to speed up testing. */
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
-      override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+
+      // TODO as in unit test, conf.clear() probably be called, all of the value will be cleared.
+      // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
+      override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
     }
   }
 
@@ -160,7 +163,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   // Hive parser need substituted text. HiveContext.sql() does this but return a DataFrame,
   // while we need a logicalPlan so we cannot reuse that.
   protected[hive] class HiveQLQueryExecution(hql: String)
-    extends this.QueryExecution(sqlParser.parse(vs.substitute(hiveconf, hql))) {
+    extends this.QueryExecution(getSQLDialect().parse(vs.substitute(hiveconf, hql))) {
     def hiveExec(): Seq[String] = runSqlHive(hql)
     override def toString: String = hql + "\n" + super.toString
   }
