@@ -108,7 +108,9 @@ private[spark] class ExternalSorter[K, V, C](
 
   private val conf = SparkEnv.get.conf
   private val spillingEnabled = conf.getBoolean("spark.shuffle.spill", true)
-  private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
+  
+  // Use getSizeAsKb (not bytes) to maintain backwards compatibility of on units are provided
+  private val fileBufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
   private val transferToEnabled = conf.getBoolean("spark.file.transferTo", true)
 
   // Size of object batches when reading/writing from serializers.
@@ -525,7 +527,8 @@ private[spark] class ExternalSorter[K, V, C](
           val k = elem._1
           var c = elem._2
           while (sorted.hasNext && sorted.head._1 == k) {
-            c = mergeCombiners(c, sorted.head._2)
+            val pair = sorted.next()
+            c = mergeCombiners(c, pair._2)
           }
           (k, c)
         }
