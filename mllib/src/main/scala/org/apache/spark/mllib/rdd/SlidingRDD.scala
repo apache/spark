@@ -24,7 +24,7 @@ import org.apache.spark.{TaskContext, Partition}
 import org.apache.spark.rdd.RDD
 
 private[mllib]
-class SlidingRDDPartition[T](val idx: Int, val prev: Partition, val tail: Seq[T])
+class SlidingRDDPartition[T](val idx: Int, val prev: Partition, val tail: Seq[T], val offset: Int)
   extends Partition with Serializable {
   override val index: Int = idx
 }
@@ -44,15 +44,16 @@ class SlidingRDDPartition[T](val idx: Int, val prev: Partition, val tail: Seq[T]
  * @see [[org.apache.spark.mllib.rdd.RDDFunctions#sliding]]
  */
 private[mllib]
-class SlidingRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int)
+class SlidingRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int, val step: Int)
   extends RDD[Array[T]](parent) {
 
-  require(windowSize > 1, s"Window size must be greater than 1, but got $windowSize.")
+  //require(windowSize > 1, s"Window size must be greater than 1, but got $windowSize.")
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[T]] = {
     val part = split.asInstanceOf[SlidingRDDPartition[T]]
     (firstParent[T].iterator(part.prev, context) ++ part.tail)
-      .sliding(windowSize)
+      .drop(part.offset)
+      .sliding(windowSize, step)
       .withPartial(false)
       .map(_.toArray)
   }
@@ -66,36 +67,54 @@ class SlidingRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int
     if (n == 0) {
       Array.empty
     } else if (n == 1) {
-      Array(new SlidingRDDPartition[T](0, parentPartitions(0), Seq.empty))
+      Array(new SlidingRDDPartition[T](0, parentPartitions(0), Seq.empty, 0))
     } else {
       val n1 = n - 1
-      val w1 = windowSize - 1
-      // Get the first w1 items of each partition, starting from the second partition.
-      val nextHeads =
-        parent.context.runJob(parent, (iter: Iterator[T]) => iter.take(w1).toArray, 1 until n)
+      // Get partitions sizes
+      val sizes =
+        parent.context.runJob(parent, (iter: Iterator[T]) => iter.length, 0 until n)
+      val cumSizes = sizes.scanLeft(0)(_ + _)
+      // Get the first required items of each partition, starting from the second partition.
+      val nextHeads = parent.context.runJob(parent,
+        (taskContext: TaskContext, iter: Iterator[T]) => {
+          val part = cumSizes(taskContext.partitionId()) % step
+          val required = if (part == 0) {
+              math.max(windowSize - step, 0)
+            } else {
+              math.max(windowSize - part, 0)
+            }
+          (required, iter.take(required).toArray)
+        },
+        1 until n, true)
       val partitions = mutable.ArrayBuffer[SlidingRDDPartition[T]]()
       var i = 0
       var partitionIndex = 0
       while (i < n1) {
         var j = i
         val tail = mutable.ListBuffer[T]()
-        // Keep appending to the current tail until appended a head of size w1.
-        while (j < n1 && nextHeads(j).size < w1) {
-          tail ++= nextHeads(j)
+        // Keep appending to the current tail until reach a head of required size.
+        while (j < n1 && (nextHeads(j)._1 > nextHeads(j)._2.size)) {
+          tail ++= nextHeads(j)._2
           j += 1
         }
         if (j < n1) {
-          tail ++= nextHeads(j)
+          tail ++= nextHeads(j)._2
           j += 1
         }
-        partitions += new SlidingRDDPartition[T](partitionIndex, parentPartitions(i), tail)
+        val part = cumSizes(i) % step
+        val offset = if (part == 0) 0 else step - part
+        partitions +=
+          new SlidingRDDPartition[T](partitionIndex, parentPartitions(i), tail, offset)
         partitionIndex += 1
-        // Skip appended heads.
+        // Skip partitions heads of which were processed.
         i = j
       }
-      // If the head of last partition has size w1, we also need to add this partition.
-      if (nextHeads.last.size == w1) {
-        partitions += new SlidingRDDPartition[T](partitionIndex, parentPartitions(n1), Seq.empty)
+      // If the head of last partition has reasonable size, we also need to add this partition.
+      val part = cumSizes(n1) % step
+      val offset = if (part == 0) 0 else step - part
+      if (sizes(n1) >= offset + windowSize) {
+        partitions +=
+          new SlidingRDDPartition[T](partitionIndex, parentPartitions(n1), Seq.empty, offset)
       }
       partitions.toArray
     }
