@@ -19,7 +19,7 @@ rem
 
 set SPARK_HOME=%~dp0..
 
-echo "%*" | findstr " --help -h" >nul
+echo "%*" | findstr " \<--help\> \<-h\>" >nul
 if %ERRORLEVEL% equ 0 (
   call :usage
   exit /b 0
