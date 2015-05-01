@@ -17,14 +17,12 @@
 
 package org.apache.spark.storage
 
-import java.io.{InputStream, IOException}
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
 import org.apache.spark.{Logging, TaskContext}
-import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.serializer.{SerializerInstance, Serializer}
@@ -301,7 +299,7 @@ final class ShuffleBlockFetcherIterator(
         // the scheduler gets a FetchFailedException.
         Try(buf.createInputStream()).map { is0 =>
           val is = blockManager.wrapForCompression(blockId, is0)
-          val iter = serializerInstance.deserializeStream(is).asIterator
+          val iter = serializerInstance.deserializeStream(is).asKeyValueIterator
           CompletionIterator[Any, Iterator[Any]](iter, {
             // Once the iterator is exhausted, release the buffer and set currentResult to null
             // so we don't release it again in cleanup.

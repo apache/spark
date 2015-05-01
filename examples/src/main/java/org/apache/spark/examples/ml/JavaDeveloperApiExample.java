@@ -28,7 +28,6 @@ import org.apache.spark.ml.classification.Classifier;
 import org.apache.spark.ml.classification.ClassificationModel;
 import org.apache.spark.ml.param.IntParam;
 import org.apache.spark.ml.param.ParamMap;
-import org.apache.spark.ml.param.Params;
 import org.apache.spark.ml.param.Params$;
 import org.apache.spark.mllib.linalg.BLAS;
 import org.apache.spark.mllib.linalg.Vector;
@@ -100,11 +99,12 @@ public class JavaDeveloperApiExample {
 /**
  * Example of defining a type of {@link Classifier}.
  *
- * NOTE: This is private since it is an example.  In practice, you may not want it to be private.
+ * Note: Some IDEs (e.g., IntelliJ) will complain that this will not compile due to
+ *       {@link org.apache.spark.ml.param.Params#set} using incompatible return types.
+ *       However, this should still compile and run successfully.
  */
 class MyJavaLogisticRegression
-    extends Classifier<Vector, MyJavaLogisticRegression, MyJavaLogisticRegressionModel>
-    implements Params {
+    extends Classifier<Vector, MyJavaLogisticRegression, MyJavaLogisticRegressionModel> {
 
   /**
    * Param for max number of iterations
@@ -145,10 +145,12 @@ class MyJavaLogisticRegression
 /**
  * Example of defining a type of {@link ClassificationModel}.
  *
- * NOTE: This is private since it is an example.  In practice, you may not want it to be private.
+ * Note: Some IDEs (e.g., IntelliJ) will complain that this will not compile due to
+ *       {@link org.apache.spark.ml.param.Params#set} using incompatible return types.
+ *       However, this should still compile and run successfully.
  */
 class MyJavaLogisticRegressionModel
-    extends ClassificationModel<Vector, MyJavaLogisticRegressionModel> implements Params {
+    extends ClassificationModel<Vector, MyJavaLogisticRegressionModel> {
 
   private MyJavaLogisticRegression parent_;
   public MyJavaLogisticRegression parent() { return parent_; }
