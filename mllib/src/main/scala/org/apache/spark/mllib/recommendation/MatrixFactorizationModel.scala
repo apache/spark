@@ -141,7 +141,7 @@ class MatrixFactorizationModel(
     MatrixFactorizationModel.SaveLoadV1_0.save(this, path)
   }
 
-    /**
+  /**
    * Recommends topK products for all users.
    *
    * @param num how many products to return for every user.
@@ -294,8 +294,8 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       val rank = (metadata \ "rank").extract[Int]
       val userFeatures = sqlContext.parquetFile(userPath(path))
         .map { case Row(id: Int, features: Seq[_]) =>
-        (id, features.asInstanceOf[Seq[Double]].toArray)
-      }
+          (id, features.asInstanceOf[Seq[Double]].toArray)
+        }
       val productFeatures = sqlContext.parquetFile(productPath(path))
         .map { case Row(id: Int, features: Seq[_]) =>
         (id, features.asInstanceOf[Seq[Double]].toArray)
