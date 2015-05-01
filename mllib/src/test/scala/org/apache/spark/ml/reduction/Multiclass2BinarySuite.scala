@@ -17,12 +17,13 @@
 
 package org.apache.spark.ml.reduction
 
-import org.apache.spark.ml.classification.{LogisticRegressionModel, LogisticRegression}
+import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.{MLUtils, MLlibTestSparkContext}
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.scalatest.FunSuite
@@ -32,7 +33,6 @@ class Multiclass2BinarySuite extends FunSuite with MLlibTestSparkContext {
   @transient var sqlContext: SQLContext = _
   @transient var dataset: DataFrame = _
   @transient var rdd: RDD[LabeledPoint] = _
-  private val eps: Double = 1e-5
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -65,32 +65,19 @@ class Multiclass2BinarySuite extends FunSuite with MLlibTestSparkContext {
     val ovaModel = ova.fit(dataset)
     assert(ovaModel.baseClassificationModels.size == numClasses)
     val ovaResults = ovaModel.transform(dataset)
-      .select("label", "prediction")
+      .select("prediction", "label")
       .map(row => (row(0).asInstanceOf[Double], row(1).asInstanceOf[Double]))
-      .collect()
 
     val lr = new LogisticRegressionWithLBFGS().setIntercept(true).setNumClasses(numClasses)
     lr.optimizer.setRegParam(0.1).setNumIterations(100)
 
     val model = lr.run(rdd)
-    val results = rdd.map(_.label).zip(model.predict(rdd.map(_.features))).collect()
+    val results = model.predict(rdd.map(_.features)).zip(rdd.map(_.label))
     // determine the #confusion matrix in each class.
-
-    println(confusionMatrix(results, numClasses).map(_.mkString("\t")).mkString("\n"))
-    println(confusionMatrix(ovaResults, numClasses).map(_.mkString("\t")).mkString("\n"))
+    // bound how much error we allow compared to multinomial logistic regression.
+    val expectedMetrics = new MulticlassMetrics(results)
+    val ovaMetrics = new MulticlassMetrics(ovaResults)
+    assert(expectedMetrics.confusionMatrix ~== ovaMetrics.confusionMatrix absTol 400)
   }
 
-  private def confusionMatrix(results: Seq[(Double, Double)], numClasses: Int) = {
-    val matrix = Array.fill(numClasses, 2)(0.0)
-    for ((label, value) <- results) {
-      val v = value.toInt
-      val l = label.toInt
-      if (l == v) {
-        matrix(l).update(0, matrix(l)(0) + 1)
-      } else {
-        matrix(l).update(1, matrix(l)(1) + 1)
-      }
-    }
-    matrix
-  }
 }

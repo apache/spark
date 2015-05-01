@@ -26,8 +26,8 @@ import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.util.Utils
 
 /**
  * Params for [[Multiclass2Binary]].
@@ -74,9 +74,10 @@ private[ml] trait Multiclass2BinaryParams extends ClassifierParams {
 }
 
 /**
- * :: AlphaComponent ::
  *
- * Model produced by [[Multiclass2Binary]].
+ * @param parent
+ * @param fittingParamMap
+ * @param baseClassificationModels the binary classification models for reduction.
  */
 @AlphaComponent
 private[ml] class Multiclass2BinaryModel(
@@ -97,6 +98,8 @@ private[ml] class Multiclass2BinaryModel(
     transformSchema(parentSchema, paramMap, logging = true)
     val map = extractParamMap(paramMap)
     val sqlCtx = dataset.sqlContext
+    // score each model on every data point and pick the model with highest score
+    // TODO: Add randomization when there are ties.
     val predictions = baseClassificationModels.zipWithIndex.par.map { case (model, index) =>
       val output = model.transform(dataset, paramMap)
       output.select(map(rawPredictionCol)).map { case Row(p: Vector) => List((index, p(1))) }
@@ -106,11 +109,11 @@ private[ml] class Multiclass2BinaryModel(
       }
     }.
       map(_.maxBy(_._2))
-
+    // ensure that we pass through columns that are part of the original dataset.
     val results = dataset.select(col("*")).rdd.zip(predictions).map { case ((row, (label, _))) =>
       Row.fromSeq(row.toSeq ++ List(label.toDouble))
     }
-    // determine the output schema
+    // the output schema should retain all input fields and add prediction column.
     val outputSchema = SchemaUtils.appendColumn(parentSchema, map(predictionCol), DoubleType)
     sqlCtx.createDataFrame(results, outputSchema)
   }
@@ -125,8 +128,14 @@ private[ml] class Multiclass2BinaryModel(
 }
 
 /**
- * Performs a reduction from Multiclass Classification to Binary Classification.
- * Currently implements One vs All reduction.
+ * :: Experimental ::
+ *
+ * Reduction of Multiclass Classification to Binary Classification.
+ * Performs reduction using one against all strategy.
+ * For a multiclass classification with k classes, train k models (one per class).
+ * Each example is scored against all k models and the model with highest score
+ * is picked to label the example.
+ *
  */
 class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
   with Multiclass2BinaryParams {
@@ -145,26 +154,24 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
     val sqlCtx = dataset.sqlContext
     val schema = dataset.schema
     val numClasses = map(k)
-
-    def getConfiguredClassifier() = {
-      import scala.language.existentials
-      val baseClassifierClass = getBaseClassifier.getClass()
-      val baseClassifier = baseClassifierClass.newInstance()
-      baseClassifier
+    // create k columns, one for each binary classifier.
+    val multiclassLabeled = dataset.select(map(labelCol), map(featuresCol))
+    val binaryDataset = multiclassLabeled.map { case (Row(label: Double, features: Vector)) =>
+      val labels = Range(0, numClasses).map { index =>
+        if (label.toInt == index) 1.0 else 0.0
+      }
+      Row.fromSeq(List(label, features) ++ labels)
     }
-    val models = Range(0, numClasses).par.map { index =>
-      val multiclassLabeled = dataset.select(map(labelCol), map(featuresCol))
-      val binaryLabeled = multiclassLabeled.map { case Row(label: Double, features: Vector) =>
-        val newLabel = if (label.toInt == index) 1.0 else 0.0
-        Row(newLabel, features)
-      }
-      val trainingDataset = sqlCtx.createDataFrame(binaryLabeled, schema)
-      val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-      if (handlePersistence) {
-        trainingDataset.persist(StorageLevel.MEMORY_AND_DISK)
-      }
-
-      getConfiguredClassifier().fit(trainingDataset, paramMap)
+    var newSchema = multiclassLabeled.schema
+    Range(0, numClasses).foreach{ index =>
+      val labelColName = Multiclass2Binary.labelColName(index)
+      newSchema = SchemaUtils.appendColumn(newSchema, labelColName, DoubleType)
+    }
+    val trainingDataset = sqlCtx.createDataFrame(binaryDataset, newSchema)
+    //learn k models, one for each label value.
+    val models = Range(0, numClasses).par.map{ index =>
+      val newClassifier = Multiclass2Binary.newClassifier(sqlCtx, getBaseClassifier, index)
+      newClassifier.fit(trainingDataset)
     }.toList
     new Multiclass2BinaryModel(this, paramMap, models)
   }
@@ -172,5 +179,46 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     validateAndTransformSchema(schema, paramMap, fitting = true, featuresDataType)
   }
+
+}
+
+object Multiclass2Binary {
+
+  /**
+   * Create a new classifier instance for multiclass classification.
+   * The new classifier is configured to recognize the appropriate label
+   * column.
+   *
+   * @param sqlCtx
+   * @param origClassifier
+   * @param index
+   * @return
+   */
+  private def newClassifier(sqlCtx: SQLContext,
+      origClassifier: Estimator[_ <: Model[_]],
+      index: Int) = {
+
+    val serializer = sqlCtx.sparkContext.env.serializer
+    val serializerInstance = serializer.newInstance()
+    // create a copy of the classifier
+    // TODO: Should there be a copy method on Estimator?
+    val classifier = Utils.clone[Estimator[_ <: Model[_]]](origClassifier, serializerInstance)
+    val baseClassifierClass = classifier.getClass()
+    val labelColName = Multiclass2Binary.labelColName(index)
+    // set the label column to use the appropriate column as label.
+    val setMthd = baseClassifierClass.getMethod("setLabelCol", classOf[String])
+    setMthd.setAccessible(true)
+    setMthd.invoke(classifier, labelColName)
+    setMthd.setAccessible(false)
+    classifier
+  }
+
+  /**
+   * Generate a label column name for a given label index.
+   *
+   * @param index
+   * @return
+   */
+  private def labelColName(index: Int) = {"mc2b$" + index}
 
 }
