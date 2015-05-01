@@ -351,7 +351,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     val validLevels = Seq("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
     if (!validLevels.contains(logLevel)) {
       throw new IllegalArgumentException(
-    s"Supplied level $logLevel did not match one of: ${validLevels.mkString(',')}")
+    s"Supplied level $logLevel did not match one of: ${validLevels.mkString(",")}")
     }
     Utils.setLogLevel(org.apache.log4j.Level.toLevel(logLevel))
   }
