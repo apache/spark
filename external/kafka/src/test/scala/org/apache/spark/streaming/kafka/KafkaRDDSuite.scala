@@ -101,6 +101,7 @@ class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
 
     val rangesMap = ranges.map(o => TopicAndPartition(o.topic, o.partition) -> o.untilOffset).toMap
 
+    // make sure consumer offsets are committed before the next getRdd call
     kc.setConsumerOffsets(kafkaParams("group.id"), rangesMap).fold(
       err => throw new Exception(err.mkString("\n")),
       _ => ()

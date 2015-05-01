@@ -38,11 +38,6 @@ private[spark]
 class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   import KafkaCluster.{Err, LeaderOffset, SimpleConsumerConfig}
 
-  /** Constructor that takes a Java map */
-  def this(kafkaParams: java.util.Map[String, String]) {
-    this(kafkaParams.asScala.toMap)
-  }
-
   // ConsumerConfig isn't serializable
   @transient private var _config: SimpleConsumerConfig = null
 
@@ -227,7 +222,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   // scalastyle:on
 
   // this 0 here indicates api version, in this case the original ZK backed api.
-  def defaultConsumerApiVersion: Short = 0
+  private def defaultConsumerApiVersion: Short = 0
 
   /** Requires Kafka >= 0.8.1.1 */
   def getConsumerOffsets(

@@ -631,6 +631,7 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
         self._kafkaTestUtils.createTopic(topic)
         self._kafkaTestUtils.sendMessages(topic, sendData)
+        self._kafkaTestUtils.waitUntilLeaderOffset(topic, 0, sum(sendData.values()))
 
         stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams)
         self._validateStreamResult(sendData, stream)
@@ -645,6 +646,7 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
         self._kafkaTestUtils.createTopic(topic)
         self._kafkaTestUtils.sendMessages(topic, sendData)
+        self._kafkaTestUtils.waitUntilLeaderOffset(topic, 0, sum(sendData.values()))
 
         stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams, fromOffsets)
         self._validateStreamResult(sendData, stream)

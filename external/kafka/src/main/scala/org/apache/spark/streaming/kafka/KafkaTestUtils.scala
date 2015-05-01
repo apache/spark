@@ -229,7 +229,7 @@ private class KafkaTestUtils extends Logging {
     tryAgain(1)
   }
 
-  /** wait until the leader offset for the given topic/partition equals the specified offset */
+  /** Wait until the leader offset for the given topic/partition equals the specified offset */
   def waitUntilLeaderOffset(
       topic: String,
       partition: Int,
@@ -245,20 +245,19 @@ private class KafkaTestUtils extends Logging {
   }
 
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {
-    eventually(Time(10000), Time(100)) {
-      assert(
-        server.apis.metadataCache.getPartitionInfo(topic, partition) match {
-          case Some(partitionState) =>
-            val leaderAndIsr = partitionState.leaderIsrAndControllerEpoch.leaderAndIsr
-            ZkUtils.getLeaderForPartition(zkClient, topic, partition).isDefined &&
-              Request.isValidBrokerId(leaderAndIsr.leader) &&
-              leaderAndIsr.isr.size >= 1
+    def isPropagated = server.apis.metadataCache.getPartitionInfo(topic, partition) match {
+      case Some(partitionState) =>
+        val leaderAndInSyncReplicas = partitionState.leaderIsrAndControllerEpoch.leaderAndIsr
 
-          case _ =>
-            false
-        },
-        s"Partition [$topic, $partition] metadata not propagated after timeout"
-      )
+        ZkUtils.getLeaderForPartition(zkClient, topic, partition).isDefined &&
+          Request.isValidBrokerId(leaderAndInSyncReplicas.leader) &&
+          leaderAndInSyncReplicas.isr.size >= 1
+
+      case _ =>
+        false
+    }
+    eventually(Time(10000), Time(100)) {
+      assert(isPropagated, s"Partition [$topic, $partition] metadata not propagated after timeout")
     }
   }
 
