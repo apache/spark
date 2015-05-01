@@ -52,7 +52,7 @@ public class UnsafeSorterSuite {
       mock(UnsafeSorter.PrefixComputer.class),
       mock(UnsafeSorter.PrefixComparator.class),
       100);
-    final Iterator<UnsafeSorter.KeyPointerAndPrefix> iter = sorter.getSortedIterator();
+    final Iterator<UnsafeSorter.RecordPointerAndKeyPrefix> iter = sorter.getSortedIterator();
     assert(!iter.hasNext());
   }
 
@@ -130,12 +130,12 @@ public class UnsafeSorterSuite {
       sorter.insertRecord(address);
       position += 8 + recordLength;
     }
-    final Iterator<UnsafeSorter.KeyPointerAndPrefix> iter = sorter.getSortedIterator();
+    final Iterator<UnsafeSorter.RecordPointerAndKeyPrefix> iter = sorter.getSortedIterator();
     int iterLength = 0;
     long prevPrefix = -1;
     Arrays.sort(dataToSort);
     while (iter.hasNext()) {
-      final UnsafeSorter.KeyPointerAndPrefix pointerAndPrefix = iter.next();
+      final UnsafeSorter.RecordPointerAndKeyPrefix pointerAndPrefix = iter.next();
       final Object recordBaseObject = memoryManager.getPage(pointerAndPrefix.recordPointer);
       final long recordBaseOffset = memoryManager.getOffsetInPage(pointerAndPrefix.recordPointer);
       final String str = getStringFromDataPage(recordBaseObject, recordBaseOffset);

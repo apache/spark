@@ -32,7 +32,7 @@ import org.apache.spark.storage.{BlockObjectWriter, ShuffleBlockId}
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.memory.{MemoryBlock, TaskMemoryManager}
 import org.apache.spark.unsafe.sort.UnsafeSorter
-import org.apache.spark.unsafe.sort.UnsafeSorter.{KeyPointerAndPrefix, PrefixComparator, PrefixComputer, RecordComparator}
+import org.apache.spark.unsafe.sort.UnsafeSorter.{RecordPointerAndKeyPrefix, PrefixComparator, PrefixComputer, RecordComparator}
 
 private class UnsafeShuffleHandle[K, V](
     shuffleId: Int,
@@ -122,7 +122,7 @@ private class UnsafeShuffleWriter[K, V](
   private[this] val serializer = Serializer.getSerializer(dep.serializer).newInstance()
 
   private def sortRecords(
-      records: Iterator[_ <: Product2[K, V]]): java.util.Iterator[KeyPointerAndPrefix] = {
+      records: Iterator[_ <: Product2[K, V]]): java.util.Iterator[RecordPointerAndKeyPrefix] = {
     val sorter = new UnsafeSorter(
       context.taskMemoryManager(),
       DummyRecordComparator,
@@ -194,7 +194,7 @@ private class UnsafeShuffleWriter[K, V](
   }
 
   private def writeSortedRecordsToFile(
-      sortedRecords: java.util.Iterator[KeyPointerAndPrefix]): Array[Long] = {
+      sortedRecords: java.util.Iterator[RecordPointerAndKeyPrefix]): Array[Long] = {
     val outputFile = shuffleBlockManager.getDataFile(dep.shuffleId, mapId)
     val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockManager.NOOP_REDUCE_ID)
     val partitionLengths = new Array[Long](partitioner.numPartitions)
@@ -223,7 +223,7 @@ private class UnsafeShuffleWriter[K, V](
     }
 
     while (sortedRecords.hasNext) {
-      val keyPointerAndPrefix: KeyPointerAndPrefix = sortedRecords.next()
+      val keyPointerAndPrefix: RecordPointerAndKeyPrefix = sortedRecords.next()
       val partition = keyPointerAndPrefix.keyPrefix.toInt
       if (partition != currentPartition) {
         switchToPartition(partition)

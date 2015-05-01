@@ -23,9 +23,16 @@ import java.util.Iterator;
 import org.apache.spark.util.collection.Sorter;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
+/**
+ * Sorts records using an AlphaSort-style key-prefix sort. This sort stores pointers to records
+ * alongside a user-defined prefix of the record's sorting key. When the underlying sort algorithm
+ * compares records, it will first compare the stored key prefixes; if the prefixes are not equal,
+ * then we do not need to traverse the record pointers to compare the actual records. Avoiding these
+ * random memory accesses improves cache hit rates.
+ */
 public final class UnsafeSorter {
 
-  public static final class KeyPointerAndPrefix {
+  public static final class RecordPointerAndKeyPrefix {
     /**
      * A pointer to a record; see {@link org.apache.spark.unsafe.memory.TaskMemoryManager} for a
      * description of how these addresses are encoded.
@@ -37,6 +44,7 @@ public final class UnsafeSorter {
      */
     public long keyPrefix;
 
+    // TODO: this was a carryover from test code; may want to remove this
     @Override
     public int hashCode() {
       throw new UnsupportedOperationException();
@@ -48,7 +56,17 @@ public final class UnsafeSorter {
     }
   }
 
+  /**
+   * Compares records for ordering. In cases where the entire sorting key can fit in the 8-byte
+   * prefix, this may simply return 0.
+   */
   public static abstract class RecordComparator {
+    /**
+     * Compare two records for order.
+     *
+     * @return a negative integer, zero, or a positive integer as the first record is less than,
+     *         equal to, or greater than the second.
+     */
     public abstract int compare(
       Object leftBaseObject,
       long leftBaseOffset,
@@ -56,13 +74,16 @@ public final class UnsafeSorter {
       long rightBaseOffset);
   }
 
+  /**
+   * Given a pointer to a record, computes a prefix.
+   */
   public static abstract class PrefixComputer {
     public abstract long computePrefix(Object baseObject, long baseOffset);
   }
 
   /**
-   * Compares 8-byte key prefixes in prefix sort. Subclasses may implement type-specific comparisons,
-   * such as lexicographic comparison for strings.
+   * Compares 8-byte key prefixes in prefix sort. Subclasses may implement type-specific
+   * comparisons, such as lexicographic comparison for strings.
    */
   public static abstract class PrefixComparator {
     public abstract int compare(long prefix1, long prefix2);
@@ -70,8 +91,8 @@ public final class UnsafeSorter {
 
   private final TaskMemoryManager memoryManager;
   private final PrefixComputer prefixComputer;
-  private final Sorter<KeyPointerAndPrefix, long[]> sorter;
-  private final Comparator<KeyPointerAndPrefix> sortComparator;
+  private final Sorter<RecordPointerAndKeyPrefix, long[]> sorter;
+  private final Comparator<RecordPointerAndKeyPrefix> sortComparator;
 
   /**
    * Within this buffer, position {@code 2 * i} holds a pointer pointer to the record at
@@ -79,7 +100,11 @@ public final class UnsafeSorter {
    */
   private long[] sortBuffer;
 
+  /**
+   * The position in the sort buffer where new records can be inserted.
+   */
   private int sortBufferInsertPosition = 0;
+
 
   private void expandSortBuffer(int newSize) {
     assert (newSize > sortBuffer.length);
@@ -99,11 +124,13 @@ public final class UnsafeSorter {
     this.memoryManager = memoryManager;
     this.prefixComputer = prefixComputer;
     this.sorter =
-      new Sorter<KeyPointerAndPrefix, long[]>(UnsafeSortDataFormat.INSTANCE);
-    this.sortComparator = new Comparator<KeyPointerAndPrefix>() {
+      new Sorter<RecordPointerAndKeyPrefix, long[]>(UnsafeSortDataFormat.INSTANCE);
+    this.sortComparator = new Comparator<RecordPointerAndKeyPrefix>() {
       @Override
-      public int compare(KeyPointerAndPrefix left, KeyPointerAndPrefix right) {
-        if (left.keyPrefix == right.keyPrefix) {
+      public int compare(RecordPointerAndKeyPrefix left, RecordPointerAndKeyPrefix right) {
+        final int prefixComparisonResult =
+          prefixComparator.compare(left.keyPrefix, right.keyPrefix);
+        if (prefixComparisonResult == 0) {
           final Object leftBaseObject = memoryManager.getPage(left.recordPointer);
           final long leftBaseOffset = memoryManager.getOffsetInPage(left.recordPointer);
           final Object rightBaseObject = memoryManager.getPage(right.recordPointer);
@@ -111,12 +138,17 @@ public final class UnsafeSorter {
           return recordComparator.compare(
             leftBaseObject, leftBaseOffset, rightBaseObject, rightBaseOffset);
         } else {
-          return prefixComparator.compare(left.keyPrefix, right.keyPrefix);
+          return prefixComparisonResult;
         }
       }
     };
   }
 
+  /**
+   * Insert a record into the sort buffer.
+   *
+   * @param objectAddress pointer to a record in a data page, encoded by {@link TaskMemoryManager}.
+   */
   public void insertRecord(long objectAddress) {
     if (sortBufferInsertPosition + 2 == sortBuffer.length) {
       expandSortBuffer(sortBuffer.length * 2);
@@ -130,11 +162,15 @@ public final class UnsafeSorter {
     sortBufferInsertPosition++;
   }
 
-  public Iterator<KeyPointerAndPrefix> getSortedIterator() {
+  /**
+   * Return an iterator over record pointers in sorted order. For efficiency, all calls to
+   * {@code next()} will return the same mutable object.
+   */
+  public Iterator<RecordPointerAndKeyPrefix> getSortedIterator() {
     sorter.sort(sortBuffer, 0, sortBufferInsertPosition / 2, sortComparator);
-    return new Iterator<KeyPointerAndPrefix>() {
+    return new Iterator<RecordPointerAndKeyPrefix>() {
       private int position = 0;
-      private final KeyPointerAndPrefix keyPointerAndPrefix = new KeyPointerAndPrefix();
+      private final RecordPointerAndKeyPrefix keyPointerAndPrefix = new RecordPointerAndKeyPrefix();
 
       @Override
       public boolean hasNext() {
@@ -142,7 +178,7 @@ public final class UnsafeSorter {
       }
 
       @Override
-      public KeyPointerAndPrefix next() {
+      public RecordPointerAndKeyPrefix next() {
         keyPointerAndPrefix.recordPointer = sortBuffer[position];
         keyPointerAndPrefix.keyPrefix = sortBuffer[position + 1];
         position += 2;
@@ -155,5 +191,4 @@ public final class UnsafeSorter {
       }
     };
   }
-
 }

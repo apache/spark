@@ -17,35 +17,34 @@
 
 package org.apache.spark.unsafe.sort;
 
-import static org.apache.spark.unsafe.sort.UnsafeSorter.KeyPointerAndPrefix;
+import static org.apache.spark.unsafe.sort.UnsafeSorter.RecordPointerAndKeyPrefix;
 import org.apache.spark.util.collection.SortDataFormat;
 
 /**
- * TODO: finish writing this description
+ * Supports sorting an array of (record pointer, key prefix) pairs.  Used in {@link UnsafeSorter}.
  *
  * Within each long[] buffer, position {@code 2 * i} holds a pointer pointer to the record at
  * index {@code i}, while position {@code 2 * i + 1} in the array holds an 8-byte key prefix.
  */
-final class UnsafeSortDataFormat
-  extends SortDataFormat<KeyPointerAndPrefix, long[]> {
+final class UnsafeSortDataFormat extends SortDataFormat<RecordPointerAndKeyPrefix, long[]> {
 
   public static final UnsafeSortDataFormat INSTANCE = new UnsafeSortDataFormat();
 
   private UnsafeSortDataFormat() { }
 
   @Override
-  public KeyPointerAndPrefix getKey(long[] data, int pos) {
+  public RecordPointerAndKeyPrefix getKey(long[] data, int pos) {
     // Since we re-use keys, this method shouldn't be called.
     throw new UnsupportedOperationException();
   }
 
   @Override
-  public KeyPointerAndPrefix newKey() {
-    return new KeyPointerAndPrefix();
+  public RecordPointerAndKeyPrefix newKey() {
+    return new RecordPointerAndKeyPrefix();
   }
 
   @Override
-  public KeyPointerAndPrefix getKey(long[] data, int pos, KeyPointerAndPrefix reuse) {
+  public RecordPointerAndKeyPrefix getKey(long[] data, int pos, RecordPointerAndKeyPrefix reuse) {
     reuse.recordPointer = data[pos * 2];
     reuse.keyPrefix = data[pos * 2 + 1];
     return reuse;
