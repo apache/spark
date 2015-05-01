@@ -92,7 +92,7 @@ private[ui] class VisualizationListener(conf: SparkConf) extends SparkListener {
       stageIds += stageInfo.stageId
       stageIdToGraph(stageInfo.stageId) = VizGraph.makeVizGraph(stageInfo)
     }
-    jobIdToStageIds(jobId) = stageInfos.map(_.stageId)
+    jobIdToStageIds(jobId) = stageInfos.map(_.stageId).sorted
 
     // Remove graph metadata for old stages
     if (stageIds.size >= retainedStages) {

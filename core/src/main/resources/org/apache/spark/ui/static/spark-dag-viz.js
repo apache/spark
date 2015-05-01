@@ -16,13 +16,16 @@
  */
 
 var VizConstants = {
-  stageVizOffset: 160,
+  stageSep: 50,
   rddScopeColor: "#AADFFF",
   rddDotColor: "#444444",
+  rddColor: "#444444",
   stageScopeColor: "#FFDDEE",
   scopeLabelColor: "#888888",
   edgeColor: "#444444",
-  edgeWidth: "1.5px"
+  edgeWidth: "1.5px",
+  svgMarginX: 0,
+  svgMarginY: 20
 };
 
 /*
@@ -75,11 +78,26 @@ function renderViz(forJob) {
   // Each dot file is used to generate the visualization for a stage
   d3.selectAll("#viz-dot-files > div").each(function(d, i) {
     var div = d3.select(this);
-    var stageId = div.attr("name");
     var dot = div.select("div.dot-file").text();
+    var stageId = div.attr("name");
     var container = svg.append("g").attr("id", "graph_" + stageId);
-    // Move the container so it doesn't overlap with the existing ones
-    container.attr("transform", "translate(" + VizConstants.stageVizOffset * i + ", 0)");
+    // No need to shift the first stage container
+    if (i > 0) {
+      // Move the container so it doesn't overlap with the existing ones
+      // To do this, first we find the position and width of the last stage's container
+      var existingStages = d3.selectAll("svg g.cluster").filter(function() {
+        var ourClusterId = "cluster_stage" + stageId;
+        var theirId = d3.select(this).attr("id");
+        return theirId.indexOf("cluster_stage") > -1 && theirId != ourClusterId;
+      });
+      if (!existingStages.empty()) {
+        var lastStageId = d3.select(existingStages[0].pop()).attr("id");
+        var lastStageWidth = toFloat(d3.select("#" + lastStageId + " rect").attr("width"));
+        var lastStagePosition = getAbsolutePosition(lastStageId);
+        var offset = lastStagePosition.x + lastStageWidth + VizConstants.stageSep;
+        container.attr("transform", "translate(" + offset + ", 0)");
+      }
+    }
     renderDot(dot, container);
     // If there are any incoming edges into this graph, keep track of them to
     // render them separately later (job page only). Note that we cannot draw
@@ -104,10 +122,9 @@ function renderViz(forJob) {
   }
 
   // Set the appropriate SVG dimensions to ensure that all elements are displayed
-  var svgMargin = 20;
   var boundingBox = svg.node().getBBox();
-  svg.style("width", (boundingBox.width + svgMargin) + "px");
-  svg.style("height", (boundingBox.height + svgMargin) + "px"); 
+  svg.style("width", (boundingBox.width + VizConstants.svgMarginX) + "px");
+  svg.style("height", (boundingBox.height + VizConstants.svgMarginY) + "px"); 
 
   // Add labels to clusters
   d3.selectAll("svg g.cluster").each(function(cluster_data) {
@@ -129,10 +146,10 @@ function renderViz(forJob) {
   });
 
   // We have shifted a few elements upwards, so we should fix the SVG views
-  var startX = -svgMargin;
-  var startY = -svgMargin;
-  var endX = toFloat(svg.style("width")) + svgMargin;
-  var endY = toFloat(svg.style("height")) + svgMargin;
+  var startX = -VizConstants.svgMarginX;
+  var startY = -VizConstants.svgMarginY;
+  var endX = toFloat(svg.style("width")) + VizConstants.svgMarginX;
+  var endY = toFloat(svg.style("height")) + VizConstants.svgMarginY;
   var newViewBox = startX + " " + startY + " " + endX + " " + endY;
   svg.attr("viewBox", newViewBox);
 }
@@ -170,7 +187,8 @@ function styleViz(forJob) {
       return name && name.indexOf("Stage") > -1;
     })
     .select("rect")
-    .style("stroke", VizConstants.stageScopeColor);
+    .style("stroke", VizConstants.stageScopeColor)
+    .style("strokeWidth", "6px");
 
   // Apply any job or stage specific styles
   if (forJob) {
@@ -208,11 +226,13 @@ function styleJobViz() {
 /* Apply stage-page-specific style to the visualization. */
 function styleStageViz() {
   d3.selectAll("svg g.node rect")
-    .style("fill", "white")
-    .style("stroke", "black")
+    .style("fill", "none")
+    .style("stroke", VizConstants.rddColor)
     .style("stroke-width", "2px")
     .style("fill-opacity", "0.8")
     .style("stroke-opacity", "0.9");
+  d3.selectAll("svg g.label text tspan")
+    .style("fill", VizConstants.rddColor);
 }
 
 /*
