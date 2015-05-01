@@ -14,16 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy
+package org.apache.spark.deploy.yarn
 
 import java.util.concurrent.{Executors, TimeUnit}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.{Logging, SparkConf}
 
 import scala.util.control.NonFatal
 
