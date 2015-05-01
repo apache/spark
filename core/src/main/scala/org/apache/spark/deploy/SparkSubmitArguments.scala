@@ -521,6 +521,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         .invoke(null, Array(HELP))
     }
 
-    SparkSubmit.exitFn()
+    SparkSubmit.exitFn(exitCode)
   }
 }
