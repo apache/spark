@@ -17,25 +17,28 @@
 
 package org.apache.spark.util.collection
 
+import java.util.Comparator
+
+import org.apache.spark.util.collection.WritablePartitionedPairCollection._
+
 /**
- * An append-only map that keeps track of its estimated size in bytes.
+ * Implementation of WritablePartitionedPairCollection that wraps a map in which the keys are tuples
+ * of (partition ID, K)
  */
-private[spark] class SizeTrackingAppendOnlyMap[K, V]
-  extends AppendOnlyMap[K, V] with SizeTracker
-{
-  override def update(key: K, value: V): Unit = {
-    super.update(key, value)
-    super.afterUpdate()
+private[spark] class PartitionedAppendOnlyMap[K, V]
+  extends SizeTrackingAppendOnlyMap[(Int, K), V] with WritablePartitionedPairCollection[K, V] {
+
+  def partitionedDestructiveSortedIterator(keyComparator: Option[Comparator[K]])
+    : Iterator[((Int, K), V)] = {
+    val comparator = keyComparator.map(partitionKeyComparator).getOrElse(partitionComparator)
+    destructiveSortedIterator(comparator)
   }
 
-  override def changeValue(key: K, updateFunc: (Boolean, V) => V): V = {
-    val newValue = super.changeValue(key, updateFunc)
-    super.afterUpdate()
-    newValue
+  def writablePartitionedIterator(): WritablePartitionedIterator = {
+    WritablePartitionedIterator.fromIterator(super.iterator)
   }
 
-  override protected def growTable(): Unit = {
-    super.growTable()
-    resetSamples()
+  def insert(partition: Int, key: K, value: V): Unit = {
+    update((partition, key), value)
   }
 }
