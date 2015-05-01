@@ -34,7 +34,7 @@ import org.apache.spark.storage._
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
 import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVector}
 
-/** A group of writers for a ShuffleMapTask, one writer per reducer. */
+/** A group of writers for ShuffleMapTask, one writer per reducer. */
 private[spark] trait ShuffleWriterGroup {
   val writers: Array[BlockObjectWriter]
 

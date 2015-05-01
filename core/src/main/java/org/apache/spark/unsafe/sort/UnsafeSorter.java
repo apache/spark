@@ -30,12 +30,22 @@ public final class UnsafeSorter {
      * A pointer to a record; see {@link org.apache.spark.unsafe.memory.TaskMemoryManager} for a
      * description of how these addresses are encoded.
      */
-    long recordPointer;
+    public long recordPointer;
 
     /**
      * A key prefix, for use in comparisons.
      */
-    long keyPrefix;
+    public long keyPrefix;
+
+    @Override
+    public int hashCode() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   public static abstract class RecordComparator {
@@ -115,8 +125,9 @@ public final class UnsafeSorter {
     final long baseOffset = memoryManager.getOffsetInPage(objectAddress);
     final long keyPrefix = prefixComputer.computePrefix(baseObject, baseOffset);
     sortBuffer[sortBufferInsertPosition] = objectAddress;
-    sortBuffer[sortBufferInsertPosition + 1] = keyPrefix;
-    sortBufferInsertPosition += 2;
+    sortBufferInsertPosition++;
+    sortBuffer[sortBufferInsertPosition] = keyPrefix;
+    sortBufferInsertPosition++;
   }
 
   public Iterator<KeyPointerAndPrefix> getSortedIterator() {

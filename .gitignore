@@ -29,6 +29,7 @@ conf/*.properties
 conf/*.conf
 conf/*.xml
 conf/slaves
+core/build/py4j/
 docs/_site
 docs/api
 target/
