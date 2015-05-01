@@ -159,6 +159,15 @@ private[spark] class TaskSchedulerImpl(
     this.synchronized {
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       activeTaskSets(taskSet.id) = manager
+      val attemptsByStage = activeTaskSets.values.map{manager => manager.taskSet}.groupBy{_.stageId}
+      attemptsByStage.foreach { case (stageId, attempts) =>
+        val n = attempts.size
+        if (n > 1) {
+          throw new SparkInternalStateException(
+            s"Stage $stageId has $n concurrent attempts: ${attempts.map{_.attempt}}.  Spark " +
+              "internal state is inconsistent, failing job")
+        }
+      }
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
 
       if (!isLocal && !hasReceivedTask) {
