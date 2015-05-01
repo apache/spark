@@ -52,8 +52,9 @@ class QueryPartitionSuite extends QueryTest {
         ++ testData.toSchemaRDD.collect ++ testData.toSchemaRDD.collect)
 
     // delete the path of one partition
-    val folders = tmpDir.listFiles.filter(_.isDirectory)
-    Utils.deleteRecursively(folders(0))
+    tmpDir.listFiles
+      .find { f => f.isDirectory && f.getName().startsWith("ds=") }
+      .foreach { f => Utils.deleteRecursively(f) }
 
     // test for after delete the path
     checkAnswer(sql("select key,value from table_with_partition"),
