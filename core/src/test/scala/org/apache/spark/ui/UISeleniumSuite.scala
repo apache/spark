@@ -563,9 +563,11 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
         sc.ui.get.appUIAddress + "/json/v1/applications"))
       val appListJsonAst = JsonMethods.parse(appListRawJson)
       appListJsonAst.children.length should be (1)
-      (appListJsonAst \ "completed").extract[Boolean] should be (false)
-      parseDate(appListJsonAst \ "startTime") should be (sc.startTime)
-      parseDate(appListJsonAst \ "endTime") should be (-1)
+      val attempts = (appListJsonAst \ "attempts").children
+      attempts.size should be (1)
+      (attempts(0) \ "completed").extract[Boolean] should be (false)
+      parseDate(attempts(0) \ "startTime") should be (sc.startTime)
+      parseDate(attempts(0) \ "endTime") should be (-1)
       val oneAppJsonAst = getJson(sc.ui.get, "")
       oneAppJsonAst should be (appListJsonAst.children(0))
     }
