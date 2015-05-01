@@ -148,4 +148,3 @@ object OneStageResource {
     Ordering.by(extractor)
   }
 }
-
