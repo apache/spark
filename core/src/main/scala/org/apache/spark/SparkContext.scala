@@ -217,6 +217,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _heartbeatReceiver: RpcEndpointRef = _
   @volatile private var _dagScheduler: DAGScheduler = _
   private var _applicationId: String = _
+  private var _applicationAttemptId: Option[String] = None
   private var _eventLogger: Option[EventLoggingListener] = None
   private var _executorAllocationManager: Option[ExecutorAllocationManager] = None
   private var _cleaner: Option[ContextCleaner] = None
@@ -315,6 +316,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   def applicationId: String = _applicationId
+  def applicationAttemptId: Option[String] = _applicationAttemptId
 
   def metricsSystem: MetricsSystem = if (_env != null) _env.metricsSystem else null
 
@@ -472,6 +474,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _taskScheduler.start()
 
     _applicationId = _taskScheduler.applicationId()
+    _applicationAttemptId = taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
     _env.blockManager.initialize(_applicationId)
 
@@ -484,7 +487,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _eventLogger =
       if (isEventLogEnabled) {
         val logger =
-          new EventLoggingListener(_applicationId, _eventLogDir.get, _conf, _hadoopConfiguration)
+          new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
+            _conf, _hadoopConfiguration)
         logger.start()
         listenerBus.addListener(logger)
         Some(logger)
@@ -1868,7 +1872,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
-      startTime, sparkUser))
+      startTime, sparkUser, applicationAttemptId))
   }
 
   /** Post the application end event */
