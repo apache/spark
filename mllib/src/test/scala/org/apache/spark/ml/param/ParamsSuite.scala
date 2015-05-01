@@ -122,6 +122,8 @@ class ParamsSuite extends FunSuite {
 
     assert(solver.getParam("inputCol").eq(inputCol))
     assert(solver.getParam("maxIter").eq(maxIter))
+    assert(solver.hasParam("inputCol"))
+    assert(!solver.hasParam("abc"))
     intercept[NoSuchElementException] {
       solver.getParam("abc")
     }
@@ -144,6 +146,11 @@ class ParamsSuite extends FunSuite {
 
     solver.clearMaxIter()
     assert(!solver.isSet(maxIter))
+
+    val copied = solver.copy(ParamMap(solver.maxIter -> 50))
+    assert(copied.uid !== solver.uid)
+    assert(copied.getInputCol === solver.getInputCol)
+    assert(copied.getMaxIter === 50)
   }
 
   test("ParamValidate") {

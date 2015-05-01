@@ -34,4 +34,8 @@ class TestParams extends Params with HasMaxIter with HasInputCol {
     super.validateParams()
     require(isDefined(inputCol))
   }
+
+  override def copy(extra: ParamMap): TestParams = {
+    super.copy(extra).asInstanceOf[TestParams]
+  }
 }
