@@ -656,7 +656,7 @@ object SparkSubmit {
   /**
    * Return whether the given main class represents a sql shell.
    */
-  private def isSqlShell(mainClass: String): Boolean = {
+  private[deploy] def isSqlShell(mainClass: String): Boolean = {
     mainClass == "org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
   }
 
@@ -825,7 +825,7 @@ private[deploy] object SparkSubmitUtils {
       md.addDependency(dd)
     }
   }
-  
+
   /** Add exclusion rules for dependencies already included in the spark-assembly */
   def addExclusionRules(
       ivySettings: IvySettings,

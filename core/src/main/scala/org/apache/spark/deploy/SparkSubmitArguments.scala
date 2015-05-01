@@ -402,6 +402,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       case VERSION =>
         SparkSubmit.printVersionAndExit()
 
+      case USAGE_ERROR =>
+        printUsageAndExit(1)
+
       case _ =>
         throw new IllegalArgumentException(s"Unexpected argument '$opt'.")
     }
@@ -439,11 +442,14 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (unknownParam != null) {
       outStream.println("Unknown/unsupported param " + unknownParam)
     }
-    outStream.println(
+    val command = sys.env.get("_SPARK_CMD_USAGE").getOrElse(
       """Usage: spark-submit [options] <app jar | python file> [app arguments]
         |Usage: spark-submit --kill [submission ID] --master [spark://...]
-        |Usage: spark-submit --status [submission ID] --master [spark://...]
-        |
+        |Usage: spark-submit --status [submission ID] --master [spark://...]""".stripMargin)
+    outStream.println(command)
+
+    outStream.println(
+      """
         |Options:
         |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
         |  --deploy-mode DEPLOY_MODE   Whether to launch the driver program locally ("client") or
@@ -508,6 +514,13 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              working directory of each executor.
       """.stripMargin
     )
+
+    if (SparkSubmit.isSqlShell(mainClass)) {
+      outStream.println("CLI options:")
+      Class.forName(mainClass).getMethod("main", classOf[Array[String]])
+        .invoke(null, Array(HELP))
+    }
+
     SparkSubmit.exitFn()
   }
 }
