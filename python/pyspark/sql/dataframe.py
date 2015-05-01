@@ -883,7 +883,11 @@ class DataFrame(object):
         :param col1: The name of the first column
         :param col2: The name of the second column
         """
-        return self.stat.cov(col1, col2)
+        if not isinstance(col1, str):
+            raise ValueError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise ValueError("col2 should be a string.")
+        return self.df._jdf.stat().cov(col1, col2)
 
     @ignore_unicode_prefix
     def withColumn(self, colName, col):
@@ -1336,11 +1340,7 @@ class DataFrameStatFunctions(object):
         self.df = df
 
     def cov(self, col1, col2):
-        if not isinstance(col1, str):
-            raise ValueError("col1 should be a string.")
-        if not isinstance(col2, str):
-            raise ValueError("col2 should be a string.")
-        return self.df._jdf.stat().cov(col1, col2)
+        return self.stat.cov(col1, col2)
 
     cov.__doc__ = DataFrame.cov.__doc__
 
