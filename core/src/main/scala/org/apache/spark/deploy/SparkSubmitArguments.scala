@@ -17,12 +17,15 @@
 
 package org.apache.spark.deploy
 
+import java.io.{ByteArrayOutputStream, PrintStream}
+import java.lang.reflect.InvocationTargetException
 import java.net.URI
 import java.util.{List => JList}
 import java.util.jar.JarFile
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.io.Source
 
 import org.apache.spark.deploy.SparkSubmitAction._
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
@@ -517,10 +520,62 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
     if (SparkSubmit.isSqlShell(mainClass)) {
       outStream.println("CLI options:")
-      Class.forName(mainClass).getMethod("main", classOf[Array[String]])
-        .invoke(null, Array(HELP))
+      outStream.println(getSqlShellOptions())
     }
 
     SparkSubmit.exitFn(exitCode)
   }
+
+  /**
+   * Run the Spark SQL CLI main class with the "--help" option and catch its output. Then filter
+   * the results to remove unwanted lines.
+   *
+   * Since the CLI will call `System.exit()`, we install a security manager to prevent that call
+   * from working, and restore the original one afterwards.
+   */
+  private def getSqlShellOptions(): String = {
+    val currentOut = System.out
+    val currentErr = System.err
+    val currentSm = System.getSecurityManager()
+    try {
+      val out = new ByteArrayOutputStream()
+      val stream = new PrintStream(out)
+      System.setOut(stream)
+      System.setErr(stream)
+
+      val sm = new SecurityManager() {
+        override def checkExit(status: Int): Unit = {
+          throw new SecurityException()
+        }
+
+        override def checkPermission(perm: java.security.Permission): Unit = {}
+      }
+      System.setSecurityManager(sm)
+
+      try {
+        Class.forName(mainClass).getMethod("main", classOf[Array[String]])
+          .invoke(null, Array(HELP))
+      } catch {
+        case e: InvocationTargetException =>
+          // Ignore SecurityException, since we throw it above.
+          if (!e.getCause().isInstanceOf[SecurityException]) {
+            throw e
+          }
+      }
+
+      stream.flush()
+
+      // Get the output and discard any unnecessary lines from it.
+      Source.fromString(new String(out.toByteArray())).getLines
+        .filter { line =>
+          !line.startsWith("log4j") && !line.startsWith("usage")
+        }
+        .mkString("\n")
+    } finally {
+      System.setSecurityManager(currentSm)
+      System.setOut(currentOut)
+      System.setErr(currentErr)
+    }
+  }
+
 }
