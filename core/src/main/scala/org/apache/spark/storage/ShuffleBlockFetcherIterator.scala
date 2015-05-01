@@ -360,6 +360,8 @@ object ShuffleBlockFetcherIterator {
    * @param size estimated size of the block, used to calculate bytesInFlight.
    *             Note that this is NOT the exact bytes.
    * @param buf [[ManagedBuffer]] for the content.
+   * @param networkReqDone Is this the last network request for this host in
+   *             this fetch request.
    */
   private[storage] case class SuccessFetchResult(blockId: BlockId, size: Long, 
       buf: ManagedBuffer, networkReqDone: Boolean) extends FetchResult {
