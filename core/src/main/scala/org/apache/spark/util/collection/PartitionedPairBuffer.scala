@@ -19,11 +19,15 @@ package org.apache.spark.util.collection
 
 import java.util.Comparator
 
+import org.apache.spark.storage.BlockObjectWriter
+import org.apache.spark.util.collection.WritablePartitionedPairCollection._
+
 /**
- * Append-only buffer of key-value pairs that keeps track of its estimated size in bytes.
+ * Append-only buffer of key-value pairs, each with a corresponding partition ID, that keeps track
+ * of its estimated size in bytes.
  */
-private[spark] class SizeTrackingPairBuffer[K, V](initialCapacity: Int = 64)
-  extends SizeTracker with SizeTrackingPairCollection[K, V]
+private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
+  extends WritablePartitionedPairCollection[K, V] with SizeTracker
 {
   require(initialCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
   require(initialCapacity >= 1, "Invalid initial capacity")
@@ -35,33 +39,14 @@ private[spark] class SizeTrackingPairBuffer[K, V](initialCapacity: Int = 64)
   private var data = new Array[AnyRef](2 * initialCapacity)
 
   /** Add an element into the buffer */
-  def insert(key: K, value: V): Unit = {
+  def insert(partition: Int, key: K, value: V): Unit = {
     if (curSize == capacity) {
       growArray()
     }
-    data(2 * curSize) = key.asInstanceOf[AnyRef]
+    data(2 * curSize) = (partition, key.asInstanceOf[AnyRef])
     data(2 * curSize + 1) = value.asInstanceOf[AnyRef]
     curSize += 1
     afterUpdate()
-  }
-
-  /** Total number of elements in buffer */
-  override def size: Int = curSize
-
-  /** Iterate over the elements of the buffer */
-  override def iterator: Iterator[(K, V)] = new Iterator[(K, V)] {
-    var pos = 0
-
-    override def hasNext: Boolean = pos < curSize
-
-    override def next(): (K, V) = {
-      if (!hasNext) {
-        throw new NoSuchElementException
-      }
-      val pair = (data(2 * pos).asInstanceOf[K], data(2 * pos + 1).asInstanceOf[V])
-      pos += 1
-      pair
-    }
   }
 
   /** Double the size of the array because we've reached capacity */
@@ -79,8 +64,29 @@ private[spark] class SizeTrackingPairBuffer[K, V](initialCapacity: Int = 64)
   }
 
   /** Iterate through the data in a given order. For this class this is not really destructive. */
-  override def destructiveSortedIterator(keyComparator: Comparator[K]): Iterator[(K, V)] = {
-    new Sorter(new KVArraySortDataFormat[K, AnyRef]).sort(data, 0, curSize, keyComparator)
+  override def partitionedDestructiveSortedIterator(keyComparator: Option[Comparator[K]])
+    : Iterator[((Int, K), V)] = {
+    val comparator = keyComparator.map(partitionKeyComparator).getOrElse(partitionComparator)
+    new Sorter(new KVArraySortDataFormat[(Int, K), AnyRef]).sort(data, 0, curSize, comparator)
     iterator
+  }
+
+  override def writablePartitionedIterator(): WritablePartitionedIterator = {
+    WritablePartitionedIterator.fromIterator(iterator)
+  }
+
+  private def iterator(): Iterator[((Int, K), V)] = new Iterator[((Int, K), V)] {
+    var pos = 0
+
+    override def hasNext: Boolean = pos < curSize
+
+    override def next(): ((Int, K), V) = {
+      if (!hasNext) {
+        throw new NoSuchElementException
+      }
+      val pair = (data(2 * pos).asInstanceOf[(Int, K)], data(2 * pos + 1).asInstanceOf[V])
+      pos += 1
+      pair
+    }
   }
 }

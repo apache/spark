@@ -15,22 +15,33 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.mllib.pmml.export
 
-import java.util.Random
+import java.text.SimpleDateFormat
+import java.util.Date
 
-import org.apache.spark.sql.types.{DataType, DoubleType}
+import scala.beans.BeanProperty
 
+import org.dmg.pmml.{Application, Header, PMML, Timestamp}
 
-case object Rand extends LeafExpression {
-  override def dataType: DataType = DoubleType
-  override def nullable: Boolean = false
+private[mllib] trait PMMLModelExport {
+  
+  /**
+   * Holder of the exported model in PMML format
+   */
+  @BeanProperty
+  val pmml: PMML = new PMML
 
-  private[this] lazy val rand = new Random
-
-  override def eval(input: Row = null): EvaluatedType = {
-    rand.nextDouble().asInstanceOf[EvaluatedType]
+  setHeader(pmml)
+  
+  private def setHeader(pmml: PMML): Unit = {
+    val version = getClass.getPackage.getImplementationVersion
+    val app = new Application().withName("Apache Spark MLlib").withVersion(version)
+    val timestamp = new Timestamp()
+      .withContent(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()))
+    val header = new Header()
+      .withApplication(app)
+      .withTimestamp(timestamp)
+    pmml.setHeader(header)
   }
-
-  override def toString: String = "RAND()"
 }

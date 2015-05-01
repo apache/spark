@@ -15,16 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.util.collection
 
-import tachyon.client.TachyonFile
+private[spark] class PairIterator[K, V](iter: Iterator[Any]) extends Iterator[(K, V)] {
+  def hasNext: Boolean = iter.hasNext
 
-/**
- * References a particular segment of a file (potentially the entire file), based off an offset and
- * a length.
- */
-private[spark] class TachyonFileSegment(val file: TachyonFile, val offset: Long, val length: Long) {
-  override def toString: String = {
-    "(name=%s, offset=%d, length=%d)".format(file.getPath(), offset, length)
-  }
+  def next(): (K, V) = (iter.next().asInstanceOf[K], iter.next().asInstanceOf[V])
 }

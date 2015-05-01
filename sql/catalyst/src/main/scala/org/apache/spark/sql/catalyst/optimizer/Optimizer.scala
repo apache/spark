@@ -36,7 +36,13 @@ object DefaultOptimizer extends Optimizer {
     // SubQueries are only needed for analysis and can be removed before execution.
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
-    Batch("Combine Limits", FixedPoint(100),
+    Batch("Operator Reordering", FixedPoint(100),
+      UnionPushdown,
+      CombineFilters,
+      PushPredicateThroughProject,
+      PushPredicateThroughJoin,
+      PushPredicateThroughGenerate,
+      ColumnPruning,
       CombineLimits) ::
     Batch("ConstantFolding", FixedPoint(100),
       NullPropagation,
@@ -49,13 +55,6 @@ object DefaultOptimizer extends Optimizer {
       OptimizeIn) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
-    Batch("Filter Pushdown", FixedPoint(100),
-      UnionPushdown,
-      CombineFilters,
-      PushPredicateThroughProject,
-      PushPredicateThroughJoin,
-      PushPredicateThroughGenerate,
-      ColumnPruning) ::
     Batch("LocalRelation", FixedPoint(100),
       ConvertToLocalRelation) :: Nil
 }
@@ -171,6 +170,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
       Project(substitutedProjection, child)
 
+    case Project(projectList, Limit(exp, child)) =>
+      Limit(exp, Project(projectList, child))
+      
     // Eliminate no-op Projects
     case Project(projectList, child) if child.output == projectList => child
   }
@@ -569,7 +571,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         split(joinCondition.map(splitConjunctivePredicates).getOrElse(Nil), left, right)
 
       joinType match {
-        case Inner =>
+        case _ @ (Inner | LeftSemi) =>
           // push down the single side only join filter for both sides sub queries
           val newLeft = leftJoinConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -577,7 +579,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
           val newJoinCond = commonJoinCondition.reduceLeftOption(And)
 
-          Join(newLeft, newRight, Inner, newJoinCond)
+          Join(newLeft, newRight, joinType, newJoinCond)
         case RightOuter =>
           // push down the left side only join filter for left side sub query
           val newLeft = leftJoinConditions.
@@ -586,14 +588,14 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newJoinCond = (rightJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
 
           Join(newLeft, newRight, RightOuter, newJoinCond)
-        case _ @ (LeftOuter | LeftSemi) =>
+        case LeftOuter =>
           // push down the right side only join filter for right sub query
           val newLeft = left
           val newRight = rightJoinConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
           val newJoinCond = (leftJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
 
-          Join(newLeft, newRight, joinType, newJoinCond)
+          Join(newLeft, newRight, LeftOuter, newJoinCond)
         case FullOuter => f
       }
   }
