@@ -371,9 +371,11 @@ private[spark] class Client(
       try {
         hadoopConfStream.setLevel(0)
         hadoopConfFiles.foreach { case (name, file) =>
-          hadoopConfStream.putNextEntry(new ZipEntry(name))
-          Files.copy(file, hadoopConfStream)
-          hadoopConfStream.closeEntry()
+          if (file.canRead()) {
+            hadoopConfStream.putNextEntry(new ZipEntry(name))
+            Files.copy(file, hadoopConfStream)
+            hadoopConfStream.closeEntry()
+          }
         }
       } finally {
         hadoopConfStream.close()
