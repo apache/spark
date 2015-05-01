@@ -94,7 +94,8 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
       blockManager,
       blocksByAddress,
       new TestSerializer,
-      48 * 1024 * 1024)
+      48 * 1024 * 1024,
+      Int.MaxValue)
 
     // 3 local blocks fetched in initialization
     verify(blockManager, times(3)).getBlockData(any())
@@ -161,7 +162,8 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
       blockManager,
       blocksByAddress,
       new TestSerializer,
-      48 * 1024 * 1024)
+      48 * 1024 * 1024,
+      Int.MaxValue)
 
     // Exhaust the first block, and then it should be released.
     iterator.next()._2.get.foreach(_ => Unit)
@@ -224,7 +226,8 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
       blockManager,
       blocksByAddress,
       new TestSerializer,
-      48 * 1024 * 1024)
+      48 * 1024 * 1024,
+      Int.MaxValue)
 
     // Continue only after the mock calls onBlockFetchFailure
     sem.acquire()
