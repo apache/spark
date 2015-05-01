@@ -103,21 +103,16 @@ final class GBTClassifier
    */
   val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
     " tries to minimize (case-insensitive). Supported options:" +
-    s" ${GBTClassifier.supportedLossTypes.mkString(", ")}")
+    s" ${GBTClassifier.supportedLossTypes.mkString(", ")}",
+    (value: String) => GBTClassifier.supportedLossTypes.contains(value.toLowerCase))
 
   setDefault(lossType -> "logistic")
 
   /** @group setParam */
-  def setLossType(value: String): this.type = {
-    val lossStr = value.toLowerCase
-    require(GBTClassifier.supportedLossTypes.contains(lossStr), "GBTClassifier was given bad loss" +
-      s" type: $value. Supported options: ${GBTClassifier.supportedLossTypes.mkString(", ")}")
-    set(lossType, lossStr)
-    this
-  }
+  def setLossType(value: String): this.type = set(lossType, value)
 
   /** @group getParam */
-  def getLossType: String = getOrDefault(lossType)
+  def getLossType: String = getOrDefault(lossType).toLowerCase
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {

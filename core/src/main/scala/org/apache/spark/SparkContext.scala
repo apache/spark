@@ -555,7 +555,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
           SparkEnv.executorActorSystemName,
           RpcAddress(host, port),
           ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME)
-        Some(endpointRef.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump))
+        Some(endpointRef.askWithRetry[Array[ThreadStackTrace]](TriggerThreadDump))
       }
     } catch {
       case e: Exception =>
@@ -713,7 +713,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   RDD[(String, String)] = {
     assertNotStopped()
     val job = new NewHadoopJob(hadoopConfiguration)
-    NewFileInputFormat.addInputPath(job, new Path(path))
+    // Use setInputPaths so that wholeTextFiles aligns with hadoopFile/textFile in taking
+    // comma separated files as input. (see SPARK-7155)
+    NewFileInputFormat.setInputPaths(job, path)
     val updateConf = job.getConfiguration
     new WholeTextFileRDD(
       this,
@@ -759,7 +761,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       RDD[(String, PortableDataStream)] = {
     assertNotStopped()
     val job = new NewHadoopJob(hadoopConfiguration)
-    NewFileInputFormat.addInputPath(job, new Path(path))
+    // Use setInputPaths so that binaryFiles aligns with hadoopFile/textFile in taking
+    // comma separated files as input. (see SPARK-7155)
+    NewFileInputFormat.setInputPaths(job, path)
     val updateConf = job.getConfiguration
     new BinaryFileRDD(
       this,
@@ -935,7 +939,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // The call to new NewHadoopJob automatically adds security credentials to conf,
     // so we don't need to explicitly add them ourselves
     val job = new NewHadoopJob(conf)
-    NewFileInputFormat.addInputPath(job, new Path(path))
+    // Use setInputPaths so that newAPIHadoopFile aligns with hadoopFile/textFile in taking
+    // comma separated files as input. (see SPARK-7155)
+    NewFileInputFormat.setInputPaths(job, path)
     val updatedConf = job.getConfiguration
     new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf).setName(path)
   }
@@ -1396,6 +1402,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Register an RDD to be persisted in memory and/or disk storage
    */
   private[spark] def persistRDD(rdd: RDD[_]) {
+    _executorAllocationManager.foreach { _ =>
+      logWarning(
+        s"Dynamic allocation currently does not support cached RDDs. Cached data for RDD " +
+        s"${rdd.id} will be lost when executors are removed.")
+    }
     persistentRdds(rdd.id) = rdd
   }
 

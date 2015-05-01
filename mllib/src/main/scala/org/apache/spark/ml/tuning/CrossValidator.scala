@@ -22,7 +22,7 @@ import com.github.fommil.netlib.F2jBLAS
 import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
+import org.apache.spark.ml.param._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
@@ -61,10 +61,12 @@ private[ml] trait CrossValidatorParams extends Params {
   def getEvaluator: Evaluator = getOrDefault(evaluator)
 
   /**
-   * param for number of folds for cross validation
+   * Param for number of folds for cross validation.  Must be >= 2.
+   * Default: 3
    * @group param
    */
-  val numFolds: IntParam = new IntParam(this, "numFolds", "number of folds for cross validation")
+  val numFolds: IntParam = new IntParam(this, "numFolds",
+    "number of folds for cross validation (>= 2)", ParamValidators.gtEq(2))
 
   /** @group getParam */
   def getNumFolds: Int = getOrDefault(numFolds)
@@ -93,6 +95,12 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
   /** @group setParam */
   def setNumFolds(value: Int): this.type = set(numFolds, value)
 
+  override def validate(paramMap: ParamMap): Unit = {
+    getEstimatorParamMaps.foreach { eMap =>
+      getEstimator.validate(eMap ++ paramMap)
+    }
+  }
+
   override def fit(dataset: DataFrame, paramMap: ParamMap): CrossValidatorModel = {
     val map = extractParamMap(paramMap)
     val schema = dataset.schema
@@ -101,8 +109,8 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     val est = map(estimator)
     val eval = map(evaluator)
     val epm = map(estimatorParamMaps)
-    val numModels = epm.size
-    val metrics = new Array[Double](epm.size)
+    val numModels = epm.length
+    val metrics = new Array[Double](epm.length)
     val splits = MLUtils.kFold(dataset.rdd, map(numFolds), 0)
     splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
       val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
@@ -147,6 +155,10 @@ class CrossValidatorModel private[ml] (
     override val fittingParamMap: ParamMap,
     val bestModel: Model[_])
   extends Model[CrossValidatorModel] with CrossValidatorParams {
+
+  override def validate(paramMap: ParamMap): Unit = {
+    bestModel.validate(paramMap)
+  }
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     bestModel.transform(dataset, paramMap)

@@ -237,7 +237,8 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
-        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at mapPartitions at SQLContext.scala:...
+        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at applySchemaToPythonRDD at\
+          NativeMethodAccessorImpl.java:...
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -425,13 +426,34 @@ class DataFrame(object):
     def sample(self, withReplacement, fraction, seed=None):
         """Returns a sampled subset of this :class:`DataFrame`.
 
-        >>> df.sample(False, 0.5, 97).count()
+        >>> df.sample(False, 0.5, 42).count()
         1
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         rdd = self._jdf.sample(withReplacement, fraction, long(seed))
         return DataFrame(rdd, self.sql_ctx)
+
+    def randomSplit(self, weights, seed=None):
+        """Randomly splits this :class:`DataFrame` with the provided weights.
+
+        :param weights: list of doubles as weights with which to split the DataFrame. Weights will
+            be normalized if they don't sum up to 1.0.
+        :param seed: The seed for sampling.
+
+        >>> splits = df4.randomSplit([1.0, 2.0], 24)
+        >>> splits[0].count()
+        1
+
+        >>> splits[1].count()
+        3
+        """
+        for w in weights:
+            if w < 0.0:
+                raise ValueError("Weights must be positive. Found weight value: %s" % w)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
+        rdd_array = self._jdf.randomSplit(_to_seq(self.sql_ctx._sc, weights), long(seed))
+        return [DataFrame(rdd, self.sql_ctx) for rdd in rdd_array]
 
     @property
     def dtypes(self):
@@ -632,7 +654,8 @@ class DataFrame(object):
         [Row(age=2), Row(age=5)]
         """
         if name not in self.columns:
-            raise AttributeError("No such column: %s" % name)
+            raise AttributeError(
+                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name))
         jc = self._jdf.apply(name)
         return Column(jc)
 
