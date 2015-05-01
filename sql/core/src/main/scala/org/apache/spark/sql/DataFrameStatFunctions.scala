@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.stat.FrequentItems
+import org.apache.spark.sql.execution.stat.{ContingencyTable, FrequentItems}
 
 /**
  * :: Experimental ::
@@ -26,6 +26,20 @@ import org.apache.spark.sql.execution.stat.FrequentItems
  */
 @Experimental
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
+
+  /**
+   * Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
+   * The number of distinct values for each column should be less than Int.MaxValue. The first
+   * column of each row will be the distinct values of `col1` and the column names will be the
+   * distinct values of `col2` sorted in lexicographical order. Counts will be returned as `Long`s.
+   *
+   * @param col1 The name of the first column.
+   * @param col2 The name of the second column.
+   * @return A Local DataFrame containing the table
+   */
+  def crosstab(col1: String, col2: String): DataFrame = {
+    ContingencyTable.crossTabulate(df, col1, col2)
+  }
 
   /**
    * Finding frequent items for columns, possibly with false positives. Using the

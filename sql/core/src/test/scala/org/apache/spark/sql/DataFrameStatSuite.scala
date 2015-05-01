@@ -24,8 +24,25 @@ import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 
 class DataFrameStatSuite extends FunSuite  {
+  import TestData._
 
   val sqlCtx = TestSQLContext
+
+  test("crosstab") {
+    val crosstab = testData2.stat.crosstab("a", "b")
+    val columnNames = crosstab.schema.fieldNames
+    assert(columnNames(0) === "a_b")
+    assert(columnNames(1) === "1")
+    assert(columnNames(2) === "2")
+    val rows: Array[Row] = crosstab.collect()
+    var count: Integer = 1
+    rows.foreach { row =>
+      assert(row.get(0).toString === count.toString)
+      assert(row.getLong(1) === 1L)
+      assert(row.getLong(2) === 1L)
+      count += 1
+    }
+  }
 
   test("Frequent Items") {
     def toLetter(i: Int): String = (i + 96).toChar.toString

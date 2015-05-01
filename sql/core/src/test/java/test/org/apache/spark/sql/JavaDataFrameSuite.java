@@ -178,6 +178,24 @@ public class JavaDataFrameSuite {
       Assert.assertEquals(bean.getD().get(i), d.apply(i));
     }
   }
+
+  @Test
+  public void testCrosstab() {
+    DataFrame df = context.table("testData2");
+    DataFrame crosstab = df.stat().crosstab("a", "b");
+    String[] columnNames = crosstab.schema().fieldNames();
+    Assert.assertEquals(columnNames[0], "a_b");
+    Assert.assertEquals(columnNames[1], "1");
+    Assert.assertEquals(columnNames[2], "2");
+    Row[] rows = crosstab.collect();
+    Integer count = 1;
+    for (Row row : rows) {
+      Assert.assertEquals(row.get(0).toString(), count.toString());
+      Assert.assertEquals(row.getLong(1), 1L);
+      Assert.assertEquals(row.getLong(2), 1L);
+      count++;
+    }
+  }
   
   @Test
   public void testFrequentItems() {
