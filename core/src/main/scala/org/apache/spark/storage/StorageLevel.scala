@@ -26,9 +26,9 @@ import org.apache.spark.util.Utils
 /**
  * :: DeveloperApi ::
  * Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
- * or Tachyon, whether to drop the RDD to disk if it falls out of memory or Tachyon , whether to
- * keep the data in memory in a serialized format, and whether to replicate the RDD partitions on
- * multiple nodes.
+ * or ExternalBlockStore, whether to drop the RDD to disk if it falls out of memory or
+ * ExternalBlockStore, whether to keep the data in memory in a serialized format, and whether
+ * to replicate the RDD partitions on multiple nodes.
  *
  * The [[org.apache.spark.storage.StorageLevel$]] singleton object contains some static constants
  * for commonly useful storage levels. To create your own storage level object, use the
@@ -126,7 +126,7 @@ class StorageLevel private(
     var result = ""
     result += (if (useDisk) "Disk " else "")
     result += (if (useMemory) "Memory " else "")
-    result += (if (useOffHeap) "Tachyon " else "")
+    result += (if (useOffHeap) "ExternalBlockStore " else "")
     result += (if (deserialized) "Deserialized " else "Serialized ")
     result += s"${replication}x Replicated"
     result
