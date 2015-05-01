@@ -120,7 +120,7 @@ public final class UnsafeSorter {
   }
 
   public Iterator<KeyPointerAndPrefix> getSortedIterator() {
-    sorter.sort(sortBuffer, 0, sortBufferInsertPosition, sortComparator);
+    sorter.sort(sortBuffer, 0, sortBufferInsertPosition / 2, sortComparator);
     return new Iterator<KeyPointerAndPrefix>() {
       private int position = 0;
       private final KeyPointerAndPrefix keyPointerAndPrefix = new KeyPointerAndPrefix();
