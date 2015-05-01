@@ -50,7 +50,7 @@ class LocalSparkCluster(
     // Disable REST server on Master in this mode unless otherwise specified
     val _conf = conf.clone()
       .setIfMissing("spark.master.rest.enabled", "false")
-      .setIfMissing("spark.shuffle.service.enabled", "false")
+      .set("spark.shuffle.service.enabled", "false")
 
     /* Start the Master */
     val (masterSystem, masterPort, _, _) = Master.startSystemAndActor(localHostname, 0, 0, _conf)
