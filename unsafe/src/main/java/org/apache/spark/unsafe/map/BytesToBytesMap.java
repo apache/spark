@@ -173,18 +173,31 @@ public final class BytesToBytesMap {
   public Iterator<Location> iterator() {
     return new Iterator<Location>() {
 
-      private int nextPos = bitset.nextSetBit(0);
+      private int cur = 0;
+
+      private int pageCur = 0;
+
+      private MemoryBlock currentPage = dataPages.get(0);
+
+      private long addr = currentPage.getBaseOffset();
 
       @Override
       public boolean hasNext() {
-        return nextPos != -1;
+        return cur != size;
       }
 
       @Override
       public Location next() {
-        final int pos = nextPos;
-        nextPos = bitset.nextSetBit(nextPos + 1);
-        return loc.with(pos, 0, true);
+        long keySize = PlatformDependent.UNSAFE.getLong(memoryManager.getPage(addr), addr);
+        if (keySize == 0) {
+          currentPage = dataPages.get(pageCur++);
+          addr = currentPage.getBaseOffset();
+        }
+        long keyAddr = addr;
+        addr += keySize + 8;
+        addr += PlatformDependent.UNSAFE.getLong(memoryManager.getPage(addr), addr) + 8;
+        cur++;
+        return loc.with(keyAddr, true);
       }
 
       @Override
@@ -286,6 +299,14 @@ public final class BytesToBytesMap {
       this.keyHashcode = keyHashcode;
       if (isDefined) {
         final long fullKeyAddress = longArray.get(pos * 2);
+        updateAddressesAndSizes(fullKeyAddress);
+      }
+      return this;
+    }
+
+    Location with(long fullKeyAddress, boolean isDefined) {
+      this.isDefined = isDefined;
+      if (isDefined) {
         updateAddressesAndSizes(fullKeyAddress);
       }
       return this;
