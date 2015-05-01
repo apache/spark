@@ -49,10 +49,8 @@ class DataFrameStatSuite extends FunSuite  {
   test("covariance") {
     val rows = Array.tabulate(10)(i => (i, 2.0 * i, toLetter(i)))
     val df = sqlCtx.sparkContext.parallelize(rows).toDF("singles", "doubles", "letters")
-    df.show()
 
     val results = df.stat.cov("singles", "doubles")
-    println(results)
     assert(math.abs(results - 16.5) < 1e-6)
     intercept[IllegalArgumentException] {
       df.stat.cov("singles", "letters") // doesn't accept non-numerical dataTypes

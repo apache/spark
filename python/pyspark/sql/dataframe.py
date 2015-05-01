@@ -877,12 +877,11 @@ class DataFrame(object):
 
     def cov(self, col1, col2):
         """
-        Calculate the covariance for the given columns, specified by their names.
-        alias for ``stat.cov()``.
+        Calculate the covariance for the given columns, specified by their names as a double value.
+        :func:`DataFrame.cov` and :func:`DataFrameStatFunctions.cov` are aliases.
 
         :param col1: The name of the first column
         :param col2: The name of the second column
-        :return: the covariance of the columns
         """
         return self.stat.cov(col1, col2)
 
@@ -1337,19 +1336,13 @@ class DataFrameStatFunctions(object):
         self.df = df
 
     def cov(self, col1, col2):
-        """
-        Calculate the covariance for the given columns, specified by their names.
-
-        :param col1: The name of the first column
-        :param col2: The name of the second column
-        :return: the covariance of the columns
-        """
         if not isinstance(col1, str):
             raise ValueError("col1 should be a string.")
         if not isinstance(col2, str):
             raise ValueError("col2 should be a string.")
         return self.df._jdf.stat().cov(col1, col2)
-
+    
+    cov.__doc__ = DataFrame.cov.__doc__
 
 def _test():
     import doctest

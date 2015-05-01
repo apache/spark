@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.stat
 
+import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.{Column, DataFrame}
-import org.apache.spark.sql.types.NumericType
+import org.apache.spark.sql.types.{DoubleType, NumericType}
 
 private[sql] object StatFunctions {
   
@@ -29,15 +30,12 @@ private[sql] object StatFunctions {
     var Ck = 0.0
     var count = 0
     // add an example to the calculation
-    def add(x: Number, y: Number): this.type = {
+    def add(x: Double, y: Double): this.type = {
       val oldX = xAvg
-      val otherX = x.doubleValue()
-      val otherY = y.doubleValue()
       count += 1
-      xAvg += (otherX - xAvg) / count
-      yAvg += (otherY - yAvg) / count
-      println(oldX)
-      Ck += (otherY - yAvg) * (otherX - oldX)
+      xAvg += (x - xAvg) / count
+      yAvg += (y - yAvg) / count
+      Ck += (y - yAvg) * (x - oldX)
       this
     }
     // merge counters from other partitions
@@ -68,9 +66,10 @@ private[sql] object StatFunctions {
       require(data.get.dataType.isInstanceOf[NumericType], "Covariance calculation for columns " +
         s"with dataType ${data.get.dataType} not supported.")
     }
-    val counts = df.select(cols.map(Column(_)):_*).rdd.aggregate(new CovarianceCounter)(
+    val columns = cols.map(n => Column(Cast(Column(n).expr, DoubleType)))
+    val counts = df.select(columns:_*).rdd.aggregate(new CovarianceCounter)(
       seqOp = (counter, row) => {
-        counter.add(row.getAs[Number](0), row.getAs[Number](1))
+        counter.add(row.getDouble(0), row.getDouble(1))
       },
       combOp = (baseCounter, other) => {
         baseCounter.merge(other)
