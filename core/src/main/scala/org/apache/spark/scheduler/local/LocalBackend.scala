@@ -123,7 +123,7 @@ private[spark] class LocalBackend(
   }
 
   override def stop() {
-    localEndpoint.sendWithReply(StopExecutor)
+    localEndpoint.ask(StopExecutor)
   }
 
   override def reviveOffers() {

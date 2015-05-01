@@ -1020,21 +1020,48 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes.
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to bytes for internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in bytes.
+   */
+  def byteStringAsBytes(str: String): Long = {
+    JavaUtils.byteStringAsBytes(str)
+  }
+
+  /**
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to kibibytes for internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in kibibytes.
+   */
+  def byteStringAsKb(str: String): Long = {
+    JavaUtils.byteStringAsKb(str)
+  }
+
+  /**
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to mebibytes for internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in mebibytes.
+   */
+  def byteStringAsMb(str: String): Long = {
+    JavaUtils.byteStringAsMb(str)
+  }
+
+  /**
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m, 500g) to gibibytes for internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in gibibytes.
+   */
+  def byteStringAsGb(str: String): Long = {
+    JavaUtils.byteStringAsGb(str)
+  }
+
+  /**
+   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of mebibytes.
    */
   def memoryStringToMb(str: String): Int = {
-    val lower = str.toLowerCase
-    if (lower.endsWith("k")) {
-      (lower.substring(0, lower.length-1).toLong / 1024).toInt
-    } else if (lower.endsWith("m")) {
-      lower.substring(0, lower.length-1).toInt
-    } else if (lower.endsWith("g")) {
-      lower.substring(0, lower.length-1).toInt * 1024
-    } else if (lower.endsWith("t")) {
-      lower.substring(0, lower.length-1).toInt * 1024 * 1024
-    } else {// no suffix, so it's just a number in bytes
-      (lower.toLong / 1024 / 1024).toInt
-    }
+    // Convert to bytes, rather than directly to MB, because when no units are specified the unit
+    // is assumed to be bytes
+    (JavaUtils.byteStringAsBytes(str) / 1024 / 1024).toInt
   }
 
   /**
@@ -1272,16 +1299,18 @@ private[spark] object Utils extends Logging {
   }
 
   /** Default filtering function for finding call sites using `getCallSite`. */
-  private def coreExclusionFunction(className: String): Boolean = {
-    // A regular expression to match classes of the "core" Spark API that we want to skip when
-    // finding the call site of a method.
+  private def sparkInternalExclusionFunction(className: String): Boolean = {
+    // A regular expression to match classes of the internal Spark API's
+    // that we want to skip when finding the call site of a method.
     val SPARK_CORE_CLASS_REGEX =
       """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.broadcast)?\.[A-Z]""".r
+    val SPARK_SQL_CLASS_REGEX = """^org\.apache\.spark\.sql.*""".r
     val SCALA_CORE_CLASS_PREFIX = "scala"
-    val isSparkCoreClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined
+    val isSparkClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined ||
+      SPARK_SQL_CLASS_REGEX.findFirstIn(className).isDefined
     val isScalaClass = className.startsWith(SCALA_CORE_CLASS_PREFIX)
     // If the class is a Spark internal class or a Scala class, then exclude.
-    isSparkCoreClass || isScalaClass
+    isSparkClass || isScalaClass
   }
 
   /**
@@ -1291,7 +1320,7 @@ private[spark] object Utils extends Logging {
    *
    * @param skipClass Function that is used to exclude non-user-code classes.
    */
-  def getCallSite(skipClass: String => Boolean = coreExclusionFunction): CallSite = {
+  def getCallSite(skipClass: String => Boolean = sparkInternalExclusionFunction): CallSite = {
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
     // transformation, a SparkContext function (such as parallelize), or anything else that leads
@@ -1330,9 +1359,17 @@ private[spark] object Utils extends Logging {
     }
 
     val callStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
-    CallSite(
-      shortForm = s"$lastSparkMethod at $firstUserFile:$firstUserLine",
-      longForm = callStack.take(callStackDepth).mkString("\n"))
+    val shortForm =
+      if (firstUserFile == "HiveSessionImpl.java") {
+        // To be more user friendly, show a nicer string for queries submitted from the JDBC
+        // server.
+        "Spark JDBC Server Query"
+      } else {
+        s"$lastSparkMethod at $firstUserFile:$firstUserLine"
+      }
+    val longForm = callStack.take(callStackDepth).mkString("\n")
+
+    CallSite(shortForm, longForm)
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */

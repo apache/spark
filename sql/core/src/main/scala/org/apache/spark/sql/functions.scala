@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-
+import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
@@ -302,6 +302,22 @@ object functions {
   def lower(e: Column): Column = Lower(e.expr)
 
   /**
+   * A column expression that generates monotonically increasing 64-bit integers.
+   *
+   * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+   * The current implementation puts the partition ID in the upper 31 bits, and the record number
+   * within each partition in the lower 33 bits. The assumption is that the data frame has
+   * less than 1 billion partitions, and each partition has less than 8 billion records.
+   *
+   * As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+   * This expression would return the following IDs:
+   * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   *
+   * @group normal_funcs
+   */
+  def monotonicallyIncreasingId(): Column = execution.expressions.MonotonicallyIncreasingID()
+
+  /**
    * Unary minus, i.e. negate the expression.
    * {{{
    *   // Select the amount column and negates all values.
@@ -329,6 +345,34 @@ object functions {
    * @group normal_funcs
    */
   def not(e: Column): Column = !e
+
+  /**
+   * Generate a random column with i.i.d. samples from U[0.0, 1.0].
+   *
+   * @group normal_funcs
+   */
+  def rand(seed: Long): Column = Rand(seed)
+
+  /**
+   * Generate a random column with i.i.d. samples from U[0.0, 1.0].
+   *
+   * @group normal_funcs
+   */
+  def rand(): Column = rand(Utils.random.nextLong)
+
+  /**
+   * Generate a column with i.i.d. samples from the standard normal distribution.
+   *
+   * @group normal_funcs
+   */
+  def randn(seed: Long): Column = Randn(seed)
+
+  /**
+   * Generate a column with i.i.d. samples from the standard normal distribution.
+   *
+   * @group normal_funcs
+   */
+  def randn(): Column = randn(Utils.random.nextLong)
 
   /**
    * Partition ID of the Spark task.

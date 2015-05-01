@@ -26,45 +26,39 @@ import org.apache.spark.util.Utils
 // scalastyle:off
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param regParam.
+ * (private[ml]) Trait for shared param regParam.
  */
-@DeveloperApi
-trait HasRegParam extends Params {
+private[ml] trait HasRegParam extends Params {
 
   /**
-   * Param for regularization parameter.
+   * Param for regularization parameter (>= 0).
    * @group param
    */
-  final val regParam: DoubleParam = new DoubleParam(this, "regParam", "regularization parameter")
+  final val regParam: DoubleParam = new DoubleParam(this, "regParam", "regularization parameter (>= 0)", ParamValidators.gtEq(0))
 
   /** @group getParam */
   final def getRegParam: Double = getOrDefault(regParam)
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param maxIter.
+ * (private[ml]) Trait for shared param maxIter.
  */
-@DeveloperApi
-trait HasMaxIter extends Params {
+private[ml] trait HasMaxIter extends Params {
 
   /**
-   * Param for max number of iterations.
+   * Param for max number of iterations (>= 0).
    * @group param
    */
-  final val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations")
+  final val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations (>= 0)", ParamValidators.gtEq(0))
 
   /** @group getParam */
   final def getMaxIter: Int = getOrDefault(maxIter)
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param featuresCol (default: "features").
+ * (private[ml]) Trait for shared param featuresCol (default: "features").
  */
-@DeveloperApi
-trait HasFeaturesCol extends Params {
+private[ml] trait HasFeaturesCol extends Params {
 
   /**
    * Param for features column name.
@@ -79,11 +73,9 @@ trait HasFeaturesCol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param labelCol (default: "label").
+ * (private[ml]) Trait for shared param labelCol (default: "label").
  */
-@DeveloperApi
-trait HasLabelCol extends Params {
+private[ml] trait HasLabelCol extends Params {
 
   /**
    * Param for label column name.
@@ -98,11 +90,9 @@ trait HasLabelCol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param predictionCol (default: "prediction").
+ * (private[ml]) Trait for shared param predictionCol (default: "prediction").
  */
-@DeveloperApi
-trait HasPredictionCol extends Params {
+private[ml] trait HasPredictionCol extends Params {
 
   /**
    * Param for prediction column name.
@@ -117,11 +107,9 @@ trait HasPredictionCol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param rawPredictionCol (default: "rawPrediction").
+ * (private[ml]) Trait for shared param rawPredictionCol (default: "rawPrediction").
  */
-@DeveloperApi
-trait HasRawPredictionCol extends Params {
+private[ml] trait HasRawPredictionCol extends Params {
 
   /**
    * Param for raw prediction (a.k.a. confidence) column name.
@@ -136,11 +124,9 @@ trait HasRawPredictionCol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param probabilityCol (default: "probability").
+ * (private[ml]) Trait for shared param probabilityCol (default: "probability").
  */
-@DeveloperApi
-trait HasProbabilityCol extends Params {
+private[ml] trait HasProbabilityCol extends Params {
 
   /**
    * Param for column name for predicted class conditional probabilities.
@@ -155,28 +141,24 @@ trait HasProbabilityCol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param threshold.
+ * (private[ml]) Trait for shared param threshold.
  */
-@DeveloperApi
-trait HasThreshold extends Params {
+private[ml] trait HasThreshold extends Params {
 
   /**
-   * Param for threshold in binary classification prediction.
+   * Param for threshold in binary classification prediction, in range [0, 1].
    * @group param
    */
-  final val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in binary classification prediction")
+  final val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in binary classification prediction, in range [0, 1]", ParamValidators.inRange(0, 1))
 
   /** @group getParam */
   final def getThreshold: Double = getOrDefault(threshold)
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param inputCol.
+ * (private[ml]) Trait for shared param inputCol.
  */
-@DeveloperApi
-trait HasInputCol extends Params {
+private[ml] trait HasInputCol extends Params {
 
   /**
    * Param for input column name.
@@ -189,11 +171,9 @@ trait HasInputCol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param inputCols.
+ * (private[ml]) Trait for shared param inputCols.
  */
-@DeveloperApi
-trait HasInputCols extends Params {
+private[ml] trait HasInputCols extends Params {
 
   /**
    * Param for input column names.
@@ -206,11 +186,9 @@ trait HasInputCols extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param outputCol.
+ * (private[ml]) Trait for shared param outputCol.
  */
-@DeveloperApi
-trait HasOutputCol extends Params {
+private[ml] trait HasOutputCol extends Params {
 
   /**
    * Param for output column name.
@@ -223,28 +201,24 @@ trait HasOutputCol extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param checkpointInterval.
+ * (private[ml]) Trait for shared param checkpointInterval.
  */
-@DeveloperApi
-trait HasCheckpointInterval extends Params {
+private[ml] trait HasCheckpointInterval extends Params {
 
   /**
-   * Param for checkpoint interval.
+   * Param for checkpoint interval (>= 1).
    * @group param
    */
-  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "checkpoint interval")
+  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "checkpoint interval (>= 1)", ParamValidators.gtEq(1))
 
   /** @group getParam */
   final def getCheckpointInterval: Int = getOrDefault(checkpointInterval)
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param fitIntercept (default: true).
+ * (private[ml]) Trait for shared param fitIntercept (default: true).
  */
-@DeveloperApi
-trait HasFitIntercept extends Params {
+private[ml] trait HasFitIntercept extends Params {
 
   /**
    * Param for whether to fit an intercept term.
@@ -259,11 +233,9 @@ trait HasFitIntercept extends Params {
 }
 
 /**
- * :: DeveloperApi ::
- * Trait for shared param seed (default: Utils.random.nextLong()).
+ * (private[ml]) Trait for shared param seed (default: Utils.random.nextLong()).
  */
-@DeveloperApi
-trait HasSeed extends Params {
+private[ml] trait HasSeed extends Params {
 
   /**
    * Param for random seed.
@@ -275,5 +247,50 @@ trait HasSeed extends Params {
 
   /** @group getParam */
   final def getSeed: Long = getOrDefault(seed)
+}
+
+/**
+ * (private[ml]) Trait for shared param elasticNetParam.
+ */
+private[ml] trait HasElasticNetParam extends Params {
+
+  /**
+   * Param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty..
+   * @group param
+   */
+  final val elasticNetParam: DoubleParam = new DoubleParam(this, "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", ParamValidators.inRange(0, 1))
+
+  /** @group getParam */
+  final def getElasticNetParam: Double = getOrDefault(elasticNetParam)
+}
+
+/**
+ * (private[ml]) Trait for shared param tol.
+ */
+private[ml] trait HasTol extends Params {
+
+  /**
+   * Param for the convergence tolerance for iterative algorithms.
+   * @group param
+   */
+  final val tol: DoubleParam = new DoubleParam(this, "tol", "the convergence tolerance for iterative algorithms")
+
+  /** @group getParam */
+  final def getTol: Double = getOrDefault(tol)
+}
+
+/**
+ * (private[ml]) Trait for shared param stepSize.
+ */
+private[ml] trait HasStepSize extends Params {
+
+  /**
+   * Param for Step size to be used for each iteration of optimization..
+   * @group param
+   */
+  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization.")
+
+  /** @group getParam */
+  final def getStepSize: Double = getOrDefault(stepSize)
 }
 // scalastyle:on

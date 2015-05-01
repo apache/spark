@@ -19,6 +19,7 @@ package org.apache.spark.ml
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
 
 /**
