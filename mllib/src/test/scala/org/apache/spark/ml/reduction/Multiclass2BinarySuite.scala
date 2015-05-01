@@ -55,31 +55,32 @@ class Multiclass2BinarySuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("one-against-all: default params") {
+    val numClasses = 3
     val ova = new Multiclass2Binary().
-      setNumClasses(3).
+      setNumClasses(numClasses).
       setBaseClassifier(new LogisticRegression)
 
     assert(ova.getLabelCol == "label")
     assert(ova.getPredictionCol == "prediction")
     val ovaModel = ova.fit(dataset)
-    assert(ovaModel.baseClassificationModels.size == 3)
+    assert(ovaModel.baseClassificationModels.size == numClasses)
     val ovaResults = ovaModel.transform(dataset)
       .select("label", "prediction")
-      .map (row => (row(0).asInstanceOf[Double], row(1).asInstanceOf[Double]))
+      .map(row => (row(0).asInstanceOf[Double], row(1).asInstanceOf[Double]))
       .collect()
 
-    val lr = new LogisticRegressionWithLBFGS().setIntercept(true).setNumClasses(3)
+    val lr = new LogisticRegressionWithLBFGS().setIntercept(true).setNumClasses(numClasses)
     lr.optimizer.setRegParam(0.1).setNumIterations(100)
 
     val model = lr.run(rdd)
     val results = rdd.map(_.label).zip(model.predict(rdd.map(_.features))).collect()
     // determine the #confusion matrix in each class.
 
-    println(confusionMatrix(results, 3).map(_.mkString("\t")).mkString("\n"))
-    println(confusionMatrix(ovaResults, 3).map(_.mkString("\t")).mkString("\n"))
+    println(confusionMatrix(results, numClasses).map(_.mkString("\t")).mkString("\n"))
+    println(confusionMatrix(ovaResults, numClasses).map(_.mkString("\t")).mkString("\n"))
   }
-  
-  private def confusionMatrix(results: Seq[(Double, Double)], numClasses: Int): Array[Array[Double]] = {
+
+  private def confusionMatrix(results: Seq[(Double, Double)], numClasses: Int) = {
     val matrix = Array.fill(numClasses, 2)(0.0)
     for ((label, value) <- results) {
       val v = value.toInt
