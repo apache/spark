@@ -25,7 +25,9 @@ private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
   val sc = parent.sc
   val killEnabled = parent.killEnabled
   def isFairScheduler: Boolean = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
+  // TODO: rename this listener
   val listener = parent.jobProgressListener
+  val vizListener = parent.visualizationListener
 
   attachPage(new AllJobsPage(this))
   attachPage(new JobPage(this))

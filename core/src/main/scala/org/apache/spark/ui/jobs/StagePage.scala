@@ -36,32 +36,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   private val progressListener = parent.progressListener
   private val vizListener = parent.vizListener
 
-  /**
-   * Return a DOM element containing the "Show Visualization" toggle that, if enabled,
-   * renders the visualization for the stage. If there is no visualization information
-   * available for this stage, an appropriate message is displayed to the user.
-   */
-  private def showVizElement(stageId: Int): Seq[Node] = {
-    val graph = vizListener.getVizGraph(stageId)
-    <div>
-      <span class="expand-visualization" onclick="render();">
-        <span class="expand-visualization-arrow arrow-closed"></span>
-        <strong>Show Visualization</strong>
-      </span>
-      <div id="viz-graph"></div>
-      <script type="text/javascript">
-        {Unparsed(s"function render() { toggleStageViz(); }")}
-      </script>
-      {
-        if (graph.isDefined) {
-          <div id="viz-dot-file" style="display:none">
-            {VizGraph.makeDotFile(graph.get)}
-          </div>
-        }
-      }
-    </div>
-  }
-
   def render(request: HttpServletRequest): Seq[Node] = {
     progressListener.synchronized {
       val parameterId = request.getParameter("id")
@@ -462,7 +436,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val content =
         summary ++
         showAdditionalMetrics ++
-        showVizElement(stageId) ++
+        vizListener.showVizElementForStage(stageId) ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++

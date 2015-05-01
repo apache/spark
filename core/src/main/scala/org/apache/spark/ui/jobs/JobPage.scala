@@ -29,6 +29,7 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 /** Page showing statistics and stage list for a given job */
 private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
   private val listener = parent.listener
+  private val vizListener = parent.vizListener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
@@ -154,6 +155,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
         </div>
 
       var content = summary
+      content ++= vizListener.showVizElementForJob(jobId)
       if (shouldShowActiveStages) {
         content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++
           activeStagesTable.toNodeSeq
@@ -174,7 +176,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
         content ++= <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
           failedStagesTable.toNodeSeq
       }
-      UIUtils.headerSparkPage(s"Details for Job $jobId", content, parent)
+      UIUtils.headerSparkPage(s"Details for Job $jobId", content, parent, showVisualization = true)
     }
   }
 }

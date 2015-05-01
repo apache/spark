@@ -47,6 +47,8 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
     self: RDD[P])
   extends Logging with Serializable
 {
+  // TODO: Don't forget to scope me later
+
   private val ordering = implicitly[Ordering[K]]
 
   /**

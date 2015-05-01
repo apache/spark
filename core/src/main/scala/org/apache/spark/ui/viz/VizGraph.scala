@@ -18,34 +18,28 @@
 package org.apache.spark.ui.viz
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.ListBuffer
 
-import org.apache.spark.storage.RDDInfo
 import org.apache.spark.rdd.RDDScope
+import org.apache.spark.scheduler.StageInfo
 
 /**
- * A class that represents an RDD DAG for a stage.
+ * A representation of a generic scoped graph used for storing visualization information.
  *
- * Each scope can have many children scopes and children nodes, and edges can span multiple scopes.
- * Thus, it is sufficient to only keep track of the root scopes and the root nodes in the graph
- * as all children scopes and nodes will be transitively included.
+ * Each graph is defined with a set of edges and a root scope, which may contain children
+ * nodes and children scopes.
  */
-private[ui] case class VizGraph(
-    edges: Seq[VizEdge],
-    rootNodes: Seq[VizNode],
-    rootScopes: Seq[VizScope])
-
-/** A node in the graph that represents an RDD. */
+private[ui] case class VizGraph(edges: Seq[VizEdge], rootScope: VizScope)
 private[ui] case class VizNode(id: Int, name: String)
-
-/** An edge in the graph that represents an RDD dependency. */
 private[ui] case class VizEdge(fromId: Int, toId: Int)
 
-/** A cluster in the graph that represents a level in the RDD scope hierarchy. */
-private[ui] class VizScope(val id: String) {
-  private val _childrenNodes = new ArrayBuffer[VizNode]
-  private val _childrenScopes = new ArrayBuffer[VizScope]
-  val name: String = id.split(RDDScope.SCOPE_NAME_DELIMITER).head
+/** A cluster in the graph that represents a level in the scope hierarchy. */
+private[ui] class VizScope(val id: String, val name: String) {
+  private val _childrenNodes = new ListBuffer[VizNode]
+  private val _childrenScopes = new ListBuffer[VizScope]
+
+  def this(id: String) { this(id, id.split(RDDScope.SCOPE_NAME_DELIMITER).head) }
+
   def childrenNodes: Seq[VizNode] = _childrenNodes.iterator.toSeq
   def childrenScopes: Seq[VizScope] = _childrenScopes.iterator.toSeq
   def attachChildNode(childNode: VizNode): Unit = { _childrenNodes += childNode }
@@ -55,97 +49,96 @@ private[ui] class VizScope(val id: String) {
 private[ui] object VizGraph {
 
   /**
-   * Construct a VizGraph from a list of RDDInfo's.
+   * Construct a VizGraph for a given stage.
    *
-   * The information needed to construct this graph include the names,
-   * IDs, and scopes of all RDDs, and the dependencies between these RDDs.
+   * The root scope represents the stage, and all children scopes represent individual
+   * levels of RDD scopes. Each node represents an RDD, and each edge represents a dependency
+   * between two RDDs from the parent to the child.
    */
-  def makeVizGraph(rddInfos: Seq[RDDInfo]): VizGraph = {
+  def makeVizGraph(stage: StageInfo): VizGraph = {
     val edges = new mutable.HashSet[VizEdge]
     val nodes = new mutable.HashMap[Int, VizNode]
     val scopes = new mutable.HashMap[String, VizScope] // scope ID -> viz scope
 
-    // Entities that are not part of any scopes
-    val rootNodes = new ArrayBuffer[VizNode]
-    val rootScopes = new mutable.HashSet[VizScope]
+    // Root scope is the stage scope
+    val stageScopeId = s"stage${stage.stageId}"
+    val stageScopeName = s"Stage ${stage.stageId}" +
+      { if (stage.attemptId == 0) "" else s" (attempt ${stage.attemptId})" }
+    val rootScope = new VizScope(stageScopeId, stageScopeName)
 
-    // Populate nodes, edges, and scopes
-    rddInfos.foreach { rdd =>
-      val node = nodes.getOrElseUpdate(rdd.id, VizNode(rdd.id, rdd.name))
+    // Find nodes, edges, and children scopes
+    stage.rddInfos.foreach { rdd =>
       edges ++= rdd.parentIds.map { parentId => VizEdge(parentId, rdd.id) }
+      val node = nodes.getOrElseUpdate(rdd.id, VizNode(rdd.id, rdd.name))
 
       if (rdd.scope == null) {
-        // There is no encompassing scope, so this is a root node
-        rootNodes += node
+        // This RDD has no encompassing scope, so we put it directly in the root scope
+        // This should happen only if an RDD is instantiated outside of a public RDD API
+        rootScope.attachChildNode(node)
       } else {
-        // Attach children scopes and nodes to each scope in the hierarchy
-        var previousScope: VizScope = null
-        val scopeIt = rdd.scope.split(RDDScope.SCOPE_NESTING_DELIMITER).iterator
-        while (scopeIt.hasNext) {
-          val scopeId = scopeIt.next()
-          val scope = scopes.getOrElseUpdate(scopeId, new VizScope(scopeId))
-          // Only attach this node to the innermost scope so
-          // the node is not duplicated across all levels
-          if (!scopeIt.hasNext) {
-            scope.attachChildNode(node)
+        // Otherwise, this RDD belongs to an inner scope
+        val rddScopes = rdd.scope
+          .split(RDDScope.SCOPE_NESTING_DELIMITER)
+          .map { scopeId => scopes.getOrElseUpdate(scopeId, new VizScope(scopeId)) }
+        // Build the scope hierarchy for this RDD
+        rddScopes.sliding(2).foreach { pc =>
+          if (pc.size == 2) {
+            val parentScope = pc(0)
+            val childScope = pc(1)
+            parentScope.attachChildScope(childScope)
           }
-          // RDD scopes are hierarchical, with the outermost scopes ordered first
-          // If there is not a previous scope, then this must be a root scope
-          if (previousScope == null) {
-            rootScopes += scope
-          } else {
-            // Otherwise, attach this scope to its parent
-            previousScope.attachChildScope(scope)
-          }
-          previousScope = scope
         }
+        // Attach the outermost scope to the root scope, and the RDD to the innermost scope
+        rddScopes.headOption.foreach { scope => rootScope.attachChildScope(scope) }
+        rddScopes.lastOption.foreach { scope => scope.attachChildNode(node) }
       }
     }
 
     // Remove any edges with nodes belonging to other stages so we do not have orphaned nodes
     edges.retain { case VizEdge(f, t) => nodes.contains(f) && nodes.contains(t) }
 
-    new VizGraph(edges.toSeq, rootNodes, rootScopes.toSeq)
+    VizGraph(edges.toSeq, rootScope)
   }
 
   /**
    * Generate the content of a dot file that describes the specified graph.
    *
    * Note that this only uses a minimal subset of features available to the DOT specification.
-   * The style is added in the UI later through post-processing in JavaScript.
+   * More style is added in the visualization later through post-processing in JavaScript.
    *
    * For the complete specification, see http://www.graphviz.org/Documentation/dotguide.pdf.
    */
-  def makeDotFile(graph: VizGraph): String = {
+  def makeDotFile(graph: VizGraph, forJob: Boolean): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
-    graph.rootScopes.foreach { scope =>
-      dotFile.append(makeDotSubgraph(scope, "  "))
-    }
-    graph.rootNodes.foreach { node =>
-      dotFile.append(s"  ${makeDotNode(node)};\n")
-    }
+    dotFile.append(makeDotSubgraph(graph.rootScope, forJob, indent = "  "))
     graph.edges.foreach { edge =>
-      dotFile.append(s"  ${edge.fromId}->${edge.toId};\n")
+      dotFile.append(s"""  ${edge.fromId}->${edge.toId} [lineInterpolate="basis"];\n""")
     }
     dotFile.append("}")
     dotFile.toString()
   }
 
   /** Return the dot representation of a node. */
-  private def makeDotNode(node: VizNode): String = {
-    s"""${node.id} [label="${node.name} (${node.id})"]"""
+  private def makeDotNode(node: VizNode, forJob: Boolean): String = {
+    if (forJob) {
+      // On the job page, we display RDDs as dots without labels
+      s"""${node.id} [label=" " shape="circle" padding="5" labelStyle="font-size: 0"]"""
+    } else {
+      s"""${node.id} [label="${node.name} (${node.id})"]"""
+    }
   }
 
   /** Return the dot representation of a subgraph recursively. */
-  private def makeDotSubgraph(scope: VizScope, indent: String): String = {
+  private def makeDotSubgraph(scope: VizScope, forJob: Boolean, indent: String): String = {
     val subgraph = new StringBuilder
     subgraph.append(indent + s"subgraph cluster${scope.id} {\n")
+    subgraph.append(indent + s"""  label="${scope.name}";\n""")
     scope.childrenNodes.foreach { node =>
-      subgraph.append(indent + s"  ${makeDotNode(node)};\n")
+      subgraph.append(indent + s"  ${makeDotNode(node, forJob)};\n")
     }
     scope.childrenScopes.foreach { cscope =>
-      subgraph.append(makeDotSubgraph(cscope, indent + "  "))
+      subgraph.append(makeDotSubgraph(cscope, forJob, indent + "  "))
     }
     subgraph.append(indent + "}\n")
     subgraph.toString()
