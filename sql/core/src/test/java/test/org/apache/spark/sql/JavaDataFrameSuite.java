@@ -104,6 +104,9 @@ public class JavaDataFrameSuite {
     df2.select(pow("a", "a"), pow("b", 2.0));
     df2.select(pow(col("a"), col("b")), exp("b"));
     df2.select(sin("a"), acos("b"));
+
+    df2.select(rand(), acos("b"));
+    df2.select(col("*"), randn(5L));
   }
 
   @Ignore
