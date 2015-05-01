@@ -152,7 +152,7 @@ class MatrixFactorizationModel(
   def recommendProductsForUsers(num: Int): RDD[(Int, Array[Rating])] = {
     MatrixFactorizationModel.recommendForAll(rank, userFeatures, productFeatures, num).map {
       case (user, top) =>
-        val ratings = top.map { case (rating, product) => Rating(user, product, rating) }
+        val ratings = top.map { case (product, rating) => Rating(user, product, rating) }
         (user, ratings)
     }
   }
@@ -169,7 +169,7 @@ class MatrixFactorizationModel(
   def recommendUsersForProducts(num: Int): RDD[(Int, Array[Rating])] = {
     MatrixFactorizationModel.recommendForAll(rank, productFeatures, userFeatures, num).map {
       case (product, top) =>
-        val ratings = top.map { case (rating, user) => Rating(user, product, rating) }
+        val ratings = top.map { case (user, rating) => Rating(user, product, rating) }
         (product, ratings)
     }
   }
@@ -199,13 +199,13 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
    * @param dstFeatures dst features used to make recommendations
    * @param num number of recommendations for each record
    * @return an RDD of (srcId: Int, recommendations), where recommendations are stored as an array
-   *         of (rating, dstId) pairs.
+   *         of (dstId, rating) pairs.
    */
   private def recommendForAll(
       rank: Int,
       srcFeatures: RDD[(Int, Array[Double])],
       dstFeatures: RDD[(Int, Array[Double])],
-      num: Int): RDD[(Int, Array[(Double, Int)])] = {
+      num: Int): RDD[(Int, Array[(Int, Double)])] = {
     val srcBlocks = blockify(rank, srcFeatures)
     val dstBlocks = blockify(rank, dstFeatures)
     val ratings = srcBlocks.cartesian(dstBlocks).flatMap {
@@ -213,15 +213,15 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
         val m = srcIds.length
         val n = dstIds.length
         val ratings = srcFactors.transpose.multiply(dstFactors)
-        val output = new Array[(Int, (Double, Int))](m * n)
+        val output = new Array[(Int, (Int, Double))](m * n)
         var k = 0
         ratings.foreachActive { (i, j, r) =>
-          output(k) = (srcIds(i), (r, dstIds(j)))
+          output(k) = (srcIds(i), (dstIds(j), r))
           k += 1
         }
         output.toSeq
     }
-    ratings.topByKey(num)
+    ratings.topByKey(num)(Ordering.by(_._2))
   }
 
   /**

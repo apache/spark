@@ -39,16 +39,14 @@ class MLPairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)]) extends Se
    * @return an RDD that contains the top k values for each key
    */
   def topByKey(num: Int)(implicit ord: Ordering[V]): RDD[(K, Array[V])] = {
-    self.aggregateByKey(new BoundedPriorityQueue[V](num)(ord.reverse))(
+    self.aggregateByKey(new BoundedPriorityQueue[V](num)(ord))(
       seqOp = (queue, item) => {
         queue += item
-        queue
       },
       combOp = (queue1, queue2) => {
         queue1 ++= queue2
-        queue1
       }
-    ).mapValues(_.toArray.sorted(ord.reverse))
+    ).mapValues(_.toArray.reverse)  // This is an min-heap, so we reverse the order.
   }
 }
 
