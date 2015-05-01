@@ -19,30 +19,26 @@ package org.apache.spark.sql.hive
 
 import java.sql.Date
 
-
-import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
-
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.Context
+import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
 import org.apache.hadoop.hive.ql.lib.Node
-import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
-import org.apache.spark.sql.{AnalysisException, SparkSQLParser}
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.sources.DescribeCommand
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
+import org.apache.spark.sql.hive.HiveASTNodeUtil._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
+import org.apache.hadoop.hive.ql.metadata.Table
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -55,192 +51,7 @@ import scala.collection.JavaConversions._
 private[hive] case object NativePlaceholder extends Command
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
-private[hive] object HiveQl {
-  protected val nativeCommands = Seq(
-    "TOK_ALTERDATABASE_OWNER",
-    "TOK_ALTERDATABASE_PROPERTIES",
-    "TOK_ALTERINDEX_PROPERTIES",
-    "TOK_ALTERINDEX_REBUILD",
-    "TOK_ALTERTABLE_ADDCOLS",
-    "TOK_ALTERTABLE_ADDPARTS",
-    "TOK_ALTERTABLE_ALTERPARTS",
-    "TOK_ALTERTABLE_ARCHIVE",
-    "TOK_ALTERTABLE_CLUSTER_SORT",
-    "TOK_ALTERTABLE_DROPPARTS",
-    "TOK_ALTERTABLE_PARTITION",
-    "TOK_ALTERTABLE_PROPERTIES",
-    "TOK_ALTERTABLE_RENAME",
-    "TOK_ALTERTABLE_RENAMECOL",
-    "TOK_ALTERTABLE_REPLACECOLS",
-    "TOK_ALTERTABLE_SKEWED",
-    "TOK_ALTERTABLE_TOUCH",
-    "TOK_ALTERTABLE_UNARCHIVE",
-    "TOK_ALTERVIEW_ADDPARTS",
-    "TOK_ALTERVIEW_AS",
-    "TOK_ALTERVIEW_DROPPARTS",
-    "TOK_ALTERVIEW_PROPERTIES",
-    "TOK_ALTERVIEW_RENAME",
-    
-    "TOK_CREATEDATABASE",
-    "TOK_CREATEFUNCTION",
-    "TOK_CREATEINDEX",
-    "TOK_CREATEROLE",
-    "TOK_CREATEVIEW",
-    
-    "TOK_DESCDATABASE",
-    "TOK_DESCFUNCTION",
-    
-    "TOK_DROPDATABASE",
-    "TOK_DROPFUNCTION",
-    "TOK_DROPINDEX",
-    "TOK_DROPROLE",
-    "TOK_DROPTABLE_PROPERTIES",
-    "TOK_DROPVIEW",
-    "TOK_DROPVIEW_PROPERTIES",
-    
-    "TOK_EXPORT",
-    
-    "TOK_GRANT",
-    "TOK_GRANT_ROLE",
-    
-    "TOK_IMPORT",
-    
-    "TOK_LOAD",
-    
-    "TOK_LOCKTABLE",
-    
-    "TOK_MSCK",
-    
-    "TOK_REVOKE",
-    
-    "TOK_SHOW_COMPACTIONS",
-    "TOK_SHOW_CREATETABLE",
-    "TOK_SHOW_GRANT",
-    "TOK_SHOW_ROLE_GRANT",
-    "TOK_SHOW_ROLE_PRINCIPALS",
-    "TOK_SHOW_ROLES",
-    "TOK_SHOW_SET_ROLE",
-    "TOK_SHOW_TABLESTATUS",
-    "TOK_SHOW_TBLPROPERTIES",
-    "TOK_SHOW_TRANSACTIONS",
-    "TOK_SHOWCOLUMNS",
-    "TOK_SHOWDATABASES",
-    "TOK_SHOWFUNCTIONS",
-    "TOK_SHOWINDEXES",
-    "TOK_SHOWLOCKS",
-    "TOK_SHOWPARTITIONS",
-    
-    "TOK_SWITCHDATABASE",
-    
-    "TOK_UNLOCKTABLE"
-  )
-
-  // Commands that we do not need to explain.
-  protected val noExplainCommands = Seq(
-    "TOK_DESCTABLE",
-    "TOK_SHOWTABLES",
-    "TOK_TRUNCATETABLE"     // truncate table" is a NativeCommand, does not need to explain.
-  ) ++ nativeCommands
-
-  protected val hqlParser = {
-    val fallback = new ExtendedHiveQlParser
-    new SparkSQLParser(fallback.parse(_))
-  }
-
-  /**
-   * A set of implicit transformations that allow Hive ASTNodes to be rewritten by transformations
-   * similar to [[catalyst.trees.TreeNode]].
-   *
-   * Note that this should be considered very experimental and is not indented as a replacement
-   * for TreeNode.  Primarily it should be noted ASTNodes are not immutable and do not appear to
-   * have clean copy semantics.  Therefore, users of this class should take care when
-   * copying/modifying trees that might be used elsewhere.
-   */
-  implicit class TransformableNode(n: ASTNode) {
-    /**
-     * Returns a copy of this node where `rule` has been recursively applied to it and all of its
-     * children.  When `rule` does not apply to a given node it is left unchanged.
-     * @param rule the function use to transform this nodes children
-     */
-    def transform(rule: PartialFunction[ASTNode, ASTNode]): ASTNode = {
-      try {
-        val afterRule = rule.applyOrElse(n, identity[ASTNode])
-        afterRule.withChildren(
-          nilIfEmpty(afterRule.getChildren)
-            .asInstanceOf[Seq[ASTNode]]
-            .map(ast => Option(ast).map(_.transform(rule)).orNull))
-      } catch {
-        case e: Exception =>
-          println(dumpTree(n))
-          throw e
-      }
-    }
-
-    /**
-     * Returns a scala.Seq equivalent to [s] or Nil if [s] is null.
-     */
-    private def nilIfEmpty[A](s: java.util.List[A]): Seq[A] =
-      Option(s).map(_.toSeq).getOrElse(Nil)
-
-    /**
-     * Returns this ASTNode with the text changed to `newText`.
-     */
-    def withText(newText: String): ASTNode = {
-      n.token.asInstanceOf[org.antlr.runtime.CommonToken].setText(newText)
-      n
-    }
-
-    /**
-     * Returns this ASTNode with the children changed to `newChildren`.
-     */
-    def withChildren(newChildren: Seq[ASTNode]): ASTNode = {
-      (1 to n.getChildCount).foreach(_ => n.deleteChild(0))
-      n.addChildren(newChildren)
-      n
-    }
-
-    /**
-     * Throws an error if this is not equal to other.
-     *
-     * Right now this function only checks the name, type, text and children of the node
-     * for equality.
-     */
-    def checkEquals(other: ASTNode): Unit = {
-      def check(field: String, f: ASTNode => Any): Unit = if (f(n) != f(other)) {
-        sys.error(s"$field does not match for trees. " +
-          s"'${f(n)}' != '${f(other)}' left: ${dumpTree(n)}, right: ${dumpTree(other)}")
-      }
-      check("name", _.getName)
-      check("type", _.getType)
-      check("text", _.getText)
-      check("numChildren", n => nilIfEmpty(n.getChildren).size)
-
-      val leftChildren = nilIfEmpty(n.getChildren).asInstanceOf[Seq[ASTNode]]
-      val rightChildren = nilIfEmpty(other.getChildren).asInstanceOf[Seq[ASTNode]]
-      leftChildren zip rightChildren foreach {
-        case (l, r) => l checkEquals r
-      }
-    }
-  }
-
-  /**
-   * Returns the AST for the given SQL string.
-   */
-  def getAst(sql: String): ASTNode = {
-    /*
-     * Context has to be passed in hive0.13.1.
-     * Otherwise, there will be Null pointer exception,
-     * when retrieving properties form HiveConf.
-     */
-    val hContext = new Context(new HiveConf())
-    val node = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql, hContext))
-    hContext.clear()
-    node
-  }
-
-
-  /** Returns a LogicalPlan for a given HiveQL string. */
-  def parseSql(sql: String): LogicalPlan = hqlParser.parse(sql)
+private[hive] object HiveQlConverter {
 
   val errorRegEx = "line (\\d+):(\\d+) (.*)".r
 
@@ -283,179 +94,6 @@ private[hive] object HiveQl {
     // currently we cannot support view from "create view v1(c1) as ..."
     case None => Subquery(view.getTableName, createPlan(view.getViewExpandedText))
     case Some(aliasText) => Subquery(aliasText, createPlan(view.getViewExpandedText))
-  }
-
-  def parseDdl(ddl: String): Seq[Attribute] = {
-    val tree =
-      try {
-        ParseUtils.findRootNonNullToken(
-          (new ParseDriver).parse(ddl, null /* no context required for parsing alone */))
-      } catch {
-        case pe: org.apache.hadoop.hive.ql.parse.ParseException =>
-          throw new RuntimeException(s"Failed to parse ddl: '$ddl'", pe)
-      }
-    assert(tree.asInstanceOf[ASTNode].getText == "TOK_CREATETABLE", "Only CREATE TABLE supported.")
-    val tableOps = tree.getChildren
-    val colList =
-      tableOps
-        .find(_.asInstanceOf[ASTNode].getText == "TOK_TABCOLLIST")
-        .getOrElse(sys.error("No columnList!")).getChildren
-
-    colList.map(nodeToAttribute)
-  }
-
-  /** Extractor for matching Hive's AST Tokens. */
-  object Token {
-    /** @return matches of the form (tokenName, children). */
-    def unapply(t: Any): Option[(String, Seq[ASTNode])] = t match {
-      case t: ASTNode =>
-        CurrentOrigin.setPosition(t.getLine, t.getCharPositionInLine)
-        Some((t.getText,
-          Option(t.getChildren).map(_.toList).getOrElse(Nil).asInstanceOf[Seq[ASTNode]]))
-      case _ => None
-    }
-  }
-
-  protected def getClauses(clauseNames: Seq[String], nodeList: Seq[ASTNode]): Seq[Option[Node]] = {
-    var remainingNodes = nodeList
-    val clauses = clauseNames.map { clauseName =>
-      val (matches, nonMatches) = remainingNodes.partition(_.getText.toUpperCase == clauseName)
-      remainingNodes = nonMatches ++ (if (matches.nonEmpty) matches.tail else Nil)
-      matches.headOption
-    }
-
-    if (remainingNodes.nonEmpty) {
-      sys.error(
-        s"""Unhandled clauses: ${remainingNodes.map(dumpTree(_)).mkString("\n")}.
-           |You are likely trying to use an unsupported Hive feature."""".stripMargin)
-    }
-    clauses
-  }
-
-  def getClause(clauseName: String, nodeList: Seq[Node]): Node =
-    getClauseOption(clauseName, nodeList).getOrElse(sys.error(
-      s"Expected clause $clauseName missing from ${nodeList.map(dumpTree(_)).mkString("\n")}"))
-
-  def getClauseOption(clauseName: String, nodeList: Seq[Node]): Option[Node] = {
-    nodeList.filter { case ast: ASTNode => ast.getText == clauseName } match {
-      case Seq(oneMatch) => Some(oneMatch)
-      case Seq() => None
-      case _ => sys.error(s"Found multiple instances of clause $clauseName")
-    }
-  }
-
-  protected def nodeToAttribute(node: Node): Attribute = node match {
-    case Token("TOK_TABCOL", Token(colName, Nil) :: dataType :: Nil) =>
-      AttributeReference(colName, nodeToDataType(dataType), true)()
-
-    case a: ASTNode =>
-      throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
-  }
-
-  protected def nodeToDataType(node: Node): DataType = node match {
-    case Token("TOK_DECIMAL", precision :: scale :: Nil) =>
-      DecimalType(precision.getText.toInt, scale.getText.toInt)
-    case Token("TOK_DECIMAL", precision :: Nil) =>
-      DecimalType(precision.getText.toInt, 0)
-    case Token("TOK_DECIMAL", Nil) => DecimalType.Unlimited
-    case Token("TOK_BIGINT", Nil) => LongType
-    case Token("TOK_INT", Nil) => IntegerType
-    case Token("TOK_TINYINT", Nil) => ByteType
-    case Token("TOK_SMALLINT", Nil) => ShortType
-    case Token("TOK_BOOLEAN", Nil) => BooleanType
-    case Token("TOK_STRING", Nil) => StringType
-    case Token("TOK_VARCHAR", Token(_, Nil) :: Nil) => StringType
-    case Token("TOK_FLOAT", Nil) => FloatType
-    case Token("TOK_DOUBLE", Nil) => DoubleType
-    case Token("TOK_DATE", Nil) => DateType
-    case Token("TOK_TIMESTAMP", Nil) => TimestampType
-    case Token("TOK_BINARY", Nil) => BinaryType
-    case Token("TOK_LIST", elementType :: Nil) => ArrayType(nodeToDataType(elementType))
-    case Token("TOK_STRUCT",
-           Token("TOK_TABCOLLIST", fields) :: Nil) =>
-      StructType(fields.map(nodeToStructField))
-    case Token("TOK_MAP",
-           keyType ::
-           valueType :: Nil) =>
-      MapType(nodeToDataType(keyType), nodeToDataType(valueType))
-    case a: ASTNode =>
-      throw new NotImplementedError(s"No parse rules for DataType:\n ${dumpTree(a).toString} ")
-  }
-
-  protected def nodeToStructField(node: Node): StructField = node match {
-    case Token("TOK_TABCOL",
-           Token(fieldName, Nil) ::
-           dataType :: Nil) =>
-      StructField(fieldName, nodeToDataType(dataType), nullable = true)
-    case Token("TOK_TABCOL",
-           Token(fieldName, Nil) ::
-             dataType ::
-             _ /* comment */:: Nil) =>
-      StructField(fieldName, nodeToDataType(dataType), nullable = true)
-    case a: ASTNode =>
-      throw new NotImplementedError(s"No parse rules for StructField:\n ${dumpTree(a).toString} ")
-  }
-
-  protected def nameExpressions(exprs: Seq[Expression]): Seq[NamedExpression] = {
-    exprs.zipWithIndex.map {
-      case (ne: NamedExpression, _) => ne
-      case (e, i) => Alias(e, s"_c$i")()
-    }
-  }
-
-  protected def extractDbNameTableName(tableNameParts: Node): (Option[String], String) = {
-    val (db, tableName) =
-      tableNameParts.getChildren.map { case Token(part, Nil) => cleanIdentifier(part) } match {
-        case Seq(tableOnly) => (None, tableOnly)
-        case Seq(databaseName, table) => (Some(databaseName), table)
-      }
-
-    (db, tableName)
-  }
-
-  protected def extractTableIdent(tableNameParts: Node): Seq[String] = {
-    tableNameParts.getChildren.map { case Token(part, Nil) => cleanIdentifier(part) } match {
-      case Seq(tableOnly) => Seq(tableOnly)
-      case Seq(databaseName, table) => Seq(databaseName, table)
-      case other => sys.error("Hive only supports tables names like 'tableName' " +
-        s"or 'databaseName.tableName', found '$other'")
-    }
-  }
-
-  /**
-   * SELECT MAX(value) FROM src GROUP BY k1, k2, k3 GROUPING SETS((k1, k2), (k2)) 
-   * is equivalent to 
-   * SELECT MAX(value) FROM src GROUP BY k1, k2 UNION SELECT MAX(value) FROM src GROUP BY k2
-   * Check the following link for details.
-   * 
-https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C+Grouping+and+Rollup
-   *
-   * The bitmask denotes the grouping expressions validity for a grouping set,
-   * the bitmask also be called as grouping id (`GROUPING__ID`, the virtual column in Hive)
-   * e.g. In superset (k1, k2, k3), (bit 0: k1, bit 1: k2, and bit 2: k3), the grouping id of 
-   * GROUPING SETS (k1, k2) and (k2) should be 3 and 2 respectively.
-   */
-  protected def extractGroupingSet(children: Seq[ASTNode]): (Seq[Expression], Seq[Int]) = {
-    val (keyASTs, setASTs) = children.partition( n => n match {
-        case Token("TOK_GROUPING_SETS_EXPRESSION", children) => false // grouping sets
-        case _ => true // grouping keys
-      })
-
-    val keys = keyASTs.map(nodeToExpr).toSeq
-    val keyMap = keyASTs.map(_.toStringTree).zipWithIndex.toMap
-
-    val bitmasks: Seq[Int] = setASTs.map(set => set match {
-      case Token("TOK_GROUPING_SETS_EXPRESSION", null) => 0
-      case Token("TOK_GROUPING_SETS_EXPRESSION", children) => 
-        children.foldLeft(0)((bitmap, col) => {
-          val colString = col.asInstanceOf[ASTNode].toStringTree()
-          require(keyMap.contains(colString), s"$colString doens't show up in the GROUP BY list")
-          bitmap | 1 << keyMap(colString)
-        })
-      case _ => sys.error("Expect GROUPING SETS clause")
-    })
-
-    (keys, bitmasks)
   }
 
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
@@ -980,19 +618,71 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
 
+  protected def nodeToAttribute(node: Node): Attribute = node match {
+    case Token("TOK_TABCOL", Token(colName, Nil) :: dataType :: Nil) =>
+      AttributeReference(colName, nodeToDataType(dataType), true)()
+
+    case a: ASTNode =>
+      throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
+  }
+
+  protected def nodeToDataType(node: Node): DataType = node match {
+    case Token("TOK_DECIMAL", precision :: scale :: Nil) =>
+      DecimalType(precision.getText.toInt, scale.getText.toInt)
+    case Token("TOK_DECIMAL", precision :: Nil) =>
+      DecimalType(precision.getText.toInt, 0)
+    case Token("TOK_DECIMAL", Nil) => DecimalType.Unlimited
+    case Token("TOK_BIGINT", Nil) => LongType
+    case Token("TOK_INT", Nil) => IntegerType
+    case Token("TOK_TINYINT", Nil) => ByteType
+    case Token("TOK_SMALLINT", Nil) => ShortType
+    case Token("TOK_BOOLEAN", Nil) => BooleanType
+    case Token("TOK_STRING", Nil) => StringType
+    case Token("TOK_VARCHAR", Token(_, Nil) :: Nil) => StringType
+    case Token("TOK_FLOAT", Nil) => FloatType
+    case Token("TOK_DOUBLE", Nil) => DoubleType
+    case Token("TOK_DATE", Nil) => DateType
+    case Token("TOK_TIMESTAMP", Nil) => TimestampType
+    case Token("TOK_BINARY", Nil) => BinaryType
+    case Token("TOK_LIST", elementType :: Nil) => ArrayType(nodeToDataType(elementType))
+    case Token("TOK_STRUCT",
+    Token("TOK_TABCOLLIST", fields) :: Nil) =>
+      StructType(fields.map(nodeToStructField))
+    case Token("TOK_MAP",
+    keyType ::
+      valueType :: Nil) =>
+      MapType(nodeToDataType(keyType), nodeToDataType(valueType))
+    case a: ASTNode =>
+      throw new NotImplementedError(s"No parse rules for DataType:\n ${dumpTree(a).toString} ")
+  }
+
+  protected def nodeToStructField(node: Node): StructField = node match {
+    case Token("TOK_TABCOL",
+    Token(fieldName, Nil) ::
+      dataType :: Nil) =>
+      StructField(fieldName, nodeToDataType(dataType), nullable = true)
+    case Token("TOK_TABCOL",
+    Token(fieldName, Nil) ::
+      dataType ::
+      _ /* comment */:: Nil) =>
+      StructField(fieldName, nodeToDataType(dataType), nullable = true)
+    case a: ASTNode =>
+      throw new NotImplementedError(s"No parse rules for StructField:\n ${dumpTree(a).toString} ")
+  }
+
   val destinationToken = "TOK_DESTINATION|TOK_INSERT_INTO".r
   protected def nodeToDest(
       node: Node,
       query: LogicalPlan,
       overwrite: Boolean): LogicalPlan = node match {
     case Token(destinationToken(),
-           Token("TOK_DIR",
-             Token("TOK_TMP_FILE", Nil) :: Nil) :: Nil) =>
+    Token("TOK_DIR",
+    Token("TOK_TMP_FILE", Nil) :: Nil) :: Nil) =>
       query
 
     case Token(destinationToken(),
-           Token("TOK_TAB",
-              tableArgs) :: Nil) =>
+    Token("TOK_TAB",
+    tableArgs) :: Nil) =>
       val Some(tableNameParts) :: partitionClause :: Nil =
         getClauses(Seq("TOK_TABNAME", "TOK_PARTSPEC"), tableArgs)
 
@@ -1009,10 +699,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       InsertIntoTable(UnresolvedRelation(tableIdent, None), partitionKeys, query, overwrite, false)
 
     case Token(destinationToken(),
-           Token("TOK_TAB",
-             tableArgs) ::
-           Token("TOK_IFNOTEXISTS",
-             ifNotExists) :: Nil) =>
+    Token("TOK_TAB",
+    tableArgs) ::
+      Token("TOK_IFNOTEXISTS",
+      ifNotExists) :: Nil) =>
       val Some(tableNameParts) :: partitionClause :: Nil =
         getClauses(Seq("TOK_TABNAME", "TOK_PARTSPEC"), tableArgs)
 
@@ -1055,12 +745,35 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
 
+  val explode = "(?i)explode".r
+  def nodesToGenerator(nodes: Seq[Node]): (Generator, Seq[String]) = {
+    val function = nodes.head
 
-  protected val escapedIdentifier = "`([^`]+)`".r
-  /** Strips backticks from ident if present */
-  protected def cleanIdentifier(ident: String): String = ident match {
-    case escapedIdentifier(i) => i
-    case plainIdent => plainIdent
+    val attributes = nodes.flatMap {
+      case Token(a, Nil) => a.toLowerCase :: Nil
+      case _ => Nil
+    }
+
+    function match {
+      case Token("TOK_FUNCTION", Token(explode(), Nil) :: child :: Nil) =>
+        (Explode(nodeToExpr(child)), attributes)
+
+      case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
+        val functionInfo: FunctionInfo =
+          Option(FunctionRegistry.getFunctionInfo(functionName.toLowerCase)).getOrElse(
+            sys.error(s"Couldn't find function $functionName"))
+        val functionClassName = functionInfo.getFunctionClass.getName
+
+        (HiveGenericUdtf(
+          new HiveFunctionWrapper(functionClassName),
+          children.map(nodeToExpr)), attributes)
+
+      case a: ASTNode =>
+        throw new NotImplementedError(
+          s"""No parse rules for ASTNode type: ${a.getType}, text: ${a.getText}, tree:
+             |${dumpTree(a).toString}
+           """.stripMargin)
+    }
   }
 
   val numericAstTypes = Seq(
@@ -1313,51 +1026,47 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
          """.stripMargin)
   }
 
-
-  val explode = "(?i)explode".r
-  def nodesToGenerator(nodes: Seq[Node]): (Generator, Seq[String]) = {
-    val function = nodes.head
-
-    val attributes = nodes.flatMap {
-      case Token(a, Nil) => a.toLowerCase :: Nil
-      case _ => Nil
-    }
-
-    function match {
-      case Token("TOK_FUNCTION", Token(explode(), Nil) :: child :: Nil) =>
-        (Explode(nodeToExpr(child)), attributes)
-
-      case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
-        val functionInfo: FunctionInfo =
-          Option(FunctionRegistry.getFunctionInfo(functionName.toLowerCase)).getOrElse(
-            sys.error(s"Couldn't find function $functionName"))
-        val functionClassName = functionInfo.getFunctionClass.getName
-
-        (HiveGenericUdtf(
-          new HiveFunctionWrapper(functionClassName),
-          children.map(nodeToExpr)), attributes)
-
-      case a: ASTNode =>
-        throw new NotImplementedError(
-          s"""No parse rules for ASTNode type: ${a.getType}, text: ${a.getText}, tree:
-             |${dumpTree(a).toString}
-           """.stripMargin)
+  protected def nameExpressions(exprs: Seq[Expression]): Seq[NamedExpression] = {
+    exprs.zipWithIndex.map {
+      case (ne: NamedExpression, _) => ne
+      case (e, i) => Alias(e, s"_c$i")()
     }
   }
 
-  def dumpTree(node: Node, builder: StringBuilder = new StringBuilder, indent: Int = 0)
-    : StringBuilder = {
-    node match {
-      case a: ASTNode => builder.append(
-        ("  " * indent) + a.getText + " " +
-          a.getLine + ", " +
-          a.getTokenStartIndex + "," +
-          a.getTokenStopIndex + ", " +
-          a.getCharPositionInLine + "\n")
-      case other => sys.error(s"Non ASTNode encountered: $other")
-    }
+  /**
+   * SELECT MAX(value) FROM src GROUP BY k1, k2, k3 GROUPING SETS((k1, k2), (k2))
+   * is equivalent to
+   * SELECT MAX(value) FROM src GROUP BY k1, k2 UNION SELECT MAX(value) FROM src GROUP BY k2
+   * Check the following link for details.
+   *
+https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C+Grouping+and+Rollup
+   *
+   * The bitmask denotes the grouping expressions validity for a grouping set,
+   * the bitmask also be called as grouping id (`GROUPING__ID`, the virtual column in Hive)
+   * e.g. In superset (k1, k2, k3), (bit 0: k1, bit 1: k2, and bit 2: k3), the grouping id of
+   * GROUPING SETS (k1, k2) and (k2) should be 3 and 2 respectively.
+   */
+  protected def extractGroupingSet(children: Seq[ASTNode]): (Seq[Expression], Seq[Int]) = {
+    val (keyASTs, setASTs) = children.partition( n => n match {
+      case Token("TOK_GROUPING_SETS_EXPRESSION", children) => false // grouping sets
+      case _ => true // grouping keys
+    })
 
-    Option(node.getChildren).map(_.toList).getOrElse(Nil).foreach(dumpTree(_, builder, indent + 1))
-    builder
+    val keys = keyASTs.map(nodeToExpr).toSeq
+    val keyMap = keyASTs.map(_.toStringTree).zipWithIndex.toMap
+
+    val bitmasks: Seq[Int] = setASTs.map(set => set match {
+      case Token("TOK_GROUPING_SETS_EXPRESSION", null) => 0
+      case Token("TOK_GROUPING_SETS_EXPRESSION", children) =>
+        children.foldLeft(0)((bitmap, col) => {
+          val colString = col.asInstanceOf[ASTNode].toStringTree()
+          require(keyMap.contains(colString), s"$colString doens't show up in the GROUP BY list")
+          bitmap | 1 << keyMap(colString)
+        })
+      case _ => sys.error("Expect GROUPING SETS clause")
+    })
+
+    (keys, bitmasks)
   }
 }
+

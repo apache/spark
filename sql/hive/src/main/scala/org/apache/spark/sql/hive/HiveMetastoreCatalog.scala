@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.parquet.{ParquetRelation2, Partition => ParquetPartition, PartitionSpec}
-import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, DDLParser, LogicalRelation, ResolvedDataSource}
+import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -218,7 +218,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     } else if (table.isView) {
       // if the unresolved relation is from hive view
       // parse the text into logic node.
-      HiveQl.createPlanForView(table, alias)
+      HiveQlConverter.createPlanForView(table, alias)
     } else {
       val partitions: Seq[Partition] =
         if (table.isPartitioned) {

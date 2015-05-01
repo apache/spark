@@ -20,9 +20,6 @@ package org.apache.spark.sql.hive
 import java.io.{BufferedReader, InputStreamReader, PrintStream}
 import java.sql.Timestamp
 
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution
-import org.apache.spark.sql.catalyst.Dialect
-
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 
@@ -39,6 +36,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateSubQueries, OverrideCatalog, OverrideFunctionRegistry}
+import org.apache.spark.sql.catalyst.Dialect
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, QueryExecutionException, SetCommand}
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
@@ -49,8 +47,14 @@ import org.apache.spark.sql.types._
  * This is the HiveQL Dialect, this dialect is strongly bind with HiveContext
  */
 private[hive] class HiveQLDialect extends Dialect {
+  @transient
+  protected val sqlParser = {
+    val hiveParser = new ExtendedHiveQlParser
+    new SparkSQLParser(hiveParser.parse)
+  }
+
   override def parse(sqlText: String): LogicalPlan = {
-    HiveQl.parseSql(sqlText)
+    sqlParser.parse(sqlText)
   }
 }
 
@@ -93,15 +97,39 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[sql] def convertCTAS: Boolean =
     getConf("spark.sql.hive.convertCTAS", "false").toBoolean
 
+  /* A catalyst metadata catalog that points to the Hive Metastore. */
+  @transient
+  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
+
+  // Note that HiveUDFs will be overridden by functions registered in this context.
+  @transient
+  override protected[sql] lazy val functionRegistry =
+    new HiveFunctionRegistry with OverrideFunctionRegistry {
+      def caseSensitive: Boolean = false
+    }
+
+  /* An analyzer that uses the Hive metastore. */
+  @transient
+  override protected[sql] lazy val analyzer =
+    new Analyzer(catalog, functionRegistry, caseSensitive = false) {
+      override val extendedResolutionRules =
+        catalog.ParquetConversions ::
+          catalog.CreateTables ::
+          catalog.PreInsertionCasts ::
+          ExtractPythonUdfs ::
+          sources.PreInsertCastAndRename ::
+          Nil
+    }
+
+  override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
+    new this.QueryExecution(plan)
+
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
 
   protected[sql] override def parseSql(sql: String): LogicalPlan = {
     super.parseSql(substitutor.substitute(hiveconf, sql))
   }
-
-  override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
-    new this.QueryExecution(plan)
 
   /**
    * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
@@ -231,30 +259,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     super.setConf(key, value)
     runSqlHive(s"SET $key=$value")
   }
-
-  /* A catalyst metadata catalog that points to the Hive Metastore. */
-  @transient
-  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
-
-  // Note that HiveUDFs will be overridden by functions registered in this context.
-  @transient
-  override protected[sql] lazy val functionRegistry =
-    new HiveFunctionRegistry with OverrideFunctionRegistry {
-      def caseSensitive: Boolean = false
-    }
-
-  /* An analyzer that uses the Hive metastore. */
-  @transient
-  override protected[sql] lazy val analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = false) {
-      override val extendedResolutionRules =
-        catalog.ParquetConversions ::
-        catalog.CreateTables ::
-        catalog.PreInsertionCasts ::
-        ExtractPythonUdfs ::
-        sources.PreInsertCastAndRename ::
-        Nil
-    }
 
   override protected[sql] def createSession(): SQLSession = {
     new this.SQLSession()
