@@ -123,7 +123,8 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
           var id = idAndAttempt[0];
           var attempt = idAndAttempt[1];
           $("#stage-" + id + "-" + attempt).removeClass("corresponding-item-hover");
-          $($(this).find("div.job-timeline-content")[0]).tooltip("hide");
+          $($(this).find("div.job-timeline-content")[0])
+          .tooltip("hide");
         }
       );
     });

@@ -73,6 +73,10 @@ div#application-timeline, div#job-timeline {
   background-color: #FDFFCA;
 }
 
+#application-timeline div.legend-area {
+  margin-top: 5px;
+}
+
 .vis.timeline div.content {
   width: 100%;
 }
