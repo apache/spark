@@ -172,6 +172,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     case Project(projectList, Limit(exp, child)) =>
       Limit(exp, Project(projectList, child))
+
+    // push down project if possible when the child is sort
+    case p @ Project(projectList, s @ Sort(order, _, grandChild))
+      if (s.references -- p.references).size == 0 =>
+      s.copy(child = Project(projectList, grandChild))
       
     // Eliminate no-op Projects
     case Project(projectList, child) if child.output == projectList => child

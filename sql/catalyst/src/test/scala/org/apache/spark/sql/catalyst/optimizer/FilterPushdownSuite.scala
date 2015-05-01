@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
-import org.apache.spark.sql.catalyst.expressions.{Count, Explode}
+import org.apache.spark.sql.catalyst.expressions.{SortOrder, Ascending, Count, Explode}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.rules._
@@ -540,5 +540,22 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
 
     comparePlans(optimized, originalQuery)
+  }
+
+  test("push down project") {
+    val x = testRelation.subquery('x)
+
+    val originalQuery = {
+      x.select('a, 'b)
+       .sortBy(SortOrder('a, Ascending))
+       .select('a)
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      x.select('a)
+       .sortBy(SortOrder('a, Ascending)).analyze
+
+    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
   }
 }
