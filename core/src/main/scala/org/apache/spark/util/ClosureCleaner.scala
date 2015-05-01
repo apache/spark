@@ -160,7 +160,7 @@ private[spark] object ClosureCleaner extends Logging {
 
   private def instantiateClass(cls: Class[_], outer: AnyRef, inInterpreter: Boolean): AnyRef = {
     // logInfo("Creating a " + cls + " with outer = " + outer)
-    if (!inInterpreter) {
+    if (inInterpreter) {
       // This is a bona fide closure class, whose constructor has no effects
       // other than to set its fields, so use its constructor
       val cons = cls.getConstructors()(0)
