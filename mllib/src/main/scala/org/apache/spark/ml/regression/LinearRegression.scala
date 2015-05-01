@@ -102,9 +102,7 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
       case LabeledPoint(label: Double, features: Vector) => (label, features)
     }
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-    if (handlePersistence) {
-      instances.persist(StorageLevel.MEMORY_AND_DISK)
-    }
+    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (summarizer, statCounter) = instances.treeAggregate(
       (new MultivariateOnlineSummarizer, new StatCounter))( {
@@ -299,9 +297,8 @@ private class LeastSquaresAggregator(
     featuresStd: Array[Double],
     featuresMean: Array[Double]) extends Serializable {
 
-  private var totalCnt: Long = 0
+  private var totalCnt: Long = 0L
   private var lossSum = 0.0
-  private var diffSum = 0.0
 
   private val (effectiveWeightsArray: Array[Double], offset: Double, dim: Int) = {
     val weightsArray = weights.toArray.clone()
@@ -318,9 +315,10 @@ private class LeastSquaresAggregator(
     }
     (weightsArray, -sum + labelMean / labelStd, weightsArray.length)
   }
+  
   private val effectiveWeightsVector = Vectors.dense(effectiveWeightsArray)
 
-  private val gradientSumArray: Array[Double] = Array.ofDim[Double](dim)
+  private val gradientSumArray = Array.ofDim[Double](dim)
 
   /**
    * Add a new training data to this LeastSquaresAggregator, and update the loss and gradient
@@ -345,7 +343,6 @@ private class LeastSquaresAggregator(
         }
       }
       lossSum += diff * diff / 2.0
-      diffSum += diff
     }
 
     totalCnt += 1
@@ -367,7 +364,6 @@ private class LeastSquaresAggregator(
     if (other.totalCnt != 0) {
       totalCnt += other.totalCnt
       lossSum += other.lossSum
-      diffSum += other.diffSum
 
       var i = 0
       val localThisGradientSumArray = this.gradientSumArray

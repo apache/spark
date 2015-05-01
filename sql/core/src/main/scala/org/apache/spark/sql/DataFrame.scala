@@ -331,6 +331,17 @@ class DataFrame private[sql](
   def na: DataFrameNaFunctions = new DataFrameNaFunctions(this)
 
   /**
+   * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
+   * {{{
+   *   // Finding frequent items in column with name 'a'.
+   *   df.stat.freqItems(Seq("a"))
+   * }}}
+   *
+   * @group dfops
+   */
+  def stat: DataFrameStatFunctions = new DataFrameStatFunctions(this)
+
+  /**
    * Cartesian join with another [[DataFrame]].
    *
    * Note that cartesian joins are very expensive without an extra filter that can be pushed down.
@@ -840,15 +851,40 @@ class DataFrame private[sql](
 
   /**
    * Returns a new [[DataFrame]] with a column renamed.
+   * This is a no-op if schema doesn't contain existingName.
    * @group dfops
    */
   def withColumnRenamed(existingName: String, newName: String): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val colNames = schema.map { field =>
-      val name = field.name
-      if (resolver(name, existingName)) Column(name).as(newName) else Column(name)
+    val shouldRename = schema.exists(f => resolver(f.name, existingName))
+    if (shouldRename) {
+      val colNames = schema.map { field =>
+        val name = field.name
+        if (resolver(name, existingName)) Column(name).as(newName) else Column(name)
+      }
+      select(colNames : _*)
+    } else {
+      this
     }
-    select(colNames :_*)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] with a column dropped.
+   * This is a no-op if schema doesn't contain column name.
+   * @group dfops
+   */
+  def drop(colName: String): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
+    val shouldDrop = schema.exists(f => resolver(f.name, colName))
+    if (shouldDrop) {
+      val colsAfterDrop = schema.filter { field =>
+        val name = field.name
+        !resolver(name, colName)
+      }.map(f => Column(f.name))
+      select(colsAfterDrop : _*)
+    } else {
+      this
+    }
   }
 
   /**
