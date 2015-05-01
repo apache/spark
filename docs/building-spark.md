@@ -83,10 +83,6 @@ mvn -Dhadoop.version=1.2.1 -DskipTests clean package
 # Cloudera CDH 4.2.0 with MapReduce v1
 mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -DskipTests clean package
 
-#Cloudera CDH 5.3.3 without MapReduce
-
-mvn -Dhadoop.version=2.5.0-cdh5.3.3 -DskipTests clean package
-
 # Apache Hadoop 0.23.x
 mvn -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
 {% endhighlight %}
@@ -96,8 +92,6 @@ You can enable the "yarn" profile and optionally set the "yarn.version" property
 Examples:
 
 {% highlight bash %}
-# Apache Hadoop 2.2.X
-mvn -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -DskipTests clean package
 
 # Apache Hadoop 2.3.X
 mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
