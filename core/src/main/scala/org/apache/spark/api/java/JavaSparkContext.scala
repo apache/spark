@@ -760,8 +760,8 @@ class JavaSparkContext(val sc: SparkContext)
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
    * Invalid log level defaults to DEBUG
    */
-  def setLoggingLevel(logLevel: String) {
-    sc.setLoggingLevel(logLevel)
+  def setLogLevel(logLevel: String) {
+    sc.setLogLevel(logLevel)
   }
 
   /**

@@ -348,8 +348,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
    * Invalid log level defaults to DEBUG
    */
-  def setLoggingLevel(logLevel: String) {
-    Utils.setLoggingLevel(org.apache.log4j.Level.toLevel(logLevel))
+  def setLogLevel(logLevel: String) {
+    Utils.setLogLevel(org.apache.log4j.Level.toLevel(logLevel))
   }
 
   try {
