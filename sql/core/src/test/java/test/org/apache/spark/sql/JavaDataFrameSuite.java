@@ -22,10 +22,7 @@ import com.google.common.primitives.Ints;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.TestData$;
+import org.apache.spark.sql.*;
 import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.test.TestSQLContext$;
 import org.apache.spark.sql.types.*;
@@ -178,5 +175,12 @@ public class JavaDataFrameSuite {
       Assert.assertEquals(bean.getD().get(i), d.apply(i));
     }
   }
-
+  
+  @Test
+  public void testFrequentItems() {
+    DataFrame df = context.table("testData2");
+    String[] cols = new String[]{"a"};
+    DataFrame results = df.stat().freqItems(cols, 0.2);
+    Assert.assertTrue(results.collect()[0].getSeq(0).contains(1));
+  }
 }
