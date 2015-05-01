@@ -178,7 +178,7 @@ for t in "${PR_TESTS[@]}"; do
     git checkout -f "${current_pr_head}" &>/dev/null
   else
     echo "Cannot find test ${this_test}."
-    die 1
+    exit 1
   fi
 done
 
