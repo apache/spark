@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.ml.reduction
 
 import org.apache.spark.ml.classification.{LogisticRegressionModel, LogisticRegression}
@@ -5,7 +22,7 @@ import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.{MLUtils, MLlibTestSparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.scalatest.FunSuite
@@ -60,6 +77,48 @@ class Multiclass2BinarySuite extends FunSuite with MLlibTestSparkContext {
 
     println(confusionMatrix(results, 3).map(_.mkString("\t")).mkString("\n"))
     println(confusionMatrix(ovaResults, 3).map(_.mkString("\t")).mkString("\n"))
+  }
+
+  test("one-against-all: news20") {
+    val k = 3
+    val ova = new Multiclass2Binary().
+      setNumClasses(k).
+      setBaseClassifier(new LogisticRegression)
+
+    assert(ova.getLabelCol == "label")
+    assert(ova.getPredictionCol == "prediction")
+    val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+    val rdds = MLUtils.loadLibSVMFile(sc,
+      "/Users/rsriharsha/projects/hortonworks/benchmark-datasets/multiclass-classification/connect-4.txt").
+      map {case LabeledPoint(label, features) => LabeledPoint(label + 1, features)}.
+      randomSplit(Array(0.7, 0.3))
+    val Array(train, test) = rdds.map(_.toDF())
+    val ovaModel = time(ova.fit(train))
+    assert(ovaModel.baseClassificationModels.size == k)
+    val ovaResults = ovaModel.transform(test)
+      .select("label", "prediction")
+      .map (row => (row(0).asInstanceOf[Double], row(1).asInstanceOf[Double]))
+      .collect()
+
+    val lr = new LogisticRegressionWithLBFGS().setIntercept(true).setNumClasses(k)
+    lr.optimizer.setRegParam(0.1).setNumIterations(100)
+
+    val model = time(lr.run(rdds(0)))
+    val results = rdds(1).map(_.label).zip(model.predict(rdds(1).map(_.features))).collect()
+    // determine the #confusion matrix in each class.
+
+    println(confusionMatrix(results, k).map(_.mkString("\t")).mkString("\n"))
+    println("**********************************************")
+    println(confusionMatrix(ovaResults, k).map(_.mkString("\t")).mkString("\n"))
+  }
+
+  def time[R](block: => R): R = {
+    val t0 = System.nanoTime()
+    val result = block    // call-by-name
+    val t1 = System.nanoTime()
+    println("Elapsed time: " + (t1 - t0)/1E9 + "s")
+    result
   }
 
   private def confusionMatrix(results: Seq[(Double, Double)], numClasses: Int): Array[Array[Double]] = {
