@@ -500,8 +500,8 @@ class DataFrameSuite extends QueryTest {
     }
 
     import org.apache.spark.sql.catalyst.plans.logical.Project
-    // make sure df only have one Project
-    val p = df.logicalPlan.asInstanceOf[Project]
+    // make sure df have at most two Projects
+    val p = df.logicalPlan.asInstanceOf[Project].child.asInstanceOf[Project]
     assert(!p.child.isInstanceOf[Project])
   }
 }
