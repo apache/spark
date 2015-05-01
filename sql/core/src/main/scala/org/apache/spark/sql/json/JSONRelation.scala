@@ -111,7 +111,8 @@ private[sql] class JSONRelation(
     @transient val sqlContext: SQLContext)
   extends BaseRelation
   with TableScan
-  with InsertableRelation {
+  with InsertableRelation
+  with CatalystScan {
 
   def this(
       path: String,
@@ -158,6 +159,19 @@ private[sql] class JSONRelation(
     }
   }
 
+  override def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row] = {
+    if (useJsonRDD2) {
+      JsonRDD2.jsonStringToRow(
+        baseRDD,
+        StructType.fromAttributes(requiredColumns),
+        sqlContext.conf.columnNameOfCorruptRecord)
+    } else {
+      JsonRDD.jsonStringToRow(
+        baseRDD,
+        StructType.fromAttributes(requiredColumns),
+        sqlContext.conf.columnNameOfCorruptRecord)
+    }
+  }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     val filesystemPath = path match {
