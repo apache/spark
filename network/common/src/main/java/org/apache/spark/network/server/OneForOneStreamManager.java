@@ -31,6 +31,8 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 
+import com.google.common.base.Preconditions;
+
 /**
  * StreamManager which allows registration of an Iterator&lt;ManagedBuffer&gt;, which are individually
  * fetched as chunks by the client. Each registered buffer is one chunk.
@@ -41,18 +43,19 @@ public class OneForOneStreamManager extends StreamManager {
   private final AtomicLong nextStreamId;
   private final Map<Long, StreamState> streams;
 
-  /** List of all stream ids that are associated to specified channel. */
-  private final Map<Channel, Set<Long>> streamIds;
-
   /** State of a single stream. */
   private static class StreamState {
     final Iterator<ManagedBuffer> buffers;
+
+    // The channel associated to the stream
+    Channel associatedChannel = null;
 
     // Used to keep track of the index of the buffer that the user has retrieved, just to ensure
     // that the caller only requests each chunk one at a time, in order.
     int curChunk = 0;
 
     StreamState(Iterator<ManagedBuffer> buffers) {
+      Preconditions.checkNotNull(buffers);
       this.buffers = buffers;
     }
   }
@@ -62,15 +65,13 @@ public class OneForOneStreamManager extends StreamManager {
     // This does not need to be globally unique, only unique to this class.
     nextStreamId = new AtomicLong((long) new Random().nextInt(Integer.MAX_VALUE) * 1000);
     streams = new ConcurrentHashMap<Long, StreamState>();
-    streamIds = new ConcurrentHashMap<Channel, Set<Long>>();
   }
 
   @Override
   public void registerChannel(Channel channel, long streamId) {
-    if (!streamIds.containsKey(channel)) {
-      streamIds.put(channel, new HashSet<Long>());
+    if (streams.containsKey(streamId)) {
+      streams.get(streamId).associatedChannel = channel;
     }
-    streamIds.get(channel).add(streamId);
   }
 
   @Override
@@ -96,22 +97,16 @@ public class OneForOneStreamManager extends StreamManager {
 
   @Override
   public void connectionTerminated(Channel channel) {
-    // Release all associated streams
-    if (streamIds.containsKey(channel)) {
-      for (long streamId : streamIds.get(channel)) {
-        connectionTerminated(streamId);
-      }
-      streamIds.remove(channel);
-    }
-  }
+    // Close all streams which have been associated with the channel.
+    for (Map.Entry<Long, StreamState> entry: streams.entrySet()) {
+      StreamState state = entry.getValue();
+      if (state.associatedChannel == channel) {
+        streams.remove(entry.getKey());
 
-  @Override
-  public void connectionTerminated(long streamId) {
-    // Release all remaining buffers.
-    StreamState state = streams.remove(streamId);
-    if (state != null && state.buffers != null) {
-      while (state.buffers.hasNext()) {
-        state.buffers.next().release();
+        // Release all remaining buffers.
+        while (state.buffers.hasNext()) {
+          state.buffers.next().release();
+        }
       }
     }
   }
