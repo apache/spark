@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-
+import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
@@ -345,6 +345,34 @@ object functions {
    * @group normal_funcs
    */
   def not(e: Column): Column = !e
+
+  /**
+   * Generate a random column with i.i.d. samples from U[0.0, 1.0].
+   *
+   * @group normal_funcs
+   */
+  def rand(seed: Long): Column = Rand(seed)
+
+  /**
+   * Generate a random column with i.i.d. samples from U[0.0, 1.0].
+   *
+   * @group normal_funcs
+   */
+  def rand(): Column = rand(Utils.random.nextLong)
+
+  /**
+   * Generate a column with i.i.d. samples from the standard normal distribution.
+   *
+   * @group normal_funcs
+   */
+  def randn(seed: Long): Column = Randn(seed)
+
+  /**
+   * Generate a column with i.i.d. samples from the standard normal distribution.
+   *
+   * @group normal_funcs
+   */
+  def randn(): Column = randn(Utils.random.nextLong)
 
   /**
    * Partition ID of the Spark task.

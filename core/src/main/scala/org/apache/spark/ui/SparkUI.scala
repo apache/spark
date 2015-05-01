@@ -19,7 +19,7 @@ package org.apache.spark.ui
 
 import java.util.Date
 
-import org.apache.spark.status.api.v1.{ApplicationInfo, JsonRootResource, UIRoot}
+import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo, JsonRootResource, UIRoot}
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
@@ -96,10 +96,13 @@ private[spark] class SparkUI private (
     Iterator(new ApplicationInfo(
       id = appName,
       name = appName,
-      startTime = new Date(startTime),
-      endTime = new Date(-1),
-      sparkUser = "",
-      completed = false
+      attempts = Seq(new ApplicationAttemptInfo(
+        attemptId = None,
+        startTime = new Date(startTime),
+        endTime = new Date(-1),
+        sparkUser = "",
+        completed = false
+      ))
     ))
   }
 }

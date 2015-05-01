@@ -25,6 +25,10 @@ import org.apache.spark.JobExecutionStatus
 class ApplicationInfo(
     val id: String,
     val name: String,
+    val attempts: Seq[ApplicationAttemptInfo])
+
+class ApplicationAttemptInfo(
+    val attemptId: Option[String],
     val startTime: Date,
     val endTime: Date,
     val sparkUser: String,

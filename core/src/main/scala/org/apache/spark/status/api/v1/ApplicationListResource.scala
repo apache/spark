@@ -43,10 +43,15 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
     val includeCompleted = adjStatus.contains(ApplicationStatus.COMPLETED)
     val includeRunning = adjStatus.contains(ApplicationStatus.RUNNING)
     allApps.filter { app =>
-      val statusOk = (app.completed && includeCompleted) ||
-        (!app.completed && includeRunning)
-      val dateOk = app.startTime.getTime >= minDate.timestamp &&
-        app.startTime.getTime <= maxDate.timestamp
+      val anyRunning = app.attempts.exists(!_.completed)
+      // if any attempt is still running, we consider the app to also still be running
+      val statusOk = (!anyRunning && includeCompleted) ||
+        (anyRunning && includeRunning)
+      // keep the app if *any* attempts fall in the right time window
+      val dateOk = app.attempts.exists { attempt =>
+        attempt.startTime.getTime >= minDate.timestamp &&
+          attempt.startTime.getTime <= maxDate.timestamp
+      }
       statusOk && dateOk
     }
   }
@@ -57,23 +62,32 @@ private[spark] object ApplicationsListResource {
     new ApplicationInfo(
       id = app.id,
       name = app.name,
-      startTime = new Date(app.startTime),
-      endTime = new Date(app.endTime),
-      sparkUser = app.sparkUser,
-      completed = app.completed
+      attempts = app.attempts.map { internalAttemptInfo =>
+        new ApplicationAttemptInfo(
+          attemptId = internalAttemptInfo.attemptId,
+          startTime = new Date(internalAttemptInfo.startTime),
+          endTime = new Date(internalAttemptInfo.endTime),
+          sparkUser = internalAttemptInfo.sparkUser,
+          completed = internalAttemptInfo.completed
+        )
+      }
     )
   }
 
   def convertApplicationInfo(
       internal: InternalApplicationInfo,
       completed: Boolean): ApplicationInfo = {
+    // standalone application info always has just one attempt
     new ApplicationInfo(
       id = internal.id,
       name = internal.desc.name,
-      startTime = new Date(internal.startTime),
-      endTime = new Date(internal.endTime),
-      sparkUser = internal.desc.user,
-      completed = completed
+      attempts = Seq(new ApplicationAttemptInfo(
+        attemptId = None,
+        startTime = new Date(internal.startTime),
+        endTime = new Date(internal.endTime),
+        sparkUser = internal.desc.user,
+        completed = completed
+      ))
     )
   }
 
