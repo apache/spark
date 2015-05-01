@@ -30,7 +30,12 @@ from pyspark.sql.types import StringType
 from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
 
 
-__all__ = ['countDistinct', 'approxCountDistinct', 'udf']
+__all__ = [
+    'approxCountDistinct',
+    'countDistinct',
+    'monotonicallyIncreasingId',
+    'sparkPartitionId',
+    'udf']
 
 
 def _create_function(name, doc=""):
@@ -75,8 +80,7 @@ __all__.sort()
 
 
 def rand(seed=None):
-    """
-    Generate a random column with i.i.d. samples from U[0.0, 1.0].
+    """Generates a random column with i.i.d. samples from U[0.0, 1.0].
     """
     sc = SparkContext._active_spark_context
     if seed:
@@ -87,14 +91,31 @@ def rand(seed=None):
 
 
 def randn(seed=None):
-    """
-    Generate a column with i.i.d. samples from the standard normal distribution.
+    """Generates a column with i.i.d. samples from the standard normal distribution.
     """
     sc = SparkContext._active_spark_context
     if seed:
         jc = sc._jvm.functions.randn(seed)
     else:
         jc = sc._jvm.functions.randn()
+
+
+def array(*cols):
+    """Creates a new array column.
+
+    :param cols: list of column names (string) or list of :class:`Column` expressions that have
+        the same data type.
+
+    >>> df.select(array('age', 'age').alias("arr")).collect()
+    [Row(arr=[2, 2]), Row(arr=[5, 5])]
+    >>> df.select(array([df.age, df.age]).alias("arr")).collect()
+    [Row(arr=[2, 2]), Row(arr=[5, 5])]
+    """
+    sc = SparkContext._active_spark_context
+    if len(cols) == 1 and isinstance(cols[0], (list, set)):
+        cols = cols[0]
+    jc = sc._jvm.functions.array(_to_seq(sc, cols, _to_java_column))
+>>>>>>> Added Python support.
     return Column(jc)
 
 
@@ -156,6 +177,24 @@ def sparkPartitionId():
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.sparkPartitionId())
+
+
+def struct(*cols):
+    """Creates a new struct column.
+
+    :param cols: list of column names (string) or list of :class:`Column` expressions
+        that are named or aliased.
+
+    >>> df.select(struct('age', 'name').alias("struct")).collect()
+    [Row(struct=[u'2', u'Alice']), Row(struct=[u'5', u'Bob'])]
+    >>> df.select(struct([df.age, df.name]).alias("struct")).collect()
+    [Row(struct=[u'2', u'Alice']), Row(struct=[u'5', u'Bob'])]
+    """
+    sc = SparkContext._active_spark_context
+    if len(cols) == 1 and isinstance(cols[0], (list, set)):
+        cols = cols[0]
+    jc = sc._jvm.functions.array(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
 
 
 class UserDefinedFunction(object):
