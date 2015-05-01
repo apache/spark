@@ -27,13 +27,13 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types.IntegerType
 
-class FilterPushdownSuite extends PlanTest {
+class OperatorReorderingSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubQueries) ::
-      Batch("Filter Pushdown", Once,
+      Batch("Operator Reordering", Once,
         UnionPushdown,
         CombineFilters,
         PushPredicateThroughProject,
