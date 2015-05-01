@@ -159,7 +159,7 @@ private[sql] object JDBCRDD extends Logging {
   def getConnector(driver: String, url: String, properties: Properties): () => Connection = {
     () => {
       try {
-        if (driver != null) Utils.getContextOrSparkClassLoader.loadClass(driver)
+        if (driver != null) DriverRegistry.register(driver)
       } catch {
         case e: ClassNotFoundException => {
           logWarning(s"Couldn't find class $driver", e);

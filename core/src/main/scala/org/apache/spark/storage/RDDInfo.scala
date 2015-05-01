@@ -32,16 +32,17 @@ class RDDInfo(
   var numCachedPartitions = 0
   var memSize = 0L
   var diskSize = 0L
-  var tachyonSize = 0L
+  var externalBlockStoreSize = 0L
 
-  def isCached: Boolean = (memSize + diskSize + tachyonSize > 0) && numCachedPartitions > 0
+  def isCached: Boolean =
+    (memSize + diskSize + externalBlockStoreSize > 0) && numCachedPartitions > 0
 
   override def toString: String = {
     import Utils.bytesToString
     ("RDD \"%s\" (%d) StorageLevel: %s; CachedPartitions: %d; TotalPartitions: %d; " +
-      "MemorySize: %s; TachyonSize: %s; DiskSize: %s").format(
+      "MemorySize: %s; ExternalBlockStoreSize: %s; DiskSize: %s").format(
         name, id, storageLevel.toString, numCachedPartitions, numPartitions,
-        bytesToString(memSize), bytesToString(tachyonSize), bytesToString(diskSize))
+        bytesToString(memSize), bytesToString(externalBlockStoreSize), bytesToString(diskSize))
   }
 
   override def compare(that: RDDInfo): Int = {
