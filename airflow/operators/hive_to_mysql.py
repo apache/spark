@@ -23,7 +23,7 @@ class HiveToMySqlTransfer(BaseOperator):
     """
 
     __mapper_args__ = {
-        'polymorphic_identity': 'MySqlToHiveOperator'
+        'polymorphic_identity': 'HiveToMySqlTransfer'
     }
     template_fields = ('sql', 'mysql_table')
     template_ext = ('.sql',)

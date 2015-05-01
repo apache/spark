@@ -218,14 +218,14 @@ def webserver(args):
         # simple multi-process server
         server = HTTPServer(WSGIContainer(app))
         server.bind(args.port)
-        server.start(0)  # Forks multiple sub-processes
+        server.start(4)  # Forks multiple sub-processes
         IOLoop.instance().start()
 
 
-def master(args):
+def scheduler(args):
     print(settings.HEADER)
     log_to_stdout()
-    job = jobs.MasterJob(args.dag_id, args.subdir)
+    job = jobs.SchedulerJob(args.dag_id, args.subdir)
     job.run()
 
 
@@ -250,7 +250,10 @@ def serve_logs(args):
 
 def worker(args):
     # Worker to serve static log files through this simple flask app
-    sp = subprocess.Popen(['airflow', 'serve_logs'])
+    sp = subprocess.Popen(
+        ['airflow', 'serve_logs'],
+        env={'AIRFLOW_HOME': settings.AIRFLOW_HOME}
+    )
 
     # Celery worker
     from airflow.executors.celery_executor import app as celery_app
@@ -422,14 +425,14 @@ def get_parser():
         "-d", "--debug", help=ht, action="store_true")
     parser_webserver.set_defaults(func=webserver)
 
-    ht = "Start a master scheduler instance"
-    parser_master = subparsers.add_parser('master', help=ht)
-    parser_master.add_argument(
+    ht = "Start a scheduler scheduler instance"
+    parser_scheduler = subparsers.add_parser('scheduler', help=ht)
+    parser_scheduler.add_argument(
         "-d", "--dag_id", help="The id of the dag to run")
-    parser_master.add_argument(
+    parser_scheduler.add_argument(
         "-sd", "--subdir", help=subdir_help,
         default=DAGS_FOLDER)
-    parser_master.set_defaults(func=master)
+    parser_scheduler.set_defaults(func=scheduler)
 
     ht = "Initialize the metadata database"
     parser_initdb = subparsers.add_parser('initdb', help=ht)
