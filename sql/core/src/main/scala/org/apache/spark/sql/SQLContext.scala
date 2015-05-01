@@ -176,6 +176,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val ddlParser = new DDLParser((sql: String) => { getSQLDialect().parse(sql) })
 
+  // kept sqlParser to make sure mima tests pass
+  @transient
+  protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect().parse(_))
+
   protected[sql] def getSQLDialect(): Dialect = {
     try {
       val clazz = Utils.classForName(dialectClassName)
