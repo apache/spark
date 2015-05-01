@@ -309,6 +309,7 @@ class SchedulerJob(BaseJob):
         db_dag = session.query(DAG).filter(DAG.dag_id==dag.dag_id).first()
         db_dag.scheduler_lock = False
         session.merge(db_dag)
+        session.commit()
 
         executor.heartbeat()
         session.close()

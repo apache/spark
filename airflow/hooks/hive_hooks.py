@@ -271,7 +271,7 @@ class HiveServer2Hook(BaseHook):
     def __init__(self, hiveserver2_conn_id='hiveserver2_default'):
         self.hiveserver2_conn = self.get_connection(hiveserver2_conn_id)
 
-    def get_results(self, hql, schema='default'):
+    def get_results(self, hql, schema='default', arraysize=1000):
         schema = schema or 'default'
         with pyhs2.connect(
                 host=self.hiveserver2_conn.host,

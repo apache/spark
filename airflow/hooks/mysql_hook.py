@@ -56,7 +56,7 @@ class MySqlHook(BaseHook):
         cur.close()
         conn.close()
 
-    def insert_rows(self, table, rows, target_fields=None):
+    def insert_rows(self, table, rows, target_fields=None, commit_every=1000):
         """
         A generic way to insert a set of tuples into a table,
         the whole set of inserts is treated as one transaction
@@ -68,7 +68,11 @@ class MySqlHook(BaseHook):
             target_fields = ''
         conn = self.get_conn()
         cur = conn.cursor()
+        cur.execute('SET autocommit = 0')
+        conn.commit()
+        i = 0
         for row in rows:
+            i += 1
             l = []
             for cell in row:
                 if isinstance(cell, basestring):
@@ -83,6 +87,12 @@ class MySqlHook(BaseHook):
                 target_fields,
                 ",".join(values))
             cur.execute(sql)
+            if i % commit_every == 0:
+                conn.commit()
+                logging.info(
+                    "Loaded {i} into {table} rows so far".format(**locals()))
         conn.commit()
         cur.close()
         conn.close()
+        logging.info(
+            "Done loading. Loaded a total of {i} rows".format(**locals()))
