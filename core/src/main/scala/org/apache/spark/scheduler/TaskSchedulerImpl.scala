@@ -159,7 +159,7 @@ private[spark] class TaskSchedulerImpl(
     this.synchronized {
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       activeTaskSets(taskSet.id) = manager
-      val attemptsByStage = activeTaskSets.values.map{manager => manager.taskSet}.groupBy{_.stageId}
+      val attemptsByStage = activeTaskSets.values.map(_.taskSet).groupBy(_.stageId)
       attemptsByStage.foreach { case (stageId, attempts) =>
         val n = attempts.size
         if (n > 1) {
