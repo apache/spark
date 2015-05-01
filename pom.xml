@@ -1671,16 +1671,6 @@
       <properties>
         <jersey.version>1.9</jersey.version>
       </properties>
-      <!-- Enable hadoop-2.2 profile when the Hadoop version is 2.2.0, which is now 
-      the default. Those building against 2.2.x or some distro-specific variation of 
-      that string still have to manually enable -Phadoop-2.2.
-      -->
-      <activation>
-       <property>
-        <name>hadoop.version</name>
-         <value>2.2.0<value>
-       </property>
-      </activation>
       <dependencies>
         <dependency>
           <groupId>org.mortbay.jetty</groupId>
