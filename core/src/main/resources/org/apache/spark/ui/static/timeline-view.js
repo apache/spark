@@ -177,6 +177,10 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, zo
         return taskIdx;
       };
 
+      $(this).click(function() {
+        window.location.href = "#task-" + getTaskIdx(this);
+      });
+
       $(this).hover(
         function() {
           var id = getTaskIdx(this);

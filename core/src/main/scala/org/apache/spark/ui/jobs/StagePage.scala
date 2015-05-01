@@ -535,7 +535,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val executorComputingTime = metricsOpt.map(_.executorRunTime).getOrElse(0L) -
         shuffleReadTime - shuffleWriteTime
       val executorComputingTimeProportion =
-        (executorComputingTime / totalExecutionTime * 100).toLong
+        (executorComputingTime.toDouble / totalExecutionTime * 100).toLong
       val serializationTime = metricsOpt.map(_.resultSerializationTime).getOrElse(0L)
       val serializationTimeProportion =
         (serializationTime.toDouble / totalExecutionTime * 100).toLong
@@ -739,7 +739,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val diskBytesSpilledSortable = maybeDiskBytesSpilled.map(_.toString).getOrElse("")
       val diskBytesSpilledReadable = maybeDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
 
-      <tr>
+      <tr id={"task-" + info.index}>
         <td>{info.index}</td>
         <td>{info.taskId}</td>
         <td sorttable_customkey={info.attempt.toString}>{
