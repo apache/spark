@@ -111,7 +111,7 @@
       </properties>
       <!-- Enable hadoop-2.2 profile when the Hadoop version is 2.2.0, which is now 
       the default. Those building against 2.2.x or some distro-specific variation of 
-      that string would still have to manually enable -Phadoop-2.2.
+      that string still have to manually enable -Phadoop-2.2.
       -->
       <activation>
        <property>
