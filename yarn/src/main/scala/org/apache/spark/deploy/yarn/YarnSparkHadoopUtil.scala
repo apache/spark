@@ -44,6 +44,8 @@ import org.apache.spark.util.Utils
  */
 class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
+  private var tokenRenewer: Option[ExecutorDelegationTokenUpdater] = None
+
   override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     dest.addCredentials(source.getCredentials())
   }
@@ -123,6 +125,15 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
         dstFs.addDelegationTokens(delegTokenRenewer, creds)
       }
     }
+  }
+
+  private[spark] override def startExecutorDelegationTokenRenewer(sparkConf: SparkConf): Unit = {
+    tokenRenewer = Some(new ExecutorDelegationTokenUpdater(sparkConf, conf))
+    tokenRenewer.get.updateCredentialsIfRequired()
+  }
+
+  private[spark] override def stopExecutorDelegationTokenRenewer(): Unit ={
+    tokenRenewer.foreach(_.stop())
   }
 
 }

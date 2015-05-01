@@ -170,24 +170,10 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           driverConf.set(key, value)
         }
       }
-      // Delegation Token Updater is not supported in Hadoop 1, so use reflection.
-      // Can't use Option[ExecutorDelegationTokenUpdater] because it is built only in YARN
-      // profile, so use Option[Any] since even the stop method call will be via reflection.
-      var tokenUpdaterOption: Option[Any] = None
-      var tokenUpdaterClass: Option[Class[_]] = None
       if (driverConf.contains("spark.yarn.credentials.file")) {
         logInfo("Will periodically update credentials from: " +
           driverConf.get("spark.yarn.credentials.file"))
-
-        tokenUpdaterClass =
-          Some(Class.forName("org.apache.spark.deploy.yarn.ExecutorDelegationTokenUpdater"))
-
-        // Periodically update the credentials for this user to ensure HDFS tokens get updated.
-        val constructor  =
-          tokenUpdaterClass.get.getDeclaredConstructor(classOf[SparkConf], classOf[Configuration])
-        tokenUpdaterOption = Some(constructor.newInstance(driverConf, SparkHadoopUtil.get.conf))
-        tokenUpdaterClass.get.getMethod("updateCredentialsIfRequired")
-          .invoke(tokenUpdaterOption.get)
+        SparkHadoopUtil.get.startExecutorDelegationTokenRenewer(driverConf)
       }
 
       val env = SparkEnv.createExecutorEnv(
@@ -205,9 +191,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
       env.rpcEnv.awaitTermination()
-      if (tokenUpdaterOption.isDefined) {
-        tokenUpdaterClass.get.getMethod("stop").invoke(tokenUpdaterOption.get)
-      }
+      SparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
     }
   }
 
