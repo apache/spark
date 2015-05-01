@@ -34,10 +34,6 @@ div#application-timeline, div#job-timeline {
   height: 80px;
 }
 
-#task-assignment-timeline>div.control-panel {
-  float: left;
-}
-
 #task-assignment-timeline>.timeline-header:after {
   content: "";
   clear: both;
@@ -61,16 +57,59 @@ div#application-timeline, div#job-timeline {
   height: 19px;
 }
 
+rect.scheduler-delay-proportion {
+  fill: #F6D76B;
+}
+
+rect.deserialization-time-proportion {
+  fill: #FFBDD8;
+}
+
+rect.shuffle-read-time-proportion {
+  fill: #8AC7DE;
+}
+
+rect.executor-runtime-proportion {
+  fill: #D9EB52;
+}
+
+rect.shuffle-write-time-proportion {
+  fill: #87796F;
+}
+
+rect.serialization-time-proportion {
+  fill: #93DFB8;
+}
+
+rect.getting-result-time-proportion {
+  fill: #FF9036;
+}
+
 .vis.timeline .item.task.succeeded {
   background-color: #D5DDF6;
+}
+
+.legend-area rect.succeeded-task-legend {
+  fill: #D5DDF6;
+  stroke: #97B0F8;
 }
 
 .vis.timeline .item.task.failed {
   background-color: #FF5475;
 }
 
+.legend-area rect.failed-task-legend {
+  fill: #FF5475;
+  stroke: #97B0F8;
+}
+
 .vis.timeline .item.task.running {
   background-color: #FDFFCA;
+}
+
+.legend-area rect.running-task-legend {
+  fill: #FDFFCA;
+  stroke: #97B0F8;
 }
 
 #application-timeline div.legend-area {
@@ -215,11 +254,20 @@ tr.corresponding-item-hover>td, tr.corresponding-item-hover>th {
   display: none;
 }
 
+#task-assignment-timeline.collapsed {
+  display: none;
+}
+
 .control-panel {
   margin-bottom: 5px;
 }
 
-span.expand-application-timeline, span.expand-job-timeline {
+#task-assignment-timeline .control-panel {
+  float: left;
+}
+
+span.expand-application-timeline, span.expand-job-timeline,
+span.expand-task-assignment-timeline {
   cursor: pointer;
 }
 

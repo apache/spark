@@ -168,6 +168,41 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, zo
   }
   taskTimeline.setWindow(minLaunchTime, curEnd);
   setupZoomable('#task-assignment-timeline-zoom-lock', taskTimeline);
+
+  function setupTaskEventAction() {
+    $(".item.range.task.task-assignment-timeline-object").each(function() {
+      var getTaskIdx = function(baseElem) {
+        var taskIdxText = $($(baseElem).find(".task-assignment-timeline-content")[0]).text();
+        var taskIdx = taskIdxText.match("Task (\\d+)\\(")[1];
+        return taskIdx;
+      };
+
+      $(this).hover(
+        function() {
+          var id = getTaskIdx(this);
+          $($(this).find("div.task-assignment-timeline-content")[0]).tooltip("show");
+        },
+        function() {
+          var id = getTaskIdx(this);
+          $($(this).find("div.task-assignment-timeline-content")[0])
+          .tooltip("hide");
+        }
+      );
+    });
+  }
+
+  setupTaskEventAction();
+  taskTimeline.on("rangechanged", function(properties) {
+    setupTaskEventAction();
+  });
+
+  $("span.expand-task-assignment-timeline").click(function() {
+    $("#task-assignment-timeline").toggleClass('collapsed');
+
+     // Switch the class of the arrow from open to closed.
+    $(this).find('.expand-task-assignment-timeline-arrow').toggleClass('arrow-open');
+    $(this).find('.expand-task-assignment-timeline-arrow').toggleClass('arrow-closed');
+  });
 }
 
 function setupExecutorEventAction() {
