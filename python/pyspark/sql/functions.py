@@ -186,14 +186,14 @@ def struct(*cols):
         that are named or aliased.
 
     >>> df.select(struct('age', 'name').alias("struct")).collect()
-    [Row(struct=[u'2', u'Alice']), Row(struct=[u'5', u'Bob'])]
+    [Row(struct=Row(age=2, name=u'Alice')), Row(struct=Row(age=5, name=u'Bob'))]
     >>> df.select(struct([df.age, df.name]).alias("struct")).collect()
-    [Row(struct=[u'2', u'Alice']), Row(struct=[u'5', u'Bob'])]
+    [Row(struct=Row(age=2, name=u'Alice')), Row(struct=Row(age=5, name=u'Bob'))]
     """
     sc = SparkContext._active_spark_context
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]
-    jc = sc._jvm.functions.array(_to_seq(sc, cols, _to_java_column))
+    jc = sc._jvm.functions.struct(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
 
