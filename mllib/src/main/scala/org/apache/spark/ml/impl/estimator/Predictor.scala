@@ -97,7 +97,7 @@ private[spark] abstract class Predictor[
     // This handles a few items such as schema validation.
     // Developers only need to implement train().
     transformSchema(dataset.schema, logging = true)
-    train(dataset)
+    copyValues(train(dataset))
   }
 
   override def copy(extra: ParamMap): Learner = {
