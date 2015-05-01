@@ -109,35 +109,38 @@ public class JavaLDASuite implements Serializable {
     assert(model.logPrior() < 0.0);
   }
 
-
   @Test
   public void OnlineOptimizerCompatibility() {
-      int k = 3;
-      double topicSmoothing = 1.2;
-      double termSmoothing = 1.2;
+    int k = 3;
+    double topicSmoothing = 1.2;
+    double termSmoothing = 1.2;
 
-      // Train a model
-      OnlineLDAOptimizer op = new OnlineLDAOptimizer().setTau_0(1024).setKappa(0.51)
-              .setGammaShape(1e40).setMiniBatchFraction(0.5);
-      LDA lda = new LDA();
-      lda.setK(k)
-         .setDocConcentration(topicSmoothing)
-         .setTopicConcentration(termSmoothing)
-         .setMaxIterations(5)
-         .setSeed(12345)
-         .setOptimizer(op);
+    // Train a model
+    OnlineLDAOptimizer op = new OnlineLDAOptimizer()
+      .setTau_0(1024)
+      .setKappa(0.51)
+      .setGammaShape(1e40)
+      .setMiniBatchFraction(0.5);
 
-      LDAModel model = lda.run(corpus);
+    LDA lda = new LDA();
+    lda.setK(k)
+      .setDocConcentration(topicSmoothing)
+      .setTopicConcentration(termSmoothing)
+      .setMaxIterations(5)
+      .setSeed(12345)
+      .setOptimizer(op);
 
-      // Check: basic parameters
-      assertEquals(model.k(), k);
-      assertEquals(model.vocabSize(), tinyVocabSize);
+    LDAModel model = lda.run(corpus);
 
-      // Check: topic summaries
-      Tuple2<int[], double[]>[] roundedTopicSummary = model.describeTopics();
-      assertEquals(roundedTopicSummary.length, k);
-      Tuple2<int[], double[]>[] roundedLocalTopicSummary = model.describeTopics();
-      assertEquals(roundedLocalTopicSummary.length, k);
+    // Check: basic parameters
+    assertEquals(model.k(), k);
+    assertEquals(model.vocabSize(), tinyVocabSize);
+
+    // Check: topic summaries
+    Tuple2<int[], double[]>[] roundedTopicSummary = model.describeTopics();
+    assertEquals(roundedTopicSummary.length, k);
+    Tuple2<int[], double[]>[] roundedLocalTopicSummary = model.describeTopics();
+    assertEquals(roundedLocalTopicSummary.length, k);
   }
 
   private static int tinyK = LDASuite$.MODULE$.tinyK();

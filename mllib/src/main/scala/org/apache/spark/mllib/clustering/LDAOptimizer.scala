@@ -295,7 +295,7 @@ class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   /**
-   * The function is for test only now. In the future, it can help support training strop/resume
+   * The function is for test only now. In the future, it can help support training stop/resume
    */
   private[clustering] def setLambda(lambda: BDM[Double]): this.type = {
     this.lambda = lambda
@@ -310,8 +310,9 @@ class OnlineLDAOptimizer extends LDAOptimizer {
     this
   }
 
-  override private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA):
-  OnlineLDAOptimizer = {
+  override private[clustering] def initialize(
+      docs: RDD[(Long, Vector)],
+      lda: LDA):  OnlineLDAOptimizer = {
     this.k = lda.getK
     this.corpusSize = docs.count()
     this.vocabSize = docs.first()._2.size
@@ -332,7 +333,6 @@ class OnlineLDAOptimizer extends LDAOptimizer {
     if (batch.isEmpty()) return this
     submitMiniBatch(batch)
   }
-
 
   /**
    * Submit a subset (like 1%, decide by the miniBatchFraction) of the corpus to the Online LDA
