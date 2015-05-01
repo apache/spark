@@ -74,7 +74,8 @@ class JsonProtocolSuite extends FunSuite {
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
       BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
-    val applicationStart = SparkListenerApplicationStart("The winner of all", None, 42L, "Garfield")
+    val applicationStart = SparkListenerApplicationStart("The winner of all", Some("appId"),
+      42L, "Garfield", Some("appAttempt"))
     val applicationEnd = SparkListenerApplicationEnd(42L)
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
@@ -274,9 +275,11 @@ class JsonProtocolSuite extends FunSuite {
 
   test("SparkListenerApplicationStart backwards compatibility") {
     // SparkListenerApplicationStart in Spark 1.0.0 do not have an "appId" property.
-    val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user")
+    // SparkListenerApplicationStart pre-Spark 1.4 does not have "appAttemptId".
+    val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user", None)
     val oldEvent = JsonProtocol.applicationStartToJson(applicationStart)
       .removeField({ _._1 == "App ID" })
+      .removeField({ _._1 == "App Attempt ID" })
     assert(applicationStart === JsonProtocol.applicationStartFromJson(oldEvent))
   }
 
@@ -1497,8 +1500,10 @@ class JsonProtocolSuite extends FunSuite {
       |{
       |  "Event": "SparkListenerApplicationStart",
       |  "App Name": "The winner of all",
+      |  "App ID": "appId",
       |  "Timestamp": 42,
-      |  "User": "Garfield"
+      |  "User": "Garfield",
+      |  "App Attempt ID": "appAttempt"
       |}
     """
 
