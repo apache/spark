@@ -330,3 +330,14 @@ def import_module_attrs(parent_module_globals, module_attrs_dict):
         except:
             logging.warning("Couldn't import module " + mod)
     return imported_attrs
+
+def is_in(obj, l):
+    """
+    Checks whether an object is one of the item in the list.
+    This is different from ``in`` because ``in`` uses __cmp__ when
+    present. Here we change based on the object itself
+    """
+    for item in l:
+        if item is obj:
+            return True
+    return False

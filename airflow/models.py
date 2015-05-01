@@ -1063,7 +1063,7 @@ class BaseOperator(Base):
         if not l:
             l = []
         for t in self.get_direct_relatives(upstream):
-            if t not in l:
+            if not utils.is_in(t, l):
                 l.append(t)
                 t.get_flat_relatives(upstream, l)
         return l
@@ -1462,9 +1462,9 @@ class DAG(Base):
             # Removing upstream/downstream references to tasks that did not
             # made the cut
             t._upstream_list = [
-                ut for ut in t._upstream_list if ut in tasks]
+                ut for ut in t._upstream_list if utils.is_in(ut, tasks)]
             t._downstream_list = [
-                ut for ut in t._downstream_list if ut in tasks]
+                ut for ut in t._downstream_list if utils.is_in(ut, tasks)]
 
         return dag
 
