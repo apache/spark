@@ -17,13 +17,12 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
+import org.scalatest.FunSuite
+
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
-import org.scalatest.FunSuite
 
 class OneHotEncoderSuite extends FunSuite with MLlibTestSparkContext {
   private var sqlContext: SQLContext = _
@@ -33,23 +32,19 @@ class OneHotEncoderSuite extends FunSuite with MLlibTestSparkContext {
     sqlContext = new SQLContext(sc)
   }
 
-  def stringIndexed(): (DataFrame, NominalAttribute) = {
+  def stringIndexed(): DataFrame = {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
     val df = sqlContext.createDataFrame(data).toDF("id", "label")
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
       .fit(df)
-    val transformed = indexer.transform(df)
-    val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
-      .asInstanceOf[NominalAttribute]
-    (transformed, attr)
+    indexer.transform(df)
   }
 
   test("OneHotEncoder includeFirst = true") {
-    val (transformed, attr) = stringIndexed()
+    val transformed = stringIndexed()
     val encoder = new OneHotEncoder()
-      .setLabelNames(attr)
       .setInputCol("labelIndex")
       .setOutputCol("labelVec")
     val encoded = encoder.transform(transformed)
@@ -65,10 +60,9 @@ class OneHotEncoderSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("OneHotEncoder includeFirst = false") {
-    val (transformed, attr) = stringIndexed()
+    val transformed = stringIndexed()
     val encoder = new OneHotEncoder()
       .setIncludeFirst(false)
-      .setLabelNames(attr)
       .setInputCol("labelIndex")
       .setOutputCol("labelVec")
     val encoded = encoder.transform(transformed)
