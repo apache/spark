@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming
 
+import scala.collection.mutable.Queue
+
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
@@ -60,8 +62,28 @@ class UISeleniumSuite
     ssc
   }
 
+  private def setupStreams(ssc: StreamingContext): Unit = {
+    val rdds = Queue(ssc.sc.parallelize(1 to 4, 4))
+    val inputStream = ssc.queueStream(rdds)
+    inputStream.foreachRDD { rdd =>
+      rdd.foreach(_ => {})
+      rdd.foreach(_ => {})
+    }
+    inputStream.foreachRDD { rdd =>
+      rdd.foreach(_ => {})
+      try {
+        rdd.foreach(_ => throw new RuntimeException("Oops"))
+      } catch {
+        case e: SparkException if e.getMessage.contains("Oops") =>
+      }
+    }
+  }
+
   test("attaching and detaching a Streaming tab") {
     withStreamingContext(newSparkStreamingContext()) { ssc =>
+      setupStreams(ssc)
+      ssc.start()
+
       val sparkUI = ssc.sparkContext.ui.get
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
@@ -77,8 +99,8 @@ class UISeleniumSuite
         statisticText should contain("Batch interval:")
 
         val h4Text = findAll(cssSelector("h4")).map(_.text).toSeq
-        h4Text should contain("Active Batches (0)")
-        h4Text should contain("Completed Batches (last 0 out of 0)")
+        h4Text.exists(_.matches("Active Batches \\(\\d+\\)")) should be (true)
+        h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
         findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
           List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time", "Status")
@@ -86,6 +108,63 @@ class UISeleniumSuite
         findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
           List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time", "Total Delay")
         }
+
+        val batchLinks =
+          findAll(cssSelector("""#completed-batches-table a""")).flatMap(_.attribute("href")).toSeq
+        batchLinks.size should be >= 1
+
+        // Check a normal batch page
+        go to (batchLinks.last) // Last should be the first batch, so it will have some jobs
+        val summaryText = findAll(cssSelector("li strong")).map(_.text).toSeq
+        summaryText should contain ("Batch Duration:")
+        summaryText should contain ("Input data size:")
+        summaryText should contain ("Scheduling delay:")
+        summaryText should contain ("Processing time:")
+        summaryText should contain ("Total delay:")
+
+        findAll(cssSelector("""#batch-job-table th""")).map(_.text).toSeq should be {
+          List("Output Op Id", "Description", "Duration", "Job Id", "Duration",
+            "Stages: Succeeded/Total", "Tasks (for all stages): Succeeded/Total", "Error")
+        }
+
+        // Check we have 2 output op ids
+        val outputOpIds = findAll(cssSelector(".output-op-id-cell")).toSeq
+        outputOpIds.map(_.attribute("rowspan")) should be (List(Some("2"), Some("2")))
+        outputOpIds.map(_.text) should be (List("0", "1"))
+
+        // Check job ids
+        val jobIdCells = findAll(cssSelector( """#batch-job-table a""")).toSeq
+        jobIdCells.map(_.text) should be (List("0", "1", "2", "3"))
+
+        val jobLinks = jobIdCells.flatMap(_.attribute("href"))
+        jobLinks.size should be (4)
+
+        // Check stage progress
+        findAll(cssSelector(""".stage-progress-cell""")).map(_.text).toSeq should be
+          (List("1/1", "1/1", "1/1", "0/1 (1 failed)"))
+
+        // Check job progress
+        findAll(cssSelector(""".progress-cell""")).map(_.text).toSeq should be
+          (List("1/1", "1/1", "1/1", "0/1 (1 failed)"))
+
+        // Check stacktrace
+        val errorCells = findAll(cssSelector(""".stacktrace-details""")).map(_.text).toSeq
+        errorCells should have size 1
+        errorCells(0) should include("java.lang.RuntimeException: Oops")
+
+        // Check the job link in the batch page is right
+        go to (jobLinks(0))
+        val jobDetails = findAll(cssSelector("li strong")).map(_.text).toSeq
+        jobDetails should contain("Status:")
+        jobDetails should contain("Completed Stages:")
+
+        // Check a batch page without id
+        go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming/batch/")
+        webDriver.getPageSource should include ("Missing id parameter")
+
+        // Check a non-exist batch
+        go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming/batch/?id=12345")
+        webDriver.getPageSource should include ("does not exist")
       }
 
       ssc.stop(false)

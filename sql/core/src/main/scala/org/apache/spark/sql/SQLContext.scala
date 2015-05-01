@@ -1065,6 +1065,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     def codegenEnabled: Boolean = self.conf.codegenEnabled
 
+    def unsafeEnabled: Boolean = self.conf.unsafeEnabled
+
     def numPartitions: Int = self.conf.numShufflePartitions
 
     def strategies: Seq[Strategy] =

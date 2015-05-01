@@ -22,10 +22,7 @@ import com.google.common.primitives.Ints;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.TestData$;
+import org.apache.spark.sql.*;
 import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.test.TestSQLContext$;
 import org.apache.spark.sql.types.*;
@@ -41,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.apache.spark.sql.functions.*;
+import static org.apache.spark.sql.mathfunctions.*;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext jsc;
@@ -98,6 +96,14 @@ public class JavaDataFrameSuite {
     df.groupBy().agg(countDistinct("key", "value"));
     df.groupBy().agg(countDistinct(col("key"), col("value")));
     df.select(coalesce(col("key")));
+    
+    // Varargs with mathfunctions
+    DataFrame df2 = context.table("testData2");
+    df2.select(exp("a"), exp("b"));
+    df2.select(exp(log("a")));
+    df2.select(pow("a", "a"), pow("b", 2.0));
+    df2.select(pow(col("a"), col("b")), exp("b"));
+    df2.select(sin("a"), acos("b"));
   }
 
   @Ignore
@@ -169,5 +175,12 @@ public class JavaDataFrameSuite {
       Assert.assertEquals(bean.getD().get(i), d.apply(i));
     }
   }
-
+  
+  @Test
+  public void testFrequentItems() {
+    DataFrame df = context.table("testData2");
+    String[] cols = new String[]{"a"};
+    DataFrame results = df.stat().freqItems(cols, 0.2);
+    Assert.assertTrue(results.collect()[0].getSeq(0).contains(1));
+  }
 }
