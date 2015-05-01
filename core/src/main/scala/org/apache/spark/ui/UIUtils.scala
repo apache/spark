@@ -167,13 +167,21 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/additional-metrics.js")}></script>
   }
 
+  def vizHeaderNodes: Seq[Node] = {
+    <script src={prependBaseUri("/static/d3.min.js")}></script>
+    <script src={prependBaseUri("/static/dagre-d3.min.js")}></script>
+    <script src={prependBaseUri("/static/graphlib-dot.min.js")}></script>
+    <script src={prependBaseUri("/static/spark-stage-viz.js")}></script>
+  }
+
   /** Returns a spark page with correctly formatted headers */
   def headerSparkPage(
       title: String,
       content: => Seq[Node],
       activeTab: SparkUITab,
       refreshInterval: Option[Int] = None,
-      helpText: Option[String] = None): Seq[Node] = {
+      helpText: Option[String] = None,
+      showVisualization: Boolean = false): Seq[Node] = {
 
     val appName = activeTab.appName
     val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
@@ -191,6 +199,7 @@ private[spark] object UIUtils extends Logging {
     <html>
       <head>
         {commonHeaderNodes}
+        {if (showVisualization) vizHeaderNodes else Seq.empty}
         <title>{appName} - {title}</title>
       </head>
       <body>

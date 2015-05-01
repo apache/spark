@@ -35,10 +35,10 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
   private val none = StorageLevel.NONE
   private val taskInfo = new TaskInfo(0, 0, 0, 0, "big", "dog", TaskLocality.ANY, false)
   private val taskInfo1 = new TaskInfo(1, 1, 1, 1, "big", "cat", TaskLocality.ANY, false)
-  private def rddInfo0 = new RDDInfo(0, "freedom", 100, memOnly)
-  private def rddInfo1 = new RDDInfo(1, "hostage", 200, memOnly)
-  private def rddInfo2 = new RDDInfo(2, "sanity", 300, memAndDisk)
-  private def rddInfo3 = new RDDInfo(3, "grace", 400, memAndDisk)
+  private def rddInfo0 = new RDDInfo(0, "freedom", 100, memOnly, "scoop", Seq(10))
+  private def rddInfo1 = new RDDInfo(1, "hostage", 200, memOnly, "scoop", Seq(10))
+  private def rddInfo2 = new RDDInfo(2, "sanity", 300, memAndDisk, "scoop", Seq(10))
+  private def rddInfo3 = new RDDInfo(3, "grace", 400, memAndDisk, "scoop", Seq(10))
   private val bm1 = BlockManagerId("big", "dog", 1)
 
   before {
@@ -70,7 +70,7 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
     assert(storageListener.rddInfoList.size === 2)
 
     // Submitting RDDInfos with duplicate IDs does nothing
-    val rddInfo0Cached = new RDDInfo(0, "freedom", 100, StorageLevel.MEMORY_ONLY)
+    val rddInfo0Cached = new RDDInfo(0, "freedom", 100, StorageLevel.MEMORY_ONLY, "scoop", Seq(10))
     rddInfo0Cached.numCachedPartitions = 1
     val stageInfo0Cached = new StageInfo(0, 0, "0", 100, Seq(rddInfo0), "details")
     bus.postToAll(SparkListenerStageSubmitted(stageInfo0Cached))
@@ -166,8 +166,8 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
 
   test("verify StorageTab contains all cached rdds") {
 
-    val rddInfo0 = new RDDInfo(0, "rdd0", 1, memOnly)
-    val rddInfo1 = new RDDInfo(1, "rdd1", 1 ,memOnly)
+    val rddInfo0 = new RDDInfo(0, "rdd0", 1, memOnly, "scoop", Seq(4))
+    val rddInfo1 = new RDDInfo(1, "rdd1", 1 ,memOnly, "scoop", Seq(4))
     val stageInfo0 = new StageInfo(0, 0, "stage0", 1, Seq(rddInfo0), "details")
     val stageInfo1 = new StageInfo(1, 0, "stage1", 1, Seq(rddInfo1), "details")
     val taskMetrics0 = new TaskMetrics
