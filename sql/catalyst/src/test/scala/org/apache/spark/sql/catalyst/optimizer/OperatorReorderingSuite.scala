@@ -549,7 +549,7 @@ class OperatorReorderingSuite extends PlanTest {
     val originalQuery =
       testRelation
         .select('a, 'b)
-        .sortBy(SortOrder('a, Ascending))
+        .sortBy(SortOrder('b, Ascending))
         .select('a)
         .limit(5)
 
@@ -557,7 +557,7 @@ class OperatorReorderingSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select('a, 'b)
-        .sortBy(SortOrder('a, Ascending))
+        .sortBy(SortOrder('b, Ascending))
         .limit(5)
         .select('a).analyze
 
