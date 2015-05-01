@@ -81,7 +81,7 @@ class InputInfoTrackerSuite extends FunSuite with BeforeAndAfter {
     assert(batchTimeToInputInfos.keys === Set(streamId1, streamId2))
     assert(batchTimeToInputInfos(streamId1) === inputInfo1)
     assert(batchTimeToInputInfos(streamId2) === inputInfo2)
-    assert(inputInfoTracker.getInfoOfBatchAndStream(time, streamId1) === Some(inputInfo1))
+    assert(inputInfoTracker.getInfo(time)(streamId1) === inputInfo1)
   }
 
   test("test cleanup InputInfo from InputInfoTracker") {
@@ -94,11 +94,11 @@ class InputInfoTrackerSuite extends FunSuite with BeforeAndAfter {
     inputInfoTracker.reportInfo(inputInfo2.batchTime, inputInfo2)
 
     inputInfoTracker.cleanup(Time(0))
-    assert(inputInfoTracker.getInfoOfBatchAndStream(Time(0), streamId1) === Some(inputInfo1))
-    assert(inputInfoTracker.getInfoOfBatchAndStream(Time(1), streamId1) === Some(inputInfo2))
+    assert(inputInfoTracker.getInfo(Time(0))(streamId1) === inputInfo1)
+    assert(inputInfoTracker.getInfo(Time(1))(streamId1) === inputInfo2)
 
     inputInfoTracker.cleanup(Time(1))
-    assert(inputInfoTracker.getInfoOfBatchAndStream(Time(0), streamId1) === None)
-    assert(inputInfoTracker.getInfoOfBatchAndStream(Time(1), streamId1) === Some(inputInfo2))
+    assert(inputInfoTracker.getInfo(Time(0)).get(streamId1) === None)
+    assert(inputInfoTracker.getInfo(Time(1))(streamId1) === inputInfo2)
   }
 }

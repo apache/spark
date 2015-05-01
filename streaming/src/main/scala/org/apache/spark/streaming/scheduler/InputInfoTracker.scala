@@ -53,12 +53,6 @@ private[streaming] class InputInfoTracker(ssc: StreamingContext) extends Logging
     inputInfos.map(_.toMap).getOrElse(Map[Int, InputInfo]())
   }
 
-  /** Get the input information of specified batch time and input stream id */
-  def getInfoOfBatchAndStream(batchTime: Time, inputStreamId: Int
-    ): Option[InputInfo] = synchronized {
-    batchTimeToInputInfos.get(batchTime).map(_.get(inputStreamId)).flatMap(x => x)
-  }
-
   /** Cleanup the tracked input information older than threshold batch time */
   def cleanup(batchThreshTime: Time): Unit = synchronized {
     val timesToCleanup = batchTimeToInputInfos.keys.filter(_ < batchThreshTime)
