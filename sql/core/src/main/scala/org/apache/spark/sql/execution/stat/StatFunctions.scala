@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.stat
 
-import org.apache.spark.sql.types.NumericType
 import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.types.NumericType
 
 private[sql] object StatFunctions {
   
