@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io._
+import java.io.File
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
@@ -25,7 +25,7 @@ import scala.collection.mutable.HashMap
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs._
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.{Master, JobConf}
 import org.apache.hadoop.security.Credentials

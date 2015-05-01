@@ -37,6 +37,7 @@ import org.apache.spark.util.Utils
 
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 /**
  * :: DeveloperApi ::
