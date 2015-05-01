@@ -495,7 +495,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * necessary. If blocks are dropped, adds them to droppedBlocks. Returns whether the
    * request was granted, and any blocks that were dropped trying to grant it.
    */
-  def reserveUnrollMemoryForThisThreadDroppingBlocks(
+  private def reserveUnrollMemoryForThisThreadDroppingBlocks(
         blockToAdd: BlockId,
         space: Long): ResultWithDroppedBlocks = {
     var droppedBlocks = Seq.empty[(BlockId, BlockStatus)]
