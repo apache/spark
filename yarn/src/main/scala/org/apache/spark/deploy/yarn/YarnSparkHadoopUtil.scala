@@ -132,7 +132,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     tokenRenewer.get.updateCredentialsIfRequired()
   }
 
-  private[spark] override def stopExecutorDelegationTokenRenewer(): Unit ={
+  private[spark] override def stopExecutorDelegationTokenRenewer(): Unit = {
     tokenRenewer.foreach(_.stop())
   }
 
