@@ -396,7 +396,7 @@ class OnlineLDAOptimizer extends LDAOptimizer {
     val batchResult = statsSum :* expElogbeta
 
     // Note that this is an optimization to avoid batch.count
-    update(batchResult, iteration, (miniBatchFraction * corpusSize).toInt)
+    update(batchResult, iteration, (miniBatchFraction * corpusSize).ceil.toInt)
     this
   }
 

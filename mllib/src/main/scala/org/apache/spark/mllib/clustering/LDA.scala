@@ -210,14 +210,15 @@ class LDA private (
 
   /**
    * Set the LDAOptimizer used to perform the actual calculation by algorithm name.
-   * Currently "em" is supported.
+   * Currently "em", "online" is supported.
    */
   def setOptimizer(optimizerName: String): this.type = {
     this.ldaOptimizer =
       optimizerName.toLowerCase match {
         case "em" => new EMLDAOptimizer
+        case "online" => new OnlineLDAOptimizer
         case other =>
-          throw new IllegalArgumentException(s"Only em is supported but got $other.")
+          throw new IllegalArgumentException(s"Only em, online are supported but got $other.")
       }
     this
   }
