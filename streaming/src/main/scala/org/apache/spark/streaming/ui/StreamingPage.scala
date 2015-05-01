@@ -30,8 +30,9 @@ import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
 
 /**
- * @param divId the `id` used in the html `div` tag
- * @param data the data for the timeline graph
+ * @param timelineDivId the timeline `id` used in the html `div` tag
+ * @param histogramDivId the timeline `id` used in the html `div` tag
+ * @param data the data for the graph
  * @param minX the min value of X axis
  * @param maxX the max value of X axis
  * @param minY the min value of Y axis
@@ -40,52 +41,56 @@ import org.apache.spark.ui.UIUtils._
  * @param batchInterval if `batchInterval` is not None, we will draw a line for `batchInterval` in
  *                      the graph
  */
-private[ui] class TimelineUIData(divId: String, data: Seq[(Long, _)], minX: Long, maxX: Long,
-    minY: Double, maxY: Double, unitY: String, batchInterval: Option[Double] = None) {
+private[ui] class GraphUIData(
+    timelineDivId: String,
+    histogramDivId: String,
+    data: Seq[(Long, Double)],
+    minX: Long,
+    maxX: Long,
+    minY: Double,
+    maxY: Double,
+    unitY: String,
+    batchInterval: Option[Double] = None) {
 
-  def toHtml(jsCollector: JsCollector): Seq[Node] = {
+  private var dataJavaScriptName: String = _
+
+  def generateDataJs(jsCollector: JsCollector): Unit = {
     val jsForData = data.map { case (x, y) =>
       s"""{"x": $x, "y": $y}"""
     }.mkString("[", ",", "]")
+    dataJavaScriptName = jsCollector.nextVariableName
+    jsCollector.addPreparedStatement(s"var $dataJavaScriptName = $jsForData;")
+  }
+
+  def generateTimelineHtml(jsCollector: JsCollector): Seq[Node] = {
     jsCollector.addPreparedStatement(s"registerTimeline($minY, $maxY);")
     if (batchInterval.isDefined) {
       jsCollector.addStatement(
         "drawTimeline(" +
-          s"'#$divId', $jsForData, $minX, $maxX, $minY, $maxY, '$unitY', ${batchInterval.get}" +
+          s"'#$timelineDivId', $dataJavaScriptName, $minX, $maxX, $minY, $maxY, '$unitY'," +
+          s" ${batchInterval.get}" +
           ");")
     } else {
       jsCollector.addStatement(
-        s"drawTimeline('#$divId', $jsForData, $minX, $maxX, $minY, $maxY, '$unitY');")
+        s"drawTimeline('#$timelineDivId', $dataJavaScriptName, $minX, $maxX, $minY, $maxY," +
+          s" '$unitY');")
     }
-    <div id={divId}></div>
+    <div id={timelineDivId}></div>
   }
-}
 
-/**
- * @param divId the `id` used in the html `div` tag
- * @param data the data for the histogram graph
- * @param minY the min value of Y axis
- * @param maxY the max value of Y axis
- * @param unitY the unit of Y axis
- * @param batchInterval if `batchInterval` is not None, we will draw a line for `batchInterval` in
- *                      the graph
- */
-private[ui] class HistogramUIData(
-    divId: String, data: Seq[_], minY: Double, maxY: Double, unitY: String,
-    batchInterval: Option[Double] = None) {
-
-  def toHtml(jsCollector: JsCollector): Seq[Node] = {
-    val jsForData = data.mkString("[", ",", "]")
-    jsCollector.addPreparedStatement(s"registerHistogram($jsForData, $minY, $maxY);")
+  def generateHistogramHtml(jsCollector: JsCollector): Seq[Node] = {
+    val histogramData = s"$dataJavaScriptName.map(function(d) { return d.y; })"
+    jsCollector.addPreparedStatement(s"registerHistogram($histogramData, $minY, $maxY);")
     if (batchInterval.isDefined) {
       jsCollector.addStatement(
         "drawHistogram(" +
-          s"'#$divId', $jsForData, $minY, $maxY, '$unitY', ${batchInterval.get}" +
+          s"'#$histogramDivId', $histogramData, $minY, $maxY, '$unitY', ${batchInterval.get}" +
           ");")
     } else {
-      jsCollector.addStatement(s"drawHistogram('#$divId', $jsForData, $minY, $maxY, '$unitY');")
+      jsCollector.addStatement(
+        s"drawHistogram('#$histogramDivId', $histogramData, $minY, $maxY, '$unitY');")
     }
-    <div id={divId}></div>
+    <div id={histogramDivId}></div>
   }
 }
 
@@ -246,77 +251,53 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     val jsCollector = new JsCollector
 
-    val timelineDataForEventRateOfAllReceivers =
-      new TimelineUIData(
+    val graphUIDataForEventRateOfAllReceivers =
+      new GraphUIData(
         "all-receiver-events-timeline",
+        "all-receiver-events-histogram",
         eventRateForAllReceivers.data,
         minBatchTime,
         maxBatchTime,
         minEventRate,
         maxEventRate,
-        "events/sec").toHtml(jsCollector)
+        "events/sec")
+    graphUIDataForEventRateOfAllReceivers.generateDataJs(jsCollector)
 
-    val histogramDataForEventRateOfAllReceivers =
-      new HistogramUIData(
-        "all-receiver-events-histogram",
-        eventRateForAllReceivers.data.map(_._2),
-        minEventRate,
-        maxEventRate,
-        "events/sec").toHtml(jsCollector)
-
-    val timelineDataForSchedulingDelay =
-      new TimelineUIData(
+    val graphUIDataForSchedulingDelay =
+      new GraphUIData(
         "scheduling-delay-timeline",
+        "scheduling-delay-histogram",
         schedulingDelay.timelineData(normalizedUnit),
         minBatchTime,
         maxBatchTime,
         minTime,
         maxTime,
-        formattedUnit).toHtml(jsCollector)
+        formattedUnit)
+    graphUIDataForSchedulingDelay.generateDataJs(jsCollector)
 
-    val histogramDataForSchedulingDelay =
-      new HistogramUIData(
-        "scheduling-delay-histogram",
-        schedulingDelay.histogramData(normalizedUnit),
-        minTime,
-        maxTime,
-        formattedUnit).toHtml(jsCollector)
-
-    val timelineDataForProcessingTime =
-      new TimelineUIData(
+    val graphUIDataForProcessingTime =
+      new GraphUIData(
         "processing-time-timeline",
+        "processing-time-histogram",
         processingTime.timelineData(normalizedUnit),
         minBatchTime,
         maxBatchTime,
         minTime,
         maxTime,
-        formattedUnit, Some(batchInterval)).toHtml(jsCollector)
+        formattedUnit, Some(batchInterval))
+    graphUIDataForProcessingTime.generateDataJs(jsCollector)
 
-    val histogramDataForProcessingTime =
-      new HistogramUIData(
-        "processing-time-histogram",
-        processingTime.histogramData(normalizedUnit),
-        minTime,
-        maxTime,
-        formattedUnit, Some(batchInterval)).toHtml(jsCollector)
-
-    val timelineDataForTotalDelay =
-      new TimelineUIData(
+    val graphUIDataForTotalDelay =
+      new GraphUIData(
         "total-delay-timeline",
+        "total-delay-histogram",
         totalDelay.timelineData(normalizedUnit),
         minBatchTime,
         maxBatchTime,
         minTime,
         maxTime,
-        formattedUnit).toHtml(jsCollector)
-
-    val histogramDataForTotalDelay =
-      new HistogramUIData(
-        "total-delay-histogram",
-        totalDelay.histogramData(normalizedUnit),
-        minTime,
-        maxTime,
-        formattedUnit).toHtml(jsCollector)
+        formattedUnit)
+    graphUIDataForTotalDelay.generateDataJs(jsCollector)
 
     val hasReceiver = listener.allReceivers.nonEmpty
 
@@ -344,8 +325,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
               <div>Avg: {eventRateForAllReceivers.formattedAvg} events/sec</div>
             </div>
           </td>
-          <td class="timeline">{timelineDataForEventRateOfAllReceivers}</td>
-          <td class="histogram">{histogramDataForEventRateOfAllReceivers}</td>
+          <td class="timeline">{graphUIDataForEventRateOfAllReceivers.generateTimelineHtml(jsCollector)}</td>
+          <td class="histogram">{graphUIDataForEventRateOfAllReceivers.generateHistogramHtml(jsCollector)}</td>
         </tr>
       {if (hasReceiver) {
         <tr id="inputs-table" style="display: none;" >
@@ -361,8 +342,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
               <div>Avg: {schedulingDelay.formattedAvg}</div>
             </div>
           </td>
-          <td class="timeline">{timelineDataForSchedulingDelay}</td>
-          <td class="histogram">{histogramDataForSchedulingDelay}</td>
+          <td class="timeline">{graphUIDataForSchedulingDelay.generateTimelineHtml(jsCollector)}</td>
+          <td class="histogram">{graphUIDataForSchedulingDelay.generateHistogramHtml(jsCollector)}</td>
         </tr>
         <tr>
           <td style="vertical-align: middle;">
@@ -371,8 +352,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
               <div>Avg: {processingTime.formattedAvg}</div>
             </div>
           </td>
-          <td class="timeline">{timelineDataForProcessingTime}</td>
-          <td class="histogram">{histogramDataForProcessingTime}</td>
+          <td class="timeline">{graphUIDataForProcessingTime.generateTimelineHtml(jsCollector)}</td>
+          <td class="histogram">{graphUIDataForProcessingTime.generateHistogramHtml(jsCollector)}</td>
         </tr>
         <tr>
           <td style="vertical-align: middle;">
@@ -381,8 +362,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
               <div>Avg: {totalDelay.formattedAvg}</div>
             </div>
           </td>
-          <td class="timeline">{timelineDataForTotalDelay}</td>
-          <td class="histogram">{histogramDataForTotalDelay}</td>
+          <td class="timeline">{graphUIDataForTotalDelay.generateTimelineHtml(jsCollector)}</td>
+          <td class="histogram">{graphUIDataForTotalDelay.generateHistogramHtml(jsCollector)}</td>
         </tr>
       </tbody>
     </table>
@@ -442,23 +423,17 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val receivedRecords =
       new EventRateUIData(listener.receivedEventRateWithBatchTime.get(receiverId).getOrElse(Seq()))
 
-    val timelineForEventRate =
-      new TimelineUIData(
+    val graphUIDataForEventRate =
+      new GraphUIData(
         s"receiver-$receiverId-events-timeline",
+        s"receiver-$receiverId-events-histogram",
         receivedRecords.data,
         minX,
         maxX,
         minY,
         maxY,
-        "events/sec").toHtml(jsCollector)
-
-    val histogramForEventsRate =
-      new HistogramUIData(
-        s"receiver-$receiverId-events-histogram",
-        receivedRecords.data.map(_._2),
-        minY,
-        maxY,
-        "events/sec").toHtml(jsCollector)
+        "events/sec")
+    graphUIDataForEventRate.generateDataJs(jsCollector)
 
     <tr>
       <td rowspan="2" style="vertical-align: middle; width: 151px;">
@@ -474,9 +449,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </tr>
     <tr>
       <td colspan="3" class="timeline">
-        {timelineForEventRate}
+        {graphUIDataForEventRate.generateTimelineHtml(jsCollector)}
       </td>
-      <td class="histogram">{histogramForEventsRate}</td>
+      <td class="histogram">{graphUIDataForEventRate.generateHistogramHtml(jsCollector)}</td>
     </tr>
   }
 
@@ -535,6 +510,17 @@ private[ui] object StreamingPage {
  * DOM has finished loading.
  */
 private[ui] class JsCollector {
+
+  private var variableId = 0
+
+  /**
+   * Return the next unused JavaScript variable name
+   */
+  def nextVariableName: String = {
+    variableId += 1
+    "v" + variableId
+  }
+
   /**
    * JavaScript statements that will execute before `statements`
    */

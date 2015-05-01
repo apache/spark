@@ -105,7 +105,6 @@ class UISeleniumSuite
         statTableHeaders should contain ("Histograms")
 
         val statTableCells = findAll(cssSelector("#stat-table td")).map(_.text).toSeq
-        println(statTableCells.toList)
         statTableCells.exists(_.contains("Input Rate")) should be (true)
         statTableCells.exists(_.contains("Streaming Scheduling Delay")) should be (true)
         statTableCells.exists(_.contains("Processing Time")) should be (true)
