@@ -27,14 +27,16 @@ import StreamingTab._
  * Spark Web UI tab that shows statistics of a streaming job.
  * This assumes the given SparkContext has enabled its SparkUI.
  */
-private[spark] class StreamingTab(ssc: StreamingContext)
+private[spark] class StreamingTab(val ssc: StreamingContext)
   extends SparkUITab(getSparkUI(ssc), "streaming") with Logging {
 
   val parent = getSparkUI(ssc)
   val listener = ssc.progressListener
 
   ssc.addStreamingListener(listener)
+  ssc.sc.addSparkListener(listener)
   attachPage(new StreamingPage(this))
+  attachPage(new BatchPage(this))
   parent.attachTab(this)
 
   def detach() {

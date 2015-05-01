@@ -78,6 +78,9 @@ To verify that the Mesos cluster is ready for Spark, navigate to the Mesos maste
 To use Mesos from Spark, you need a Spark binary package available in a place accessible by Mesos, and
 a Spark driver program configured to connect to Mesos.
 
+Alternatively, you can also install Spark in the same location in all the Mesos slaves, and configure
+`spark.mesos.executor.home` (defaults to SPARK_HOME) to point to that location.
+
 ## Uploading Spark Package
 
 When Mesos runs a task on a Mesos slave for the first time, that slave must have a Spark binary
@@ -107,7 +110,11 @@ the `make-distribution.sh` script included in a Spark source tarball/checkout.
 The Master URLs for Mesos are in the form `mesos://host:5050` for a single-master Mesos
 cluster, or `mesos://zk://host:2181` for a multi-master Mesos cluster using ZooKeeper.
 
-The driver also needs some configuration in `spark-env.sh` to interact properly with Mesos:
+## Client Mode
+
+In client mode, a Spark Mesos framework is launched directly on the client machine and waits for the driver output.
+
+The driver needs some configuration in `spark-env.sh` to interact properly with Mesos:
 
 1. In `spark-env.sh` set some environment variables:
  * `export MESOS_NATIVE_JAVA_LIBRARY=<path to libmesos.so>`. This path is typically
@@ -129,8 +136,7 @@ val sc = new SparkContext(conf)
 {% endhighlight %}
 
 (You can also use [`spark-submit`](submitting-applications.html) and configure `spark.executor.uri`
-in the [conf/spark-defaults.conf](configuration.html#loading-default-configurations) file. Note
-that `spark-submit` currently only supports deploying the Spark driver in `client` mode for Mesos.)
+in the [conf/spark-defaults.conf](configuration.html#loading-default-configurations) file.)
 
 When running a shell, the `spark.executor.uri` parameter is inherited from `SPARK_EXECUTOR_URI`, so
 it does not need to be redundantly passed in as a system property.
@@ -139,6 +145,17 @@ it does not need to be redundantly passed in as a system property.
 ./bin/spark-shell --master mesos://host:5050
 {% endhighlight %}
 
+## Cluster mode
+
+Spark on Mesos also supports cluster mode, where the driver is launched in the cluster and the client
+can find the results of the driver from the Mesos Web UI.
+
+To use cluster mode, you must start the MesosClusterDispatcher in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
+passing in the Mesos master url (e.g: mesos://host:5050).
+
+From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master url
+to the url of the MesosClusterDispatcher (e.g: mesos://dispatcher:7077). You can view driver statuses on the
+Spark cluster Web UI.
 
 # Mesos Run Modes
 
@@ -208,6 +225,16 @@ See the [configuration page](configuration.html) for information on Spark config
     Set the extra amount of cpus to request per task. This setting is only used for Mesos coarse grain mode.
     The total amount of cores requested per task is the number of cores in the offer plus the extra cores configured.
     Note that total amount of cores the executor will request in total will not exceed the spark.cores.max setting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.mesosExecutor.cores</code></td>
+  <td>1.0</td>
+  <td>
+    (Fine-grained mode only) Number of cores to give each Mesos executor. This does not
+    include the cores used to run the Spark tasks. In other words, even if no Spark task
+    is being run, each Mesos executor will occupy the number of cores configured here.
+    The value can be a floating point number.
   </td>
 </tr>
 <tr>

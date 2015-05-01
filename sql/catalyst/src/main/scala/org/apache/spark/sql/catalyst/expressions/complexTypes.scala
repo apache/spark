@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.Map
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.types._
 
 /**
@@ -79,6 +81,41 @@ trait GetField extends UnaryExpression {
   override def toString: String = s"$child.${field.name}"
 
   def field: StructField
+}
+
+object GetField {
+  /**
+   * Returns the resolved `GetField`, and report error if no desired field or over one
+   * desired fields are found.
+   */
+  def apply(
+      expr: Expression,
+      fieldName: String,
+      resolver: Resolver): GetField = {
+    def findField(fields: Array[StructField]): Int = {
+      val checkField = (f: StructField) => resolver(f.name, fieldName)
+      val ordinal = fields.indexWhere(checkField)
+      if (ordinal == -1) {
+        throw new AnalysisException(
+          s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
+      } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
+        throw new AnalysisException(
+          s"Ambiguous reference to fields ${fields.filter(checkField).mkString(", ")}")
+      } else {
+        ordinal
+      }
+    }
+    expr.dataType match {
+      case StructType(fields) =>
+        val ordinal = findField(fields)
+        StructGetField(expr, fields(ordinal), ordinal)
+      case ArrayType(StructType(fields), containsNull) =>
+        val ordinal = findField(fields)
+        ArrayGetField(expr, fields(ordinal), ordinal, containsNull)
+      case otherType =>
+        throw new AnalysisException(s"GetField is not valid on fields of type $otherType")
+    }
+  }
 }
 
 /**

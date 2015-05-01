@@ -56,6 +56,10 @@ object LinearDataGenerator {
   }
 
   /**
+   * For compatibility, the generated data without specifying the mean and variance
+   * will have zero mean and variance of (1.0/3.0) since the original output range is
+   * [-1, 1] with uniform distribution, and the variance of uniform distribution
+   * is (b - a)^2^ / 12 which will be (1.0/3.0)
    *
    * @param intercept Data intercept
    * @param weights  Weights to be applied.
@@ -70,10 +74,45 @@ object LinearDataGenerator {
       nPoints: Int,
       seed: Int,
       eps: Double = 0.1): Seq[LabeledPoint] = {
+    generateLinearInput(intercept, weights,
+      Array.fill[Double](weights.length)(0.0),
+      Array.fill[Double](weights.length)(1.0 / 3.0),
+      nPoints, seed, eps)}
+
+  /**
+   *
+   * @param intercept Data intercept
+   * @param weights  Weights to be applied.
+   * @param xMean the mean of the generated features. Lots of time, if the features are not properly
+   *              standardized, the algorithm with poor implementation will have difficulty
+   *              to converge.
+   * @param xVariance the variance of the generated features.
+   * @param nPoints Number of points in sample.
+   * @param seed Random seed
+   * @param eps Epsilon scaling factor.
+   * @return Seq of input.
+   */
+  def generateLinearInput(
+      intercept: Double,
+      weights: Array[Double],
+      xMean: Array[Double],
+      xVariance: Array[Double],
+      nPoints: Int,
+      seed: Int,
+      eps: Double): Seq[LabeledPoint] = {
 
     val rnd = new Random(seed)
     val x = Array.fill[Array[Double]](nPoints)(
-      Array.fill[Double](weights.length)(2 * rnd.nextDouble - 1.0))
+      Array.fill[Double](weights.length)(rnd.nextDouble()))
+
+    x.foreach { v =>
+      var i = 0
+      while (i < v.length) {
+        v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
+        i += 1
+      }
+    }
+
     val y = x.map { xi =>
       blas.ddot(weights.length, xi, 1, weights, 1) + intercept + eps * rnd.nextGaussian()
     }

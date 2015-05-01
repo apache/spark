@@ -18,16 +18,16 @@
 """
 A collections of builtin functions
 """
+import sys
 
-from itertools import imap
-
-from py4j.java_collections import ListConverter
+if sys.version < "3":
+    from itertools import imap as map
 
 from pyspark import SparkContext
 from pyspark.rdd import _prepare_for_python_RDD
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
-from pyspark.sql.dataframe import Column, _to_java_column
+from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
 
 
 __all__ = ['countDistinct', 'approxCountDistinct', 'udf']
@@ -54,7 +54,7 @@ _functions = {
     'upper': 'Converts a string expression to upper case.',
     'lower': 'Converts a string expression to upper case.',
     'sqrt': 'Computes the square root of the specified float value.',
-    'abs': 'Computes the absolutle value.',
+    'abs': 'Computes the absolute value.',
 
     'max': 'Aggregate function: returns the maximum value of the expression in a group.',
     'min': 'Aggregate function: returns the minimum value of the expression in a group.',
@@ -67,7 +67,6 @@ _functions = {
     'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
 }
 
-
 for _name, _doc in _functions.items():
     globals()[_name] = _create_function(_name, _doc)
 del _name, _doc
@@ -75,18 +74,27 @@ __all__ += _functions.keys()
 __all__.sort()
 
 
-def countDistinct(col, *cols):
-    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
-
-    >>> df.agg(countDistinct(df.age, df.name).alias('c')).collect()
-    [Row(c=2)]
-
-    >>> df.agg(countDistinct("age", "name").alias('c')).collect()
-    [Row(c=2)]
+def rand(seed=None):
+    """
+    Generate a random column with i.i.d. samples from U[0.0, 1.0].
     """
     sc = SparkContext._active_spark_context
-    jcols = ListConverter().convert([_to_java_column(c) for c in cols], sc._gateway._gateway_client)
-    jc = sc._jvm.functions.countDistinct(_to_java_column(col), sc._jvm.PythonUtils.toSeq(jcols))
+    if seed:
+        jc = sc._jvm.functions.rand(seed)
+    else:
+        jc = sc._jvm.functions.rand()
+    return Column(jc)
+
+
+def randn(seed=None):
+    """
+    Generate a column with i.i.d. samples from the standard normal distribution.
+    """
+    sc = SparkContext._active_spark_context
+    if seed:
+        jc = sc._jvm.functions.randn(seed)
+    else:
+        jc = sc._jvm.functions.randn()
     return Column(jc)
 
 
@@ -104,6 +112,52 @@ def approxCountDistinct(col, rsd=None):
     return Column(jc)
 
 
+def countDistinct(col, *cols):
+    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
+
+    >>> df.agg(countDistinct(df.age, df.name).alias('c')).collect()
+    [Row(c=2)]
+
+    >>> df.agg(countDistinct("age", "name").alias('c')).collect()
+    [Row(c=2)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.countDistinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
+def monotonicallyIncreasingId():
+    """A column that generates monotonically increasing 64-bit integers.
+
+    The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+    The current implementation puts the partition ID in the upper 31 bits, and the record number
+    within each partition in the lower 33 bits. The assumption is that the data frame has
+    less than 1 billion partitions, and each partition has less than 8 billion records.
+
+    As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+    This expression would return the following IDs:
+    0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+
+    >>> df0 = sc.parallelize(range(2), 2).mapPartitions(lambda x: [(1,), (2,), (3,)]).toDF(['col1'])
+    >>> df0.select(monotonicallyIncreasingId().alias('id')).collect()
+    [Row(id=0), Row(id=1), Row(id=2), Row(id=8589934592), Row(id=8589934593), Row(id=8589934594)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.monotonicallyIncreasingId())
+
+
+def sparkPartitionId():
+    """A column for partition ID of the Spark task.
+
+    Note that this is indeterministic because it depends on data partitioning and task scheduling.
+
+    >>> df.repartition(1).select(sparkPartitionId().alias("pid")).collect()
+    [Row(pid=0), Row(pid=0)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.sparkPartitionId())
+
+
 class UserDefinedFunction(object):
     """
     User defined function in Python
@@ -116,14 +170,15 @@ class UserDefinedFunction(object):
 
     def _create_judf(self):
         f = self.func  # put it in closure `func`
-        func = lambda _, it: imap(lambda x: f(*x), it)
+        func = lambda _, it: map(lambda x: f(*x), it)
         ser = AutoBatchedSerializer(PickleSerializer())
         command = (func, None, ser, ser)
         sc = SparkContext._active_spark_context
         pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
         ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
         jdt = ssql_ctx.parseDataType(self.returnType.json())
-        judf = sc._jvm.UserDefinedPythonFunction(f.__name__, bytearray(pickled_command), env,
+        fname = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
+        judf = sc._jvm.UserDefinedPythonFunction(fname, bytearray(pickled_command), env,
                                                  includes, sc.pythonExec, broadcast_vars,
                                                  sc._javaAccumulator, jdt)
         return judf
@@ -135,9 +190,7 @@ class UserDefinedFunction(object):
 
     def __call__(self, *cols):
         sc = SparkContext._active_spark_context
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        sc._gateway._gateway_client)
-        jc = self._judf.apply(sc._jvm.PythonUtils.toSeq(jcols))
+        jc = self._judf.apply(_to_seq(sc, cols, _to_java_column))
         return Column(jc)
 
 
@@ -160,7 +213,7 @@ def _test():
     globs = pyspark.sql.functions.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlCtx'] = SQLContext(sc)
+    globs['sqlContext'] = SQLContext(sc)
     globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions, globs=globs,

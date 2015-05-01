@@ -22,7 +22,7 @@ import parquet.filter2.predicate.Operators._
 import parquet.filter2.predicate.{FilterPredicate, Operators}
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, Predicate, Row}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.test.TestSQLContext
@@ -349,5 +349,27 @@ class ParquetDataSourceOffFilterSuite extends ParquetFilterSuiteBase with Before
 
   override protected def afterAll(): Unit = {
     sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+  }
+  
+  test("SPARK-6742: don't push down predicates which reference partition columns") {
+    import sqlContext.implicits._
+
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/part=1"
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").saveAsParquetFile(path)
+
+        // If the "part = 1" filter gets pushed down, this query will throw an exception since
+        // "part" is not a valid column in the actual Parquet file
+        val df = DataFrame(sqlContext, org.apache.spark.sql.parquet.ParquetRelation(
+          path,
+          Some(sqlContext.sparkContext.hadoopConfiguration), sqlContext,
+          Seq(AttributeReference("part", IntegerType, false)()) ))
+       
+        checkAnswer(
+          df.filter("a = 1 or part = 1"),
+          (1 to 3).map(i => Row(1, i, i.toString)))
+      }
+    }
   }
 }

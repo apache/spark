@@ -20,13 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.{DataType, BinaryType, BooleanType, NativeType}
+import org.apache.spark.sql.types.{DataType, BinaryType, BooleanType, AtomicType}
 
 object InterpretedPredicate {
-  def apply(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
-    apply(BindReferences.bindReference(expression, inputSchema))
+  def create(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
+    create(BindReferences.bindReference(expression, inputSchema))
 
-  def apply(expression: Expression): (Row => Boolean) = {
+  def create(expression: Expression): (Row => Boolean) = {
     (r: Row) => expression.eval(r).asInstanceOf[Boolean]
   }
 }
@@ -179,8 +179,7 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
       val r = right.eval(input)
       if (r == null) null
       else if (left.dataType != BinaryType) l == r
-      else BinaryType.ordering.compare(
-        l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]]) == 0
+      else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
     }
   }
 }
@@ -212,7 +211,7 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
         s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
-      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case other => sys.error(s"Type $other does not support ordered operations")
     }
   }
@@ -241,7 +240,7 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
         s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
-      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case other => sys.error(s"Type $other does not support ordered operations")
     }
   }
@@ -270,7 +269,7 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
         s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
-      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case other => sys.error(s"Type $other does not support ordered operations")
     }
   }
@@ -299,7 +298,7 @@ case class GreaterThanOrEqual(left: Expression, right: Expression) extends Binar
         s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
-      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case other => sys.error(s"Type $other does not support ordered operations")
     }
   }

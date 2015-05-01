@@ -107,7 +107,8 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
     val myRddInfo0 = rddInfo0
     val myRddInfo1 = rddInfo1
     val myRddInfo2 = rddInfo2
-    val stageInfo0 = new StageInfo(0, 0, "0", 100, Seq(myRddInfo0, myRddInfo1, myRddInfo2), "details")
+    val stageInfo0 = new StageInfo(
+      0, 0, "0", 100, Seq(myRddInfo0, myRddInfo1, myRddInfo2), "details")
     bus.postToAll(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
     bus.postToAll(SparkListenerStageSubmitted(stageInfo0))
     assert(storageListener._rddInfoMap.size === 3)
@@ -132,12 +133,12 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
     bus.postToAll(SparkListenerTaskEnd(1, 0, "obliteration", Success, taskInfo, metrics1))
     assert(storageListener._rddInfoMap(0).memSize === 800L)
     assert(storageListener._rddInfoMap(0).diskSize === 400L)
-    assert(storageListener._rddInfoMap(0).tachyonSize === 200L)
+    assert(storageListener._rddInfoMap(0).externalBlockStoreSize === 200L)
     assert(storageListener._rddInfoMap(0).numCachedPartitions === 3)
     assert(storageListener._rddInfoMap(0).isCached)
     assert(storageListener._rddInfoMap(1).memSize === 0L)
     assert(storageListener._rddInfoMap(1).diskSize === 240L)
-    assert(storageListener._rddInfoMap(1).tachyonSize === 0L)
+    assert(storageListener._rddInfoMap(1).externalBlockStoreSize === 0L)
     assert(storageListener._rddInfoMap(1).numCachedPartitions === 1)
     assert(storageListener._rddInfoMap(1).isCached)
     assert(!storageListener._rddInfoMap(2).isCached)
@@ -154,7 +155,7 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
     bus.postToAll(SparkListenerTaskEnd(2, 0, "obliteration", Success, taskInfo, metrics2))
     assert(storageListener._rddInfoMap(0).memSize === 400L)
     assert(storageListener._rddInfoMap(0).diskSize === 400L)
-    assert(storageListener._rddInfoMap(0).tachyonSize === 200L)
+    assert(storageListener._rddInfoMap(0).externalBlockStoreSize === 200L)
     assert(storageListener._rddInfoMap(0).numCachedPartitions === 2)
     assert(storageListener._rddInfoMap(0).isCached)
     assert(!storageListener._rddInfoMap(1).isCached)
