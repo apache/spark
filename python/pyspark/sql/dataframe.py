@@ -1360,11 +1360,12 @@ class DataFrameStatFunctions(object):
         return self.df.cov(col1, col2)
 
     cov.__doc__ = DataFrame.cov.__doc__
-    
+
     def crosstab(self, col1, col2):
         return self.df.crosstab(col1, col2)
 
     crosstab.__doc__ = DataFrame.crosstab.__doc__
+
 
 def _test():
     import doctest
