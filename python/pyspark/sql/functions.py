@@ -34,6 +34,8 @@ __all__ = [
     'approxCountDistinct',
     'countDistinct',
     'monotonicallyIncreasingId',
+    'rand',
+    'randn',
     'sparkPartitionId',
     'udf']
 
@@ -79,27 +81,6 @@ __all__ += _functions.keys()
 __all__.sort()
 
 
-def rand(seed=None):
-    """Generates a random column with i.i.d. samples from U[0.0, 1.0].
-    """
-    sc = SparkContext._active_spark_context
-    if seed:
-        jc = sc._jvm.functions.rand(seed)
-    else:
-        jc = sc._jvm.functions.rand()
-    return Column(jc)
-
-
-def randn(seed=None):
-    """Generates a column with i.i.d. samples from the standard normal distribution.
-    """
-    sc = SparkContext._active_spark_context
-    if seed:
-        jc = sc._jvm.functions.randn(seed)
-    else:
-        jc = sc._jvm.functions.randn()
-
-
 def array(*cols):
     """Creates a new array column.
 
@@ -115,7 +96,6 @@ def array(*cols):
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]
     jc = sc._jvm.functions.array(_to_seq(sc, cols, _to_java_column))
->>>>>>> Added Python support.
     return Column(jc)
 
 
@@ -165,6 +145,28 @@ def monotonicallyIncreasingId():
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.monotonicallyIncreasingId())
+
+
+def rand(seed=None):
+    """Generates a random column with i.i.d. samples from U[0.0, 1.0].
+    """
+    sc = SparkContext._active_spark_context
+    if seed:
+        jc = sc._jvm.functions.rand(seed)
+    else:
+        jc = sc._jvm.functions.rand()
+    return Column(jc)
+
+
+def randn(seed=None):
+    """Generates a column with i.i.d. samples from the standard normal distribution.
+    """
+    sc = SparkContext._active_spark_context
+    if seed:
+        jc = sc._jvm.functions.randn(seed)
+    else:
+        jc = sc._jvm.functions.randn()
+    return Column(jc)
 
 
 def sparkPartitionId():
