@@ -390,7 +390,7 @@ class SQLTests(ReusedPySparkTestCase):
     def test_cov(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
         cov = df.stat.cov("a", "b")
-        self.assertTrue(abs(cov - 16.5) < 1e-6)
+        self.assertTrue(abs(cov - 55.0 / 3) < 1e-6)
 
     def test_math_functions(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()

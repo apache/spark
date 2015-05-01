@@ -51,7 +51,7 @@ class DataFrameStatSuite extends FunSuite  {
     val df = sqlCtx.sparkContext.parallelize(rows).toDF("singles", "doubles", "letters")
 
     val results = df.stat.cov("singles", "doubles")
-    assert(math.abs(results - 16.5) < 1e-6)
+    assert(math.abs(results - 55.0 / 3) < 1e-6)
     intercept[IllegalArgumentException] {
       df.stat.cov("singles", "letters") // doesn't accept non-numerical dataTypes
     }

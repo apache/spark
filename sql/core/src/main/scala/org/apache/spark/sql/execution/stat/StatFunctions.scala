@@ -49,8 +49,8 @@ private[sql] object StatFunctions {
       count = totalCount
       this
     }
-    // return the covariance for the observed examples
-    def cov: Double = Ck / count
+    // return the sample covariance for the observed examples
+    def cov: Double = Ck / (count - 1)
   }
 
   /**

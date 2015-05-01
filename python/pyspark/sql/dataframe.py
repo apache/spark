@@ -877,8 +877,8 @@ class DataFrame(object):
 
     def cov(self, col1, col2):
         """
-        Calculate the covariance for the given columns, specified by their names as a double value.
-        :func:`DataFrame.cov` and :func:`DataFrameStatFunctions.cov` are aliases.
+        Calculate the sample covariance for the given columns, specified by their names, as a
+        double value. :func:`DataFrame.cov` and :func:`DataFrameStatFunctions.cov` are aliases.
 
         :param col1: The name of the first column
         :param col2: The name of the second column

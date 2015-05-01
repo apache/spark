@@ -67,7 +67,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Calculate the covariance of two numerical columns of a DataFrame.
+   * Calculate the sample covariance of two numerical columns of a DataFrame.
    * @param col1 the name of the first column
    * @param col2 the name of the second column
    * @return the covariance of the two columns.
