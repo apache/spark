@@ -1235,7 +1235,8 @@ class QueryView(DataProfilingMixin, BaseView):
     def query(self):
         session = settings.Session()
         dbs = session.query(models.Connection).order_by(
-            models.Connection.conn_id)
+            models.Connection.conn_id).all()
+        session.expunge_all()
         db_choices = [(db.conn_id, db.conn_id) for db in dbs if db.get_hook()]
         conn_id_str = request.args.get('conn_id')
         csv = request.args.get('csv') == "true"
