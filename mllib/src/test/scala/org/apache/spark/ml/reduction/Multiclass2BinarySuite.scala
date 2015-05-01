@@ -78,49 +78,7 @@ class Multiclass2BinarySuite extends FunSuite with MLlibTestSparkContext {
     println(confusionMatrix(results, 3).map(_.mkString("\t")).mkString("\n"))
     println(confusionMatrix(ovaResults, 3).map(_.mkString("\t")).mkString("\n"))
   }
-
-  test("one-against-all: news20") {
-    val k = 3
-    val ova = new Multiclass2Binary().
-      setNumClasses(k).
-      setBaseClassifier(new LogisticRegression)
-
-    assert(ova.getLabelCol == "label")
-    assert(ova.getPredictionCol == "prediction")
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
-    val rdds = MLUtils.loadLibSVMFile(sc,
-      "/Users/rsriharsha/projects/hortonworks/benchmark-datasets/multiclass-classification/connect-4.txt").
-      map {case LabeledPoint(label, features) => LabeledPoint(label + 1, features)}.
-      randomSplit(Array(0.7, 0.3))
-    val Array(train, test) = rdds.map(_.toDF())
-    val ovaModel = time(ova.fit(train))
-    assert(ovaModel.baseClassificationModels.size == k)
-    val ovaResults = ovaModel.transform(test)
-      .select("label", "prediction")
-      .map (row => (row(0).asInstanceOf[Double], row(1).asInstanceOf[Double]))
-      .collect()
-
-    val lr = new LogisticRegressionWithLBFGS().setIntercept(true).setNumClasses(k)
-    lr.optimizer.setRegParam(0.1).setNumIterations(100)
-
-    val model = time(lr.run(rdds(0)))
-    val results = rdds(1).map(_.label).zip(model.predict(rdds(1).map(_.features))).collect()
-    // determine the #confusion matrix in each class.
-
-    println(confusionMatrix(results, k).map(_.mkString("\t")).mkString("\n"))
-    println("**********************************************")
-    println(confusionMatrix(ovaResults, k).map(_.mkString("\t")).mkString("\n"))
-  }
-
-  def time[R](block: => R): R = {
-    val t0 = System.nanoTime()
-    val result = block    // call-by-name
-    val t1 = System.nanoTime()
-    println("Elapsed time: " + (t1 - t0)/1E9 + "s")
-    result
-  }
-
+  
   private def confusionMatrix(results: Seq[(Double, Double)], numClasses: Int): Array[Array[Double]] = {
     val matrix = Array.fill(numClasses, 2)(0.0)
     for ((label, value) <- results) {
