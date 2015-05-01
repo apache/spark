@@ -216,7 +216,7 @@ model = ALS.train(ratings, rank, numIterations)
 testdata = ratings.map(lambda p: (p[0], p[1]))
 predictions = model.predictAll(testdata).map(lambda r: ((r[0], r[1]), r[2]))
 ratesAndPreds = ratings.map(lambda r: ((r[0], r[1]), r[2])).join(predictions)
-MSE = ratesAndPreds.map(lambda r: (r[1][0] - r[1][1])**2).reduce(lambda x, y: x + y) / ratesAndPreds.count()
+MSE = ratesAndPreds.map(lambda r: (r[1][0] - r[1][1])**2).mean()
 print("Mean Squared Error = " + str(MSE))
 
 # Save and load model

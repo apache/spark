@@ -19,16 +19,26 @@ package org.apache.spark.util.collection
 
 import java.util.Comparator
 
-/**
- * A common interface for our size-tracking collections of key-value pairs, which are used in
- * external operations. These all support estimating the size and obtaining a memory-efficient
- * sorted iterator.
- */
-// TODO: should extend Iterable[Product2[K, V]] instead of (K, V)
-private[spark] trait SizeTrackingPairCollection[K, V] extends Iterable[(K, V)] {
-  /** Estimate the collection's current memory usage in bytes. */
-  def estimateSize(): Long
+import org.apache.spark.util.collection.WritablePartitionedPairCollection._
 
-  /** Iterate through the data in a given key order. This may destroy the underlying collection. */
-  def destructiveSortedIterator(keyComparator: Comparator[K]): Iterator[(K, V)]
+/**
+ * Implementation of WritablePartitionedPairCollection that wraps a map in which the keys are tuples
+ * of (partition ID, K)
+ */
+private[spark] class PartitionedAppendOnlyMap[K, V]
+  extends SizeTrackingAppendOnlyMap[(Int, K), V] with WritablePartitionedPairCollection[K, V] {
+
+  def partitionedDestructiveSortedIterator(keyComparator: Option[Comparator[K]])
+    : Iterator[((Int, K), V)] = {
+    val comparator = keyComparator.map(partitionKeyComparator).getOrElse(partitionComparator)
+    destructiveSortedIterator(comparator)
+  }
+
+  def writablePartitionedIterator(): WritablePartitionedIterator = {
+    WritablePartitionedIterator.fromIterator(super.iterator)
+  }
+
+  def insert(partition: Int, key: K, value: V): Unit = {
+    update((partition, key), value)
+  }
 }
