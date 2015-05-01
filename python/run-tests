@@ -38,7 +38,7 @@ rm -rf metastore warehouse
 function run_test() {
     echo -en "Running test: $1 ... " | tee -a $LOG_FILE
     start=$(date +"%s")
-    SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 > $LOG_FILE 2>&1
+    SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 > $LOG_FILE
 
     FAILED=$((PIPESTATUS[0]||$FAILED))
 
@@ -134,10 +134,10 @@ fi
 echo "Testing with Python version:"
 $PYSPARK_PYTHON --version
 
-run_core_tests
-run_sql_tests
-run_mllib_tests
-run_ml_tests
+# run_core_tests
+# run_sql_tests
+# run_mllib_tests
+# run_ml_tests
 run_streaming_tests
 
 # Try to test with Python 3
@@ -146,11 +146,11 @@ if [ $(which python3.4) ]; then
     echo "Testing with Python3.4 version:"
     $PYSPARK_PYTHON --version
 
-    run_core_tests
-    run_sql_tests
-    run_mllib_tests
-    run_ml_tests
-    run_streaming_tests
+    # run_core_tests
+    # run_sql_tests
+    # run_mllib_tests
+    # run_ml_tests
+    # run_streaming_tests
 fi
 
 # Try to test with PyPy
@@ -159,9 +159,9 @@ if [ $(which pypy) ]; then
     echo "Testing with PyPy version:"
     $PYSPARK_PYTHON --version
 
-    run_core_tests
-    run_sql_tests
-    run_streaming_tests
+    # run_core_tests
+    # run_sql_tests
+    # run_streaming_tests
 fi
 
 if [[ $FAILED == 0 ]]; then
