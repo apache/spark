@@ -80,7 +80,14 @@ function renderViz(forJob) {
     var div = d3.select(this);
     var dot = div.select("div.dot-file").text();
     var stageId = div.attr("name");
-    var container = svg.append("g").attr("id", "graph_" + stageId);
+    if (forJob) {
+      // TODO: handle attempts
+      var stageLink = "/stages/stage/?id=" + stageId.replace(/^stage/, "") + "&attempt=0";
+      var parentContainer = svg.append("a").attr("xlink:href", stageLink);
+    } else {
+      var parentContainer = svg;
+    }
+    var container = parentContainer.append("g").attr("id", "graph_" + stageId);
     // No need to shift the first stage container
     if (i > 0) {
       // Move the container so it doesn't overlap with the existing ones
@@ -168,7 +175,7 @@ function renderDot(dot, container) {
 /* Style the visualization we just rendered. */
 function styleViz(forJob) {
   d3.selectAll("svg g.cluster rect")
-    .style("fill", "none")
+    .style("fill", "white")
     .style("stroke", VizConstants.rddScopeColor)
     .style("stroke-width", "4px")
     .style("stroke-opacity", "0.5");
