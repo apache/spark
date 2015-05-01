@@ -21,7 +21,7 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -62,7 +62,10 @@ final class Binarizer extends Transformer with HasInputCol with HasOutputCol {
     val map = extractParamMap(paramMap)
     val td = map(threshold)
     val binarizer = udf { in: Double => if (in > td) 1.0 else 0.0 }
-    dataset.withColumn(map(outputCol), binarizer(col(map(inputCol))))
+    val outputColName = map(outputCol)
+    val metadata = BinaryAttribute.defaultAttr.withName(outputColName).toMetadata()
+    dataset.select(col("*"),
+      binarizer(col(map(inputCol))).as(outputColName, metadata))
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
@@ -75,7 +78,7 @@ final class Binarizer extends Transformer with HasInputCol with HasOutputCol {
     require(inputFields.forall(_.name != outputColName),
       s"Output column $outputColName already exists.")
 
-    val attr = BinaryAttribute.defaultAttr.withName(map(outputCol))
+    val attr = BinaryAttribute.defaultAttr.withName(outputColName)
     val outputFields = inputFields :+ attr.toStructField()
     StructType(outputFields)
   }

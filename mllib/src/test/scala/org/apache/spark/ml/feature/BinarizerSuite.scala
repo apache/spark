@@ -27,50 +27,43 @@ import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 class BinarizerSuite extends FunSuite with MLlibTestSparkContext {
 
   @transient var data: Array[Double] = _
-  @transient var dataFrame: DataFrame = _
-  @transient var binarizer: Binarizer = _
-  @transient val threshold = 0.2
-  @transient var defaultBinarized: Array[Double] = _
-  @transient var thresholdBinarized: Array[Double] = _
+  @transient var sqlContext: SQLContext = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
+    sqlContext = new SQLContext(sc)
     data = Array(0.1, -0.5, 0.2, -0.3, 0.8, 0.7, -0.1, -0.4)
-    defaultBinarized = data.map(x => if (x > 0.0) 1.0 else 0.0)
-    thresholdBinarized = data.map(x => if (x > threshold) 1.0 else 0.0)
-
-    val sqlContext = new SQLContext(sc)
-    dataFrame = sqlContext.createDataFrame(sc.parallelize(data, 2).map(BinarizerSuite.FeatureData))
-    binarizer = new Binarizer()
-      .setInputCol("feature")
-      .setOutputCol("binarized_feature")
-  }
-
-  def collectResult(result: DataFrame): Array[Double] = {
-    result.select("binarized_feature").collect().map {
-      case Row(feature: Double) => feature
-    }
-  }
-
-  def assertValues(lhs: Array[Double], rhs: Array[Double]): Unit = {
-    assert((lhs, rhs).zipped.forall { (x1, x2) =>
-      x1 === x2
-    }, "The feature value is not correct after binarization.")
   }
 
   test("Binarize continuous features with default parameter") {
-    val result = collectResult(binarizer.transform(dataFrame))
-    assertValues(result, defaultBinarized)
+    val defaultBinarized: Array[Double] = data.map(x => if (x > 0.0) 1.0 else 0.0)
+    val dataFrame: DataFrame = sqlContext.createDataFrame(
+      data.zip(defaultBinarized)).toDF("feature", "expected")
+
+    val binarizer: Binarizer = new Binarizer()
+      .setInputCol("feature")
+      .setOutputCol("binarized_feature")
+
+    binarizer.transform(dataFrame).select("binarized_feature", "expected").collect().foreach {
+      case Row(x: Double, y: Double) =>
+        assert(x === y, "The feature value is not correct after binarization.")
+    }
   }
 
   test("Binarize continuous features with setter") {
-    binarizer.setThreshold(threshold)
-    val result = collectResult(binarizer.transform(dataFrame))
-    assertValues(result, thresholdBinarized)
-  }
-}
+    val threshold: Double = 0.2
+    val thresholdBinarized: Array[Double] = data.map(x => if (x > threshold) 1.0 else 0.0) 
+    val dataFrame: DataFrame = sqlContext.createDataFrame(
+        data.zip(thresholdBinarized)).toDF("feature", "expected")
 
-private object BinarizerSuite {
-  case class FeatureData(feature: Double)
+    val binarizer: Binarizer = new Binarizer()
+      .setInputCol("feature")
+      .setOutputCol("binarized_feature")
+      .setThreshold(threshold)
+
+    binarizer.transform(dataFrame).select("binarized_feature", "expected").collect().foreach {
+      case Row(x: Double, y: Double) =>
+        assert(x === y, "The feature value is not correct after binarization.")
+    }
+  }
 }
