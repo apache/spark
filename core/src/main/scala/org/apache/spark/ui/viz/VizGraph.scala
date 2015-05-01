@@ -20,6 +20,7 @@ package org.apache.spark.ui.viz
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDDScope
 import org.apache.spark.scheduler.StageInfo
 
@@ -27,9 +28,15 @@ import org.apache.spark.scheduler.StageInfo
  * A representation of a generic scoped graph used for storing visualization information.
  *
  * Each graph is defined with a set of edges and a root scope, which may contain children
- * nodes and children scopes.
+ * nodes and children scopes. Additionally, a graph may also have edges that enter or exit
+ * the graph from nodes that belong to adjacent graphs.
  */
-private[ui] case class VizGraph(edges: Seq[VizEdge], rootScope: VizScope)
+private[ui] case class VizGraph(
+    edges: Seq[VizEdge],
+    outgoingEdges: Seq[VizEdge],
+    incomingEdges: Seq[VizEdge],
+    rootScope: VizScope)
+
 private[ui] case class VizNode(id: Int, name: String)
 private[ui] case class VizEdge(fromId: Int, toId: Int)
 
@@ -46,7 +53,7 @@ private[ui] class VizScope(val id: String, val name: String) {
   def attachChildScope(childScope: VizScope): Unit = { _childrenScopes += childScope }
 }
 
-private[ui] object VizGraph {
+private[ui] object VizGraph extends Logging {
 
   /**
    * Construct a VizGraph for a given stage.
@@ -56,7 +63,7 @@ private[ui] object VizGraph {
    * between two RDDs from the parent to the child.
    */
   def makeVizGraph(stage: StageInfo): VizGraph = {
-    val edges = new mutable.HashSet[VizEdge]
+    val edges = new ListBuffer[VizEdge]
     val nodes = new mutable.HashMap[Int, VizNode]
     val scopes = new mutable.HashMap[String, VizScope] // scope ID -> viz scope
 
@@ -66,7 +73,10 @@ private[ui] object VizGraph {
       { if (stage.attemptId == 0) "" else s" (attempt ${stage.attemptId})" }
     val rootScope = new VizScope(stageScopeId, stageScopeName)
 
-    // Find nodes, edges, and children scopes
+    // Find nodes, edges, and children scopes that belong to this stage. Each node is an RDD
+    // that lives either directly in the root scope or in one of the children scopes. Each
+    // children scope represents a level of the RDD scope and must contain at least one RDD.
+    // Children scopes can be nested if one RDD operation calls another.
     stage.rddInfos.foreach { rdd =>
       edges ++= rdd.parentIds.map { parentId => VizEdge(parentId, rdd.id) }
       val node = nodes.getOrElseUpdate(rdd.id, VizNode(rdd.id, rdd.name))
@@ -94,10 +104,23 @@ private[ui] object VizGraph {
       }
     }
 
-    // Remove any edges with nodes belonging to other stages so we do not have orphaned nodes
-    edges.retain { case VizEdge(f, t) => nodes.contains(f) && nodes.contains(t) }
+    // Classify each edge as internal, outgoing or incoming
+    val internalEdges = new ListBuffer[VizEdge]
+    val outgoingEdges = new ListBuffer[VizEdge]
+    val incomingEdges = new ListBuffer[VizEdge]
+    edges.foreach { case e: VizEdge =>
+      val fromThisGraph = nodes.contains(e.fromId)
+      val toThisGraph = nodes.contains(e.toId)
+      (fromThisGraph, toThisGraph) match {
+        case (true, true) => internalEdges += e
+        case (true, false) => outgoingEdges += e
+        case (false, true) => incomingEdges += e
+        // should never happen
+        case _ => logWarning(s"Found an orphan edge in stage ${stage.stageId}: $e")
+      }
+    }
 
-    VizGraph(edges.toSeq, rootScope)
+    VizGraph(internalEdges, outgoingEdges, incomingEdges, rootScope)
   }
 
   /**
@@ -116,7 +139,9 @@ private[ui] object VizGraph {
       dotFile.append(s"""  ${edge.fromId}->${edge.toId} [lineInterpolate="basis"];\n""")
     }
     dotFile.append("}")
-    dotFile.toString()
+    val result = dotFile.toString()
+    logDebug(result)
+    result
   }
 
   /** Return the dot representation of a node. */

@@ -58,7 +58,9 @@ private[ui] class VisualizationListener(conf: SparkConf) extends SparkListener {
         {
           graphs.map { g =>
             <div name={g.rootScope.id} style="display:none">
-              {VizGraph.makeDotFile(g, forJob)}
+              <div class="dot-file">{VizGraph.makeDotFile(g, forJob)}</div>
+              { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
+              { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }
             </div>
           }
         }
