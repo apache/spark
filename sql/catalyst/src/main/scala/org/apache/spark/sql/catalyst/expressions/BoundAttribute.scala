@@ -36,7 +36,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def eval(input: Row): Any = input(ordinal)
 
-  override def name: String = throw new UnsupportedOperationException
+  override def name: String = s"i[$ordinal]"
 
   override def toAttribute: Attribute = throw new UnsupportedOperationException
 
