@@ -1341,8 +1341,9 @@ class DataFrameStatFunctions(object):
         if not isinstance(col2, str):
             raise ValueError("col2 should be a string.")
         return self.df._jdf.stat().cov(col1, col2)
-    
+
     cov.__doc__ = DataFrame.cov.__doc__
+
 
 def _test():
     import doctest
