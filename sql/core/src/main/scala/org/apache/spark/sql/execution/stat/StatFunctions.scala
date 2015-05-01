@@ -28,7 +28,7 @@ private[sql] object StatFunctions {
     var xAvg = 0.0
     var yAvg = 0.0
     var Ck = 0.0
-    var count = 0
+    var count = 0L
     // add an example to the calculation
     def add(x: Double, y: Double): this.type = {
       val oldX = xAvg
@@ -38,11 +38,12 @@ private[sql] object StatFunctions {
       Ck += (y - yAvg) * (x - oldX)
       this
     }
-    // merge counters from other partitions
+    // merge counters from other partitions. Formula can be found at:
+    // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Covariance
     def merge(other: CovarianceCounter): this.type = {
       val totalCount = count + other.count
       Ck += other.Ck + 
-        (xAvg - other.xAvg) * (yAvg - other.yAvg) * (count * other.count) / totalCount
+        (xAvg - other.xAvg) * (yAvg - other.yAvg) * count / totalCount * other.count
       xAvg = (xAvg * count + other.xAvg * other.count) / totalCount
       yAvg = (yAvg * count + other.yAvg * other.count) / totalCount
       count = totalCount
@@ -76,5 +77,4 @@ private[sql] object StatFunctions {
       })
     counts.cov
   }
-
 }
