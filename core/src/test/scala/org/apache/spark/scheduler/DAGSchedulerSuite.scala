@@ -768,26 +768,6 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty()
   }
 
-  test("fail fast on multiple concurrent attempts for one stage", ActiveTag) {
-    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
-    val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
-    submit(reduceRdd, Array(0, 1))
-    complete(taskSets(0), Seq(
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostB", 1))))
-    // fail one task
-    runEvent(CompletionEvent(taskSets(1).tasks(0),
-      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null, null,
-      createFakeTaskInfo(), null))
-    scheduler.resubmitFailedStages()
-    // fail the other task
-    runEvent(CompletionEvent(taskSets(1).tasks(1),
-      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null, null,
-      createFakeTaskInfo(), null))
-  }
-
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.
