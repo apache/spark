@@ -24,7 +24,7 @@ if sys.version < "3":
     from itertools import imap as map
 
 from pyspark import SparkContext
-from pyspark.rdd import _prepare_for_python_RDD
+from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
 from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
@@ -181,6 +181,7 @@ def sparkPartitionId():
     return Column(sc._jvm.functions.sparkPartitionId())
 
 
+@ignore_unicode_prefix
 def struct(*cols):
     """Creates a new struct column.
 
