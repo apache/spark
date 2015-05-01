@@ -16,7 +16,9 @@
  */
 package org.apache.spark.streaming.rdd
 
+import java.io.File
 import java.nio.ByteBuffer
+import java.util.UUID
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -27,6 +29,7 @@ import org.apache.spark._
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming.util._
+import org.apache.spark.util.Utils
 
 /**
  * Partition class for [[org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD]].
@@ -107,10 +110,13 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
           // WriteAheadLog object as the default FileBasedWriteAheadLog needs a directory for
           // writing log data. However, the directory is not needed if data needs to be read, hence
           // a dummy path is provided to satisfy the method parameter requirements.
-          // FileBasedWriteAheadLog will not create any file or directory at that path.
-          val dummyDirectory = FileUtils.getTempDirectoryPath()
+          // FileBasedWriteAheadLog will not create any file or directory at that path. Also,
+          // this dummy directory should not already exist otherwise the WAL will try to recover
+          // past events from the directory and throw errors.
+          val nonExistentDirectory = new File(
+            FileUtils.getTempDirectory(), UUID.randomUUID().toString).getAbsolutePath
           writeAheadLog = WriteAheadLogUtils.createLogForReceiver(
-            SparkEnv.get.conf, dummyDirectory, hadoopConf)
+            SparkEnv.get.conf, nonExistentDirectory, hadoopConf)
           dataRead = writeAheadLog.read(partition.walRecordHandle)
         } catch {
           case NonFatal(e) =>
