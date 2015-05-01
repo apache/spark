@@ -63,7 +63,6 @@ def login(self, request):
     if not user:
         user = models.User(
             username=DEFAULT_USERNAME,
-            has_access=True,
             is_superuser=True)
     session.merge(user)
     session.expunge_all()

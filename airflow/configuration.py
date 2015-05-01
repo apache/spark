@@ -11,6 +11,7 @@ defaults = {
         'base_url': 'http://localhost:8080',
         'web_server_host': '0.0.0.0',
         'web_server_port': '8080',
+        'authenticate': False,
     },
     'scheduler': {
         'statsd_on': False,

@@ -934,12 +934,12 @@ class BaseOperator(Base):
             '_sa_instance_state', '_upstream_list', '_downstream_list', 'dag'}
         for k in set(self.__dict__) - blacklist:
             if self.__dict__[k] != other.__dict__[k]:
-                logging.debug(str(
+                logging.debug(str((
                     self.dag_id,
                     self.task_id,
                     k,
                     self.__dict__[k],
-                    other.__dict__[k]))
+                    other.__dict__[k])))
                 return -1
         return 0
 
@@ -1426,6 +1426,7 @@ class DAG(Base):
         # backdoor
         cls = self.__class__
         result = cls.__new__(cls)
+        setattr(result, '_sa_instance_state', getattr(self, '_sa_instance_state'))
         memo[id(self)] = result
         for k, v in self.__dict__.items():
             if k not in ('user_defined_macros', 'params'):
