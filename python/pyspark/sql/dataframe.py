@@ -34,7 +34,7 @@ from pyspark.sql.types import *
 from pyspark.sql.types import _create_cls, _parse_datatype_json_string
 
 
-__all__ = ["DataFrame", "GroupedData", "Column", "SchemaRDD", "DataFrameNaFunctions", 
+__all__ = ["DataFrame", "GroupedData", "Column", "SchemaRDD", "DataFrameNaFunctions",
            "DataFrameStatFunctions"]
 
 
@@ -877,9 +877,9 @@ class DataFrame(object):
 
     def cov(self, col1, col2):
         """
-        Calculate the covariance for the given columns, specified by their names. 
+        Calculate the covariance for the given columns, specified by their names.
         alias for ``stat.cov()``.
-        
+
         :param col1: The name of the first column
         :param col2: The name of the second column
         :return: the covariance of the columns
