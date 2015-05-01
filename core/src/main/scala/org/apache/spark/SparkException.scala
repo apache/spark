@@ -31,7 +31,6 @@ class SparkException(message: String, cause: Throwable)
 private[spark] class SparkDriverExecutionException(cause: Throwable)
   extends SparkException("Execution error", cause)
 
-
 /**
  * Exception indicating an error internal to Spark, not caused by user error
  */
