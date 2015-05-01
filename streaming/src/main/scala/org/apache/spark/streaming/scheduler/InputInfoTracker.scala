@@ -27,7 +27,7 @@ case class InputInfo(batchTime: Time, inputStreamId: Int, numRecords: Long)
 
 /**
  * This class manages all the input streams as well as their input data statistics. The information
- * will output to StreamingListener to better monitoring.
+ * will output to StreamingListener for better monitoring.
  */
 private[streaming] class InputInfoTracker(ssc: StreamingContext) extends Logging {
 
