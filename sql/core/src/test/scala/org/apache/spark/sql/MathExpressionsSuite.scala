@@ -194,18 +194,6 @@ class MathExpressionsSuite extends QueryTest {
     testOneToOneMathFunction[Double](signum, math.signum)
   }
 
-  test("isignum") {
-    testOneToOneMathFunction[Int](isignum, math.signum)
-  }
-
-  test("fsignum") {
-    testOneToOneMathFunction[Float](fsignum, math.signum)
-  }
-
-  test("lsignum") {
-    testOneToOneMathFunction[Long](lsignum, math.signum)
-  }
-
   test("pow") {
     testTwoToOneMathFunction(pow, pow, math.pow)
   }

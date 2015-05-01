@@ -35,7 +35,7 @@ case class JobSet(
   private var processingStartTime = -1L // when the first job of this jobset started processing
   private var processingEndTime = -1L // when the last job of this jobset finished processing
 
-  jobs.zipWithIndex.foreach { case (job, i) => job.setId(i) }
+  jobs.zipWithIndex.foreach { case (job, i) => job.setOutputOpId(i) }
   incompleteJobs ++= jobs
 
   def handleJobStart(job: Job) {

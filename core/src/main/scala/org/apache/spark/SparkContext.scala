@@ -247,9 +247,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def eventLogDir: Option[URI] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
-  // Generate the random name for a temp folder in Tachyon
+  // Generate the random name for a temp folder in external block store.
   // Add a timestamp as the suffix here to make it more safe
-  val tachyonFolderName = "spark-" + randomUUID.toString()
+  val externalBlockStoreFolderName = "spark-" + randomUUID.toString()
+  @deprecated("Use externalBlockStoreFolderName instead.", "1.4.0")
+  val tachyonFolderName = externalBlockStoreFolderName
 
   def isLocal: Boolean = (master == "local" || master.startsWith("local["))
 
@@ -386,7 +388,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
     }
 
-    _conf.set("spark.tachyonStore.folderName", tachyonFolderName)
+    _conf.set("spark.externalBlockStore.folderName", externalBlockStoreFolderName)
 
     if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
 
@@ -555,7 +557,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
           SparkEnv.executorActorSystemName,
           RpcAddress(host, port),
           ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME)
-        Some(endpointRef.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump))
+        Some(endpointRef.askWithRetry[Array[ThreadStackTrace]](TriggerThreadDump))
       }
     } catch {
       case e: Exception =>
@@ -713,7 +715,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   RDD[(String, String)] = {
     assertNotStopped()
     val job = new NewHadoopJob(hadoopConfiguration)
-    NewFileInputFormat.addInputPath(job, new Path(path))
+    // Use setInputPaths so that wholeTextFiles aligns with hadoopFile/textFile in taking
+    // comma separated files as input. (see SPARK-7155)
+    NewFileInputFormat.setInputPaths(job, path)
     val updateConf = job.getConfiguration
     new WholeTextFileRDD(
       this,
@@ -759,7 +763,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       RDD[(String, PortableDataStream)] = {
     assertNotStopped()
     val job = new NewHadoopJob(hadoopConfiguration)
-    NewFileInputFormat.addInputPath(job, new Path(path))
+    // Use setInputPaths so that binaryFiles aligns with hadoopFile/textFile in taking
+    // comma separated files as input. (see SPARK-7155)
+    NewFileInputFormat.setInputPaths(job, path)
     val updateConf = job.getConfiguration
     new BinaryFileRDD(
       this,
@@ -935,7 +941,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // The call to new NewHadoopJob automatically adds security credentials to conf,
     // so we don't need to explicitly add them ourselves
     val job = new NewHadoopJob(conf)
-    NewFileInputFormat.addInputPath(job, new Path(path))
+    // Use setInputPaths so that newAPIHadoopFile aligns with hadoopFile/textFile in taking
+    // comma separated files as input. (see SPARK-7155)
+    NewFileInputFormat.setInputPaths(job, path)
     val updatedConf = job.getConfiguration
     new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf).setName(path)
   }

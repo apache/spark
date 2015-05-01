@@ -19,13 +19,11 @@ package org.apache.spark.sql.hive
 
 import java.sql.Date
 
-
-import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
+import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse._
@@ -783,13 +781,13 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             case (None, Some(perPartitionOrdering), None, None) =>
               Sort(perPartitionOrdering.getChildren.map(nodeToSortOrder), false, withHaving)
             case (None, None, Some(partitionExprs), None) =>
-              Repartition(partitionExprs.getChildren.map(nodeToExpr), withHaving)
+              RepartitionByExpression(partitionExprs.getChildren.map(nodeToExpr), withHaving)
             case (None, Some(perPartitionOrdering), Some(partitionExprs), None) =>
               Sort(perPartitionOrdering.getChildren.map(nodeToSortOrder), false,
-                Repartition(partitionExprs.getChildren.map(nodeToExpr), withHaving))
+                RepartitionByExpression(partitionExprs.getChildren.map(nodeToExpr), withHaving))
             case (None, None, None, Some(clusterExprs)) =>
               Sort(clusterExprs.getChildren.map(nodeToExpr).map(SortOrder(_, Ascending)), false,
-                Repartition(clusterExprs.getChildren.map(nodeToExpr), withHaving))
+                RepartitionByExpression(clusterExprs.getChildren.map(nodeToExpr), withHaving))
             case (None, None, None, None) => withHaving
             case _ => sys.error("Unsupported set of ordering / distribution clauses.")
           }
@@ -887,13 +885,13 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             fraction.toDouble >= (0.0 - RandomSampler.roundingEpsilon)
               && fraction.toDouble <= (100.0 + RandomSampler.roundingEpsilon),
             s"Sampling fraction ($fraction) must be on interval [0, 100]")
-          Sample(fraction.toDouble / 100, withReplacement = false, (math.random * 1000).toInt,
+          Sample(0.0, fraction.toDouble / 100, withReplacement = false, (math.random * 1000).toInt,
             relation)
         case Token("TOK_TABLEBUCKETSAMPLE",
                Token(numerator, Nil) ::
                Token(denominator, Nil) :: Nil) =>
           val fraction = numerator.toDouble / denominator.toDouble
-          Sample(fraction, withReplacement = false, (math.random * 1000).toInt, relation)
+          Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, relation)
         case a: ASTNode =>
           throw new NotImplementedError(
             s"""No parse rules for sampling clause: ${a.getType}, text: ${a.getText} :
@@ -1244,7 +1242,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     /* Other functions */
     case Token("TOK_FUNCTION", Token(ARRAY(), Nil) :: children) =>
       CreateArray(children.map(nodeToExpr))
-    case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand
+    case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand()
+    case Token("TOK_FUNCTION", Token(RAND(), Nil) :: seed :: Nil) => Rand(seed.toString.toLong)
     case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: Nil) =>
       Substring(nodeToExpr(string), nodeToExpr(pos), Literal.create(Integer.MAX_VALUE, IntegerType))
     case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: length :: Nil) =>
