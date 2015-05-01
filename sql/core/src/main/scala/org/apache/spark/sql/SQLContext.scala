@@ -76,10 +76,7 @@ import org.apache.spark.{Partition, SparkContext}
  */
 private[spark] class DefaultDialect extends Dialect {
   @transient
-  protected val sqlParser = {
-    val catalystSqlParser = new catalyst.SqlParser
-    new SparkSQLParser(catalystSqlParser.parse)
-  }
+  protected val sqlParser = new catalyst.SqlParser
 
   override def parse(sqlText: String): LogicalPlan = {
     sqlParser.parse(sqlText)
@@ -174,7 +171,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
-  protected[sql] val ddlParser = new DDLParser((sql: String) => { getSQLDialect().parse(sql) })
+  protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
 
   @transient
   protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect().parse(_))
