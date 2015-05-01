@@ -573,7 +573,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
            |  'className': 'task task-assignment-timeline-object ${classNameByStatus}',
            |  'group': '${executorId}',
            |  'content': '<div class="task-assignment-timeline-content"' +
-           |    'data-toggle="tooltip" data-placement="right" data-html="true" data-container="body"' +
+           |    'data-toggle="tooltip" data-placement="top"' +
+           |    'data-html="true" data-container="body"' +
            |    'data-title="${taskIdWithIndexAndAttempt}<br>Status: ${taskInfo.status}<br>' +
            |    'Launch Time: ${UIUtils.formatDate(new Date(launchTime))}' +
            |    '${
