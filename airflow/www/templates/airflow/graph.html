@@ -21,6 +21,7 @@
             {{ form.execution_date(class_="form-control") | safe }}
             Layout:
             {{ form.arrange(class_="form-control") | safe }}
+            <input type="hidden" name="root" value="{{ root }}">
             <input type="submit" value="Go" class="btn btn-default"
             action="" method="get">
         </form>
