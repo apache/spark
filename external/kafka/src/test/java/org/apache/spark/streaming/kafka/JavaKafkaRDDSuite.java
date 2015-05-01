@@ -72,9 +72,8 @@ public class JavaKafkaRDDSuite implements Serializable {
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
     kafkaParams.put("metadata.broker.list", kafkaTestUtils.brokerAddress());
 
-    KafkaCluster kc = new KafkaCluster(kafkaParams);
-    kafkaTestUtils.waitUntilLeaderOffset(kc, topic1, 0, topic1data.length);
-    kafkaTestUtils.waitUntilLeaderOffset(kc, topic2, 0, topic2data.length);
+    kafkaTestUtils.waitUntilLeaderOffset(topic1, 0, topic1data.length);
+    kafkaTestUtils.waitUntilLeaderOffset(topic2, 0, topic2data.length);
 
     OffsetRange[] offsetRanges = {
       OffsetRange.create(topic1, 0, 0, 1),

@@ -231,11 +231,11 @@ private class KafkaTestUtils extends Logging {
 
   /** wait until the leader offset for the given topic / partition equals the specified offset */
   def waitUntilLeaderOffset(
-      kc: KafkaCluster,
       topic: String,
       partition: Int,
       offset: Long): Unit = {
     eventually(Time(10000), Time(100)) {
+      val kc = new KafkaCluster(Map("metadata.broker.list" -> brokerAddress))
       val tp = TopicAndPartition(topic, partition)
       val llo = kc.getLatestLeaderOffsets(Set(tp)).right.get.apply(tp).offset
       assert(
