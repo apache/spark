@@ -20,19 +20,22 @@ package org.apache.spark.mllib.recommendation
 import java.io.IOException
 import java.lang.{Integer => JavaInteger}
 
+import scala.collection.mutable
+
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
+import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.BoundedPriorityQueue
-import org.apache.spark.util.collection.Utils
-import org.apache.spark.mllib.linalg.{Vectors, Vector, BLAS}
 
 /**
  * Model representing the result of matrix factorization.
@@ -58,7 +61,7 @@ class MatrixFactorizationModel(
 
   /** Validates factors and warns users if there are performance concerns. */
   private def validateFeatures(name: String, features: RDD[(Int, Array[Double])]): Unit = {
-    require(features.first()._2.size == rank,
+    require(features.first()._2.length == rank,
       s"$name feature dimension does not match the rank $rank.")
     if (features.partitioner.isEmpty) {
       logWarning(s"$name factor does not have a partitioner. "
@@ -71,9 +74,9 @@ class MatrixFactorizationModel(
 
   /** Predict the rating of one user for one product. */
   def predict(user: Int, product: Int): Double = {
-    val userVector = Vectors.dense(userFeatures.lookup(user).head)
-    val productVector = Vectors.dense(productFeatures.lookup(product).head)
-    BLAS.dot(userVector, productVector)
+    val userVector = userFeatures.lookup(user).head
+    val productVector = productFeatures.lookup(product).head
+    blas.ddot(rank, userVector, 1, productVector, 1)
   }
 
   /**
@@ -90,9 +93,7 @@ class MatrixFactorizationModel(
     }
     users.join(productFeatures).map {
       case (product, ((user, uFeatures), pFeatures)) =>
-        val userVector = Vectors.dense(uFeatures)
-        val productVector = Vectors.dense(pFeatures)
-        Rating(user, product, BLAS.dot(userVector, productVector))
+        Rating(user, product, blas.ddot(uFeatures.length, uFeatures, 1, pFeatures, 1))
     }
   }
 
@@ -115,7 +116,7 @@ class MatrixFactorizationModel(
    *  recommended the product is.
    */
   def recommendProducts(user: Int, num: Int): Array[Rating] =
-    recommend(userFeatures.lookup(user).head, productFeatures, num)
+    MatrixFactorizationModel.recommend(userFeatures.lookup(user).head, productFeatures, num)
       .map(t => Rating(user, t._1, t._2))
 
   /**
@@ -131,7 +132,7 @@ class MatrixFactorizationModel(
    *  recommended the user is.
    */
   def recommendUsers(product: Int, num: Int): Array[Rating] =
-    recommend(productFeatures.lookup(product).head, userFeatures, num)
+    MatrixFactorizationModel.recommend(productFeatures.lookup(product).head, userFeatures, num)
       .map(t => Rating(t._1, product, t._2))
 
   protected override val formatVersion: String = "1.0"
@@ -140,19 +141,7 @@ class MatrixFactorizationModel(
     MatrixFactorizationModel.SaveLoadV1_0.save(this, path)
   }
 
-  private def recommend(
-    recommendToFeatures: Array[Double],
-    recommendableFeatures: RDD[(Int, Array[Double])],
-    num: Int): Array[(Int, Double)] = {
-    val recommendToVector = Vectors.dense(recommendToFeatures)
-    val scored = recommendableFeatures.map {
-      case (id, features) =>
-        (id, BLAS.dot(recommendToVector, Vectors.dense(features)))
-    }
-    scored.top(num)(Ordering.by(_._2))
-  }
-
-  /**
+    /**
    * Recommends topK products for all users
    *
    * @param num how many products to return for every user.
@@ -161,9 +150,13 @@ class MatrixFactorizationModel(
    * rating field. Semantics of score is same as recommendProducts API
    */
   def recommendProductsForUsers(num: Int): RDD[(Int, Array[Rating])] = {
-    val topK = userFeatures.map { x => (x._1, num) }
-    recommendProductsForUsers(topK)
+    MatrixFactorizationModel.recommendForAll(rank, userFeatures, productFeatures, num).map {
+      case (user, top) =>
+        val ratings = top.map { case (rating, product) => Rating(user, product, rating) }
+        (user, ratings)
+    }
   }
+
 
   /**
    * Recommends topK users for all products
@@ -174,87 +167,10 @@ class MatrixFactorizationModel(
    * rating field. Semantics of score is same as recommendUsers API
    */
   def recommendUsersForProducts(num: Int): RDD[(Int, Array[Rating])] = {
-    val topK = productFeatures.map { x => (x._1, num) }
-    recommendUsersForProducts(topK)
-  }
-
-  val ord = Ordering.by[Rating, Double](x => x.rating)
-  case class FeatureTopK(feature: Vector, topK: Int)
-
-  /**
-   * Recommend topK products for users in userTopK RDD
-   *
-   * @param userTopK how many products to return for every user in userTopK RDD.
-   * @return [(Int, Array[Rating])] objects, where every tuple contains a userID and an array
-   * of rating objects which contains the same userId, recommended productID and a "score" in the
-   * rating field. Semantics of score is same as recommendProducts API
-   */
-  def recommendProductsForUsers(
-    userTopK: RDD[(Int, Int)]): RDD[(Int, Array[Rating])] = {
-    val userFeaturesTopK = userFeatures.join(userTopK).map {
-      case (userId, (userFeature, topK)) =>
-        (userId, FeatureTopK(Vectors.dense(userFeature), topK))
-    }
-
-    // TO DO: Do a mini-batch on productFeatures.collect if the dimension of rows are big
-    val productVectors = productFeatures.map {
-      x => (x._1, Vectors.dense(x._2))
-    }.collect
-
-    // TO DO: User BLAS dgemm
-    userFeaturesTopK.map {
-      case (userId, userFeatureTopK) => {
-        val predictions = productVectors.map {
-          case (productId, productVector) =>
-            Rating(userId, productId,
-              BLAS.dot(userFeatureTopK.feature, productVector))
-        }
-        (userId, Utils.takeOrdered(predictions.iterator,
-          userFeatureTopK.topK)(ord.reverse).toArray)
-      }
-    }
-  }
-
-  /**
-   * Recommends topK users for all products in productTopK RDD
-   *
-   * @param productTopK how many users to return for every product in productTopK RDD
-   * @return [(Int, Array[Rating])] objects, where every tuple contains a productID and an array
-   * of Rating objects which contains the recommended userId, same productID and a "score" in the
-   * rating field. Semantics of score is same as recommendUsers API
-   */
-  def recommendUsersForProducts(
-    productTopK: RDD[(Int, Int)]): RDD[(Int, Array[Rating])] = {
-    val blocks = userFeatures.partitions.size / 2
-
-    // TO DO: Do a mini-batch on productFeatures.collect if the dimension of rows are big
-    val productVectors = productFeatures.join(productTopK).map {
-      case (productId, (productFeature, topK)) =>
-        (productId, FeatureTopK(Vectors.dense(productFeature), topK))
-    }.collect()
-
-    // TO DO: Use BLAS dgemm
-    userFeatures.mapPartitions { items =>
-      val predictions = productVectors.map {
-        x => (x._1, new BoundedPriorityQueue[Rating](x._2.topK)(ord.reverse))
-      }.toMap
-      while (items.hasNext) {
-        val (userId, userFeature) = items.next
-        val userVector = Vectors.dense(userFeature)
-        for (i <- 0 until productVectors.length) {
-          val (productId, productFeatureTopK) = productVectors(i)
-          val predicted = Rating(userId, productId,
-            BLAS.dot(userVector, productFeatureTopK.feature))
-          predictions(productId) ++= Iterator.single(predicted)
-        }
-      }
-      predictions.iterator
-    }.reduceByKey({ (queue1, queue2) =>
-      queue1 ++= queue2
-      queue1
-    }, blocks).map {
-      case (productId, predictions) =>
-        (productId, predictions.toArray)
+    MatrixFactorizationModel.recommendForAll(rank, productFeatures, userFeatures, num).map {
+      case (product, top) =>
+        val ratings = top.map { case (rating, user) => Rating(user, product, rating) }
+        (product, ratings)
     }
   }
 }
@@ -262,6 +178,76 @@ class MatrixFactorizationModel(
 object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
 
   import org.apache.spark.mllib.util.Loader._
+
+  /**
+   * Makes recommendations for a single user (or product).
+   */
+  private def recommend(
+      recommendToFeatures: Array[Double],
+      recommendableFeatures: RDD[(Int, Array[Double])],
+      num: Int): Array[(Int, Double)] = {
+    val scored = recommendableFeatures.map { case (id, features) =>
+      (id, blas.ddot(features.length, recommendToFeatures, 1, features, 1))
+    }
+    scored.top(num)(Ordering.by(_._2))
+  }
+
+  /**
+   * Makes recommendations for all users (or products).
+   * @param rank rank
+   * @param srcFeatures src features to receive recommendations
+   * @param dstFeatures dst features used to make recommendations
+   * @param num number of recommendations for each record
+   * @return an RDD of (srcId: Int, recommendations), where recommendations are stored as an array
+   *         of (rating, dstId) pairs.
+   */
+  private def recommendForAll(
+      rank: Int,
+      srcFeatures: RDD[(Int, Array[Double])],
+      dstFeatures: RDD[(Int, Array[Double])],
+      num: Int): RDD[(Int, Array[(Double, Int)])] = {
+    val srcBlocks = blockify(rank, srcFeatures)
+    val dstBlocks = blockify(rank, dstFeatures)
+    val ratings = srcBlocks.cartesian(dstBlocks).flatMap {
+      case ((srcIds, srcFactors), (dstIds, dstFactors)) =>
+        val m = srcIds.length
+        val n = dstIds.length
+        val ratings = srcFactors.transpose.multiply(dstFactors)
+        val output = new Array[(Int, (Double, Int))](m * n)
+        var k = 0
+        ratings.foreachActive { (i, j, r) =>
+          output(k) = (i, (r, j))
+          k += 1
+        }
+        output.toSeq
+    }
+    ratings.topByKey(num)
+  }
+
+  /**
+   * Blockifies features to use Level-3 BLAS.
+   */
+  private def blockify(
+      rank: Int,
+      features: RDD[(Int, Array[Double])]): RDD[(Array[Int], DenseMatrix)] = {
+    val blockSize = 4096 // TODO: tune the block size
+    val blockStorage = rank * blockSize
+    features.mapPartitions { iter =>
+      iter.grouped(blockSize).map { grouped =>
+        val ids = mutable.ArrayBuilder.make[Int]
+        ids.sizeHint(blockSize)
+        val factors = mutable.ArrayBuilder.make[Double]
+        factors.sizeHint(blockStorage)
+        var i = 0
+        grouped.foreach { case (id, factor) =>
+          ids += id
+          factors ++= factor
+          i += 1
+        }
+        (ids.result(), new DenseMatrix(rank, i, factors.result()))
+      }
+    }
+  }
 
   override def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
     val (loadedClassName, formatVersion, _) = loadMetadata(sc, path)
