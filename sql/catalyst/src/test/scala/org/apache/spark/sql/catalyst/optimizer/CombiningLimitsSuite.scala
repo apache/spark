@@ -89,24 +89,4 @@ class CombiningLimitsSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
-
-  test("limits: combines two limits with sort") {
-    val originalQuery =
-      testRelation
-        .select('a)
-        .limit(2)
-        .select('a)
-        .sortBy(SortOrder('a, Ascending))
-        .limit(5)
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer =
-      testRelation
-        .select('a)
-        .sortBy(SortOrder('a, Ascending))
-        .limit(2).analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
 }

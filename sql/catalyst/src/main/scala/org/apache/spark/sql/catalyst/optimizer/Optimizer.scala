@@ -43,7 +43,8 @@ object DefaultOptimizer extends Optimizer {
       PushPredicateThroughJoin,
       PushPredicateThroughGenerate,
       ColumnPruning,
-      CombineLimits) ::
+      CombineLimits,
+      CombineLimitSort) ::
     Batch("ConstantFolding", FixedPoint(100),
       NullPropagation,
       ConstantFolding,
@@ -438,6 +439,17 @@ object CombineFilters extends Rule[LogicalPlan] {
 }
 
 /**
+ * Combines Limit and Sort if possible, so it will be planed as TakeOrdered
+ * and won't do total ordering.
+ */
+object CombineLimitSort extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case l @ Limit(limitExpr, p @ Project(projectList, s @ Sort(_, _, _))) =>
+      Project(projectList, Limit(limitExpr, s))
+  }
+}
+
+/**
  * Removes filters that can be evaluated trivially.  This is done either by eliding the filter for
  * cases where it will always evaluate to `true`, or substituting a dummy empty relation when the
  * filter will always evaluate to `false`.
@@ -618,9 +630,6 @@ object CombineLimits extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ll @ Limit(le, nl @ Limit(ne, grandChild)) =>
       Limit(If(LessThan(ne, le), ne, le), grandChild)
-
-    case s @ Sort(_, _, Limit(exp, grandChild)) =>
-      Limit(exp, s.copy(child = grandChild))
   }
 }
 

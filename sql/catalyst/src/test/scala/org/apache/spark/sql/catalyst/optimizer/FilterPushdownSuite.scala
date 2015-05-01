@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
-import org.apache.spark.sql.catalyst.expressions.{Count, Explode}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder, Count, Explode}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{PlanTest, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.rules._
@@ -34,11 +34,14 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubQueries) ::
       Batch("Filter Pushdown", Once,
+        UnionPushdown,
         CombineFilters,
         PushPredicateThroughProject,
         PushPredicateThroughJoin,
         PushPredicateThroughGenerate,
-        ColumnPruning) :: Nil
+        ColumnPruning,
+        CombineLimits,
+        CombineLimitSort) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -521,5 +524,24 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
 
     comparePlans(optimized, originalQuery)
+  }
+
+  test("Combines Limit and Sort") {
+    val originalQuery =
+      testRelation
+        .select('a, 'b)
+        .sortBy(SortOrder('a, Ascending))
+        .select('a)
+        .limit(5)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select('a, 'b)
+        .sortBy(SortOrder('a, Ascending))
+        .limit(5)
+        .select('a).analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 }
