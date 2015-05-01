@@ -266,6 +266,14 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
+    <repository>
+      <id>bintray-mengxr-maven</id>
+      <name>bintray</name>
+      <url>http://dl.bintray.com/mengxr/maven</url>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>

@@ -360,9 +360,9 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.spark-project</groupId>
+      <groupId>com.github.irmen</groupId>
       <artifactId>pyrolite</artifactId>
-      <version>2.0.1</version>
+      <version>4.4-0</version>
     </dependency>
     <dependency>
       <groupId>net.sf.py4j</groupId>
