@@ -108,4 +108,9 @@ private[spark] object UIData {
       var taskInfo: TaskInfo,
       var taskMetrics: Option[TaskMetrics] = None,
       var errorMessage: Option[String] = None)
+
+  case class ExecutorUIData(
+      val startTime: Long,
+      var finishTime: Option[Long] = None,
+      var finishReason: Option[String] = None)
 }
