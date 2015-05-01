@@ -387,6 +387,11 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(95 < g.agg(functions.approxCountDistinct(df.key)).first()[0])
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
+    def test_cov(self):
+        df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
+        cov = df.stat.cov("a", "b")
+        self.assertTrue(abs(cov - 55.0 / 3) < 1e-6)
+
     def test_math_functions(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
         from pyspark.sql import mathfunctions as functions

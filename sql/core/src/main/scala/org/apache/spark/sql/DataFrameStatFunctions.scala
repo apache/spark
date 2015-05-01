@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.stat.{ContingencyTable, FrequentItems}
+import org.apache.spark.sql.execution.stat._
 
 /**
  * :: Experimental ::
@@ -28,8 +28,18 @@ import org.apache.spark.sql.execution.stat.{ContingencyTable, FrequentItems}
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
+   * Calculate the sample covariance of two numerical columns of a DataFrame.
+   * @param col1 the name of the first column
+   * @param col2 the name of the second column
+   * @return the covariance of the two columns.
+   */
+  def cov(col1: String, col2: String): Double = {
+    StatFunctions.calculateCov(df, Seq(col1, col2))
+  }
+
+  /**
    * Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
-   * The number of distinct values for each column should be less than Int.MaxValue. The first
+   * The number of distinct values for each column should be less than 1e5. The first
    * column of each row will be the distinct values of `col1` and the column names will be the
    * distinct values of `col2` sorted in lexicographical order. Counts will be returned as `Long`s.
    *
@@ -38,7 +48,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @return A Local DataFrame containing the table
    */
   def crosstab(col1: String, col2: String): DataFrame = {
-    ContingencyTable.crossTabulate(df, col1, col2)
+    StatFunctions.crossTabulate(df, col1, col2)
   }
 
   /**
