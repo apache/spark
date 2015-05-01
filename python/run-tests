@@ -36,9 +36,9 @@ rm -f $LOG_FILE
 rm -rf metastore warehouse
 
 function run_test() {
-    echo -en "Running test: $1 ... " | tee -a $LOG_FILE 2>&1
+    echo -en "Running test: $1 ... " | tee -a $LOG_FILE
     start=$(date +"%s")
-    SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 > $LOG_FILE
+    SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 > $LOG_FILE 2>&1
 
     FAILED=$((PIPESTATUS[0]||$FAILED))
 
