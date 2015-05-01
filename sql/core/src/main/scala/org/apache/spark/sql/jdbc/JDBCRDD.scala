@@ -294,7 +294,7 @@ private[sql] class JDBCRDD(
   abstract class JDBCConversion
   case object BooleanConversion extends JDBCConversion
   case object DateConversion extends JDBCConversion
-  case object DecimalConversion extends JDBCConversion
+  case class  DecimalConversion(precisionInfo: Option[(Int, Int)]) extends JDBCConversion
   case object DoubleConversion extends JDBCConversion
   case object FloatConversion extends JDBCConversion
   case object IntegerConversion extends JDBCConversion
@@ -311,8 +311,8 @@ private[sql] class JDBCRDD(
     schema.fields.map(sf => sf.dataType match {
       case BooleanType           => BooleanConversion
       case DateType              => DateConversion
-      case DecimalType.Unlimited => DecimalConversion
-      case DecimalType.Fixed(d)  => DecimalConversion
+      case DecimalType.Unlimited => DecimalConversion(None)
+      case DecimalType.Fixed(d)  => DecimalConversion(Some(d))
       case DoubleType            => DoubleConversion
       case FloatType             => FloatConversion
       case IntegerType           => IntegerConversion
@@ -363,7 +363,9 @@ private[sql] class JDBCRDD(
             case BooleanConversion    => mutableRow.setBoolean(i, rs.getBoolean(pos))
             case DateConversion       =>
               mutableRow.update(i, DateUtils.fromJavaDate(rs.getDate(pos)))
-            case DecimalConversion    => mutableRow.update(i, rs.getBigDecimal(pos))
+            case DecimalConversion(d) if d != None =>
+              mutableRow.update(i, Decimal(rs.getBigDecimal(pos), d.map(_._1).get, d.map(_._2).get))
+            case DecimalConversion(n) => mutableRow.update(i, Decimal(rs.getBigDecimal(pos)))
             case DoubleConversion     => mutableRow.setDouble(i, rs.getDouble(pos))
             case FloatConversion      => mutableRow.setFloat(i, rs.getFloat(pos))
             case IntegerConversion    => mutableRow.setInt(i, rs.getInt(pos))
