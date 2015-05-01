@@ -136,7 +136,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
         """Sort the list based on first value."""
         for output in outputs:
             output.sort(key=lambda x: x[0])
-
+'''
 
 class BasicOperationTests(PySparkStreamingTestCase):
 
