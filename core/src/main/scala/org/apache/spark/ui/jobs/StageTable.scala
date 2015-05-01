@@ -103,7 +103,7 @@ private[ui] class StageTableBase(
             <a href={s"$basePathUri/storage/rdd?id=${i.id}"}>{i.name}</a>
           }
         }}
-        <pre>{s.details}</pre>
+        <pre class="stage-detail-text" data-stage-id={"%d".format(s.stageId)}>{s.details}</pre>
       </div>
     }
 

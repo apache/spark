@@ -133,7 +133,10 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       }
       if (shouldShowCompletedStages) {
         content ++= <h4 id="completed">Completed Stages ({numCompletedStages})</h4> ++
-        completedStagesTable.toNodeSeq
+        completedStagesTable.toNodeSeq ++
+        <h4 id="debugger">Visual Debugger</h4> ++
+        <div id="visual-debugger"><div id="canvas-svg"></div></div> ++
+        <script src={UIUtils.prependBaseUri("/static/initialize-visual-debugger.js")}></script>
       }
       if (shouldShowFailedStages) {
         content ++= <h4 id ="failed">Failed Stages ({numFailedStages})</h4> ++
