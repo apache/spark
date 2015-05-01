@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.util.{Utils, ByteBufferInputStream, NextIterator}
 
 /**
@@ -63,6 +63,30 @@ abstract class Serializer {
 
   /** Creates a new [[SerializerInstance]]. */
   def newInstance(): SerializerInstance
+
+  /**
+   * Returns true if this serializer supports relocation of its serialized objects and false
+   * otherwise.  This should return true if and only if reordering the bytes of serialized objects
+   * in serialization stream output results in re-ordered input that can be read with the
+   * deserializer. For instance, the following should work if the serializer supports relocation:
+   *
+   *  serOut.open()
+   *  position = 0
+   *  serOut.write(obj1)
+   *  serOut.flush()
+   *  position = # of bytes writen to stream so far
+   *  obj1Bytes = [bytes 0 through position of stream]
+   *  serOut.write(obj2)
+   *  serOut.flush
+   *  position2 = # of bytes written to stream so far
+   *  obj2Bytes = bytes[position through position2 of stream]
+   *
+   *  serIn.open([obj2bytes] concatenate [obj1bytes]) should return (obj2, obj1)
+   *
+   * See SPARK-7311 for more discussion.
+   */
+  @Experimental
+  def supportsRelocationOfSerializedObjects: Boolean = false
 }
 
 

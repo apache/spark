@@ -125,6 +125,11 @@ class KryoSerializer(conf: SparkConf)
   override def newInstance(): SerializerInstance = {
     new KryoSerializerInstance(this)
   }
+
+  override def supportsRelocationOfSerializedObjects: Boolean = {
+    // TODO: we should have a citation / explanatory comment here clarifying _why_ this is the case
+    newInstance().asInstanceOf[KryoSerializerInstance].getAutoReset()
+  }
 }
 
 private[spark]

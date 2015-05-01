@@ -131,8 +131,7 @@ private[spark] class ExternalSorter[K, V, C](
   private val kvChunkSize = conf.getInt("spark.shuffle.sort.kvChunkSize", 1 << 22) // 4 MB
   private val useSerializedPairBuffer =
     !ordering.isDefined && conf.getBoolean("spark.shuffle.sort.serializeMapOutputs", true) &&
-    ser.isInstanceOf[KryoSerializer] &&
-    serInstance.asInstanceOf[KryoSerializerInstance].getAutoReset
+    ser.supportsRelocationOfSerializedObjects
 
   // Data structures to store in-memory objects before we spill. Depending on whether we have an
   // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
