@@ -38,12 +38,12 @@ private[sql] class DDLParser(
     parseQuery: String => LogicalPlan)
   extends AbstractSparkSQLParser with DataTypeParser with Logging {
 
-  def parse(input: String, exceptionOnError: Boolean): LogicalPlan = {
+  def parse(input: String, exceptionOnError: Boolean): Option[LogicalPlan] = {
     try {
-      parse(input)
+      Some(parse(input))
     } catch {
       case ddlException: DDLException => throw ddlException
-      case _ if !exceptionOnError => parseQuery(input)
+      case _ if !exceptionOnError => None
       case x: Throwable => throw x
     }
   }

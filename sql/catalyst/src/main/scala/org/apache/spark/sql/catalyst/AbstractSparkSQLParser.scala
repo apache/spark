@@ -25,6 +25,10 @@ import scala.util.parsing.input.CharArrayReader.EofCh
 
 import org.apache.spark.sql.catalyst.plans.logical._
 
+private[sql] object KeywordNormalizer {
+  def apply(str: String): String = str.toLowerCase()
+}
+
 private[sql] abstract class AbstractSparkSQLParser
   extends StandardTokenParsers with PackratParsers {
 
@@ -38,7 +42,7 @@ private[sql] abstract class AbstractSparkSQLParser
   }
 
   protected case class Keyword(str: String) {
-    def normalize: String = lexical.normalizeKeyword(str)
+    def normalize: String = KeywordNormalizer(str)
     def parser: Parser[String] = normalize
   }
 
@@ -86,16 +90,13 @@ class SqlLexical extends StdLexical {
     reserved ++= keywords
   }
 
-  /* Normal the keyword string */
-  def normalizeKeyword(str: String): String = str.toLowerCase
-
   delimiters += (
     "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
     ",", ";", "%", "{", "}", ":", "[", "]", ".", "&", "|", "^", "~", "<=>"
   )
 
   protected override def processIdent(name: String) = {
-    val token = normalizeKeyword(name)
+    val token = KeywordNormalizer(name)
     if (reserved contains token) Keyword(token) else Identifier(name)
   }
 
