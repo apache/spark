@@ -899,17 +899,12 @@ class DataFrame(object):
 
         :param col1: The name of the first column
         :param col2: The name of the second column
-        
-        >>> df3.crosstab("age", "height").show()
-        age_height 80 85
-        2 1 1
-        5 1 1
         """
         if not isinstance(col1, str):
             raise ValueError("col1 should be a string.")
         if not isinstance(col2, str):
             raise ValueError("col2 should be a string.")
-        return self._jdf.stat().crosstab(col1, col2)
+        return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sql_ctx)
 
     @ignore_unicode_prefix
     def withColumn(self, colName, col):
