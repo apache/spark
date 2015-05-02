@@ -23,8 +23,6 @@ import java.util.UUID
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark._
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
@@ -114,7 +112,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
           // this dummy directory should not already exist otherwise the WAL will try to recover
           // past events from the directory and throw errors.
           val nonExistentDirectory = new File(
-            FileUtils.getTempDirectory(), UUID.randomUUID().toString).getAbsolutePath
+            System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString).getAbsolutePath
           writeAheadLog = WriteAheadLogUtils.createLogForReceiver(
             SparkEnv.get.conf, nonExistentDirectory, hadoopConf)
           dataRead = writeAheadLog.read(partition.walRecordHandle)
