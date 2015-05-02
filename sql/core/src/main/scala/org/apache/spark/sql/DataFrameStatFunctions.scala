@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.stat._
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
-   * Calculate the correlation of two columns of a DataFrame. Currently only supports the Pearson
+   * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
    * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in 
    * MLlib's Statistics.
    *
@@ -43,7 +43,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Java Friendly implementation to calculate the Pearson correlation coefficient of two columns.
+   * Calculates the Pearson Correlation Coefficient of two columns of a DataFrame.
    *
    * @param col1 the name of the column
    * @param col2 the name of the column to calculate the correlation against
