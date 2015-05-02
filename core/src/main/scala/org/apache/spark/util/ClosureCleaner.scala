@@ -102,6 +102,10 @@ private[spark] object ClosureCleaner extends Logging {
   }
 
   def clean(func: AnyRef, checkSerializable: Boolean = true) {
+    if (!isClosure(func.getClass)) {
+      throw new IllegalArgumentException("Expected a closure; got " + func.getClass.getName)
+    }
+
     // TODO: cache outerClasses / innerClasses / accessedFields
     val outerClasses = getOuterClasses(func)
     val innerClasses = getInnerClasses(func)
