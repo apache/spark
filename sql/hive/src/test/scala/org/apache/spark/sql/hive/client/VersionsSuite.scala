@@ -25,7 +25,7 @@ import org.scalatest.FunSuite
 class VersionsSuite extends FunSuite with Logging {
   val testType = "derby"
 
-  private def buildConf(version: Int) = {
+  private def buildConf() = {
     lazy val warehousePath = Utils.createTempDir()
     lazy val metastorePath = Utils.createTempDir()
     metastorePath.delete()
@@ -35,8 +35,9 @@ class VersionsSuite extends FunSuite with Logging {
   }
 
   test("success sanity check") {
-    val badClient = IsolatedClientLoader.forVersion(13, buildConf(13)).client
-    badClient.createDatabase("default")
+    val badClient = IsolatedClientLoader.forVersion("13", buildConf()).client
+    val db = new HiveDatabase("default", "")
+    badClient.createDatabase(db)
   }
 
   private def getNestedMessages(e: Throwable): String = {
@@ -55,24 +56,25 @@ class VersionsSuite extends FunSuite with Logging {
   // TODO: currently only works on mysql where we manually create the schema...
   ignore("failure sanity check") {
     val e = intercept[Throwable] {
-      val badClient = quietly { IsolatedClientLoader.forVersion(13, buildConf(12)).client }
+      val badClient = quietly { IsolatedClientLoader.forVersion("13", buildConf()).client }
     }
     assert(getNestedMessages(e) contains "Unknown column 'A0.OWNER_NAME' in 'field list'")
   }
 
-  private val versions = Seq(12, 13)
+  private val versions = Seq("12", "13")
 
   private var client: ClientInterface = null
 
   versions.foreach { version =>
     test(s"$version: listTables") {
       client = null
-      client = IsolatedClientLoader.forVersion(version, buildConf(version)).client
+      client = IsolatedClientLoader.forVersion(version, buildConf()).client
       client.listTables("default")
     }
 
     test(s"$version: createDatabase") {
-      client.createDatabase("default")
+      val db = HiveDatabase("default", "")
+      client.createDatabase(db)
     }
 
     test(s"$version: createTable") {
@@ -85,7 +87,7 @@ class VersionsSuite extends FunSuite with Logging {
           properties = Map.empty,
           serdeProperties = Map.empty,
           tableType = ManagedTable,
-          location = Some("/user/hive/src"),
+          location = None,
           inputFormat =
             Some(classOf[org.apache.hadoop.mapred.TextInputFormat].getName),
           outputFormat =

@@ -37,23 +37,23 @@ object IsolatedClientLoader {
    * Creates isolated Hive client loaders by downloading the requested version from maven.
    */
   def forVersion(
-      version: Int,
+      version: String,
       config: Map[String, String] = Map.empty): IsolatedClientLoader = synchronized {
-    val files = resolvedVersions.getOrElseUpdate(version, downloadVersion(version))
+    val resolvedVersion = hiveVersion(version)
+    val files = resolvedVersions.getOrElseUpdate(resolvedVersion, downloadVersion(resolvedVersion))
     new IsolatedClientLoader(hiveVersion(version), files, config)
   }
 
-  def hiveVersion(version: Int): HiveVersion = version match {
-    case 12 => hive.v12
-    case 13 => hive.v13
+  def hiveVersion(version: String): HiveVersion = version match {
+    case "12" | "0.12" | "0.12.0" => hive.v12
+    case "13" | "0.13" | "0.13.0" | "0.13.1" => hive.v13
   }
 
-  private def downloadVersion(version: Int): Seq[File] = {
-    val v = hiveVersion(version).fullVersion
+  private def downloadVersion(version: HiveVersion): Seq[File] = {
     val hiveArtifacts =
       (Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde") ++
-        (if (version <= 10) "hive-builtins" :: Nil else Nil))
-        .map(a => s"org.apache.hive:$a:$v") :+
+        (if (version.hasBuiltinsJar) "hive-builtins" :: Nil else Nil))
+        .map(a => s"org.apache.hive:$a:${version.fullVersion}") :+
         "com.google.guava:guava:14.0.1" :+
         "org.apache.hadoop:hadoop-client:2.4.0" :+
         "mysql:mysql-connector-java:5.1.12"
@@ -75,7 +75,7 @@ object IsolatedClientLoader {
     tempDir.listFiles()
   }
 
-  private def resolvedVersions = new scala.collection.mutable.HashMap[Int, Seq[File]]
+  private def resolvedVersions = new scala.collection.mutable.HashMap[HiveVersion, Seq[File]]
 }
 
 /**
@@ -136,7 +136,7 @@ class IsolatedClientLoader(
   protected val classLoader: ClassLoader = new URLClassLoader(allJars, rootClassLoader) {
     override def loadClass(name: String, resolve: Boolean): Class[_] = {
       val loaded = findLoadedClass(name)
-      if(loaded == null) doLoadClass(name, resolve) else loaded
+      if (loaded == null) doLoadClass(name, resolve) else loaded
     }
 
     def doLoadClass(name: String, resolve: Boolean): Class[_] = {

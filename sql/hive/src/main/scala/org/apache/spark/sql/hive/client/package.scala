@@ -19,12 +19,15 @@ package org.apache.spark.sql.hive
 
 /** Support for interacting with different versions of the HiveMetastoreClient */
 package object client {
-  private[client] abstract class HiveVersion(val fullVersion: String)
+  private[client] abstract class HiveVersion(val fullVersion: String, val hasBuiltinsJar: Boolean)
 
   // scalastyle:off
   private[client] object hive {
-    case object v12 extends HiveVersion("0.12.0")
-    case object v13 extends HiveVersion("0.13.1")
+    case object v10 extends HiveVersion("0.10.0", true)
+    case object v11 extends HiveVersion("0.11.0", false)
+    case object v12 extends HiveVersion("0.12.0", false)
+    case object v13 extends HiveVersion("0.13.1", false)
   }
   // scalastyle:on
+  
 }

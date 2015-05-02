@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
 
 case class HiveDatabase(
     name: String,
@@ -91,7 +91,7 @@ trait ClientInterface {
 
   /** Returns the metadata for specified database, throwing an exception if it doesn't exist */
   def getDatabase(name: String): HiveDatabase = {
-    getDatabaseOption(name).getOrElse(sys.error(s"No such database $name"))
+    getDatabaseOption(name).getOrElse(throw new NoSuchDatabaseException)
   }
 
   /** Returns the metadata for a given database, or None if it doesn't exist. */
@@ -112,7 +112,7 @@ trait ClientInterface {
   def alterTable(table: HiveTable): Unit
 
   /** Creates a new database with the given name. */
-  def createDatabase(databaseName: String): Unit
+  def createDatabase(database: HiveDatabase): Unit
 
   /** Returns all partitions for the given table. */
   def getAllPartitions(hTable: HiveTable): Seq[HivePartition]
@@ -121,7 +121,7 @@ trait ClientInterface {
   def loadPartition(
       loadPath: String,
       tableName: String,
-      partSpec: java.util.LinkedHashMap[String, String],
+      partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
       holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
@@ -138,7 +138,7 @@ trait ClientInterface {
   def loadDynamicPartitions(
       loadPath: String,
       tableName: String,
-      partSpec: java.util.LinkedHashMap[String, String],
+      partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
       numDP: Int,
       holdDDLTime: Boolean,

@@ -27,8 +27,10 @@ import scala.language.reflectiveCalls
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.metastore.api.Database
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.metastore.api
 import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hadoop.hive.ql.metadata._
+import org.apache.hadoop.hive.ql.metadata
+import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.Driver
@@ -64,13 +66,6 @@ class ClientWrapper(
     logDebug(s"Hive Config: $k=$v")
     conf.set(k, v)
   }
-
-  private def properties = Seq(
-    "javax.jdo.option.ConnectionURL",
-    "javax.jdo.option.ConnectionDriverName",
-    "javax.jdo.option.ConnectionUserName")
-
-  properties.foreach(p => logInfo(s"Hive Configuration: $p = ${conf.get(p)}"))
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   private val outputBuffer = new java.io.OutputStream {
@@ -117,7 +112,10 @@ class ClientWrapper(
 
   private val client = Hive.get(conf)
 
-  private def withClassLoader[A](f: => A): A = synchronized {
+  /**
+   * Runs `f` with ThreadLocal session state and classloaders configured for this version of hive.
+   */
+  private def withHiveState[A](f: => A): A = synchronized {
     val original = Thread.currentThread().getContextClassLoader
     Thread.currentThread().setContextClassLoader(getClass.getClassLoader)
     Hive.set(client)
@@ -135,17 +133,21 @@ class ClientWrapper(
     ret
   }
 
-  def currentDatabase: String = withClassLoader {
+  override def currentDatabase: String = withHiveState {
     state.getCurrentDatabase
   }
 
-  def createDatabase(tableName: String): Unit = withClassLoader {
-    val table = new Table("default", tableName)
+  override def createDatabase(database: HiveDatabase): Unit = withHiveState {
     client.createDatabase(
-      new Database("default", "", new File("").toURI.toString, new java.util.HashMap), true)
+      new Database(
+        database.name,
+        "",
+        new File(database.location).toURI.toString,
+        new java.util.HashMap),
+        true)
   }
 
-  def getDatabaseOption(name: String): Option[HiveDatabase] = withClassLoader {
+  override def getDatabaseOption(name: String): Option[HiveDatabase] = withHiveState {
     Option(client.getDatabase(name)).map { d =>
       HiveDatabase(
         name = d.getName,
@@ -153,7 +155,10 @@ class ClientWrapper(
     }
   }
 
-  def getTableOption(dbName: String, tableName: String): Option[HiveTable] = withClassLoader {
+  override def getTableOption(
+      dbName: String,
+      tableName: String): Option[HiveTable] = withHiveState {
+
     logDebug(s"Looking up $dbName.$tableName")
 
     val hiveTable = Option(client.getTable(dbName, tableName, false))
@@ -185,8 +190,8 @@ class ClientWrapper(
     Class.forName(name)
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
-  private def toQlTable(table: HiveTable): Table = {
-    val qlTable = new Table(table.database, table.name)
+  private def toQlTable(table: HiveTable): metadata.Table = {
+    val qlTable = new metadata.Table(table.database, table.name)
 
     qlTable.setFields(table.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
     qlTable.setPartCols(
@@ -208,25 +213,23 @@ class ClientWrapper(
     qlTable
   }
 
-  def createTable(table: HiveTable): Unit = withClassLoader {
+  override def createTable(table: HiveTable): Unit = withHiveState {
     val qlTable = toQlTable(table)
     client.createTable(qlTable)
   }
 
-  def alterTable(table: HiveTable): Unit = withClassLoader {
+  override def alterTable(table: HiveTable): Unit = withHiveState {
     val qlTable = toQlTable(table)
     client.alterTable(table.qualifiedName, qlTable)
   }
 
-  def getTables(dbName: String): Seq[String] = withClassLoader {
-    client.getAllTables(dbName).toSeq
-  }
-
-  def getAllPartitions(hTable: HiveTable): Seq[HivePartition] = withClassLoader {
+  override def getAllPartitions(hTable: HiveTable): Seq[HivePartition] = withHiveState {
     val qlTable = toQlTable(hTable)
     val qlPartitions = version match {
-      case hive.v12 => client.call[Table, Set[Partition]]("getAllPartitionsForPruner", qlTable)
-      case hive.v13 => client.call[Table, Set[Partition]]("getAllPartitionsOf", qlTable)
+      case hive.v12 =>
+        client.call[metadata.Table, Set[metadata.Partition]]("getAllPartitionsForPruner", qlTable)
+      case hive.v13 =>
+        client.call[metadata.Table, Set[metadata.Partition]]("getAllPartitionsOf", qlTable)
     }
     qlPartitions.map(_.getTPartition).map { p =>
       HivePartition(
@@ -239,14 +242,14 @@ class ClientWrapper(
     }.toSeq
   }
 
-  def listTables(dbName: String): Seq[String] = withClassLoader {
+  override def listTables(dbName: String): Seq[String] = withHiveState {
     client.getAllTables
   }
 
   /**
    * Runs the specified SQL query using Hive.
    */
-  def runSqlHive(sql: String): Seq[String] = {
+  override def runSqlHive(sql: String): Seq[String] = {
     val maxResults = 100000
     val results = runHive(sql, maxResults)
     // It is very confusing when you only get back some of the results...
@@ -258,7 +261,7 @@ class ClientWrapper(
    * Execute the command using Hive and return the results as a sequence. Each element
    * in the sequence is one row.
    */
-  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = withClassLoader {
+  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = withHiveState {
     logDebug(s"Running hiveql '$cmd'")
     if (cmd.toLowerCase.startsWith("set")) { logDebug(s"Changing config: $cmd") }
     try {
@@ -331,7 +334,7 @@ class ClientWrapper(
       replace: Boolean,
       holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit = withClassLoader {
+      isSkewedStoreAsSubdir: Boolean): Unit = withHiveState {
 
     client.loadPartition(
       new Path(loadPath), // TODO: Use URI
@@ -347,7 +350,7 @@ class ClientWrapper(
       loadPath: String, // TODO URI
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean): Unit = withClassLoader {
+      holdDDLTime: Boolean): Unit = withHiveState {
     client.loadTable(
       new Path(loadPath),
       tableName,
@@ -362,7 +365,7 @@ class ClientWrapper(
       replace: Boolean,
       numDP: Int,
       holdDDLTime: Boolean,
-      listBucketingEnabled: Boolean): Unit = withClassLoader {
+      listBucketingEnabled: Boolean): Unit = withHiveState {
     client.loadDynamicPartitions(
       new Path(loadPath),
       tableName,
@@ -373,7 +376,7 @@ class ClientWrapper(
       listBucketingEnabled)
   }
 
-  def reset(): Unit = withClassLoader {
+  def reset(): Unit = withHiveState {
     client.getAllTables("default").foreach { t =>
         logDebug(s"Deleting table $t")
         val table = client.getTable("default", t)
