@@ -1471,6 +1471,7 @@ class DagModelView(SuperUserMixin, ModelView):
         'is_subdag': {'disabled': True},
         'is_active': {'disabled': True},
         'scheduler_lock': {'disabled': True},
+        'owners': {'disabled': True},
     }
     column_formatters = dict(
         dag_id=dag_link,

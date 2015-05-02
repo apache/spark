@@ -109,13 +109,13 @@ class DagBag(object):
             if dag.last_loaded < (
                     dag.last_expired_live or datetime(2100, 1, 1)):
                 self.process_file(
-                    filepath=dag.full_filepath, only_if_updated=False)
+                    filepath=dag.fileloc, only_if_updated=False)
                 dag = self.dags[dag_id]
         else:
             session = settings.Session()
             dag = session.query(DAG).filter(DAG.dag_id == dag_id).first()
             self.process_file(
-                filepath=dag.full_filepath, only_if_updated=False)
+                filepath=dag.fileloc, only_if_updated=False)
             if dag_id in self.dags:
                 dag = self.dags[dag_id]
             else:
