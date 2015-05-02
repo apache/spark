@@ -38,6 +38,7 @@ object MovieLensALS {
 
   case class Params(
     input: String = null,
+    delimiter: String = "::",
     kryo: Boolean = false,
     numIterations: Int = 20,
     lambda: Double = 1.0,
@@ -52,6 +53,9 @@ object MovieLensALS {
 
     val parser = new OptionParser[Params]("MovieLensALS") {
       head("MovieLensALS: an example app for ALS on MovieLens data.")
+      opt[String]("delimiter")
+        .text(s"delimiter, default(for MovieLens): ::")
+        .action((x,c) => c.copy(delimiter = x))
       opt[Int]("rank")
         .text(s"rank, default: ${defaultParams.rank}}")
         .action((x, c) => c.copy(rank = x))
@@ -102,16 +106,17 @@ object MovieLensALS {
     val conf = new SparkConf().setAppName(s"MovieLensALS with $params")
     if (params.kryo) {
       conf.registerKryoClasses(Array(classOf[mutable.BitSet], classOf[Rating]))
-        .set("spark.kryoserializer.buffer.mb", "8")
+        .set("spark.kryoserializer.buffer", "8m")
     }
     val sc = new SparkContext(conf)
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
     val implicitPrefs = params.implicitPrefs
+    val delimiter = params.delimiter
 
     val ratings = sc.textFile(params.input).map { line =>
-      val fields = line.split("::")
+      val fields = line.split(delimiter)
       if (implicitPrefs) {
         /*
          * MovieLens ratings are on a scale of 1-5:
@@ -194,7 +199,7 @@ object MovieLensALS {
     math.sqrt(predictionsAndRatings.map(x => (x._1 - x._2) * (x._1 - x._2)).mean())
   }
 
-  def mapPredictedRating(r: Double, implicitPrefs: Boolean) = {
+  def mapPredictedRating(r: Double, implicitPrefs: Boolean) : Double = {
     if (implicitPrefs) math.max(math.min(r, 1.0), 0.0) else r
   }
   
@@ -204,19 +209,17 @@ object MovieLensALS {
     train: RDD[Rating],
     test: RDD[Rating],
     n: Int) : (Double, Long) = {
-    val ord = Ordering.by[(Int, Double), Double](x => x._2)
-
     val testUserLabels = test.map {
       x => (x.user, (x.product, x.rating))
     }.groupByKey().map {
-      case (userId, products) =>
-        val sortedProducts = products.toArray.sorted(ord.reverse)
-        (userId, sortedProducts.map(_._1))
+      case (userId, products) => (userId, products.map(_._1).toArray)
     }
 
     val trainUserLabels = train.map {
       x => (x.user, x.product)
-    }.groupByKey().map{case (userId, products) => (userId, products.toArray)}
+    }.groupByKey().map {
+      case (userId, products) => (userId, products.toArray)
+    }
 
     val rankings = model.recommendProductsForUsers(n).join(trainUserLabels).map {
       case (userId, (pred, train)) => {
@@ -225,7 +228,7 @@ object MovieLensALS {
         (userId, predictedProducts.filterNot { x => trainSet.contains(x) })
       }
     }.join(testUserLabels).map {
-      case (user, (pred, lab)) => (pred, lab)
+      case (userId, (pred, lab)) => (pred, lab)
     }
 
     val metrics = new RankingMetrics(rankings)

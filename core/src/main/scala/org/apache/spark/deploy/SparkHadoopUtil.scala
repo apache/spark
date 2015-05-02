@@ -17,22 +17,27 @@
 
 package org.apache.spark.deploy
 
+import java.io.{ByteArrayInputStream, DataInputStream}
 import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
+import java.util.{Arrays, Comparator}
 
+import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.fs.FileSystem.Statistics
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
-import org.apache.hadoop.security.Credentials
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.mapreduce.JobContext
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.{Logging, SparkContext, SparkConf, SparkException}
+import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
 import scala.collection.JavaConversions._
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
 /**
  * :: DeveloperApi ::
@@ -40,7 +45,8 @@ import scala.collection.JavaConversions._
  */
 @DeveloperApi
 class SparkHadoopUtil extends Logging {
-  val conf: Configuration = newConfiguration(new SparkConf())
+  private val sparkConf = new SparkConf()
+  val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
 
   /**
@@ -201,6 +207,103 @@ class SparkHadoopUtil extends Logging {
     val baseStatus = fs.getFileStatus(basePath)
     if (baseStatus.isDir) recurse(basePath) else Array(baseStatus)
   }
+
+  /**
+   * Lists all the files in a directory with the specified prefix, and does not end with the
+   * given suffix. The returned {{FileStatus}} instances are sorted by the modification times of
+   * the respective files.
+   */
+  def listFilesSorted(
+      remoteFs: FileSystem,
+      dir: Path,
+      prefix: String,
+      exclusionSuffix: String): Array[FileStatus] = {
+    val fileStatuses = remoteFs.listStatus(dir,
+      new PathFilter {
+        override def accept(path: Path): Boolean = {
+          val name = path.getName
+          name.startsWith(prefix) && !name.endsWith(exclusionSuffix)
+        }
+      })
+    Arrays.sort(fileStatuses, new Comparator[FileStatus] {
+      override def compare(o1: FileStatus, o2: FileStatus): Int = {
+        Longs.compare(o1.getModificationTime, o2.getModificationTime)
+      }
+    })
+    fileStatuses
+  }
+
+  /**
+   * How much time is remaining (in millis) from now to (fraction * renewal time for the token that
+   * is valid the latest)?
+   * This will return -ve (or 0) value if the fraction of validity has already expired.
+   */
+  def getTimeFromNowToRenewal(
+      sparkConf: SparkConf,
+      fraction: Double,
+      credentials: Credentials): Long = {
+    val now = System.currentTimeMillis()
+
+    val renewalInterval =
+      sparkConf.getLong("spark.yarn.token.renewal.interval", (24 hours).toMillis)
+
+    credentials.getAllTokens.filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
+      .map { t =>
+      val identifier = new DelegationTokenIdentifier()
+      identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
+      (identifier.getIssueDate + fraction * renewalInterval).toLong - now
+    }.foldLeft(0L)(math.max)
+  }
+
+
+  private[spark] def getSuffixForCredentialsPath(credentialsPath: Path): Int = {
+    val fileName = credentialsPath.getName
+    fileName.substring(
+      fileName.lastIndexOf(SparkHadoopUtil.SPARK_YARN_CREDS_COUNTER_DELIM) + 1).toInt
+  }
+
+
+  private val HADOOP_CONF_PATTERN = "(\\$\\{hadoopconf-[^\\}\\$\\s]+\\})".r.unanchored
+
+  /**
+   * Substitute variables by looking them up in Hadoop configs. Only variables that match the
+   * ${hadoopconf- .. } pattern are substituted.
+   */
+  def substituteHadoopVariables(text: String, hadoopConf: Configuration): String = {
+    text match {
+      case HADOOP_CONF_PATTERN(matched) => {
+        logDebug(text + " matched " + HADOOP_CONF_PATTERN)
+        val key = matched.substring(13, matched.length() - 1) // remove ${hadoopconf- .. }
+        val eval = Option[String](hadoopConf.get(key))
+          .map { value =>
+            logDebug("Substituted " + matched + " with " + value)
+            text.replace(matched, value)
+          }
+        if (eval.isEmpty) {
+          // The variable was not found in Hadoop configs, so return text as is.
+          text
+        } else {
+          // Continue to substitute more variables.
+          substituteHadoopVariables(eval.get, hadoopConf)
+        }
+      }
+      case _ => {
+        logDebug(text + " didn't match " + HADOOP_CONF_PATTERN)
+        text
+      }
+    }
+  }
+
+  /**
+   * Start a thread to periodically update the current user's credentials with new delegation
+   * tokens so that writes to HDFS do not fail.
+   */
+  private[spark] def startExecutorDelegationTokenRenewer(conf: SparkConf) {}
+
+  /**
+   * Stop the thread that does the delegation token updates.
+   */
+  private[spark] def stopExecutorDelegationTokenRenewer() {}
 }
 
 object SparkHadoopUtil {
@@ -220,6 +323,10 @@ object SparkHadoopUtil {
       new SparkHadoopUtil
     }
   }
+
+  val SPARK_YARN_CREDS_TEMP_EXTENSION = ".tmp"
+
+  val SPARK_YARN_CREDS_COUNTER_DELIM = "-"
 
   def get: SparkHadoopUtil = {
     hadoop

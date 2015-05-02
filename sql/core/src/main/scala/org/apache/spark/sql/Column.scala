@@ -515,14 +515,15 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def rlike(literal: String): Column = RLike(expr, lit(literal).expr)
 
   /**
-   * An expression that gets an item at position `ordinal` out of an array.
+   * An expression that gets an item at position `ordinal` out of an array,
+   * or gets a value by key `key` in a [[MapType]].
    *
    * @group expr_ops
    */
-  def getItem(ordinal: Int): Column = GetItem(expr, Literal(ordinal))
+  def getItem(key: Any): Column = GetItem(expr, Literal(key))
 
   /**
-   * An expression that gets a field by name in a [[StructField]].
+   * An expression that gets a field by name in a [[StructType]].
    *
    * @group expr_ops
    */
@@ -646,7 +647,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group expr_ops
    */
-  def cast(to: String): Column = cast(DataTypeParser(to))
+  def cast(to: String): Column = cast(DataTypeParser.parse(to))
 
   /**
    * Returns an ordering used in sorting.
