@@ -90,7 +90,7 @@ private[sql] case class InsertIntoFSBasedRelation(
         needsConversion = false)
 
       if (partitionColumns.isEmpty) {
-        insert(new WriterContainer(relation, jobConf), df)
+        insert(new DefaultWriterContainer(relation, jobConf), df)
       } else {
         val writerContainer = new DynamicPartitionWriterContainer(
           relation, jobConf, partitionColumns, "__HIVE_DEFAULT_PARTITION__")
@@ -101,7 +101,7 @@ private[sql] case class InsertIntoFSBasedRelation(
     Seq.empty[Row]
   }
 
-  private def insert(writerContainer: WriterContainer, df: DataFrame): Unit = {
+  private def insert(writerContainer: BaseWriterContainer, df: DataFrame): Unit = {
     try {
       writerContainer.driverSideSetup()
       df.sqlContext.sparkContext.runJob(df.rdd, writeRows _)
@@ -128,7 +128,7 @@ private[sql] case class InsertIntoFSBasedRelation(
   }
 
   private def insertWithDynamicPartitions(
-      writerContainer: WriterContainer,
+      writerContainer: BaseWriterContainer,
       df: DataFrame,
       partitionColumns: Array[String]): Unit = {
 
@@ -191,7 +191,7 @@ private[sql] case class InsertIntoFSBasedRelation(
   }
 }
 
-private[sql] class WriterContainer(
+private[sql] abstract class BaseWriterContainer(
     @transient val relation: FSBasedRelation,
     @transient jobConf: JobConf)
   extends SparkHadoopMapRedUtil
@@ -223,11 +223,9 @@ private[sql] class WriterContainer(
 
   protected val outputWriterClass: Class[_ <: OutputWriter] = relation.outputWriterClass
 
-  // All output writers are created on executor side.
-  @transient protected var outputWriters: mutable.Map[String, OutputWriter] = _
-
   def driverSideSetup(): Unit = {
     setupIDs(0, 0, 0)
+    relation.prepareForWrite(serializableJobConf.value)
     setupJobConf()
     jobContext = newJobContext(jobConf, jobId)
     outputCommitter = jobConf.getOutputCommitter
@@ -240,7 +238,7 @@ private[sql] class WriterContainer(
     taskAttemptContext = newTaskAttemptContext(serializableJobConf.value, taskAttemptId)
     outputCommitter = serializableJobConf.value.getOutputCommitter
     outputCommitter.setupTask(taskAttemptContext)
-    outputWriters = initWriters()
+    initWriters()
   }
 
   private def setupIDs(jobId: Int, splitId: Int, attemptId: Int): Unit = {
@@ -258,22 +256,20 @@ private[sql] class WriterContainer(
   }
 
   // Called on executor side when writing rows
-  def outputWriterForRow(row: Row): OutputWriter = outputWriters.values.head
+  def outputWriterForRow(row: Row): OutputWriter
 
-  protected def initWriters(): mutable.Map[String, OutputWriter] = {
+  protected def initWriters(): Unit = {
     val writer = outputWriterClass.newInstance()
     writer.init(outputPath, dataSchema, serializableJobConf.value)
     mutable.Map(outputPath -> writer)
   }
 
   def commitTask(): Unit = {
-    outputWriters.values.foreach(_.close())
     SparkHadoopMapRedUtil.commitTask(
       outputCommitter, taskAttemptContext, jobId.getId, taskId.getId, taskAttemptId.getId)
   }
 
   def abortTask(): Unit = {
-    outputWriters.values.foreach(_.close())
     outputCommitter.abortTask(taskAttemptContext)
     logError(s"Task attempt $taskAttemptId aborted.")
   }
@@ -289,14 +285,44 @@ private[sql] class WriterContainer(
   }
 }
 
+private[sql] class DefaultWriterContainer(
+    @transient relation: FSBasedRelation,
+    @transient conf: JobConf)
+  extends BaseWriterContainer(relation, conf) {
+
+  @transient private var writer: OutputWriter = _
+
+  override protected def initWriters(): Unit = {
+    writer = relation.outputWriterClass.newInstance()
+    writer.init(outputPath, dataSchema, serializableJobConf.value)
+  }
+
+  override def outputWriterForRow(row: Row): OutputWriter = writer
+
+  override def commitTask(): Unit = {
+    writer.close()
+    super.commitTask()
+  }
+
+  override def abortTask(): Unit = {
+    writer.close()
+    super.abortTask()
+  }
+}
+
 private[sql] class DynamicPartitionWriterContainer(
     @transient relation: FSBasedRelation,
     @transient conf: JobConf,
     partitionColumns: Array[String],
     defaultPartitionName: String)
-  extends WriterContainer(relation, conf) {
+  extends BaseWriterContainer(relation, conf) {
 
-  override protected def initWriters() = mutable.Map.empty[String, OutputWriter]
+  // All output writers are created on executor side.
+  @transient protected var outputWriters: mutable.Map[String, OutputWriter] = _
+
+  override protected def initWriters(): Unit = {
+    outputWriters = mutable.Map.empty[String, OutputWriter]
+  }
 
   override def outputWriterForRow(row: Row): OutputWriter = {
     val partitionPath = partitionColumns.zip(row.toSeq).map { case (col, rawValue) =>
@@ -304,7 +330,7 @@ private[sql] class DynamicPartitionWriterContainer(
       val valueString = if (string == null || string.isEmpty) {
         defaultPartitionName
       } else {
-        escapePathName(string)
+        DynamicPartitionWriterContainer.escapePathName(string)
       }
       s"/$col=$valueString"
     }.mkString
@@ -317,18 +343,14 @@ private[sql] class DynamicPartitionWriterContainer(
     })
   }
 
-  private def escapePathName(path: String): String = {
-    val builder = new StringBuilder()
-    path.foreach { c =>
-      if (DynamicPartitionWriterContainer.needsEscaping(c)) {
-        builder.append('%')
-        builder.append(f"${c.asInstanceOf[Int]}%02x")
-      } else {
-        builder.append(c)
-      }
-    }
+  override def commitTask(): Unit = {
+    outputWriters.values.foreach(_.close())
+    super.commitTask()
+  }
 
-    builder.toString()
+  override def abortTask(): Unit = {
+    outputWriters.values.foreach(_.close())
+    super.abortTask()
   }
 }
 
@@ -358,5 +380,19 @@ private[sql] object DynamicPartitionWriterContainer {
 
   def needsEscaping(c: Char): Boolean = {
     c >= 0 && c < charToEscape.size() && charToEscape.get(c);
+  }
+
+  def escapePathName(path: String): String = {
+    val builder = new StringBuilder()
+    path.foreach { c =>
+      if (DynamicPartitionWriterContainer.needsEscaping(c)) {
+        builder.append('%')
+        builder.append(f"${c.asInstanceOf[Int]}%02x")
+      } else {
+        builder.append(c)
+      }
+    }
+
+    builder.toString()
   }
 }

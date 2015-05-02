@@ -107,6 +107,8 @@ class SimpleFSBasedRelation
   }
 
   override def outputWriterClass: Class[_ <: OutputWriter] = classOf[SimpleOutputWriter]
+
+  override def prepareForWrite(conf: Configuration): Unit = ()
 }
 
 object TestResult {

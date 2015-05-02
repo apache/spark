@@ -409,6 +409,8 @@ abstract class FSBasedRelation private[sql](
     buildScan(requiredColumns, inputPaths)
   }
 
+  def prepareForWrite(conf: Configuration): Unit
+
   /**
    * This method is responsible for producing a new [[OutputWriter]] for each newly opened output
    * file on the executor side.
