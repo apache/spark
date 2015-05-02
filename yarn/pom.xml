@@ -86,7 +86,12 @@
       <artifactId>jetty-servlet</artifactId>
     </dependency>
     <!-- End of shaded deps. -->
-
+    
+     <!--
+    See SPARK-3710. hadoop-yarn-server-tests in Hadoop 2.2 fails to pull some needed
+    dependencies, so they need to be added manually for the tests to work.
+    -->
+     
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-yarn-server-tests</artifactId>
