@@ -15,14 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.network.sasl;
 
-import org.apache.spark.annotation.DeveloperApi
+import javax.security.sasl.SaslException;
 
-/**
- * An opaque handle to a shuffle, used by a ShuffleManager to pass information about it to tasks.
- *
- * @param shuffleId ID of the shuffle
- */
-@DeveloperApi
-abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {}
+interface SaslEncryptionBackend {
+
+  /** Disposes of resources used by the backend. */
+  void dispose();
+
+  /** Encrypt data. */
+  byte[] wrap(byte[] data, int offset, int len) throws SaslException;
+
+  /** Decrypt data. */
+  byte[] unwrap(byte[] data, int offset, int len) throws SaslException;
+
+}

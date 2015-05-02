@@ -15,41 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network;
+package org.apache.spark.network.server;
 
-import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
+import io.netty.channel.Channel;
 
-public class ByteArrayWritableChannel implements WritableByteChannel {
-
-  private final byte[] data;
-  private int offset;
-
-  public ByteArrayWritableChannel(int size) {
-    this.data = new byte[size];
-    this.offset = 0;
-  }
-
-  public byte[] getData() {
-    return data;
-  }
-
-  @Override
-  public int write(ByteBuffer src) {
-    int available = src.remaining();
-    src.get(data, offset, available);
-    offset += available;
-    return available;
-  }
-
-  @Override
-  public void close() {
-
-  }
-
-  @Override
-  public boolean isOpen() {
-    return true;
-  }
-
+/**
+ * A bootstrap which is executed on a TransportServer's client channel once a client connects
+ * to the server. This allows customizing the client channel to allow for things such as SASL
+ * authentication.
+ */
+public interface TransportServerBootstrap {
+  /**
+   * Customizes the channel to include new features, if needed.
+   *
+   * @param channel The connected channel opened by the client.
+   * @param rpcHandler The RPC handler for the server.
+   * @return The RPC handler to use for the channel.
+   */
+  RpcHandler doBootstrap(Channel channel, RpcHandler rpcHandler);
 }
