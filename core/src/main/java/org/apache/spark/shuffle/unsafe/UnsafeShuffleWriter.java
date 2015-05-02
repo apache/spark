@@ -159,16 +159,16 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
       // TODO: we should run the partition extraction function _now_, at insert time, rather than
       // requiring it to be stored alongisde the data, since this may lead to double storage
       // Need 8 bytes to store the prefix (for later retrieval in the prefix computer), plus
-      // 8 to store the record length (TODO: can store as an int instead).
-      ensureSpaceInDataPage(serializedRecordSize + 8 + 8);
+      // 4 to store the record length.
+      ensureSpaceInDataPage(serializedRecordSize + 8 + 4);
 
       final long recordAddress =
         memoryManager.encodePageNumberAndOffset(currentPage, currentPagePosition);
       final Object baseObject = currentPage.getBaseObject();
       PlatformDependent.UNSAFE.putLong(baseObject, currentPagePosition, partitionId);
       currentPagePosition += 8;
-      PlatformDependent.UNSAFE.putLong(baseObject, currentPagePosition, serializedRecordSize);
-      currentPagePosition += 8;
+      PlatformDependent.UNSAFE.putInt(baseObject, currentPagePosition, serializedRecordSize);
+      currentPagePosition += 4;
       PlatformDependent.copyMemory(
         serArray,
         PlatformDependent.BYTE_ARRAY_OFFSET,
@@ -214,7 +214,7 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
       final int recordLength = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + 8);
       PlatformDependent.copyMemory(
         baseObject,
-        baseOffset + 16,
+        baseOffset + 8 + 4,
         arr,
         PlatformDependent.BYTE_ARRAY_OFFSET,
         recordLength);
