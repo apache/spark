@@ -588,7 +588,9 @@ private[spark] class ExecutorAllocationManager(
   /**
    * Metric source for ExecutorAllocationManager to expose its internal executor allocation
    * status to MetricsSystem.
-   * Note: These metrics may not be stable across Spark version.
+   * Note: These metrics heavily rely on the internal implementation of
+   * ExecutorAllocationManager, metrics or value of metrics will be changed when internal
+   * implementation is changed, so these metrics are not stable across Spark version.
    */
   private[spark] class ExecutorAllocationManagerSource extends Source {
     val sourceName = "ExecutorAllocationManager"
@@ -601,10 +603,9 @@ private[spark] class ExecutorAllocationManager(
     }
 
     registerGauge("numberExecutorsToAdd", numExecutorsToAdd, 0)
-    registerGauge("numberExecutorsPending", numExecutorsPending, 0)
     registerGauge("numberExecutorsPendingToRemove", executorsPendingToRemove.size, 0)
     registerGauge("numberAllExecutors", executorIds.size, 0)
-    registerGauge("numberTargetExecutors", targetNumExecutors(), 0)
+    registerGauge("numberTargetExecutors", numExecutorsTarget, 0)
     registerGauge("numberMaxNeededExecutors", maxNumExecutorsNeeded(), 0)
   }
 }
