@@ -49,7 +49,6 @@ public class UnsafeSorterSuite {
     final UnsafeSorter sorter = new UnsafeSorter(
       new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP)),
       mock(UnsafeSorter.RecordComparator.class),
-      mock(UnsafeSorter.PrefixComputer.class),
       mock(UnsafeSorter.PrefixComparator.class),
       100);
     final Iterator<UnsafeSorter.RecordPointerAndKeyPrefix> iter = sorter.getSortedIterator();
@@ -104,14 +103,6 @@ public class UnsafeSorterSuite {
     };
     // Compute key prefixes based on the records' partition ids
     final HashPartitioner hashPartitioner = new HashPartitioner(4);
-    final UnsafeSorter.PrefixComputer prefixComputer = new UnsafeSorter.PrefixComputer() {
-      @Override
-      public long computePrefix(Object baseObject, long baseOffset) {
-        final String str = getStringFromDataPage(baseObject, baseOffset);
-        final int partitionId = hashPartitioner.getPartition(str);
-        return (long) partitionId;
-      }
-    };
     // Use integer comparison for comparing prefixes (which are partition ids, in this case)
     final UnsafeSorter.PrefixComparator prefixComparator = new UnsafeSorter.PrefixComparator() {
       @Override
@@ -119,15 +110,17 @@ public class UnsafeSorterSuite {
         return (int) prefix1 - (int) prefix2;
       }
     };
-    final UnsafeSorter sorter = new UnsafeSorter(memoryManager, recordComparator, prefixComputer,
-      prefixComparator, dataToSort.length);
+    final UnsafeSorter sorter = new UnsafeSorter(memoryManager, recordComparator, prefixComparator,
+      dataToSort.length);
     // Given a page of records, insert those records into the sorter one-by-one:
     position = dataPage.getBaseOffset();
     for (int i = 0; i < dataToSort.length; i++) {
       // position now points to the start of a record (which holds its length).
       final long recordLength = PlatformDependent.UNSAFE.getLong(baseObject, position);
       final long address = memoryManager.encodePageNumberAndOffset(dataPage, position);
-      sorter.insertRecord(address);
+      final String str = getStringFromDataPage(baseObject, position);
+      final int partitionId = hashPartitioner.getPartition(str);
+      sorter.insertRecord(address, partitionId);
       position += 8 + recordLength;
     }
     final Iterator<UnsafeSorter.RecordPointerAndKeyPrefix> iter = sorter.getSortedIterator();

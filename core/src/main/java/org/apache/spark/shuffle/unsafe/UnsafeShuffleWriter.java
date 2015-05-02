@@ -134,7 +134,6 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
     final UnsafeSorter sorter = new UnsafeSorter(
       memoryManager,
       RECORD_COMPARATOR,
-      PREFIX_COMPUTER,
       PREFIX_COMPARATOR,
       4096 // Initial size (TODO: tune this!)
     );
@@ -156,17 +155,12 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
 
       final int serializedRecordSize = serByteBuffer.position();
       assert (serializedRecordSize > 0);
-      // TODO: we should run the partition extraction function _now_, at insert time, rather than
-      // requiring it to be stored alongisde the data, since this may lead to double storage
-      // Need 8 bytes to store the prefix (for later retrieval in the prefix computer), plus
-      // 4 to store the record length.
-      ensureSpaceInDataPage(serializedRecordSize + 8 + 4);
+      // Need 4 bytes to store the record length.
+      ensureSpaceInDataPage(serializedRecordSize + 4);
 
       final long recordAddress =
         memoryManager.encodePageNumberAndOffset(currentPage, currentPagePosition);
       final Object baseObject = currentPage.getBaseObject();
-      PlatformDependent.UNSAFE.putLong(baseObject, currentPagePosition, partitionId);
-      currentPagePosition += 8;
       PlatformDependent.UNSAFE.putInt(baseObject, currentPagePosition, serializedRecordSize);
       currentPagePosition += 4;
       PlatformDependent.copyMemory(
@@ -177,7 +171,7 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
         serializedRecordSize);
       currentPagePosition += serializedRecordSize;
 
-      sorter.insertRecord(recordAddress);
+      sorter.insertRecord(recordAddress, partitionId);
     }
 
     return sorter.getSortedIterator();
@@ -211,10 +205,10 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
 
       final Object baseObject = memoryManager.getPage(recordPointer.recordPointer);
       final long baseOffset = memoryManager.getOffsetInPage(recordPointer.recordPointer);
-      final int recordLength = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + 8);
+      final int recordLength = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset);
       PlatformDependent.copyMemory(
         baseObject,
-        baseOffset + 8 + 4,
+        baseOffset + 4,
         arr,
         PlatformDependent.BYTE_ARRAY_OFFSET,
         recordLength);
@@ -259,16 +253,6 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
     public int compare(
         Object leftBaseObject, long leftBaseOffset, Object rightBaseObject, long rightBaseOffset) {
       return 0;
-    }
-  };
-
-  private static final PrefixComputer PREFIX_COMPUTER = new PrefixComputer() {
-    @Override
-    public long computePrefix(Object baseObject, long baseOffset) {
-      // TODO: should the prefix be computed when inserting the record pointer rather than being
-      // read from the record itself?  May be more efficient in terms of space, etc, and is a simple
-      // change.
-      return PlatformDependent.UNSAFE.getLong(baseObject, baseOffset);
     }
   };
 

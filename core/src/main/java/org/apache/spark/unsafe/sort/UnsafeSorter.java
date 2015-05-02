@@ -75,13 +75,6 @@ public final class UnsafeSorter {
   }
 
   /**
-   * Given a pointer to a record, computes a prefix.
-   */
-  public static abstract class PrefixComputer {
-    public abstract long computePrefix(Object baseObject, long baseOffset);
-  }
-
-  /**
    * Compares 8-byte key prefixes in prefix sort. Subclasses may implement type-specific
    * comparisons, such as lexicographic comparison for strings.
    */
@@ -90,7 +83,6 @@ public final class UnsafeSorter {
   }
 
   private final TaskMemoryManager memoryManager;
-  private final PrefixComputer prefixComputer;
   private final Sorter<RecordPointerAndKeyPrefix, long[]> sorter;
   private final Comparator<RecordPointerAndKeyPrefix> sortComparator;
 
@@ -116,13 +108,11 @@ public final class UnsafeSorter {
   public UnsafeSorter(
       final TaskMemoryManager memoryManager,
       final RecordComparator recordComparator,
-      PrefixComputer prefixComputer,
       final PrefixComparator prefixComparator,
       int initialSize) {
     assert (initialSize > 0);
     this.sortBuffer = new long[initialSize * 2];
     this.memoryManager = memoryManager;
-    this.prefixComputer = prefixComputer;
     this.sorter =
       new Sorter<RecordPointerAndKeyPrefix, long[]>(UnsafeSortDataFormat.INSTANCE);
     this.sortComparator = new Comparator<RecordPointerAndKeyPrefix>() {
@@ -149,13 +139,12 @@ public final class UnsafeSorter {
    *
    * @param objectAddress pointer to a record in a data page, encoded by {@link TaskMemoryManager}.
    */
-  public void insertRecord(long objectAddress) {
+  public void insertRecord(long objectAddress, long keyPrefix) {
     if (sortBufferInsertPosition + 2 == sortBuffer.length) {
       expandSortBuffer(sortBuffer.length * 2);
     }
     final Object baseObject = memoryManager.getPage(objectAddress);
     final long baseOffset = memoryManager.getOffsetInPage(objectAddress);
-    final long keyPrefix = prefixComputer.computePrefix(baseObject, baseOffset);
     sortBuffer[sortBufferInsertPosition] = objectAddress;
     sortBufferInsertPosition++;
     sortBuffer[sortBufferInsertPosition] = keyPrefix;
