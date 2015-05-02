@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.stat.FrequentItems
+import org.apache.spark.sql.execution.stat._
 
 /**
  * :: Experimental ::
@@ -64,5 +64,15 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    */
   def freqItems(cols: List[String]): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, 0.01)
+  }
+
+  /**
+   * Calculate the sample covariance of two numerical columns of a DataFrame.
+   * @param col1 the name of the first column
+   * @param col2 the name of the second column
+   * @return the covariance of the two columns.
+   */
+  def cov(col1: String, col2: String): Double = {
+    StatFunctions.calculateCov(df, Seq(col1, col2))
   }
 }

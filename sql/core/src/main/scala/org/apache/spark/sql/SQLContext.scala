@@ -429,20 +429,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * Creates a [[DataFrame]] from an [[JavaRDD]] containing [[Row]]s by applying
-   * a seq of names of columns to this RDD, the data type for each column will
-   * be inferred by the first row.
-   *
-   * @param rowRDD an JavaRDD of Row
-   * @param columns names for each column
-   * @return DataFrame
-   * @group dataframes
-   */
-  def createDataFrame(rowRDD: JavaRDD[Row], columns: java.util.List[String]): DataFrame = {
-    createDataFrame(rowRDD.rdd, columns.toSeq)
-  }
-
-  /**
    * Applies a schema to an RDD of Java Beans.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
