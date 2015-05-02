@@ -387,6 +387,11 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(95 < g.agg(functions.approxCountDistinct(df.key)).first()[0])
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
+    def test_cov(self):
+        df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
+        cov = df.stat.cov("a", "b")
+        self.assertTrue(abs(cov - 55.0 / 3) < 1e-6)
+
     def test_math_functions(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
         from pyspark.sql import mathfunctions as functions
@@ -415,6 +420,16 @@ class SQLTests(ReusedPySparkTestCase):
                      df.select(functions.pow(df.a, 2.0)).collect())
         assert_close([math.hypot(i, 2 * i) for i in range(10)],
                      df.select(functions.hypot(df.a, df.b)).collect())
+
+    def test_rand_functions(self):
+        df = self.df
+        from pyspark.sql import functions
+        rnd = df.select('key', functions.rand()).collect()
+        for row in rnd:
+            assert row[1] >= 0.0 and row[1] <= 1.0, "got: %s" % row[1]
+        rndn = df.select('key', functions.randn(5)).collect()
+        for row in rndn:
+            assert row[1] >= -4.0 and row[1] <= 4.0, "got: %s" % row[1]
 
     def test_save_and_load(self):
         df = self.df

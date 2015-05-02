@@ -41,6 +41,9 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
 
   ssc.graph.addInputStream(this)
 
+  /** This is an unique identifier for the input stream. */
+  val id = ssc.getNewInputStreamId()
+
   /**
    * Checks whether the 'time' is valid wrt slideDuration for generating RDD.
    * Additionally it also ensures valid times are in strictly increasing order.
