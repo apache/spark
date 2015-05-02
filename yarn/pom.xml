@@ -30,6 +30,7 @@
   <name>Spark Project YARN</name>
   <properties>
     <sbt.project.name>yarn</sbt.project.name>
+    <jersey.version>1.9</jersey.version>
   </properties>
 
   <dependencies>
@@ -97,6 +98,42 @@
       <artifactId>mockito-all</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.mortbay.jetty</groupId>
+      <artifactId>jetty</artifactId>
+      <version>6.1.26</version>
+      <exclusions>
+       <exclusion>
+        <groupId>org.mortbay.jetty</groupId>
+         <artifactId>servlet-api</artifactId>
+       </exclusion>
+      </exclusions>
+      <scope>test</scope>
+     </dependency>
+     <dependency>
+       <groupId>com.sun.jersey</groupId>
+       <artifactId>jersey-core</artifactId>
+       <version>${jersey.version}</version>
+       <scope>test</scope>
+     </dependency>
+     <dependency>
+       <groupId>com.sun.jersey</groupId>
+       <artifactId>jersey-json</artifactId>
+       <version>${jersey.version}</version>
+       <scope>test</scope>
+       <exclusions>
+        <exclusion>
+          <groupId>stax</groupId>
+          <artifactId>stax-api</artifactId>
+        </exclusion>
+       </exclusions>
+     </dependency>
+     <dependency>
+       <groupId>com.sun.jersey</groupId>
+       <artifactId>jersey-server</artifactId>
+       <version>${jersey.version}</version>
+       <scope>test</scope>
+     </dependency>
   </dependencies>
   
   <build>
