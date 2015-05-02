@@ -124,13 +124,19 @@ private[spark] class MesosSchedulerBackend(
         Value.Scalar.newBuilder()
           .setValue(MemoryUtils.calculateTotalMemory(sc)).build())
       .build()
-    MesosExecutorInfo.newBuilder()
+    val executorInfo = MesosExecutorInfo.newBuilder()
       .setExecutorId(ExecutorID.newBuilder().setValue(execId).build())
       .setCommand(command)
       .setData(ByteString.copyFrom(createExecArg()))
       .addResources(cpus)
       .addResources(memory)
-      .build()
+
+    sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
+      MesosSchedulerBackendUtil
+        .setupContainerBuilderDockerInfo(image, sc.conf, executorInfo.getContainerBuilder())
+    }
+
+    executorInfo.build()
   }
 
   /**
