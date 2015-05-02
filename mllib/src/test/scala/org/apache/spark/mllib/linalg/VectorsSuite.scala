@@ -270,4 +270,48 @@ class VectorsSuite extends FunSuite {
     assert(Vectors.norm(sv, 3.7) ~== math.pow(sv.toArray.foldLeft(0.0)((a, v) =>
       a + math.pow(math.abs(v), 3.7)), 1.0 / 3.7) relTol 1E-8)
   }
+
+  test("Vector numActive and numNonzeros") {
+    val dv = Vectors.dense(0.0, 2.0, 3.0, 0.0)
+    assert(dv.numActives === 4)
+    assert(dv.numNonzeros === 2)
+
+    val sv = Vectors.sparse(4, Array(0, 1, 2), Array(0.0, 2.0, 3.0))
+    assert(sv.numActives === 3)
+    assert(sv.numNonzeros === 2)
+  }
+
+  test("Vector toSparse and toDense") {
+    val dv0 = Vectors.dense(0.0, 2.0, 3.0, 0.0)
+    assert(dv0.toDense === dv0)
+    val dv0s = dv0.toSparse
+    assert(dv0s.numActives === 2)
+    assert(dv0s === dv0)
+
+    val sv0 = Vectors.sparse(4, Array(0, 1, 2), Array(0.0, 2.0, 3.0))
+    assert(sv0.toDense === sv0)
+    val sv0s = sv0.toSparse
+    assert(sv0s.numActives === 2)
+    assert(sv0s === sv0)
+  }
+
+  test("Vector.compressed") {
+    val dv0 = Vectors.dense(1.0, 2.0, 3.0, 0.0)
+    val dv0c = dv0.compressed.asInstanceOf[DenseVector]
+    assert(dv0c === dv0)
+
+    val dv1 = Vectors.dense(0.0, 2.0, 0.0, 0.0)
+    val dv1c = dv1.compressed.asInstanceOf[SparseVector]
+    assert(dv1 === dv1c)
+    assert(dv1c.numActives === 1)
+
+    val sv0 = Vectors.sparse(4, Array(1, 2), Array(2.0, 0.0))
+    val sv0c = sv0.compressed.asInstanceOf[SparseVector]
+    assert(sv0 === sv0c)
+    assert(sv0c.numActives === 1)
+
+    val sv1 = Vectors.sparse(4, Array(0, 1, 2), Array(1.0, 2.0, 3.0))
+    val sv1c = sv1.compressed.asInstanceOf[DenseVector]
+    assert(sv1 === sv1c)
+  }
 }
