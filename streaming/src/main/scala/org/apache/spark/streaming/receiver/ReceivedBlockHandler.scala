@@ -190,6 +190,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
   def stop() {
     writeAheadLog.close()
+    executionContext.shutdown()
   }
 }
 
