@@ -230,7 +230,7 @@ if [[ ! "$@" =~ --skip-package ]]; then
   # share the same Zinc server.
   make_binary_release "hadoop1" "-Phadoop-1 -Phive -Phive-thriftserver" "3030" &
   make_binary_release "hadoop1-scala2.11" "-Phadoop-1 -Phive -Dscala-2.11" "3031" &
-  make_binary_release "cdh4" "-Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" "3032" &
+  make_binary_release "cdh4" "-Phadoop-1 -Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" "3032" &
   make_binary_release "hadoop2.3" "-Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" "3033" &
   make_binary_release "hadoop2.4" "-Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn" "3034" &
   make_binary_release "mapr3" "-Pmapr3 -Phive -Phive-thriftserver" "3035" &

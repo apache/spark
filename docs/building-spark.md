@@ -78,10 +78,10 @@ For Apache Hadoop versions 1.x, Cloudera CDH "mr1" distributions, and other Hado
 
 {% highlight bash %}
 # Apache Hadoop 1.2.1
-mvn -Dhadoop.version=1.2.1 -DskipTests clean package
+mvn -Dhadoop.version=1.2.1 -Phadoop-1 -DskipTests clean package
 
 # Cloudera CDH 4.2.0 with MapReduce v1
-mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -DskipTests clean package
+mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -Phadoop-1 -DskipTests clean package
 
 # Apache Hadoop 0.23.x
 mvn -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
