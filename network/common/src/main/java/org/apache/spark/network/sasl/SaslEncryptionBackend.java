@@ -15,20 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.collection
+package org.apache.spark.network.sasl;
 
-import java.util.Comparator
+import javax.security.sasl.SaslException;
 
-/**
- * A common interface for our size-tracking collections of key-value pairs, which are used in
- * external operations. These all support estimating the size and obtaining a memory-efficient
- * sorted iterator.
- */
-// TODO: should extend Iterable[Product2[K, V]] instead of (K, V)
-private[spark] trait SizeTrackingPairCollection[K, V] extends Iterable[(K, V)] {
-  /** Estimate the collection's current memory usage in bytes. */
-  def estimateSize(): Long
+interface SaslEncryptionBackend {
 
-  /** Iterate through the data in a given key order. This may destroy the underlying collection. */
-  def destructiveSortedIterator(keyComparator: Comparator[K]): Iterator[(K, V)]
+  /** Disposes of resources used by the backend. */
+  void dispose();
+
+  /** Encrypt data. */
+  byte[] wrap(byte[] data, int offset, int len) throws SaslException;
+
+  /** Decrypt data. */
+  byte[] unwrap(byte[] data, int offset, int len) throws SaslException;
+
 }

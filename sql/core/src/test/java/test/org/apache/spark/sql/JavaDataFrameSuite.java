@@ -186,4 +186,11 @@ public class JavaDataFrameSuite {
     DataFrame results = df.stat().freqItems(cols, 0.2);
     Assert.assertTrue(results.collect()[0].getSeq(0).contains(1));
   }
+
+  @Test
+  public void testCovariance() {
+    DataFrame df = context.table("testData2");
+    Double result = df.stat().cov("a", "b");
+    Assert.assertTrue(Math.abs(result) < 1e-6);
+  }
 }
