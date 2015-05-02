@@ -348,7 +348,7 @@ class SchedulerJob(BaseJob):
             paused_dag_ids = dagbag.paused_dags()
             for dag in dags:
                 dag = dagbag.get_dag(dag.dag_id)
-                if dag.dag_id in paused_dag_ids:
+                if not dag or (dag.dag_id in paused_dag_ids):
                     continue
                 try:
                     self.process_dag(dag, executor)

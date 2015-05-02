@@ -116,11 +116,14 @@ class DagBag(object):
             dag = session.query(DAG).filter(DAG.dag_id == dag_id).first()
             self.process_file(
                 filepath=dag.full_filepath, only_if_updated=False)
+            if dag_id in self.dags:
+                dag = self.dags[dag_id]
+            else:
+                dag = None
             session.commit()
             session.close()
-            dag = self.dags[dag_id]
-
         return dag
+
 
     def process_file(self, filepath, only_if_updated=True, safe_mode=True):
         """
@@ -1334,7 +1337,8 @@ class DAG(Base):
         session.commit()
         session.expunge_all()
         session.close()
-        return dag.last_expired
+        if dag:
+            return dag.last_expired
 
     def crawl_for_tasks(objects):
         """
