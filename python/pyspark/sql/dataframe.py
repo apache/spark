@@ -1,6 +1,6 @@
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
-# contributor license agreements.  See the NOTICE file distributed with
+# contir[butor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
 # The ASF licenses this file to You under the Apache License, Version 2.0
 # (the "License"); you may not use this file except in compliance with
@@ -34,7 +34,8 @@ from pyspark.sql.types import *
 from pyspark.sql.types import _create_cls, _parse_datatype_json_string
 
 
-__all__ = ["DataFrame", "GroupedData", "Column", "SchemaRDD", "DataFrameNaFunctions"]
+__all__ = ["DataFrame", "GroupedData", "Column", "SchemaRDD", "DataFrameNaFunctions",
+           "DataFrameStatFunctions"]
 
 
 class DataFrame(object):
@@ -92,6 +93,12 @@ class DataFrame(object):
         """Returns a :class:`DataFrameNaFunctions` for handling missing values.
         """
         return DataFrameNaFunctions(self)
+
+    @property
+    def stat(self):
+        """Returns a :class:`DataFrameStatFunctions` for statistic functions.
+        """
+        return DataFrameStatFunctions(self)
 
     @ignore_unicode_prefix
     def toJSON(self, use_unicode=True):
@@ -868,6 +875,40 @@ class DataFrame(object):
 
             return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
 
+    def cov(self, col1, col2):
+        """
+        Calculate the sample covariance for the given columns, specified by their names, as a
+        double value. :func:`DataFrame.cov` and :func:`DataFrameStatFunctions.cov` are aliases.
+
+        :param col1: The name of the first column
+        :param col2: The name of the second column
+        """
+        if not isinstance(col1, str):
+            raise ValueError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise ValueError("col2 should be a string.")
+        return self._jdf.stat().cov(col1, col2)
+
+    def freqItems(self, cols, support=None):
+        """
+        Finding frequent items for columns, possibly with false positives. Using the
+        frequent element count algorithm described in
+        "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
+        :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
+
+        :param cols: Names of the columns to calculate frequent items for as a list or tuple of
+            strings.
+        :param support: The frequency with which to consider an item 'frequent'. Default is 1%.
+            The support must be greater than 1e-4.
+        """
+        if isinstance(cols, tuple):
+            cols = list(cols)
+        if not isinstance(cols, list):
+            raise ValueError("cols must be a list or tuple of column names as strings.")
+        if not support:
+            support = 0.01
+        return DataFrame(self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sql_ctx)
+
     @ignore_unicode_prefix
     def withColumn(self, colName, col):
         """Returns a new :class:`DataFrame` by adding a column.
@@ -1309,6 +1350,24 @@ class DataFrameNaFunctions(object):
         return self.df.fillna(value=value, subset=subset)
 
     fill.__doc__ = DataFrame.fillna.__doc__
+
+
+class DataFrameStatFunctions(object):
+    """Functionality for statistic functions with :class:`DataFrame`.
+    """
+
+    def __init__(self, df):
+        self.df = df
+
+    def cov(self, col1, col2):
+        return self.df.cov(col1, col2)
+
+    cov.__doc__ = DataFrame.cov.__doc__
+
+    def freqItems(self, cols, support=None):
+        return self.df.freqItems(cols, support)
+
+    freqItems.__doc__ = DataFrame.freqItems.__doc__
 
 
 def _test():

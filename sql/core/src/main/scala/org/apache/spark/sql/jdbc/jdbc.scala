@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Connection, Driver, DriverManager, DriverPropertyInfo, PreparedStatement}
+import java.sql.{Connection, Driver, DriverManager, DriverPropertyInfo, PreparedStatement, SQLFeatureNotSupportedException}
 import java.util.Properties
 
 import scala.collection.mutable
@@ -195,7 +195,9 @@ package object jdbc {
 
     override def getMinorVersion: Int = wrapped.getMinorVersion
 
-    override def getParentLogger: java.util.logging.Logger = wrapped.getParentLogger
+    def getParentLogger: java.util.logging.Logger =
+      throw new SQLFeatureNotSupportedException(
+        s"${this.getClass().getName}.getParentLogger is not yet implemented.")
 
     override def connect(url: String, info: Properties): Connection = wrapped.connect(url, info)
 
