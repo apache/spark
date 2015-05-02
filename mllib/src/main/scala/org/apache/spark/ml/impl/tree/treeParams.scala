@@ -20,13 +20,10 @@ package org.apache.spark.ml.impl.tree
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.impl.estimator.PredictorParams
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasSeed, HasMaxIter}
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo,
-  BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
-import org.apache.spark.mllib.tree.impurity.{Gini => OldGini, Entropy => OldEntropy,
-  Impurity => OldImpurity, Variance => OldVariance}
+import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
+import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
-
 
 /**
  * :: DeveloperApi ::

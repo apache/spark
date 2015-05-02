@@ -18,18 +18,16 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute.{BinaryAttribute, NumericAttribute, NominalAttribute,
-  Attribute, AttributeGroup}
-import org.apache.spark.ml.param.{ParamValidators, IntParam, Params}
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, BinaryAttribute, NominalAttribute, NumericAttribute}
+import org.apache.spark.ml.param.{IntParam, ParamValidators, Params}
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, VectorUDT}
-import org.apache.spark.sql.{Row, DataFrame}
+import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.callUDF
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.collection.OpenHashSet
-
 
 /** Private trait for params for VectorIndexer and VectorIndexerModel */
 private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOutputCol {
