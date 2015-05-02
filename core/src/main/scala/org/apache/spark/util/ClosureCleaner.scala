@@ -92,9 +92,6 @@ private[spark] object ClosureCleaner extends Logging {
    * Return a list of classes that represent closures enclosed in the given closure object.
    */
   private def getInnerClosureClasses(obj: AnyRef): List[Class[_]] = {
-    if (!isClosure(obj.getClass)) {
-      throw new IllegalArgumentException(s"Expected a closure object; got ${obj.getClass.getName}")
-    }
     val seen = Set[Class[_]](obj.getClass)
     var stack = List[Class[_]](obj.getClass)
     while (!stack.isEmpty) {
