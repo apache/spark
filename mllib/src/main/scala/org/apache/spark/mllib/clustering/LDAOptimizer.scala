@@ -21,7 +21,7 @@ import java.util.Random
 
 import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, sum, normalize, kron}
 import breeze.numerics.{digamma, exp, abs}
-import breeze.stats.distributions.Gamma
+import breeze.stats.distributions.{Gamma, RandBasis}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.graphx._
@@ -227,20 +227,37 @@ class OnlineLDAOptimizer extends LDAOptimizer {
   private var k: Int = 0
   private var corpusSize: Long = 0
   private var vocabSize: Int = 0
-  private[clustering] var alpha: Double = 0
-  private[clustering] var eta: Double = 0
+
+  /** alias for docConcentration */
+  private var alpha: Double = 0
+
+  /** (private[clustering] for debugging)  Get docConcentration */
+  private[clustering] def getAlpha: Double = alpha
+
+  /** alias for topicConcentration */
+  private var eta: Double = 0
+
+  /** (private[clustering] for debugging)  Get topicConcentration */
+  private[clustering] def getEta: Double = eta
+
   private var randomGenerator: java.util.Random = null
 
   // Online LDA specific parameters
+  // Learning rate is: (tau_0 + t)^{-kappa}
   private var tau_0: Double = 1024
   private var kappa: Double = 0.51
-  private var miniBatchFraction: Double = 0.01
+  private var miniBatchFraction: Double = 0.05
 
   // internal data structure
   private var docs: RDD[(Long, Vector)] = null
-  private[clustering] var lambda: BDM[Double] = null
 
-  // count of invocation to next, which helps deciding the weight for each iteration
+  /** Dirichlet parameter for the posterior over topics */
+  private var lambda: BDM[Double] = null
+
+  /** (private[clustering] for debugging) Get parameter for topics */
+  private[clustering] def getLambda: BDM[Double] = lambda
+
+  /** Current iteration (count of invocations of [[next()]]) */
   private var iteration: Int = 0
   private var gammaShape: Double = 100
 
@@ -285,7 +302,12 @@ class OnlineLDAOptimizer extends LDAOptimizer {
   /**
    * Mini-batch fraction in (0, 1], which sets the fraction of document sampled and used in
    * each iteration.
-   * Default: 0.01, i.e., 1% of total documents
+   *
+   * Note that this should be adjusted in synch with [[LDA.setMaxIterations()]]
+   * so the entire corpus is used.  Specifically, set both so that
+   * maxIterations * miniBatchFraction >= 1.
+   *
+   * Default: 0.05, i.e., 5% of total documents.
    */
   def setMiniBatchFraction(miniBatchFraction: Double): this.type = {
     require(miniBatchFraction > 0.0 && miniBatchFraction <= 1.0,
@@ -295,7 +317,9 @@ class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   /**
-   * The function is for test only now. In the future, it can help support training stop/resume
+   * (private[clustering])
+   * Set the Dirichlet parameter for the posterior over topics.
+   * This is only used for testing now. In the future, it can help support training stop/resume.
    */
   private[clustering] def setLambda(lambda: BDM[Double]): this.type = {
     this.lambda = lambda
@@ -303,7 +327,10 @@ class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   /**
-   * Used to control the gamma distribution. Larger value produces values closer to 1.0.
+   * (private[clustering])
+   * Used for random initialization of the variational parameters.
+   * Larger value produces values closer to 1.0.
+   * This is only used for testing currently.
    */
   private[clustering] def setGammaShape(shape: Double): this.type = {
     this.gammaShape = shape
@@ -380,12 +407,11 @@ class OnlineLDAOptimizer extends LDAOptimizer {
           meanchange = sum(abs(gammad - lastgamma)) / k
         }
 
-        val m1 = expElogthetad.t.toDenseMatrix.t
-        val m2 = (ctsVector / phinorm).t.toDenseMatrix
-        val outerResult = kron(m1, m2) // K * ids
+        val m1 = expElogthetad.t
+        val m2 = (ctsVector / phinorm).t.toDenseVector
         var i = 0
         while (i < ids.size) {
-          stat(::, ids(i)) := (stat(::, ids(i)) + outerResult(::, i))
+          stat(::, ids(i)) := stat(::, ids(i)) + m1 * m2(i)
           i += 1
         }
       }
@@ -423,7 +449,9 @@ class OnlineLDAOptimizer extends LDAOptimizer {
    * Get a random matrix to initialize lambda
    */
   private def getGammaMatrix(row: Int, col: Int): BDM[Double] = {
-    val gammaRandomGenerator = new Gamma(gammaShape, 1.0 / gammaShape)
+    val randBasis = new RandBasis(new org.apache.commons.math3.random.MersenneTwister(
+      randomGenerator.nextLong()))
+    val gammaRandomGenerator = new Gamma(gammaShape, 1.0 / gammaShape)(randBasis)
     val temp = gammaRandomGenerator.sample(row * col).toArray
     new BDM[Double](col, row, temp).t
   }
