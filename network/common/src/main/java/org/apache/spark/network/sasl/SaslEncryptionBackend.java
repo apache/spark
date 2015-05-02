@@ -15,20 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.client;
+package org.apache.spark.network.sasl;
 
-import io.netty.channel.Channel;
+import javax.security.sasl.SaslException;
 
-/**
- * A bootstrap which is executed on a TransportClient before it is returned to the user.
- * This enables an initial exchange of information (e.g., SASL authentication tokens) on a once-per-
- * connection basis.
- *
- * Since connections (and TransportClients) are reused as much as possible, it is generally
- * reasonable to perform an expensive bootstrapping operation, as they often share a lifespan with
- * the JVM itself.
- */
-public interface TransportClientBootstrap {
-  /** Performs the bootstrapping operation, throwing an exception on failure. */
-  void doBootstrap(TransportClient client, Channel channel) throws RuntimeException;
+interface SaslEncryptionBackend {
+
+  /** Disposes of resources used by the backend. */
+  void dispose();
+
+  /** Encrypt data. */
+  byte[] wrap(byte[] data, int offset, int len) throws SaslException;
+
+  /** Decrypt data. */
+  byte[] unwrap(byte[] data, int offset, int len) throws SaslException;
+
 }
