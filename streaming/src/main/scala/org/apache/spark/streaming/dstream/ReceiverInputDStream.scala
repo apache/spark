@@ -25,6 +25,7 @@ import org.apache.spark.streaming._
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.{Receiver, WriteAheadLogBasedStoreResult}
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
+import org.apache.spark.streaming.util.WriteAheadLogUtils
 
 /**
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]
@@ -84,8 +85,12 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
           // Else, create a BlockRDD. However, if there are some blocks with WAL info but not others
           // then that is unexpected and log a warning accordingly.
           if (blockInfos.find(_.walRecordHandleOption.nonEmpty).nonEmpty) {
-            logWarning("Could not find Write Ahead Log information on some of the blocks, " +
-              "data may not be recoverable after driver failures")
+            if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
+              logError("Some blocks do not have Write Ahead Log information; " +
+                "this is unexpected and data may not be recoverable after driver failures")
+            } else {
+              logWarning("Some blocks have Write Ahead Log information; this is unexpected")
+            }
           }
           new BlockRDD[T](ssc.sc, blockIds)
         }

@@ -33,7 +33,6 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
 
   @transient lazy val _locations = BlockManager.blockIdsToHosts(blockIds, SparkEnv.get)
   @volatile private var _isValid = true
-  @volatile private var _setInvalid = true
 
   override def getPartitions: Array[Partition] = {
     assertValid()
@@ -67,9 +66,7 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
     blockIds.foreach { blockId =>
       sc.env.blockManager.master.removeBlock(blockId)
     }
-    if (_setInvalid) {
-      _isValid = false
-    }
+    _isValid = false
   }
 
   /**
@@ -82,14 +79,10 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
 
   /** Check if this BlockRDD is valid. If not valid, exception is thrown. */
   private[spark] def assertValid() {
-    if (!_isValid) {
+    if (!isValid) {
       throw new SparkException(
         "Attempted to use %s after its blocks have been removed!".format(toString))
     }
-  }
-
-  protected def setInvalidIfBlocksRemoved(setInvalid: Boolean): Unit = {
-    _setInvalid = setInvalid
   }
 
   protected def getBlockIdLocations(): Map[BlockId, Seq[String]] = {

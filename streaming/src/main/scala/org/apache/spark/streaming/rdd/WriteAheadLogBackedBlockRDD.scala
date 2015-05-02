@@ -34,6 +34,9 @@ import org.apache.spark.streaming.util._
  * the corresponding record handle in the write ahead log that backs the partition.
  * @param index index of the partition
  * @param blockId id of the block having the partition data
+ * @param isBlockIdValid Whether the block Ids are valid (i.e., the blocks are present in the Spark
+ *                         executors). If not, then block lookups by the block ids will be skipped.
+ *                         By default, this is an empty array signifying true for all the blocks.
  * @param walRecordHandle Handle of the record in a write ahead log having the partition data
  */
 private[streaming]
@@ -91,7 +94,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
   @transient private val hadoopConfig = sc.hadoopConfiguration
   private val broadcastedHadoopConf = new SerializableWritable(hadoopConfig)
 
-  setInvalidIfBlocksRemoved(false)
+  override def isValid(): Boolean = true
 
   override def getPartitions: Array[Partition] = {
     assertValid()
