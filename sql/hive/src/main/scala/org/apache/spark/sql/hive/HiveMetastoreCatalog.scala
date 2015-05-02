@@ -705,11 +705,13 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     def castChildOutput(p: InsertIntoTable, table: MetastoreRelation, child: LogicalPlan)
       : LogicalPlan = {
       val childOutputDataTypes = child.output.map(_.dataType)
+      val numDynamicPartitions = p.partition.values.count(_.isEmpty)
       val tableOutputDataTypes =
-        (table.attributes ++ table.partitionKeys).take(child.output.length).map(_.dataType)
+        (table.attributes ++ table.partitionKeys.takeRight(numDynamicPartitions))
+          .take(child.output.length).map(_.dataType)
 
       if (childOutputDataTypes == tableOutputDataTypes) {
-        p
+        InsertIntoHiveTable(p.table, p.partition, p.child, p.overwrite, p.ifNotExists)
       } else if (childOutputDataTypes.size == tableOutputDataTypes.size &&
         childOutputDataTypes.zip(tableOutputDataTypes)
           .forall { case (left, right) => left.sameType(right) }) {
@@ -760,7 +762,14 @@ private[hive] case class InsertIntoHiveTable(
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = child.output
 
-  override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
+  val numDynamicPartitions = partition.values.count(_.isEmpty)
+  val tableOutput = {
+    val hiveTable = table.asInstanceOf[MetastoreRelation]
+    (hiveTable.attributes ++ hiveTable.partitionKeys.takeRight(numDynamicPartitions))
+      .take(child.output.length)
+  }
+
+  override lazy val resolved: Boolean = childrenResolved && child.output.zip(tableOutput).forall {
     case (childAttr, tableAttr) => childAttr.dataType.sameType(tableAttr.dataType)
   }
 }
