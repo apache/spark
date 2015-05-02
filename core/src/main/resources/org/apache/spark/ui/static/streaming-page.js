@@ -266,8 +266,8 @@ $(function() {
         }
     }
 
-    if (getParameterFromURL("show-receivers-detail") == "true") {
-        // Show the details for all receivers
+    if (getParameterFromURL("show-streams-detail") == "true") {
+        // Show the details for all InputDStream
         $('#inputs-table').toggle('collapsed');
         $('#triangle').html('&#9660;');
     }

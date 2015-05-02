@@ -144,7 +144,9 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     }
   }
 
-  def numReceivers: Int = ssc.graph.getReceiverInputStreams().size
+  def numReceivers: Int = synchronized {
+    receiverInfos.size
+  }
 
   def numTotalCompletedBatches: Long = synchronized {
     totalCompletedBatches
@@ -174,35 +176,41 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     completedBatchUIData.toSeq
   }
 
-  def allReceivers: Seq[Int] = synchronized {
-    receiverInfos.keys.toSeq
+  def streamName(streamId: Int): Option[String] = {
+    ssc.graph.getInputStreamName(streamId)
   }
 
   /**
-   * Return all of the event rates for each receiver in each batch.
+   * Return all InputDStream Ids
+   */
+  def streamIds: Seq[Int] = ssc.graph.getInputStreams().map(_.id)
+
+  /**
+   * Return all of the event rates for each InputDStream in each batch.
    */
   def receivedEventRateWithBatchTime: Map[Int, Seq[(Long, Double)]] = synchronized {
-    val latestBatches = retainedBatches.map { batchUIData =>
-      (batchUIData.batchTime.milliseconds, batchUIData.receiverNumRecords)
+    val _retainedBatches = retainedBatches
+    val latestBatches = _retainedBatches.map { batchUIData =>
+      (batchUIData.batchTime.milliseconds, batchUIData.streamIdToNumRecords)
     }
-    (0 until numReceivers).map { receiverId =>
+    streamIds.map { streamId =>
       val eventRates = latestBatches.map {
-        case (batchTime, receiverNumRecords) =>
-          val numRecords = receiverNumRecords.getOrElse(receiverId, 0L)
+        case (batchTime, streamIdToNumRecords) =>
+          val numRecords = streamIdToNumRecords.getOrElse(streamId, 0L)
           (batchTime, numRecords * 1000.0 / batchDuration)
       }
-      (receiverId, eventRates)
+      (streamId, eventRates)
     }.toMap
   }
 
   def lastReceivedBatchRecords: Map[Int, Long] = synchronized {
-    val lastReceivedBlockInfoOption = lastReceivedBatch.map(_.receiverNumRecords)
+    val lastReceivedBlockInfoOption = lastReceivedBatch.map(_.streamIdToNumRecords)
     lastReceivedBlockInfoOption.map { lastReceivedBlockInfo =>
-      (0 until numReceivers).map { receiverId =>
-        (receiverId, lastReceivedBlockInfo.getOrElse(receiverId, 0L))
+      streamIds.map { streamId =>
+        (streamId, lastReceivedBlockInfo.getOrElse(streamId, 0L))
       }.toMap
     }.getOrElse {
-      (0 until numReceivers).map(receiverId => (receiverId, 0L)).toMap
+      streamIds.map(streamId => (streamId, 0L)).toMap
     }
   }
 

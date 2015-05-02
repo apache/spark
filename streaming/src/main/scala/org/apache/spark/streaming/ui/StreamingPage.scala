@@ -207,7 +207,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val minBatchTime = if (batchTimes.isEmpty) startTime else batchTimes.min
     val maxBatchTime = if (batchTimes.isEmpty) startTime else batchTimes.max
 
-    val eventRateForAllReceivers = new EventRateUIData(batches.map { batchInfo =>
+    val eventRateForAllStreams = new EventRateUIData(batches.map { batchInfo =>
       (batchInfo.batchTime.milliseconds, batchInfo.numRecords * 1000.0 / listener.batchDuration)
     })
 
@@ -231,12 +231,12 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val (maxTime, normalizedUnit) = UIUtils.normalizeDuration(_maxTime)
     val formattedUnit = UIUtils.shortTimeUnitString(normalizedUnit)
 
-    // Use the max input rate for all receivers' graphs to make the Y axis ranges same.
+    // Use the max input rate for all InputDStreams' graphs to make the Y axis ranges same.
     // If it's not an integral number, just use its ceil integral number.
-    val maxEventRate = eventRateForAllReceivers.max.map(_.ceil.toLong).getOrElse(0L)
+    val maxEventRate = eventRateForAllStreams.max.map(_.ceil.toLong).getOrElse(0L)
     val minEventRate = 0L
 
-    // JavaScript to show/hide the receiver sub table.
+    // JavaScript to show/hide the InputDStreams sub table.
     val triangleJs =
       s"""$$('#inputs-table').toggle('collapsed');
          |var status = false;
@@ -244,24 +244,24 @@ private[ui] class StreamingPage(parent: StreamingTab)
          |$$(this).html('$BLACK_DOWN_TRIANGLE_HTML');status = true;}
          |else {$$(this).html('$BLACK_RIGHT_TRIANGLE_HTML');status  = false;}
          |window.history.pushState('',
-         |    document.title, window.location.pathname + '?show-receivers-detail=' + status);"""
+         |    document.title, window.location.pathname + '?show-streams-detail=' + status);"""
         .stripMargin.replaceAll("\\n", "") // it must be only one single line
 
     val batchInterval = StreamingPage.convertToTimeUnit(listener.batchDuration, normalizedUnit)
 
     val jsCollector = new JsCollector
 
-    val graphUIDataForEventRateOfAllReceivers =
+    val graphUIDataForEventRateOfAllStreams =
       new GraphUIData(
-        "all-receiver-events-timeline",
-        "all-receiver-events-histogram",
-        eventRateForAllReceivers.data,
+        "all-stream-events-timeline",
+        "all-stream-events-histogram",
+        eventRateForAllStreams.data,
         minBatchTime,
         maxBatchTime,
         minEventRate,
         maxEventRate,
         "events/sec")
-    graphUIDataForEventRateOfAllReceivers.generateDataJs(jsCollector)
+    graphUIDataForEventRateOfAllStreams.generateDataJs(jsCollector)
 
     val graphUIDataForSchedulingDelay =
       new GraphUIData(
@@ -299,7 +299,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
         formattedUnit)
     graphUIDataForTotalDelay.generateDataJs(jsCollector)
 
-    val hasReceiver = listener.allReceivers.nonEmpty
+    // It's false before the user registers the first InputDStream
+    val hasStream = listener.streamIds.nonEmpty
 
     val numCompletedBatches = listener.retainedCompletedBatches.size
     val numActiveBatches = batchTimes.length - numCompletedBatches
@@ -317,21 +318,21 @@ private[ui] class StreamingPage(parent: StreamingTab)
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
               <div>
-              {if (hasReceiver) {
+              {if (hasStream) {
                 <span id="triangle" onclick={Unparsed(triangleJs)}>{Unparsed(BLACK_RIGHT_TRIANGLE_HTML)}</span>
               }}
                 <strong>Input Rate</strong>
               </div>
-              <div>Avg: {eventRateForAllReceivers.formattedAvg} events/sec</div>
+              <div>Avg: {eventRateForAllStreams.formattedAvg} events/sec</div>
             </div>
           </td>
-          <td class="timeline">{graphUIDataForEventRateOfAllReceivers.generateTimelineHtml(jsCollector)}</td>
-          <td class="histogram">{graphUIDataForEventRateOfAllReceivers.generateHistogramHtml(jsCollector)}</td>
+          <td class="timeline">{graphUIDataForEventRateOfAllStreams.generateTimelineHtml(jsCollector)}</td>
+          <td class="histogram">{graphUIDataForEventRateOfAllStreams.generateHistogramHtml(jsCollector)}</td>
         </tr>
-      {if (hasReceiver) {
+      {if (hasStream) {
         <tr id="inputs-table" style="display: none;" >
           <td colspan="3">
-            {generateInputReceiversTable(jsCollector, minBatchTime, maxBatchTime, minEventRate, maxEventRate)}
+            {generateInputDStreamsTable(jsCollector, minBatchTime, maxBatchTime, minEventRate, maxEventRate)}
           </td>
         </tr>
       }}
@@ -372,14 +373,14 @@ private[ui] class StreamingPage(parent: StreamingTab)
     generateTimeMap(batchTimes) ++ table ++ jsCollector.toHtml
   }
 
-  private def generateInputReceiversTable(
+  private def generateInputDStreamsTable(
       jsCollector: JsCollector,
       minX: Long,
       maxX: Long,
       minY: Double,
       maxY: Double): Seq[Node] = {
-    val content = listener.allReceivers.map { receiverId =>
-      generateInputReceiverRow(jsCollector, receiverId, minX, maxX, minY, maxY)
+    val content = listener.receivedEventRateWithBatchTime.map { case (streamId, eventRates) =>
+      generateInputDStreamRow(jsCollector, streamId, eventRates, minX, maxX, minY, maxY)
     }.foldLeft[Seq[Node]](Nil)(_ ++ _)
 
     // scalastyle:off
@@ -400,33 +401,36 @@ private[ui] class StreamingPage(parent: StreamingTab)
     // scalastyle:on
   }
 
-  private def generateInputReceiverRow(
+  private def generateInputDStreamRow(
       jsCollector: JsCollector,
-      receiverId: Int,
+      streamId: Int,
+      eventRates: Seq[(Long, Double)],
       minX: Long,
       maxX: Long,
       minY: Double,
       maxY: Double): Seq[Node] = {
-    val receiverInfo = listener.receiverInfo(receiverId)
-    val receiverName = receiverInfo.map(_.name).getOrElse(s"Receiver-$receiverId")
+    // If this is a ReceiverInputDStream, we need to show the receiver info. Or we only need the
+    // InputDStream name.
+    val receiverInfo = listener.receiverInfo(streamId)
+    val receiverName = receiverInfo.map(_.name).
+      orElse(listener.streamName(streamId)).getOrElse(s"Stream-$streamId")
     val receiverActive = receiverInfo.map { info =>
       if (info.active) "ACTIVE" else "INACTIVE"
     }.getOrElse(emptyCell)
     val receiverLocation = receiverInfo.map(_.location).getOrElse(emptyCell)
-    val receiverLastError = listener.receiverInfo(receiverId).map { info =>
+    val receiverLastError = receiverInfo.map { info =>
       val msg = s"${info.lastErrorMessage} - ${info.lastError}"
       if (msg.size > 100) msg.take(97) + "..." else msg
     }.getOrElse(emptyCell)
     val receiverLastErrorTime = receiverInfo.map {
       r => if (r.lastErrorTime < 0) "-" else UIUtils.formatDate(r.lastErrorTime)
     }.getOrElse(emptyCell)
-    val receivedRecords =
-      new EventRateUIData(listener.receivedEventRateWithBatchTime.get(receiverId).getOrElse(Seq()))
+    val receivedRecords = new EventRateUIData(eventRates)
 
     val graphUIDataForEventRate =
       new GraphUIData(
-        s"receiver-$receiverId-events-timeline",
-        s"receiver-$receiverId-events-histogram",
+        s"stream-$streamId-events-timeline",
+        s"stream-$streamId-events-histogram",
         receivedRecords.data,
         minX,
         maxX,
