@@ -163,7 +163,7 @@ private[spark] class TaskSchedulerImpl(
       attemptsByStage.foreach { case (stageId, attempts) =>
         val n = attempts.size
         if (n > 1) {
-          throw new SparkInternalStateException(
+          throw new SparkIllegalStateException(
             s"Stage $stageId has $n concurrent attempts: ${attempts.map{_.attempt}}.  Spark " +
               "internal state is inconsistent, failing job")
         }

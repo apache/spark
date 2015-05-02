@@ -146,7 +146,7 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
       priority = taskSetAttempt1.priority,
       properties = taskSetAttempt1.properties
     )
-    intercept[SparkInternalStateException](taskScheduler.submitTasks(taskSetAttempt2))
+    intercept[SparkIllegalStateException](taskScheduler.submitTasks(taskSetAttempt2))
   }
 
 }

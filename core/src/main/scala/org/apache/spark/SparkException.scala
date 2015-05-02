@@ -34,7 +34,7 @@ private[spark] class SparkDriverExecutionException(cause: Throwable)
 /**
  * Exception indicating an error internal to Spark, not caused by user error
  */
-class SparkInternalStateException(message: String, cause: Throwable)
+class SparkIllegalStateException(message: String, cause: Throwable)
   extends SparkException(message, cause) {
 
   def this(message: String) = this(message, null)
