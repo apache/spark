@@ -253,7 +253,8 @@ case class InsertIntoHiveTable(
 
     //remove temporary directories
     val fs = outputPath.getFileSystem(jobConf)
-    fs.delete(outputPath,true)
+    if ( outputPath.getParent.isRoot == false ) 
+      fs.delete(outputPath.getParent,true)
 
     // Invalidate the cache.
     sqlContext.cacheManager.invalidateCache(table)
