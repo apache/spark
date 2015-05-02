@@ -83,10 +83,12 @@ class S3ToHiveTransfer(BaseOperator):
         self.partition = partition
         self.headers = headers
         self.check_headers = check_headers
-        self.hive = HiveCliHook(hive_cli_conn_id=hive_cli_conn_id)
-        self.s3 = S3Hook(s3_conn_id=s3_conn_id)
+        self.hive_cli_conn_id = hive_cli_conn_id
+        self.s3_conn_id = s3_conn_id
 
     def execute(self, context):
+        self.hive = HiveCliHook(hive_cli_conn_id=self.hive_cli_conn_id)
+        self.s3 = S3Hook(s3_conn_id=self.s3_conn_id)
         logging.info("Downloading S3 file")
         if not self.s3.check_for_key(self.s3_key):
             raise Exception("The key {0} does not exists".format(self.s3_key))
