@@ -56,11 +56,10 @@
       <a href="{{ url_for("airflow.refresh", dag_id=dag.dag_id) }}" title="Refresh">
         <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span>
       </a>
-    
-                    <a href="/admin/log/?sort=1&desc=1&flt1_dag_id_equals={{ dag.dag_id }}">
-                        <i class="icon-list"></i>
-                        <span class="glyphicon glyphicon-align-justify" aria-hidden="true"></span>
-                    </a>
+      <a href="/admin/log/?sort=1&desc=1&flt1_dag_id_equals={{ dag.dag_id }}">
+         <i class="icon-list"></i>
+         <span class="glyphicon glyphicon-align-justify" aria-hidden="true"></span>
+      </a>
                 </td>
             </tr>
         {% endfor %}

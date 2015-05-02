@@ -190,7 +190,7 @@ class Airflow(BaseView):
     @expose('/chart_data')
     @data_profiling_required
     @wwwutils.gzipped
-    #@cache.cached(timeout=3600, key_prefix=wwwutils.make_cache_key)
+    # @cache.cached(timeout=3600, key_prefix=wwwutils.make_cache_key)
     def chart_data(self):
         session = settings.Session()
         chart_id = request.args.get('chart_id')
@@ -382,34 +382,34 @@ class Airflow(BaseView):
                     'max': 2200,
                 }
             else:
-                    if chart.sql_layout == 'series':
-                        # User provides columns (series, x, y)
-                        xaxis_label = df.columns[1]
-                        yaxis_label = df.columns[2]
-                        df[df.columns[2]] = df[df.columns[2]].astype(np.float)
-                        df = df.pivot_table(
-                            index=df.columns[1],
-                            columns=df.columns[0],
-                            values=df.columns[2], aggfunc=np.sum)
-                    else:
-                        # User provides columns (x, y, metric1, metric2, ...)
-                        xaxis_label = df.columns[0]
-                        yaxis_label = 'y'
-                        df.index = df[df.columns[0]]
-                        df = df.sort(df.columns[0])
-                        del df[df.columns[0]]
-                        for col in df.columns:
-                            df[col] = df[col].astype(np.float)
-
+                if chart.sql_layout == 'series':
+                    # User provides columns (series, x, y)
+                    xaxis_label = df.columns[1]
+                    yaxis_label = df.columns[2]
+                    df[df.columns[2]] = df[df.columns[2]].astype(np.float)
+                    df = df.pivot_table(
+                        index=df.columns[1],
+                        columns=df.columns[0],
+                        values=df.columns[2], aggfunc=np.sum)
+                else:
+                    # User provides columns (x, y, metric1, metric2, ...)
+                    xaxis_label = df.columns[0]
+                    yaxis_label = 'y'
+                    df.index = df[df.columns[0]]
+                    df = df.sort(df.columns[0])
+                    del df[df.columns[0]]
                     for col in df.columns:
-                        series.append({
-                            'name': col,
-                            'data': [
-                                (i, v)
-                                for i, v in df[col].iteritems() if not np.isnan(v)]
-                        })
-                    series = [serie for serie in sorted(
-                        series, key=lambda s: s['data'][0][1], reverse=True)]
+                        df[col] = df[col].astype(np.float)
+
+                for col in df.columns:
+                    series.append({
+                        'name': col,
+                        'data': [
+                            (i, v)
+                            for i, v in df[col].iteritems() if not np.isnan(v)]
+                    })
+                series = [serie for serie in sorted(
+                    series, key=lambda s: s['data'][0][1], reverse=True)]
 
             if chart_type == "stacked_area":
                 stacking = "normal"
@@ -1096,7 +1096,7 @@ class Airflow(BaseView):
         DAG = models.DAG
         dag_id = request.args.get('dag_id')
         session = settings.Session()
-        dag = session.query(DAG).filter(DAG.dag_id==dag_id).all()[0]
+        dag = session.query(DAG).filter(DAG.dag_id == dag_id).all()[0]
 
         if dag:
             dag.last_expired = datetime.now()
@@ -1454,19 +1454,33 @@ admin.add_view(ConfigurationView(name='Configuration', category="Admin"))
 
 
 class DagModelView(SuperUserMixin, ModelView):
-    column_list = (
-        'dag_id', 'is_paused', 'last_scheduler_run',
-        'last_expired', 'last_loaded', 'scheduler_lock', 'pickle_id')
+    column_list = ('dag_id', 'owners')
     column_editable_list = ('is_paused',)
+    column_searchable_list = ('dag_id',)
+    column_filters = (
+        'dag_id', 'owners', 'is_paused', 'is_active', 'is_subdag',
+        'last_scheduler_run', 'last_expired')
     form_widget_args = {
-        'last_scheduler_run':{'disabled':True},
-        'fileloc':{'disabled':True},
-        'last_pickled':{'disabled':True},
-        'pickle_id':{'disabled':True},
-        'last_loaded':{'disabled':True},
-        'last_expired':{'disabled':True},
-        'pickle_size':{'disabled':True},
+        'last_scheduler_run': {'disabled': True},
+        'fileloc': {'disabled': True},
+        'last_pickled': {'disabled': True},
+        'pickle_id': {'disabled': True},
+        'last_loaded': {'disabled': True},
+        'last_expired': {'disabled': True},
+        'pickle_size': {'disabled': True},
+        'is_subdag': {'disabled': True},
+        'is_active': {'disabled': True},
+        'scheduler_lock': {'disabled': True},
     }
+    column_formatters = dict(
+        dag_id=dag_link,
+    )
+    can_delete = False
+    can_create = False
+    page_size = 100
+    list_template = 'airflow/list_dags.html'
+    named_filter_urls = True
+
 mv = DagModelView(
     models.DAG, Session, name="Pause DAGs", category="Admin")
 admin.add_view(mv)
@@ -1623,8 +1637,16 @@ mv = DagPickleView(
 admin.add_view(mv)
 '''
 
+
 class VariableView(LoginMixin, ModelView):
     column_list = ('key',)
+    column_filters = ('key', 'val')
+    column_searchable_list = ('key', 'val')
+    form_widget_args = {
+        'val': {
+            'rows': 20,
+        }
+    }
 
 mv = VariableView(
     models.Variable, Session, name="Variables", category="Admin")
