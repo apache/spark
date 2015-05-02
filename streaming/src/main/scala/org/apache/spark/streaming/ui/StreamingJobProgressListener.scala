@@ -188,30 +188,35 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   }
 
   def receivedRecordsDistributions: Map[Int, Option[Distribution]] = synchronized {
-    val latestBatches = retainedBatches.reverse.take(batchUIDataLimit)
-    (0 until numReceivers).map { receiverId =>
-      val recordsOfParticularReceiver = latestBatches.map { batch =>
-        // calculate records per second for each batch
-        batch.receiverNumRecords.get(receiverId).sum.toDouble * 1000 / batchDuration
-      }
-      val distributionOption = Distribution(recordsOfParticularReceiver)
-      (receiverId, distributionOption)
+    val latestBatchInfos = retainedBatches.reverse.take(batchUIDataLimit)
+    val latestReceiverNumRecords = latestBatchInfos.map(_.receiverNumRecords)
+    val streamIds = ssc.graph.getInputStreams().map(_.id)
+    streamIds.map { id =>
+     val recordsOfParticularReceiver =
+       latestReceiverNumRecords.map(v => v.getOrElse(id, 0L).toDouble * 1000 / batchDuration)
+      val distribution = Distribution(recordsOfParticularReceiver)
+      (id, distribution)
     }.toMap
   }
 
   def lastReceivedBatchRecords: Map[Int, Long] = synchronized {
-    val lastReceivedBlockInfoOption = lastReceivedBatch.map(_.receiverNumRecords)
-    lastReceivedBlockInfoOption.map { lastReceivedBlockInfo =>
-      (0 until numReceivers).map { receiverId =>
-        (receiverId, lastReceivedBlockInfo.getOrElse(receiverId, 0L))
+    val lastReceiverNumRecords = lastReceivedBatch.map(_.receiverNumRecords)
+    val streamIds = ssc.graph.getInputStreams().map(_.id)
+    lastReceiverNumRecords.map { receiverNumRecords =>
+      streamIds.map { id =>
+        (id, receiverNumRecords.getOrElse(id, 0L))
       }.toMap
     }.getOrElse {
-      (0 until numReceivers).map(receiverId => (receiverId, 0L)).toMap
+      streamIds.map(id => (id, 0L)).toMap
     }
   }
 
   def receiverInfo(receiverId: Int): Option[ReceiverInfo] = synchronized {
     receiverInfos.get(receiverId)
+  }
+
+  def receiverIds(): Iterable[Int] = synchronized {
+    receiverInfos.keys
   }
 
   def lastCompletedBatch: Option[BatchUIData] = synchronized {
