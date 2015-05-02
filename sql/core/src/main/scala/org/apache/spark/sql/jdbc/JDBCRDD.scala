@@ -363,9 +363,17 @@ private[sql] class JDBCRDD(
             case BooleanConversion    => mutableRow.setBoolean(i, rs.getBoolean(pos))
             case DateConversion       =>
               mutableRow.update(i, DateUtils.fromJavaDate(rs.getDate(pos)))
-            case DecimalConversion(d) if d != None =>
-              mutableRow.update(i, Decimal(rs.getBigDecimal(pos), d.map(_._1).get, d.map(_._2).get))
-            case DecimalConversion(n) => mutableRow.update(i, Decimal(rs.getBigDecimal(pos)))
+            // When connecting with Oracle DB through JDBC, the precision and scale of BigDecimal
+            // object returned by ResultSet.getBigDecimal is not correctly matched to the table
+            // schema reported by ResultSetMetaData.getPrecision and ResultSetMetaData.getScale.
+            // If inserting values like 19999 into a column with NUMBER(12, 2) type, you get through
+            // a BigDecimal object with scale as 0. But the dataframe schema has correct type as
+            // DecimalType(12, 2). Thus, after saving the dataframe into parquet file and then
+            // retrieve it, you will get wrong result 199.99.
+            // So it is needed to set precision and scale for Decimal based on JDBC metadata.
+            case DecimalConversion(Some((p, s))) =>
+              mutableRow.update(i, Decimal(rs.getBigDecimal(pos), p, s))
+            case DecimalConversion(None) => mutableRow.update(i, Decimal(rs.getBigDecimal(pos)))
             case DoubleConversion     => mutableRow.setDouble(i, rs.getDouble(pos))
             case FloatConversion      => mutableRow.setFloat(i, rs.getFloat(pos))
             case IntegerConversion    => mutableRow.setInt(i, rs.getInt(pos))
