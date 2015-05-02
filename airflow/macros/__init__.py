@@ -27,7 +27,7 @@ def ds_add(ds, days):
 
 def ds_format(ds, input_format, output_format):
     '''
-    Takes an input string and outputs another string 
+    Takes an input string and outputs another string
     as specified in the output format
 
     :param ds: input string which contains a date
@@ -39,7 +39,7 @@ def ds_format(ds, input_format, output_format):
 
     >>> ds_format('2015-01-01', "%Y-%m-%d", "%m-%d-%y")
     '01-01-15'
-    >>> ds_format('2015-01-01', "%Y-%m-%d",  "%Y-%m-%d")
-    '2015-01-01'
+    >>> ds_format('1/5/2015', "%m/%d/%Y",  "%Y-%m-%d")
+    '2015-01-05'
     '''
-    return datetime.datetime.strptime(ds, input_format).strftime(output_format)
+    return datetime.strptime(ds, input_format).strftime(output_format)

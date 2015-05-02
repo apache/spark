@@ -167,8 +167,8 @@ class CoreTest(unittest.TestCase):
         job = jobs.LocalTaskJob(task_instance=ti, force=True)
         job.run()
 
-    def test_master_job(self):
-        job = jobs.MasterJob(dag_id='example_bash_operator', test_mode=True)
+    def test_scheduler_job(self):
+        job = jobs.SchedulerJob(dag_id='example_bash_operator', test_mode=True)
         job.run()
 
     def test_local_backfill_job(self):

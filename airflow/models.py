@@ -79,11 +79,12 @@ class DagBag(object):
     """
     def __init__(
             self,
-            dag_folder=DAGS_FOLDER,
+            dag_folder=None,
             executor=DEFAULT_EXECUTOR,
             include_examples=True,
             sync_to_db=False):
 
+        dag_folder = dag_folder or DAGS_FOLDER
         logging.info("Filling up the DagBag from " + dag_folder)
         self.dag_folder = dag_folder
         self.dags = {}
