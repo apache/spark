@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
 class QueryPartitionSuite extends QueryTest {
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
-  test("SPARK-5068: query data when path doesn't exists"){
+  test("SPARK-5068: query data when path doesn't exist"){
     val testData = TestHive.sparkContext.parallelize(
       (1 to 10).map(i => TestData(i, i.toString))).toDF()
     testData.registerTempTable("testData")
