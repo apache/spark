@@ -193,6 +193,7 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
     int currentPartition = -1;
     BlockObjectWriter writer = null;
 
+    final byte[] arr = new byte[SER_BUFFER_SIZE];
     while (sortedRecords.hasNext()) {
       final RecordPointerAndKeyPrefix recordPointer = sortedRecords.next();
       final int partition = (int) recordPointer.keyPrefix;
@@ -211,16 +212,14 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
       final Object baseObject = memoryManager.getPage(recordPointer.recordPointer);
       final long baseOffset = memoryManager.getOffsetInPage(recordPointer.recordPointer);
       final int recordLength = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + 8);
-      // TODO: re-use a buffer or avoid double-buffering entirely
-      final byte[] arr = new byte[recordLength];
-        PlatformDependent.copyMemory(
-          baseObject,
-          baseOffset + 16,
-          arr,
-          PlatformDependent.BYTE_ARRAY_OFFSET,
-          recordLength);
+      PlatformDependent.copyMemory(
+        baseObject,
+        baseOffset + 16,
+        arr,
+        PlatformDependent.BYTE_ARRAY_OFFSET,
+        recordLength);
       assert (writer != null);  // To suppress an IntelliJ warning
-      writer.write(arr);
+      writer.write(arr, 0, recordLength);
       // TODO: add a test that detects whether we leave this call out:
       writer.recordWritten();
     }
