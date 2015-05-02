@@ -1297,8 +1297,7 @@ class Column(object):
         >>> df[df.col1.between(lowerBound, upperBound)].collect()
         [Row(col1=5, col2=6, col3=8)]
         """
-        jc = (self >= lowerBound) & (self <= upperBound)
-        return Column(jc)
+        return (self >= lowerBound) & (self <= upperBound)
 
     def __repr__(self):
         return 'Column<%s>' % self._jc.toString().encode('utf8')
