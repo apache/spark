@@ -875,9 +875,9 @@ class DataFrame(object):
 
             return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
 
-    def corr(self, col1, col2, method="pearson"):
+    def corr(self, col1, col2, method=None):
         """
-        Calculate the correlation of two columns of a DataFrame as a double value. Currently only
+        Calculates the correlation of two columns of a DataFrame as a double value. Currently only
         supports the Pearson Correlation Coefficient.
         :func:`DataFrame.corr` and :func:`DataFrameStatFunctions.corr` are aliases.
 
@@ -889,6 +889,8 @@ class DataFrame(object):
             raise ValueError("col1 should be a string.")
         if not isinstance(col2, str):
             raise ValueError("col2 should be a string.")
+        if not method:
+            method = "pearson"
         if not method == "pearson":
             raise ValueError("Currently only the calculation of the Pearson Correlation " +
                              "coefficient is supported.")
@@ -1378,7 +1380,7 @@ class DataFrameStatFunctions(object):
     def __init__(self, df):
         self.df = df
 
-    def corr(self, col1, col2, method="pearson"):
+    def corr(self, col1, col2, method=None):
         return self.df.corr(col1, col2, method)
 
     corr.__doc__ = DataFrame.corr.__doc__

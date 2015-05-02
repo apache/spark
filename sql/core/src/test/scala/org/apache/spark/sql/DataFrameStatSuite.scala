@@ -30,10 +30,10 @@ class DataFrameStatSuite extends FunSuite  {
   def toLetter(i: Int): String = (i + 97).toChar.toString
   
   test("Frequent Items") {
-    val rows = Array.tabulate(1000) { i =>
+    val rows = Seq.tabulate(1000) { i =>
       if (i % 3 == 0) (1, toLetter(1), -1.0) else (i, toLetter(i), i * -1.0)
     }
-    val df = sqlCtx.sparkContext.parallelize(rows).toDF("numbers", "letters", "negDoubles")
+    val df = rows.toDF("numbers", "letters", "negDoubles")
 
     val results = df.stat.freqItems(Array("numbers", "letters"), 0.1)
     val items = results.collect().head
@@ -46,8 +46,7 @@ class DataFrameStatSuite extends FunSuite  {
   }
 
   test("pearson correlation") {
-    val df = sqlCtx.sparkContext.parallelize(
-      Array.tabulate(10)(i => (i, 2 * i, i * -1.0))).toDF("a", "b", "c")
+    val df = Seq.tabulate(10)(i => (i, 2 * i, i * -1.0)).toDF("a", "b", "c")
     val corr1 = df.stat.corr("a", "b", "pearson")
     assert(math.abs(corr1 - 1.0) < 1e-6)
     val corr2 = df.stat.corr("a", "c", "pearson")
@@ -55,8 +54,7 @@ class DataFrameStatSuite extends FunSuite  {
   }
 
   test("covariance") {
-    val rows = Array.tabulate(10)(i => (i, 2.0 * i, toLetter(i)))
-    val df = sqlCtx.sparkContext.parallelize(rows).toDF("singles", "doubles", "letters")
+    val df = Seq.tabulate(10)(i => (i, 2.0 * i, toLetter(i))).toDF("singles", "doubles", "letters")
 
     val results = df.stat.cov("singles", "doubles")
     assert(math.abs(results - 55.0 / 3) < 1e-6)

@@ -37,7 +37,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @return The Pearson Correlation Coefficient as a Double.
    */
   def corr(col1: String, col2: String, method: String): Double = {
-    assert(method == "pearson", "Currently only the calculation of the Pearson Correlation " +
+    require(method == "pearson", "Currently only the calculation of the Pearson Correlation " +
       "coefficient is supported.")
     StatFunctions.pearsonCorrelation(df, Seq(col1, col2))
   }
