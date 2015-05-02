@@ -1460,9 +1460,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.streaming.kafka.maxRetries</code></td>
   <td>1</td>
   <td>
-    Maximum number of consecutive trials the driver will make in order to find
-    the latest offsets on the leader of each partition. Only applies to the new
-    Kafka direct stream API.
+    Maximum number of consecutive retries the driver will make in order to find
+    the latest offsets on the leader of each partition (a default value of 1
+    means that the driver will make a maximum of 2 attempts). Only applies to
+    the new Kafka direct stream API.
   </td>
 </tr>
 </table>
