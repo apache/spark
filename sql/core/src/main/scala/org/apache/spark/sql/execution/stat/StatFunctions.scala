@@ -82,9 +82,9 @@ private[sql] object StatFunctions {
   /** Generate a table of frequencies for the elements of two columns. */
   private[sql] def crossTabulate(df: DataFrame, col1: String, col2: String): DataFrame = {
     val tableName = s"${col1}_$col2"
-    val distinctCol2 = df.select(col2).distinct.orderBy(col2).collect()
+    val distinctCol2 = df.select(col2).distinct.collect().sortBy(_.get(0).toString)
     val columnSize = distinctCol2.size
-    require(columnSize < 1e5, s"The number of distinct values for $col2, can't " +
+    require(columnSize < 1e4, s"The number of distinct values for $col2, can't " +
       s"exceed 1e5. Currently $columnSize")
     var i = 0
     val col2Map = distinctCol2.map { r =>

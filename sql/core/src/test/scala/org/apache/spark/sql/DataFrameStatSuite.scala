@@ -33,10 +33,10 @@ class DataFrameStatSuite extends FunSuite  {
     val crosstab = df.stat.crosstab("a", "b")
     val columnNames = crosstab.schema.fieldNames
     assert(columnNames(0) === "a_b")
-    assert(columnNames(1) === "1")
-    assert(columnNames(2) === "2")
+    assert(columnNames(1) === "0")
+    assert(columnNames(2) === "1")
     val rows: Array[Row] = crosstab.collect()
-    var count: Integer = 1
+    var count: Integer = 0
     rows.foreach { row =>
       assert(row.get(0).toString === count.toString)
       assert(row.getLong(1) === 1L)
