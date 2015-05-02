@@ -43,7 +43,15 @@ class DataFrameStatSuite extends FunSuite  {
     val singleColResults = df.stat.freqItems(Array("negDoubles"), 0.1)
     val items2 = singleColResults.collect().head
     items2.getSeq[Double](0) should contain (-1.0)
+  }
 
+  test("pearson correlation") {
+    val df = sqlCtx.sparkContext.parallelize(
+      Array.tabulate(10)(i => (i, 2 * i, i * -1.0))).toDF("a", "b", "c")
+    val corr1 = df.stat.corr("a", "b", "pearson")
+    assert(math.abs(corr1 - 1.0) < 1e-6)
+    val corr2 = df.stat.corr("a", "c", "pearson")
+    assert(math.abs(corr2 + 1.0) < 1e-6)
   }
 
   test("covariance") {
