@@ -592,10 +592,10 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(df.select(df("key")), testData.select('key).collect().toSeq)
   }
 
-  ignore("show") {
+  test("show") {
     // This test case is intended ignored, but to make sure it compiles correctly
     testData.select($"*").show()
-    testData.select($"*").show(1000)
+    //testData.select($"*").show(1000)
   }
 
   test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {

@@ -175,6 +175,7 @@ class DataFrame private[sql](
    * @param numRows Number of rows to show
    */
   private[sql] def showString(numRows: Int): String = {
+    val sb = new StringBuilder
     val data = take(numRows)
     val numCols = schema.fieldNames.length
 
@@ -194,12 +195,34 @@ class DataFrame private[sql](
       }
     }
 
-    // Pad the cells
-    rows.map { row =>
-      row.zipWithIndex.map { case (cell, i) =>
-        String.format(s"%-${colWidths(i)}s", cell)
-      }.mkString(" ")
-    }.mkString("\n")
+    // Create SeparateLine
+    val sep:String = {
+      "+" + colWidths.map {
+        size =>
+          val columnSep = new Array[Char](size)
+          for (i <- 0 until size)
+            columnSep(i) = '-'
+          String.valueOf(columnSep)
+      }.mkString("+") + "+\n"
+    }
+
+    sb.append(sep)
+
+    // append column names
+    sb.append("|").append(rows.head.zipWithIndex.map { case (cell, i) =>
+        String.format(s"%${colWidths(i)}s", cell)
+      }.mkString("|")).append("|\n")
+
+    // append data
+    sb.append(rows.tail.map { row =>
+      "|" + row.zipWithIndex.map { case (cell, i) =>
+        String.format(s"%${colWidths(i)}s", cell)
+      }.mkString("|") + "|"
+    }.mkString("\n")).append("\n")
+
+    sb.append(sep)
+
+    sb.toString()
   }
 
   override def toString: String = {
