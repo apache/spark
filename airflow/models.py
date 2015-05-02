@@ -106,13 +106,14 @@ class DagBag(object):
         """
         if dag_id in self.dags:
             dag = self.dags[dag_id]
-            if dag.last_loaded < (dag.last_expired_live or datetime(2100,1,1)):
+            if dag.last_loaded < (
+                    dag.last_expired_live or datetime(2100, 1, 1)):
                 self.process_file(
                     filepath=dag.full_filepath, only_if_updated=False)
                 dag = self.dags[dag_id]
         else:
             session = settings.Session()
-            dag = session.query(DAG).filter(DAG.dag_id==dag_id).first()
+            dag = session.query(DAG).filter(DAG.dag_id == dag_id).first()
             self.process_file(
                 filepath=dag.full_filepath, only_if_updated=False)
             session.commit()
@@ -120,7 +121,6 @@ class DagBag(object):
             dag = self.dags[dag_id]
 
         return dag
-
 
     def process_file(self, filepath, only_if_updated=True, safe_mode=True):
         """
@@ -159,7 +159,7 @@ class DagBag(object):
                     dag.is_subdag = False
                     dag.owners = dag.owner
                     self.bag_dag(dag)
-                    #dag.pickle()
+                    # dag.pickle()
 
             self.file_last_changed[filepath] = dttm
 
