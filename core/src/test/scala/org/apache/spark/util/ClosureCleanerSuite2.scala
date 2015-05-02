@@ -68,17 +68,23 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
   /**
    * Helper method for testing whether closure cleaning works as expected.
    * This cleans the given closure twice, with and without transitive cleaning.
+   *
+   * @param closure closure to test cleaning with
+   * @param serializableBefore if true, verify that the closure is serializable
+   *                           before cleaning, otherwise assert that it is not
+   * @param serializableAfter if true, assert that the closure is serializable
+   *                          after cleaning otherwise assert that it is not
    */
-  private def testClean(
+  private def verifyCleaning(
       closure: AnyRef,
       serializableBefore: Boolean,
       serializableAfter: Boolean): Unit = {
-    testClean(closure, serializableBefore, serializableAfter, transitive = true)
-    testClean(closure, serializableBefore, serializableAfter, transitive = false)
+    verifyCleaning(closure, serializableBefore, serializableAfter, transitive = true)
+    verifyCleaning(closure, serializableBefore, serializableAfter, transitive = false)
   }
 
   /** Helper method for testing whether closure cleaning works as expected. */
-  private def testClean(
+  private def verifyCleaning(
       closure: AnyRef,
       serializableBefore: Boolean,
       serializableAfter: Boolean,
@@ -113,7 +119,7 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
 
   // Accessors for private methods
   private val _isClosure = PrivateMethod[Boolean]('isClosure)
-  private val _getInnerClasses = PrivateMethod[List[Class[_]]]('getInnerClasses)
+  private val _getInnerClosureClasses = PrivateMethod[List[Class[_]]]('getInnerClosureClasses)
   private val _getOuterClasses = PrivateMethod[List[Class[_]]]('getOuterClasses)
   private val _getOuterObjects = PrivateMethod[List[AnyRef]]('getOuterObjects)
 
@@ -121,7 +127,7 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
     ClosureCleaner invokePrivate _isClosure(obj)
   }
 
-  private def getInnerClasses(closure: AnyRef): List[Class[_]] = {
+  private def getInnerClosureClasses(closure: AnyRef): List[Class[_]] = {
     ClosureCleaner invokePrivate _getInnerClasses(closure)
   }
 
@@ -133,7 +139,7 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
     ClosureCleaner invokePrivate _getOuterObjects(closure)
   }
 
-  test("get inner classes") {
+  test("get inner closure classes") {
     val closure1 = () => 1
     val closure2 = () => { () => 1 }
     val closure3 = (i: Int) => {
@@ -312,7 +318,8 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
       val fields3 = findAccessedFields(closure3, outerClasses3, findTransitively = false)
       val fields4 = findAccessedFields(closure4, outerClasses4, findTransitively = false)
       assert(fields1.isEmpty)
-      // "test1" < "FunSuite#test" < ClosureCleanerSuite2
+      // Note that the size here represents the number of outer classes, not the number of fields
+      // "test1" < parameter of "FunSuite#test" < ClosureCleanerSuite2
       assert(fields2.size === 3)
       // Since we do not find fields transitively here, we do not look into what `def a` references
       assert(fields2(outerClasses2(0)).isEmpty) // This corresponds to the "test1" scope
@@ -376,11 +383,11 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
     val closure4r = closure4()
     val closure5r = closure5()
 
-    testClean(closure1, serializableBefore = true, serializableAfter = true)
-    testClean(closure2, serializableBefore = true, serializableAfter = true)
-    testClean(closure3, serializableBefore = true, serializableAfter = true)
-    testClean(closure4, serializableBefore = true, serializableAfter = true)
-    testClean(closure5, serializableBefore = true, serializableAfter = true)
+    verifyCleaning(closure1, serializableBefore = true, serializableAfter = true)
+    verifyCleaning(closure2, serializableBefore = true, serializableAfter = true)
+    verifyCleaning(closure3, serializableBefore = true, serializableAfter = true)
+    verifyCleaning(closure4, serializableBefore = true, serializableAfter = true)
+    verifyCleaning(closure5, serializableBefore = true, serializableAfter = true)
 
     // Verify that closures can still be invoked and the result still the same
     assert(closure1() === closure1r)
@@ -398,11 +405,11 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
     val closure2 = () => someNonSerializableMethod()
 
     // These are not cleanable because they ultimately reference the ClosureCleanerSuite2
-    testClean(closure1, serializableBefore = false, serializableAfter = false)
-    testClean(closure2, serializableBefore = false, serializableAfter = false)
-    testClean(closure3, serializableBefore = false, serializableAfter = false)
-    testClean(closure4, serializableBefore = false, serializableAfter = false)
-    testClean(closure5, serializableBefore = false, serializableAfter = false)
+    verifyCleaning(closure1, serializableBefore = false, serializableAfter = false)
+    verifyCleaning(closure2, serializableBefore = false, serializableAfter = false)
+    verifyCleaning(closure3, serializableBefore = false, serializableAfter = false)
+    verifyCleaning(closure4, serializableBefore = false, serializableAfter = false)
+    verifyCleaning(closure5, serializableBefore = false, serializableAfter = false)
   }
 
   test("clean basic nested serializable closures") {
@@ -424,9 +431,9 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
     val closure2r = closure2(2)
     val closure3r = closure3(3, 4, 5)
 
-    testClean(closure1, serializableBefore = true, serializableAfter = true)
-    testClean(closure2, serializableBefore = true, serializableAfter = true)
-    testClean(closure3, serializableBefore = true, serializableAfter = true)
+    verifyCleaning(closure1, serializableBefore = true, serializableAfter = true)
+    verifyCleaning(closure2, serializableBefore = true, serializableAfter = true)
+    verifyCleaning(closure3, serializableBefore = true, serializableAfter = true)
 
     // Verify that closures can still be invoked and the result still the same
     assert(closure1(1) === closure1r)
@@ -455,11 +462,11 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
       }
     }
 
-    testClean(closure1, serializableBefore = false, serializableAfter = false)
-    testClean(closure2, serializableBefore = false, serializableAfter = false)
-    testClean(closure3, serializableBefore = false, serializableAfter = false)
-    testClean(closure4, serializableBefore = false, serializableAfter = false)
-    testClean(closure5, serializableBefore = false, serializableAfter = false)
+    verifyCleaning(closure1, serializableBefore = false, serializableAfter = false)
+    verifyCleaning(closure2, serializableBefore = false, serializableAfter = false)
+    verifyCleaning(closure3, serializableBefore = false, serializableAfter = false)
+    verifyCleaning(closure4, serializableBefore = false, serializableAfter = false)
+    verifyCleaning(closure5, serializableBefore = false, serializableAfter = false)
   }
 
   test("clean complicated nested serializable closures") {
@@ -496,8 +503,8 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
 
     val closure1r = closure1(1)
     val closure2r = closure2(2)
-    testClean(closure1, serializableBefore = true, serializableAfter = true)
-    testClean(closure2, serializableBefore = true, serializableAfter = true)
+    verifyCleaning(closure1, serializableBefore = true, serializableAfter = true)
+    verifyCleaning(closure2, serializableBefore = true, serializableAfter = true)
     assert(closure1(1) == closure1r)
     assert(closure2(2) == closure2r)
   }
@@ -516,11 +523,11 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
 
       // This closure explicitly references a non-serializable field
       // There is no way to clean it
-      testClean(inner1, serializableBefore = false, serializableAfter = false)
+      verifyCleaning(inner1, serializableBefore = false, serializableAfter = false)
 
       // This closure is serializable to begin with since it does not need a pointer to
       // the outer closure (it only references local variables)
-      testClean(inner2, serializableBefore = true, serializableAfter = true)
+      verifyCleaning(inner2, serializableBefore = true, serializableAfter = true)
     }
 
     // Same as above, but the `val a` becomes `def a`
@@ -532,17 +539,17 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
       val inner2 = (x: Int) => x + a
 
       // As before, this closure is neither serializable nor cleanable
-      testClean(inner1, serializableBefore = false, serializableAfter = false)
+      verifyCleaning(inner1, serializableBefore = false, serializableAfter = false)
 
       // This closure is no longer serializable because it now has a pointer to the outer closure,
       // which is itself not serializable because it has a pointer to the ClosureCleanerSuite2.
       // If we do not clean transitively, we will not null out this indirect reference.
-      testClean(inner2, serializableBefore = false, serializableAfter = false, transitive = false)
+      verifyCleaning(inner2, serializableBefore = false, serializableAfter = false, transitive = false)
 
       // If we clean transitively, we will find that method `a` does not actually reference the
       // outer closure's parent (i.e. the ClosureCleanerSuite), so we can additionally null out
       // the outer closure's parent pointer. This will make `inner2` serializable.
-      testClean(inner2, serializableBefore = false, serializableAfter = true, transitive = true)
+      verifyCleaning(inner2, serializableBefore = false, serializableAfter = true, transitive = true)
     }
 
     // Same as above, but with more levels of nesting

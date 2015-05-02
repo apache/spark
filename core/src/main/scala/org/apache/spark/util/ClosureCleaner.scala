@@ -62,7 +62,7 @@ private[spark] object ClosureCleaner extends Logging {
       // The outer pointer may be null if we have cleaned this closure before
       if (outer != null) {
         if (isClosure(f.getType)) {
-          return f.getType :: getOuterClasses(f.get(obj))
+          return f.getType :: getOuterClasses(outer)
         } else {
           return f.getType :: Nil // Stop at the first $outer that is not a closure
         }
@@ -79,9 +79,9 @@ private[spark] object ClosureCleaner extends Logging {
       // The outer pointer may be null if we have cleaned this closure before
       if (outer != null) {
         if (isClosure(f.getType)) {
-          return f.get(obj) :: getOuterObjects(f.get(obj))
+          return outer :: getOuterObjects(outer)
         } else {
-          return f.get(obj) :: Nil // Stop at the first $outer that is not a closure
+          return outer :: Nil // Stop at the first $outer that is not a closure
         }
       }
     }
@@ -91,7 +91,10 @@ private[spark] object ClosureCleaner extends Logging {
   /**
    * Return a list of classes that represent closures enclosed in the given closure object.
    */
-  private def getInnerClasses(obj: AnyRef): List[Class[_]] = {
+  private def getInnerClosureClasses(obj: AnyRef): List[Class[_]] = {
+    if (!isClosure(obj.getClass)) {
+      throw new IllegalArgumentException(s"Expected a closure object; got ${obj.getClass.getName}")
+    }
     val seen = Set[Class[_]](obj.getClass)
     var stack = List[Class[_]](obj.getClass)
     while (!stack.isEmpty) {
@@ -104,7 +107,7 @@ private[spark] object ClosureCleaner extends Logging {
         stack = cls :: stack
       }
     }
-    return (seen - obj.getClass).toList
+    (seen - obj.getClass).toList
   }
 
   private def createNullValue(cls: Class[_]): AnyRef = {
@@ -153,12 +156,12 @@ private[spark] object ClosureCleaner extends Logging {
    *
    *   class SomethingNotSerializable {
    *     def someValue = 1
+   *     def scope(name: String)(body: => Unit) = body
    *     def someMethod(): Unit = scope("one") {
    *       def x = someValue
    *       def y = 2
    *       scope("two") { println(y + 1) }
    *     }
-   *     def scope(name: String)(body: => Unit) = body
    *   }
    *
    * In this example, scope "two" is not serializable because it references scope "one", which
@@ -189,7 +192,7 @@ private[spark] object ClosureCleaner extends Logging {
     logDebug(s"+++ Cleaning closure $func (${func.getClass.getName}}) +++")
 
     // A list of classes that represents closures enclosed in the given one
-    val innerClasses = getInnerClasses(func)
+    val innerClasses = getInnerClosureClasses(func)
 
     // A list of enclosing objects and their respective classes, from innermost to outermost
     // An outer object at a given index is of type outer class at the same index
@@ -280,7 +283,9 @@ private[spark] object ClosureCleaner extends Logging {
       // the already populated accessed fields map of the starting closure
       if (cleanTransitively && isClosure(clone.getClass)) {
         logDebug(s" + cleaning cloned closure $clone recursively (${cls.getName})")
-        clean(clone, checkSerializable, cleanTransitively, accessedFields)
+        // No need to check serializable here for the outer closures because we're
+        // only interested in the serializability of the starting closure
+        clean(clone, checkSerializable = false, cleanTransitively, accessedFields)
       }
       parent = clone
     }
