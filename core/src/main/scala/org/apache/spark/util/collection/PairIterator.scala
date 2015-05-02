@@ -15,22 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.util.collection
 
-import java.util.Random
+private[spark] class PairIterator[K, V](iter: Iterator[Any]) extends Iterator[(K, V)] {
+  def hasNext: Boolean = iter.hasNext
 
-import org.apache.spark.sql.types.{DataType, DoubleType}
-
-
-case object Rand extends LeafExpression {
-  override def dataType: DataType = DoubleType
-  override def nullable: Boolean = false
-
-  private[this] lazy val rand = new Random
-
-  override def eval(input: Row = null): EvaluatedType = {
-    rand.nextDouble().asInstanceOf[EvaluatedType]
-  }
-
-  override def toString: String = "RAND()"
+  def next(): (K, V) = (iter.next().asInstanceOf[K], iter.next().asInstanceOf[V])
 }

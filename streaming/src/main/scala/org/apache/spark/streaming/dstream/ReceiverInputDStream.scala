@@ -20,11 +20,10 @@ package org.apache.spark.streaming.dstream
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.{BlockRDD, RDD}
-import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.storage.BlockId
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
-import org.apache.spark.streaming.receiver.{Receiver, WriteAheadLogBasedStoreResult}
-import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
+import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 
 /**
@@ -39,9 +38,6 @@ import org.apache.spark.streaming.util.WriteAheadLogUtils
  */
 abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
   extends InputDStream[T](ssc_) {
-
-  /** This is an unique identifier for the receiver input stream. */
-  val id = ssc.getNewReceiverStreamId()
 
   /**
    * Gets the receiver object that will be sent to the worker nodes

@@ -350,7 +350,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
     }
   }
 
-  test("kill stage is POST only") {
+  test("kill stage POST/GET response is correct") {
     def getResponseCode(url: URL, method: String): Int = {
       val connection = url.openConnection().asInstanceOf[HttpURLConnection]
       connection.setRequestMethod(method)
@@ -365,7 +365,8 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         val url = new URL(
           sc.ui.get.appUIAddress.stripSuffix("/") + "/stages/stage/kill/?id=0&terminate=true")
-        getResponseCode(url, "GET") should be (405)
+        // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
+        getResponseCode(url, "GET") should be (200)
         getResponseCode(url, "POST") should be (200)
       }
     }
