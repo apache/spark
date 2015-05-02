@@ -131,10 +131,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     lazy val cachedSerializer = SparkEnv.get.serializer.newInstance()
     val createZero = () => cachedSerializer.deserialize[U](ByteBuffer.wrap(zeroArray))
 
+    // We will clean the combiner closure later in `combineByKey`
     val cleanedSeqOp = self.context.clean(seqOp)
-    val cleanedCombOp = self.context.clean(combOp)
-    combineByKey[U](
-      (v: V) => cleanedSeqOp(createZero(), v), cleanedSeqOp, cleanedCombOp, partitioner)
+    combineByKey[U]((v: V) => cleanedSeqOp(createZero(), v), cleanedSeqOp, combOp, partitioner)
   }
 
   /**

@@ -119,8 +119,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    * Applies a function f to each partition of this RDD.
    */
   def foreachPartitionAsync(f: Iterator[T] => Unit): FutureAction[Unit] = {
-    val cleanedF = self.context.clean(f)
-    self.context.submitJob[T, Unit, Unit](self, cleanedF, Range(0, self.partitions.length),
+    self.context.submitJob[T, Unit, Unit](self, f, Range(0, self.partitions.length),
       (index, data) => Unit, Unit)
   }
 }
