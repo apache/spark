@@ -1290,15 +1290,14 @@ class Column(object):
         return Column(jc)
 
     @ignore_unicode_prefix
-    def between(self, col1, col2):
+    def between(self, lowerBound, upperBound):
         """ A boolean expression that is evaluated to true if the value of this
         expression is between the given columns.
 
-        >>> df[df.col1.between(col2, col3)].collect()
+        >>> df[df.col1.between(lowerBound, upperBound)].collect()
         [Row(col1=5, col2=6, col3=8)]
         """
-        #sc = SparkContext._active_spark_context
-        jc = self > col1 & self < col2
+        jc = (self >= lowerBound) & (self <= upperBound)
         return Column(jc)
 
     def __repr__(self):

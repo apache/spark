@@ -296,18 +296,23 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def eqNullSafe(other: Any): Column = this <=> other
 
   /**
-   * Between col1 and col2.
+   * True if the current column is between the lower bound and upper bound, inclusive.
    *
    * @group java_expr_ops
    */
-  def between(col1: String, col2: String): Column = between(Column(col1), Column(col2))
+  def between(lowerBound: String, upperBound: String): Column = {
+    between(Column(lowerBound), Column(upperBound))
+  }
 
   /**
-   * Between col1 and col2.
+   * True if the current column is between the lower bound and upper bound, inclusive.
    *
    * @group java_expr_ops
    */
-  def between(col1: Column, col2: Column): Column = And(GreaterThan(this.expr, col1.expr), LessThan(this.expr, col2.expr))
+  def between(lowerBound: Column, upperBound: Column): Column = {
+    And(GreaterThanOrEqual(this.expr, lowerBound.expr),
+      LessThanOrEqual(this.expr, upperBound.expr))
+  }
 
   /**
    * True if the current expression is null.
