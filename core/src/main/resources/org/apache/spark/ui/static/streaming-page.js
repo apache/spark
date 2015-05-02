@@ -164,6 +164,9 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
                     .attr("stroke", "white")
                     .attr("fill", "white")
                     .attr("opacity", "0");
+            })
+            .on("click", function(d) {
+                window.location.href = "batch/?id=" + d.x;
             });
 }
 
