@@ -330,14 +330,14 @@ class SchedulerJob(BaseJob):
         logging.info("Starting the scheduler")
 
         # This should get new code
-        dagbag = models.DagBag(self.subdir)
+        dagbag = models.DagBag(self.subdir, sync_to_db=True)
         executor = dagbag.executor
         executor.start()
         i = 0
         while (not self.test_mode) or i < 1:
             i += 1
             if i % self.refresh_dags_every == 0:
-                dagbag.collect_dags(only_if_updated=False)
+                dagbag = models.DagBag(self.subdir, sync_to_db=True)
             else:
                 dagbag.collect_dags(only_if_updated=True)
             if dag_id:

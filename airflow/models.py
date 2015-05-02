@@ -64,17 +64,31 @@ class DagBag(object):
     different teams or security profiles. What would have been system level
     settings are now dagbag level so that one system can run multiple,
     independent settings sets.
+
+    :param dag_folder: the folder to scan to find DAGs
+    :type dag_folder: str
+    :param executor: the executor to use when executing task instances
+        in this DagBag
+    :param include_examples: whether to include the examples that ship
+        with airflow or not
+    :type include_examples: bool
+    :param sync_to_db: whether to sync the properties of the DAGs to
+        the metadata DB while finding them, typically should be done
+        by the scheduler job only
+    :type sync_to_db: bool
     """
     def __init__(
             self,
             dag_folder=None,
             executor=DEFAULT_EXECUTOR,
-            include_examples=True):
-        if not dag_folder:
-            dag_folder = DAGS_FOLDER
+            include_examples=True,
+            sync_to_db=False):
+
+        dag_folder = dag_folder or DAGS_FOLDER
         logging.info("Filling up the DagBag from " + dag_folder)
         self.dag_folder = dag_folder
         self.dags = {}
+        self.sync_to_db = sync_to_db
         self.file_last_changed = {}
         self.executor = executor
         self.collect_dags(dag_folder)
@@ -83,18 +97,30 @@ class DagBag(object):
                 os.path.dirname(__file__),
                 'example_dags')
             self.collect_dags(example_dag_folder)
-        self.merge_dags()
+        if sync_to_db:
+            self.merge_dags()
 
     def get_dag(self, dag_id):
-        # Gets the DAG out of the dictionary, and refreshes it if expired
-        dag = self.dags[dag_id]
-
-        if dag.last_loaded < (dag.last_expired_live or datetime(2100,1,1)):
+        """
+        Gets the DAG out of the dictionary, and refreshes it if expired
+        """
+        if dag_id in self.dags:
+            dag = self.dags[dag_id]
+            if dag.last_loaded < (
+                    dag.last_expired_live or datetime(2100, 1, 1)):
+                self.process_file(
+                    filepath=dag.full_filepath, only_if_updated=False)
+                dag = self.dags[dag_id]
+        else:
+            session = settings.Session()
+            dag = session.query(DAG).filter(DAG.dag_id == dag_id).first()
             self.process_file(
                 filepath=dag.full_filepath, only_if_updated=False)
+            session.commit()
+            session.close()
             dag = self.dags[dag_id]
-        return dag
 
+        return dag
 
     def process_file(self, filepath, only_if_updated=True, safe_mode=True):
         """
@@ -126,12 +152,14 @@ class DagBag(object):
                 return
 
             for dag in m.__dict__.values():
-                if type(dag) == DAG:
+                if isinstance(dag, DAG):
                     dag.full_filepath = filepath
                     dag.fileloc = filepath
                     dag.last_loaded = datetime.now()
+                    dag.is_subdag = False
+                    dag.owners = dag.owner
                     self.bag_dag(dag)
-                    #dag.pickle()
+                    # dag.pickle()
 
             self.file_last_changed[filepath] = dttm
 
@@ -144,6 +172,7 @@ class DagBag(object):
         for subdag in dag.subdags:
             subdag.full_filepath = dag.full_filepath
             subdag.parent_dag = dag
+            subdag.is_subdag = True
             self.bag_dag(subdag)
         logging.info('Loaded DAG {dag}'.format(**locals()))
 
@@ -184,7 +213,11 @@ class DagBag(object):
 
     def merge_dags(self):
         session = settings.Session()
+        for dag in session.query(DAG).all():
+            dag.is_active = False
+            session.merge(dag)
         for dag in self.dags.values():
+            dag.is_active = True
             session.merge(dag)
         session.commit()
         session.close()
@@ -1199,6 +1232,10 @@ class DAG(Base):
     dag_id = Column(String(ID_LEN), primary_key=True)
     # A DAG can be paused from the UI / DB
     is_paused = Column(Boolean, default=False)
+    # Whether the DAG is a subdag
+    is_subdag = Column(Boolean, default=False)
+    # Whether that DAG was seen on the last DagBag load
+    is_active = Column(Boolean, default=False)
     # Last time the scheduler started
     last_scheduler_run = Column(DateTime)
     # Last time this DAG was pickled
@@ -1212,6 +1249,8 @@ class DAG(Base):
     pickle_id = Column(Integer)
     # The location of the file containing the DAG object
     fileloc = Column(String(2000))
+    # String representing the owners
+    owners = Column(String(2000))
 
     def __init__(
             self, dag_id,

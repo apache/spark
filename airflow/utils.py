@@ -130,6 +130,8 @@ def initdb():
     session.commit()
     session.close()
 
+    models.DagBag(sync_to_db=True)
+
 
 def resetdb():
     '''
