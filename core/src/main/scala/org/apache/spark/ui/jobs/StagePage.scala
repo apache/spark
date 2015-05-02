@@ -68,9 +68,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     </div>
   }
 
-
-
-
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val parameterId = request.getParameter("id")
@@ -485,7 +482,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
   def makeTimeline(tasks: Seq[TaskUIData], currentTime: Long): Seq[Node] = {
     val executorsSet = new HashSet[(String, String)]
-
     var minLaunchTime = Long.MaxValue
     var maxFinishTime = Long.MinValue
     var numEffectiveTasks = 0
