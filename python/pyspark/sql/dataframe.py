@@ -889,6 +889,26 @@ class DataFrame(object):
             raise ValueError("col2 should be a string.")
         return self._jdf.stat().cov(col1, col2)
 
+    def freqItems(self, cols, support=None):
+        """
+        Finding frequent items for columns, possibly with false positives. Using the
+        frequent element count algorithm described in
+        "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
+        :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
+
+        :param cols: Names of the columns to calculate frequent items for as a list or tuple of
+            strings.
+        :param support: The frequency with which to consider an item 'frequent'. Default is 1%.
+            The support must be greater than 1e-4.
+        """
+        if isinstance(cols, tuple):
+            cols = list(cols)
+        if not isinstance(cols, list):
+            raise ValueError("cols must be a list or tuple of column names as strings.")
+        if not support:
+            support = 0.01
+        return DataFrame(self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sql_ctx)
+
     @ignore_unicode_prefix
     def withColumn(self, colName, col):
         """Returns a new :class:`DataFrame` by adding a column.
@@ -1343,6 +1363,11 @@ class DataFrameStatFunctions(object):
         return self.df.cov(col1, col2)
 
     cov.__doc__ = DataFrame.cov.__doc__
+
+    def freqItems(self, cols, support=None):
+        return self.df.freqItems(cols, support)
+
+    freqItems.__doc__ = DataFrame.freqItems.__doc__
 
 
 def _test():
