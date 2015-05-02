@@ -59,8 +59,8 @@ class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
     val shuffle1 = shuffleBlockManager.forMapTask(1, 1, 1, new JavaSerializer(conf),
       new ShuffleWriteMetrics)
     for (writer <- shuffle1.writers) {
-      writer.write("test1")
-      writer.write("test2")
+      writer.write("test1", "value")
+      writer.write("test2", "value")
     }
     for (writer <- shuffle1.writers) {
       writer.commitAndClose()
@@ -73,8 +73,8 @@ class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
       new ShuffleWriteMetrics)
 
     for (writer <- shuffle2.writers) {
-      writer.write("test3")
-      writer.write("test4")
+      writer.write("test3", "value")
+      writer.write("test4", "vlue")
     }
     for (writer <- shuffle2.writers) {
       writer.commitAndClose()
@@ -91,8 +91,8 @@ class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
     val shuffle3 = shuffleBlockManager.forMapTask(1, 3, 1, new JavaSerializer(testConf),
       new ShuffleWriteMetrics)
     for (writer <- shuffle3.writers) {
-      writer.write("test3")
-      writer.write("test4")
+      writer.write("test3", "value")
+      writer.write("test4", "value")
     }
     for (writer <- shuffle3.writers) {
       writer.commitAndClose()

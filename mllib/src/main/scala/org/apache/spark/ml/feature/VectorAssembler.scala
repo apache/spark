@@ -25,9 +25,7 @@ import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
-import org.apache.spark.sql.{Column, DataFrame, Row}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CreateStruct}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -53,13 +51,12 @@ class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
     val inputColNames = map(inputCols)
     val args = inputColNames.map { c =>
       schema(c).dataType match {
-        case DoubleType => UnresolvedAttribute(c)
-        case t if t.isInstanceOf[VectorUDT] => UnresolvedAttribute(c)
-        case _: NumericType | BooleanType =>
-          Alias(Cast(UnresolvedAttribute(c), DoubleType), s"${c}_double_$uid")()
+        case DoubleType => dataset(c)
+        case _: VectorUDT => dataset(c)
+        case _: NumericType | BooleanType => dataset(c).cast(DoubleType).as(s"${c}_double_$uid")
       }
     }
-    dataset.select(col("*"), assembleFunc(new Column(CreateStruct(args))).as(map(outputCol)))
+    dataset.select(col("*"), assembleFunc(struct(args : _*)).as(map(outputCol)))
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
