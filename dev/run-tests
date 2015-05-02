@@ -113,7 +113,7 @@ echo "========================================================================="
 
 CURRENT_BLOCK=$BLOCK_RAT
 
-./dev/check-license
+# ./dev/check-license
 
 echo ""
 echo "========================================================================="
@@ -122,7 +122,7 @@ echo "========================================================================="
 
 CURRENT_BLOCK=$BLOCK_SCALA_STYLE
 
-./dev/lint-scala
+# ./dev/lint-scala
 
 echo ""
 echo "========================================================================="
@@ -131,7 +131,7 @@ echo "========================================================================="
 
 CURRENT_BLOCK=$BLOCK_PYTHON_STYLE
 
-./dev/lint-python
+# ./dev/lint-python
 
 echo ""
 echo "========================================================================="
@@ -173,7 +173,7 @@ CURRENT_BLOCK=$BLOCK_BUILD
     build/mvn $HIVE_BUILD_ARGS clean package -DskipTests
   else
     echo -e "q\n" \
-      | build/sbt $HIVE_BUILD_ARGS package assembly/assembly streaming-kafka-assembly/assembly \
+      | build/sbt -Dhadoop.version=1.0.4 package assembly/assembly streaming-kafka-assembly/assembly \
       | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
   fi
 }
@@ -185,7 +185,7 @@ echo "========================================================================="
 
 CURRENT_BLOCK=$BLOCK_MIMA
 
-./dev/mima
+# ./dev/mima
 
 echo ""
 echo "========================================================================="
@@ -222,9 +222,10 @@ CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
     # "${SBT_MAVEN_TEST_ARGS[@]}" is cool because it's an array.
     # QUESTION: Why doesn't 'yes "q"' work?
     # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
-    echo -e "q\n" \
-      | build/sbt $SBT_MAVEN_PROFILES_ARGS "${SBT_MAVEN_TEST_ARGS[@]}" \
-      | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+
+    echo "Running this"
+
+    build/sbt -Dhadoop.version=1.0.4 "streaming/test-only *WriteAheadLog*" "streaming/test-only *JobGenerator*"
   fi
 }
 
@@ -247,8 +248,9 @@ echo "========================================================================="
 CURRENT_BLOCK=$BLOCK_SPARKR_UNIT_TESTS
 
 if [ $(command -v R) ]; then
-  ./R/install-dev.sh
-  ./R/run-tests.sh
+  #./R/install-dev.sh
+  #./R/run-tests.sh
+  echo ""
 else
   echo "Ignoring SparkR tests as R was not found in PATH"
 fi
