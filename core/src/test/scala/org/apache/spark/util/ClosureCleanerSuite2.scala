@@ -128,7 +128,7 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
   }
 
   private def getInnerClosureClasses(closure: AnyRef): List[Class[_]] = {
-    ClosureCleaner invokePrivate _getInnerClasses(closure)
+    ClosureCleaner invokePrivate _getInnerClosureClasses(closure)
   }
 
   private def getOuterClasses(closure: AnyRef): List[Class[_]] = {
@@ -152,10 +152,10 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
         }
       }
     }
-    val inner1 = getInnerClasses(closure1)
-    val inner2 = getInnerClasses(closure2)
-    val inner3 = getInnerClasses(closure3)
-    val inner4 = getInnerClasses(closure4)
+    val inner1 = getInnerClosureClasses(closure1)
+    val inner2 = getInnerClosureClasses(closure2)
+    val inner3 = getInnerClosureClasses(closure3)
+    val inner4 = getInnerClosureClasses(closure4)
     assert(inner1.isEmpty)
     assert(inner2.size === 1)
     assert(inner3.size === 2)
