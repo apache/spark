@@ -375,6 +375,13 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(self.testData, df.select(df.key, df.value).collect())
         self.assertEqual([Row(value='1')], df.where(df.key == 1).select(df.value).collect())
 
+    def test_freqItems(self):
+        vals = [Row(a=1, b=-2.0) if i % 2 == 0 else Row(a=i, b=i * 1.0) for i in range(100)]
+        df = self.sc.parallelize(vals).toDF()
+        items = df.stat.freqItems(("a", "b"), 0.4).collect()[0]
+        self.assertTrue(1 in items[0])
+        self.assertTrue(-2.0 in items[1])
+
     def test_aggregator(self):
         df = self.df
         g = df.groupBy()

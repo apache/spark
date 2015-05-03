@@ -117,7 +117,7 @@ class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
     }
   }
 
-  test("neglects Spark and Spark's dependencies") {
+  ignore("neglects Spark and Spark's dependencies") {
     val components = Seq("bagel_", "catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
       "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
 

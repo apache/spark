@@ -56,8 +56,9 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
   }
 
   private def queuedRow(submission: MesosDriverDescription): Seq[Node] = {
+    val id = submission.submissionId
     <tr>
-      <td>{submission.submissionId}</td>
+      <td><a href={s"driver?id=$id"}>{id}</a></td>
       <td>{submission.submissionDate}</td>
       <td>{submission.command.mainClass}</td>
       <td>cpus: {submission.cores}, mem: {submission.mem}</td>
@@ -65,8 +66,9 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
   }
 
   private def driverRow(state: MesosClusterSubmissionState): Seq[Node] = {
+    val id = state.driverDescription.submissionId
     <tr>
-      <td>{state.driverDescription.submissionId}</td>
+      <td><a href={s"driver?id=$id"}>{id}</a></td>
       <td>{state.driverDescription.submissionDate}</td>
       <td>{state.driverDescription.command.mainClass}</td>
       <td>cpus: {state.driverDescription.cores}, mem: {state.driverDescription.mem}</td>
@@ -77,8 +79,9 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
   }
 
   private def retryRow(submission: MesosDriverDescription): Seq[Node] = {
+    val id = submission.submissionId
     <tr>
-      <td>{submission.submissionId}</td>
+      <td><a href={s"driver?id=$id"}>{id}</a></td>
       <td>{submission.submissionDate}</td>
       <td>{submission.command.mainClass}</td>
       <td>{submission.retryState.get.lastFailureStatus}</td>

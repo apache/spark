@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.stat
 import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 private[sql] object StatFunctions {
@@ -82,36 +83,21 @@ private[sql] object StatFunctions {
   /** Generate a table of frequencies for the elements of two columns. */
   private[sql] def crossTabulate(df: DataFrame, col1: String, col2: String): DataFrame = {
     val tableName = s"${col1}_$col2"
-    val distinctCol2 = df.select(col2).distinct.collect().sortBy(_.get(0).toString)
-    val columnSize = distinctCol2.size
+    val counts = df.groupBy(col1, col2).agg(col(col1), col(col2), count("*")).collect()
+    // We need to sort the entries to pivot them properly
+    val sorted = counts.sortBy(r => (r.get(0).toString, r.get(1).toString))
+    val first = sorted.head.get(0)
+    // get the distinct values of column 2, so that we can make them the column names
+    val distinctCol2 = sorted.takeWhile(r => r.get(0) == first)
+    val columnSize = distinctCol2.length
     require(columnSize < 1e4, s"The number of distinct values for $col2, can't " +
-      s"exceed 1e5. Currently $columnSize")
-    var i = 0
-    val col2Map = distinctCol2.map { r =>
-      val tuple = (r.get(0), i)
-      i += 1
-      tuple
-    }.toMap
-    // Aggregate the counts for the two columns
-    val table = df.select(col1, col2).map { r =>
-      (r.get(0), r.get(1))
-    }.aggregateByKey(new Array[Long](columnSize))(
-        seqOp = (counts, item) => {
-          val index = col2Map.get(item).get
-          counts(index) += 1
-          counts
-        },
-        combOp = (baseCounts, counts) => {
-          var j = 0
-          while (j < columnSize) {
-            baseCounts(j) += counts(j)
-            j += 1
-          }
-          baseCounts
-        }
-      ).map(r => Row((r._1.toString +: r._2):_*)).collect().sortBy(_.getString(0))
-
-    val headerNames = col2Map.map(item => StructField(item._1.toString, LongType)).toSeq
+      s"exceed 1e4. Currently $columnSize")
+    val table = sorted.grouped(columnSize).map { rows =>
+      // the value of col1 is the first value, the rest are the counts
+      val rowValues = rows.head.get(0).toString +: rows.map(_.getLong(2))
+      Row(rowValues: _*)
+    }.toSeq
+    val headerNames = distinctCol2.map(r => StructField(r.get(1).toString, LongType))
     val schema = StructType(StructField(tableName, StringType) +: headerNames)
 
     new DataFrame(df.sqlContext, LocalRelation(schema.toAttributes, table))

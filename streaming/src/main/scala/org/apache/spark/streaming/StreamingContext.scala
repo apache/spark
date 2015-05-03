@@ -159,7 +159,7 @@ class StreamingContext private[streaming] (
     }
   }
 
-  private val nextReceiverInputStreamId = new AtomicInteger(0)
+  private val nextInputStreamId = new AtomicInteger(0)
 
   private[streaming] var checkpointDir: String = {
     if (isCheckpointPresent) {
@@ -241,7 +241,7 @@ class StreamingContext private[streaming] (
     if (isCheckpointPresent) cp_ else null
   }
 
-  private[streaming] def getNewReceiverStreamId() = nextReceiverInputStreamId.getAndIncrement()
+  private[streaming] def getNewInputStreamId() = nextInputStreamId.getAndIncrement()
 
   /**
    * Create an input stream with any arbitrary user implemented receiver.
