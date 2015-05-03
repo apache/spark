@@ -24,7 +24,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.{TransportClientBootstrap, RpcResponseCallback, TransportClientFactory}
-import org.apache.spark.network.sasl.{SaslRpcHandler, SaslClientBootstrap}
+import org.apache.spark.network.sasl.{SaslClientBootstrap, SaslServerBootstrap}
 import org.apache.spark.network.server._
 import org.apache.spark.network.shuffle.{RetryingBlockFetcher, BlockFetchingListener, OneForOneBlockFetcher}
 import org.apache.spark.network.shuffle.protocol.UploadBlock
@@ -49,18 +49,18 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
   private[this] var appId: String = _
 
   override def init(blockDataManager: BlockDataManager): Unit = {
-    val (rpcHandler: RpcHandler, bootstrap: Option[TransportClientBootstrap]) = {
-      val nettyRpcHandler = new NettyBlockRpcServer(serializer, blockDataManager)
-      if (!authEnabled) {
-        (nettyRpcHandler, None)
-      } else {
-        (new SaslRpcHandler(nettyRpcHandler, securityManager),
-          Some(new SaslClientBootstrap(transportConf, conf.getAppId, securityManager)))
-      }
+    val rpcHandler = new NettyBlockRpcServer(serializer, blockDataManager)
+    var serverBootstrap: Option[TransportServerBootstrap] = None
+    var clientBootstrap: Option[TransportClientBootstrap] = None
+    if (authEnabled) {
+      serverBootstrap = Some(new SaslServerBootstrap(transportConf, securityManager))
+      clientBootstrap = Some(new SaslClientBootstrap(transportConf, conf.getAppId, securityManager,
+        securityManager.isSaslEncryptionEnabled()))
     }
     transportContext = new TransportContext(transportConf, rpcHandler)
-    clientFactory = transportContext.createClientFactory(bootstrap.toList)
-    server = transportContext.createServer(conf.getInt("spark.blockManager.port", 0))
+    clientFactory = transportContext.createClientFactory(clientBootstrap.toList)
+    server = transportContext.createServer(conf.getInt("spark.blockManager.port", 0),
+      serverBootstrap.toList)
     appId = conf.getAppId
     logInfo("Server created on " + server.getPort)
   }

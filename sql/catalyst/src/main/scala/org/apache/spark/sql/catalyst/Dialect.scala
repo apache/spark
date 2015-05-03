@@ -15,14 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.sql.catalyst
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
- * An opaque handle to a shuffle, used by a ShuffleManager to pass information about it to tasks.
+ * Root class of SQL Parser Dialect, and we don't guarantee the binary
+ * compatibility for the future release, let's keep it as the internal
+ * interface for advanced user.
  *
- * @param shuffleId ID of the shuffle
  */
 @DeveloperApi
-abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {}
+abstract class Dialect {
+  // this is the main function that will be implemented by sql parser.
+  def parse(sqlText: String): LogicalPlan
+}
