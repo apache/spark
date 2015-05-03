@@ -29,20 +29,22 @@ class DataFrameStatSuite extends FunSuite  {
   def toLetter(i: Int): String = (i + 97).toChar.toString
   
   test("crosstab") {
-    val df = sqlCtx.sparkContext.parallelize((1 to 6).map(i => (i % 3, i % 2))).toDF("a", "b")
+    val df = Seq.tabulate(8)(i => (i % 3, i % 2)).toDF("a", "b")
     val crosstab = df.stat.crosstab("a", "b")
     val columnNames = crosstab.schema.fieldNames
     assert(columnNames(0) === "a_b")
     assert(columnNames(1) === "0")
     assert(columnNames(2) === "1")
     val rows: Array[Row] = crosstab.collect()
-    var count: Integer = 0
-    rows.foreach { row =>
-      assert(row.get(0).toString === count.toString)
-      assert(row.getLong(1) === 1L)
-      assert(row.getLong(2) === 1L)
-      count += 1
-    }
+    assert(rows(0).get(0).toString === "0")
+    assert(rows(0).getLong(1) === 2L)
+    assert(rows(0).getLong(2) === 1L)
+    assert(rows(1).get(0).toString === "1")
+    assert(rows(1).getLong(1) === 1L)
+    assert(rows(1).getLong(2) === 2L)
+    assert(rows(2).get(0).toString === "2")
+    assert(rows(2).getLong(1) === 1L)
+    assert(rows(2).getLong(2) === 1L)
   }
 
   test("Frequent Items") {
