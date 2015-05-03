@@ -180,7 +180,8 @@ private[spark] object ClosureCleaner extends Logging {
       accessedFields: Map[Class[_], Set[String]]): Unit = {
 
     if (!isClosure(func.getClass)) {
-      throw new IllegalArgumentException("Expected a closure; got " + func.getClass.getName)
+      logWarning("Expected a closure; got " + func.getClass.getName)
+      return
     }
 
     // TODO: clean all inner closures first. This requires us to find the inner objects.

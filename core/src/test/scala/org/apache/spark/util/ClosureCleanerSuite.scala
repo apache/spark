@@ -63,18 +63,6 @@ class ClosureCleanerSuite extends FunSuite {
     val result = TestObjectWithNestedReturns.run()
     assert(result === 1)
   }
-
-  test("should clean only closures") {
-    withSpark(new SparkContext("local", "test")) { sc =>
-      val rdd = sc.makeRDD(1 to 100)
-      intercept[IllegalArgumentException] { sc.clean(new Integer(1)) }
-      intercept[IllegalArgumentException] { sc.clean("not a closure") }
-      intercept[IllegalArgumentException] { sc.clean(rdd) }
-      sc.clean(() => new Integer(1))
-      sc.clean(() => "part of a closure")
-      sc.clean(() => rdd)
-    }
-  }
 }
 
 // A non-serializable class we create in closures to make sure that we aren't
