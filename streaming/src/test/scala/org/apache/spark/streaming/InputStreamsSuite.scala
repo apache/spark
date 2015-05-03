@@ -27,17 +27,18 @@ import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer, SynchronizedQu
 import scala.language.postfixOps
 
 import com.google.common.io.Files
+import org.apache.hadoop.io.{Text, LongWritable}
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Logging
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{ManualClock, Utils}
+import org.apache.spark.streaming.dstream.{InputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.rdd.RDD
-import org.apache.hadoop.io.{Text, LongWritable}
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
-import org.apache.hadoop.fs.Path
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
@@ -276,6 +277,30 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     for (i <- 0 until output.size) {
       assert(output(i) === expectedOutput(i))
     }
+  }
+
+  test("test track the number of input stream") {
+    val ssc = new StreamingContext(conf, batchDuration)
+
+    class TestInputDStream extends InputDStream[String](ssc) {
+      def start() { }
+      def stop() { }
+      def compute(validTime: Time): Option[RDD[String]] = None
+    }
+
+    class TestReceiverInputDStream extends ReceiverInputDStream[String](ssc) {
+      def getReceiver: Receiver[String] = null
+    }
+
+    // Register input streams
+    val receiverInputStreams = Array(new TestReceiverInputDStream, new TestReceiverInputDStream)
+    val inputStreams = Array(new TestInputDStream, new TestInputDStream, new TestInputDStream)
+
+    assert(ssc.graph.getInputStreams().length == receiverInputStreams.length + inputStreams.length)
+    assert(ssc.graph.getReceiverInputStreams().length == receiverInputStreams.length)
+    assert(ssc.graph.getReceiverInputStreams() === receiverInputStreams)
+    assert(ssc.graph.getInputStreams().map(_.id) === Array.tabulate(5)(i => i))
+    assert(receiverInputStreams.map(_.id) === Array(0, 1))
   }
 
   def testFileStream(newFilesOnly: Boolean) {

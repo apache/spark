@@ -1,0 +1,182 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+div#application-timeline, div#job-timeline {
+  margin-bottom: 30px;
+}
+
+#application-timeline div.legend-area {
+  margin-top: 5px;
+}
+
+.vis.timeline div.content {
+  width: 100%;
+}
+
+.vis.timeline .item.stage {
+  cursor: pointer;
+}
+
+.vis.timeline .item.stage.succeeded {
+  background-color: #D5DDF6;
+}
+
+.vis.timeline .item.stage.succeeded.selected {
+   background-color: #D5DDF6;
+   border-color: #97B0F8;
+   z-index: auto;
+}
+
+.legend-area rect.completed-stage-legend {
+  fill: #D5DDF6;
+  stroke: #97B0F8;
+}
+
+.vis.timeline .item.stage.failed {
+   background-color: #FF5475;
+}
+
+.vis.timeline .item.stage.failed.selected {
+   background-color: #FF5475;
+   border-color: #97B0F8;
+   z-index: auto;
+}
+
+.legend-area rect.failed-stage-legend {
+  fill: #FF5475;
+  stroke: #97B0F8;
+}
+
+.vis.timeline .item.stage.running {
+   background-color: #FDFFCA;
+}
+
+.vis.timeline .item.stage.running.selected {
+   background-color: #FDFFCA;
+   border-color: #97B0F8;
+   z-index: auto;
+}
+
+.legend-area rect.active-stage-legend {
+  fill: #FDFFCA;
+  stroke: #97B0F8;
+}
+
+.vis.timeline .item.job {
+  cursor: pointer;
+}
+
+.vis.timeline .item.job.succeeded {
+  background-color: #D5DDF6;
+}
+
+.vis.timeline .item.job.succeeded.selected {
+   background-color: #D5DDF6;
+   border-color: #97B0F8;
+   z-index: auto;
+}
+
+.legend-area rect.succeeded-job-legend {
+  fill: #D5DDF6;
+  stroke: #97B0F8;
+}
+
+.vis.timeline .item.job.failed {
+   background-color: #FF5475;
+}
+
+.vis.timeline .item.job.failed.selected {
+   background-color: #FF5475;
+   border-color: #97B0F8;
+   z-index: auto;
+}
+
+.legend-area rect.failed-job-legend {
+  fill: #FF5475;
+  stroke: #97B0F8;
+}
+
+.vis.timeline .item.job.running {
+   background-color: #FDFFCA;
+}
+
+.vis.timeline .item.job.running.selected {
+   background-color: #FDFFCA;
+   border-color: #97B0F8;
+   z-index: auto;
+}
+
+.legend-area rect.running-job-legend {
+  fill: #FDFFCA;
+  stroke: #97B0F8;
+}
+
+.vis.timeline .item.executor.added {
+  background-color: #D5DDF6;
+}
+
+.legend-area rect.executor-added-legend {
+  fill: #D5DDF6;
+  stroke: #97B0F8;
+}
+
+.vis.timeline .item.executor.removed {
+  background-color: #EBCA59;
+}
+
+.legend-area rect.executor-removed-legend {
+  fill: #EBCA59;
+  stroke: #97B0F8;
+}
+
+.vis.timeline .item.executor.selected {
+  border-color: #FFC200;
+  background-color: #FFF785;
+  z-index: 2;
+}
+
+tr.corresponding-item-hover>td, tr.corresponding-item-hover>th {
+  background-color: #FFE1FA !important;
+}
+
+#application-timeline.collapsed {
+  display: none;
+}
+
+#job-timeline.collapsed {
+  display: none;
+}
+
+.control-panel {
+  margin-bottom: 5px;
+}
+
+span.expand-application-timeline, span.expand-job-timeline {
+  cursor: pointer;
+}
+
+.control-panel input+span {
+  cursor: pointer;
+}
+
+.vis.timeline .item.range .content {
+  position: unset;
+}
+
+.vis.timeline .item .tooltip-inner {
+  max-width: unset !important;
+}

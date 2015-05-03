@@ -40,7 +40,7 @@ class AkkaRpcEnvSuite extends RpcEnvSuite {
       RpcEnvConfig(conf, "test", "localhost", 12346, new SecurityManager(conf)))
     try {
       val newRef = newRpcEnv.setupEndpointRef("local", ref.address, "test_endpoint")
-      assert("akka.tcp://local@localhost:12345/user/test_endpoint" ===
+      assert(s"akka.tcp://local@${env.address}/user/test_endpoint" ===
         newRef.asInstanceOf[AkkaRpcEndpointRef].actorRef.path.toString)
     } finally {
       newRpcEnv.shutdown()

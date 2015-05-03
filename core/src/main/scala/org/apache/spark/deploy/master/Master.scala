@@ -393,8 +393,9 @@ private[master] class Master(
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RequestSubmitDriver(description) => {
       if (state != RecoveryState.ALIVE) {
-        val msg = s"Can only accept driver submissions in ALIVE state. Current state: $state."
-        context.reply(SubmitDriverResponse(false, None, msg))
+        val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
+          "Can only accept driver submissions in ALIVE state."
+        context.reply(SubmitDriverResponse(self, false, None, msg))
       } else {
         logInfo("Driver submitted " + description.command.mainClass)
         val driver = createDriver(description)
@@ -406,15 +407,16 @@ private[master] class Master(
         // TODO: It might be good to instead have the submission client poll the master to determine
         //       the current status of the driver. For now it's simply "fire and forget".
 
-        context.reply(SubmitDriverResponse(true, Some(driver.id),
+        context.reply(SubmitDriverResponse(self, true, Some(driver.id),
           s"Driver successfully submitted as ${driver.id}"))
       }
     }
 
     case RequestKillDriver(driverId) => {
       if (state != RecoveryState.ALIVE) {
-        val msg = s"Can only kill drivers in ALIVE state. Current state: $state."
-        context.reply(KillDriverResponse(driverId, success = false, msg))
+        val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
+          s"Can only kill drivers in ALIVE state."
+        context.reply(KillDriverResponse(self, driverId, success = false, msg))
       } else {
         logInfo("Asked to kill driver " + driverId)
         val driver = drivers.find(_.id == driverId)
@@ -434,22 +436,28 @@ private[master] class Master(
             // TODO: It would be nice for this to be a synchronous response
             val msg = s"Kill request for $driverId submitted"
             logInfo(msg)
-            context.reply(KillDriverResponse(driverId, success = true, msg))
+            context.reply(KillDriverResponse(self, driverId, success = true, msg))
           case None =>
             val msg = s"Driver $driverId has already finished or does not exist"
             logWarning(msg)
-            context.reply(KillDriverResponse(driverId, success = false, msg))
+            context.reply(KillDriverResponse(self, driverId, success = false, msg))
         }
       }
     }
 
     case RequestDriverStatus(driverId) => {
-      (drivers ++ completedDrivers).find(_.id == driverId) match {
-        case Some(driver) =>
-          context.reply(DriverStatusResponse(found = true, Some(driver.state),
-            driver.worker.map(_.id), driver.worker.map(_.hostPort), driver.exception))
-        case None =>
-          context.reply(DriverStatusResponse(found = false, None, None, None, None))
+      if (state != RecoveryState.ALIVE) {
+        val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
+          "Can only request driver status in ALIVE state."
+        context.reply(DriverStatusResponse(found = false, None, None, None, Some(new Exception(msg))))
+      } else {
+        (drivers ++ completedDrivers).find(_.id == driverId) match {
+          case Some(driver) =>
+            context.reply(DriverStatusResponse(found = true, Some(driver.state),
+              driver.worker.map(_.id), driver.worker.map(_.hostPort), driver.exception))
+          case None =>
+            context.reply(DriverStatusResponse(found = false, None, None, None, None))
+        }
       }
     }
 

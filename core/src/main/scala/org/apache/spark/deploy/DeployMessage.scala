@@ -125,12 +125,14 @@ private[deploy] object DeployMessages {
 
   case class RequestSubmitDriver(driverDescription: DriverDescription) extends DeployMessage
 
-  case class SubmitDriverResponse(success: Boolean, driverId: Option[String], message: String)
+  case class SubmitDriverResponse(
+      master: RpcEndpointRef, success: Boolean, driverId: Option[String], message: String)
     extends DeployMessage
 
   case class RequestKillDriver(driverId: String) extends DeployMessage
 
-  case class KillDriverResponse(driverId: String, success: Boolean, message: String)
+  case class KillDriverResponse(
+      master: RpcEndpointRef, driverId: String, success: Boolean, message: String)
     extends DeployMessage
 
   case class RequestDriverStatus(driverId: String) extends DeployMessage

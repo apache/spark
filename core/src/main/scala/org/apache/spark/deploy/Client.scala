@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy
 
+import scala.collection.mutable.HashSet
 import scala.concurrent.ExecutionContext
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success}
@@ -31,11 +32,14 @@ import org.apache.spark.util.{ThreadUtils, SparkExitCode, Utils}
 
 /**
  * Proxy that relays messages to the driver.
+ *
+ * We currently don't support retry if submission fails. In HA mode, client will submit request to
+ * all masters and see which one could handle it.
  */
 private class ClientEndpoint(
     override val rpcEnv: RpcEnv,
     driverArgs: ClientArguments,
-    masterEndpoint: RpcEndpointRef,
+    masterEndpoints: Seq[RpcEndpointRef],
     conf: SparkConf)
   extends ThreadSafeRpcEndpoint with Logging {
 
@@ -52,9 +56,10 @@ private class ClientEndpoint(
           System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
       })
 
-  override def onStart(): Unit = {
-    println(s"Sending ${driverArgs.cmd} command to ${driverArgs.master}")
+   private val lostMasters = new HashSet[RpcAddress]
+   private var activeMasterEndpoint: RpcEndpointRef = null
 
+  override def onStart(): Unit = {
     driverArgs.cmd match {
       case "launch" =>
         // TODO: We could add an env variable here and intercept it in `sc.addJar` that would
@@ -100,13 +105,14 @@ private class ClientEndpoint(
    * Send the message to master and forward the reply to self asynchronously.
    */
   private def ayncSendToMasterAndForwardReply[T: ClassTag](message: Any): Unit = {
-    masterEndpoint.ask[T](message).onComplete {
-      case Success(v) => self.send(v)
-      case Failure(e) =>
-        println(s"Error sending messages to master ${driverArgs.master}, exiting.")
-        logError(e.getMessage, e)
-        System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
-    }(forwardMessageExecutionContext)
+    for (masterEndpoint <- masterEndpoints) {
+      masterEndpoint.ask[T](message).onComplete {
+        case Success(v) => self.send(v)
+        case Failure(e) =>
+          println(s"Error sending messages to master $masterEndpoint, exiting.")
+          logError(e.getMessage, e)
+      }(forwardMessageExecutionContext)
+    }
   }
 
   /* Find out driver status then exit the JVM */
@@ -117,8 +123,7 @@ private class ClientEndpoint(
     Thread.sleep(5000)
     println("... polling master for driver state")
     val statusResponse =
-      masterEndpoint.askWithRetry[DriverStatusResponse](RequestDriverStatus(driverId))
-
+      activeMasterEndpoint.askWithRetry[DriverStatusResponse](RequestDriverStatus(driverId))
     statusResponse.found match {
       case false =>
         println(s"ERROR: Cluster master did not recognize $driverId")
@@ -143,25 +148,50 @@ private class ClientEndpoint(
 
   override def receive: PartialFunction[Any, Unit] = {
 
-    case SubmitDriverResponse(success, driverId, message) =>
+    case SubmitDriverResponse(master, success, driverId, message) =>
       println(message)
-      if (success) pollAndReportStatus(driverId.get) else System.exit(-1)
+      if (success) {
+        activeMasterEndpoint = master
+        pollAndReportStatus(driverId.get)
+      } else if (!Utils.responseFromBackup(message)) {
+        System.exit(-1)
+      }
 
-    case KillDriverResponse(driverId, success, message) =>
+
+    case KillDriverResponse(master, driverId, success, message) =>
       println(message)
-      if (success) pollAndReportStatus(driverId) else System.exit(-1)
-
+      if (success) {
+        activeMasterEndpoint = master
+        pollAndReportStatus(driverId)
+      } else if (!Utils.responseFromBackup(message)) {
+        System.exit(-1)
+      }
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
-    println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
-    System.exit(-1)
+    if (!lostMasters.contains(remoteAddress)) {
+      println(s"Error connecting to master $remoteAddress.")
+      lostMasters += remoteAddress
+      // Note that this heuristic does not account for the fact that a Master can recover within
+      // the lifetime of this client. Thus, once a Master is lost it is lost to us forever. This
+      // is not currently a concern, however, because this client does not retry submissions.
+      if (lostMasters.size >= masterEndpoints.size) {
+        println("No master is available, exiting.")
+        System.exit(-1)
+      }
+    }
   }
 
   override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
-    println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
-    cause.printStackTrace()
-    System.exit(-1)
+    if (!lostMasters.contains(remoteAddress)) {
+      println(s"Error connecting to master ($remoteAddress).")
+      println(s"Cause was: $cause")
+      lostMasters += remoteAddress
+      if (lostMasters.size >= masterEndpoints.size) {
+        println("No master is available, exiting.")
+        System.exit(-1)
+      }
+    }
   }
 
   override def onError(cause: Throwable): Unit = {
@@ -198,10 +228,9 @@ object Client {
     val rpcEnv =
       RpcEnv.create("driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
-    val masterAddress = RpcAddress.fromSparkURL(driverArgs.master)
-    val masterEndpoint =
-      rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, masterAddress, Master.ENDPOINT_NAME)
-    rpcEnv.setupEndpoint("client", new ClientEndpoint(rpcEnv, driverArgs, masterEndpoint, conf))
+    val masterEndpoints = driverArgs.masters.map(RpcAddress.fromSparkURL).
+      map(rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, _, Master.ENDPOINT_NAME))
+    rpcEnv.setupEndpoint("client", new ClientEndpoint(rpcEnv, driverArgs, masterEndpoints, conf))
 
     rpcEnv.awaitTermination()
   }
