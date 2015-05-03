@@ -104,8 +104,11 @@ object MimaExcludes {
               "org.apache.spark.sql.parquet.ParquetTestData$"),
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.parquet.TestGroupWriteSupport")
-          )
-
+          ) ++ Seq(
+            // SPARK-6333
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.saveAsObjectFile")
+            )
         case v if v.startsWith("1.3") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
@@ -120,12 +123,6 @@ object MimaExcludes {
               "org.apache.spark.SparkStageInfoImpl.this"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.SparkStageInfo.submissionTime")
-          ) ++ Seq(
-            // SPARK-4614
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.Matrices.randn"),
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.Matrices.rand")
           ) ++ Seq(
             // SPARK-5321
             ProblemFilters.exclude[MissingMethodProblem](
@@ -158,14 +155,14 @@ object MimaExcludes {
               "org.apache.spark.streaming.flume.sink.SparkAvroCallbackHandler." +
                 "removeAndGetProcessor")
           ) ++ Seq(
-            // SPARK-5123 (SparkSQL data type change) - alpha component only
+            // SPARK-512                                                                                                        3 (SparkSQL data type change) - alpha component only
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.ml.feature.HashingTF.outputDataType"),
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.ml.feature.Tokenizer.outputDataType"),
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.ml.feature.Tokenizer.validateInputType"),
-            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+                                                                                                                                                                                                                                                                                                            ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.ml.classification.LogisticRegressionModel.validateAndTransformSchema"),
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.ml.classification.LogisticRegression.validateAndTransformSchema")
