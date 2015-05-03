@@ -82,7 +82,6 @@ public final class UnsafeSorter {
     public abstract int compare(long prefix1, long prefix2);
   }
 
-  private final TaskMemoryManager memoryManager;
   private final Sorter<RecordPointerAndKeyPrefix, long[]> sorter;
   private final Comparator<RecordPointerAndKeyPrefix> sortComparator;
 
@@ -112,7 +111,6 @@ public final class UnsafeSorter {
       int initialSize) {
     assert (initialSize > 0);
     this.sortBuffer = new long[initialSize * 2];
-    this.memoryManager = memoryManager;
     this.sorter =
       new Sorter<RecordPointerAndKeyPrefix, long[]>(UnsafeSortDataFormat.INSTANCE);
     this.sortComparator = new Comparator<RecordPointerAndKeyPrefix>() {
@@ -143,8 +141,6 @@ public final class UnsafeSorter {
     if (sortBufferInsertPosition + 2 == sortBuffer.length) {
       expandSortBuffer(sortBuffer.length * 2);
     }
-    final Object baseObject = memoryManager.getPage(objectAddress);
-    final long baseOffset = memoryManager.getOffsetInPage(objectAddress);
     sortBuffer[sortBufferInsertPosition] = objectAddress;
     sortBufferInsertPosition++;
     sortBuffer[sortBufferInsertPosition] = keyPrefix;
