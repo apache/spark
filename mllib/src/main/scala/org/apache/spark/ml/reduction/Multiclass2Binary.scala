@@ -168,7 +168,7 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
       newSchema = SchemaUtils.appendColumn(newSchema, labelColName, DoubleType)
     }
     val trainingDataset = sqlCtx.createDataFrame(binaryDataset, newSchema)
-    //learn k models, one for each label value.
+    // learn k models, one for each label value.
     val models = Range(0, numClasses).par.map{ index =>
       val newClassifier = Multiclass2Binary.newClassifier(sqlCtx, getBaseClassifier, index)
       newClassifier.fit(trainingDataset)
