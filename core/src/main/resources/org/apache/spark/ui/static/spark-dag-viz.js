@@ -105,6 +105,9 @@ function toggleDagViz(forJob) {
  *   div#dag-viz-graph >
  *   svg >
  *   g#cluster_stage_[stageId]
+ *
+ * Note that the input metadata is populated by o.a.s.ui.UIUtils.showDagViz.
+ * Any changes in the input format here must be reflected there.
  */
 function renderDagViz(forJob) {
 

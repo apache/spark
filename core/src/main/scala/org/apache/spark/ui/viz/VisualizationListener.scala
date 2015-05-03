@@ -36,47 +36,15 @@ private[ui] class VisualizationListener(conf: SparkConf) extends SparkListener {
   private val retainedStages =
     conf.getInt("spark.ui.retainedStages", SparkUI.DEFAULT_RETAINED_STAGES)
 
-  /** Construct a "DAG visualization" DOM element that expands into a visualization for a stage. */
-  def showVizElementForStage(stageId: Int): Seq[Node] = {
-    showVizElement(getVizGraphForStage(stageId).toSeq, forJob = false)
-  }
-
-  /** Construct a "DAG visualization" DOM element that expands into a visualization for a job. */
-  def showVizElementForJob(jobId: Int): Seq[Node] = {
-    showVizElement(getVizGraphsForJob(jobId), forJob = true)
-  }
-
-  /** Construct a "DAG visualization" DOM element that expands into a visualization on the UI. */
-  private def showVizElement(graphs: Seq[VizGraph], forJob: Boolean): Seq[Node] = {
-    <div>
-      <span class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
-        <span class="expand-dag-viz-arrow arrow-closed"></span>
-        <strong>DAG visualization</strong>
-      </span>
-      <div id="dag-viz-graph"></div>
-      <div id="dag-viz-metadata">
-        {
-          graphs.map { g =>
-            <div class="stage-metadata" stageId={g.rootScope.id} style="display:none">
-              <div class="dot-file">{VizGraph.makeDotFile(g, forJob)}</div>
-              { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
-              { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }
-            </div>
-          }
-        }
-      </div>
-    </div>
-  }
-
   /** Return the graph metadata for the given stage, or None if no such information exists. */
-  private def getVizGraphsForJob(jobId: Int): Seq[VizGraph] = {
+  def getVizGraphsForJob(jobId: Int): Seq[VizGraph] = {
     jobIdToStageIds.get(jobId)
       .map { sids => sids.flatMap { sid => stageIdToGraph.get(sid) } }
       .getOrElse { Seq.empty }
   }
 
   /** Return the graph metadata for the given stage, or None if no such information exists. */
-  private def getVizGraphForStage(stageId: Int): Option[VizGraph] = {
+  def getVizGraphForStage(stageId: Int): Option[VizGraph] = {
     stageIdToGraph.get(stageId)
   }
 

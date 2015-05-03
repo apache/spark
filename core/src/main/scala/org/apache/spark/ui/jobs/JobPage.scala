@@ -309,7 +309,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,
           executorListener.executorIdToData, appStartTime)
 
-      content ++= vizListener.showVizElementForJob(jobId)
+      content ++= UIUtils.showDagVizForJob(jobId, vizListener.getVizGraphsForJob(jobId))
 
       if (shouldShowActiveStages) {
         content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++

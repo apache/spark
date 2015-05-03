@@ -23,6 +23,7 @@ import java.util.{Locale, Date}
 import scala.xml.{Node, Text}
 
 import org.apache.spark.Logging
+import org.apache.spark.ui.viz.VizGraph
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
@@ -327,6 +328,44 @@ private[spark] object UIUtils extends Logging {
       </span>
       <div class="bar bar-completed" style={completeWidth}></div>
       <div class="bar bar-running" style={startWidth}></div>
+    </div>
+  }
+
+  /** Return a "DAG visualization" DOM element that expands into a visualization for a stage. */
+  def showDagVizForStage(stageId: Int, graph: Option[VizGraph]): Seq[Node] = {
+    showDagViz(graph.toSeq, forJob = false)
+  }
+
+  /** Return a "DAG visualization" DOM element that expands into a visualization for a job. */
+  def showDagVizForJob(jobId: Int, graphs: Seq[VizGraph]): Seq[Node] = {
+    showDagViz(graphs, forJob = true)
+  }
+
+  /**
+   * Return a "DAG visualization" DOM element that expands into a visualization on the UI.
+   *
+   * This populates metadata necessary for generating the visualization on the front-end in
+   * a format that is expected by spark-dag-viz.js. Any changes in the format here must be
+   * reflected there.
+   */
+  private def showDagViz(graphs: Seq[VizGraph], forJob: Boolean): Seq[Node] = {
+    <div>
+      <span class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
+        <span class="expand-dag-viz-arrow arrow-closed"></span>
+        <strong>DAG visualization</strong>
+      </span>
+      <div id="dag-viz-graph"></div>
+      <div id="dag-viz-metadata">
+        {
+          graphs.map { g =>
+            <div class="stage-metadata" stageId={g.rootScope.id} style="display:none">
+              <div class="dot-file">{VizGraph.makeDotFile(g, forJob)}</div>
+              { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
+              { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }
+            </div>
+          }
+        }
+      </div>
     </div>
   }
 }

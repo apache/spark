@@ -171,6 +171,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           </div>
         </div>
 
+      val dagViz = UIUtils.showDagVizForStage(stageId, vizListener.getVizGraphForStage(stageId))
+
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
       def accumulableRow(acc: AccumulableInfo): Elem =
         <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
@@ -436,7 +438,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val content =
         summary ++
         showAdditionalMetrics ++
-        vizListener.showVizElementForStage(stageId) ++
+        dagViz ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
