@@ -39,14 +39,10 @@ class ParamGridBuilder(object):
 {lr.regParam: 1.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
 {lr.regParam: 2.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
 {lr.regParam: 3.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}]
-    >>> fail_count = 0
-    >>> for e in expected:
-    ...     if e not in output:
-    ...         fail_count += 1
-    >>> if len(expected) != len(output):
-    ...     fail_count += 1
-    >>> fail_count
-    0
+    >>> len(output) == len(expected)
+    True
+    >>> all([m in expected for m in output])
+    True
     """
 
     def __init__(self):
