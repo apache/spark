@@ -43,7 +43,10 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Runs `freqItems` with a default `support` of 1%.
+   * Finding frequent items for columns, possibly with false positives. Using the
+   * frequent element count algorithm described in
+   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * Uses a `default` support of 1%.
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
@@ -55,14 +58,14 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * Python friendly implementation for `freqItems`
    */
-  def freqItems(cols: List[String], support: Double): DataFrame = {
+  def freqItems(cols: Seq[String], support: Double): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, support)
   }
 
   /**
    * Python friendly implementation for `freqItems` with a default `support` of 1%.
    */
-  def freqItems(cols: List[String]): DataFrame = {
+  def freqItems(cols: Seq[String]): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, 0.01)
   }
 
