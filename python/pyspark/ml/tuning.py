@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import itertools
+
 __all__ = ['ParamGridBuilder']
 
 
@@ -76,17 +78,9 @@ class ParamGridBuilder(object):
         Builds and returns all combinations of parameters specified
         by the param grid.
         """
-        param_maps = [{}]
-        for (param, values) in self._param_grid.items():
-            new_param_maps = []
-            for value in values:
-                for old_map in param_maps:
-                    copied_map = old_map.copy()
-                    copied_map[param] = value
-                    new_param_maps.append(copied_map)
-            param_maps = new_param_maps
-
-        return param_maps
+        keys = self._param_grid.keys()
+        grid_values = self._param_grid.values()
+        return [dict(zip(keys, prod)) for prod in itertools.product(*grid_values)]
 
 
 if __name__ == "__main__":
