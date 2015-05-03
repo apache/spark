@@ -17,22 +17,30 @@
 
 package org.apache.spark.ml.reduction
 
+import scala.language.existentials
+
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
-import org.apache.spark.ml.classification.ClassifierParams
+import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.classification.{ClassificationModel, Classifier, ClassifierParams}
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap}
 import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.util.Utils
 
 /**
  * Params for [[Multiclass2Binary]].
  */
 private[ml] trait Multiclass2BinaryParams extends ClassifierParams {
+
+  type ClassifierType = Classifier[F, E, M] forSome {
+    type F ;
+    type M <: ClassificationModel[F,M];
+    type E <:  Classifier[F, E,M]
+  }
 
   /**
    * param for prediction column name
@@ -56,11 +64,11 @@ private[ml] trait Multiclass2BinaryParams extends ClassifierParams {
    * param for the base classifier that we reduce multiclass classification into.
    * @group param
    */
-  val baseClassifier: Param[Estimator[_ <: Model[_]]] =
+  val baseClassifier: Param[ClassifierType]  =
     new Param(this, "baseClassifier", "base binary classifier/regressor ")
 
   /** @group getParam */
-  def getBaseClassifier: Estimator[_ <: Model[_]] = getOrDefault(baseClassifier)
+  def getBaseClassifier: ClassifierType = getOrDefault(baseClassifier)
 
   /**
    * param for number of classes.
@@ -144,7 +152,7 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
   protected def featuresDataType: DataType = new VectorUDT
 
   /** @group setParam */
-  def setBaseClassifier(value: Estimator[_ <: Model[_]]): this.type = set(baseClassifier, value)
+  def setBaseClassifier(value: ClassifierType): this.type = set(baseClassifier, value)
 
   /** @group setParam */
   def setNumClasses(value: Int): this.type = set(k, value)
@@ -154,6 +162,7 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
     val sqlCtx = dataset.sqlContext
     val schema = dataset.schema
     val numClasses = map(k)
+    val labelMetadata = dataset.schema(map(labelCol)).metadata
     // create k columns, one for each binary classifier.
     val multiclassLabeled = dataset.select(map(labelCol), map(featuresCol))
     val binaryDataset = multiclassLabeled.map { case (Row(label: Double, features: Vector)) =>
@@ -162,15 +171,15 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
       }
       Row.fromSeq(List(label, features) ++ labels)
     }
-    var newSchema = multiclassLabeled.schema
-    Range(0, numClasses).foreach{ index =>
-      val labelColName = Multiclass2Binary.labelColName(index)
-      newSchema = SchemaUtils.appendColumn(newSchema, labelColName, DoubleType)
+
+    val estimatorsWithLabels = newClassifiers(sqlCtx, numClasses)
+    val additionalFlds = estimatorsWithLabels.map { case (labelColName, _) =>
+      StructField(labelColName, DoubleType, false, labelMetadata)
     }
+    val newSchema = StructType(multiclassLabeled.schema.fields ++ additionalFlds)
     val trainingDataset = sqlCtx.createDataFrame(binaryDataset, newSchema)
     // learn k models, one for each label value.
-    val models = Range(0, numClasses).par.map{ index =>
-      val newClassifier = Multiclass2Binary.newClassifier(sqlCtx, getBaseClassifier, index)
+    val models = estimatorsWithLabels.par.map { case (labelColName, newClassifier) =>
       newClassifier.fit(trainingDataset)
     }.toList
     new Multiclass2BinaryModel(this, paramMap, models)
@@ -180,45 +189,29 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
     validateAndTransformSchema(schema, paramMap, fitting = true, featuresDataType)
   }
 
-}
-
-object Multiclass2Binary {
-
   /**
-   * Create a new classifier instance for multiclass classification.
-   * The new classifier is configured to recognize the appropriate label
-   * column.
+   * Create k initialized classifiers one for each label class.
    *
    * @param sqlCtx
-   * @param origClassifier
-   * @param index
+   * @param numClasses
    * @return
    */
-  private def newClassifier(sqlCtx: SQLContext,
-      origClassifier: Estimator[_ <: Model[_]],
-      index: Int) = {
+  private def newClassifiers(sqlCtx: SQLContext, numClasses: Int) = {
 
     val serializer = sqlCtx.sparkContext.env.serializer
     val serializerInstance = serializer.newInstance()
     // create a copy of the classifier
     // TODO: Should there be a copy method on Estimator?
-    val classifier = Utils.clone[Estimator[_ <: Model[_]]](origClassifier, serializerInstance)
-    val baseClassifierClass = classifier.getClass()
-    val labelColName = Multiclass2Binary.labelColName(index)
-    // set the label column to use the appropriate column as label.
-    val setMthd = baseClassifierClass.getMethod("setLabelCol", classOf[String])
-    setMthd.setAccessible(true)
-    setMthd.invoke(classifier, labelColName)
-    setMthd.setAccessible(false)
-    classifier
-  }
+    val origClassifier = getBaseClassifier
+    val baseClassifierClass = origClassifier.getClass()
+    Range(0, numClasses).map{ index =>
+      val newClassifier = Utils.clone[ClassifierType](origClassifier, serializerInstance)
 
-  /**
-   * Generate a label column name for a given label index.
-   *
-   * @param index
-   * @return
-   */
-  private def labelColName(index: Int) = {"mc2b$" + index}
+      val labelColName = "mc2b$" + index
+      // set the label column to use the appropriate column as label.
+      newClassifier.setLabelCol(labelColName)
+      (labelColName, newClassifier)
+    }
+  }
 
 }
