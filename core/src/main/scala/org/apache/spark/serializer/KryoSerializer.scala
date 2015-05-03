@@ -127,7 +127,9 @@ class KryoSerializer(conf: SparkConf)
   }
 
   override def supportsRelocationOfSerializedObjects: Boolean = {
-    // TODO: we should have a citation / explanatory comment here clarifying _why_ this is the case
+    // If auto-flush is disabled, then Kryo may store references to duplicate occurrences of objects
+    // in the stream rather than writing those objects' serialized bytes, breaking relocation. See
+    // https://groups.google.com/d/msg/kryo-users/6ZUSyfjjtdo/FhGG1KHDXPgJ for more details.
     newInstance().asInstanceOf[KryoSerializerInstance].getAutoReset()
   }
 }
