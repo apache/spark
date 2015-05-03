@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.EmptyConf
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
 /**
  * Thrown by a catalog when a table cannot be found.  The analyzer will rethrow the exception
