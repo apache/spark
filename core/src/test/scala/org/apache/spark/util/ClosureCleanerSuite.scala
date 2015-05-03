@@ -67,10 +67,10 @@ class ClosureCleanerSuite extends FunSuite {
   test("should clean only closures") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val rdd = sc.makeRDD(1 to 100)
-      intercept[IllegalArgumentException] { sc.clean(1) }
+      intercept[IllegalArgumentException] { sc.clean(new Integer(1)) }
       intercept[IllegalArgumentException] { sc.clean("not a closure") }
       intercept[IllegalArgumentException] { sc.clean(rdd) }
-      sc.clean(() => 1)
+      sc.clean(() => new Integer(1))
       sc.clean(() => "part of a closure")
       sc.clean(() => rdd)
     }
