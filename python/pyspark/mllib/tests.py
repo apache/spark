@@ -24,7 +24,7 @@ import sys
 import tempfile
 import array as pyarray
 
-from numpy import array, array_equal, zeros
+from numpy import array, array_equal, zeros, inf
 from py4j.protocol import Py4JJavaError
 
 if sys.version_info[:2] <= (2, 6):
@@ -110,6 +110,10 @@ class VectorTests(MLlibTestCase):
         self.assertTrue(array_equal(array([10., 20., 30., 40.]), dv.dot(mat)))
         self.assertEquals(30.0, lst.dot(dv))
         self.assertTrue(array_equal(array([10., 20., 30., 40.]), lst.dot(mat)))
+        self.assertEquals(Vectors.dot(sv, sv), 5.)
+        self.assertEquals(Vectors.dot(sv, dv), 10.)
+        self.assertEquals(Vectors.dot(dv, sv), 10.)
+        self.assertEquals(Vectors.dot(sv, array([2, 5, 7, 8])), 21.0)
 
     def test_squared_distance(self):
         sv = SparseVector(4, {1: 1, 3: 2})
@@ -219,6 +223,27 @@ class VectorTests(MLlibTestCase):
         self.assertTrue(array_equal(sm.rowIndices, [1, 2, 0, 1, 2]))
         self.assertTrue(array_equal(sm.colPtrs, [0, 2, 5]))
         self.assertTrue(array_equal(sm.values, [1, 3, 4, 6, 9]))
+
+    def test_parse_matrix(self):
+        a = DenseVector([3, 4, 6, 7])
+        self.assertTrue(a.toString(), '[3.0,4.0,6.0,7.0]')
+        self.assertTrue(Vectors.parse(a.toString()), a)
+        a = SparseVector(4, [0, 2], [3, 4])
+        self.assertTrue(a.toString(), '(4,[0,2],[3.0,4.0])')
+        self.assertTrue(Vectors.parse(a.toString()), a)
+
+    def test_norms(self):
+        a = DenseVector([0, 2, 3, -1])
+        self.assertAlmostEqual(a.norm(2), 3.742, 3)
+        self.assertTrue(a.norm(1), 6)
+        self.assertTrue(a.norm(inf), 3)
+        a = SparseVector(4, [0, 2], [3, -4])
+        self.assertAlmostEqual(a.norm(2), 5)
+        self.assertTrue(a.norm(1), 7)
+        self.assertTrue(a.norm(inf), 4)
+
+        tmp = SparseVector(4, [0, 2], [3, 0])
+        self.assertEqual(tmp.numNonzeros(), 1)
 
 
 class ListTests(MLlibTestCase):
