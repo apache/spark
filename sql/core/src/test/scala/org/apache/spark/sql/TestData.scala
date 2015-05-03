@@ -57,17 +57,6 @@ object TestData {
       TestData2(3, 2) :: Nil, 2).toDF()
   testData2.registerTempTable("testData2")
 
-  case class TestData4(a: Int, b: Int, c: Int)
-  val testData4 =
-    TestSQLContext.sparkContext.parallelize(
-      TestData4(0, 1, 2) ::
-        TestData4(1, 2, 3) ::
-        TestData4(2, 1, 0) ::
-        TestData4(2, 2, 4) ::
-        TestData4(3, 1, 6) ::
-        TestData4(3, 2, 0) :: Nil, 2).toDF()
-  testData4.registerTempTable("TestData4")
-
   case class DecimalData(a: BigDecimal, b: BigDecimal)
 
   val decimalData =
