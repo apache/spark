@@ -888,10 +888,16 @@ class DataFrame private[sql](
   }
 
   /**
+   * Returns a new [[DataFrame]] without duplicates.
+   * @group dfops
+   */
+  def dropDuplicates(): DataFrame = dropDuplicates(this.columns)
+
+  /**
    * Returns a new [[DataFrame]] without duplicates under the given columns.
    * @group dfops
    */
-  def dropDuplicates(subset: Seq[String] = this.columns): DataFrame = {
+  def dropDuplicates(subset: Seq[String]): DataFrame = {
     import org.apache.spark.sql.functions.{first => columnFirst}
     new GroupedData(this, subset.map(colName => resolve(colName))).agg(columns.map(columnFirst))
   }
