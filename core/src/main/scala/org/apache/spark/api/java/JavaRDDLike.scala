@@ -531,7 +531,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Save this RDD as a compressed SequenceFile of serialized objects.
    */
   def saveAsObjectFile(path: String, codec: Class[_ <: CompressionCodec]): Unit = {
-    rdd.saveAsObjectFile(path, codec)
+    rdd.saveAsObjectFile(path, Option(codec))
   }
 
   /**
