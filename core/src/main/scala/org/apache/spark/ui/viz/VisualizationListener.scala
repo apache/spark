@@ -36,28 +36,28 @@ private[ui] class VisualizationListener(conf: SparkConf) extends SparkListener {
   private val retainedStages =
     conf.getInt("spark.ui.retainedStages", SparkUI.DEFAULT_RETAINED_STAGES)
 
-  /** Construct a "Show visualization" DOM element that expands into a visualization for a stage. */
+  /** Construct a "DAG visualization" DOM element that expands into a visualization for a stage. */
   def showVizElementForStage(stageId: Int): Seq[Node] = {
     showVizElement(getVizGraphForStage(stageId).toSeq, forJob = false)
   }
 
-  /** Construct a "Show visualization" DOM element that expands into a visualization for a job. */
+  /** Construct a "DAG visualization" DOM element that expands into a visualization for a job. */
   def showVizElementForJob(jobId: Int): Seq[Node] = {
     showVizElement(getVizGraphsForJob(jobId), forJob = true)
   }
 
-  /** Construct a "Show visualization" DOM element that expands into a visualization on the UI. */
+  /** Construct a "DAG visualization" DOM element that expands into a visualization on the UI. */
   private def showVizElement(graphs: Seq[VizGraph], forJob: Boolean): Seq[Node] = {
     <div>
-      <span class="expand-visualization" onclick="render();">
-        <span class="expand-visualization-arrow arrow-closed"></span>
-        <strong>Show visualization</strong>
+      <span class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
+        <span class="expand-dag-viz-arrow arrow-closed"></span>
+        <strong>DAG visualization</strong>
       </span>
-      <div id="viz-graph"></div>
-      <div id="viz-dot-files">
+      <div id="dag-viz-graph"></div>
+      <div id="dag-viz-metadata">
         {
           graphs.map { g =>
-            <div name={g.rootScope.id} style="display:none">
+            <div class="stage-metadata" stageId={g.rootScope.id} style="display:none">
               <div class="dot-file">{VizGraph.makeDotFile(g, forJob)}</div>
               { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
               { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }
@@ -65,10 +65,7 @@ private[ui] class VisualizationListener(conf: SparkConf) extends SparkListener {
           }
         }
       </div>
-    </div> ++
-    <script type="text/javascript">
-      {Unparsed(s"function render() { toggleShowViz($forJob); }")}
-    </script>
+    </div>
   }
 
   /** Return the graph metadata for the given stage, or None if no such information exists. */

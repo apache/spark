@@ -68,7 +68,7 @@ private[ui] object VizGraph extends Logging {
     val scopes = new mutable.HashMap[String, VizScope] // scope ID -> viz scope
 
     // Root scope is the stage scope
-    val stageScopeId = s"stage${stage.stageId}"
+    val stageScopeId = s"stage_${stage.stageId}"
     val stageScopeName = s"Stage ${stage.stageId}" +
       { if (stage.attemptId == 0) "" else s" (attempt ${stage.attemptId})" }
     val rootScope = new VizScope(stageScopeId, stageScopeName)
