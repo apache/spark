@@ -362,7 +362,7 @@
     <dependency>
       <groupId>com.github.irmen</groupId>
       <artifactId>pyrolite</artifactId>
-      <version>4.4-0</version>
+      <version>3.1</version>
     </dependency>
     <dependency>
       <groupId>net.sf.py4j</groupId>
