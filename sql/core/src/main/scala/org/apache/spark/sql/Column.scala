@@ -310,8 +310,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group java_expr_ops
    */
   def between(lowerBound: Column, upperBound: Column): Column = {
-    And(GreaterThanOrEqual(this.expr, lowerBound.expr),
-      LessThanOrEqual(this.expr, upperBound.expr))
+    (this >= lowerBound) && (this <= upperBound)
   }
 
   /**
