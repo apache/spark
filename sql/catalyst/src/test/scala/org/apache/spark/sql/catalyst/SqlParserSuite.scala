@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.Command
 import org.scalatest.FunSuite
 
-private[sql] case class TestCommand(cmd: String) extends Command
+private[sql] case class TestCommand(cmd: String) extends LogicalPlan with Command {
+  override def output: Seq[Attribute] = Seq.empty
+  override def children: Seq[LogicalPlan] = Seq.empty
+}
 
 private[sql] class SuperLongKeywordTestParser extends AbstractSparkSQLParser {
   protected val EXECUTE   = Keyword("THISISASUPERLONGKEYWORDTEST")

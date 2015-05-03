@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{BufferedReader, InputStreamReader, File, PrintStream}
 import java.net.URI
-import java.util.{ArrayList => JArrayList}
+import java.util.{ArrayList => JArrayList, Map => JMap, List => JList, Set => JSet}
 
 import scala.collection.JavaConversions._
 import scala.language.reflectiveCalls
@@ -27,6 +27,7 @@ import scala.language.reflectiveCalls
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.metastore.api.Database
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.metastore.TableType
 import org.apache.hadoop.hive.metastore.api
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata
@@ -171,14 +172,20 @@ class ClientWrapper(
         partitionColumns = h.getPartCols.map(f => HiveColumn(f.getName, f.getType, f.getComment)),
         properties = h.getParameters.toMap,
         serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.toMap,
-        tableType = ManagedTable, // TODO
+        tableType = h.getTableType match {
+          case TableType.MANAGED_TABLE => ManagedTable
+          case TableType.EXTERNAL_TABLE => ExternalTable
+          case TableType.VIRTUAL_VIEW => VirtualView
+          case TableType.INDEX_TABLE => IndexTable
+        },
         location = version match {
           case hive.v12 => Option(h.call[URI]("getDataLocation")).map(_.toString)
           case hive.v13 => Option(h.call[Path]("getDataLocation")).map(_.toString)
         },
         inputFormat = Option(h.getInputFormatClass).map(_.getName),
         outputFormat = Option(h.getOutputFormatClass).map(_.getName),
-        serde = Option(h.getSerializationLib)).withClient(this)
+        serde = Option(h.getSerializationLib),
+        viewText = Option(h.getViewExpandedText)).withClient(this)
     }
     converted
   }
@@ -223,27 +230,40 @@ class ClientWrapper(
     client.alterTable(table.qualifiedName, qlTable)
   }
 
+  private def toHivePartition(partition: metadata.Partition): HivePartition = {
+    val apiPartition = partition.getTPartition
+    HivePartition(
+      values = Option(apiPartition.getValues).map(_.toSeq).getOrElse(Seq.empty),
+      storage = HiveStorageDescriptor(
+        location = apiPartition.getSd.getLocation,
+        inputFormat = apiPartition.getSd.getInputFormat,
+        outputFormat = apiPartition.getSd.getOutputFormat,
+        serde = apiPartition.getSd.getSerdeInfo.getSerializationLib,
+        serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.toMap))
+  }
+
+  override def getPartitionOption(
+      table: HiveTable,
+      partitionSpec: JMap[String, String]): Option[HivePartition] = withHiveState {
+
+    val qlTable = toQlTable(table)
+    val qlPartition = client.getPartition(qlTable, partitionSpec, false)
+    Option(qlPartition).map(toHivePartition)
+  }
+
   override def getAllPartitions(hTable: HiveTable): Seq[HivePartition] = withHiveState {
     val qlTable = toQlTable(hTable)
     val qlPartitions = version match {
       case hive.v12 =>
-        client.call[metadata.Table, Set[metadata.Partition]]("getAllPartitionsForPruner", qlTable)
+        client.call[metadata.Table, JSet[metadata.Partition]]("getAllPartitionsForPruner", qlTable)
       case hive.v13 =>
-        client.call[metadata.Table, Set[metadata.Partition]]("getAllPartitionsOf", qlTable)
+        client.call[metadata.Table, JSet[metadata.Partition]]("getAllPartitionsOf", qlTable)
     }
-    qlPartitions.map(_.getTPartition).map { p =>
-      HivePartition(
-        values = Option(p.getValues).map(_.toSeq).getOrElse(Seq.empty),
-        storage = HiveStorageDescriptor(
-          location = p.getSd.getLocation,
-          inputFormat = p.getSd.getInputFormat,
-          outputFormat = p.getSd.getOutputFormat,
-          serde = p.getSd.getSerdeInfo.getSerializationLib))
-    }.toSeq
+    qlPartitions.toSeq.map(toHivePartition)
   }
 
   override def listTables(dbName: String): Seq[String] = withHiveState {
-    client.getAllTables
+    client.getAllTables(dbName)
   }
 
   /**
@@ -294,7 +314,7 @@ class ClientWrapper(
               res.toSeq
             case hive.v13 =>
               val res = new JArrayList[Object]
-              driver.call[JArrayList[Object], Boolean]("getResults", res)
+              driver.call[JList[Object], Boolean]("getResults", res)
               res.map { r =>
                 r match {
                   case s: String => s

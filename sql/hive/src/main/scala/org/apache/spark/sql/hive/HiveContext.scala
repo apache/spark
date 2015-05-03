@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.{BufferedReader, InputStreamReader, PrintStream}
 import java.sql.Timestamp
+import java.util.{ArrayList => JArrayList}
 
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.spark.sql.catalyst.Dialect
@@ -41,9 +42,12 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateSubQueries, OverrideCatalog, OverrideFunctionRegistry}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, QueryExecutionException, SetCommand}
+import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.sources.{DDLParser, DataSourceStrategy}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
+
 
 /**
  * This is the HiveQL Dialect, this dialect is strongly bind with HiveContext
@@ -93,8 +97,63 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[sql] def convertCTAS: Boolean =
     getConf("spark.sql.hive.convertCTAS", "false").toBoolean
 
+  /**
+   * The version of the hive client that will be used to communicate with the metastore.  Note that
+   * this does not necessarily need to be the same version of Hive that is used internally by
+   * Spark SQL for execution.
+   */
+  protected[hive] def hiveVersion: String =
+    getConf("spark.sql.hive.version", "0.13.1")
+
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
+
+
+  /** A local instance of hive that is only used for execution. */
+  protected[hive] lazy val localMetastore = {
+    val temp = Utils.createTempDir()
+    temp.delete()
+    temp
+  }
+
+  @transient
+  protected[hive] lazy val executionConf = new HiveConf()
+  executionConf.set(
+    "javax.jdo.option.ConnectionURL", s"jdbc:derby:;databaseName=$localMetastore;create=true")
+
+  /**
+   * The copy of the hive client that is used for execution.  Currently this must always be
+   * Hive 13 as this is the version of Hive that is packaged with Spark SQL.  This copy of the
+   * client is used for execution related tasks like registering temporary functions or ensuring
+   * that the ThreadLocal SessionState is correctly populated.  This copy of Hive is *not* used
+   * for storing peristent metadata, and only point to a dummy metastore in a temporary directory.
+   */
+  @transient
+  protected[hive] lazy val executionHive: ClientWrapper =
+    new IsolatedClientLoader(
+      version = IsolatedClientLoader.hiveVersion("13"),
+      isolationOn = false,
+      config = Map(
+        "javax.jdo.option.ConnectionURL" ->
+          s"jdbc:derby:;databaseName=$localMetastore;create=true"),
+      rootClassLoader = Utils.getContextOrSparkClassLoader).client.asInstanceOf[ClientWrapper]
+  SessionState.setCurrentSessionState(executionHive.state)
+
+  /**
+   * The copy of the Hive client that is used to retrieve metadata from the Hive MetaStore.  This
+   * The version of the Hive client that is used here must match the metastore that is configured
+   * in the hive-site.xml file.
+   */
+  @transient
+  protected[hive] lazy val metadataHive: ClientInterface = {
+    // We instantiate a HiveConf here to read in the hive-site.xml file and then pass the options
+    // into the isolated client loader
+    val metadataConf = new HiveConf()
+    val allConfig = metadataConf.iterator.map(e => e.getKey -> e.getValue).toMap
+    
+    // Config goes second to override other settings.
+    IsolatedClientLoader.forVersion(hiveVersion, allConfig ++ configure).client
+  }
 
   protected[sql] override def parseSql(sql: String): LogicalPlan = {
     super.parseSql(substitutor.substitute(hiveconf, sql))
@@ -178,15 +237,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         // recorded in the Hive metastore.
         // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
         if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-          tableParameters.put(HiveShim.getStatsSetupConstTotalSize, newTotalSize.toString)
-          val hiveTTable = relation.hiveQlTable.getTTable
-          hiveTTable.setParameters(tableParameters)
-          val tableFullName =
-            relation.hiveQlTable.getDbName + "." + relation.hiveQlTable.getTableName
-
-          catalog.synchronized {
-            catalog.client.alterTable(tableFullName, new Table(hiveTTable))
-          }
+          catalog.client.alterTable(
+            relation.table.copy(
+              properties = relation.table.properties +
+                (HiveShim.getStatsSetupConstTotalSize -> newTotalSize.toString)))
         }
       case otherRelation =>
         throw new UnsupportedOperationException(
@@ -194,47 +248,18 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
-  // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
-  @transient
-  protected lazy val outputBuffer = new java.io.OutputStream {
-    var pos: Int = 0
-    var buffer = new Array[Int](10240)
-    def write(i: Int): Unit = {
-      buffer(pos) = i
-      pos = (pos + 1) % buffer.size
-    }
-
-    override def toString: String = {
-      val (end, start) = buffer.splitAt(pos)
-      val input = new java.io.InputStream {
-        val iterator = (start ++ end).iterator
-
-        def read(): Int = if (iterator.hasNext) iterator.next() else -1
-      }
-      val reader = new BufferedReader(new InputStreamReader(input))
-      val stringBuilder = new StringBuilder
-      var line = reader.readLine()
-      while(line != null) {
-        stringBuilder.append(line)
-        stringBuilder.append("\n")
-        line = reader.readLine()
-      }
-      stringBuilder.toString()
-    }
-  }
-
-  protected[hive] def sessionState = tlSession.get().asInstanceOf[this.SQLSession].sessionState
-
   protected[hive] def hiveconf = tlSession.get().asInstanceOf[this.SQLSession].hiveconf
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
+    hiveconf.set(key, value)
     runSqlHive(s"SET $key=$value")
   }
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
-  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
+  override protected[sql] lazy val catalog =
+    new HiveMetastoreCatalog(metadataHive, this) with OverrideCatalog
 
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
@@ -260,103 +285,18 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     new this.SQLSession()
   }
 
+  /** Overridden by child classes that need to set configuration before the client init. */
+  protected def configure(): Map[String, String] = Map.empty
+
+
   protected[hive] class SQLSession extends super.SQLSession {
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
     }
 
-    protected[hive] lazy val hiveconf: HiveConf = {
-      setConf(sessionState.getConf.getAllProperties)
-      sessionState.getConf
-    }
+    protected[hive] def localSession = executionHive.state
 
-    /**
-     * SQLConf and HiveConf contracts:
-     *
-     * 1. reuse existing started SessionState if any
-     * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
-     *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
-     *    set in the SQLConf *as well as* in the HiveConf.
-     */
-    protected[hive] lazy val sessionState: SessionState = {
-      var state = SessionState.get()
-      if (state == null) {
-        state = new SessionState(new HiveConf(classOf[SessionState]))
-        SessionState.start(state)
-      }
-      if (state.out == null) {
-        state.out = new PrintStream(outputBuffer, true, "UTF-8")
-      }
-      if (state.err == null) {
-        state.err = new PrintStream(outputBuffer, true, "UTF-8")
-      }
-      state
-    }
-  }
-
-  /**
-   * Runs the specified SQL query using Hive.
-   */
-  protected[sql] def runSqlHive(sql: String): Seq[String] = {
-    val maxResults = 100000
-    val results = runHive(sql, maxResults)
-    // It is very confusing when you only get back some of the results...
-    if (results.size == maxResults) sys.error("RESULTS POSSIBLY TRUNCATED")
-    results
-  }
-
-  /**
-   * Execute the command using Hive and return the results as a sequence. Each element
-   * in the sequence is one row.
-   */
-  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = synchronized {
-    try {
-      val cmd_trimmed: String = cmd.trim()
-      val tokens: Array[String] = cmd_trimmed.split("\\s+")
-      val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
-      val proc: CommandProcessor = HiveShim.getCommandProcessor(Array(tokens(0)), hiveconf)
-
-      // Makes sure the session represented by the `sessionState` field is activated. This implies
-      // Spark SQL Hive support uses a single `SessionState` for all Hive operations and breaks
-      // session isolation under multi-user scenarios (i.e. HiveThriftServer2).
-      // TODO Fix session isolation
-      if (SessionState.get() != sessionState) {
-        SessionState.start(sessionState)
-      }
-
-      proc match {
-        case driver: Driver =>
-          val results = HiveShim.createDriverResultsArray
-          val response: CommandProcessorResponse = driver.run(cmd)
-          // Throw an exception if there is an error in query processing.
-          if (response.getResponseCode != 0) {
-            driver.close()
-            throw new QueryExecutionException(response.getErrorMessage)
-          }
-          driver.setMaxRows(maxRows)
-          driver.getResults(results)
-          driver.close()
-          HiveShim.processResults(results)
-        case _ =>
-          if (sessionState.out != null) {
-            sessionState.out.println(tokens(0) + " " + cmd_1)
-          }
-          Seq(proc.run(cmd_1).getResponseCode.toString)
-      }
-    } catch {
-      case e: Exception =>
-        logError(
-          s"""
-            |======================
-            |HIVE FAILURE OUTPUT
-            |======================
-            |${outputBuffer.toString}
-            |======================
-            |END HIVE FAILURE OUTPUT
-            |======================
-          """.stripMargin)
-        throw e
-    }
+    protected[hive] def hiveconf = executionConf
   }
 
   override protected[sql] def dialectClassName = if (conf.dialect == "hiveql") {
@@ -390,17 +330,23 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     )
   }
 
+  protected[hive] def runSqlHive(sql: String): Seq[String] = {
+    if (sql.toLowerCase.startsWith("create temporary function")) {
+      executionHive.runSqlHive(sql)
+    } else if (sql.trim.toLowerCase.startsWith("set")) {
+      metadataHive.runSqlHive(sql)
+      executionHive.runSqlHive(sql)
+    } else {
+      metadataHive.runSqlHive(sql)
+    }
+  }
+
   @transient
   override protected[sql] val planner = hivePlanner
 
   /** Extends QueryExecution with hive specific features. */
   protected[sql] class QueryExecution(logicalPlan: LogicalPlan)
     extends super.QueryExecution(logicalPlan) {
-    // Like what we do in runHive, makes sure the session represented by the
-    // `sessionState` field is activated.
-    if (SessionState.get() != sessionState) {
-      SessionState.start(sessionState)
-    }
 
     /**
      * Returns the result as a hive compatible sequence of strings.  For native commands, the

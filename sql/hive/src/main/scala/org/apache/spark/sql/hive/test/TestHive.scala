@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.test
 import java.io.File
 import java.util.{Set => JavaSet}
 
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
@@ -70,23 +71,21 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   hiveconf.set("hive.plan.serialization.format", "javaXML")
 
   lazy val warehousePath = Utils.createTempDir()
-  lazy val metastorePath = Utils.createTempDir()
+  lazy val metastorePath = {
+    val temp = Utils.createTempDir()
+    temp.delete()
+    temp
+  }
 
   /** Sets up the system initially or after a RESET command */
-  protected def configure(): Unit = {
-    warehousePath.delete()
-    metastorePath.delete()
-    setConf("javax.jdo.option.ConnectionURL",
-      s"jdbc:derby:;databaseName=$metastorePath;create=true")
-    setConf("hive.metastore.warehouse.dir", warehousePath.toString)
-  }
+  protected override def configure(): Map[String, String] = Map(
+      "javax.jdo.option.ConnectionURL" -> s"jdbc:derby:;databaseName=$metastorePath;create=true",
+      "hive.metastore.warehouse.dir" -> warehousePath.toString)
 
   val testTempDir = Utils.createTempDir()
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
-
-  configure() // Must be called before initializing the catalog below.
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
@@ -245,16 +244,18 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       import org.apache.hadoop.mapred.{SequenceFileInputFormat, SequenceFileOutputFormat}
       import org.apache.thrift.protocol.TBinaryProtocol
 
-      val srcThrift = new Table("default", "src_thrift")
-      srcThrift.setFields(Nil)
-      srcThrift.setInputFormatClass(classOf[SequenceFileInputFormat[_,_]].getName)
-      // In Hive, SequenceFileOutputFormat will be substituted by HiveSequenceFileOutputFormat.
-      srcThrift.setOutputFormatClass(classOf[SequenceFileOutputFormat[_,_]].getName)
-      srcThrift.setSerializationLib(classOf[ThriftDeserializer].getName)
-      srcThrift.setSerdeParam("serialization.class", classOf[Complex].getName)
-      srcThrift.setSerdeParam("serialization.format", classOf[TBinaryProtocol].getName)
-      catalog.client.createTable(srcThrift)
-
+      runSqlHive(
+        s"""
+         |CREATE TABLE src_thrift(fake INT)
+         |ROW FORMAT SERDE '${classOf[ThriftDeserializer].getName}'
+         |WITH SERDEPROPERTIES(
+         |  'serialization.class'='${classOf[Complex].getName}',
+         |  'serialization.format'='${classOf[TBinaryProtocol].getName}'
+         |)
+         |STORED AS
+         |INPUTFORMAT '${classOf[SequenceFileInputFormat[_,_]].getName}'
+         |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_,_]].getName}'
+        """.stripMargin)
 
       runSqlHive(
         s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/complex.seq")}' INTO TABLE src_thrift")
@@ -376,7 +377,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     if (!(loadedTables contains name)) {
       // Marks the table as loaded first to prevent infinite mutually recursive table loading.
       loadedTables += name
-      logInfo(s"Loading test table $name")
+      logDebug(s"Loading test table $name")
       val createCmds =
         testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
       createCmds.foreach(_())
@@ -393,9 +394,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    */
   protected val originalUdfs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
-  // Database default may not exist in 0.13.1, create it if not exist
-  HiveShim.createDefaultDBIfNeeded(this)
-
   /**
    * Resets the test instance by deleting any tables that have been created.
    * TODO: also clear out UDFs, views, etc.
@@ -410,24 +408,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       cacheManager.clearCache()
       loadedTables.clear()
       catalog.cachedDataSourceTables.invalidateAll()
-      catalog.client.getAllTables("default").foreach { t =>
-        logDebug(s"Deleting table $t")
-        val table = catalog.client.getTable("default", t)
-
-        catalog.client.getIndexes("default", t, 255).foreach { index =>
-          catalog.client.dropIndex("default", t, index.getIndexName, true)
-        }
-
-        if (!table.isIndexTable) {
-          catalog.client.dropTable("default", t)
-        }
-      }
-
-      catalog.client.getAllDatabases.filterNot(_ == "default").foreach { db =>
-        logDebug(s"Dropping Database: $db")
-        catalog.client.dropDatabase(db, true, false, true)
-      }
-
+      catalog.client.reset()
       catalog.unregisterAllTables()
 
       FunctionRegistry.getFunctionNames.filterNot(originalUdfs.contains(_)).foreach { udfName =>
@@ -438,7 +419,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       hiveconf.set("fs.default.name", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
-      runSqlHive("RESET")
+      executionHive.runSqlHive("RESET")
+      metadataHive.runSqlHive("RESET")
       // For some reason, RESET does not reset the following variables...
       // https://issues.apache.org/jira/browse/HIVE-9004
       runSqlHive("set hive.table.parameters.default=")
@@ -446,7 +428,11 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
       runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
-      configure()
+
+      configure().foreach {
+        case (k, v) =>
+          metadataHive.runSqlHive(s"SET $k=$v")
+      }
 
       runSqlHive("USE default")
 

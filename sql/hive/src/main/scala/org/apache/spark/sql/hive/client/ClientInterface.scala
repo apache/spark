@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.client
 
+import java.util.{Map => JMap}
+
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
 
 case class HiveDatabase(
@@ -29,11 +31,13 @@ case object IndexTable extends TableType { override val name = "INDEX_TABLE" }
 case object ManagedTable extends TableType { override val name = "MANAGED_TABLE" }
 case object VirtualView extends TableType { override val name = "VIRTUAL_VIEW" }
 
+// TODO: Use this for Tables and Partitions
 case class HiveStorageDescriptor(
     location: String,
     inputFormat: String,
     outputFormat: String,
-    serde: String)
+    serde: String,
+    serdeProperties: Map[String, String])
 
 case class HivePartition(
     values: Seq[String],
@@ -51,7 +55,8 @@ case class HiveTable(
     location: Option[String] = None,
     inputFormat: Option[String] = None,
     outputFormat: Option[String] = None,
-    serde: Option[String] = None) {
+    serde: Option[String] = None,
+    viewText: Option[String] = None) {
 
   @transient
   private[client] var client: ClientInterface = _
@@ -113,6 +118,11 @@ trait ClientInterface {
 
   /** Creates a new database with the given name. */
   def createDatabase(database: HiveDatabase): Unit
+
+  /** Returns the specified paritition or None if it does not exist. */
+  def getPartitionOption(
+      hTable: HiveTable,
+      partitionSpec: JMap[String, String]): Option[HivePartition]
 
   /** Returns all partitions for the given table. */
   def getAllPartitions(hTable: HiveTable): Seq[HivePartition]
