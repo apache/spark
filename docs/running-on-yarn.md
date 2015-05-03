@@ -137,7 +137,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.am.port</code></td>
   <td>(random)</td>
   <td>
-    Port for the YARN Application Master to listen on. In yarn client mode, this is used to communicate between the spark driver running on a gateway and the application master running on yarn. In yarn cluster mode, this is used for the dynamic executor feature, where it handles the kill from the scheduler backend.
+    Port for the YARN Application Master to listen on. In YARN client mode, this is used to communicate between the Spark driver running on a gateway and the Application Master running on YARN. In YARN cluster mode, this is used for the dynamic executor feature, where it handles the kill from the scheduler backend.
   </td>
 </tr>
 <tr>
