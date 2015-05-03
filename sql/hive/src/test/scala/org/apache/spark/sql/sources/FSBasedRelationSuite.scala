@@ -20,10 +20,9 @@ package org.apache.spark.sql.sources
 import scala.collection.mutable
 
 import com.google.common.base.Objects
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.mapreduce.{TaskAttemptContext, OutputFormat}
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.rdd.RDD
@@ -110,7 +109,7 @@ class SimpleFSBasedRelation
 
   override def outputWriterClass: Class[_ <: OutputWriter] = classOf[SimpleOutputWriter]
 
-  override def outputFormatClass: Class[_ <: OutputFormat[Void, Row]] = {
+  override def outputFormatClass: Class[_ <: FileOutputFormat[Void, Row]] = {
     // This is just a mock, not used within this test suite.
     classOf[TextOutputFormat[Void, Row]]
   }
@@ -268,7 +267,7 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
 
     TestResult.synchronized {
-      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writerPaths.size === 4)
       assert(TestResult.writtenRows === expectedRows.toSet)
     }
   }
@@ -295,7 +294,7 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
 
     TestResult.synchronized {
-      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writerPaths.size === 4)
       assert(TestResult.writtenRows === expectedRows.toSet)
     }
   }
@@ -328,7 +327,7 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 4) yield Row(i, s"val_$i")
 
     TestResult.synchronized {
-      assert(TestResult.writerPaths.size === 4)
+      assert(TestResult.writerPaths.size === 8)
       assert(TestResult.writtenRows === expectedRows.toSet)
     }
   }
@@ -381,7 +380,7 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
 
     TestResult.synchronized {
-      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writerPaths.size === 4)
       assert(TestResult.writtenRows === expectedRows.toSet)
     }
 
@@ -443,7 +442,7 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
 
     TestResult.synchronized {
-      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writerPaths.size === 4)
       assert(TestResult.writtenRows === expectedRows.toSet)
     }
 
@@ -472,7 +471,7 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
 
     TestResult.synchronized {
-      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writerPaths.size === 4)
       assert(TestResult.writtenRows === expectedRows.toSet)
     }
 
@@ -493,7 +492,7 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
 
     TestResult.synchronized {
-      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writerPaths.size === 8)
       assert(TestResult.writtenRows === expectedRows.toSet)
     }
 
@@ -535,7 +534,7 @@ class FSBasedRelationSuite extends QueryTest with BeforeAndAfter {
     val expectedRows = for (i <- 1 to 3; _ <- 1 to 2) yield Row(i, s"val_$i")
 
     TestResult.synchronized {
-      assert(TestResult.writerPaths.size === 2)
+      assert(TestResult.writerPaths.size === 4)
       assert(TestResult.writtenRows === expectedRows.toSet)
     }
 

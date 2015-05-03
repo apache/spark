@@ -19,8 +19,8 @@ package org.apache.spark.sql.sources
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.mapreduce.{TaskAttemptContext, OutputFormat, OutputCommitter}
-import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
+import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -411,7 +411,7 @@ abstract class FSBasedRelation private[sql](
     buildScan(requiredColumns, inputPaths)
   }
 
-  def outputFormatClass: Class[_ <: OutputFormat[Void, Row]]
+  def outputFormatClass: Class[_ <: FileOutputFormat[Void, Row]]
 
   /**
    * This method is responsible for producing a new [[OutputWriter]] for each newly opened output

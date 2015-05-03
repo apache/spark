@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, FileOutputFormat}
 import org.apache.hadoop.util.Shell
 import parquet.hadoop.util.ContextUtil
 
@@ -211,7 +211,7 @@ private[sql] abstract class BaseWriterContainer(
   @transient private val jobContext: JobContext = job
 
   // The following fields are initialized and used on both driver and executor side.
-  @transient private var outputCommitter: OutputCommitter = _
+  @transient protected var outputCommitter: FileOutputCommitter = _
   @transient private var jobId: JobID = _
   @transient private var taskId: TaskID = _
   @transient private var taskAttemptId: TaskAttemptID = _
@@ -235,7 +235,11 @@ private[sql] abstract class BaseWriterContainer(
     setupConf()
     taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
     val outputFormat = relation.outputFormatClass.newInstance()
-    outputCommitter = outputFormat.getOutputCommitter(taskAttemptContext)
+    outputCommitter = outputFormat.getOutputCommitter(taskAttemptContext) match {
+      case c: FileOutputCommitter => c
+      case _ => sys.error(
+        s"Output committer must be ${classOf[FileOutputCommitter].getName} or its subclasses")
+    }
     outputCommitter.setupJob(jobContext)
   }
 
@@ -244,7 +248,11 @@ private[sql] abstract class BaseWriterContainer(
     setupConf()
     taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
     val outputFormat = outputFormatClass.newInstance()
-    outputCommitter = outputFormat.getOutputCommitter(taskAttemptContext)
+    outputCommitter = outputFormat.getOutputCommitter(taskAttemptContext) match {
+      case c: FileOutputCommitter => c
+      case _ => sys.error(
+        s"Output committer must be ${classOf[FileOutputCommitter].getName} or its subclasses")
+    }
     outputCommitter.setupTask(taskAttemptContext)
     initWriters()
   }
@@ -298,7 +306,7 @@ private[sql] class DefaultWriterContainer(
 
   override protected def initWriters(): Unit = {
     writer = relation.outputWriterClass.newInstance()
-    writer.init(outputPath, dataSchema, taskAttemptContext)
+    writer.init(outputCommitter.getWorkPath.toString, dataSchema, taskAttemptContext)
   }
 
   override def outputWriterForRow(row: Row): OutputWriter = writer
@@ -340,7 +348,7 @@ private[sql] class DynamicPartitionWriterContainer(
     }.mkString
 
     outputWriters.getOrElseUpdate(partitionPath, {
-      val path = new Path(outputPath, partitionPath.stripPrefix(Path.SEPARATOR))
+      val path = new Path(outputCommitter.getWorkPath, partitionPath.stripPrefix(Path.SEPARATOR))
       val writer = outputWriterClass.newInstance()
       writer.init(path.toString, dataSchema, taskAttemptContext)
       writer
