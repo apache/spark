@@ -71,7 +71,7 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
   private MapStatus mapStatus = null;
 
   private MemoryBlock currentPage = null;
-  private long currentPagePosition = PAGE_SIZE;
+  private long currentPagePosition = -1;
 
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
@@ -110,11 +110,17 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
   }
 
   private void ensureSpaceInDataPage(long requiredSpace) throws Exception {
+    final long spaceInCurrentPage;
+    if (currentPage != null) {
+      spaceInCurrentPage = PAGE_SIZE - (currentPagePosition - currentPage.getBaseOffset());
+    } else {
+      spaceInCurrentPage = 0;
+    }
     if (requiredSpace > PAGE_SIZE) {
       // TODO: throw a more specific exception?
       throw new Exception("Required space " + requiredSpace + " is greater than page size (" +
         PAGE_SIZE + ")");
-    } else if (requiredSpace > (PAGE_SIZE - currentPagePosition)) {
+    } else if (requiredSpace > spaceInCurrentPage) {
       currentPage = memoryManager.allocatePage(PAGE_SIZE);
       currentPagePosition = currentPage.getBaseOffset();
       allocatedPages.add(currentPage);
