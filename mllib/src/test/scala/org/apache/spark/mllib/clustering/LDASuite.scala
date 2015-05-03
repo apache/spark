@@ -39,7 +39,7 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
 
     // Check: describeTopics() with all terms
     val fullTopicSummary = model.describeTopics()
-    assert(fullTopicSummary.size === tinyK)
+    assert(fullTopicSummary.length === tinyK)
     fullTopicSummary.zip(tinyTopicDescription).foreach {
       case ((algTerms, algTermWeights), (terms, termWeights)) =>
         assert(algTerms === terms)
@@ -101,7 +101,7 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     // Check: per-doc topic distributions
     val topicDistributions = model.topicDistributions.collect()
     //  Ensure all documents are covered.
-    assert(topicDistributions.size === tinyCorpus.size)
+    assert(topicDistributions.length === tinyCorpus.length)
     assert(tinyCorpus.map(_._1).toSet === topicDistributions.map(_._1).toSet)
     //  Ensure we have proper distributions
     topicDistributions.foreach { case (docId, topicDistribution) =>
@@ -139,8 +139,8 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     val corpus = sc.parallelize(tinyCorpus, 2)
     val op = new OnlineLDAOptimizer().initialize(corpus, lda)
     op.setKappa(0.9876).setMiniBatchFraction(0.123).setTau_0(567)
-    assert(op.alpha == 0.5) // default 1.0 / k
-    assert(op.eta == 0.5)   // default 1.0 / k
+    assert(op.getAlpha == 0.5) // default 1.0 / k
+    assert(op.getEta == 0.5)   // default 1.0 / k
     assert(op.getKappa == 0.9876)
     assert(op.getMiniBatchFraction == 0.123)
     assert(op.getTau_0 == 567)
@@ -154,14 +154,14 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
 
     def docs: Array[(Long, Vector)] = Array(
       Vectors.sparse(vocabSize, Array(0, 1, 2), Array(1, 1, 1)), // apple, orange, banana
-      Vectors.sparse(vocabSize, Array(3, 4, 5), Array(1, 1, 1))) // tiger, cat, dog
-      .zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
+      Vectors.sparse(vocabSize, Array(3, 4, 5), Array(1, 1, 1)) // tiger, cat, dog
+    ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
     val corpus = sc.parallelize(docs, 2)
 
-    // setGammaShape large so to avoid the stochastic impact.
+    // Set GammaShape large to avoid the stochastic impact.
     val op = new OnlineLDAOptimizer().setTau_0(1024).setKappa(0.51).setGammaShape(1e40)
       .setMiniBatchFraction(1)
-    val lda = new LDA().setK(k).setMaxIterations(1).setOptimizer(op)
+    val lda = new LDA().setK(k).setMaxIterations(1).setOptimizer(op).setSeed(12345)
 
     val state = op.initialize(corpus, lda)
     // override lambda to simulate an intermediate state
@@ -175,8 +175,8 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
 
     // verify the result, Note this generate the identical result as
     // [[https://github.com/Blei-Lab/onlineldavb]]
-    val topic1 = op.lambda(0, ::).inner.toArray.map("%.4f".format(_)).mkString(", ")
-    val topic2 = op.lambda(1, ::).inner.toArray.map("%.4f".format(_)).mkString(", ")
+    val topic1 = op.getLambda(0, ::).inner.toArray.map("%.4f".format(_)).mkString(", ")
+    val topic2 = op.getLambda(1, ::).inner.toArray.map("%.4f".format(_)).mkString(", ")
     assert("1.1101, 1.2076, 1.3050, 0.8899, 0.7924, 0.6950" == topic1)
     assert("0.8899, 0.7924, 0.6950, 1.1101, 1.2076, 1.3050" == topic2)
   }
@@ -186,7 +186,6 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
       Vectors.sparse(6, Array(0, 1), Array(1, 1)),
       Vectors.sparse(6, Array(1, 2), Array(1, 1)),
       Vectors.sparse(6, Array(0, 2), Array(1, 1)),
-
       Vectors.sparse(6, Array(3, 4), Array(1, 1)),
       Vectors.sparse(6, Array(3, 5), Array(1, 1)),
       Vectors.sparse(6, Array(4, 5), Array(1, 1))
@@ -200,6 +199,7 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
       .setTopicConcentration(0.01)
       .setMaxIterations(100)
       .setOptimizer(op)
+      .setSeed(12345)
 
     val ldaModel = lda.run(docs)
     val topicIndices = ldaModel.describeTopics(maxTermsPerTopic = 10)
@@ -208,10 +208,10 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     }
 
     // check distribution for each topic, typical distribution is (0.3, 0.3, 0.3, 0.02, 0.02, 0.02)
-    topics.foreach(topic =>{
-      val smalls = topic.filter(t => (t._2 < 0.1)).map(_._2)
-      assert(smalls.size == 3 && smalls.sum < 0.2)
-    })
+    topics.foreach { topic =>
+      val smalls = topic.filter(t => t._2 < 0.1).map(_._2)
+      assert(smalls.length == 3 && smalls.sum < 0.2)
+    }
   }
 
 }
