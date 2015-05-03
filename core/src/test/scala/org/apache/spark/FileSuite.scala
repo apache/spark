@@ -177,7 +177,7 @@ class FileSuite extends FunSuite with LocalSparkContext {
     
     val nums = sc.makeRDD(1 to 4)
     nums.saveAsObjectFile(normalDir)
-    nums.saveAsObjectFile(compressedOutputDir, Option(classOf[DefaultCodec]))
+    nums.saveAsObjectFile(compressedOutputDir, classOf[DefaultCodec])
     
     // Try reading the output back as an object file
     val normalFile = new File(normalDir, "part-00000")
