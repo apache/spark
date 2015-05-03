@@ -1381,17 +1381,15 @@ class DataFrameStatFunctions(object):
 
     cov.__doc__ = DataFrame.cov.__doc__
 
-<<<<<<< HEAD
     def crosstab(self, col1, col2):
         return self.df.crosstab(col1, col2)
 
     crosstab.__doc__ = DataFrame.crosstab.__doc__
-=======
+
     def freqItems(self, cols, support=None):
         return self.df.freqItems(cols, support)
 
     freqItems.__doc__ = DataFrame.freqItems.__doc__
->>>>>>> 49549d5a1a867c3ba25f5e4aec351d4102444bc0
 
 
 def _test():
