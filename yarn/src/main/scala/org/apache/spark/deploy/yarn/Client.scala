@@ -1227,5 +1227,5 @@ object Client extends Logging {
   def buildPath(components: String*): String = {
     components.mkString(Path.SEPARATOR)
   }
-
+  
 }
