@@ -20,30 +20,32 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.sql.DriverManager
 
-import com.fasterxml.jackson.core.JsonFactory
-import org.apache.commons.lang3.StringUtils
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.python.SerDeUtil
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedAttribute, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
-import org.apache.spark.sql.jdbc.JDBCWriteDetails
-import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, ResolvedDataSource}
-import org.apache.spark.sql.types._
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
+
+import com.fasterxml.jackson.core.JsonFactory
+
+import org.apache.commons.lang3.StringUtils
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.python.SerDeUtil
+import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation, ResolvedStar}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
+import org.apache.spark.sql.jdbc.JDBCWriteDetails
+import org.apache.spark.sql.json.JsonRDD
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
+import org.apache.spark.util.Utils
 
 
 private[sql] object DataFrame {
