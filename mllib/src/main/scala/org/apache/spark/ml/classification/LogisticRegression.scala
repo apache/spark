@@ -19,11 +19,11 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.linalg.{VectorUDT, BLAS, Vector, Vectors}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
 
 
@@ -31,8 +31,10 @@ import org.apache.spark.storage.StorageLevel
  * Params for logistic regression.
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
-  with HasRegParam with HasMaxIter with HasThreshold
+  with HasRegParam with HasMaxIter with HasFitIntercept with HasThreshold {
 
+  setDefault(regParam -> 0.1, maxIter -> 100, threshold -> 0.5)
+}
 
 /**
  * :: AlphaComponent ::
@@ -45,15 +47,14 @@ class LogisticRegression
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams {
 
-  setRegParam(0.1)
-  setMaxIter(100)
-  setThreshold(0.5)
-
   /** @group setParam */
   def setRegParam(value: Double): this.type = set(regParam, value)
 
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
+
+  /** @group setParam */
+  def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
 
   /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
@@ -67,7 +68,8 @@ class LogisticRegression
     }
 
     // Train model
-    val lr = new LogisticRegressionWithLBFGS
+    val lr = new LogisticRegressionWithLBFGS()
+      .setIntercept(paramMap(fitIntercept))
     lr.optimizer
       .setRegParam(paramMap(regParam))
       .setNumIterations(paramMap(maxIter))
@@ -96,8 +98,6 @@ class LogisticRegressionModel private[ml] (
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams {
 
-  setThreshold(0.5)
-
   /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
 
@@ -119,7 +119,7 @@ class LogisticRegressionModel private[ml] (
     // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
 
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
 
     // Output selected columns only.
     // This is a bit complicated since it tries to avoid repeated computation.
@@ -180,8 +180,7 @@ class LogisticRegressionModel private[ml] (
    * The behavior of this can be adjusted using [[threshold]].
    */
   override protected def predict(features: Vector): Double = {
-    println(s"LR.predict with threshold: ${paramMap(threshold)}")
-    if (score(features) > paramMap(threshold)) 1 else 0
+    if (score(features) > getThreshold) 1 else 0
   }
 
   override protected def predictProbabilities(features: Vector): Vector = {
@@ -196,7 +195,7 @@ class LogisticRegressionModel private[ml] (
 
   override protected def copy(): LogisticRegressionModel = {
     val m = new LogisticRegressionModel(parent, fittingParamMap, weights, intercept)
-    Params.inheritValues(this.paramMap, this, m)
+    Params.inheritValues(this.extractParamMap(), this, m)
     m
   }
 }

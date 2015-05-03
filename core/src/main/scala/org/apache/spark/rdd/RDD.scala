@@ -186,7 +186,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
-  def getStorageLevel = storageLevel
+  def getStorageLevel: StorageLevel = storageLevel
 
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
@@ -316,7 +316,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a new RDD containing the distinct elements in this RDD.
    */
-  def distinct(): RDD[T] = distinct(partitions.size)
+  def distinct(): RDD[T] = distinct(partitions.length)
 
   /**
    * Return a new RDD that has exactly numPartitions partitions.
@@ -377,6 +377,12 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return a sampled subset of this RDD.
+   * 
+   * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
+   * @param fraction expected size of the sample as a fraction of this RDD's size
+   *  without replacement: probability that each element is chosen; fraction must be [0, 1]
+   *  with replacement: expected number of times each element is chosen; fraction must be >= 0
+   * @param seed seed for the random number generator
    */
   def sample(withReplacement: Boolean,
       fraction: Double,
@@ -401,9 +407,24 @@ abstract class RDD[T: ClassTag](
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
-      new PartitionwiseSampledRDD[T, T](
-        this, new BernoulliCellSampler[T](x(0), x(1)), true, seed)
+      randomSampleWithRange(x(0), x(1), seed)
     }.toArray
+  }
+
+  /**
+   * Internal method exposed for Random Splits in DataFrames. Samples an RDD given a probability
+   * range.
+   * @param lb lower bound to use for the Bernoulli sampler
+   * @param ub upper bound to use for the Bernoulli sampler
+   * @param seed the seed for the Random number generator
+   * @return A random sub-sample of the RDD without replacement.
+   */
+  private[spark] def randomSampleWithRange(lb: Double, ub: Double, seed: Long): RDD[T] = {
+    this.mapPartitionsWithIndex { case (index, partition) =>
+      val sampler = new BernoulliCellSampler[T](lb, ub)
+      sampler.setSeed(seed + index)
+      sampler.sample(partition)
+    }
   }
 
   /**
@@ -482,7 +503,7 @@ abstract class RDD[T: ClassTag](
   def sortBy[K](
       f: (T) => K,
       ascending: Boolean = true,
-      numPartitions: Int = this.partitions.size)
+      numPartitions: Int = this.partitions.length)
       (implicit ord: Ordering[K], ctag: ClassTag[K]): RDD[T] =
     this.keyBy[K](f)
         .sortByKey(ascending, numPartitions)
@@ -740,13 +761,13 @@ abstract class RDD[T: ClassTag](
   def zip[U: ClassTag](other: RDD[U]): RDD[(T, U)] = {
     zipPartitions(other, preservesPartitioning = false) { (thisIter, otherIter) =>
       new Iterator[(T, U)] {
-        def hasNext = (thisIter.hasNext, otherIter.hasNext) match {
+        def hasNext: Boolean = (thisIter.hasNext, otherIter.hasNext) match {
           case (true, true) => true
           case (false, false) => false
           case _ => throw new SparkException("Can only zip RDDs with " +
             "same number of elements in each partition")
         }
-        def next = (thisIter.next, otherIter.next)
+        def next(): (T, U) = (thisIter.next(), otherIter.next())
       }
     }
   }
@@ -846,7 +867,7 @@ abstract class RDD[T: ClassTag](
    * RDD will be &lt;= us.
    */
   def subtract(other: RDD[T]): RDD[T] =
-    subtract(other, partitioner.getOrElse(new HashPartitioner(partitions.size)))
+    subtract(other, partitioner.getOrElse(new HashPartitioner(partitions.length)))
 
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
@@ -862,8 +883,8 @@ abstract class RDD[T: ClassTag](
       // Our partitioner knows how to handle T (which, since we have a partitioner, is
       // really (K, V)) so make a new Partitioner that will de-tuple our fake tuples
       val p2 = new Partitioner() {
-        override def numPartitions = p.numPartitions
-        override def getPartition(k: Any) = p.getPartition(k.asInstanceOf[(Any, _)]._1)
+        override def numPartitions: Int = p.numPartitions
+        override def getPartition(k: Any): Int = p.getPartition(k.asInstanceOf[(Any, _)]._1)
       }
       // Unfortunately, since we're making a new p2, we'll get ShuffleDependencies
       // anyway, and when calling .keys, will not have a partitioner set, even though
@@ -960,7 +981,7 @@ abstract class RDD[T: ClassTag](
    */
   def aggregate[U: ClassTag](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U): U = {
     // Clone the zero value since we will also be serializing it as part of tasks
-    var jobResult = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
+    var jobResult = Utils.clone(zeroValue, sc.env.serializer.newInstance())
     val cleanSeqOp = sc.clean(seqOp)
     val cleanCombOp = sc.clean(combOp)
     val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
@@ -980,14 +1001,14 @@ abstract class RDD[T: ClassTag](
       combOp: (U, U) => U,
       depth: Int = 2): U = {
     require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
-    if (partitions.size == 0) {
+    if (partitions.length == 0) {
       return Utils.clone(zeroValue, context.env.closureSerializer.newInstance())
     }
     val cleanSeqOp = context.clean(seqOp)
     val cleanCombOp = context.clean(combOp)
     val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
     var partiallyAggregated = mapPartitions(it => Iterator(aggregatePartition(it)))
-    var numPartitions = partiallyAggregated.partitions.size
+    var numPartitions = partiallyAggregated.partitions.length
     val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
     // If creating an extra level doesn't help reduce the wall-clock time, we stop tree aggregation.
     while (numPartitions > scale + numPartitions / scale) {
@@ -1020,7 +1041,7 @@ abstract class RDD[T: ClassTag](
       }
       result
     }
-    val evaluator = new CountEvaluator(partitions.size, confidence)
+    val evaluator = new CountEvaluator(partitions.length, confidence)
     sc.runApproximateJob(this, countElements, evaluator, timeout)
   }
 
@@ -1055,7 +1076,7 @@ abstract class RDD[T: ClassTag](
       }
       map
     }
-    val evaluator = new GroupedCountEvaluator[T](partitions.size, confidence)
+    val evaluator = new GroupedCountEvaluator[T](partitions.length, confidence)
     sc.runApproximateJob(this, countPartition, evaluator, timeout)
   }
 
@@ -1134,7 +1155,7 @@ abstract class RDD[T: ClassTag](
    * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
    */
   def zipWithUniqueId(): RDD[(T, Long)] = {
-    val n = this.partitions.size.toLong
+    val n = this.partitions.length.toLong
     this.mapPartitionsWithIndex { case (k, iter) =>
       iter.zipWithIndex.map { case (item, i) =>
         (item, i * n + k)
@@ -1237,7 +1258,7 @@ abstract class RDD[T: ClassTag](
         queue ++= util.collection.Utils.takeOrdered(items, num)(ord)
         Iterator.single(queue)
       }
-      if (mapRDDs.partitions.size == 0) {
+      if (mapRDDs.partitions.length == 0) {
         Array.empty
       } else {
         mapRDDs.reduce { (queue1, queue2) =>
@@ -1397,7 +1418,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
-  def context = sc
+  def context: SparkContext = sc
 
   /**
    * Private API for changing an RDD's ClassTag.
@@ -1463,9 +1484,9 @@ abstract class RDD[T: ClassTag](
 
       val persistence = if (storageLevel != StorageLevel.NONE) storageLevel.description else ""
       val storageInfo = rdd.context.getRDDStorageInfo.filter(_.id == rdd.id).map(info =>
-        "    CachedPartitions: %d; MemorySize: %s; TachyonSize: %s; DiskSize: %s".format(
+        "    CachedPartitions: %d; MemorySize: %s; ExternalBlockStoreSize: %s; DiskSize: %s".format(
           info.numCachedPartitions, bytesToString(info.memSize),
-          bytesToString(info.tachyonSize), bytesToString(info.diskSize)))
+          bytesToString(info.externalBlockStoreSize), bytesToString(info.diskSize)))
 
       s"$rdd [$persistence]" +: storageInfo
     }
@@ -1492,7 +1513,7 @@ abstract class RDD[T: ClassTag](
     }
     // The first RDD in the dependency stack has no parents, so no need for a +-
     def firstDebugString(rdd: RDD[_]): Seq[String] = {
-      val partitionStr = "(" + rdd.partitions.size + ")"
+      val partitionStr = "(" + rdd.partitions.length + ")"
       val leftOffset = (partitionStr.length - 1) / 2
       val nextPrefix = (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset))
 
@@ -1502,7 +1523,7 @@ abstract class RDD[T: ClassTag](
       } ++ debugChildren(rdd, nextPrefix)
     }
     def shuffleDebugString(rdd: RDD[_], prefix: String = "", isLastChild: Boolean): Seq[String] = {
-      val partitionStr = "(" + rdd.partitions.size + ")"
+      val partitionStr = "(" + rdd.partitions.length + ")"
       val leftOffset = (partitionStr.length - 1) / 2
       val thisPrefix = prefix.replaceAll("\\|\\s+$", "")
       val nextPrefix = (

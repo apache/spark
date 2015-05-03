@@ -22,27 +22,26 @@ import java.net.{URI, URISyntaxException}
 import scala.collection.mutable.ListBuffer
 
 import org.apache.log4j.Level
-
-import org.apache.spark.util.{IntParam, MemoryParam}
+import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
 /**
  * Command-line parser for the driver client.
  */
-private[spark] class ClientArguments(args: Array[String]) {
+private[deploy] class ClientArguments(args: Array[String]) {
   import ClientArguments._
 
   var cmd: String = "" // 'launch' or 'kill'
   var logLevel = Level.WARN
 
   // launch parameters
-  var master: String = ""
+  var masters: Array[String] = null
   var jarUrl: String = ""
   var mainClass: String = ""
   var supervise: Boolean = DEFAULT_SUPERVISE
   var memory: Int = DEFAULT_MEMORY
   var cores: Int = DEFAULT_CORES
   private var _driverOptions = ListBuffer[String]()
-  def driverOptions = _driverOptions.toSeq
+  def driverOptions: Seq[String] = _driverOptions.toSeq
 
   // kill parameters
   var driverId: String = ""
@@ -80,13 +79,13 @@ private[spark] class ClientArguments(args: Array[String]) {
       }
 
       jarUrl = _jarUrl
-      master = _master
+      masters = Utils.parseStandaloneMasterUrls(_master)
       mainClass = _mainClass
       _driverOptions ++= tail
 
     case "kill" :: _master :: _driverId :: tail =>
       cmd = "kill"
-      master = _master
+      masters = Utils.parseStandaloneMasterUrls(_master)
       driverId = _driverId
 
     case _ =>
@@ -96,7 +95,7 @@ private[spark] class ClientArguments(args: Array[String]) {
   /**
    * Print usage and exit JVM with the given exit code.
    */
-  def printUsageAndExit(exitCode: Int) {
+  private def printUsageAndExit(exitCode: Int) {
     // TODO: It wouldn't be too hard to allow users to submit their app and dependency jars
     //       separately similar to in the YARN client.
     val usage =
@@ -116,10 +115,10 @@ private[spark] class ClientArguments(args: Array[String]) {
   }
 }
 
-object ClientArguments {
-  private[spark] val DEFAULT_CORES = 1
-  private[spark] val DEFAULT_MEMORY = 512 // MB
-  private[spark] val DEFAULT_SUPERVISE = false
+private[deploy] object ClientArguments {
+  val DEFAULT_CORES = 1
+  val DEFAULT_MEMORY = 512 // MB
+  val DEFAULT_SUPERVISE = false
 
   def isValidJarUrl(s: String): Boolean = {
     try {

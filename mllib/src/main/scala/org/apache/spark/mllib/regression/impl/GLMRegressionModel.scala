@@ -32,7 +32,7 @@ private[regression] object GLMRegressionModel {
 
   object SaveLoadV1_0 {
 
-    def thisFormatVersion = "1.0"
+    def thisFormatVersion: String = "1.0"
 
     /** Model data for model import/export */
     case class Data(weights: Vector, intercept: Double)

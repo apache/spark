@@ -17,36 +17,40 @@
 
 package org.apache.spark.sql.hive
 
-import java.util.{ArrayList => JArrayList}
-import java.util.Properties
 import java.rmi.server.UID
+import java.util.{Properties, ArrayList => JArrayList}
+import java.io.{OutputStream, InputStream}
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
+import scala.reflect.ClassTag
 
+import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.Input
+import com.esotericsoftware.kryo.io.Output
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{NullWritable, Writable}
-import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.hive.common.StatsSetupConst
-import org.apache.hadoop.hive.common.`type`.{HiveDecimal}
+import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
-import org.apache.hadoop.hive.ql.metadata.{Table, Hive, Partition}
+import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
+import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.{CreateTableDesc, FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
 import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfo, DecimalTypeInfo, TypeInfoFactory}
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.{HiveDecimalObjectInspector, PrimitiveObjectInspectorFactory}
-import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, ObjectInspector}
-import org.apache.hadoop.hive.serde2.{Deserializer, ColumnProjectionUtils}
-import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.{HiveDecimalObjectInspector, PrimitiveObjectInspectorFactory}
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorConverters, PrimitiveObjectInspector}
+import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfo, TypeInfoFactory}
+import org.apache.hadoop.hive.serde2.{ColumnProjectionUtils, Deserializer, io => hiveIo}
+import org.apache.hadoop.io.{NullWritable, Writable}
+import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.{io => hadoopIo}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.types.{Decimal, DecimalType}
-
+import org.apache.spark.sql.types.{Decimal, DecimalType, UTF8String}
+import org.apache.spark.util.Utils._
 
 /**
  * This class provides the UDF creation and also the UDF instance serialization and
@@ -62,43 +66,34 @@ private[hive] case class HiveFunctionWrapper(var functionClassName: String)
   // for Serialization
   def this() = this(null)
 
-  import java.io.{OutputStream, InputStream}
-  import com.esotericsoftware.kryo.Kryo
-  import org.apache.spark.util.Utils._
-  import org.apache.hadoop.hive.ql.exec.Utilities
-  import org.apache.hadoop.hive.ql.exec.UDF
-
   @transient
-  private val methodDeSerialize = {
-    val method = classOf[Utilities].getDeclaredMethod(
-      "deserializeObjectByKryo",
-      classOf[Kryo],
-      classOf[InputStream],
-      classOf[Class[_]])
-    method.setAccessible(true)
-
-    method
+  def deserializeObjectByKryo[T: ClassTag](
+      kryo: Kryo,
+      in: InputStream,
+      clazz: Class[_]): T = {
+    val inp = new Input(in)
+    val t: T = kryo.readObject(inp,clazz).asInstanceOf[T]
+    inp.close()
+    t
   }
 
   @transient
-  private val methodSerialize = {
-    val method = classOf[Utilities].getDeclaredMethod(
-      "serializeObjectByKryo",
-      classOf[Kryo],
-      classOf[Object],
-      classOf[OutputStream])
-    method.setAccessible(true)
-
-    method
+  def serializeObjectByKryo(
+      kryo: Kryo,
+      plan: Object,
+      out: OutputStream ) {
+    val output: Output = new Output(out)
+    kryo.writeObject(output, plan)
+    output.close()
   }
 
   def deserializePlan[UDFType](is: java.io.InputStream, clazz: Class[_]): UDFType = {
-    methodDeSerialize.invoke(null, Utilities.runtimeSerializationKryo.get(), is, clazz)
+    deserializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), is, clazz)
       .asInstanceOf[UDFType]
   }
 
   def serializePlan(function: AnyRef, out: java.io.OutputStream): Unit = {
-    methodSerialize.invoke(null, Utilities.runtimeSerializationKryo.get(), function, out)
+    serializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), function, out)
   }
 
   private var instance: AnyRef = null
@@ -223,7 +218,7 @@ private[hive] object HiveShim {
       TypeInfoFactory.voidTypeInfo, null)
 
   def getStringWritable(value: Any): hadoopIo.Text =
-    if (value == null) null else new hadoopIo.Text(value.asInstanceOf[String])
+    if (value == null) null else new hadoopIo.Text(value.asInstanceOf[UTF8String].toString)
 
   def getIntWritable(value: Any): hadoopIo.IntWritable =
     if (value == null) null else new hadoopIo.IntWritable(value.asInstanceOf[Int])
@@ -400,7 +395,11 @@ private[hive] object HiveShim {
       Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue(), hdoi.precision(), hdoi.scale())
     }
   }
- 
+
+  def getConvertedOI(inputOI: ObjectInspector, outputOI: ObjectInspector): ObjectInspector = {
+    ObjectInspectorConverters.getConvertedOI(inputOI, outputOI)
+  }
+
   /*
    * Bug introduced in hive-0.13. AvroGenericRecordWritable has a member recordReaderID that
    * is needed to initialize before serialization.

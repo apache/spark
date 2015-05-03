@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql
 
+import org.scalatest.Matchers._
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
-
+import org.apache.spark.sql.types._
 
 class ColumnExpressionSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
@@ -310,12 +311,64 @@ class ColumnExpressionSuite extends QueryTest {
     )
   }
 
+  test("monotonicallyIncreasingId") {
+    // Make sure we have 2 partitions, each with 2 records.
+    val df = TestSQLContext.sparkContext.parallelize(1 to 2, 2).mapPartitions { iter =>
+      Iterator(Tuple1(1), Tuple1(2))
+    }.toDF("a")
+    checkAnswer(
+      df.select(monotonicallyIncreasingId()),
+      Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
+    )
+  }
+
+  test("sparkPartitionId") {
+    val df = TestSQLContext.sparkContext.parallelize(1 to 1, 1).map(i => (i, i)).toDF("a", "b")
+    checkAnswer(
+      df.select(sparkPartitionId()),
+      Row(0)
+    )
+  }
+
   test("lift alias out of cast") {
-    assert(col("1234").as("name").cast("int").expr === col("1234").cast("int").as("name").expr)
+    compareExpressions(
+      col("1234").as("name").cast("int").expr,
+      col("1234").cast("int").as("name").expr)
   }
 
   test("columns can be compared") {
     assert('key.desc == 'key.desc)
     assert('key.desc != 'key.asc)
+  }
+
+  test("alias with metadata") {
+    val metadata = new MetadataBuilder()
+      .putString("originName", "value")
+      .build()
+    val schema = testData
+      .select($"*", col("value").as("abc", metadata))
+      .schema
+    assert(schema("value").metadata === Metadata.empty)
+    assert(schema("abc").metadata === metadata)
+  }
+
+  test("rand") {
+    val randCol = testData.select('key, rand(5L).as("rand"))
+    randCol.columns.length should be (2)
+    val rows = randCol.collect()
+    rows.foreach { row =>
+      assert(row.getDouble(1) <= 1.0)
+      assert(row.getDouble(1) >= 0.0)
+    }
+  }
+
+  test("randn") {
+    val randCol = testData.select('key, randn(5L).as("rand"))
+    randCol.columns.length should be (2)
+    val rows = randCol.collect()
+    rows.foreach { row =>
+      assert(row.getDouble(1) <= 4.0)
+      assert(row.getDouble(1) >= -4.0)
+    }
   }
 }

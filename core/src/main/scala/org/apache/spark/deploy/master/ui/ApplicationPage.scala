@@ -32,7 +32,7 @@ import org.apache.spark.deploy.master.ExecutorDesc
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
-private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") {
+private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") {
 
   private val master = parent.masterActorRef
   private val timeout = parent.timeout
@@ -94,7 +94,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app
             </li>
             <li>
               <strong>Executor Memory:</strong>
-              {Utils.megabytesToString(app.desc.memoryPerSlave)}
+              {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
             </li>
             <li><strong>Submit Date:</strong> {app.submitDate}</li>
             <li><strong>State:</strong> {app.state}</li>

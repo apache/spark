@@ -108,7 +108,7 @@ class JavaSparkContext(val sc: SparkContext)
 
   private[spark] val env = sc.env
 
-  def statusTracker = new JavaSparkStatusTracker(sc)
+  def statusTracker: JavaSparkStatusTracker = new JavaSparkStatusTracker(sc)
 
   def isLocal: java.lang.Boolean = sc.isLocal
 
@@ -754,6 +754,14 @@ class JavaSparkContext(val sc: SparkContext)
    * [[org.apache.spark.api.java.JavaSparkContext.setLocalProperty]].
    */
   def getLocalProperty(key: String): String = sc.getLocalProperty(key)
+
+  /** Control our logLevel. This overrides any user-defined log settings.
+   * @param logLevel The desired log level as a string.
+   * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
+   */
+  def setLogLevel(logLevel: String) {
+    sc.setLogLevel(logLevel)
+  }
 
   /**
    * Assigns a group ID to all the jobs started by this thread until the group ID is set to a

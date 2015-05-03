@@ -22,6 +22,7 @@ import scala.annotation.varargs
 import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -86,20 +87,20 @@ private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, O
   protected def validateInputType(inputType: DataType): Unit = {}
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val inputType = schema(map(inputCol)).dataType
     validateInputType(inputType)
     if (schema.fieldNames.contains(map(outputCol))) {
       throw new IllegalArgumentException(s"Output column ${map(outputCol)} already exists.")
     }
     val outputFields = schema.fields :+
-      StructField(map(outputCol), outputDataType, !outputDataType.isPrimitive)
+      StructField(map(outputCol), outputDataType, nullable = false)
     StructType(outputFields)
   }
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     dataset.withColumn(map(outputCol),
       callUDF(this.createTransformFunc(map), outputDataType, dataset(map(inputCol))))
   }

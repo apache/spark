@@ -19,10 +19,9 @@ package org.apache.spark.sql.parquet
 
 import java.io.IOException
 import java.lang.{Long => JLong}
-import java.text.SimpleDateFormat
-import java.text.NumberFormat
+import java.text.{NumberFormat, SimpleDateFormat}
 import java.util.concurrent.{Callable, TimeUnit}
-import java.util.{ArrayList, Collections, Date, List => JList}
+import java.util.{Date, List => JList}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
@@ -43,12 +42,13 @@ import parquet.io.ParquetDecodingException
 import parquet.schema.MessageType
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row, _}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 
 /**
@@ -152,8 +152,8 @@ private[sql] case class ParquetTableScan(
 
         if (primitiveRow) {
           new Iterator[Row] {
-            def hasNext = iter.hasNext
-            def next() = {
+            def hasNext: Boolean = iter.hasNext
+            def next(): Row = {
               // We are using CatalystPrimitiveRowConverter and it returns a SpecificMutableRow.
               val row = iter.next()._2.asInstanceOf[SpecificMutableRow]
 
@@ -171,8 +171,8 @@ private[sql] case class ParquetTableScan(
           // Create a mutable row since we need to fill in values from partition columns.
           val mutableRow = new GenericMutableRow(outputSize)
           new Iterator[Row] {
-            def hasNext = iter.hasNext
-            def next() = {
+            def hasNext: Boolean = iter.hasNext
+            def next(): Row = {
               // We are using CatalystGroupConverter and it returns a GenericRow.
               // Since GenericRow is not mutable, we just cast it to a Row.
               val row = iter.next()._2.asInstanceOf[Row]
@@ -255,7 +255,7 @@ private[sql] case class InsertIntoParquetTable(
   /**
    * Inserts all rows into the Parquet file.
    */
-  override def execute() = {
+  override def execute(): RDD[Row] = {
     // TODO: currently we do not check whether the "schema"s are compatible
     // That means if one first creates a table and then INSERTs data with
     // and incompatible schema the execution will fail. It would be nice
@@ -268,7 +268,7 @@ private[sql] case class InsertIntoParquetTable(
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
 
     val writeSupport =
-      if (child.output.map(_.dataType).forall(_.isPrimitive)) {
+      if (child.output.map(_.dataType).forall(ParquetTypesConverter.isPrimitiveType)) {
         log.debug("Initializing MutableRowWriteSupport")
         classOf[org.apache.spark.sql.parquet.MutableRowWriteSupport]
       } else {
@@ -302,7 +302,7 @@ private[sql] case class InsertIntoParquetTable(
     childRdd
   }
 
-  override def output = child.output
+  override def output: Seq[Attribute] = child.output
 
   /**
    * Stores the given Row RDD as a Hadoop file.
@@ -356,7 +356,7 @@ private[sql] case class InsertIntoParquetTable(
       } finally {
         writer.close(hadoopContext)
       }
-      committer.commitTask(hadoopContext)
+      SparkHadoopMapRedUtil.commitTask(committer, hadoopContext, context)
       1
     }
     val jobFormat = new AppendingParquetOutputFormat(taskIdOffset)
@@ -381,6 +381,7 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
   extends parquet.hadoop.ParquetOutputFormat[Row] {
   // override to accept existing directories as valid output directory
   override def checkOutputSpecs(job: JobContext): Unit = {}
+  var committer: OutputCommitter = null
 
   // override to choose output filename so not overwrite existing ones
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
@@ -402,6 +403,26 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
   // the opcode of method call for class is INVOKEVIRTUAL and for interface is INVOKEINTERFACE.
   private def getTaskAttemptID(context: TaskAttemptContext): TaskAttemptID = {
     context.getClass.getMethod("getTaskAttemptID").invoke(context).asInstanceOf[TaskAttemptID]
+  }
+
+  // override to create output committer from configuration
+  override def getOutputCommitter(context: TaskAttemptContext): OutputCommitter = {
+    if (committer == null) {
+      val output = getOutputPath(context)
+      val cls = context.getConfiguration.getClass("spark.sql.parquet.output.committer.class",
+        classOf[ParquetOutputCommitter], classOf[ParquetOutputCommitter])
+      val ctor = cls.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
+      committer = ctor.newInstance(output, context).asInstanceOf[ParquetOutputCommitter]
+    }
+    committer
+  }
+
+  // FileOutputFormat.getOutputPath takes JobConf in hadoop-1 but JobContext in hadoop-2
+  private def getOutputPath(context: TaskAttemptContext): Path = {
+    context.getConfiguration().get("mapred.output.dir") match {
+      case null => null
+      case name => new Path(name)
+    }
   }
 }
 
@@ -512,6 +533,7 @@ private[parquet] class FilteringParquetRowInputFormat
 
     import parquet.filter2.compat.FilterCompat.Filter
     import parquet.filter2.compat.RowGroupFilter
+
     import org.apache.spark.sql.parquet.FilteringParquetRowInputFormat.blockLocationCache
 
     val cacheMetadata = configuration.getBoolean(SQLConf.PARQUET_CACHE_METADATA, true)

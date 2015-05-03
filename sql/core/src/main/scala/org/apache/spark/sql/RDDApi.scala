@@ -61,5 +61,7 @@ private[sql] trait RDDApi[T] {
 
   def repartition(numPartitions: Int): DataFrame
 
+  def coalesce(numPartitions: Int): DataFrame
+
   def distinct: DataFrame
 }

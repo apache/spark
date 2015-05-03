@@ -76,7 +76,12 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
     predictPoint(testData, weights, intercept)
   }
 
-  override def toString() = "(weights=%s, intercept=%s)".format(weights, intercept)
+  /**
+   * Print a summary of the model.
+   */
+  override def toString: String = {
+    s"${this.getClass.getName}: intercept = ${intercept}, numFeatures = ${weights.size}"
+  }
 }
 
 /**
@@ -126,6 +131,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /**
    * The dimension of training features.
    */
+  def getNumFeatures: Int = this.numFeatures
+
+  /**
+   * The dimension of training features.
+   */
   protected var numFeatures: Int = -1
 
   /**
@@ -140,6 +150,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * Create a model given the weights and intercept
    */
   protected def createModel(weights: Vector, intercept: Double): M
+
+  /**
+   * Get if the algorithm uses addIntercept
+   */
+  def isAddIntercept: Boolean = this.addIntercept
 
   /**
    * Set if the algorithm should add an intercept. Default false.
@@ -196,6 +211,10 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    */
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
 
+    if (numFeatures < 0) {
+      numFeatures = input.map(_.features.size).first()
+    }
+
     if (input.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")
@@ -206,7 +225,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
       throw new SparkException("Input validation failed.")
     }
 
-    /*
+    /**
      * Scaling columns to unit variance as a heuristic to reduce the condition number:
      *
      * During the optimization process, the convergence (rate) depends on the condition number of

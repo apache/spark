@@ -61,7 +61,7 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
   def checkCondition(input: Expression, expected: Expression): Unit = {
     val plan = testRelation.where(input).analyze
-    val actual = Optimize(plan).expressions.head
+    val actual = Optimize.execute(plan).expressions.head
     compareConditions(actual, expected)
   }
 

@@ -56,7 +56,7 @@ SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
 <div data-lang="python"  markdown="1">
 
 The entry point into all relational functionality in Spark is the
-[`SQLContext`](api/python/pyspark.sql.SQLContext-class.html) class, or one
+[`SQLContext`](api/python/pyspark.sql.html#pyspark.sql.SQLContext) class, or one
 of its decedents.  To create a basic `SQLContext`, all you need is a SparkContext.
 
 {% highlight python %}
@@ -170,14 +170,14 @@ df.select("name").show()
 // Justin
 
 // Select everybody, but increment the age by 1
-df.select("name", df("age") + 1).show()
+df.select(df("name"), df("age") + 1).show()
 // name    (age + 1)
 // Michael null
 // Andy    31
 // Justin  20
 
 // Select people older than 21
-df.filter(df("name") > 21).show()
+df.filter(df("age") > 21).show()
 // age name
 // 30  Andy
 
@@ -193,8 +193,8 @@ df.groupBy("age").count().show()
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-val sc: JavaSparkContext // An existing SparkContext.
-val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+JavaSparkContext sc // An existing SparkContext.
+SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc)
 
 // Create the DataFrame
 DataFrame df = sqlContext.jsonFile("examples/src/main/resources/people.json");
@@ -220,14 +220,14 @@ df.select("name").show();
 // Justin
 
 // Select everybody, but increment the age by 1
-df.select("name", df.col("age").plus(1)).show();
+df.select(df.col("name"), df.col("age").plus(1)).show();
 // name    (age + 1)
 // Michael null
 // Andy    31
 // Justin  20
 
 // Select people older than 21
-df.filter(df("name") > 21).show();
+df.filter(df.col("age").gt(21)).show();
 // age name
 // 30  Andy
 
@@ -270,14 +270,14 @@ df.select("name").show()
 ## Justin
 
 # Select everybody, but increment the age by 1
-df.select("name", df.age + 1).show()
+df.select(df.name, df.age + 1).show()
 ## name    (age + 1)
 ## Michael null
 ## Andy    31
 ## Justin  20
 
 # Select people older than 21
-df.filter(df.name > 21).show()
+df.filter(df.age > 21).show()
 ## age name
 ## 30  Andy
 
@@ -308,8 +308,8 @@ val df = sqlContext.sql("SELECT * FROM table")
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-val sqlContext = ...  // An existing SQLContext
-val df = sqlContext.sql("SELECT * FROM table")
+SQLContext sqlContext = ...  // An existing SQLContext
+DataFrame df = sqlContext.sql("SELECT * FROM table")
 {% endhighlight %}
 </div>
 
@@ -435,7 +435,7 @@ DataFrame teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AN
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
 // The columns of a row in the result can be accessed by ordinal.
-List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
+List<String> teenagerNames = teenagers.javaRDD().map(new Function<Row, String>() {
   public String call(Row row) {
     return "Name: " + row.getString(0);
   }
@@ -509,8 +509,11 @@ val people = sc.textFile("examples/src/main/resources/people.txt")
 // The schema is encoded in a string
 val schemaString = "name age"
 
-// Import Spark SQL data types and Row.
-import org.apache.spark.sql._
+// Import Row.
+import org.apache.spark.sql.Row;
+
+// Import Spark SQL data types
+import org.apache.spark.sql.types.{StructType,StructField,StringType};
 
 // Generate the schema based on the string of schema
 val schema =
@@ -552,13 +555,16 @@ by `SQLContext`.
 
 For example:
 {% highlight java %}
-// Import factory methods provided by DataType.
-import org.apache.spark.sql.types.DataType;
+import org.apache.spark.api.java.function.Function;
+// Import factory methods provided by DataTypes.
+import org.apache.spark.sql.types.DataTypes;
 // Import StructType and StructField
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructField;
 // Import Row.
 import org.apache.spark.sql.Row;
+// Import RowFactory.
+import org.apache.spark.sql.RowFactory;
 
 // sc is an existing JavaSparkContext.
 SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
@@ -572,16 +578,16 @@ String schemaString = "name age";
 // Generate the schema based on the string of schema
 List<StructField> fields = new ArrayList<StructField>();
 for (String fieldName: schemaString.split(" ")) {
-  fields.add(DataType.createStructField(fieldName, DataType.StringType, true));
+  fields.add(DataTypes.createStructField(fieldName, DataTypes.StringType, true));
 }
-StructType schema = DataType.createStructType(fields);
+StructType schema = DataTypes.createStructType(fields);
 
 // Convert records of the RDD (people) to Rows.
 JavaRDD<Row> rowRDD = people.map(
   new Function<String, Row>() {
     public Row call(String record) throws Exception {
       String[] fields = record.split(",");
-      return Row.create(fields[0], fields[1].trim());
+      return RowFactory.create(fields[0], fields[1].trim());
     }
   });
 
@@ -596,7 +602,7 @@ DataFrame results = sqlContext.sql("SELECT name FROM people");
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
 // The columns of a row in the result can be accessed by ordinal.
-List<String> names = results.map(new Function<Row, String>() {
+List<String> names = results.javaRDD().map(new Function<Row, String>() {
   public String call(Row row) {
     return "Name: " + row.getString(0);
   }
@@ -621,7 +627,8 @@ tuples or lists in the RDD created in the step 1.
 For example:
 {% highlight python %}
 # Import SQLContext and data types
-from pyspark.sql import *
+from pyspark.sql import SQLContext
+from pyspark.sql.types import *
 
 # sc is an existing SparkContext.
 sqlContext = SQLContext(sc)
@@ -674,8 +681,8 @@ In the simplest form, the default data source (`parquet` unless otherwise config
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-val df = sqlContext.load("people.parquet")
-df.select("name", "age").save("namesAndAges.parquet")
+val df = sqlContext.load("examples/src/main/resources/users.parquet")
+df.select("name", "favorite_color").save("namesAndFavColors.parquet")
 {% endhighlight %}
 
 </div>
@@ -684,8 +691,8 @@ df.select("name", "age").save("namesAndAges.parquet")
 
 {% highlight java %}
 
-DataFrame df = sqlContext.load("people.parquet");
-df.select("name", "age").save("namesAndAges.parquet");
+DataFrame df = sqlContext.load("examples/src/main/resources/users.parquet");
+df.select("name", "favorite_color").save("namesAndFavColors.parquet");
 
 {% endhighlight %}
 
@@ -695,8 +702,8 @@ df.select("name", "age").save("namesAndAges.parquet");
 
 {% highlight python %}
 
-df = sqlContext.load("people.parquet")
-df.select("name", "age").save("namesAndAges.parquet")
+df = sqlContext.load("examples/src/main/resources/users.parquet")
+df.select("name", "favorite_color").save("namesAndFavColors.parquet")
 
 {% endhighlight %}
 
@@ -715,7 +722,7 @@ using this syntax.
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-val df = sqlContext.load("people.json", "json")
+val df = sqlContext.load("examples/src/main/resources/people.json", "json")
 df.select("name", "age").save("namesAndAges.parquet", "parquet")
 {% endhighlight %}
 
@@ -725,7 +732,7 @@ df.select("name", "age").save("namesAndAges.parquet", "parquet")
 
 {% highlight java %}
 
-DataFrame df = sqlContext.load("people.json", "json");
+DataFrame df = sqlContext.load("examples/src/main/resources/people.json", "json");
 df.select("name", "age").save("namesAndAges.parquet", "parquet");
 
 {% endhighlight %}
@@ -736,7 +743,7 @@ df.select("name", "age").save("namesAndAges.parquet", "parquet");
 
 {% highlight python %}
 
-df = sqlContext.load("people.json", "json")
+df = sqlContext.load("examples/src/main/resources/people.json", "json")
 df.select("name", "age").save("namesAndAges.parquet", "parquet")
 
 {% endhighlight %}
@@ -856,7 +863,7 @@ DataFrame parquetFile = sqlContext.parquetFile("people.parquet");
 //Parquet files can also be registered as tables and then used in SQL statements.
 parquetFile.registerTempTable("parquetFile");
 DataFrame teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
-List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
+List<String> teenagerNames = teenagers.javaRDD().map(new Function<Row, String>() {
   public String call(Row row) {
     return "Name: " + row.getString(0);
   }
@@ -1357,7 +1364,7 @@ the Data Sources API.  The following options are supported:
   <tr>
     <td><code>driver</code></td>
     <td>
-      The class name of the JDBC driver needed to connect to this URL.  This class with be loaded
+      The class name of the JDBC driver needed to connect to this URL.  This class will be loaded
       on the master and workers before running an JDBC commands to allow the driver to
       register itself with the JDBC subsystem.
     </td>
@@ -1367,7 +1374,10 @@ the Data Sources API.  The following options are supported:
     <td>
       These options must all be specified if any of them is specified.  They describe how to
       partition the table when reading in parallel from multiple workers.
-      <code>partitionColumn</code> must be a numeric column from the table in question.
+      <code>partitionColumn</code> must be a numeric column from the table in question. Notice
+      that <code>lowerBound</code> and <code>upperBound</code> are just used to decide the
+      partition stride, not for filtering the rows in table. So all rows in the table will be
+      partitioned and returned.
     </td>
   </tr>
 </table>
@@ -1402,7 +1412,7 @@ DataFrame jdbcDF = sqlContext.load("jdbc", options)
 
 {% highlight python %}
 
-df = sqlContext.load("jdbc", url="jdbc:postgresql:dbserver", dbtable="schema.tablename")
+df = sqlContext.load(source="jdbc", url="jdbc:postgresql:dbserver", dbtable="schema.tablename")
 
 {% endhighlight %}
 
@@ -1638,7 +1648,7 @@ moved into the udf object in `SQLContext`.
 <div data-lang="scala"  markdown="1">
 {% highlight java %}
 
-sqlCtx.udf.register("strLen", (s: String) => s.length())
+sqlContext.udf.register("strLen", (s: String) => s.length())
 
 {% endhighlight %}
 </div>
@@ -1646,7 +1656,7 @@ sqlCtx.udf.register("strLen", (s: String) => s.length())
 <div data-lang="java"  markdown="1">
 {% highlight java %}
 
-sqlCtx.udf().register("strLen", (String s) -> { s.length(); });
+sqlContext.udf().register("strLen", (String s) -> { s.length(); });
 
 {% endhighlight %}
 </div>
@@ -1780,6 +1790,7 @@ in Hive deployments.
 
 
 **Esoteric Hive Features**
+
 * `UNION` type
 * Unique join
 * Column statistics collecting: Spark SQL does not piggyback scans to collect column statistics at

@@ -18,8 +18,9 @@
 import numpy as np
 from numpy import array
 
-from pyspark.mllib.common import callMLlibFunc, inherit_doc
+from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.util import Saveable, Loader
 
 __all__ = ['LabeledPoint', 'LinearModel',
            'LinearRegressionModel', 'LinearRegressionWithSGD',
@@ -107,44 +108,88 @@ class LinearRegressionModel(LinearRegressionModelBase):
     ...     LabeledPoint(3.0, [2.0]),
     ...     LabeledPoint(2.0, [3.0])
     ... ]
-    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), initialWeights=np.array([1.0]))
+    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
+    ...     initialWeights=np.array([1.0]))
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> lrm.save(sc, path)
+    >>> sameModel = LinearRegressionModel.load(sc, path)
+    >>> abs(sameModel.predict(np.array([0.0])) - 0) < 0.5
+    True
+    >>> abs(sameModel.predict(np.array([1.0])) - 1) < 0.5
+    True
+    >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> try:
+    ...    os.removedirs(path)
+    ... except:
+    ...    pass
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(1, {0: 0.0})),
     ...     LabeledPoint(1.0, SparseVector(1, {0: 1.0})),
     ...     LabeledPoint(3.0, SparseVector(1, {0: 2.0})),
     ...     LabeledPoint(2.0, SparseVector(1, {0: 3.0}))
     ... ]
-    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
+    ...     initialWeights=array([1.0]))
+    >>> abs(lrm.predict(array([0.0])) - 0) < 0.5
+    True
+    >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10, step=1.0,
+    ...    miniBatchFraction=1.0, initialWeights=array([1.0]), regParam=0.1, regType="l2",
+    ...    intercept=True, validateData=True)
     >>> abs(lrm.predict(array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
     """
+    def save(self, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.regression.LinearRegressionModel(
+            _py2java(sc, self._coeff), self.intercept)
+        java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.regression.LinearRegressionModel.load(
+            sc._jsc.sc(), path)
+        weights = _java2py(sc, java_model.weights())
+        intercept = java_model.intercept()
+        model = LinearRegressionModel(weights, intercept)
+        return model
 
 
 # train_func should take two parameters, namely data and initial_weights, and
 # return the result of a call to the appropriate JVM stub.
 # _regression_train_wrapper is responsible for setup and error checking.
 def _regression_train_wrapper(train_func, modelClass, data, initial_weights):
+    from pyspark.mllib.classification import LogisticRegressionModel
     first = data.first()
     if not isinstance(first, LabeledPoint):
-        raise ValueError("data should be an RDD of LabeledPoint, but got %s" % first)
-    initial_weights = initial_weights or [0.0] * len(data.first().features)
-    weights, intercept = train_func(data, _convert_to_vector(initial_weights))
-    return modelClass(weights, intercept)
+        raise TypeError("data should be an RDD of LabeledPoint, but got %s" % type(first))
+    if initial_weights is None:
+        initial_weights = [0.0] * len(data.first().features)
+    if (modelClass == LogisticRegressionModel):
+        weights, intercept, numFeatures, numClasses = train_func(
+            data, _convert_to_vector(initial_weights))
+        return modelClass(weights, intercept, numFeatures, numClasses)
+    else:
+        weights, intercept = train_func(data, _convert_to_vector(initial_weights))
+        return modelClass(weights, intercept)
 
 
 class LinearRegressionWithSGD(object):
 
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
-              initialWeights=None, regParam=0.0, regType=None, intercept=False):
+              initialWeights=None, regParam=0.0, regType=None, intercept=False,
+              validateData=True):
         """
         Train a linear regression model on the given data.
 
@@ -166,15 +211,18 @@ class LinearRegressionWithSGD(object):
 
                                      (default: None)
 
-        @param intercept:         Boolean parameter which indicates the use
+        :param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not). (default: False)
+        :param validateData:      Boolean parameter which indicates if the
+                                  algorithm should validate data before training.
+                                  (default: True)
         """
         def train(rdd, i):
             return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam),
-                                 regType, bool(intercept))
+                                 regType, bool(intercept), bool(validateData))
 
         return _regression_train_wrapper(train, LinearRegressionModel, data, initialWeights)
 
@@ -192,36 +240,73 @@ class LassoModel(LinearRegressionModelBase):
     ...     LabeledPoint(3.0, [2.0]),
     ...     LabeledPoint(2.0, [3.0])
     ... ]
-    >>> lrm = LassoWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> lrm = LassoWithSGD.train(sc.parallelize(data), iterations=10, initialWeights=array([1.0]))
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> lrm.save(sc, path)
+    >>> sameModel = LassoModel.load(sc, path)
+    >>> abs(sameModel.predict(np.array([0.0])) - 0) < 0.5
+    True
+    >>> abs(sameModel.predict(np.array([1.0])) - 1) < 0.5
+    True
+    >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> try:
+    ...    os.removedirs(path)
+    ... except:
+    ...    pass
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(1, {0: 0.0})),
     ...     LabeledPoint(1.0, SparseVector(1, {0: 1.0})),
     ...     LabeledPoint(3.0, SparseVector(1, {0: 2.0})),
     ...     LabeledPoint(2.0, SparseVector(1, {0: 3.0}))
     ... ]
-    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
+    ...     initialWeights=array([1.0]))
+    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
+    True
+    >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> lrm = LassoWithSGD.train(sc.parallelize(data), iterations=10, step=1.0,
+    ...     regParam=0.01, miniBatchFraction=1.0, initialWeights=array([1.0]), intercept=True,
+    ...     validateData=True)
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
     """
+    def save(self, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.regression.LassoModel(
+            _py2java(sc, self._coeff), self.intercept)
+        java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.regression.LassoModel.load(
+            sc._jsc.sc(), path)
+        weights = _java2py(sc, java_model.weights())
+        intercept = java_model.intercept()
+        model = LassoModel(weights, intercept)
+        return model
 
 
 class LassoWithSGD(object):
 
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
-              miniBatchFraction=1.0, initialWeights=None):
+              miniBatchFraction=1.0, initialWeights=None, intercept=False,
+              validateData=True):
         """Train a Lasso regression model on the given data."""
         def train(rdd, i):
             return callMLlibFunc("trainLassoModelWithSGD", rdd, int(iterations), float(step),
-                                 float(regParam), float(miniBatchFraction), i)
+                                 float(regParam), float(miniBatchFraction), i, bool(intercept),
+                                 bool(validateData))
 
         return _regression_train_wrapper(train, LassoModel, data, initialWeights)
 
@@ -239,36 +324,74 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     ...     LabeledPoint(3.0, [2.0]),
     ...     LabeledPoint(2.0, [3.0])
     ... ]
-    >>> lrm = RidgeRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> lrm = RidgeRegressionWithSGD.train(sc.parallelize(data), iterations=10,
+    ...     initialWeights=array([1.0]))
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> lrm.save(sc, path)
+    >>> sameModel = RidgeRegressionModel.load(sc, path)
+    >>> abs(sameModel.predict(np.array([0.0])) - 0) < 0.5
+    True
+    >>> abs(sameModel.predict(np.array([1.0])) - 1) < 0.5
+    True
+    >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> try:
+    ...    os.removedirs(path)
+    ... except:
+    ...    pass
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(1, {0: 0.0})),
     ...     LabeledPoint(1.0, SparseVector(1, {0: 1.0})),
     ...     LabeledPoint(3.0, SparseVector(1, {0: 2.0})),
     ...     LabeledPoint(2.0, SparseVector(1, {0: 3.0}))
     ... ]
-    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
+    ...     initialWeights=array([1.0]))
+    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
+    True
+    >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> lrm = RidgeRegressionWithSGD.train(sc.parallelize(data), iterations=10, step=1.0,
+    ...     regParam=0.01, miniBatchFraction=1.0, initialWeights=array([1.0]), intercept=True,
+    ...     validateData=True)
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
     """
+    def save(self, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.regression.RidgeRegressionModel(
+            _py2java(sc, self._coeff), self.intercept)
+        java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.regression.RidgeRegressionModel.load(
+            sc._jsc.sc(), path)
+        weights = _java2py(sc, java_model.weights())
+        intercept = java_model.intercept()
+        model = RidgeRegressionModel(weights, intercept)
+        return model
 
 
 class RidgeRegressionWithSGD(object):
 
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
-              miniBatchFraction=1.0, initialWeights=None):
+              miniBatchFraction=1.0, initialWeights=None, intercept=False,
+              validateData=True):
         """Train a ridge regression model on the given data."""
         def train(rdd, i):
             return callMLlibFunc("trainRidgeModelWithSGD", rdd, int(iterations), float(step),
-                                 float(regParam), float(miniBatchFraction), i)
+                                 float(regParam), float(miniBatchFraction), i, bool(intercept),
+                                 bool(validateData))
 
         return _regression_train_wrapper(train, RidgeRegressionModel, data, initialWeights)
 
@@ -278,7 +401,7 @@ def _test():
     from pyspark import SparkContext
     import pyspark.mllib.regression
     globs = pyspark.mllib.regression.__dict__.copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    globs['sc'] = SparkContext('local[2]', 'PythonTest', batchSize=2)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:

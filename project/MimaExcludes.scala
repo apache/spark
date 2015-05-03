@@ -16,6 +16,7 @@
  */
 
 import com.typesafe.tools.mima.core._
+import com.typesafe.tools.mima.core.ProblemFilters._
 
 /**
  * Additional excludes for checking of Spark's binary compatibility.
@@ -33,6 +34,78 @@ import com.typesafe.tools.mima.core._
 object MimaExcludes {
     def excludes(version: String) =
       version match {
+        case v if v.startsWith("1.4") =>
+          Seq(
+            MimaBuild.excludeSparkPackage("deploy"),
+            MimaBuild.excludeSparkPackage("ml"),
+            // SPARK-5922 Adding a generalized diff(other: RDD[(VertexId, VD)]) to VertexRDD
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff"),
+            // These are needed if checking against the sbt build, since they are part of
+            // the maven-generated artifacts in 1.3.
+            excludePackage("org.spark-project.jetty"),
+            MimaBuild.excludeSparkPackage("unused"),
+            ProblemFilters.exclude[MissingClassProblem]("com.google.common.base.Optional"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.rdd.JdbcRDD.compute"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.broadcast.HttpBroadcastFactory.newBroadcast"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.broadcast.TorrentBroadcastFactory.newBroadcast"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.scheduler.OutputCommitCoordinator$OutputCommitCoordinatorActor")
+          ) ++ Seq(
+            // SPARK-4655 - Making Stage an Abstract class broke binary compatility even though
+            // the stage class is defined as private[spark]
+            ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.scheduler.Stage")
+          ) ++ Seq(
+            // SPARK-6510 Add a Graph#minus method acting as Set#difference
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.minus")
+          ) ++ Seq(
+            // SPARK-6492 Fix deadlock in SparkContext.stop()
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.org$" +
+                "apache$spark$SparkContext$$SPARK_CONTEXT_CONSTRUCTOR_LOCK")
+          )++ Seq(
+            // SPARK-6693 add tostring with max lines and width for matrix
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.toString")
+          )++ Seq(
+            // SPARK-6703 Add getOrCreate method to SparkContext
+            ProblemFilters.exclude[IncompatibleResultTypeProblem]
+                ("org.apache.spark.SparkContext.org$apache$spark$SparkContext$$activeContext")
+          )++ Seq(
+            // SPARK-7090 Introduce LDAOptimizer to LDA to further improve extensibility
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.mllib.clustering.LDA$EMOptimizer")
+          ) ++ Seq(
+            // SPARK-6756 add toSparse, toDense, numActives, numNonzeros, and compressed to Vector
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.compressed"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.toDense"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.numNonzeros"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.toSparse"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.numActives")
+          ) ++ Seq(
+            // This `protected[sql]` method was removed in 1.3.1
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.sql.SQLContext.checkAnalysis"),
+            // This `private[sql]` class was removed in 1.4.0:
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.execution.AddExchange"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.execution.AddExchange$"),
+            // These test support classes were moved out of src/main and into src/test:
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetTestData"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetTestData$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.TestGroupWriteSupport")
+          )
+
         case v if v.startsWith("1.3") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
@@ -181,6 +254,9 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.RealClock"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Clock"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.TestClock")
+          ) ++ Seq(
+            // SPARK-5922 Adding a generalized diff(other: RDD[(VertexId, VD)]) to VertexRDD
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff")
           )
 
         case v if v.startsWith("1.2") =>

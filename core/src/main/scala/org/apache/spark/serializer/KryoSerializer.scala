@@ -49,10 +49,21 @@ class KryoSerializer(conf: SparkConf)
   with Logging
   with Serializable {
 
-  private val bufferSize =
-    (conf.getDouble("spark.kryoserializer.buffer.mb", 0.064) * 1024 * 1024).toInt
+  private val bufferSizeKb = conf.getSizeAsKb("spark.kryoserializer.buffer", "64k")
+  
+  if (bufferSizeKb >= 2048) {
+    throw new IllegalArgumentException("spark.kryoserializer.buffer must be less than " +
+      s"2048 mb, got: + $bufferSizeKb mb.")
+  }
+  private val bufferSize = (bufferSizeKb * 1024).toInt
 
-  private val maxBufferSize = conf.getInt("spark.kryoserializer.buffer.max.mb", 64) * 1024 * 1024
+  val maxBufferSizeMb = conf.getSizeAsMb("spark.kryoserializer.buffer.max", "64m").toInt
+  if (maxBufferSizeMb >= 2048) {
+    throw new IllegalArgumentException("spark.kryoserializer.buffer.max must be less than " +
+      s"2048 mb, got: + $maxBufferSizeMb mb.")
+  }
+  private val maxBufferSize = maxBufferSizeMb * 1024 * 1024
+
   private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
   private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", false)
   private val userRegistrator = conf.getOption("spark.kryo.registrator")
@@ -60,7 +71,7 @@ class KryoSerializer(conf: SparkConf)
     .split(',')
     .filter(!_.isEmpty)
 
-  def newKryoOutput() = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
+  def newKryoOutput(): KryoOutput = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
 
   def newKryo(): Kryo = {
     val instantiator = new EmptyScalaKryoInstantiator
@@ -163,7 +174,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
     } catch {
       case e: KryoException if e.getMessage.startsWith("Buffer overflow") =>
         throw new SparkException(s"Kryo serialization failed: ${e.getMessage}. To avoid this, " +
-          "increase spark.kryoserializer.buffer.max.mb value.")
+          "increase spark.kryoserializer.buffer.max value.")
     }
     ByteBuffer.wrap(output.toBytes)
   }
@@ -188,6 +199,16 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
 
   override def deserializeStream(s: InputStream): DeserializationStream = {
     new KryoDeserializationStream(kryo, s)
+  }
+
+  /**
+   * Returns true if auto-reset is on. The only reason this would be false is if the user-supplied
+   * registrator explicitly turns auto-reset off.
+   */
+  def getAutoReset(): Boolean = {
+    val field = classOf[Kryo].getDeclaredField("autoReset")
+    field.setAccessible(true)
+    field.get(kryo).asInstanceOf[Boolean]
   }
 }
 

@@ -149,20 +149,27 @@ private[spark] object UIUtils extends Logging {
     }
   }
 
-  def prependBaseUri(basePath: String = "", resource: String = "") = uiRoot + basePath + resource
+  def prependBaseUri(basePath: String = "", resource: String = ""): String = {
+    uiRoot + basePath + resource
+  }
 
-  def commonHeaderNodes = {
+  def commonHeaderNodes: Seq[Node] = {
     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
     <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
           type="text/css" />
     <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
           type="text/css" />
+    <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")}
+          typ="text/css" />
+    <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")}></link>
     <script src={prependBaseUri("/static/sorttable.js")} ></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
+    <script src={prependBaseUri("/static/vis.min.js")}></script>
     <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri("/static/table.js")}></script>
     <script src={prependBaseUri("/static/additional-metrics.js")}></script>
+    <script src={prependBaseUri("/static/timeline-view.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */

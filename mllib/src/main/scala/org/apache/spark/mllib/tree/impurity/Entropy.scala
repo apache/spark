@@ -71,7 +71,7 @@ object Entropy extends Impurity {
    * Get this impurity instance.
    * This is useful for passing impurity parameters to a Strategy in Java.
    */
-  def instance = this
+  def instance: this.type = this
 
 }
 
