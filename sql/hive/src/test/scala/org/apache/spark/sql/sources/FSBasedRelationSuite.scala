@@ -22,7 +22,7 @@ import scala.collection.mutable
 import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.mapreduce.OutputFormat
+import org.apache.hadoop.mapreduce.{TaskAttemptContext, OutputFormat}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 import org.scalatest.BeforeAndAfter
 
@@ -56,7 +56,7 @@ class SimpleFSBasedSource extends FSBasedRelationProvider {
 }
 
 class SimpleOutputWriter extends OutputWriter {
-  override def init(path: String, dataSchema: StructType, conf: Configuration): Unit = {
+  override def init(path: String, dataSchema: StructType, context: TaskAttemptContext): Unit = {
     TestResult.synchronized {
       TestResult.writerPaths += path
     }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.sources
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.mapreduce.{OutputFormat, OutputCommitter}
+import org.apache.hadoop.mapreduce.{TaskAttemptContext, OutputFormat, OutputCommitter}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -263,12 +263,12 @@ abstract class OutputWriter {
    * @param path The file path to which this [[OutputWriter]] is supposed to write.
    * @param dataSchema Schema of the rows to be written. Partition columns are not included in the
    *        schema if the corresponding relation is partitioned.
-   * @param conf Hadoop configuration inherited from driver side.
+   * @param context The Hadoop MapReduce task context.
    */
   def init(
       path: String,
       dataSchema: StructType,
-      conf: Configuration): Unit = ()
+      context: TaskAttemptContext): Unit = ()
 
   /**
    * Persists a single row.  Invoked on the executor side.  When writing to dynamically partitioned

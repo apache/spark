@@ -208,14 +208,14 @@ private[sql] abstract class BaseWriterContainer(
   protected val serializableConf = new SerializableWritable(ContextUtil.getConfiguration(job))
 
   // This is only used on driver side.
-  @transient private var jobContext: JobContext = job
+  @transient private val jobContext: JobContext = job
 
   // The following fields are initialized and used on both driver and executor side.
   @transient private var outputCommitter: OutputCommitter = _
   @transient private var jobId: JobID = _
   @transient private var taskId: TaskID = _
   @transient private var taskAttemptId: TaskAttemptID = _
-  @transient private var taskAttemptContext: TaskAttemptContext = _
+  @transient protected var taskAttemptContext: TaskAttemptContext = _
 
   protected val outputPath = {
     assert(
@@ -266,11 +266,7 @@ private[sql] abstract class BaseWriterContainer(
   // Called on executor side when writing rows
   def outputWriterForRow(row: Row): OutputWriter
 
-  protected def initWriters(): Unit = {
-    val writer = outputWriterClass.newInstance()
-    writer.init(outputPath, dataSchema, serializableConf.value)
-    mutable.Map(outputPath -> writer)
-  }
+  protected def initWriters(): Unit
 
   def commitTask(): Unit = {
     SparkHadoopMapRedUtil.commitTask(
@@ -302,7 +298,7 @@ private[sql] class DefaultWriterContainer(
 
   override protected def initWriters(): Unit = {
     writer = relation.outputWriterClass.newInstance()
-    writer.init(outputPath, dataSchema, serializableConf.value)
+    writer.init(outputPath, dataSchema, taskAttemptContext)
   }
 
   override def outputWriterForRow(row: Row): OutputWriter = writer
@@ -346,7 +342,7 @@ private[sql] class DynamicPartitionWriterContainer(
     outputWriters.getOrElseUpdate(partitionPath, {
       val path = new Path(outputPath, partitionPath.stripPrefix(Path.SEPARATOR))
       val writer = outputWriterClass.newInstance()
-      writer.init(path.toString, dataSchema, serializableConf.value)
+      writer.init(path.toString, dataSchema, taskAttemptContext)
       writer
     })
   }
