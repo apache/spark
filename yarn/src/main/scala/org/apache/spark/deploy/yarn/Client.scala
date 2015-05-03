@@ -132,7 +132,7 @@ private[spark] class Client(
     sparkConf.getOption("spark.yarn.maxAppAttempts").map(_.toInt) match {
       case Some(v) => appContext.setMaxAppAttempts(v)
       case None => logDebug("spark.yarn.maxAppAttempts is not set. " +
-        "Cluster's default value will be used.")
+          "Cluster's default value will be used.")
     }
     val capability = Records.newRecord(classOf[Resource])
     capability.setMemory(args.amMemory + amMemoryOverhead)
@@ -912,7 +912,7 @@ object Client extends Logging {
    * classpath specified through the Hadoop and Yarn configurations.
    */
   private[yarn] def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String])
-  : Unit = {
+    : Unit = {
     val classPathElementsToAdd = getYarnAppClasspath(conf) ++ getMRAppClasspath(conf)
     for (c <- classPathElementsToAdd.flatten) {
       YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name, c.trim)
@@ -989,12 +989,12 @@ object Client extends Logging {
    * @param args Client arguments (when starting the AM) or null (when starting executors).
    */
   private[yarn] def populateClasspath(
-                                       args: ClientArguments,
-                                       conf: Configuration,
-                                       sparkConf: SparkConf,
-                                       env: HashMap[String, String],
-                                       isAM: Boolean,
-                                       extraClassPath: Option[String] = None): Unit = {
+      args: ClientArguments,
+      conf: Configuration,
+      sparkConf: SparkConf,
+      env: HashMap[String, String],
+      isAM: Boolean,
+      extraClassPath: Option[String] = None): Unit = {
     extraClassPath.foreach(addClasspathEntry(_, env))
     addClasspathEntry(
       YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env
@@ -1033,8 +1033,8 @@ object Client extends Logging {
   }
 
   private def getUserClasspath(
-                                mainJar: Option[String],
-                                secondaryJars: Option[String]): Array[URI] = {
+      mainJar: Option[String],
+      secondaryJars: Option[String]): Array[URI] = {
     val mainUri = mainJar.orElse(Some(APP_JAR)).map(new URI(_))
     val secondaryUris = secondaryJars.map(_.split(",")).toSeq.flatten.map(new URI(_))
     (mainUri ++ secondaryUris).toArray
@@ -1053,9 +1053,9 @@ object Client extends Logging {
    * @param env       Map holding the environment variables.
    */
   private def addFileToClasspath(
-                                  uri: URI,
-                                  fileName: String,
-                                  env: HashMap[String, String]): Unit = {
+      uri: URI,
+      fileName: String,
+      env: HashMap[String, String]): Unit = {
     if (uri != null && uri.getScheme == LOCAL_SCHEME) {
       addClasspathEntry(uri.getPath, env)
     } else if (fileName != null) {
