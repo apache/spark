@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.sql.test.TestSQLContext.{logicalPlanToSparkQuery, sql}
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, TestSQLContext}
-import org.apache.spark.sql.types._
-
 import scala.language.postfixOps
+
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, TestSQLContext}
+import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
+import org.apache.spark.sql.test.TestSQLContext.implicits._
+import org.apache.spark.sql.test.TestSQLContext.sql
 
 
 class DataFrameSuite extends QueryTest {
