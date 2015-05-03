@@ -17,27 +17,31 @@
 
 package org.apache.spark.sql.catalyst.test
 
-import org.apache.spark.sql.catalyst.CatalystConf
-
 import scala.collection.immutable
-import scala.collection.mutable
+import scala.collection.JavaConversions._
+
+import org.apache.spark.sql.catalyst.CatalystConf
 
 /** A CatalystConf that can be used for local testing. */
 class SimpleCatalystConf(caseSensitive: Boolean) extends CatalystConf {
-  val map = mutable.Map[String, String]()
+  val settings = java.util.Collections.synchronizedMap(
+    new java.util.HashMap[String, String]())
 
   override def caseSensitiveAnalysis: Boolean = caseSensitive
 
   override def setConf(key: String, value: String) : Unit = {
-    map.put(key, value)
+    settings.put(key, value)
   }
+
   override def getConf(key: String) : String ={
-    map.get(key).get
+    settings.get(key)
   }
+
   override def getConf(key: String, defaultValue: String) : String = {
-    map.getOrElse(key, defaultValue)
+    Option(settings.get(key)).getOrElse(defaultValue)
   }
-  override def getAllConfs: immutable.Map[String, String] = {
-    map.toMap
+
+  override def getAllConfs: immutable.Map[String, String] = settings.synchronized {
+    settings.toMap
   }
 }
