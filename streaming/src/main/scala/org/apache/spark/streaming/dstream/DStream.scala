@@ -770,8 +770,8 @@ abstract class DStream[T: ClassTag] (
       logWarning("toTime (" + fromTime + ") is not a multiple of slideDuration ("
         + slideDuration + ")")
     }
-    val alignedToTime = toTime.floor(slideDuration)
-    val alignedFromTime = fromTime.floor(slideDuration)
+    val alignedToTime = toTime.floor(slideDuration, zeroTime)
+    val alignedFromTime = fromTime.floor(slideDuration, zeroTime)
 
     logInfo("Slicing from " + fromTime + " to " + toTime +
       " (aligned to " + alignedFromTime + " and " + alignedToTime + ")")
