@@ -19,6 +19,8 @@ package org.apache.spark.sql.sources
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.mapreduce.{OutputFormat, OutputCommitter}
+import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -363,7 +365,7 @@ abstract class FSBasedRelation private[sql](
   /**
    * For a non-partitioned relation, this method builds an `RDD[Row]` containing all rows within
    * this relation. For partitioned relations, this method is called for each selected partition,
-   * and builds an `RDD[Row]` containg all rows within that single partition.
+   * and builds an `RDD[Row]` containing all rows within that single partition.
    *
    * @param inputPaths For a non-partitioned relation, it contains paths of all data files in the
    *        relation. For a partitioned relation, it contains paths of all data files in a single
@@ -377,7 +379,7 @@ abstract class FSBasedRelation private[sql](
   /**
    * For a non-partitioned relation, this method builds an `RDD[Row]` containing all rows within
    * this relation. For partitioned relations, this method is called for each selected partition,
-   * and builds an `RDD[Row]` containg all rows within that single partition.
+   * and builds an `RDD[Row]` containing all rows within that single partition.
    *
    * @param requiredColumns Required columns.
    * @param inputPaths For a non-partitioned relation, it contains paths of all data files in the
@@ -391,7 +393,7 @@ abstract class FSBasedRelation private[sql](
   /**
    * For a non-partitioned relation, this method builds an `RDD[Row]` containing all rows within
    * this relation. For partitioned relations, this method is called for each selected partition,
-   * and builds an `RDD[Row]` containg all rows within that single partition.
+   * and builds an `RDD[Row]` containing all rows within that single partition.
    *
    * @param requiredColumns Required columns.
    * @param filters Candidate filters to be pushed down. The actual filter should be the conjunction
@@ -409,7 +411,7 @@ abstract class FSBasedRelation private[sql](
     buildScan(requiredColumns, inputPaths)
   }
 
-  def prepareForWrite(conf: Configuration): Unit
+  def outputFormatClass: Class[_ <: OutputFormat[Void, Row]]
 
   /**
    * This method is responsible for producing a new [[OutputWriter]] for each newly opened output

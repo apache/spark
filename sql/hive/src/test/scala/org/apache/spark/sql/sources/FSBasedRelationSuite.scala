@@ -22,6 +22,8 @@ import scala.collection.mutable
 import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.mapreduce.OutputFormat
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.rdd.RDD
@@ -108,7 +110,10 @@ class SimpleFSBasedRelation
 
   override def outputWriterClass: Class[_ <: OutputWriter] = classOf[SimpleOutputWriter]
 
-  override def prepareForWrite(conf: Configuration): Unit = ()
+  override def outputFormatClass: Class[_ <: OutputFormat[Void, Row]] = {
+    // This is just a mock, not used within this test suite.
+    classOf[TextOutputFormat[Void, Row]]
+  }
 }
 
 object TestResult {
