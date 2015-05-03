@@ -353,4 +353,26 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     slaveRpcEnv.shutdown()
   }
 
+
+  test("construction of ConfiguredTimeout with properties") {
+    val conf = new SparkConf
+
+    val testProp = "spark.ask.test.timeout"
+    val testDurationSeconds = 30
+
+    conf.set(testProp, testDurationSeconds.toString + "s")
+
+    val ct = ConfiguredTimeout(conf, testProp)
+    assert( testDurationSeconds === ct.timeout.toSeconds )
+
+    var wasRaised = false
+    try {
+      ConfiguredTimeout(conf, "spark.ask.invalid.timeout")
+    } catch {
+      case _: Exception =>
+        wasRaised = true
+    }
+    assert(wasRaised)
+  }
+
 }

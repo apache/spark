@@ -22,6 +22,8 @@ import java.util.concurrent.TimeoutException
 import scala.collection.JavaConversions.mapAsJavaMap
 import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
 import akka.pattern.ask
@@ -32,45 +34,58 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, SparkException}
 
 /**
- * Binds a timeout to a configuration property so that a thrown akka timeout exception can be
- * traced back to the originating value.  The main constructor takes a generic timeout and
- * description while the auxilary constructor uses a specific property defined in the
- * configuration.
- * @param timeout_duration timeout duration in milliseconds
- * @param timeout_description description to be displayed in a timeout exception
+ * Associates a timeout with a configuration property so that a TimeoutException can be
+ * traced back to the controlling property.  The main constructor takes a generic timeout
+ * and description while the auxilary constructor uses a specific property defined in the
+ * given configuration.
+ * @param duration timeout duration in milliseconds
+ * @param description description to be displayed in a timeout exception
  */
-class ConfiguredTimeout(timeout_duration: FiniteDuration, timeout_description: String = null) {
+class ConfiguredTimeout(duration: FiniteDuration, description: String) {
 
   /**
-   * Specialized constructor to lookup the timeout property in the configuration and construct
-   * a FiniteDuration timeout with the property key as the description
+   * Lookup the timeout property in the configuration and construct
+   * a FiniteDuration timeout with the property key as the description.
+   * Throws a NoSuchElementException if it's not set
    * @param conf configuration properties containing the timeout
-   * @param timeout_prop property key for the timeout
+   * @param timeoutProp property key for the timeout in seconds
    */
-  def this(conf: SparkConf, timeout_prop: String) = {
-    this(FiniteDuration(conf.getInt(timeout_prop, -1), "millis"), timeout_prop)
-    require(timeout_duration.toMillis >= 0, "invalid property string: " + timeout_prop)
+  def this(conf: SparkConf, timeoutProp: String) = {
+    this(conf.getTimeAsSeconds(timeoutProp) seconds,
+      "This timeout is controlled by " + timeoutProp)
   }
 
-  val timeout = timeout_duration
-  val description = timeout_description
+  /**
+   * Lookup the timeout property in the configuration and construct
+   * a FiniteDuration timeout with the property key as the description.
+   * Uses the given default value if property is not set
+   * @param conf configuration properties containing the timeout
+   * @param timeoutProp property key for the timeout in seconds
+   */
+  def this(conf: SparkConf, timeoutProp: String, defaultValue: String) = {
+    this(conf.getTimeAsSeconds(timeoutProp, defaultValue) seconds,
+      "This timeout is controlled by " + timeoutProp)
+  }
+
+  val timeout = duration
+  val desc = description
 }
 
 object ConfiguredTimeout {
 
-  /**
-   * Implicit conversion to allow for a simple FiniteDuration timeout to be used instead of a
-   * ConfiguredTimeout when the description is not needed.
-   * @param timeout_duration timeout duration in milliseconds
-   * @return ConfiguredTimeout object
-   */
-  implicit def toConfiguredTimeout(timeout_duration: FiniteDuration): ConfiguredTimeout =
-    new ConfiguredTimeout(timeout_duration)
+  def apply(conf: SparkConf, timeoutProp: String): ConfiguredTimeout =
+    new ConfiguredTimeout(conf, timeoutProp)
 
-  def apply(conf: SparkConf, timeout_prop: String): ConfiguredTimeout =
-    new ConfiguredTimeout(conf, timeout_prop)
-  def apply(timeout_duration: FiniteDuration, timeout_description: String): ConfiguredTimeout =
-    new ConfiguredTimeout(timeout_duration, timeout_description)
+  def apply(duration: FiniteDuration, description: String): ConfiguredTimeout =
+    new ConfiguredTimeout(duration, description)
+
+  /** Create a ConfiguredTimeout using standard property for askTimeouts */
+  def createAskTimeout(conf: SparkConf): ConfiguredTimeout = {
+    val askTimeoutKey = "spark.rpc.askTimeout"
+    val fd = { conf.getTimeAsSeconds(askTimeoutKey,
+      conf.get("spark.network.timeout", "120s")) seconds }
+    new ConfiguredTimeout(fd, "This timeout is controlled by " + askTimeoutKey)
+  }
 }
 
 /**
@@ -224,15 +239,15 @@ private[spark] object AkkaUtils extends Logging {
       } catch {
         case ie: InterruptedException => throw ie
         case te: TimeoutException =>
-          var msg = te.toString()
-          if (confTimeout.description != null) {
-            msg += " with [" + confTimeout.description + "]"
-          }
+          val msg = te.toString() + " " + confTimeout.desc
           lastException = new TimeoutException(msg)
+          logWarning(s"Error sending message [message = $message] in $attempts attempts",
+            lastException)
         case e: Exception =>
           lastException = e
           logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
       }
+
       Thread.sleep(retryInterval)
     }
 

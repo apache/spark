@@ -32,7 +32,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
-import org.apache.spark.util.{AkkaUtils, RpcUtils, Utils}
+import org.apache.spark.util.{ConfiguredTimeout, AkkaUtils, RpcUtils, Utils}
 import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
 
@@ -223,9 +223,9 @@ private[rest] class KillRequestServlet(masterActor: ActorRef, conf: SparkConf)
   }
 
   protected def handleKill(submissionId: String): KillSubmissionResponse = {
-    val askTimeout = RpcUtils.askTimeout(conf)
+    val confAskTimeout = ConfiguredTimeout.createAskTimeout(conf)
     val response = AkkaUtils.askWithReply[DeployMessages.KillDriverResponse](
-      DeployMessages.RequestKillDriver(submissionId), masterActor, askTimeout)
+      DeployMessages.RequestKillDriver(submissionId), masterActor, confAskTimeout)
     val k = new KillSubmissionResponse
     k.serverSparkVersion = sparkVersion
     k.message = response.message
@@ -257,9 +257,9 @@ private[rest] class StatusRequestServlet(masterActor: ActorRef, conf: SparkConf)
   }
 
   protected def handleStatus(submissionId: String): SubmissionStatusResponse = {
-    val askTimeout = RpcUtils.askTimeout(conf)
+    val confAskTimeout = ConfiguredTimeout.createAskTimeout(conf)
     val response = AkkaUtils.askWithReply[DeployMessages.DriverStatusResponse](
-      DeployMessages.RequestDriverStatus(submissionId), masterActor, askTimeout)
+      DeployMessages.RequestDriverStatus(submissionId), masterActor, confAskTimeout)
     val message = response.exception.map { s"Exception from the cluster:\n" + formatException(_) }
     val d = new SubmissionStatusResponse
     d.serverSparkVersion = sparkVersion
@@ -321,10 +321,10 @@ private[rest] class SubmitRequestServlet(
       responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
     requestMessage match {
       case submitRequest: CreateSubmissionRequest =>
-        val askTimeout = RpcUtils.askTimeout(conf)
+        val confAskTimeout = ConfiguredTimeout.createAskTimeout(conf)
         val driverDescription = buildDriverDescription(submitRequest)
         val response = AkkaUtils.askWithReply[DeployMessages.SubmitDriverResponse](
-          DeployMessages.RequestSubmitDriver(driverDescription), masterActor, askTimeout)
+          DeployMessages.RequestSubmitDriver(driverDescription), masterActor, confAskTimeout)
         val submitResponse = new CreateSubmissionResponse
         submitResponse.serverSparkVersion = sparkVersion
         submitResponse.message = response.message
