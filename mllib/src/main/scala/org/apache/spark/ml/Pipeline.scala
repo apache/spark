@@ -21,7 +21,7 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
-import org.apache.spark.ml.param.{Param, ParamMap}
+import org.apache.spark.ml.param.{Params, Param, ParamMap}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
 
@@ -86,6 +86,14 @@ class Pipeline extends Estimator[PipelineModel] {
   def setStages(value: Array[PipelineStage]): this.type = { set(stages, value); this }
   def getStages: Array[PipelineStage] = getOrDefault(stages)
 
+  override def validate(paramMap: ParamMap): Unit = {
+    val map = extractParamMap(paramMap)
+    getStages.foreach {
+      case pStage: Params => pStage.validate(map)
+      case _ =>
+    }
+  }
+
   /**
    * Fits the pipeline to the input dataset with additional parameters. If a stage is an
    * [[Estimator]], its [[Estimator#fit]] method will be called on the input dataset to fit a model.
@@ -140,7 +148,7 @@ class Pipeline extends Estimator[PipelineModel] {
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = extractParamMap(paramMap)
     val theStages = map(stages)
-    require(theStages.toSet.size == theStages.size,
+    require(theStages.toSet.size == theStages.length,
       "Cannot have duplicate components in a pipeline.")
     theStages.foldLeft(schema)((cur, stage) => stage.transformSchema(cur, paramMap))
   }
@@ -157,6 +165,11 @@ class PipelineModel private[ml] (
     private[ml] val stages: Array[Transformer])
   extends Model[PipelineModel] with Logging {
 
+  override def validate(paramMap: ParamMap): Unit = {
+    val map = fittingParamMap ++ extractParamMap(paramMap)
+    stages.foreach(_.validate(map))
+  }
+
   /**
    * Gets the model produced by the input estimator. Throws an NoSuchElementException is the input
    * estimator does not exist in the pipeline.
@@ -168,7 +181,7 @@ class PipelineModel private[ml] (
     }
     if (matched.isEmpty) {
       throw new NoSuchElementException(s"Cannot find stage $stage from the pipeline.")
-    } else if (matched.size > 1) {
+    } else if (matched.length > 1) {
       throw new IllegalStateException(s"Cannot have duplicate estimators in the sample pipeline.")
     } else {
       matched.head.asInstanceOf[M]

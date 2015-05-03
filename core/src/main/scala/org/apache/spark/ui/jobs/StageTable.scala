@@ -76,15 +76,20 @@ private[ui] class StageTableBase(
     val basePathUri = UIUtils.prependBaseUri(basePath)
 
     val killLink = if (killEnabled) {
-      val killLinkUri = s"$basePathUri/stages/stage/kill/"
       val confirm =
         s"if (window.confirm('Are you sure you want to kill stage ${s.stageId} ?')) " +
         "{ this.parentNode.submit(); return true; } else { return false; }"
+      // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
+      /*
+      val killLinkUri = s"$basePathUri/stages/stage/kill/"
       <form action={killLinkUri} method="POST" style="display:inline">
         <input type="hidden" name="id" value={s.stageId.toString}/>
         <input type="hidden" name="terminate" value="true"/>
         <a href="#" onclick={confirm} class="kill-link">(kill)</a>
       </form>
+       */
+      val killLinkUri = s"$basePathUri/stages/stage/kill/?id=${s.stageId}&terminate=true"
+      <a href={killLinkUri} onclick={confirm} class="kill-link">(kill)</a>
     }
 
     val nameLinkUri = s"$basePathUri/stages/stage?id=${s.stageId}&attempt=${s.attemptId}"
@@ -174,7 +179,8 @@ private[ui] class StageTableBase(
   }
 
   /** Render an HTML row that represents a stage */
-  private def renderStageRow(s: StageInfo): Seq[Node] = <tr>{stageRow(s)}</tr>
+  private def renderStageRow(s: StageInfo): Seq[Node] =
+    <tr id={"stage-" + s.stageId + "-" + s.attemptId}>{stageRow(s)}</tr>
 }
 
 private[ui] class FailedStageTable(

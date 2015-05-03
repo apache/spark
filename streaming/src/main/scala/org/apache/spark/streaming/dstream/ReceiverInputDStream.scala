@@ -24,7 +24,7 @@ import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.{Receiver, WriteAheadLogBasedStoreResult}
-import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
+import org.apache.spark.streaming.scheduler.{InputInfo, ReceivedBlockInfo}
 
 /**
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]
@@ -38,9 +38,6 @@ import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
  */
 abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
   extends InputDStream[T](ssc_) {
-
-  /** This is an unique identifier for the receiver input stream. */
-  val id = ssc.getNewReceiverStreamId()
 
   /**
    * Gets the receiver object that will be sent to the worker nodes
@@ -72,6 +69,10 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
         val blockStoreResults = blockInfos.map { _.blockStoreResult }
         val blockIds = blockStoreResults.map { _.blockId.asInstanceOf[BlockId] }.toArray
 
+        // Register the input blocks information into InputInfoTracker
+        val inputInfo = InputInfo(id, blockInfos.map(_.numRecords).sum)
+        ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
+
         // Check whether all the results are of the same type
         val resultTypes = blockStoreResults.map { _.getClass }.distinct
         if (resultTypes.size > 1) {
@@ -82,7 +83,7 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
         // WriteAheadLogBackedBlockRDD else create simple BlockRDD.
         if (resultTypes.size == 1 && resultTypes.head == classOf[WriteAheadLogBasedStoreResult]) {
           val logSegments = blockStoreResults.map {
-            _.asInstanceOf[WriteAheadLogBasedStoreResult].segment
+            _.asInstanceOf[WriteAheadLogBasedStoreResult].walRecordHandle
           }.toArray
           // Since storeInBlockManager = false, the storage level does not matter.
           new WriteAheadLogBackedBlockRDD[T](ssc.sparkContext,

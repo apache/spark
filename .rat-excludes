@@ -15,6 +15,7 @@ TAGS
 RELEASE
 control
 docs
+docker.properties.template
 fairscheduler.xml.template
 spark-defaults.conf.template
 log4j.properties
@@ -33,6 +34,9 @@ d3.min.js
 dagre-d3.min.js
 graphlib-dot.min.js
 sorttable.js
+vis.min.js
+vis.min.css
+vis.map
 .*avsc
 .*txt
 .*json

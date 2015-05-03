@@ -49,6 +49,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   type PoolName = String
   type ExecutorId = String
 
+  // Applicatin:
+  @volatile var startTime = -1L
+
   // Jobs:
   val activeJobs = new HashMap[JobId, JobUIData]
   val completedJobs = ListBuffer[JobUIData]()
@@ -74,6 +77,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   // Misc:
   val executorIdToBlockManagerId = HashMap[ExecutorId, BlockManagerId]()
+
   def blockManagerIds: Seq[BlockManagerId] = executorIdToBlockManagerId.values.toSeq
 
   var schedulingMode: Option[SchedulingMode] = None
@@ -515,4 +519,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     }
   }
 
+  override def onApplicationStart(appStarted: SparkListenerApplicationStart) {
+    startTime = appStarted.time
+  }
 }
