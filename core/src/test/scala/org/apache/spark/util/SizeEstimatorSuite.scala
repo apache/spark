@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, FunSuite, PrivateMethodTester}
 
 class DummyClass1 {}
@@ -34,6 +36,15 @@ class DummyClass4(val d: DummyClass3) {
   val x: Int = 0
 }
 
+// dummy class to show class field blocks alignment.
+class DummyClass5 extends DummyClass1 {
+  val x: Boolean = true
+}
+
+class DummyClass6 extends DummyClass5 {
+  val y: Boolean = true
+}
+
 object DummyString {
   def apply(str: String) : DummyString = new DummyString(str.toArray)
 }
@@ -48,6 +59,7 @@ class SizeEstimatorSuite
 
   override def beforeEach() {
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
+    super.beforeEach()
     System.setProperty("os.arch", "amd64")
     System.setProperty("spark.test.useCompressedOops", "true")
   }
@@ -58,6 +70,22 @@ class SizeEstimatorSuite
     assertResult(24)(SizeEstimator.estimate(new DummyClass3))
     assertResult(24)(SizeEstimator.estimate(new DummyClass4(null)))
     assertResult(48)(SizeEstimator.estimate(new DummyClass4(new DummyClass3)))
+  }
+
+  test("primitive wrapper objects") {
+    assertResult(16)(SizeEstimator.estimate(new java.lang.Boolean(true)))
+    assertResult(16)(SizeEstimator.estimate(new java.lang.Byte("1")))
+    assertResult(16)(SizeEstimator.estimate(new java.lang.Character('1')))
+    assertResult(16)(SizeEstimator.estimate(new java.lang.Short("1")))
+    assertResult(16)(SizeEstimator.estimate(new java.lang.Integer(1)))
+    assertResult(24)(SizeEstimator.estimate(new java.lang.Long(1)))
+    assertResult(16)(SizeEstimator.estimate(new java.lang.Float(1.0)))
+    assertResult(24)(SizeEstimator.estimate(new java.lang.Double(1.0d)))
+  }
+
+  test("class field blocks rounding") {
+    assertResult(16)(SizeEstimator.estimate(new DummyClass5))
+    assertResult(24)(SizeEstimator.estimate(new DummyClass6))
   }
 
   // NOTE: The String class definition varies across JDK versions (1.6 vs. 1.7) and vendors
@@ -95,6 +123,22 @@ class SizeEstimatorSuite
 
     // Past size 100, our samples 100 elements, but we should still get the right size.
     assertResult(28016)(SizeEstimator.estimate(Array.fill(1000)(new DummyClass3)))
+
+
+    val arr = new Array[Char](100000)
+    assertResult(200016)(SizeEstimator.estimate(arr))
+    assertResult(480032)(SizeEstimator.estimate(Array.fill(10000)(new DummyString(arr))))
+
+    val buf = new ArrayBuffer[DummyString]()
+    for (i <- 0 until 5000) {
+      buf.append(new DummyString(new Array[Char](10)))
+    }
+    assertResult(340016)(SizeEstimator.estimate(buf.toArray))
+
+    for (i <- 0 until 5000) {
+      buf.append(new DummyString(arr))
+    }
+    assertResult(683912)(SizeEstimator.estimate(buf.toArray))
 
     // If an array contains the *same* element many times, we should only count it once.
     val d1 = new DummyClass1
@@ -137,5 +181,20 @@ class SizeEstimatorSuite
     assertResult(64)(SizeEstimator.estimate(DummyString("a")))
     assertResult(64)(SizeEstimator.estimate(DummyString("ab")))
     assertResult(72)(SizeEstimator.estimate(DummyString("abcdefgh")))
+
+    // primitive wrapper classes
+    assertResult(24)(SizeEstimator.estimate(new java.lang.Boolean(true)))
+    assertResult(24)(SizeEstimator.estimate(new java.lang.Byte("1")))
+    assertResult(24)(SizeEstimator.estimate(new java.lang.Character('1')))
+    assertResult(24)(SizeEstimator.estimate(new java.lang.Short("1")))
+    assertResult(24)(SizeEstimator.estimate(new java.lang.Integer(1)))
+    assertResult(24)(SizeEstimator.estimate(new java.lang.Long(1)))
+    assertResult(24)(SizeEstimator.estimate(new java.lang.Float(1.0)))
+    assertResult(24)(SizeEstimator.estimate(new java.lang.Double(1.0d)))
+  }
+
+  test("class field blocks rounding on 64-bit VM without useCompressedOops") {
+    assertResult(24)(SizeEstimator.estimate(new DummyClass5))
+    assertResult(32)(SizeEstimator.estimate(new DummyClass6))
   }
 }

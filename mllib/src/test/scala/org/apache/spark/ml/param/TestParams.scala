@@ -29,7 +29,7 @@ class TestParams extends Params with HasMaxIter with HasInputCol {
 
   override def validate(paramMap: ParamMap): Unit = {
     val m = extractParamMap(paramMap)
-    require(m(maxIter) >= 0)
+    // Note: maxIter is validated when it is set.
     require(m.contains(inputCol))
   }
 

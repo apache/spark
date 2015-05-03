@@ -73,6 +73,52 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Mo
       s"cd test-app-1*;  ./bin/spark-class ${classOf[MesosExecutorBackend].getName}")
   }
 
+  test("spark docker properties correctly populate the DockerInfo message") {
+    val taskScheduler = mock[TaskSchedulerImpl]
+
+    val conf = new SparkConf()
+      .set("spark.mesos.executor.docker.image", "spark/mock")
+      .set("spark.mesos.executor.docker.volumes", "/a,/b:/b,/c:/c:rw,/d:ro,/e:/e:ro")
+      .set("spark.mesos.executor.docker.portmaps", "80:8080,53:53:tcp")
+     
+    val listenerBus = mock[LiveListenerBus]
+    listenerBus.post(
+      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+                         
+    val sc = mock[SparkContext]
+    when(sc.executorMemory).thenReturn(100)
+    when(sc.getSparkHome()).thenReturn(Option("/spark-home"))
+    when(sc.executorEnvs).thenReturn(new mutable.HashMap[String, String])
+    when(sc.conf).thenReturn(conf)
+    when(sc.listenerBus).thenReturn(listenerBus)
+
+    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
+
+    val execInfo = backend.createExecutorInfo("mockExecutor")
+    assert(execInfo.getContainer.getDocker.getImage.equals("spark/mock"))
+    val portmaps = execInfo.getContainer.getDocker.getPortMappingsList
+    assert(portmaps.get(0).getHostPort.equals(80))
+    assert(portmaps.get(0).getContainerPort.equals(8080))
+    assert(portmaps.get(0).getProtocol.equals("tcp"))
+    assert(portmaps.get(1).getHostPort.equals(53))
+    assert(portmaps.get(1).getContainerPort.equals(53))
+    assert(portmaps.get(1).getProtocol.equals("tcp"))
+    val volumes = execInfo.getContainer.getVolumesList
+    assert(volumes.get(0).getContainerPath.equals("/a"))
+    assert(volumes.get(0).getMode.equals(Volume.Mode.RW))
+    assert(volumes.get(1).getContainerPath.equals("/b"))
+    assert(volumes.get(1).getHostPath.equals("/b"))
+    assert(volumes.get(1).getMode.equals(Volume.Mode.RW))
+    assert(volumes.get(2).getContainerPath.equals("/c"))
+    assert(volumes.get(2).getHostPath.equals("/c"))
+    assert(volumes.get(2).getMode.equals(Volume.Mode.RW))
+    assert(volumes.get(3).getContainerPath.equals("/d"))
+    assert(volumes.get(3).getMode.equals(Volume.Mode.RO))
+    assert(volumes.get(4).getContainerPath.equals("/e"))
+    assert(volumes.get(4).getHostPath.equals("/e"))
+    assert(volumes.get(4).getMode.equals(Volume.Mode.RO))
+  }
+
   test("mesos resource offers result in launching tasks") {
     def createOffer(id: Int, mem: Int, cpu: Int): Offer = {
       val builder = Offer.newBuilder()
@@ -118,12 +164,12 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Mo
     expectedWorkerOffers.append(new WorkerOffer(
       mesosOffers.get(0).getSlaveId.getValue,
       mesosOffers.get(0).getHostname,
-      2
+      (minCpu - backend.mesosExecutorCores).toInt
     ))
     expectedWorkerOffers.append(new WorkerOffer(
       mesosOffers.get(2).getSlaveId.getValue,
       mesosOffers.get(2).getHostname,
-      2
+      (minCpu - backend.mesosExecutorCores).toInt
     ))
     val taskDesc = new TaskDescription(1L, 0, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
     when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))

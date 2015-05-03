@@ -68,7 +68,7 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
       .setSeed(12345)
     val corpus = sc.parallelize(tinyCorpus, 2)
 
-    val model: DistributedLDAModel = lda.run(corpus)
+    val model: DistributedLDAModel = lda.run(corpus).asInstanceOf[DistributedLDAModel]
 
     // Check: basic parameters
     val localModel = model.toLocal
@@ -122,6 +122,14 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     assert(termIds.map(LDA.term2index) === termVertexIds)
     assert(termVertexIds.map(i => LDA.index2term(i.toLong)) === termIds)
     assert(termVertexIds.forall(i => LDA.isTermVertex((i.toLong, 0))))
+  }
+
+  test("setter alias") {
+    val lda = new LDA().setAlpha(2.0).setBeta(3.0)
+    assert(lda.getAlpha === 2.0)
+    assert(lda.getDocConcentration === 2.0)
+    assert(lda.getBeta === 3.0)
+    assert(lda.getTopicConcentration === 3.0)
   }
 }
 

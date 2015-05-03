@@ -21,13 +21,6 @@ An interactive shell.
 This file is designed to be launched as a PYTHONSTARTUP script.
 """
 
-import sys
-if sys.version_info[0] != 2:
-    print("Error: Default Python used is Python%s" % sys.version_info.major)
-    print("\tSet env variable PYSPARK_PYTHON to Python2 binary and re-run it.")
-    sys.exit(1)
-
-
 import atexit
 import os
 import platform
@@ -53,9 +46,14 @@ atexit.register(lambda: sc.stop())
 try:
     # Try to access HiveConf, it will raise exception if Hive is not added
     sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
-    sqlCtx = sqlContext = HiveContext(sc)
+    sqlContext = HiveContext(sc)
 except py4j.protocol.Py4JError:
-    sqlCtx = sqlContext = SQLContext(sc)
+    sqlContext = SQLContext(sc)
+except TypeError:
+    sqlContext = SQLContext(sc)
+
+# for compatibility
+sqlCtx = sqlContext
 
 print("""Welcome to
       ____              __

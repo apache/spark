@@ -77,6 +77,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
   private var yarnCluster: MiniYARNCluster = _
   private var tempDir: File = _
   private var fakeSparkJar: File = _
+  private var hadoopConfDir: File = _
   private var logConfDir: File = _
 
   override def beforeAll() {
@@ -85,6 +86,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     tempDir = Utils.createTempDir()
     logConfDir = new File(tempDir, "log4j")
     logConfDir.mkdir()
+    System.setProperty("SPARK_YARN_MODE", "true")
 
     val logConfFile = new File(logConfDir, "log4j.properties")
     Files.write(LOG4J_CONF, logConfFile, UTF_8)
@@ -120,10 +122,14 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     logInfo(s"RM address in configuration is ${config.get(YarnConfiguration.RM_ADDRESS)}")
 
     fakeSparkJar = File.createTempFile("sparkJar", null, tempDir)
+    hadoopConfDir = new File(tempDir, Client.LOCALIZED_HADOOP_CONF_DIR)
+    assert(hadoopConfDir.mkdir())
+    File.createTempFile("token", ".txt", hadoopConfDir)
   }
 
   override def afterAll() {
     yarnCluster.stop()
+    System.clearProperty("SPARK_YARN_MODE")
     super.afterAll()
   }
 
@@ -258,7 +264,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
       appArgs
 
     Utils.executeAndGetOutput(argv,
-      extraEnvironment = Map("YARN_CONF_DIR" -> tempDir.getAbsolutePath()))
+      extraEnvironment = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()))
   }
 
   /**

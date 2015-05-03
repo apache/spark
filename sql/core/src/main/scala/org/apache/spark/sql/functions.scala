@@ -22,10 +22,10 @@ import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-
+import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
@@ -277,6 +277,30 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Computes the absolute value.
+   *
+   * @group normal_funcs
+   */
+  def abs(e: Column): Column = Abs(e.expr)
+
+  /**
+   * Creates a new array column. The input columns must all have the same data type.
+   *
+   * @group normal_funcs
+   */
+  @scala.annotation.varargs
+  def array(cols: Column*): Column = CreateArray(cols.map(_.expr))
+
+  /**
+   * Creates a new array column. The input columns must all have the same data type.
+   *
+   * @group normal_funcs
+   */
+  def array(colName: String, colNames: String*): Column = {
+    array((colName +: colNames).map(col) : _*)
+  }
+
+  /**
    * Returns the first column that is not null.
    * {{{
    *   df.select(coalesce(df("a"), df("b")))
@@ -286,6 +310,29 @@ object functions {
    */
   @scala.annotation.varargs
   def coalesce(e: Column*): Column = Coalesce(e.map(_.expr))
+
+  /**
+   * Converts a string exprsesion to lower case.
+   *
+   * @group normal_funcs
+   */
+  def lower(e: Column): Column = Lower(e.expr)
+
+  /**
+   * A column expression that generates monotonically increasing 64-bit integers.
+   *
+   * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+   * The current implementation puts the partition ID in the upper 31 bits, and the record number
+   * within each partition in the lower 33 bits. The assumption is that the data frame has
+   * less than 1 billion partitions, and each partition has less than 8 billion records.
+   *
+   * As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+   * This expression would return the following IDs:
+   * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   *
+   * @group normal_funcs
+   */
+  def monotonicallyIncreasingId(): Column = execution.expressions.MonotonicallyIncreasingID()
 
   /**
    * Unary minus, i.e. negate the expression.
@@ -317,18 +364,41 @@ object functions {
   def not(e: Column): Column = !e
 
   /**
-   * Converts a string expression to upper case.
+   * Generate a random column with i.i.d. samples from U[0.0, 1.0].
    *
    * @group normal_funcs
    */
-  def upper(e: Column): Column = Upper(e.expr)
+  def rand(seed: Long): Column = Rand(seed)
 
   /**
-   * Converts a string exprsesion to lower case.
+   * Generate a random column with i.i.d. samples from U[0.0, 1.0].
    *
    * @group normal_funcs
    */
-  def lower(e: Column): Column = Lower(e.expr)
+  def rand(): Column = rand(Utils.random.nextLong)
+
+  /**
+   * Generate a column with i.i.d. samples from the standard normal distribution.
+   *
+   * @group normal_funcs
+   */
+  def randn(seed: Long): Column = Randn(seed)
+
+  /**
+   * Generate a column with i.i.d. samples from the standard normal distribution.
+   *
+   * @group normal_funcs
+   */
+  def randn(): Column = randn(Utils.random.nextLong)
+
+  /**
+   * Partition ID of the Spark task.
+   *
+   * Note that this is indeterministic because it depends on data partitioning and task scheduling.
+   *
+   * @group normal_funcs
+   */
+  def sparkPartitionId(): Column = execution.expressions.SparkPartitionID
 
   /**
    * Computes the square root of the specified float value.
@@ -338,11 +408,33 @@ object functions {
   def sqrt(e: Column): Column = Sqrt(e.expr)
 
   /**
-   * Computes the absolutle value.
+   * Creates a new struct column. The input column must be a column in a [[DataFrame]], or
+   * a derived column expression that is named (i.e. aliased).
    *
    * @group normal_funcs
    */
-  def abs(e: Column): Column = Abs(e.expr)
+  @scala.annotation.varargs
+  def struct(cols: Column*): Column = {
+    require(cols.forall(_.expr.isInstanceOf[NamedExpression]),
+      s"struct input columns must all be named or aliased ($cols)")
+    CreateStruct(cols.map(_.expr.asInstanceOf[NamedExpression]))
+  }
+
+  /**
+   * Creates a new struct column that composes multiple input columns.
+   *
+   * @group normal_funcs
+   */
+  def struct(colName: String, colNames: String*): Column = {
+    struct((colName +: colNames).map(col) : _*)
+  }
+
+  /**
+   * Converts a string expression to upper case.
+   *
+   * @group normal_funcs
+   */
+  def upper(e: Column): Column = Upper(e.expr)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////

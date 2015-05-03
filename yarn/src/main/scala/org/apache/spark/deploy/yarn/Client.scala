@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
 
@@ -340,17 +339,6 @@ private[spark] class Client(
       YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)
       // Pass SPARK_YARN_USER_ENV itself to the AM so it can use it to set up executor environments.
       env("SPARK_YARN_USER_ENV") = userEnvs
-    }
-
-    // if spark.submit.pyArchives is in sparkConf, append pyArchives to PYTHONPATH
-    // that can be passed on to the ApplicationMaster and the executors.
-    if (sparkConf.contains("spark.submit.pyArchives")) {
-      var pythonPath = sparkConf.get("spark.submit.pyArchives")
-      if (env.contains("PYTHONPATH")) {
-        pythonPath = Seq(env.get("PYTHONPATH"), pythonPath).mkString(File.pathSeparator)
-      }
-      env("PYTHONPATH") = pythonPath
-      sparkConf.setExecutorEnv("PYTHONPATH", pythonPath)
     }
 
     // In cluster mode, if the deprecated SPARK_JAVA_OPTS is set, we need to propagate it to

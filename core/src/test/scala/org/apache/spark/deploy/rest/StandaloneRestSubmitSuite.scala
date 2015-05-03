@@ -39,9 +39,8 @@ import org.apache.spark.deploy.master.DriverState._
  * Tests for the REST application submission protocol used in standalone cluster mode.
  */
 class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
-  private val client = new StandaloneRestClient
   private var actorSystem: Option[ActorSystem] = None
-  private var server: Option[StandaloneRestServer] = None
+  private var server: Option[RestSubmissionServer] = None
 
   override def afterEach() {
     actorSystem.foreach(_.shutdown())
@@ -52,7 +51,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     val appArgs = Array("one", "two", "three")
     val sparkProperties = Map("spark.app.name" -> "pi")
     val environmentVariables = Map("SPARK_ONE" -> "UN", "SPARK_TWO" -> "DEUX")
-    val request = client.constructSubmitRequest(
+    val request = new RestSubmissionClient("spark://host:port").constructSubmitRequest(
       "my-app-resource", "my-main-class", appArgs, sparkProperties, environmentVariables)
     assert(request.action === Utils.getFormattedClassName(request))
     assert(request.clientSparkVersion === SPARK_VERSION)
@@ -71,7 +70,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     val request = constructSubmitRequest(masterUrl, appArgs)
     assert(request.appArgs === appArgs)
     assert(request.sparkProperties("spark.master") === masterUrl)
-    val response = client.createSubmission(masterUrl, request)
+    val response = new RestSubmissionClient(masterUrl).createSubmission(request)
     val submitResponse = getSubmitResponse(response)
     assert(submitResponse.action === Utils.getFormattedClassName(submitResponse))
     assert(submitResponse.serverSparkVersion === SPARK_VERSION)
@@ -89,7 +88,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     conf.set("spark.app.name", "dreamer")
     val appArgs = Array("one", "two", "six")
     // main method calls this
-    val response = StandaloneRestClient.run("app-resource", "main-class", appArgs, conf)
+    val response = RestSubmissionClient.run("app-resource", "main-class", appArgs, conf)
     val submitResponse = getSubmitResponse(response)
     assert(submitResponse.action === Utils.getFormattedClassName(submitResponse))
     assert(submitResponse.serverSparkVersion === SPARK_VERSION)
@@ -102,7 +101,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     val submissionId = "my-lyft-driver"
     val killMessage = "your driver is killed"
     val masterUrl = startDummyServer(killMessage = killMessage)
-    val response = client.killSubmission(masterUrl, submissionId)
+    val response = new RestSubmissionClient(masterUrl).killSubmission(submissionId)
     val killResponse = getKillResponse(response)
     assert(killResponse.action === Utils.getFormattedClassName(killResponse))
     assert(killResponse.serverSparkVersion === SPARK_VERSION)
@@ -116,7 +115,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     val submissionState = KILLED
     val submissionException = new Exception("there was an irresponsible mix of alcohol and cars")
     val masterUrl = startDummyServer(state = submissionState, exception = Some(submissionException))
-    val response = client.requestSubmissionStatus(masterUrl, submissionId)
+    val response = new RestSubmissionClient(masterUrl).requestSubmissionStatus(submissionId)
     val statusResponse = getStatusResponse(response)
     assert(statusResponse.action === Utils.getFormattedClassName(statusResponse))
     assert(statusResponse.serverSparkVersion === SPARK_VERSION)
@@ -129,13 +128,14 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   test("create then kill") {
     val masterUrl = startSmartServer()
     val request = constructSubmitRequest(masterUrl)
-    val response1 = client.createSubmission(masterUrl, request)
+    val client = new RestSubmissionClient(masterUrl)
+    val response1 = client.createSubmission(request)
     val submitResponse = getSubmitResponse(response1)
     assert(submitResponse.success)
     assert(submitResponse.submissionId != null)
     // kill submission that was just created
     val submissionId = submitResponse.submissionId
-    val response2 = client.killSubmission(masterUrl, submissionId)
+    val response2 = client.killSubmission(submissionId)
     val killResponse = getKillResponse(response2)
     assert(killResponse.success)
     assert(killResponse.submissionId === submissionId)
@@ -144,13 +144,14 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   test("create then request status") {
     val masterUrl = startSmartServer()
     val request = constructSubmitRequest(masterUrl)
-    val response1 = client.createSubmission(masterUrl, request)
+    val client = new RestSubmissionClient(masterUrl)
+    val response1 = client.createSubmission(request)
     val submitResponse = getSubmitResponse(response1)
     assert(submitResponse.success)
     assert(submitResponse.submissionId != null)
     // request status of submission that was just created
     val submissionId = submitResponse.submissionId
-    val response2 = client.requestSubmissionStatus(masterUrl, submissionId)
+    val response2 = client.requestSubmissionStatus(submissionId)
     val statusResponse = getStatusResponse(response2)
     assert(statusResponse.success)
     assert(statusResponse.submissionId === submissionId)
@@ -160,8 +161,9 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   test("create then kill then request status") {
     val masterUrl = startSmartServer()
     val request = constructSubmitRequest(masterUrl)
-    val response1 = client.createSubmission(masterUrl, request)
-    val response2 = client.createSubmission(masterUrl, request)
+    val client = new RestSubmissionClient(masterUrl)
+    val response1 = client.createSubmission(request)
+    val response2 = client.createSubmission(request)
     val submitResponse1 = getSubmitResponse(response1)
     val submitResponse2 = getSubmitResponse(response2)
     assert(submitResponse1.success)
@@ -171,13 +173,13 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     val submissionId1 = submitResponse1.submissionId
     val submissionId2 = submitResponse2.submissionId
     // kill only submission 1, but not submission 2
-    val response3 = client.killSubmission(masterUrl, submissionId1)
+    val response3 = client.killSubmission(submissionId1)
     val killResponse = getKillResponse(response3)
     assert(killResponse.success)
     assert(killResponse.submissionId === submissionId1)
     // request status for both submissions: 1 should be KILLED but 2 should be RUNNING still
-    val response4 = client.requestSubmissionStatus(masterUrl, submissionId1)
-    val response5 = client.requestSubmissionStatus(masterUrl, submissionId2)
+    val response4 = client.requestSubmissionStatus(submissionId1)
+    val response5 = client.requestSubmissionStatus(submissionId2)
     val statusResponse1 = getStatusResponse(response4)
     val statusResponse2 = getStatusResponse(response5)
     assert(statusResponse1.submissionId === submissionId1)
@@ -189,13 +191,14 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   test("kill or request status before create") {
     val masterUrl = startSmartServer()
     val doesNotExist = "does-not-exist"
+    val client = new RestSubmissionClient(masterUrl)
     // kill a non-existent submission
-    val response1 = client.killSubmission(masterUrl, doesNotExist)
+    val response1 = client.killSubmission(doesNotExist)
     val killResponse = getKillResponse(response1)
     assert(!killResponse.success)
     assert(killResponse.submissionId === doesNotExist)
     // request status for a non-existent submission
-    val response2 = client.requestSubmissionStatus(masterUrl, doesNotExist)
+    val response2 = client.requestSubmissionStatus(doesNotExist)
     val statusResponse = getStatusResponse(response2)
     assert(!statusResponse.success)
     assert(statusResponse.submissionId === doesNotExist)
@@ -208,7 +211,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   test("good request paths") {
     val masterUrl = startSmartServer()
     val httpUrl = masterUrl.replace("spark://", "http://")
-    val v = StandaloneRestServer.PROTOCOL_VERSION
+    val v = RestSubmissionServer.PROTOCOL_VERSION
     val json = constructSubmitRequest(masterUrl).toJson
     val submitRequestPath = s"$httpUrl/$v/submissions/create"
     val killRequestPath = s"$httpUrl/$v/submissions/kill"
@@ -238,7 +241,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   test("good request paths, bad requests") {
     val masterUrl = startSmartServer()
     val httpUrl = masterUrl.replace("spark://", "http://")
-    val v = StandaloneRestServer.PROTOCOL_VERSION
+    val v = RestSubmissionServer.PROTOCOL_VERSION
     val submitRequestPath = s"$httpUrl/$v/submissions/create"
     val killRequestPath = s"$httpUrl/$v/submissions/kill"
     val statusRequestPath = s"$httpUrl/$v/submissions/status"
@@ -276,7 +279,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   test("bad request paths") {
     val masterUrl = startSmartServer()
     val httpUrl = masterUrl.replace("spark://", "http://")
-    val v = StandaloneRestServer.PROTOCOL_VERSION
+    val v = RestSubmissionServer.PROTOCOL_VERSION
     val (response1, code1) = sendHttpRequestWithResponse(httpUrl, "GET")
     val (response2, code2) = sendHttpRequestWithResponse(s"$httpUrl/", "GET")
     val (response3, code3) = sendHttpRequestWithResponse(s"$httpUrl/$v", "GET")
@@ -292,7 +295,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     assert(code5 === HttpServletResponse.SC_BAD_REQUEST)
     assert(code6 === HttpServletResponse.SC_BAD_REQUEST)
     assert(code7 === HttpServletResponse.SC_BAD_REQUEST)
-    assert(code8 === StandaloneRestServer.SC_UNKNOWN_PROTOCOL_VERSION)
+    assert(code8 === RestSubmissionServer.SC_UNKNOWN_PROTOCOL_VERSION)
     // all responses should be error responses
     val errorResponse1 = getErrorResponse(response1)
     val errorResponse2 = getErrorResponse(response2)
@@ -310,13 +313,13 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     assert(errorResponse5.highestProtocolVersion === null)
     assert(errorResponse6.highestProtocolVersion === null)
     assert(errorResponse7.highestProtocolVersion === null)
-    assert(errorResponse8.highestProtocolVersion === StandaloneRestServer.PROTOCOL_VERSION)
+    assert(errorResponse8.highestProtocolVersion === RestSubmissionServer.PROTOCOL_VERSION)
   }
 
   test("server returns unknown fields") {
     val masterUrl = startSmartServer()
     val httpUrl = masterUrl.replace("spark://", "http://")
-    val v = StandaloneRestServer.PROTOCOL_VERSION
+    val v = RestSubmissionServer.PROTOCOL_VERSION
     val submitRequestPath = s"$httpUrl/$v/submissions/create"
     val oldJson = constructSubmitRequest(masterUrl).toJson
     val oldFields = parse(oldJson).asInstanceOf[JObject].obj
@@ -339,8 +342,9 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
 
   test("client handles faulty server") {
     val masterUrl = startFaultyServer()
+    val client = new RestSubmissionClient(masterUrl)
     val httpUrl = masterUrl.replace("spark://", "http://")
-    val v = StandaloneRestServer.PROTOCOL_VERSION
+    val v = RestSubmissionServer.PROTOCOL_VERSION
     val submitRequestPath = s"$httpUrl/$v/submissions/create"
     val killRequestPath = s"$httpUrl/$v/submissions/kill/anything"
     val statusRequestPath = s"$httpUrl/$v/submissions/status/anything"
@@ -400,9 +404,9 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     val fakeMasterRef = _actorSystem.actorOf(Props(makeFakeMaster))
     val _server =
       if (faulty) {
-        new FaultyStandaloneRestServer(localhost, 0, fakeMasterRef, "spark://fake:7077", conf)
+        new FaultyStandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077")
       } else {
-        new StandaloneRestServer(localhost, 0, fakeMasterRef, "spark://fake:7077", conf)
+        new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077")
       }
     val port = _server.start()
     // set these to clean them up after every test
@@ -425,7 +429,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
       mainJar) ++ appArgs
     val args = new SparkSubmitArguments(commandLineArgs)
     val (_, _, sparkProperties, _) = SparkSubmit.prepareSubmitEnvironment(args)
-    client.constructSubmitRequest(
+    new RestSubmissionClient("spark://host:port").constructSubmitRequest(
       mainJar, mainClass, appArgs, sparkProperties.toMap, Map.empty)
   }
 
@@ -492,7 +496,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
       method: String,
       body: String = ""): (SubmitRestProtocolResponse, Int) = {
     val conn = sendHttpRequest(url, method, body)
-    (client.readResponse(conn), conn.getResponseCode)
+    (new RestSubmissionClient("spark://host:port").readResponse(conn), conn.getResponseCode)
   }
 }
 
@@ -563,20 +567,18 @@ private class SmarterMaster extends Actor {
 private class FaultyStandaloneRestServer(
     host: String,
     requestedPort: Int,
+    masterConf: SparkConf,
     masterActor: ActorRef,
-    masterUrl: String,
-    masterConf: SparkConf)
-  extends StandaloneRestServer(host, requestedPort, masterActor, masterUrl, masterConf) {
+    masterUrl: String)
+  extends RestSubmissionServer(host, requestedPort, masterConf) {
 
-  protected override val contextToServlet = Map[String, StandaloneRestServlet](
-    s"$baseContext/create/*" -> new MalformedSubmitServlet,
-    s"$baseContext/kill/*" -> new InvalidKillServlet,
-    s"$baseContext/status/*" -> new ExplodingStatusServlet,
-    "/*" -> new ErrorServlet
-  )
+  protected override val submitRequestServlet = new MalformedSubmitServlet
+  protected override val killRequestServlet = new InvalidKillServlet
+  protected override val statusRequestServlet = new ExplodingStatusServlet
 
   /** A faulty servlet that produces malformed responses. */
-  class MalformedSubmitServlet extends SubmitRequestServlet(masterActor, masterUrl, masterConf) {
+  class MalformedSubmitServlet
+    extends StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf) {
     protected override def sendResponse(
         responseMessage: SubmitRestProtocolResponse,
         responseServlet: HttpServletResponse): Unit = {
@@ -586,7 +588,7 @@ private class FaultyStandaloneRestServer(
   }
 
   /** A faulty servlet that produces invalid responses. */
-  class InvalidKillServlet extends KillRequestServlet(masterActor, masterConf) {
+  class InvalidKillServlet extends StandaloneKillRequestServlet(masterActor, masterConf) {
     protected override def handleKill(submissionId: String): KillSubmissionResponse = {
       val k = super.handleKill(submissionId)
       k.submissionId = null
@@ -595,7 +597,7 @@ private class FaultyStandaloneRestServer(
   }
 
   /** A faulty status servlet that explodes. */
-  class ExplodingStatusServlet extends StatusRequestServlet(masterActor, masterConf) {
+  class ExplodingStatusServlet extends StandaloneStatusRequestServlet(masterActor, masterConf) {
     private def explode: Int = 1 / 0
     protected override def handleStatus(submissionId: String): SubmissionStatusResponse = {
       val s = super.handleStatus(submissionId)

@@ -16,6 +16,8 @@
 #
 
 # Operations supported on RDDs contains pairs (i.e key, value)
+#' @include generics.R jobj.R RDD.R
+NULL
 
 ############ Actions and Transformations ############
 
@@ -188,7 +190,7 @@ setMethod("flatMapValues",
 #' @rdname partitionBy
 #' @aliases partitionBy,RDD,integer-method
 setMethod("partitionBy",
-          signature(x = "RDD", numPartitions = "integer"),
+          signature(x = "RDD", numPartitions = "numeric"),
           function(x, numPartitions, partitionFunc = hashCode) {
 
             #if (missing(partitionFunc)) {
@@ -204,12 +206,12 @@ setMethod("partitionBy",
                                    get(name, .broadcastNames) })
             jrdd <- getJRDD(x)
 
-            # We create a PairwiseRRDD that extends RDD[(Array[Byte],
-            # Array[Byte])], where the key is the hashed split, the value is
+            # We create a PairwiseRRDD that extends RDD[(Int, Array[Byte])],
+            # where the key is the target partition number, the value is
             # the content (key-val pairs).
             pairwiseRRDD <- newJObject("org.apache.spark.api.r.PairwiseRRDD",
                                        callJMethod(jrdd, "rdd"),
-                                       as.integer(numPartitions),
+                                       numToInt(numPartitions),
                                        serializedHashFuncBytes,
                                        getSerializedMode(x),
                                        packageNamesArr,
@@ -219,7 +221,7 @@ setMethod("partitionBy",
 
             # Create a corresponding partitioner.
             rPartitioner <- newJObject("org.apache.spark.HashPartitioner",
-                                       as.integer(numPartitions))
+                                       numToInt(numPartitions))
 
             # Call partitionBy on the obtained PairwiseRDD.
             javaPairRDD <- callJMethod(pairwiseRRDD, "asJavaPairRDD")
@@ -254,7 +256,7 @@ setMethod("partitionBy",
 #' @rdname groupByKey
 #' @aliases groupByKey,RDD,integer-method
 setMethod("groupByKey",
-          signature(x = "RDD", numPartitions = "integer"),
+          signature(x = "RDD", numPartitions = "numeric"),
           function(x, numPartitions) {
             shuffled <- partitionBy(x, numPartitions)
             groupVals <- function(part) {
@@ -313,7 +315,7 @@ setMethod("groupByKey",
 #' @rdname reduceByKey
 #' @aliases reduceByKey,RDD,integer-method
 setMethod("reduceByKey",
-          signature(x = "RDD", combineFunc = "ANY", numPartitions = "integer"),
+          signature(x = "RDD", combineFunc = "ANY", numPartitions = "numeric"),
           function(x, combineFunc, numPartitions) {
             reduceVals <- function(part) {
               vals <- new.env()
@@ -420,7 +422,7 @@ setMethod("reduceByKeyLocally",
 #' @aliases combineByKey,RDD,ANY,ANY,ANY,integer-method
 setMethod("combineByKey",
           signature(x = "RDD", createCombiner = "ANY", mergeValue = "ANY",
-                    mergeCombiners = "ANY", numPartitions = "integer"),
+                    mergeCombiners = "ANY", numPartitions = "numeric"),
           function(x, createCombiner, mergeValue, mergeCombiners, numPartitions) {
             combineLocally <- function(part) {
               combiners <- new.env()
@@ -428,7 +430,7 @@ setMethod("combineByKey",
               pred <- function(item) exists(item$hash, keys)
               lapply(part,
                      function(item) {
-                       item$hash <- as.character(item[[1]])
+                       item$hash <- as.character(hashCode(item[[1]]))
                        updateOrCreatePair(item, keys, combiners, pred, mergeValue, createCombiner)
                      })
               convertEnvsToList(keys, combiners)
@@ -441,7 +443,7 @@ setMethod("combineByKey",
               pred <- function(item) exists(item$hash, keys)
               lapply(part,
                      function(item) {
-                       item$hash <- as.character(item[[1]])
+                       item$hash <- as.character(hashCode(item[[1]]))
                        updateOrCreatePair(item, keys, combiners, pred, mergeCombiners, identity)
                      })
               convertEnvsToList(keys, combiners)
@@ -450,19 +452,19 @@ setMethod("combineByKey",
           })
 
 #' Aggregate a pair RDD by each key.
-#' 
+#'
 #' Aggregate the values of each key in an RDD, using given combine functions
 #' and a neutral "zero value". This function can return a different result type,
 #' U, than the type of the values in this RDD, V. Thus, we need one operation
-#' for merging a V into a U and one operation for merging two U's, The former 
-#' operation is used for merging values within a partition, and the latter is 
-#' used for merging values between partitions. To avoid memory allocation, both 
-#' of these functions are allowed to modify and return their first argument 
+#' for merging a V into a U and one operation for merging two U's, The former
+#' operation is used for merging values within a partition, and the latter is
+#' used for merging values between partitions. To avoid memory allocation, both
+#' of these functions are allowed to modify and return their first argument
 #' instead of creating a new U.
-#' 
+#'
 #' @param x An RDD.
 #' @param zeroValue A neutral "zero value".
-#' @param seqOp A function to aggregate the values of each key. It may return 
+#' @param seqOp A function to aggregate the values of each key. It may return
 #'              a different result type from the type of the values.
 #' @param combOp A function to aggregate results of seqOp.
 #' @return An RDD containing the aggregation result.
@@ -474,14 +476,14 @@ setMethod("combineByKey",
 #' zeroValue <- list(0, 0)
 #' seqOp <- function(x, y) { list(x[[1]] + y, x[[2]] + 1) }
 #' combOp <- function(x, y) { list(x[[1]] + y[[1]], x[[2]] + y[[2]]) }
-#' aggregateByKey(rdd, zeroValue, seqOp, combOp, 2L) 
+#' aggregateByKey(rdd, zeroValue, seqOp, combOp, 2L)
 #'   # list(list(1, list(3, 2)), list(2, list(7, 2)))
 #'}
 #' @rdname aggregateByKey
 #' @aliases aggregateByKey,RDD,ANY,ANY,ANY,integer-method
 setMethod("aggregateByKey",
           signature(x = "RDD", zeroValue = "ANY", seqOp = "ANY",
-                    combOp = "ANY", numPartitions = "integer"),
+                    combOp = "ANY", numPartitions = "numeric"),
           function(x, zeroValue, seqOp, combOp, numPartitions) {
             createCombiner <- function(v) {
               do.call(seqOp, list(zeroValue, v))
@@ -491,12 +493,12 @@ setMethod("aggregateByKey",
           })
 
 #' Fold a pair RDD by each key.
-#' 
+#'
 #' Aggregate the values of each key in an RDD, using an associative function "func"
-#' and a neutral "zero value" which may be added to the result an arbitrary 
-#' number of times, and must not change the result (e.g., 0 for addition, or 
+#' and a neutral "zero value" which may be added to the result an arbitrary
+#' number of times, and must not change the result (e.g., 0 for addition, or
 #' 1 for multiplication.).
-#' 
+#'
 #' @param x An RDD.
 #' @param zeroValue A neutral "zero value".
 #' @param func An associative function for folding values of each key.
@@ -512,7 +514,7 @@ setMethod("aggregateByKey",
 #' @aliases foldByKey,RDD,ANY,ANY,integer-method
 setMethod("foldByKey",
           signature(x = "RDD", zeroValue = "ANY",
-                    func = "ANY", numPartitions = "integer"),
+                    func = "ANY", numPartitions = "numeric"),
           function(x, zeroValue, func, numPartitions) {
             aggregateByKey(x, zeroValue, func, func, numPartitions)
           })
@@ -546,12 +548,12 @@ setMethod("join",
           function(x, y, numPartitions) {
             xTagged <- lapply(x, function(i) { list(i[[1]], list(1L, i[[2]])) })
             yTagged <- lapply(y, function(i) { list(i[[1]], list(2L, i[[2]])) })
-            
+
             doJoin <- function(v) {
               joinTaggedList(v, list(FALSE, FALSE))
             }
-            
-            joined <- flatMapValues(groupByKey(unionRDD(xTagged, yTagged), numToInt(numPartitions)),
+
+            joined <- flatMapValues(groupByKey(unionRDD(xTagged, yTagged), numPartitions),
                                     doJoin)
           })
 
@@ -566,8 +568,8 @@ setMethod("join",
 #' @param y An RDD to be joined. Should be an RDD where each element is
 #'             list(K, V).
 #' @param numPartitions Number of partitions to create.
-#' @return For each element (k, v) in x, the resulting RDD will either contain 
-#'         all pairs (k, (v, w)) for (k, w) in rdd2, or the pair (k, (v, NULL)) 
+#' @return For each element (k, v) in x, the resulting RDD will either contain
+#'         all pairs (k, (v, w)) for (k, w) in rdd2, or the pair (k, (v, NULL))
 #'         if no elements in rdd2 have key k.
 #' @examples
 #'\dontrun{
@@ -580,15 +582,15 @@ setMethod("join",
 #' @rdname join-methods
 #' @aliases leftOuterJoin,RDD,RDD-method
 setMethod("leftOuterJoin",
-          signature(x = "RDD", y = "RDD", numPartitions = "integer"),
+          signature(x = "RDD", y = "RDD", numPartitions = "numeric"),
           function(x, y, numPartitions) {
             xTagged <- lapply(x, function(i) { list(i[[1]], list(1L, i[[2]])) })
             yTagged <- lapply(y, function(i) { list(i[[1]], list(2L, i[[2]])) })
-            
+
             doJoin <- function(v) {
               joinTaggedList(v, list(FALSE, TRUE))
             }
-            
+
             joined <- flatMapValues(groupByKey(unionRDD(xTagged, yTagged), numPartitions), doJoin)
           })
 
@@ -617,22 +619,22 @@ setMethod("leftOuterJoin",
 #' @rdname join-methods
 #' @aliases rightOuterJoin,RDD,RDD-method
 setMethod("rightOuterJoin",
-          signature(x = "RDD", y = "RDD", numPartitions = "integer"),
+          signature(x = "RDD", y = "RDD", numPartitions = "numeric"),
           function(x, y, numPartitions) {
             xTagged <- lapply(x, function(i) { list(i[[1]], list(1L, i[[2]])) })
             yTagged <- lapply(y, function(i) { list(i[[1]], list(2L, i[[2]])) })
-            
+
             doJoin <- function(v) {
               joinTaggedList(v, list(TRUE, FALSE))
             }
-            
+
             joined <- flatMapValues(groupByKey(unionRDD(xTagged, yTagged), numPartitions), doJoin)
           })
 
 #' Full outer join two RDDs
 #'
 #' @description
-#' \code{fullouterjoin} This function full-outer-joins two RDDs where every element is of the form list(K, V). 
+#' \code{fullouterjoin} This function full-outer-joins two RDDs where every element is of the form list(K, V).
 #' The key types of the two RDDs should be the same.
 #'
 #' @param x An RDD to be joined. Should be an RDD where each element is
@@ -642,7 +644,7 @@ setMethod("rightOuterJoin",
 #' @param numPartitions Number of partitions to create.
 #' @return For each element (k, v) in x and (k, w) in y, the resulting RDD
 #'         will contain all pairs (k, (v, w)) for both (k, v) in x and
-#'         (k, w) in y, or the pair (k, (NULL, w))/(k, (v, NULL)) if no elements 
+#'         (k, w) in y, or the pair (k, (NULL, w))/(k, (v, NULL)) if no elements
 #'         in x/y have key k.
 #' @examples
 #'\dontrun{
@@ -657,7 +659,7 @@ setMethod("rightOuterJoin",
 #' @rdname join-methods
 #' @aliases fullOuterJoin,RDD,RDD-method
 setMethod("fullOuterJoin",
-          signature(x = "RDD", y = "RDD", numPartitions = "integer"),
+          signature(x = "RDD", y = "RDD", numPartitions = "numeric"),
           function(x, y, numPartitions) {
             xTagged <- lapply(x, function(i) { list(i[[1]], list(1L, i[[2]])) })
             yTagged <- lapply(y, function(i) { list(i[[1]], list(2L, i[[2]])) })
@@ -681,7 +683,7 @@ setMethod("fullOuterJoin",
 #' sc <- sparkR.init()
 #' rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
 #' rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
-#' cogroup(rdd1, rdd2, numPartitions = 2L) 
+#' cogroup(rdd1, rdd2, numPartitions = 2L)
 #' # list(list(1, list(1, list(2, 3))), list(2, list(list(4), list()))
 #'}
 #' @rdname cogroup
@@ -692,7 +694,7 @@ setMethod("cogroup",
             rdds <- list(...)
             rddsLen <- length(rdds)
             for (i in 1:rddsLen) {
-              rdds[[i]] <- lapply(rdds[[i]], 
+              rdds[[i]] <- lapply(rdds[[i]],
                                   function(x) { list(x[[1]], list(i, x[[2]])) })
             }
             union.rdd <- Reduce(unionRDD, rdds)
@@ -717,7 +719,7 @@ setMethod("cogroup",
                 }
               })
             }
-            cogroup.rdd <- mapValues(groupByKey(union.rdd, numPartitions), 
+            cogroup.rdd <- mapValues(groupByKey(union.rdd, numPartitions),
                                      group.func)
           })
 
@@ -739,18 +741,18 @@ setMethod("sortByKey",
           signature(x = "RDD"),
           function(x, ascending = TRUE, numPartitions = SparkR::numPartitions(x)) {
             rangeBounds <- list()
-            
+
             if (numPartitions > 1) {
               rddSize <- count(x)
               # constant from Spark's RangePartitioner
               maxSampleSize <- numPartitions * 20
               fraction <- min(maxSampleSize / max(rddSize, 1), 1.0)
-              
+
               samples <- collect(keys(sampleRDD(x, FALSE, fraction, 1L)))
-              
+
               # Note: the built-in R sort() function only works on atomic vectors
               samples <- sort(unlist(samples, recursive = FALSE), decreasing = !ascending)
-              
+
               if (length(samples) > 0) {
                 rangeBounds <- lapply(seq_len(numPartitions - 1),
                                       function(i) {
@@ -762,24 +764,146 @@ setMethod("sortByKey",
 
             rangePartitionFunc <- function(key) {
               partition <- 0
-              
+
               # TODO: Use binary search instead of linear search, similar with Spark
               while (partition < length(rangeBounds) && key > rangeBounds[[partition + 1]]) {
                 partition <- partition + 1
               }
-              
+
               if (ascending) {
                 partition
               } else {
                 numPartitions - partition - 1
               }
             }
-            
+
             partitionFunc <- function(part) {
               sortKeyValueList(part, decreasing = !ascending)
             }
-            
+
             newRDD <- partitionBy(x, numPartitions, rangePartitionFunc)
             lapplyPartition(newRDD, partitionFunc)
           })
           
+#' Subtract a pair RDD with another pair RDD.
+#'
+#' Return an RDD with the pairs from x whose keys are not in other.
+#'
+#' @param x An RDD.
+#' @param other An RDD.
+#' @param numPartitions Number of the partitions in the result RDD.
+#' @return An RDD with the pairs from x whose keys are not in other.
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd1 <- parallelize(sc, list(list("a", 1), list("b", 4),
+#'                              list("b", 5), list("a", 2)))
+#' rdd2 <- parallelize(sc, list(list("a", 3), list("c", 1)))
+#' collect(subtractByKey(rdd1, rdd2))
+#' # list(list("b", 4), list("b", 5))
+#'}
+#' @rdname subtractByKey
+#' @aliases subtractByKey,RDD
+setMethod("subtractByKey",
+          signature(x = "RDD", other = "RDD"),
+          function(x, other, numPartitions = SparkR::numPartitions(x)) {
+            filterFunction <- function(elem) {
+              iters <- elem[[2]]
+              (length(iters[[1]]) > 0) && (length(iters[[2]]) == 0)
+            }
+
+            flatMapValues(filterRDD(cogroup(x,
+                                            other,
+                                            numPartitions = numPartitions),
+                                    filterFunction),
+                          function (v) { v[[1]] })
+          })
+
+#' Return a subset of this RDD sampled by key.
+#' 
+#' @description
+#' \code{sampleByKey} Create a sample of this RDD using variable sampling rates
+#' for different keys as specified by fractions, a key to sampling rate map.
+#'
+#' @param x The RDD to sample elements by key, where each element is
+#'             list(K, V) or c(K, V).
+#' @param withReplacement Sampling with replacement or not
+#' @param fraction The (rough) sample target fraction
+#' @param seed Randomness seed value
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:3000)
+#' pairs <- lapply(rdd, function(x) { if (x %% 3 == 0) list("a", x)
+#'                                    else { if (x %% 3 == 1) list("b", x) else list("c", x) }})
+#' fractions <- list(a = 0.2, b = 0.1, c = 0.3)
+#' sample <- sampleByKey(pairs, FALSE, fractions, 1618L)
+#' 100 < length(lookup(sample, "a")) && 300 > length(lookup(sample, "a")) # TRUE
+#' 50 < length(lookup(sample, "b")) && 150 > length(lookup(sample, "b")) # TRUE
+#' 200 < length(lookup(sample, "c")) && 400 > length(lookup(sample, "c")) # TRUE
+#' lookup(sample, "a")[which.min(lookup(sample, "a"))] >= 0 # TRUE
+#' lookup(sample, "a")[which.max(lookup(sample, "a"))] <= 2000 # TRUE
+#' lookup(sample, "b")[which.min(lookup(sample, "b"))] >= 0 # TRUE
+#' lookup(sample, "b")[which.max(lookup(sample, "b"))] <= 2000 # TRUE
+#' lookup(sample, "c")[which.min(lookup(sample, "c"))] >= 0 # TRUE
+#' lookup(sample, "c")[which.max(lookup(sample, "c"))] <= 2000 # TRUE
+#' fractions <- list(a = 0.2, b = 0.1, c = 0.3, d = 0.4)
+#' sample <- sampleByKey(pairs, FALSE, fractions, 1618L) # Key "d" will be ignored
+#' fractions <- list(a = 0.2, b = 0.1)
+#' sample <- sampleByKey(pairs, FALSE, fractions, 1618L) # KeyError: "c"
+#'}
+#' @rdname sampleByKey
+#' @aliases sampleByKey,RDD-method
+setMethod("sampleByKey",
+          signature(x = "RDD", withReplacement = "logical",
+                    fractions = "vector", seed = "integer"),
+          function(x, withReplacement, fractions, seed) {
+
+            for (elem in fractions) {
+              if (elem < 0.0) {
+                stop(paste("Negative fraction value ", fractions[which(fractions == elem)]))
+              }
+            }
+
+            # The sampler: takes a partition and returns its sampled version.
+            samplingFunc <- function(partIndex, part) {
+              set.seed(bitwXor(seed, partIndex))
+              res <- vector("list", length(part))
+              len <- 0
+
+              # mixing because the initial seeds are close to each other
+              runif(10)
+
+              for (elem in part) {
+                if (elem[[1]] %in% names(fractions)) {
+                  frac <- as.numeric(fractions[which(elem[[1]] == names(fractions))])
+                  if (withReplacement) {
+                    count <- rpois(1, frac)
+                    if (count > 0) {
+                      res[(len + 1):(len + count)] <- rep(list(elem), count)
+                      len <- len + count
+                    }
+                  } else {
+                    if (runif(1) < frac) {
+                      len <- len + 1
+                      res[[len]] <- elem
+                    }
+                  }
+                } else {
+                  stop("KeyError: \"", elem[[1]], "\"")
+                }
+              }
+
+              # TODO(zongheng): look into the performance of the current
+              # implementation. Look into some iterator package? Note that
+              # Scala avoids many calls to creating an empty list and PySpark
+              # similarly achieves this using `yield'. (duplicated from sampleRDD)
+              if (len > 0) {
+                res[1:len]
+              } else {
+                list()
+              }
+            }
+
+            lapplyPartitionsWithIndex(x, samplingFunc)
+          })

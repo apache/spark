@@ -47,7 +47,7 @@ class ConstantFoldingSuite extends PlanTest {
         .subquery('y)
         .select('a)
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .select('a.attr)
@@ -74,7 +74,7 @@ class ConstantFoldingSuite extends PlanTest {
           Literal(2) * Literal(3) - Literal(6) / (Literal(4) - Literal(2))
         )(Literal(9) / Literal(3) as Symbol("9/3"))
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
@@ -99,7 +99,7 @@ class ConstantFoldingSuite extends PlanTest {
           Literal(2) * 'a + Literal(4) as Symbol("c3"),
           'a * (Literal(3) + Literal(4)) as Symbol("c4"))
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
@@ -127,7 +127,7 @@ class ConstantFoldingSuite extends PlanTest {
             (Literal(1) === Literal(1) || 'b > 1) &&
             (Literal(1) === Literal(2) || 'b < 10)))
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
@@ -144,7 +144,7 @@ class ConstantFoldingSuite extends PlanTest {
           Cast(Literal("2"), IntegerType) + Literal(3) + 'a as Symbol("c1"),
           Coalesce(Seq(Cast(Literal("abc"), IntegerType), Literal(3))) as Symbol("c2"))
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
@@ -160,15 +160,15 @@ class ConstantFoldingSuite extends PlanTest {
     val originalQuery =
       testRelation
         .select(
-          Rand + Literal(1) as Symbol("c1"),
+          Rand(5L) + Literal(1) as Symbol("c1"),
           Sum('a) as Symbol("c2"))
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
         .select(
-          Rand + Literal(1.0) as Symbol("c1"),
+          Rand(5L) + Literal(1.0) as Symbol("c1"),
           Sum('a) as Symbol("c2"))
         .analyze
 
@@ -210,7 +210,7 @@ class ConstantFoldingSuite extends PlanTest {
       Contains("abc", Literal.create(null, StringType)) as 'c20
     )
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation

@@ -95,7 +95,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         "Maximum rate\n[events/sec]",
         "Last Error"
       )
-      val dataRows = (0 until listener.numReceivers).map { receiverId =>
+      val dataRows = listener.receiverIds().map { receiverId =>
         val receiverInfo = listener.receiverInfo(receiverId)
         val receiverName = receiverInfo.map(_.name).getOrElse(s"Receiver-$receiverId")
         val receiverActive = receiverInfo.map { info =>
@@ -114,7 +114,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         }.getOrElse(emptyCell)
         Seq(receiverName, receiverActive, receiverLocation, receiverLastBatchRecords) ++
           receivedRecordStats ++ Seq(receiverLastError)
-      }
+      }.toSeq
       Some(listingTable(headerRow, dataRows))
     } else {
       None

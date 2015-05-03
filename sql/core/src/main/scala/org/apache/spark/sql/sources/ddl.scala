@@ -38,12 +38,12 @@ private[sql] class DDLParser(
     parseQuery: String => LogicalPlan)
   extends AbstractSparkSQLParser with DataTypeParser with Logging {
 
-  def apply(input: String, exceptionOnError: Boolean): Option[LogicalPlan] = {
+  def parse(input: String, exceptionOnError: Boolean): LogicalPlan = {
     try {
-      Some(apply(input))
+      parse(input)
     } catch {
       case ddlException: DDLException => throw ddlException
-      case _ if !exceptionOnError => None
+      case _ if !exceptionOnError => parseQuery(input)
       case x: Throwable => throw x
     }
   }
@@ -347,7 +347,24 @@ private[sql] case class RefreshTable(databaseName: String, tableName: String)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
+    // Refresh the given table's metadata first.
     sqlContext.catalog.refreshTable(databaseName, tableName)
+
+    // If this table is cached as a InMemoryColumnarRelation, drop the original
+    // cached version and make the new version cached lazily.
+    val logicalPlan = sqlContext.catalog.lookupRelation(Seq(databaseName, tableName))
+    // Use lookupCachedData directly since RefreshTable also takes databaseName.
+    val isCached = sqlContext.cacheManager.lookupCachedData(logicalPlan).nonEmpty
+    if (isCached) {
+      // Create a data frame to represent the table.
+      // TODO: Use uncacheTable once it supports database name.
+      val df = DataFrame(sqlContext, logicalPlan)
+      // Uncache the logicalPlan.
+      sqlContext.cacheManager.tryUncacheQuery(df, blocking = true)
+      // Cache it again.
+      sqlContext.cacheManager.cacheQuery(df, Some(tableName))
+    }
+
     Seq.empty[Row]
   }
 }
