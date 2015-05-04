@@ -53,19 +53,19 @@ private[ui] case class RDDOperationEdge(fromId: Int, toId: Int)
  * stages, jobs, or any higher level construct. A cluster may be nested inside of other clusters.
  */
 private[ui] class RDDOperationCluster(val id: String, val name: String) {
-  private val _childrenNodes = new ListBuffer[RDDOperationNode]
-  private val _childrenClusters = new ListBuffer[RDDOperationCluster]
+  private val _childNodes = new ListBuffer[RDDOperationNode]
+  private val _childClusters = new ListBuffer[RDDOperationCluster]
 
-  def childrenNodes: Seq[RDDOperationNode] = _childrenNodes.iterator.toSeq
-  def childrenClusters: Seq[RDDOperationCluster] = _childrenClusters.iterator.toSeq
-  def attachChildNode(childNode: RDDOperationNode): Unit = { _childrenNodes += childNode }
+  def childNodes: Seq[RDDOperationNode] = _childNodes.iterator.toSeq
+  def childClusters: Seq[RDDOperationCluster] = _childClusters.iterator.toSeq
+  def attachChildNode(childNode: RDDOperationNode): Unit = { _childNodes += childNode }
   def attachChildCluster(childCluster: RDDOperationCluster): Unit = {
-    _childrenClusters += childCluster
+    _childClusters += childCluster
   }
 
   /** Return all the nodes container in this cluster, including ones nested in other clusters. */
   def getAllNodes: Seq[RDDOperationNode] = {
-    _childrenNodes ++ _childrenClusters.flatMap(_.childrenNodes)
+    _childNodes ++ _childClusters.flatMap(_.childNodes)
   }
 }
 
@@ -193,10 +193,10 @@ private[ui] object RDDOperationGraph extends Logging {
     val subgraph = new StringBuilder
     subgraph.append(indent + s"subgraph cluster${scope.id} {\n")
     subgraph.append(indent + s"""  label="${scope.name}";\n""")
-    scope.childrenNodes.foreach { node =>
+    scope.childNodes.foreach { node =>
       subgraph.append(indent + s"  ${makeDotNode(node, forJob)};\n")
     }
-    scope.childrenClusters.foreach { cscope =>
+    scope.childClusters.foreach { cscope =>
       subgraph.append(makeDotSubgraph(cscope, forJob, indent + "  "))
     }
     subgraph.append(indent + "}\n")
