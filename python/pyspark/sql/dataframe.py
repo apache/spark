@@ -244,7 +244,7 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
-        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at applySchemaToPythonRDD at\
+        PhysicalRDD [age#0,name#1], MapPartitionsRDD MapPartitionsRDD[7] at applySchemaToPythonRDD at\
           NativeMethodAccessorImpl.java:...
 
         >>> df.explain(True)
