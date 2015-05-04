@@ -15,78 +15,82 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.viz
+package org.apache.spark.ui.scope
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.Logging
-import org.apache.spark.rdd.OperatorScope
 import org.apache.spark.scheduler.StageInfo
 
 /**
- * A representation of a generic cluster graph used for storing visualization information.
+ * A representation of a generic cluster graph used for storing information on RDD operations.
  *
  * Each graph is defined with a set of edges and a root cluster, which may contain children
  * nodes and children clusters. Additionally, a graph may also have edges that enter or exit
  * the graph from nodes that belong to adjacent graphs.
  */
-private[ui] case class VizGraph(
-    edges: Seq[VizEdge],
-    outgoingEdges: Seq[VizEdge],
-    incomingEdges: Seq[VizEdge],
-    rootCluster: VizCluster)
+private[ui] case class RDDOperationGraph(
+    edges: Seq[RDDOperationEdge],
+    outgoingEdges: Seq[RDDOperationEdge],
+    incomingEdges: Seq[RDDOperationEdge],
+    rootCluster: RDDOperationCluster)
 
-/** A node in a VizGraph. This represents an RDD. */
-private[ui] case class VizNode(id: Int, name: String)
-
-/** A directed edge connecting two nodes in a VizGraph. This represents an RDD dependency. */
-private[ui] case class VizEdge(fromId: Int, toId: Int)
+/** A node in an RDDOperationGraph. This represents an RDD. */
+private[ui] case class RDDOperationNode(id: Int, name: String)
 
 /**
- * A cluster that groups nodes together in a VizGraph.
+ * A directed edge connecting two nodes in an RDDOperationGraph.
+ * This represents an RDD dependency.
+ */
+private[ui] case class RDDOperationEdge(fromId: Int, toId: Int)
+
+/**
+ * A cluster that groups nodes together in an RDDOperationGraph.
  *
  * This represents any grouping of RDDs, including operator scopes (e.g. textFile, flatMap),
  * stages, jobs, or any higher level construct. A cluster may be nested inside of other clusters.
  */
-private[ui] class VizCluster(val id: String, val name: String) {
-  private val _childrenNodes = new ListBuffer[VizNode]
-  private val _childrenClusters = new ListBuffer[VizCluster]
+private[ui] class RDDOperationCluster(val id: String, val name: String) {
+  private val _childrenNodes = new ListBuffer[RDDOperationNode]
+  private val _childrenClusters = new ListBuffer[RDDOperationCluster]
 
-  def childrenNodes: Seq[VizNode] = _childrenNodes.iterator.toSeq
-  def childrenClusters: Seq[VizCluster] = _childrenClusters.iterator.toSeq
-  def attachChildNode(childNode: VizNode): Unit = { _childrenNodes += childNode }
-  def attachChildCluster(childCluster: VizCluster): Unit = { _childrenClusters += childCluster }
+  def childrenNodes: Seq[RDDOperationNode] = _childrenNodes.iterator.toSeq
+  def childrenClusters: Seq[RDDOperationCluster] = _childrenClusters.iterator.toSeq
+  def attachChildNode(childNode: RDDOperationNode): Unit = { _childrenNodes += childNode }
+  def attachChildCluster(childCluster: RDDOperationCluster): Unit = {
+    _childrenClusters += childCluster
+  }
 }
 
-private[ui] object VizGraph extends Logging {
+private[ui] object RDDOperationGraph extends Logging {
 
   /**
-   * Construct a VizGraph for a given stage.
+   * Construct a RDDOperationGraph for a given stage.
    *
    * The root cluster represents the stage, and all children clusters represent RDD operations.
    * Each node represents an RDD, and each edge represents a dependency between two RDDs pointing
    * from the parent to the child.
    *
-   * This does not currently merge common scopes across stages. This may be worth supporting in
-   * the future when we decide to group certain stages within the same job under a common scope
-   * (e.g. part of a SQL query).
+   * This does not currently merge common operator scopes across stages. This may be worth
+   * supporting in the future if we decide to group certain stages within the same job under
+   * a common scope (e.g. part of a SQL query).
    */
-  def makeVizGraph(stage: StageInfo): VizGraph = {
-    val edges = new ListBuffer[VizEdge]
-    val nodes = new mutable.HashMap[Int, VizNode]
-    val clusters = new mutable.HashMap[String, VizCluster] // cluster ID -> VizCluster
+  def makeOperationGraph(stage: StageInfo): RDDOperationGraph = {
+    val edges = new ListBuffer[RDDOperationEdge]
+    val nodes = new mutable.HashMap[Int, RDDOperationNode]
+    val clusters = new mutable.HashMap[String, RDDOperationCluster] // indexed by cluster ID
 
     // Root cluster is the stage cluster
     val stageClusterId = s"stage_${stage.stageId}"
     val stageClusterName = s"Stage ${stage.stageId}" +
       { if (stage.attemptId == 0) "" else s" (attempt ${stage.attemptId})" }
-    val rootCluster = new VizCluster(stageClusterId, stageClusterName)
+    val rootCluster = new RDDOperationCluster(stageClusterId, stageClusterName)
 
     // Find nodes, edges, and operator scopes that belong to this stage
     stage.rddInfos.foreach { rdd =>
-      edges ++= rdd.parentIds.map { parentId => VizEdge(parentId, rdd.id) }
-      val node = nodes.getOrElseUpdate(rdd.id, VizNode(rdd.id, rdd.name))
+      edges ++= rdd.parentIds.map { parentId => RDDOperationEdge(parentId, rdd.id) }
+      val node = nodes.getOrElseUpdate(rdd.id, RDDOperationNode(rdd.id, rdd.name))
 
       if (rdd.scope == null) {
         // This RDD has no encompassing scope, so we put it directly in the root cluster
@@ -99,7 +103,7 @@ private[ui] object VizGraph extends Logging {
         val rddClusters = rddScopes.map { scope =>
           val clusterId = scope.name + "_" + scope.id
           val clusterName = scope.name
-          clusters.getOrElseUpdate(clusterId, new VizCluster(clusterId, clusterName))
+          clusters.getOrElseUpdate(clusterId, new RDDOperationCluster(clusterId, clusterName))
         }
         // Build the cluster hierarchy for this RDD
         rddClusters.sliding(2).foreach { pc =>
@@ -117,10 +121,10 @@ private[ui] object VizGraph extends Logging {
 
     // Classify each edge as internal, outgoing or incoming
     // This information is needed to reason about how stages relate to each other
-    val internalEdges = new ListBuffer[VizEdge]
-    val outgoingEdges = new ListBuffer[VizEdge]
-    val incomingEdges = new ListBuffer[VizEdge]
-    edges.foreach { case e: VizEdge =>
+    val internalEdges = new ListBuffer[RDDOperationEdge]
+    val outgoingEdges = new ListBuffer[RDDOperationEdge]
+    val incomingEdges = new ListBuffer[RDDOperationEdge]
+    edges.foreach { case e: RDDOperationEdge =>
       val fromThisGraph = nodes.contains(e.fromId)
       val toThisGraph = nodes.contains(e.toId)
       (fromThisGraph, toThisGraph) match {
@@ -132,7 +136,7 @@ private[ui] object VizGraph extends Logging {
       }
     }
 
-    VizGraph(internalEdges, outgoingEdges, incomingEdges, rootCluster)
+    RDDOperationGraph(internalEdges, outgoingEdges, incomingEdges, rootCluster)
   }
 
   /**
@@ -145,7 +149,7 @@ private[ui] object VizGraph extends Logging {
    *
    * For the complete DOT specification, see http://www.graphviz.org/Documentation/dotguide.pdf.
    */
-  def makeDotFile(graph: VizGraph, forJob: Boolean): String = {
+  def makeDotFile(graph: RDDOperationGraph, forJob: Boolean): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
     dotFile.append(makeDotSubgraph(graph.rootCluster, forJob, indent = "  "))
@@ -159,12 +163,12 @@ private[ui] object VizGraph extends Logging {
   }
 
   /**
-   * Return the dot representation of a node.
+   * Return the dot representation of a node in an RDDOperationGraph.
    *
    * On the job page, is displayed as a small circle without labels.
    * On the stage page, it is displayed as a box with an embedded label.
    */
-  private def makeDotNode(node: VizNode, forJob: Boolean): String = {
+  private def makeDotNode(node: RDDOperationNode, forJob: Boolean): String = {
     if (forJob) {
       s"""${node.id} [label=" " shape="circle" padding="5" labelStyle="font-size: 0"]"""
     } else {
@@ -172,8 +176,11 @@ private[ui] object VizGraph extends Logging {
     }
   }
 
-  /** Return the dot representation of a subgraph. */
-  private def makeDotSubgraph(scope: VizCluster, forJob: Boolean, indent: String): String = {
+  /** Return the dot representation of a subgraph in an RDDOperationGraph. */
+  private def makeDotSubgraph(
+      scope: RDDOperationCluster,
+      forJob: Boolean,
+      indent: String): String = {
     val subgraph = new StringBuilder
     subgraph.append(indent + s"subgraph cluster${scope.id} {\n")
     subgraph.append(indent + s"""  label="${scope.name}";\n""")

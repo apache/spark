@@ -27,14 +27,14 @@ import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
 import org.apache.spark.ui.jobs.UIData._
-import org.apache.spark.ui.viz.VizGraph
+import org.apache.spark.ui.scope.RDDOperationGraph
 import org.apache.spark.util.{Utils, Distribution}
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   private val progressListener = parent.progressListener
-  private val vizListener = parent.vizListener
+  private val operationGraphListener = parent.operationGraphListener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     progressListener.synchronized {
@@ -171,7 +171,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           </div>
         </div>
 
-      val dagViz = UIUtils.showDagVizForStage(stageId, vizListener.getVizGraphForStage(stageId))
+      val dagViz = UIUtils.showDagVizForStage(
+        stageId, operationGraphListener.getOperationGraphForStage(stageId))
 
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
       def accumulableRow(acc: AccumulableInfo): Elem =

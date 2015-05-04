@@ -27,7 +27,7 @@ private[ui] class StagesTab(parent: SparkUI) extends SparkUITab(parent, "stages"
   val sc = parent.sc
   val killEnabled = parent.killEnabled
   val progressListener = parent.jobProgressListener
-  val vizListener = parent.visualizationListener
+  val operationGraphListener = parent.operationGraphListener
 
   attachPage(new AllStagesPage(this))
   attachPage(new StagePage(this))

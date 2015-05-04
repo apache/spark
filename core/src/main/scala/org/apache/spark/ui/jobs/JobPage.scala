@@ -304,12 +304,13 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       var content = summary
       val appStartTime = listener.startTime
       val executorListener = parent.executorListener
-      val vizListener = parent.vizListener
+      val operationGraphListener = parent.operationGraphListener
 
       content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,
           executorListener.executorIdToData, appStartTime)
 
-      content ++= UIUtils.showDagVizForJob(jobId, vizListener.getVizGraphsForJob(jobId))
+      content ++= UIUtils.showDagVizForJob(
+        jobId, operationGraphListener.getOperationGraphForJob(jobId))
 
       if (shouldShowActiveStages) {
         content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++

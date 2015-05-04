@@ -23,7 +23,7 @@ import java.util.{Locale, Date}
 import scala.xml.{Node, Text}
 
 import org.apache.spark.Logging
-import org.apache.spark.ui.viz.VizGraph
+import org.apache.spark.ui.scope.RDDOperationGraph
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
@@ -332,12 +332,12 @@ private[spark] object UIUtils extends Logging {
   }
 
   /** Return a "DAG visualization" DOM element that expands into a visualization for a stage. */
-  def showDagVizForStage(stageId: Int, graph: Option[VizGraph]): Seq[Node] = {
+  def showDagVizForStage(stageId: Int, graph: Option[RDDOperationGraph]): Seq[Node] = {
     showDagViz(graph.toSeq, forJob = false)
   }
 
   /** Return a "DAG visualization" DOM element that expands into a visualization for a job. */
-  def showDagVizForJob(jobId: Int, graphs: Seq[VizGraph]): Seq[Node] = {
+  def showDagVizForJob(jobId: Int, graphs: Seq[RDDOperationGraph]): Seq[Node] = {
     showDagViz(graphs, forJob = true)
   }
 
@@ -348,7 +348,7 @@ private[spark] object UIUtils extends Logging {
    * a format that is expected by spark-dag-viz.js. Any changes in the format here must be
    * reflected there.
    */
-  private def showDagViz(graphs: Seq[VizGraph], forJob: Boolean): Seq[Node] = {
+  private def showDagViz(graphs: Seq[RDDOperationGraph], forJob: Boolean): Seq[Node] = {
     <div>
       <span class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
         <span class="expand-dag-viz-arrow arrow-closed"></span>
@@ -359,7 +359,7 @@ private[spark] object UIUtils extends Logging {
         {
           graphs.map { g =>
             <div class="stage-metadata" stageId={g.rootCluster.id} style="display:none">
-              <div class="dot-file">{VizGraph.makeDotFile(g, forJob)}</div>
+              <div class="dot-file">{RDDOperationGraph.makeDotFile(g, forJob)}</div>
               { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
               { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }
             </div>

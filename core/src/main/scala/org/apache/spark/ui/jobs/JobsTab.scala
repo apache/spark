@@ -26,7 +26,7 @@ private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
   val killEnabled = parent.killEnabled
   val jobProgresslistener = parent.jobProgressListener
   val executorListener = parent.executorsListener
-  val vizListener = parent.visualizationListener
+  val operationGraphListener = parent.operationGraphListener
 
   def isFairScheduler: Boolean =
     jobProgresslistener.schedulingMode.exists(_ == SchedulingMode.FAIR)

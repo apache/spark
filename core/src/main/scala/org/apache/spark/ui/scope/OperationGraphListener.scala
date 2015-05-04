@@ -15,21 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.viz
+package org.apache.spark.ui.scope
 
 import scala.collection.mutable
-import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 
 /**
- * A SparkListener that constructs the RDD DAG visualization for the UI.
+ * A SparkListener that constructs a DAG of RDD operations.
  */
-private[ui] class VisualizationListener(conf: SparkConf) extends SparkListener {
+private[ui] class OperationGraphListener(conf: SparkConf) extends SparkListener {
   private val jobIdToStageIds = new mutable.HashMap[Int, Seq[Int]]
-  private val stageIdToGraph = new mutable.HashMap[Int, VizGraph]
+  private val stageIdToGraph = new mutable.HashMap[Int, RDDOperationGraph]
   private val stageIds = new mutable.ArrayBuffer[Int]
 
   // How many jobs or stages to retain graph metadata for
@@ -37,25 +36,25 @@ private[ui] class VisualizationListener(conf: SparkConf) extends SparkListener {
     conf.getInt("spark.ui.retainedStages", SparkUI.DEFAULT_RETAINED_STAGES)
 
   /** Return the graph metadata for the given stage, or None if no such information exists. */
-  def getVizGraphsForJob(jobId: Int): Seq[VizGraph] = {
+  def getOperationGraphForJob(jobId: Int): Seq[RDDOperationGraph] = {
     jobIdToStageIds.get(jobId)
       .map { sids => sids.flatMap { sid => stageIdToGraph.get(sid) } }
       .getOrElse { Seq.empty }
   }
 
   /** Return the graph metadata for the given stage, or None if no such information exists. */
-  def getVizGraphForStage(stageId: Int): Option[VizGraph] = {
+  def getOperationGraphForStage(stageId: Int): Option[RDDOperationGraph] = {
     stageIdToGraph.get(stageId)
   }
 
-  /** On job start, construct a VizGraph for each stage in the job for display later. */
+  /** On job start, construct a RDDOperationGraph for each stage in the job for display later. */
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
     val jobId = jobStart.jobId
     val stageInfos = jobStart.stageInfos
 
     stageInfos.foreach { stageInfo =>
       stageIds += stageInfo.stageId
-      stageIdToGraph(stageInfo.stageId) = VizGraph.makeVizGraph(stageInfo)
+      stageIdToGraph(stageInfo.stageId) = RDDOperationGraph.makeOperationGraph(stageInfo)
     }
     jobIdToStageIds(jobId) = stageInfos.map(_.stageId).sorted
 
