@@ -443,7 +443,9 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("SPARK-7269 Check analysis failed in case in-sensitive") {
-    Seq(1,2,3).map(i => (i.toString, i.toString)).toDF("key", "value").registerTempTable("df_analysis")
+    Seq(1,2,3).map { i =>
+      (i.toString, i.toString)
+    }.toDF("key", "value").registerTempTable("df_analysis")
     sql("SELECT kEy from df_analysis group by key").collect()
     sql("SELECT kEy+3 from df_analysis group by key+3").collect()
     sql("SELECT kEy+3, a.kEy, A.kEy from df_analysis A group by key").collect()
