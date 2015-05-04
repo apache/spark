@@ -60,8 +60,8 @@ class IsotonicRegressionModel (
 
   /** A Java-friendly constructor that takes two Iterable parameters and one Boolean parameter. */
   def this(boundaries: java.lang.Iterable[Double],
-           predictions: java.lang.Iterable[Double],
-           isotonic: java.lang.Boolean) = {
+      predictions: java.lang.Iterable[Double],
+      isotonic: java.lang.Boolean) = {
     this(boundaries.asScala.toArray, predictions.asScala.toArray, isotonic)
   }
 
