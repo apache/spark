@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.{ParamValidators, IntParam, ParamMap}
+import org.apache.spark.ml.param.{IntParam, ParamValidators}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.types.DataType
 
@@ -47,14 +47,13 @@ class PolynomialExpansion extends UnaryTransformer[Vector, Vector, PolynomialExp
   setDefault(degree -> 2)
 
   /** @group getParam */
-  def getDegree: Int = getOrDefault(degree)
+  def getDegree: Int = $(degree)
 
   /** @group setParam */
   def setDegree(value: Int): this.type = set(degree, value)
 
-  override protected def createTransformFunc(paramMap: ParamMap): Vector => Vector = { v =>
-    val d = paramMap(degree)
-    PolynomialExpansion.expand(v, d)
+  override protected def createTransformFunc: Vector => Vector = { v =>
+    PolynomialExpansion.expand(v, $(degree))
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
