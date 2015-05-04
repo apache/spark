@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable
 import scala.collection.mutable.HashSet
 
 import org.apache.spark._
@@ -69,20 +70,44 @@ private[spark] abstract class Stage(
 
   /** Pointer to the latest [StageInfo] object, set by DAGScheduler. */
   var latestInfo: StageInfo = StageInfo.fromStage(this)
+
+  /**
+   * Spark is resilient to executors dying by retrying stages on FetchFailures. Here, we keep track
+   * of the number of stage failures to prevent endless stage retries. However, because 
+   * FetchFailures may cause multiple tasks to retry a Stage in parallel, we cannot count stage 
+   * failures alone since the same stage may be attempted multiple times simultaneously. 
+   * We deal with this by tracking the number of failures per attemptId.
+   */
+  private val failedStageAttemptIds = new mutable.HashMap[Int, HashSet[Int]]
+  private var failedStageCount = 0
   
-  // Spark is resilient to executors dying by retrying stages on FetchFailures. This counter ensures
-  // that we don't retry stages indefinitely by aborting the stage if it fails too many times. 
-  private var failCount = 0
-  private[scheduler] def fail() : Unit = { failCount += 1 }
-  private[scheduler] def shouldAbort(): Boolean = { failCount >= Stage.maxStageFailures }
-  private[scheduler] def clearFailures() : Unit = { failCount = 0 }
+  private[scheduler] def clearFailures() : Unit = { 
+    failedStageAttemptIds.clear()
+    failedStageCount = 0
+  }
 
   /**
    * Check whether we should abort the failedStage due to multiple failures.
    * This method updates the running count of failures for a particular stage and returns 
    * true if the number of failures exceeds the allowable number of failures.
    */
-  private[scheduler] def failAndShouldAbort(): Boolean = { fail(); shouldAbort() }
+  private[scheduler] def failAndShouldAbort(): Boolean = {
+    // We increment the failure count on the first attempt for a particular Stage
+    if (latestInfo.attemptId == 0)
+    {
+      failedStageCount += 1
+    }
+    
+    val concurrentFailures = failedStageAttemptIds
+      .getOrElseUpdate(failedStageCount, new HashSet[Int]())
+      
+    concurrentFailures.add(latestInfo.attemptId)
+    
+    // Check for multiple FetchFailures in a Stage and for the stage failing repeatedly following
+    // resubmissions.
+    failedStageCount >= Stage.MAX_STAGE_FAILURES || 
+      concurrentFailures.size >= Stage.MAX_STAGE_FAILURES
+  }
   
   /** Return a new attempt id, starting with 0. */
   def newAttemptId(): Int = {
@@ -102,5 +127,5 @@ private[spark] abstract class Stage(
 
 private[spark] object Stage {
   // The maximum number of times to retry a stage before aborting 
-  private[scheduler] val maxStageFailures = 4
+  private[scheduler] val MAX_STAGE_FAILURES = 4
 }

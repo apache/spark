@@ -1087,7 +1087,7 @@ class DAGScheduler(
           abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
         } else if (failedStage.failAndShouldAbort()) {
           abortStage(failedStage, s"Fetch failure - aborting stage. Stage ${failedStage.name} " +
-            s"has failed the maximum allowable number of times: ${Stage.maxStageFailures}. " +
+            s"has failed the maximum allowable number of times: ${Stage.MAX_STAGE_FAILURES}. " +
             s"Failure reason: ${failureMessage}")
         } else if (failedStages.isEmpty) {
           // Don't schedule an event to resubmit failed stages if failed isn't empty, because
@@ -1213,9 +1213,9 @@ class DAGScheduler(
       stage.latestInfo.completionTime = Some(clock.getTimeMillis())
 
       // Clear failure count for this stage, now that it's succeeded. 
-      // We only limit consecutive failures of stage attempts, such that if this stage is a 
-      // dependency for downstream stages, e.g. in a long-running streaming app, we don't
-      // fail because of failures of this stage, but rather the failed downstage components.
+      // We only limit consecutive failures of stage attempts,so that if a stage is 
+      // re-used many times in a long-running job, unrelated failures that are spaced out in time 
+      // don't eventually cause the stage to be aborted."
       stage.clearFailures()
     } else {
       stage.latestInfo.stageFailed(errorMessage.get)
