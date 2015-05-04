@@ -85,7 +85,9 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
    * byte arrays to BytesWritable, and Strings to Text. The `path` can be on any Hadoop-supported
    * file system.
    */
-  def saveAsSequenceFile(path: String, codec: Option[Class[_ <: CompressionCodec]] = None) {
+  def saveAsSequenceFile(
+      path: String,
+      codec: Option[Class[_ <: CompressionCodec]] = None): Unit = self.withScope {
     def anyToWritable[U <% Writable](u: U): Writable = u
 
     // TODO We cannot force the return type of `anyToWritable` be same as keyWritableClass and
