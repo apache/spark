@@ -53,8 +53,9 @@
 
 var VizConstants = {
   rddColor: "#444444",
+  rddCachedColor: "#7DDD00",
+  rddOperationColor: "#AADFFF",
   stageColor: "#FFDDEE",
-  operationScopeColor: "#AADFFF",
   clusterLabelColor: "#888888",
   edgeColor: "#444444",
   edgeWidth: "1.5px",
@@ -124,6 +125,12 @@ function renderDagViz(forJob) {
   } else {
     renderDagVizForStage(svg);
   }
+
+  // Find cached RDDs
+  metadataContainer().selectAll(".cached-rdd").each(function(v) {
+    var nodeId = VizConstants.nodePrefix + d3.select(this).text();
+    graphContainer().selectAll("#" + nodeId).classed("cached", true);
+  });
 
   // Set the appropriate SVG dimensions to ensure that all elements are displayed
   var boundingBox = svg.node().getBBox();
@@ -240,7 +247,7 @@ function renderDot(dot, container) {
 function styleDagViz(forJob) {
   graphContainer().selectAll("svg g.cluster rect")
     .style("fill", "white")
-    .style("stroke", VizConstants.operationScopeColor)
+    .style("stroke", VizConstants.rddOperationColor)
     .style("stroke-width", "4px")
     .style("stroke-opacity", "0.5");
   graphContainer().selectAll("svg g.cluster text")
@@ -279,6 +286,9 @@ function styleDagViz(forJob) {
 function styleDagVizForJob() {
   graphContainer().selectAll("svg g.node circle")
     .style("fill", VizConstants.rddColor);
+  // TODO: add a legend to explain what a highlighted dot means
+  graphContainer().selectAll("svg g.cached circle")
+    .style("fill", VizConstants.rddCachedColor);
   graphContainer().selectAll("svg g#cross-stage-edges path")
     .style("fill", "none");
 }
@@ -289,6 +299,9 @@ function styleDagVizForStage() {
     .style("fill", "none")
     .style("stroke", VizConstants.rddColor)
     .style("stroke-width", "2px");
+    // TODO: add a legend to explain what a highlighted RDD means
+  graphContainer().selectAll("svg g.cached rect")
+    .style("stroke", VizConstants.rddCachedColor);
   graphContainer().selectAll("svg g.node g.label text tspan")
     .style("fill", VizConstants.rddColor);
 }

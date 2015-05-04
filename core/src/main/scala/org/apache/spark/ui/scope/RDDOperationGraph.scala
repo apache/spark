@@ -22,6 +22,7 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.scheduler.StageInfo
+import org.apache.spark.storage.StorageLevel
 
 /**
  * A representation of a generic cluster graph used for storing information on RDD operations.
@@ -37,7 +38,7 @@ private[ui] case class RDDOperationGraph(
     rootCluster: RDDOperationCluster)
 
 /** A node in an RDDOperationGraph. This represents an RDD. */
-private[ui] case class RDDOperationNode(id: Int, name: String)
+private[ui] case class RDDOperationNode(id: Int, name: String, cached: Boolean)
 
 /**
  * A directed edge connecting two nodes in an RDDOperationGraph.
@@ -60,6 +61,11 @@ private[ui] class RDDOperationCluster(val id: String, val name: String) {
   def attachChildNode(childNode: RDDOperationNode): Unit = { _childrenNodes += childNode }
   def attachChildCluster(childCluster: RDDOperationCluster): Unit = {
     _childrenClusters += childCluster
+  }
+
+  /** Return all the nodes container in this cluster, including ones nested in other clusters. */
+  def getAllNodes: Seq[RDDOperationNode] = {
+    _childrenNodes ++ _childrenClusters.flatMap(_.childrenNodes)
   }
 }
 
@@ -90,7 +96,10 @@ private[ui] object RDDOperationGraph extends Logging {
     // Find nodes, edges, and operation scopes that belong to this stage
     stage.rddInfos.foreach { rdd =>
       edges ++= rdd.parentIds.map { parentId => RDDOperationEdge(parentId, rdd.id) }
-      val node = nodes.getOrElseUpdate(rdd.id, RDDOperationNode(rdd.id, rdd.name))
+
+      // TODO: differentiate between the intention to cache an RDD and whether it's actually cached
+      val node = nodes.getOrElseUpdate(
+        rdd.id, RDDOperationNode(rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE))
 
       if (rdd.scope == null) {
         // This RDD has no encompassing scope, so we put it directly in the root cluster
