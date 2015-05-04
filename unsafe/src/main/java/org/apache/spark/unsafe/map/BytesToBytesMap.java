@@ -189,7 +189,7 @@ public final class BytesToBytesMap {
       @Override
       public Location next() {
         long keySize = PlatformDependent.UNSAFE.getLong(memoryManager.getPage(addr), addr);
-        if (keySize == 0) {
+        if (keySize == -1L) {
           currentPage = dataPages.get(pageCur++);
           addr = currentPage.getBaseOffset();
         }
@@ -401,7 +401,13 @@ public final class BytesToBytesMap {
       bitset.set(pos);
 
       // If there's not enough space in the current page, allocate a new page:
-      if (currentDataPage == null || PAGE_SIZE_BYTES - pageCursor < requiredSize) {
+      if (currentDataPage == null || PAGE_SIZE_BYTES - pageCursor - 8 < requiredSize) {
+        if (currentDataPage != null) {
+          final Object pageBaseObject = currentDataPage.getBaseObject();
+          final long pageBaseOffset = currentDataPage.getBaseOffset();
+          final long lengthOffsetInPage = pageBaseOffset + pageCursor;
+          PlatformDependent.UNSAFE.putLong(pageBaseObject, lengthOffsetInPage, -1L);
+        }
         MemoryBlock newPage = memoryManager.allocatePage(PAGE_SIZE_BYTES);
         dataPages.add(newPage);
         pageCursor = 0;

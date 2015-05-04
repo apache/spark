@@ -167,14 +167,25 @@ public abstract class AbstractBytesToBytesMapSuite {
         final BytesToBytesMap.Location loc =
           map.lookup(value, PlatformDependent.LONG_ARRAY_OFFSET, 8);
         Assert.assertFalse(loc.isDefined());
-        loc.putNewKey(
-          value,
-          PlatformDependent.LONG_ARRAY_OFFSET,
-          8,
-          value,
-          PlatformDependent.LONG_ARRAY_OFFSET,
-          8
-        );
+        if (i % 5 == 0) {
+          loc.putNewKey(
+            value,
+            PlatformDependent.LONG_ARRAY_OFFSET,
+            0,
+            value,
+            PlatformDependent.LONG_ARRAY_OFFSET,
+            8
+          );
+        } else {
+          loc.putNewKey(
+            value,
+            PlatformDependent.LONG_ARRAY_OFFSET,
+            8,
+            value,
+            PlatformDependent.LONG_ARRAY_OFFSET,
+            8
+          );
+        }
       }
       final java.util.BitSet valuesSeen = new java.util.BitSet(size);
       final Iterator<BytesToBytesMap.Location> iter = map.iterator();
@@ -183,11 +194,15 @@ public abstract class AbstractBytesToBytesMapSuite {
         Assert.assertTrue(loc.isDefined());
         final MemoryLocation keyAddress = loc.getKeyAddress();
         final MemoryLocation valueAddress = loc.getValueAddress();
-        final long key =  PlatformDependent.UNSAFE.getLong(
+        final long keyLength = loc.getKeyLength();
+        final long key = PlatformDependent.UNSAFE.getLong(
           keyAddress.getBaseObject(), keyAddress.getBaseOffset());
         final long value = PlatformDependent.UNSAFE.getLong(
           valueAddress.getBaseObject(), valueAddress.getBaseOffset());
-        Assert.assertEquals(key, value);
+        if (value % 5 == 0)
+          Assert.assertEquals(keyLength, 0);
+        else
+          Assert.assertEquals(key, value);
         valuesSeen.set((int) value);
       }
       Assert.assertEquals(size, valuesSeen.cardinality());
