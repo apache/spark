@@ -15,41 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network;
+package org.apache.spark.sql.hive
 
-import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
+/** Support for interacting with different versions of the HiveMetastoreClient */
+package object client {
+  private[client] abstract class HiveVersion(val fullVersion: String, val hasBuiltinsJar: Boolean)
 
-public class ByteArrayWritableChannel implements WritableByteChannel {
-
-  private final byte[] data;
-  private int offset;
-
-  public ByteArrayWritableChannel(int size) {
-    this.data = new byte[size];
-    this.offset = 0;
+  // scalastyle:off
+  private[client] object hive {
+    case object v10 extends HiveVersion("0.10.0", true)
+    case object v11 extends HiveVersion("0.11.0", false)
+    case object v12 extends HiveVersion("0.12.0", false)
+    case object v13 extends HiveVersion("0.13.1", false)
   }
-
-  public byte[] getData() {
-    return data;
-  }
-
-  @Override
-  public int write(ByteBuffer src) {
-    int available = src.remaining();
-    src.get(data, offset, available);
-    offset += available;
-    return available;
-  }
-
-  @Override
-  public void close() {
-
-  }
-
-  @Override
-  public boolean isOpen() {
-    return true;
-  }
-
+  // scalastyle:on
+  
 }

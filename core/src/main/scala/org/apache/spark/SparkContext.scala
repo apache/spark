@@ -217,6 +217,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _heartbeatReceiver: RpcEndpointRef = _
   @volatile private var _dagScheduler: DAGScheduler = _
   private var _applicationId: String = _
+  private var _applicationAttemptId: Option[String] = None
   private var _eventLogger: Option[EventLoggingListener] = None
   private var _executorAllocationManager: Option[ExecutorAllocationManager] = None
   private var _cleaner: Option[ContextCleaner] = None
@@ -247,9 +248,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def eventLogDir: Option[URI] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
-  // Generate the random name for a temp folder in Tachyon
+  // Generate the random name for a temp folder in external block store.
   // Add a timestamp as the suffix here to make it more safe
-  val tachyonFolderName = "spark-" + randomUUID.toString()
+  val externalBlockStoreFolderName = "spark-" + randomUUID.toString()
+  @deprecated("Use externalBlockStoreFolderName instead.", "1.4.0")
+  val tachyonFolderName = externalBlockStoreFolderName
 
   def isLocal: Boolean = (master == "local" || master.startsWith("local["))
 
@@ -313,6 +316,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   def applicationId: String = _applicationId
+  def applicationAttemptId: Option[String] = _applicationAttemptId
 
   def metricsSystem: MetricsSystem = if (_env != null) _env.metricsSystem else null
 
@@ -341,6 +345,19 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
       "deprecated, please use spark.executor.memory instead.")
     value
+  }
+
+  /** Control our logLevel. This overrides any user-defined log settings.
+   * @param logLevel The desired log level as a string.
+   * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
+   */
+  def setLogLevel(logLevel: String) {
+    val validLevels = Seq("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
+    if (!validLevels.contains(logLevel)) {
+      throw new IllegalArgumentException(
+        s"Supplied level $logLevel did not match one of: ${validLevels.mkString(",")}")
+    }
+    Utils.setLogLevel(org.apache.log4j.Level.toLevel(logLevel))
   }
 
   try {
@@ -386,7 +403,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
     }
 
-    _conf.set("spark.tachyonStore.folderName", tachyonFolderName)
+    _conf.set("spark.externalBlockStore.folderName", externalBlockStoreFolderName)
 
     if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
 
@@ -470,6 +487,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _taskScheduler.start()
 
     _applicationId = _taskScheduler.applicationId()
+    _applicationAttemptId = taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
     _env.blockManager.initialize(_applicationId)
 
@@ -482,7 +500,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _eventLogger =
       if (isEventLogEnabled) {
         val logger =
-          new EventLoggingListener(_applicationId, _eventLogDir.get, _conf, _hadoopConfiguration)
+          new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
+            _conf, _hadoopConfiguration)
         logger.start()
         listenerBus.addListener(logger)
         Some(logger)
@@ -1866,7 +1885,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
-      startTime, sparkUser))
+      startTime, sparkUser, applicationAttemptId))
   }
 
   /** Post the application end event */

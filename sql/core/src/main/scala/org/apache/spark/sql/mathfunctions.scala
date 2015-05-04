@@ -27,8 +27,6 @@ import org.apache.spark.sql.functions.lit
 /**
  * :: Experimental ::
  * Mathematical Functions available for [[DataFrame]].
- *
- * @groupname double_funcs Functions that require DoubleType as an input
  */
 @Experimental
 // scalastyle:off

@@ -23,7 +23,82 @@ import sun.misc.Unsafe;
 
 public final class PlatformDependent {
 
-  public static final Unsafe UNSAFE;
+  /**
+   * Facade in front of {@link sun.misc.Unsafe}, used to avoid directly exposing Unsafe outside of
+   * this package. This also lets us aovid accidental use of deprecated methods or methods that
+   * aren't present in Java 6.
+   */
+  public static final class UNSAFE {
+
+    private UNSAFE() { }
+
+    public static int getInt(Object object, long offset) {
+      return _UNSAFE.getInt(object, offset);
+    }
+
+    public static void putInt(Object object, long offset, int value) {
+      _UNSAFE.putInt(object, offset, value);
+    }
+
+    public static boolean getBoolean(Object object, long offset) {
+      return _UNSAFE.getBoolean(object, offset);
+    }
+
+    public static void putBoolean(Object object, long offset, boolean value) {
+      _UNSAFE.putBoolean(object, offset, value);
+    }
+
+    public static byte getByte(Object object, long offset) {
+      return _UNSAFE.getByte(object, offset);
+    }
+
+    public static void putByte(Object object, long offset, byte value) {
+      _UNSAFE.putByte(object, offset, value);
+    }
+
+    public static short getShort(Object object, long offset) {
+      return _UNSAFE.getShort(object, offset);
+    }
+
+    public static void putShort(Object object, long offset, short value) {
+      _UNSAFE.putShort(object, offset, value);
+    }
+
+    public static long getLong(Object object, long offset) {
+      return _UNSAFE.getLong(object, offset);
+    }
+
+    public static void putLong(Object object, long offset, long value) {
+      _UNSAFE.putLong(object, offset, value);
+    }
+
+    public static float getFloat(Object object, long offset) {
+      return _UNSAFE.getFloat(object, offset);
+    }
+
+    public static void putFloat(Object object, long offset, float value) {
+      _UNSAFE.putFloat(object, offset, value);
+    }
+
+    public static double getDouble(Object object, long offset) {
+      return _UNSAFE.getDouble(object, offset);
+    }
+
+    public static void putDouble(Object object, long offset, double value) {
+      _UNSAFE.putDouble(object, offset, value);
+    }
+
+    public static long allocateMemory(long size) {
+      return _UNSAFE.allocateMemory(size);
+    }
+
+    public static void freeMemory(long address) {
+      _UNSAFE.freeMemory(address);
+    }
+
+  }
+
+  private static final Unsafe _UNSAFE;
 
   public static final int BYTE_ARRAY_OFFSET;
 
@@ -48,13 +123,13 @@ public final class PlatformDependent {
     } catch (Throwable cause) {
       unsafe = null;
     }
-    UNSAFE = unsafe;
+    _UNSAFE = unsafe;
 
-    if (UNSAFE != null) {
-      BYTE_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(byte[].class);
-      INT_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(int[].class);
-      LONG_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(long[].class);
-      DOUBLE_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(double[].class);
+    if (_UNSAFE != null) {
+      BYTE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(byte[].class);
+      INT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(int[].class);
+      LONG_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(long[].class);
+      DOUBLE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(double[].class);
     } else {
       BYTE_ARRAY_OFFSET = 0;
       INT_ARRAY_OFFSET = 0;
@@ -71,7 +146,7 @@ public final class PlatformDependent {
       long length) {
     while (length > 0) {
       long size = Math.min(length, UNSAFE_COPY_THRESHOLD);
-      UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, size);
+      _UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, size);
       length -= size;
       srcOffset += size;
       dstOffset += size;
@@ -82,6 +157,6 @@ public final class PlatformDependent {
    * Raises an exception bypassing compiler checks for checked exceptions.
    */
   public static void throwException(Throwable t) {
-    UNSAFE.throwException(t);
+    _UNSAFE.throwException(t);
   }
 }
