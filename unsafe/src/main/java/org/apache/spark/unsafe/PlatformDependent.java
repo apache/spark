@@ -89,7 +89,7 @@ public final class PlatformDependent {
     }
 
     public static long allocateMemory(long size) {
-      return  _UNSAFE.allocateMemory(size);
+      return _UNSAFE.allocateMemory(size);
     }
 
     public static void freeMemory(long address) {
