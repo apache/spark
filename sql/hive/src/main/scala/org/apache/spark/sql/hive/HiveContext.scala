@@ -150,8 +150,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     // into the isolated client loader
     val metadataConf = new HiveConf()
     val allConfig = metadataConf.iterator.map(e => e.getKey -> e.getValue).toMap
-    
+
     // Config goes second to override other settings.
+    // TODO: Support for loading the jars from an already downloaded location.
     IsolatedClientLoader.forVersion(hiveVersion, allConfig ++ configure).client
   }
 
