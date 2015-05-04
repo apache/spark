@@ -28,10 +28,11 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
 
+import org.apache.spark._
 import org.apache.spark.executor._
+import org.apache.spark.rdd.OperatorScope
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
-import org.apache.spark._
 
 /**
  * Serializes SparkListener events to/from JSON.  This protocol provides strong backwards-
@@ -373,7 +374,7 @@ private[spark] object JsonProtocol {
     val parentIds = JArray(rddInfo.parentIds.map(JInt(_)).toList)
     ("RDD ID" -> rddInfo.id) ~
     ("Name" -> rddInfo.name) ~
-    ("Scope" -> Option(rddInfo.scope)) ~
+    ("Scope" -> rddInfo.scope.map(_.toJson)) ~
     ("Parent IDs" -> parentIds) ~
     ("Storage Level" -> storageLevel) ~
     ("Number of Partitions" -> rddInfo.numPartitions) ~
@@ -794,7 +795,7 @@ private[spark] object JsonProtocol {
   def rddInfoFromJson(json: JValue): RDDInfo = {
     val rddId = (json \ "RDD ID").extract[Int]
     val name = (json \ "Name").extract[String]
-    val scope = Utils.jsonOption(json \ "Scope").map(_.extract[String]).orNull
+    val scope = Utils.jsonOption(json \ "Scope").map(_.extract[OperatorScope])
     val parentIds = Utils.jsonOption(json \ "Parent IDs")
       .map { l => l.extract[List[JValue]].map(_.extract[Int]) }
       .getOrElse(Seq.empty)
@@ -807,7 +808,7 @@ private[spark] object JsonProtocol {
       .getOrElse(json \ "Tachyon Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
 
-    val rddInfo = new RDDInfo(rddId, name, numPartitions, storageLevel, scope, parentIds)
+    val rddInfo = new RDDInfo(rddId, name, numPartitions, storageLevel, parentIds, scope)
     rddInfo.numCachedPartitions = numCachedPartitions
     rddInfo.memSize = memSize
     rddInfo.externalBlockStoreSize = externalBlockStoreSize

@@ -23,10 +23,10 @@
  *   (2) an RDD and its operator scopes, and
  *   (3) an RDD's operator scopes and the stage / job hierarchy
  *
- * An operator scope is a general, named code block representing a public
- * operation that instantiates RDDs (e.g. filter, textFile, reduceByKey).
- * An operator scope can be nested inside of other scopes if the corresponding
- * RDD operation invokes other such operations.
+ * An operator scope is a general, named code block representing an operation
+ * that instantiates RDDs (e.g. filter, textFile, reduceByKey). An operator
+ * scope can be nested inside of other scopes if the corresponding RDD operation
+ * invokes other such operations (for more detail, see o.a.s.rdd.OperatorScope).
  *
  * A stage may include one or more operator scopes if the RDD operations are
  * streamlined into one stage (e.g. rdd.map(...).filter(...).flatMap(...)).

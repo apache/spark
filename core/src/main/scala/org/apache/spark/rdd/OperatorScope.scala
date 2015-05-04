@@ -18,38 +18,57 @@
 package org.apache.spark.rdd
 
 import java.util.concurrent.atomic.AtomicInteger
+
+import com.fasterxml.jackson.annotation.JsonIgnore
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
+
 import org.apache.spark.SparkContext
+
+/**
+ * A general, named code block representing an operation that instantiates RDDs.
+ *
+ * All RDDs instantiated in the corresponding code block will store a pointer to this object.
+ * Examples include, but will not be limited to, existing RDD operations, such as textFile,
+ * reduceByKey, and treeAggregate.
+ *
+ * An operator scope may be nested in other scopes. For instance, a SQL query may enclose
+ * scopes associated with the public RDD APIs it uses under the hood.
+ *
+ * There is no particular relationship between an operator scope and a stage or a job.
+ * A scope may live inside one stage (e.g. map) or span across multiple jobs (e.g. take).
+ */
+private[spark] class OperatorScope(val name: String, parent: Option[OperatorScope] = None) {
+  val id: Int = OperatorScope.nextScopeId()
+
+  def toJson: String = {
+    OperatorScope.jsonMapper.writeValueAsString(this)
+  }
+
+  /**
+   * Return a list of scopes that this scope is a part of, including this scope itself.
+   * The result is ordered from the outermost scope (eldest ancestor) to this scope.
+   */
+  @JsonIgnore
+  def getAllScopes: Seq[OperatorScope] = {
+    parent.map(_.getAllScopes).getOrElse(Seq.empty) ++ Seq(this)
+  }
+}
 
 /**
  * A collection of utility methods to construct a hierarchical representation of RDD scopes.
  * An RDD scope tracks the series of operations that created a given RDD.
  */
-private[spark] object RDDScope {
-
-  // Symbol for delimiting each level of the hierarchy
-  // e.g. grandparent;parent;child
-  val SCOPE_NESTING_DELIMITER = ";"
-
-  // Symbol for delimiting the scope name from the ID within each level
-  val SCOPE_NAME_DELIMITER = "_"
-
-  // Counter for generating scope IDs, for differentiating
-  // between different scopes of the same name
+private[spark] object OperatorScope {
+  private val jsonMapper = new ObjectMapper().registerModule(DefaultScalaModule)
   private val scopeCounter = new AtomicInteger(0)
 
-  /**
-   * Make a globally unique scope ID from the scope name.
-   *
-   * For instance:
-   *   textFile -> textFile_0
-   *   textFile -> textFile_1
-   *   map -> map_2
-   *   name;with_sensitive;characters -> name-with-sensitive-characters_3
-   */
-  private def makeScopeId(name: String): String = {
-    name.replace(SCOPE_NESTING_DELIMITER, "-").replace(SCOPE_NAME_DELIMITER, "-") +
-      SCOPE_NAME_DELIMITER + scopeCounter.getAndIncrement
+  def fromJson(s: String): OperatorScope = {
+    jsonMapper.readValue(s, classOf[OperatorScope])
   }
+
+  /** Return a globally unique operator scope ID. */
+  def nextScopeId(): Int = scopeCounter.getAndIncrement
 
   /**
    * Execute the given body such that all RDDs created in this body will have the same scope.
@@ -80,14 +99,13 @@ private[spark] object RDDScope {
     // Save the old scope to restore it later
     val scopeKey = SparkContext.RDD_SCOPE_KEY
     val noOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY
-    val oldScope = sc.getLocalProperty(scopeKey)
+    val oldScopeJson = sc.getLocalProperty(scopeKey)
+    val oldScope = Option(oldScopeJson).map(OperatorScope.fromJson)
     val oldNoOverride = sc.getLocalProperty(noOverrideKey)
     try {
       // Set the scope only if the higher level caller allows us to do so
       if (sc.getLocalProperty(noOverrideKey) == null) {
-        val oldScopeId = Option(oldScope).map { _ + SCOPE_NESTING_DELIMITER }.getOrElse("")
-        val newScopeId = oldScopeId + makeScopeId(name)
-        sc.setLocalProperty(scopeKey, newScopeId)
+        sc.setLocalProperty(scopeKey, new OperatorScope(name, oldScope).toJson)
       }
       // Optionally disallow the child body to override our scope
       if (!allowNesting) {
@@ -96,7 +114,7 @@ private[spark] object RDDScope {
       body
     } finally {
       // Remember to restore any state that was modified before exiting
-      sc.setLocalProperty(scopeKey, oldScope)
+      sc.setLocalProperty(scopeKey, oldScopeJson)
       sc.setLocalProperty(noOverrideKey, oldNoOverride)
     }
   }

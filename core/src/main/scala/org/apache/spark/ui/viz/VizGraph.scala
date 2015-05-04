@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.Logging
-import org.apache.spark.rdd.RDDScope
+import org.apache.spark.rdd.OperatorScope
 import org.apache.spark.scheduler.StageInfo
 
 /**
@@ -52,8 +52,6 @@ private[ui] case class VizEdge(fromId: Int, toId: Int)
 private[ui] class VizCluster(val id: String, val name: String) {
   private val _childrenNodes = new ListBuffer[VizNode]
   private val _childrenClusters = new ListBuffer[VizCluster]
-
-  def this(id: String) { this(id, id.split(RDDScope.SCOPE_NAME_DELIMITER).head) }
 
   def childrenNodes: Seq[VizNode] = _childrenNodes.iterator.toSeq
   def childrenClusters: Seq[VizCluster] = _childrenClusters.iterator.toSeq
@@ -97,9 +95,12 @@ private[ui] object VizGraph extends Logging {
       } else {
         // Otherwise, this RDD belongs to an inner cluster,
         // which may be nested inside of other clusters
-        val rddClusters = rdd.scope
-          .split(RDDScope.SCOPE_NESTING_DELIMITER)
-          .map { scopeId => clusters.getOrElseUpdate(scopeId, new VizCluster(scopeId)) }
+        val rddScopes = rdd.scope.map { scope => scope.getAllScopes }.getOrElse(Seq.empty)
+        val rddClusters = rddScopes.map { scope =>
+          val clusterId = scope.name + "_" + scope.id
+          val clusterName = scope.name
+          clusters.getOrElseUpdate(clusterId, new VizCluster(clusterId, clusterName))
+        }
         // Build the cluster hierarchy for this RDD
         rddClusters.sliding(2).foreach { pc =>
           if (pc.size == 2) {
