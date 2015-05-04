@@ -162,7 +162,8 @@ private[sql] class SQLConf extends Serializable {
 
   private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2, "true").toBoolean
 
-  private[spark] def useJacksonStreamingAPI: Boolean = getConf(USE_JACKSON_STREAMING_API, "true").toBoolean
+  private[spark] def useJacksonStreamingAPI: Boolean =
+    getConf(USE_JACKSON_STREAMING_API, "true").toBoolean
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
