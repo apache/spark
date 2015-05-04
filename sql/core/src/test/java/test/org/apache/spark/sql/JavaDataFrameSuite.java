@@ -34,6 +34,7 @@ import scala.collection.mutable.Buffer;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -179,6 +180,14 @@ public class JavaDataFrameSuite {
     }
   }
 
+  private static Comparator<Row> CrosstabRowComparator = new Comparator<Row>() {
+    public int compare(Row row1, Row row2) {
+      String item1 = row1.getString(0);
+      String item2 = row2.getString(0);
+      return item1.compareTo(item2);
+    }
+  };
+
   @Test
   public void testCrosstab() {
     DataFrame df = context.table("testData2");
@@ -188,6 +197,7 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(columnNames[1], "1");
     Assert.assertEquals(columnNames[2], "2");
     Row[] rows = crosstab.collect();
+    Arrays.sort(rows, CrosstabRowComparator);
     Integer count = 1;
     for (Row row : rows) {
       Assert.assertEquals(row.get(0).toString(), count.toString());
@@ -203,6 +213,13 @@ public class JavaDataFrameSuite {
     String[] cols = new String[]{"a"};
     DataFrame results = df.stat().freqItems(cols, 0.2);
     Assert.assertTrue(results.collect()[0].getSeq(0).contains(1));
+  }
+
+  @Test
+  public void testCorrelation() {
+    DataFrame df = context.table("testData2");
+    Double pearsonCorr = df.stat().corr("a", "b", "pearson");
+    Assert.assertTrue(Math.abs(pearsonCorr) < 1e-6);
   }
 
   @Test

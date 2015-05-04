@@ -875,6 +875,27 @@ class DataFrame(object):
 
             return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
 
+    def corr(self, col1, col2, method=None):
+        """
+        Calculates the correlation of two columns of a DataFrame as a double value. Currently only
+        supports the Pearson Correlation Coefficient.
+        :func:`DataFrame.corr` and :func:`DataFrameStatFunctions.corr` are aliases.
+
+        :param col1: The name of the first column
+        :param col2: The name of the second column
+        :param method: The correlation method. Currently only supports "pearson"
+        """
+        if not isinstance(col1, str):
+            raise ValueError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise ValueError("col2 should be a string.")
+        if not method:
+            method = "pearson"
+        if not method == "pearson":
+            raise ValueError("Currently only the calculation of the Pearson Correlation " +
+                             "coefficient is supported.")
+        return self._jdf.stat().corr(col1, col2, method)
+
     def cov(self, col1, col2):
         """
         Calculate the sample covariance for the given columns, specified by their names, as a
@@ -892,13 +913,15 @@ class DataFrame(object):
     def crosstab(self, col1, col2):
         """
         Computes a pair-wise frequency table of the given columns. Also known as a contingency
-        table. The number of distinct values for each column should be less than 1e5. The first
+        table. The number of distinct values for each column should be less than 1e4. The first
         column of each row will be the distinct values of `col1` and the column names will be the
-        distinct values of `col2` sorted in lexicographical order.
+        distinct values of `col2`. Pairs that have no occurrences will have `null` as their values.
         :func:`DataFrame.crosstab` and :func:`DataFrameStatFunctions.crosstab` are aliases.
 
-        :param col1: The name of the first column
-        :param col2: The name of the second column
+        :param col1: The name of the first column. Distinct items will make the first item of
+            each row.
+        :param col2: The name of the second column. Distinct items will make the column names
+            of the DataFrame.
         """
         if not isinstance(col1, str):
             raise ValueError("col1 should be a string.")
@@ -1375,6 +1398,11 @@ class DataFrameStatFunctions(object):
 
     def __init__(self, df):
         self.df = df
+
+    def corr(self, col1, col2, method=None):
+        return self.df.corr(col1, col2, method)
+
+    corr.__doc__ = DataFrame.corr.__doc__
 
     def cov(self, col1, col2):
         return self.df.cov(col1, col2)

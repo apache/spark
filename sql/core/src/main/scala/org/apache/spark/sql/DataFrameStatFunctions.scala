@@ -37,14 +37,43 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
     StatFunctions.calculateCov(df, Seq(col1, col2))
   }
 
+  /*
+   * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
+   * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in 
+   * MLlib's Statistics.
+   *
+   * @param col1 the name of the column
+   * @param col2 the name of the column to calculate the correlation against
+   * @return The Pearson Correlation Coefficient as a Double.
+   */
+  def corr(col1: String, col2: String, method: String): Double = {
+    require(method == "pearson", "Currently only the calculation of the Pearson Correlation " +
+      "coefficient is supported.")
+    StatFunctions.pearsonCorrelation(df, Seq(col1, col2))
+  }
+
+  /**
+   * Calculates the Pearson Correlation Coefficient of two columns of a DataFrame.
+   *
+   * @param col1 the name of the column
+   * @param col2 the name of the column to calculate the correlation against
+   * @return The Pearson Correlation Coefficient as a Double.
+   */
+  def corr(col1: String, col2: String): Double = {
+    corr(col1, col2, "pearson")
+  }
+
   /**
    * Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
-   * The number of distinct values for each column should be less than 1e5. The first
+   * The number of distinct values for each column should be less than 1e4. The first
    * column of each row will be the distinct values of `col1` and the column names will be the
-   * distinct values of `col2` sorted in lexicographical order. Counts will be returned as `Long`s.
+   * distinct values of `col2`. Counts will be returned as `Long`s. Pairs that have no occurrences
+   * will have `null` as their values.
    *
-   * @param col1 The name of the first column.
-   * @param col2 The name of the second column.
+   * @param col1 The name of the first column. Distinct items will make the first item of
+   *             each row.
+   * @param col2 The name of the second column. Distinct items will make the column names
+   *             of the DataFrame.
    * @return A Local DataFrame containing the table
    */
   def crosstab(col1: String, col2: String): DataFrame = {
