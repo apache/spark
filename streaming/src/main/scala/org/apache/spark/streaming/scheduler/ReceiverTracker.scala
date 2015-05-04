@@ -154,12 +154,16 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   private def deregisterReceiver(streamId: Int, message: String, error: String) {
     val newReceiverInfo = receiverInfo.get(streamId) match {
       case Some(oldInfo) =>
+        val lastErrorTime =
+          if (error == null || error == "") -1 else ssc.scheduler.clock.getTimeMillis()
         oldInfo.copy(endpoint = null, active = false, lastErrorMessage = message,
-          lastError = error, lastErrorTime = ssc.scheduler.clock.getTimeMillis())
+          lastError = error, lastErrorTime = lastErrorTime)
       case None =>
         logWarning("No prior receiver info")
+        val lastErrorTime =
+          if (error == null || error == "") -1 else ssc.scheduler.clock.getTimeMillis()
         ReceiverInfo(streamId, "", null, false, "", lastErrorMessage = message,
-          lastError = error, lastErrorTime = ssc.scheduler.clock.getTimeMillis())
+          lastError = error, lastErrorTime = lastErrorTime)
     }
     receiverInfo -= streamId
     listenerBus.post(StreamingListenerReceiverStopped(newReceiverInfo))
