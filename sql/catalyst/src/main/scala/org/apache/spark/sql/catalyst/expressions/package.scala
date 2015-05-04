@@ -83,7 +83,8 @@ package object expressions  {
    */
   trait ExpressionEquals
 
-  private[this] class AttributeRefEquals(private val normalized: Expression) extends ExpressionEquals {
+  private[this] class AttributeRefEquals(private val normalized: Expression)
+    extends ExpressionEquals {
     override def equals(other: Any): Boolean = other match {
       case o: AttributeRefEquals => normalized == o.normalized
       case _ => false
