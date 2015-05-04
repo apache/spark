@@ -91,7 +91,10 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val inputPaths = t.paths.map(new Path(_)).flatMap { path =>
         val fs = path.getFileSystem(t.sqlContext.sparkContext.hadoopConfiguration)
         val qualifiedPath = fs.makeQualified(path)
-        SparkHadoopUtil.get.listLeafStatuses(fs, qualifiedPath).map(_.getPath.toString)
+        SparkHadoopUtil.get.listLeafStatuses(fs, qualifiedPath).map(_.getPath).filterNot { path =>
+          val name = path.getName
+          name.startsWith("_") || name.startsWith(".")
+        }.map(fs.makeQualified(_).toString)
       }
 
       pruneFilterProject(
@@ -131,13 +134,10 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val dataFilePaths = {
         val dirPath = new Path(dir)
         val fs = dirPath.getFileSystem(SparkHadoopUtil.get.conf)
-        fs.listStatus(dirPath)
-          .map(_.getPath)
-          .filter { path =>
-            val name = path.getName
-            name.startsWith("_") || name.startsWith(".")
-          }
-          .map(fs.makeQualified(_).toString)
+        fs.listStatus(dirPath).map(_.getPath).filterNot { path =>
+          val name = path.getName
+          name.startsWith("_") || name.startsWith(".")
+        }.map(fs.makeQualified(_).toString)
       }
 
       // The table scan operator (PhysicalRDD) which retrieves required columns from data files.
