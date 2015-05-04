@@ -98,21 +98,25 @@ class DagBag(object):
                 'example_dags')
             self.collect_dags(example_dag_folder)
         if sync_to_db:
-            self.merge_dags()
+            self.deactivate_inactive_dags()
 
     def get_dag(self, dag_id):
         """
         Gets the DAG out of the dictionary, and refreshes it if expired
         """
-        orm_dag = DagModel.get_current(dag_id)
         if dag_id in self.dags:
             dag = self.dags[dag_id]
+            if dag.is_subdag:
+                orm_dag = DagModel.get_current(dag.parent_dag.dag_id)
+            else:
+                orm_dag = DagModel.get_current(dag_id)
             if dag.last_loaded < (
                     orm_dag.last_expired or datetime(2100, 1, 1)):
                 self.process_file(
                     filepath=orm_dag.fileloc, only_if_updated=False)
                 dag = self.dags[dag_id]
         else:
+            orm_dag = DagModel.get_current(dag_id)
             session = settings.Session()
             dag = session.query(DAG).filter(DAG.dag_id == dag_id).first()
             self.process_file(
@@ -124,7 +128,6 @@ class DagBag(object):
             session.commit()
             session.close()
         return dag
-
 
     def process_file(self, filepath, only_if_updated=True, safe_mode=True):
         """
@@ -158,29 +161,29 @@ class DagBag(object):
             for dag in m.__dict__.values():
                 if isinstance(dag, DAG):
                     dag.full_filepath = filepath
-                    dag.last_loaded = datetime.now()
                     dag.is_subdag = False
-                    self.bag_dag(dag)
+                    self.bag_dag(dag, parent_dag=dag, root_dag=dag)
                     # dag.pickle()
 
             self.file_last_changed[filepath] = dttm
 
-    def bag_dag(self, dag):
+    def bag_dag(self, dag, parent_dag, root_dag):
         """
         Adds the DAG into the bag, recurses into sub dags.
         """
         self.dags[dag.dag_id] = dag
         dag.resolve_template_files()
+        dag.last_loaded = datetime.now()
 
         if self.sync_to_db:
             session = settings.Session()
             orm_dag = session.query(
-                DagModel).filter(DagModel.dag_id==dag.dag_id).first()
+                DagModel).filter(DagModel.dag_id == dag.dag_id).first()
             if not orm_dag:
                 orm_dag = DagModel(dag_id=dag.dag_id)
-            orm_dag.fileloc = dag.filepath
-            orm_dag.is_subdag = dag.is_sub_dag
-            orm_dag.owners = dag.owner
+            orm_dag.fileloc = root_dag.full_filepath
+            orm_dag.is_subdag = dag.is_subdag
+            orm_dag.owners = root_dag.owner
             orm_dag.is_active = True
             session.merge(orm_dag)
             session.commit()
@@ -189,11 +192,9 @@ class DagBag(object):
         for subdag in dag.subdags:
             subdag.full_filepath = dag.full_filepath
             subdag.parent_dag = dag
-            subdag.last_expired = dag.last_expired
-            subdag.fileloc = dag.fileloc
-            subdag.last_expired = dag.last_expired
+            subdag.fileloc = root_dag.full_filepath
             subdag.is_subdag = True
-            self.bag_dag(subdag)
+            self.bag_dag(subdag, parent_dag=dag, root_dag=root_dag)
         logging.info('Loaded DAG {dag}'.format(**locals()))
 
     def collect_dags(
@@ -231,13 +232,12 @@ class DagBag(object):
                         self.process_file(
                             filepath, only_if_updated=only_if_updated)
 
-    def merge_dags(self):
+    def deactivate_inactive_dags(self):
+        active_dag_ids = [dag.dag_id for dag in self.dags.values()]
         session = settings.Session()
-        for dag in session.query(DagModel).all():
+        for dag in session.query(
+                DagModel).filter(~DagModel.dag_id.in_(active_dag_ids)).all():
             dag.is_active = False
-            session.merge(dag)
-        for dag in self.dags.values():
-            dag.is_active = True
             session.merge(dag)
         session.commit()
         session.close()
@@ -1238,11 +1238,12 @@ class DagModel(Base):
     @classmethod
     def get_current(cls, dag_id):
         session = settings.Session()
-        obj = session.query(cls).filter(cls.dag_id==dag_id).first()
+        obj = session.query(cls).filter(cls.dag_id == dag_id).first()
         session.expunge_all()
         session.commit()
         session.close()
         return obj
+
 
 class DAG(object):
     """
@@ -1489,8 +1490,6 @@ class DAG(object):
         # backdoor
         cls = self.__class__
         result = cls.__new__(cls)
-        setattr(
-            result, '_sa_instance_state', getattr(self, '_sa_instance_state'))
         memo[id(self)] = result
         for k, v in self.__dict__.items():
             if k not in ('user_defined_macros', 'params'):
@@ -1556,11 +1555,11 @@ class DAG(object):
 
     def pickle(self, main_session=None):
         session = main_session or settings.Session()
-        dag = session.query(DAG).filter(DAG.dag_id==self.dag_id).first()
+        dag = session.query(DAG).filter(DAG.dag_id == self.dag_id).first()
         dp = None
         if dag and dag.pickle_id:
             dp = session.query(DagPickle).filter(
-                DagPickle.id==dag.pickle_id).first()
+                DagPickle.id == dag.pickle_id).first()
         if not dp or dp.pickle != self:
             dp = DagPickle(dag=self)
             session.add(dp)
