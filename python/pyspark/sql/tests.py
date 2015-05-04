@@ -445,7 +445,6 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual([False, True, True],
                      df.select(df.a.between(df.b, df.c)).collect())
 
-
     def test_save_and_load(self):
         df = self.df
         tmpPath = tempfile.mkdtemp()

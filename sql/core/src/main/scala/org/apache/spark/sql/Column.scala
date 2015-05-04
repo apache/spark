@@ -300,16 +300,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group java_expr_ops
    */
-  def between(lowerBound: String, upperBound: String): Column = {
-    between(Column(lowerBound), Column(upperBound))
-  }
-
-  /**
-   * True if the current column is between the lower bound and upper bound, inclusive.
-   *
-   * @group java_expr_ops
-   */
-  def between(lowerBound: Column, upperBound: Column): Column = {
+  def between(lowerBound: Any, upperBound: Any): Column = {
     (this >= lowerBound) && (this <= upperBound)
   }
 
