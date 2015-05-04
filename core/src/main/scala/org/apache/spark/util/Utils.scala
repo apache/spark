@@ -21,7 +21,7 @@ import java.io._
 import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
-import java.util.{PriorityQueue, Properties, Locale, Random, UUID}
+import java.util.{Locale, PriorityQueue, Properties, Random, UUID}
 import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
 
@@ -1971,23 +1971,23 @@ private[spark] object Utils extends Logging {
       startService: Int => (T, Int),
       conf: SparkConf,
       serviceName: String = ""): (T, Int) = {
+    val maxRetries = portMaxRetries(conf)
     val ports = port.split(":", 2)
     val (minPort, maxPort) = if (ports.length == 2) {
       (ports(0).toInt, ports(1).toInt)
     } else {
-      (ports(0).toInt, 65535)
+      val _minPort = ports(0).toInt
+      (_minPort, math.min(65535, _minPort + maxRetries))
     }
     require(minPort == 0 || (1024 <= minPort && minPort <= 65535),
       s"Minimum port ${minPort} should be between 1024 and 65535 (inclusive)," +
         " or 0 for a random free port.")
-    require(maxPort == 0 || (1024 <= maxPort && maxPort <= 65535),
-      s"Maximum port ${maxPort} should be between 1024 and 65535 (inclusive)," +
-        " or 0 for a random free port.")
+    require((1024 <= maxPort && maxPort <= 65535),
+      s"Maximum port ${maxPort} should be between 1024 and 65535 (inclusive).")
     require(minPort <= maxPort, s"Minimum ${minPort} port should not be" +
       s" less than the maximum ${maxPort}.")
 
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
-    val maxRetries = portMaxRetries(conf)
     for (offset <- 0 to maxRetries) {
       val tryPort = if (minPort == 0) {
         minPort
