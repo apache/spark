@@ -204,19 +204,20 @@ calling `.rdd()` on your `JavaRDD` object. A self-contained application example
 that is equivalent to the provided example in Scala is given below:
 
 {% highlight java %}
-import org.apache.spark.api.java.*;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.mllib.clustering.GaussianMixture;
-import org.apache.spark.mllib.clustering.GaussianMixtureModel;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.SparkConf;
 
-public class GaussianMixtureExample {
-  public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("GaussianMixture Example");
-    JavaSparkContext sc = new JavaSparkContext(conf);
-
+    import org.apache.spark.api.java.*;
+    import org.apache.spark.api.java.function.Function;
+    import org.apache.spark.mllib.clustering.GaussianMixture;
+    import org.apache.spark.mllib.clustering.GaussianMixtureModel;
+    import org.apache.spark.mllib.linalg.Vector;
+    import org.apache.spark.mllib.linalg.Vectors;
+    import org.apache.spark.SparkConf;
+      
+    public class GaussianMixtureExample {
+      public static void main(String[] args) {
+        SparkConf conf = new SparkConf().setAppName("GaussianMixture Example");
+        JavaSparkContext sc = new JavaSparkContext(conf);
+        
     // Load and parse data
     String path = "data/mllib/gmm_data.txt";
     JavaRDD<String> data = sc.textFile(path);
@@ -232,10 +233,10 @@ public class GaussianMixtureExample {
       }
     );
     parsedData.cache();
-
+      
     // Cluster the data into two classes using GaussianMixture
     GaussianMixtureModel gmm = new GaussianMixture().setK(2).run(parsedData.rdd());
-
+      
     // Save and load GaussianMixtureModel
     gmm.save(sc, "myGMMModel")
     GaussianMixtureModel sameModel = GaussianMixtureModel.load(sc, "myGMMModel")
@@ -243,9 +244,9 @@ public class GaussianMixtureExample {
     for(int j=0; j<gmm.k(); j++) {
         System.out.println("weight=%f\nmu=%s\nsigma=\n%s\n",
             gmm.weights()[j], gmm.gaussians()[j].mu(), gmm.gaussians()[j].sigma());
+        }
+      }
     }
-  }
-}
 {% endhighlight %}
 </div>
 
