@@ -275,9 +275,12 @@ class DataFrame(object):
         >>> df
         DataFrame[age: int, name: string]
         >>> df.show()
-        age name
-        2   Alice
-        5   Bob
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
         """
         print(self._jdf.showString(n))
 
@@ -591,12 +594,15 @@ class DataFrame(object):
         given, this function computes statistics for all numerical columns.
 
         >>> df.describe().show()
-        summary age
-        count   2
-        mean    3.5
-        stddev  1.5
-        min     2
-        max     5
+        +-------+---+
+        |summary|age|
+        +-------+---+
+        |  count|  2|
+        |   mean|3.5|
+        | stddev|1.5|
+        |    min|  2|
+        |    max|  5|
+        +-------+---+
         """
         jdf = self._jdf.describe(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
@@ -801,12 +807,18 @@ class DataFrame(object):
         :param subset: optional list of column names to consider.
 
         >>> df4.dropna().show()
-        age height name
-        10  80     Alice
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        +---+------+-----+
 
         >>> df4.na.drop().show()
-        age height name
-        10  80     Alice
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        +---+------+-----+
         """
         if how is not None and how not in ['any', 'all']:
             raise ValueError("how ('" + how + "') should be 'any' or 'all'")
@@ -837,25 +849,34 @@ class DataFrame(object):
             then the non-string column is simply ignored.
 
         >>> df4.fillna(50).show()
-        age height name
-        10  80     Alice
-        5   50     Bob
-        50  50     Tom
-        50  50     null
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        |  5|    50|  Bob|
+        | 50|    50|  Tom|
+        | 50|    50| null|
+        +---+------+-----+
 
         >>> df4.fillna({'age': 50, 'name': 'unknown'}).show()
-        age height name
-        10  80     Alice
-        5   null   Bob
-        50  null   Tom
-        50  null   unknown
+        +---+------+-------+
+        |age|height|   name|
+        +---+------+-------+
+        | 10|    80|  Alice|
+        |  5|  null|    Bob|
+        | 50|  null|    Tom|
+        | 50|  null|unknown|
+        +---+------+-------+
 
         >>> df4.na.fill({'age': 50, 'name': 'unknown'}).show()
-        age height name
-        10  80     Alice
-        5   null   Bob
-        50  null   Tom
-        50  null   unknown
+        +---+------+-------+
+        |age|height|   name|
+        +---+------+-------+
+        | 10|    80|  Alice|
+        |  5|  null|    Bob|
+        | 50|  null|    Tom|
+        | 50|  null|unknown|
+        +---+------+-------+
         """
         if not isinstance(value, (float, int, long, basestring, dict)):
             raise ValueError("value should be a float, int, long, string, or dict")
@@ -1241,11 +1262,17 @@ class Column(object):
 
         >>> df = sc.parallelize([([1, 2], {"key": "value"})]).toDF(["l", "d"])
         >>> df.select(df.l.getItem(0), df.d.getItem("key")).show()
-        l[0] d[key]
-        1    value
+        +----+------+
+        |l[0]|d[key]|
+        +----+------+
+        |   1| value|
+        +----+------+
         >>> df.select(df.l[0], df.d["key"]).show()
-        l[0] d[key]
-        1    value
+        +----+------+
+        |l[0]|d[key]|
+        +----+------+
+        |   1| value|
+        +----+------+
         """
         return self[key]
 
@@ -1255,11 +1282,17 @@ class Column(object):
         >>> from pyspark.sql import Row
         >>> df = sc.parallelize([Row(r=Row(a=1, b="b"))]).toDF()
         >>> df.select(df.r.getField("b")).show()
-        r.b
-        b
+        +---+
+        |r.b|
+        +---+
+        |  b|
+        +---+
         >>> df.select(df.r.a).show()
-        r.a
-        1
+        +---+
+        |r.a|
+        +---+
+        |  1|
+        +---+
         """
         return Column(self._jc.getField(name))
 
