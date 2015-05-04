@@ -40,6 +40,7 @@ import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorC
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
 
 /**
  * Suite of Kinesis streaming receiver tests focusing mostly on the KinesisRecordProcessor
@@ -47,11 +48,17 @@ import com.amazonaws.services.kinesis.model.Record
 class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAfter
     with MockitoSugar {
 
-  val app = "TestKinesisReceiver"
-  val stream = "mySparkStream"
-  val endpoint = "endpoint-url"
+  val explicitAppName = "myExplicitAppName"
+  val streamName = "mySparkStream"
+  val endpointUrl = "https://kinesis.us-west-2.amazonaws.com"
+  val regionName = "us-east-1"
   val workerId = "dummyWorkerId"
-  val shardId = "dummyShardId"
+  val awsAccessKeyId = "awsAccessKeyId"
+  val awsSecretKey = "awsSecretKey"
+  val batchInterval = Seconds(1)
+  val checkpointInterval = Seconds(2)
+  val initialPosition = InitialPositionInStream.LATEST
+  val storageLevel = StorageLevel.MEMORY_AND_DISK_2
 
   val record1 = new Record()
   record1.setData(ByteBuffer.wrap("Spark In Action".getBytes()))
@@ -81,13 +88,69 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
       checkpointStateMock, currentClockMock)
   }
 
-  test("kinesis utils api") {
-    val ssc = new StreamingContext(master, framework, batchDuration)
-    // Tests the API, does not actually test data receiving
-    val kinesisStream = KinesisUtils.createStream(ssc, "mySparkStream",
-      "https://kinesis.us-west-2.amazonaws.com", Seconds(2),
-      InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2);
-    ssc.stop()
+  test("Use regionName when it's provided and valid") {
+    val receiver = new KinesisReceiver(explicitAppName, streamName, endpointUrl, regionName,
+      awsAccessKeyId, awsSecretKey, checkpointInterval, initialPosition, storageLevel)
+
+    assert(receiver.resolveRegionName() === "us-east-1")
+  }
+
+  test("Throw exception when regionName is provided, but not valid") {
+    val receiver = new KinesisReceiver(explicitAppName, streamName, endpointUrl, "janitor-monkey",
+      awsAccessKeyId, awsSecretKey, checkpointInterval, initialPosition, storageLevel)
+
+    intercept[IllegalArgumentException] {
+      receiver.resolveRegionName()
+    }
+  }
+
+  test("Use endpoint url when regionName not provided") {
+    val receiver = new KinesisReceiver(explicitAppName, streamName, endpointUrl, null,
+      awsAccessKeyId, awsSecretKey, checkpointInterval, initialPosition, storageLevel)
+
+    assert(receiver.resolveRegionName() === "us-west-2")
+  }
+
+  test("Throw exception when region cannot be derived from endpointUrl") {
+    val receiver = new KinesisReceiver(explicitAppName, streamName, 
+        "https://kinesis.eu-chaos-monkey-2.amazonaws.com", null, awsAccessKeyId, awsSecretKey, 
+        checkpointInterval, initialPosition, storageLevel)
+    
+    intercept[IllegalArgumentException] {
+      receiver.resolveRegionName()
+    }
+  }
+
+  test("Use DefaultAWSCredentialsProviderChain when awsAccessKeyId and awsSecretKey are null") {
+    val receiver = new KinesisReceiver(explicitAppName, streamName, endpointUrl, regionName, 
+      null, null, checkpointInterval, initialPosition, storageLevel)
+
+    assert(receiver.resolveAWSCredentialsProvider()
+      .isInstanceOf[DefaultAWSCredentialsProviderChain])
+  }
+
+  test("Use DefaultAWSCredentialsProviderChain when awsAccessKeyId is null") {
+    val receiver = new KinesisReceiver(explicitAppName, streamName, endpointUrl, regionName, 
+      null, awsSecretKey, checkpointInterval, initialPosition, storageLevel)
+
+    assert(receiver.resolveAWSCredentialsProvider()
+      .isInstanceOf[DefaultAWSCredentialsProviderChain])
+  }
+
+  test("Use DefaultAWSCredentialsProviderChain when awsSecretKey is null") {
+    val receiver = new KinesisReceiver(explicitAppName, streamName, endpointUrl, regionName, 
+      awsAccessKeyId, null, checkpointInterval, initialPosition, storageLevel)
+
+    assert(receiver.resolveAWSCredentialsProvider()
+      .isInstanceOf[DefaultAWSCredentialsProviderChain])
+  } 
+
+  test("Use BasicAWSCredentialsProvider when both awsAccessKeyId and awsSecretKey are non-null") {
+    val receiver = new KinesisReceiver(explicitAppName, streamName, endpointUrl, regionName, 
+      awsAccessKeyId, awsSecretKey, checkpointInterval, initialPosition, storageLevel)
+
+    assert(receiver.resolveAWSCredentialsProvider()
+      .isInstanceOf[BasicAWSCredentialsProvider])
   }
 
   test("process records including store and checkpoint") {

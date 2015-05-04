@@ -35,7 +35,10 @@ import com.amazonaws.services.kinesis.model.Record
 /**
  * Kinesis-specific implementation of the Kinesis Client Library (KCL) IRecordProcessor.
  * This implementation operates on the Array[Byte] from the KinesisReceiver.
- * The Kinesis Worker creates an instance of this KinesisRecordProcessor upon startup.
+ * The Kinesis Worker creates an instance of this KinesisRecordProcessor for each 
+ *   shard in the Kinesis stream upon startup.  This is normally done in separate threads, 
+ *   but the KCLs within the KinesisReceivers will balance themselves out if you create 
+ *   multiple Receivers.
  *
  * @param receiver Kinesis receiver
  * @param workerId for logging purposes
@@ -47,8 +50,8 @@ private[kinesis] class KinesisRecordProcessor(
     workerId: String,
     checkpointState: KinesisCheckpointState) extends IRecordProcessor with Logging {
 
-  /* shardId to be populated during initialize() */
-  var shardId: String = _
+  // shardId to be populated during initialize()
+  private var shardId: String = _
 
   /**
    * The Kinesis Client Library calls this method during IRecordProcessor initialization.
@@ -56,8 +59,8 @@ private[kinesis] class KinesisRecordProcessor(
    * @param shardId assigned by the KCL to this particular RecordProcessor.
    */
   override def initialize(shardId: String) {
-    logInfo(s"Initialize:  Initializing workerId $workerId with shardId $shardId")
     this.shardId = shardId
+    logInfo(s"Initialized workerId $workerId with shardId $shardId")
   }
 
   /**
@@ -73,12 +76,17 @@ private[kinesis] class KinesisRecordProcessor(
     if (!receiver.isStopped()) {
       try {
         /*
-         * Note:  If we try to store the raw ByteBuffer from record.getData(), the Spark Streaming
-         * Receiver.store(ByteBuffer) attempts to deserialize the ByteBuffer using the
-         *   internally-configured Spark serializer (kryo, etc).
-         * This is not desirable, so we instead store a raw Array[Byte] and decouple
-         *   ourselves from Spark's internal serialization strategy.
-         */
+         * Notes:  
+         * 1) If we try to store the raw ByteBuffer from record.getData(), the Spark Streaming
+         *    Receiver.store(ByteBuffer) attempts to deserialize the ByteBuffer using the
+         *    internally-configured Spark serializer (kryo, etc).
+         * 2) This is not desirable, so we instead store a raw Array[Byte] and decouple
+         *    ourselves from Spark's internal serialization strategy.
+         * 3) For performance, the BlockGenerator is asynchronously queuing elements within its
+         *    memory before creating blocks.  This prevents the small block scenario, but requires
+         *    that you register callbacks to know when a block has been generated and stored 
+         *    (WAL is sufficient for storage) before can checkpoint back to the source.
+        */
         batch.foreach(record => receiver.store(record.getData().array()))
         
         logDebug(s"Stored:  Worker $workerId stored ${batch.size} records for shardId $shardId")
@@ -116,7 +124,7 @@ private[kinesis] class KinesisRecordProcessor(
           logError(s"Exception:  WorkerId $workerId encountered and exception while storing " +
               " or checkpointing a batch for workerId $workerId and shardId $shardId.", e)
 
-          /* Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor.*/
+          /* Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor. */
           throw e
         }
       }
@@ -190,7 +198,7 @@ private[kinesis] object KinesisRecordProcessor extends Logging {
                logError(s"Retryable Exception:  Random backOffMillis=${backOffMillis}", e)
                retryRandom(expression, numRetriesLeft - 1, maxBackOffMillis)
              }
-        /* Throw:  Shutdown has been requested by the Kinesis Client Library.*/
+        /* Throw:  Shutdown has been requested by the Kinesis Client Library. */
         case _: ShutdownException => {
           logError(s"ShutdownException:  Caught shutdown exception, skipping checkpoint.", e)
           throw e

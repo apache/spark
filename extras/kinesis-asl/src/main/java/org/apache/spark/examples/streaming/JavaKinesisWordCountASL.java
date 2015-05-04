@@ -33,8 +33,7 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.apache.spark.streaming.kinesis.KinesisUtils;
 
 import scala.Tuple2;
-
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.kinesis.AmazonKinesisClient;
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
 import com.google.common.collect.Lists;
@@ -52,30 +51,26 @@ import com.google.common.collect.Lists;
  *
  * Valid endpoint urls:  http://docs.aws.amazon.com/general/latest/gr/rande.html#ak_region
  *
- * This code uses the DefaultAWSCredentialsProviderChain and searches for credentials 
- *  in the following order of precedence: 
- *         Environment Variables - AWS_ACCESS_KEY_ID and AWS_SECRET_KEY
- *         Java System Properties - aws.accessKeyId and aws.secretKey
- *         Credential profiles file - default location (~/.aws/credentials) shared by all AWS SDKs
- *         Instance profile credentials - delivered through the Amazon EC2 metadata service
+ * This example requires the AWS credentials to be passed as args.
  *
- * Usage: JavaKinesisWordCountASL <stream-name> <endpoint-url>
- *         <stream-name> is the name of the Kinesis stream (ie. mySparkStream)
- *         <endpoint-url> is the endpoint of the Kinesis service 
- *           (ie. https://kinesis.us-east-1.amazonaws.com)
+ * Usage: JavaKinesisWordCountASL <app-name> <stream-name> <endpoint-url> <region-name> \
+ *                                <aws-access-key-id> <aws-secret-key>
+ *   <app-name> name of the consumer app
+ *   <stream-name> name of the Kinesis stream (ie. mySparkStream)
+ *   <endpoint-url> endpoint of the Kinesis service
+ *     (ie. https://kinesis.us-east-1.amazonaws.com)
+ *   <region-name> region name for DynamoDB and CloudWatch backing services
+ *   <aws-access-key-id> AWS access key id
+ *   <aws-secret-key> AWS secret key
  *
- * Example:
- *      $ export AWS_ACCESS_KEY_ID=<your-access-key>
- *      $ export AWS_SECRET_KEY=<your-secret-key>
- *      $ $SPARK_HOME/bin/run-example \
- *            org.apache.spark.examples.streaming.JavaKinesisWordCountASL mySparkStream \
- *            https://kinesis.us-east-1.amazonaws.com
- *
- * Note that number of workers/threads should be 1 more than the number of receivers.
- * This leaves one thread available for actually processing the data.
+ * Examples:
+ *    $ SPARK_HOME/bin/run-example \
+ *        org.apache.spark.examples.streaming.JavaKinesisWordCountASL myKinesisApp myKinesisStream\
+ *        https://kinesis.us-east-1.amazonaws.com us-east-1 <aws-access-key-id> <aws-secret-key>
  *
  * There is a companion helper class called KinesisWordCountProducerASL which puts dummy data 
- *   onto the Kinesis stream. 
+ *   onto the Kinesis stream.
+ *
  * Usage instructions for KinesisWordCountProducerASL are provided in the class definition.
  */
 public final class JavaKinesisWordCountASL { // needs to be public for access from run-example
@@ -88,40 +83,50 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
 
     public static void main(String[] args) {
         /* Check that all required args were passed in. */
-        if (args.length < 2) {
+        if (args.length < 6) {
           System.err.println(
-              "Usage: JavaKinesisWordCountASL <stream-name> <endpoint-url>\n" +
+              "Usage: JavaKinesisWordCountASL <app-name> <stream-name> <endpoint-url>" + 
+              "                            <region-name> <aws-access-key-id> <aws-secret-key>\n" +
+              "    <app-name> is the name of the consumer app\n" +
               "    <stream-name> is the name of the Kinesis stream\n" +
               "    <endpoint-url> is the endpoint of the Kinesis service\n" +
-              "                   (e.g. https://kinesis.us-east-1.amazonaws.com)\n");
+              "                   (e.g. https://kinesis.us-east-1.amazonaws.com)\n" +
+              "    <region-name> region name for DynamoDB and CloudWatch backing services\n" +
+              "    <aws-access-key-id> is the AWS Access Key Id\n" + 
+              "    <aws-secret-key> is the AWS Secret Key");
           System.exit(1);
         }
 
         StreamingExamples.setStreamingLogLevels();
 
         /* Populate the appropriate variables from the given args */
-        String streamName = args[0];
-        String endpointUrl = args[1];
+        String appName = args[0];
+        String streamName = args[1];
+        String endpointUrl = args[2];
+        String regionName = args[3];
+        String awsAccessKeyId = args[4];
+        String awsSecretKey = args[5];
+        
         /* Set the batch interval to a fixed 2000 millis (2 seconds) */
         Duration batchInterval = new Duration(2000);
 
-        /* Create a Kinesis client in order to determine the number of shards for the given stream */
+        /* Create Kinesis client in order to determine the number of shards for the given stream */
         AmazonKinesisClient kinesisClient = new AmazonKinesisClient(
-                new DefaultAWSCredentialsProviderChain());
+                new BasicAWSCredentials(awsAccessKeyId, awsSecretKey));
         kinesisClient.setEndpoint(endpointUrl);
 
         /* Determine the number of shards from the stream */
         int numShards = kinesisClient.describeStream(streamName)
                 .getStreamDescription().getShards().size();
 
-        /* In this example, we're going to create 1 Kinesis Worker/Receiver/DStream for each shard */ 
+        /* Create 1 Kinesis Worker/Receiver/DStream for each shard */ 
         int numStreams = numShards;
-
-        /* Setup the Spark config. */
-        SparkConf sparkConfig = new SparkConf().setAppName("KinesisWordCount");
 
         /* Kinesis checkpoint interval.  Same as batchInterval for this example. */
         Duration checkpointInterval = batchInterval;
+
+        /* Setup the Spark config. */
+        SparkConf sparkConfig = new SparkConf().setAppName(appName);
 
         /* Setup the StreamingContext */
         JavaStreamingContext jssc = new JavaStreamingContext(sparkConfig, batchInterval);
@@ -130,23 +135,27 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
         List<JavaDStream<byte[]>> streamsList = new ArrayList<JavaDStream<byte[]>>(numStreams);
         for (int i = 0; i < numStreams; i++) {
           streamsList.add(
-            KinesisUtils.createStream(jssc, streamName, endpointUrl, checkpointInterval, 
-            InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2())
+            KinesisUtils.createStream(appName, jssc, streamName, endpointUrl, 
+                regionName, awsAccessKeyId, awsSecretKey, checkpointInterval, 
+                InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2())
           );
         }
 
         /* Union all the streams if there is more than 1 stream */
         JavaDStream<byte[]> unionStreams;
         if (streamsList.size() > 1) {
-            unionStreams = jssc.union(streamsList.get(0), streamsList.subList(1, streamsList.size()));
+            unionStreams = jssc.union(streamsList.get(0), 
+                streamsList.subList(1, streamsList.size()));
         } else {
             /* Otherwise, just use the 1 stream */
             unionStreams = streamsList.get(0);
         }
 
         /*
-         * Split each line of the union'd DStreams into multiple words using flatMap to produce the collection.
-         * Convert lines of byte[] to multiple Strings by first converting to String, then splitting on WORD_SEPARATOR.
+         * Split each line of the union'd DStreams into multiple words using flatMap
+         *   to produce the collection.
+         * Convert lines of byte[] to multiple Strings by first converting to String, 
+         *   then splitting on WORD_SEPARATOR.
          */
         JavaDStream<String> words = unionStreams.flatMap(new FlatMapFunction<byte[], String>() {
                 @Override
