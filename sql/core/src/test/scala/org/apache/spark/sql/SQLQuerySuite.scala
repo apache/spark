@@ -864,8 +864,11 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   test("SET commands with illegal or inappropriate argument") {
     conf.clear()
-    // mapred.reduce.tasks=-1 for automatically determing the number of reducers is not supported
+    // Set negative mapred.reduce.tasks for automatically determing
+    // the number of reducers is not supported
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
+    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-01"))
+    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-2"))
     conf.clear()
   }
 
