@@ -94,6 +94,30 @@ class HashPartitioner(partitions: Int) extends Partitioner {
 }
 
 /**
+ * A [[org.apache.spark.Partitioner]] that uses pre-partitioned integer keys.
+ * Key is reduced modulo numPartitions.
+ *
+ */
+class DirectPartitioner(partitions: Int) extends Partitioner {
+  def numPartitions = partitions
+
+  def getPartition(key: Any): Int = key match {
+    case null => 0
+    case a: Int => Utils.nonNegativeMod(a, numPartitions)
+    case _ => throw new IllegalArgumentException("RDD key type must be 'Int' when using DirectPartitioner.")
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case d: DirectPartitioner =>
+      d.numPartitions == numPartitions
+    case _ =>
+      false
+  }
+
+  override def hashCode: Int = numPartitions
+}
+
+/**
  * A [[org.apache.spark.Partitioner]] that partitions sortable records by range into roughly
  * equal ranges. The ranges are determined by sampling the content of the RDD passed in.
  *
