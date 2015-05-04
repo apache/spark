@@ -17,7 +17,6 @@
 
 package org.apache.spark.streaming.kafka
 
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.reflect.{classTag, ClassTag}
@@ -27,10 +26,10 @@ import kafka.message.MessageAndMetadata
 import kafka.serializer.Decoder
 
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
+import org.apache.spark.streaming.scheduler.InputInfo
 
 /**
  *  A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
@@ -116,6 +115,12 @@ class DirectKafkaInputDStream[
     val untilOffsets = clamp(latestLeaderOffsets(maxRetries))
     val rdd = KafkaRDD[K, V, U, T, R](
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
+
+    // Report the number of records of the batch interval to InputInfoTracker.
+    val currentNumRecords = currentOffsets.map(_._2).sum
+    val toBeProcessedNumRecords = untilOffsets.map(_._2.offset).sum
+    val inputInfo = InputInfo(id, toBeProcessedNumRecords - currentNumRecords)
+    ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
     currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
     Some(rdd)

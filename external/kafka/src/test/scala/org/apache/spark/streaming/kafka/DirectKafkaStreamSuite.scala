@@ -34,6 +34,7 @@ import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
 import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.Utils
 
 class DirectKafkaStreamSuite
@@ -290,7 +291,6 @@ class DirectKafkaStreamSuite
       },
       "Recovered ranges are not the same as the ones generated"
     )
-
     // Restart context, give more data and verify the total at the end
     // If the total is write that means each records has been received only once
     ssc.start()
@@ -299,6 +299,49 @@ class DirectKafkaStreamSuite
       assert(DirectKafkaStreamSuite.total === (1 to 20).sum)
     }
     ssc.stop()
+  }
+
+  test("Direct Kafka stream report input information") {
+    val topic = "report-test"
+    val data = Map("a" -> 7, "b" -> 9)
+    kafkaTestUtils.createTopic(topic)
+    kafkaTestUtils.sendMessages(topic, data)
+
+    val totalSent = data.values.sum
+    val kafkaParams = Map(
+      "metadata.broker.list" -> kafkaTestUtils.brokerAddress,
+      "auto.offset.reset" -> "smallest"
+    )
+
+    import DirectKafkaStreamSuite._
+    ssc = new StreamingContext(sparkConf, Milliseconds(200))
+    val collector = new InputInfoCollector
+    ssc.addStreamingListener(collector)
+
+    val stream = withClue("Error creating direct stream") {
+      KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](
+        ssc, kafkaParams, Set(topic))
+    }
+
+    val allReceived = new ArrayBuffer[(String, String)]
+
+    stream.foreachRDD { rdd => allReceived ++= rdd.collect() }
+    ssc.start()
+    eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
+      assert(allReceived.size === totalSent,
+        "didn't get expected number of messages, messages:\n" + allReceived.mkString("\n"))
+    }
+    ssc.stop()
+
+    // Calculate all the record number collected in the StreamingListener.
+    val numRecordsSubmitted = collector.streamIdToNumRecordsSubmitted.map(_.values.sum).sum
+    assert(numRecordsSubmitted === totalSent)
+
+    val numRecordsStarted = collector.streamIdToNumRecordsStarted.map(_.values.sum).sum
+    assert(numRecordsStarted === totalSent)
+
+    val numRecordsCompleted = collector.streamIdToNumRecordsCompleted.map(_.values.sum).sum
+    assert(numRecordsCompleted === totalSent)
   }
 
   /** Get the generated offset ranges from the DirectKafkaStream */
@@ -313,4 +356,24 @@ class DirectKafkaStreamSuite
 object DirectKafkaStreamSuite {
   val collectedData = new mutable.ArrayBuffer[String]()
   var total = -1L
+
+  class InputInfoCollector extends StreamingListener {
+    val streamIdToNumRecordsSubmitted = new ArrayBuffer[Map[Int, Long]]()
+    val streamIdToNumRecordsStarted = new ArrayBuffer[Map[Int, Long]]()
+    val streamIdToNumRecordsCompleted = new ArrayBuffer[Map[Int, Long]]()
+
+    override def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted): Unit =
+      synchronized {
+        streamIdToNumRecordsSubmitted += batchSubmitted.batchInfo.streamIdToNumRecords
+    }
+
+    override def onBatchStarted(batchStarted: StreamingListenerBatchStarted): Unit = synchronized {
+      streamIdToNumRecordsStarted += batchStarted.batchInfo.streamIdToNumRecords
+    }
+
+    override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit =
+      synchronized {
+        streamIdToNumRecordsCompleted += batchCompleted.batchInfo.streamIdToNumRecords
+    }
+  }
 }
