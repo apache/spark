@@ -181,8 +181,9 @@ class Evaluator(object):
     def evaluate(self, dataset, params={}):
         """
         Evaluates the output.
-        :param dataset: a dataset that contains labels/observations
-                        and predictions
+
+        :param dataset: a dataset that contains labels/observations and
+                        predictions
         :param params: an optional param map that overrides embedded
                        params
         :return: metric

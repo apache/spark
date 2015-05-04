@@ -19,10 +19,12 @@ from pyspark.ml.wrapper import JavaEvaluator
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasLabelCol, HasRawPredictionCol
 from pyspark.ml.util import keyword_only
+from pyspark.mllib.common import inherit_doc
 
 __all__ = ['BinaryClassificationEvaluator']
 
 
+@inherit_doc
 class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol):
     """
     Evaluator for binary classification, which expects two input
@@ -51,7 +53,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     def __init__(self, rawPredictionCol="rawPrediction", labelCol="label",
                  metricName="areaUnderROC"):
         """
-        __init__(self, rawPredictionCol="rawPrediction", labelCol="label",
+        __init__(self, rawPredictionCol="rawPrediction", labelCol="label", \
                  metricName="areaUnderROC")
         """
         super(BinaryClassificationEvaluator, self).__init__()
@@ -80,7 +82,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     def setParams(self, rawPredictionCol="rawPrediction", labelCol="label",
                   metricName="areaUnderROC"):
         """
-        setParams(self, rawPredictionCol="rawPrediction", labelCol="label",
+        setParams(self, rawPredictionCol="rawPrediction", labelCol="label", \
                   metricName="areaUnderROC")
         Sets params for binary classification evaluator.
         """
