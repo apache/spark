@@ -18,7 +18,7 @@
 package org.apache.spark.storage
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.{OperatorScope, RDD}
+import org.apache.spark.rdd.{RDDOperationScope, RDD}
 import org.apache.spark.util.Utils
 
 @DeveloperApi
@@ -28,7 +28,7 @@ class RDDInfo(
     val numPartitions: Int,
     var storageLevel: StorageLevel,
     val parentIds: Seq[Int],
-    val scope: Option[OperatorScope] = None)
+    val scope: Option[RDDOperationScope] = None)
   extends Ordered[RDDInfo] {
 
   var numCachedPartitions = 0

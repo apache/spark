@@ -32,17 +32,20 @@ import org.apache.spark.SparkContext
  * Examples include, but will not be limited to, existing RDD operations, such as textFile,
  * reduceByKey, and treeAggregate.
  *
- * An operator scope may be nested in other scopes. For instance, a SQL query may enclose
+ * An operation scope may be nested in other scopes. For instance, a SQL query may enclose
  * scopes associated with the public RDD APIs it uses under the hood.
  *
- * There is no particular relationship between an operator scope and a stage or a job.
+ * There is no particular relationship between an operation scope and a stage or a job.
  * A scope may live inside one stage (e.g. map) or span across multiple jobs (e.g. take).
  */
-private[spark] class OperatorScope(val name: String, parent: Option[OperatorScope] = None) {
-  val id: Int = OperatorScope.nextScopeId()
+private[spark] class RDDOperationScope(
+    val name: String,
+    parent: Option[RDDOperationScope] = None) {
+
+  val id: Int = RDDOperationScope.nextScopeId()
 
   def toJson: String = {
-    OperatorScope.jsonMapper.writeValueAsString(this)
+    RDDOperationScope.jsonMapper.writeValueAsString(this)
   }
 
   /**
@@ -50,7 +53,7 @@ private[spark] class OperatorScope(val name: String, parent: Option[OperatorScop
    * The result is ordered from the outermost scope (eldest ancestor) to this scope.
    */
   @JsonIgnore
-  def getAllScopes: Seq[OperatorScope] = {
+  def getAllScopes: Seq[RDDOperationScope] = {
     parent.map(_.getAllScopes).getOrElse(Seq.empty) ++ Seq(this)
   }
 }
@@ -59,15 +62,15 @@ private[spark] class OperatorScope(val name: String, parent: Option[OperatorScop
  * A collection of utility methods to construct a hierarchical representation of RDD scopes.
  * An RDD scope tracks the series of operations that created a given RDD.
  */
-private[spark] object OperatorScope {
+private[spark] object RDDOperationScope {
   private val jsonMapper = new ObjectMapper().registerModule(DefaultScalaModule)
   private val scopeCounter = new AtomicInteger(0)
 
-  def fromJson(s: String): OperatorScope = {
-    jsonMapper.readValue(s, classOf[OperatorScope])
+  def fromJson(s: String): RDDOperationScope = {
+    jsonMapper.readValue(s, classOf[RDDOperationScope])
   }
 
-  /** Return a globally unique operator scope ID. */
+  /** Return a globally unique operation scope ID. */
   def nextScopeId(): Int = scopeCounter.getAndIncrement
 
   /**
@@ -100,12 +103,12 @@ private[spark] object OperatorScope {
     val scopeKey = SparkContext.RDD_SCOPE_KEY
     val noOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY
     val oldScopeJson = sc.getLocalProperty(scopeKey)
-    val oldScope = Option(oldScopeJson).map(OperatorScope.fromJson)
+    val oldScope = Option(oldScopeJson).map(RDDOperationScope.fromJson)
     val oldNoOverride = sc.getLocalProperty(noOverrideKey)
     try {
       // Set the scope only if the higher level caller allows us to do so
       if (sc.getLocalProperty(noOverrideKey) == null) {
-        sc.setLocalProperty(scopeKey, new OperatorScope(name, oldScope).toJson)
+        sc.setLocalProperty(scopeKey, new RDDOperationScope(name, oldScope).toJson)
       }
       // Optionally disallow the child body to override our scope
       if (!allowNesting) {

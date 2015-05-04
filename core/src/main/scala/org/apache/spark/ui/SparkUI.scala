@@ -25,7 +25,7 @@ import org.apache.spark.ui.env.{EnvironmentListener, EnvironmentTab}
 import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
 import org.apache.spark.ui.jobs.{JobsTab, JobProgressListener, StagesTab}
 import org.apache.spark.ui.storage.{StorageListener, StorageTab}
-import org.apache.spark.ui.scope.OperationGraphListener
+import org.apache.spark.ui.scope.RDDOperationGraphListener
 
 /**
  * Top level user interface for a Spark application.
@@ -39,7 +39,7 @@ private[spark] class SparkUI private (
     val executorsListener: ExecutorsListener,
     val jobProgressListener: JobProgressListener,
     val storageListener: StorageListener,
-    val operationGraphListener: OperationGraphListener,
+    val operationGraphListener: RDDOperationGraphListener,
     var appName: String,
     val basePath: String)
   extends WebUI(securityManager, SparkUI.getUIPort(conf), conf, basePath, "SparkUI")
@@ -149,7 +149,7 @@ private[spark] object SparkUI {
     val storageStatusListener = new StorageStatusListener
     val executorsListener = new ExecutorsListener(storageStatusListener)
     val storageListener = new StorageListener(storageStatusListener)
-    val operationGraphListener = new OperationGraphListener(conf)
+    val operationGraphListener = new RDDOperationGraphListener(conf)
 
     listenerBus.addListener(environmentListener)
     listenerBus.addListener(storageStatusListener)

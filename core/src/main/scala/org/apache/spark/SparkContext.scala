@@ -661,11 +661,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Execute a block of code in a scope such that all new RDDs created in this body will
-   * be part of the same scope. For more detail, see {{org.apache.spark.rdd.OperatorScope}}.
+   * be part of the same scope. For more detail, see {{org.apache.spark.rdd.RDDOperationScope}}.
    *
    * Note: Return statements are NOT allowed in the given body.
    */
-  private def withScope[U](body: => U): U = OperatorScope.withScope[U](this)(body)
+  private def withScope[U](body: => U): U = RDDOperationScope.withScope[U](this)(body)
 
   // Methods for creating RDDs
 

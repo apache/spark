@@ -48,7 +48,7 @@ private[ui] case class RDDOperationEdge(fromId: Int, toId: Int)
 /**
  * A cluster that groups nodes together in an RDDOperationGraph.
  *
- * This represents any grouping of RDDs, including operator scopes (e.g. textFile, flatMap),
+ * This represents any grouping of RDDs, including operation scopes (e.g. textFile, flatMap),
  * stages, jobs, or any higher level construct. A cluster may be nested inside of other clusters.
  */
 private[ui] class RDDOperationCluster(val id: String, val name: String) {
@@ -72,7 +72,7 @@ private[ui] object RDDOperationGraph extends Logging {
    * Each node represents an RDD, and each edge represents a dependency between two RDDs pointing
    * from the parent to the child.
    *
-   * This does not currently merge common operator scopes across stages. This may be worth
+   * This does not currently merge common operation scopes across stages. This may be worth
    * supporting in the future if we decide to group certain stages within the same job under
    * a common scope (e.g. part of a SQL query).
    */
@@ -87,7 +87,7 @@ private[ui] object RDDOperationGraph extends Logging {
       { if (stage.attemptId == 0) "" else s" (attempt ${stage.attemptId})" }
     val rootCluster = new RDDOperationCluster(stageClusterId, stageClusterName)
 
-    // Find nodes, edges, and operator scopes that belong to this stage
+    // Find nodes, edges, and operation scopes that belong to this stage
     stage.rddInfos.foreach { rdd =>
       edges ++= rdd.parentIds.map { parentId => RDDOperationEdge(parentId, rdd.id) }
       val node = nodes.getOrElseUpdate(rdd.id, RDDOperationNode(rdd.id, rdd.name))

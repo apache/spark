@@ -29,7 +29,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.executor._
-import org.apache.spark.rdd.OperatorScope
+import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 
@@ -327,7 +327,7 @@ class JsonProtocolSuite extends FunSuite {
   test("RDDInfo backward compatibility (scope, parent IDs)") {
     // Prior to Spark 1.4.0, RDDInfo did not have the "Scope" and "Parent IDs" properties
     val rddInfo = new RDDInfo(
-      1, "one", 100, StorageLevel.NONE, Seq(1, 6, 8), Some(new OperatorScope("fable")))
+      1, "one", 100, StorageLevel.NONE, Seq(1, 6, 8), Some(new RDDOperationScope("fable")))
     val oldRddInfoJson = JsonProtocol.rddInfoToJson(rddInfo)
       .removeField({ _._1 == "Parent IDs"})
       .removeField({ _._1 == "Scope"})

@@ -30,7 +30,7 @@ import org.json4s.JsonAST._
 
 import org.apache.spark._
 import org.apache.spark.executor._
-import org.apache.spark.rdd.OperatorScope
+import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 
@@ -795,7 +795,7 @@ private[spark] object JsonProtocol {
   def rddInfoFromJson(json: JValue): RDDInfo = {
     val rddId = (json \ "RDD ID").extract[Int]
     val name = (json \ "Name").extract[String]
-    val scope = Utils.jsonOption(json \ "Scope").map(_.extract[OperatorScope])
+    val scope = Utils.jsonOption(json \ "Scope").map(_.extract[RDDOperationScope])
     val parentIds = Utils.jsonOption(json \ "Parent IDs")
       .map { l => l.extract[List[JValue]].map(_.extract[Int]) }
       .getOrElse(Seq.empty)

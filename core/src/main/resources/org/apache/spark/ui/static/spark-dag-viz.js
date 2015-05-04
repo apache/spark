@@ -20,22 +20,22 @@
  *
  * This DAG describes the relationships between
  *   (1) an RDD and its dependencies,
- *   (2) an RDD and its operator scopes, and
- *   (3) an RDD's operator scopes and the stage / job hierarchy
+ *   (2) an RDD and its operation scopes, and
+ *   (3) an RDD's operation scopes and the stage / job hierarchy
  *
- * An operator scope is a general, named code block representing an operation
- * that instantiates RDDs (e.g. filter, textFile, reduceByKey). An operator
+ * An operation scope is a general, named code block representing an operation
+ * that instantiates RDDs (e.g. filter, textFile, reduceByKey). An operation
  * scope can be nested inside of other scopes if the corresponding RDD operation
- * invokes other such operations (for more detail, see o.a.s.rdd.OperatorScope).
+ * invokes other such operations (for more detail, see o.a.s.rdd.operationScope).
  *
- * A stage may include one or more operator scopes if the RDD operations are
+ * A stage may include one or more operation scopes if the RDD operations are
  * streamlined into one stage (e.g. rdd.map(...).filter(...).flatMap(...)).
- * On the flip side, an operator scope may also include one or many stages,
+ * On the flip side, an operation scope may also include one or many stages,
  * or even jobs if the RDD operation is higher level than Spark's scheduling
  * primitives (e.g. take, any SQL query).
  *
  * In the visualization, an RDD is expressed as a node, and its dependencies
- * as directed edges (from parent to child). Operator scopes, stages, and
+ * as directed edges (from parent to child). operation scopes, stages, and
  * jobs are expressed as clusters that may contain one or many nodes. These
  * clusters may be nested inside of each other in the scenarios described
  * above.
@@ -54,7 +54,7 @@
 var VizConstants = {
   rddColor: "#444444",
   stageColor: "#FFDDEE",
-  operatorScopeColor: "#AADFFF",
+  operationScopeColor: "#AADFFF",
   clusterLabelColor: "#888888",
   edgeColor: "#444444",
   edgeWidth: "1.5px",
@@ -240,7 +240,7 @@ function renderDot(dot, container) {
 function styleDagViz(forJob) {
   graphContainer().selectAll("svg g.cluster rect")
     .style("fill", "white")
-    .style("stroke", VizConstants.operatorScopeColor)
+    .style("stroke", VizConstants.operationScopeColor)
     .style("stroke-width", "4px")
     .style("stroke-opacity", "0.5");
   graphContainer().selectAll("svg g.cluster text")

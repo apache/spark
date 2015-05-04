@@ -26,7 +26,7 @@ import org.apache.spark.ui.SparkUI
 /**
  * A SparkListener that constructs a DAG of RDD operations.
  */
-private[ui] class OperationGraphListener(conf: SparkConf) extends SparkListener {
+private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListener {
   private val jobIdToStageIds = new mutable.HashMap[Int, Seq[Int]]
   private val stageIdToGraph = new mutable.HashMap[Int, RDDOperationGraph]
   private val stageIds = new mutable.ArrayBuffer[Int]

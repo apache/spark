@@ -279,11 +279,11 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Execute a block of code in a scope such that all new RDDs created in this body will
-   * be part of the same scope. For more detail, see {{org.apache.spark.rdd.OperatorScope}}.
+   * be part of the same scope. For more detail, see {{org.apache.spark.rdd.RDDOperationScope}}.
    *
    * Note: Return statements are NOT allowed in the given body.
    */
-  private[spark] def withScope[U](body: => U): U = OperatorScope.withScope[U](sc)(body)
+  private[spark] def withScope[U](body: => U): U = RDDOperationScope.withScope[U](sc)(body)
 
   // Transformations (return a new RDD)
 
@@ -1453,11 +1453,11 @@ abstract class RDD[T: ClassTag](
    * The scope associated with the operation that created this RDD.
    *
    * This is more flexible than the call site and can be defined hierarchically. For more
-   * detail, see the documentation of {{OperatorScope}}. This scope is not defined if the
+   * detail, see the documentation of {{RDDOperationScope}}. This scope is not defined if the
    * user instantiates this RDD himself without using any Spark operations.
    */
-  @transient private[spark] val scope: Option[OperatorScope] = {
-    Option(sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY)).map(OperatorScope.fromJson)
+  @transient private[spark] val scope: Option[RDDOperationScope] = {
+    Option(sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY)).map(RDDOperationScope.fromJson)
   }
 
   private[spark] def getCreationSite: String = Option(creationSite).map(_.shortForm).getOrElse("")
