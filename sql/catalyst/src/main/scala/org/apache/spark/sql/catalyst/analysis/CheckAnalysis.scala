@@ -84,16 +84,17 @@ trait CheckAnalysis {
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
+            val normalizedGroupingExprs = groupingExprs.map(ExpressionEquals.apply)
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
               case _: AggregateExpression => // OK
-              case e: Attribute if !groupingExprs.contains(e) =>
+              case e if normalizedGroupingExprs.exists(_ == ExpressionEquals(e)) => // OK
+              case e if e.children.size > 0 => e.children.foreach(checkValidAggregateExpression)
+              case e: NamedExpression =>
                 failAnalysis(
-                  s"expression '${e.prettyString}' is neither present in the group by, " +
-                    s"nor is it an aggregate function. " +
-                    "Add to group by or wrap in first() if you don't care which value you get.")
-              case e if groupingExprs.contains(e) => // OK
-              case e if e.references.isEmpty => // OK
-              case e => e.children.foreach(checkValidAggregateExpression)
+                  s"""expression '${e.prettyString}' is neither present in the group by,
+                    nor is it an aggregate function.
+                    Add to group by or wrap in first() if you don't care which value you get.""")
+              case _ => // OK e.g Literal
             }
 
             val cleaned = aggregateExprs.map(_.transform {
