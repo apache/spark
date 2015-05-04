@@ -795,7 +795,9 @@ private[spark] object JsonProtocol {
   def rddInfoFromJson(json: JValue): RDDInfo = {
     val rddId = (json \ "RDD ID").extract[Int]
     val name = (json \ "Name").extract[String]
-    val scope = Utils.jsonOption(json \ "Scope").map(_.extract[RDDOperationScope])
+    val scope = Utils.jsonOption(json \ "Scope")
+      .map(_.extract[String])
+      .map(RDDOperationScope.fromJson)
     val parentIds = Utils.jsonOption(json \ "Parent IDs")
       .map { l => l.extract[List[JValue]].map(_.extract[Int]) }
       .getOrElse(Seq.empty)
@@ -803,7 +805,7 @@ private[spark] object JsonProtocol {
     val numPartitions = (json \ "Number of Partitions").extract[Int]
     val numCachedPartitions = (json \ "Number of Cached Partitions").extract[Int]
     val memSize = (json \ "Memory Size").extract[Long]
-    // fallback to tachyon for backward compatability
+    // fallback to tachyon for backward compatibility
     val externalBlockStoreSize = (json \ "ExternalBlockStore Size").toSome
       .getOrElse(json \ "Tachyon Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
