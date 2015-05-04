@@ -238,6 +238,7 @@ private[sql] object JsonRDD2 extends Logging {
         parser.getDoubleValue
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, DecimalType()) =>
+        // TODO: add fixed precision and scale handling
         Decimal(parser.getDecimalValue)
 
       case (VALUE_NUMBER_INT, ByteType) =>
