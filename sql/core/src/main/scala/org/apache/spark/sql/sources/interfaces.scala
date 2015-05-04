@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.TaskAttemptContext
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
+import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -325,13 +325,17 @@ abstract class FSBasedRelation private[sql](
 
   private[sql] def partitionSpec: PartitionSpec = _partitionSpec
 
-  private[sql] def refreshPartitions(): Unit = {
+  private[sql] def refresh(): Unit = {
+    refreshPartitions()
+  }
+
+  private def refreshPartitions(): Unit = {
     _partitionSpec = maybePartitionSpec.getOrElse {
       val basePaths = paths.map(new Path(_))
       val leafDirs = basePaths.flatMap { path =>
         val fs = path.getFileSystem(hadoopConf)
         if (fs.exists(path)) {
-          SparkHadoopUtil.get.listLeafDirStatuses(fs, path)
+          SparkHadoopUtil.get.listLeafDirStatuses(fs, fs.makeQualified(path))
         } else {
           Seq.empty[FileStatus]
         }
@@ -349,7 +353,7 @@ abstract class FSBasedRelation private[sql](
    * Schema of this relation.  It consists of [[dataSchema]] and all partition columns not appeared
    * in [[dataSchema]].
    */
-  override val schema: StructType = {
+  override lazy val schema: StructType = {
     val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
     StructType(dataSchema ++ partitionSpec.partitionColumns.filterNot { column =>
       dataSchemaColumnNames.contains(column.name.toLowerCase)
@@ -411,7 +415,11 @@ abstract class FSBasedRelation private[sql](
     buildScan(requiredColumns, inputPaths)
   }
 
-  def outputFormatClass: Class[_ <: FileOutputFormat[Void, Row]]
+  /**
+   * The output committer class to use. Default to
+   * [[org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter]].
+   */
+  def outputCommitterClass: Class[_ <: FileOutputCommitter] = classOf[FileOutputCommitter]
 
   /**
    * This method is responsible for producing a new [[OutputWriter]] for each newly opened output

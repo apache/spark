@@ -101,9 +101,13 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           }
         }
 
-      case i @ logical.InsertIntoTable(
-        l: LogicalRelation, partition, query, overwrite, ifNotExists)
-          if !l.isInstanceOf[InsertableRelation] =>
+      case logical.InsertIntoTable(LogicalRelation(_: InsertableRelation), _, _, _, _) =>
+        // OK
+
+      case logical.InsertIntoTable(LogicalRelation(_: FSBasedRelation), _, _, _, _) =>
+        // OK
+
+      case logical.InsertIntoTable(l: LogicalRelation, _, _, _, _) =>
         // The relation in l is not an InsertableRelation.
         failAnalysis(s"$l does not allow insertion.")
 

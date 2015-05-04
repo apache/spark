@@ -21,7 +21,6 @@ import java.util.Date
 
 import scala.collection.mutable
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, FileOutputFormat}
@@ -71,11 +70,15 @@ private[sql] case class InsertIntoFSBasedRelation(
 
     val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
     val outputPath = new Path(relation.paths.head)
-
     val fs = outputPath.getFileSystem(hadoopConf)
-    val doInsertion = (mode, fs.exists(outputPath)) match {
+    val qualifiedOutputPath = fs.makeQualified(outputPath)
+
+    val doInsertion = (mode, fs.exists(qualifiedOutputPath)) match {
       case (SaveMode.ErrorIfExists, true) =>
-        sys.error(s"path $outputPath already exists.")
+        sys.error(s"path $qualifiedOutputPath already exists.")
+      case (SaveMode.Overwrite, true) =>
+        fs.delete(qualifiedOutputPath, true)
+        true
       case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
         true
       case (SaveMode.Ignore, exists) =>
@@ -86,9 +89,7 @@ private[sql] case class InsertIntoFSBasedRelation(
       val job = Job.getInstance(hadoopConf)
       job.setOutputKeyClass(classOf[Void])
       job.setOutputValueClass(classOf[Row])
-      FileOutputFormat.setOutputPath(job, outputPath)
-
-      val jobConf: Configuration = ContextUtil.getConfiguration(job)
+      FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
 
       val df = sqlContext.createDataFrame(
         DataFrame(sqlContext, query).queryExecution.toRdd,
@@ -110,8 +111,9 @@ private[sql] case class InsertIntoFSBasedRelation(
   private def insert(writerContainer: BaseWriterContainer, df: DataFrame): Unit = {
     try {
       writerContainer.driverSideSetup()
-      df.sqlContext.sparkContext.runJob(df.rdd, writeRows _)
+      df.sqlContext.sparkContext.runJob(df.queryExecution.executedPlan.execute(), writeRows _)
       writerContainer.commitJob()
+      relation.refresh()
     } catch { case cause: Throwable =>
       writerContainer.abortJob()
       throw new SparkException("Job aborted.", cause)
@@ -166,14 +168,15 @@ private[sql] case class InsertIntoFSBasedRelation(
       val partitionDF = df.select(partitionColumns.head, partitionColumns.tail: _*)
       val dataDF = df.select(dataCols.head, dataCols.tail: _*)
 
-      (partitionDF.rdd, dataDF.rdd)
+      partitionDF.queryExecution.executedPlan.execute() ->
+        dataDF.queryExecution.executedPlan.execute()
     }
 
     try {
       writerContainer.driverSideSetup()
       sqlContext.sparkContext.runJob(partitionRDD.zip(dataRDD), writeRows _)
       writerContainer.commitJob()
-      relation.refreshPartitions()
+      relation.refresh()
     } catch { case cause: Throwable =>
       logError("Aborting job.", cause)
       writerContainer.abortJob()
@@ -217,7 +220,7 @@ private[sql] abstract class BaseWriterContainer(
   @transient private var taskAttemptId: TaskAttemptID = _
   @transient protected var taskAttemptContext: TaskAttemptContext = _
 
-  protected val outputPath = {
+  protected val outputPath: String = {
     assert(
       relation.paths.length == 1,
       s"Cannot write to multiple destinations: ${relation.paths.mkString(",")}")
@@ -226,7 +229,8 @@ private[sql] abstract class BaseWriterContainer(
 
   protected val dataSchema = relation.dataSchema
 
-  protected val outputFormatClass: Class[_ <: OutputFormat[Void, Row]] = relation.outputFormatClass
+  protected val outputCommitterClass: Class[_ <: FileOutputCommitter] =
+    relation.outputCommitterClass
 
   protected val outputWriterClass: Class[_ <: OutputWriter] = relation.outputWriterClass
 
@@ -234,12 +238,7 @@ private[sql] abstract class BaseWriterContainer(
     setupIDs(0, 0, 0)
     setupConf()
     taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
-    val outputFormat = relation.outputFormatClass.newInstance()
-    outputCommitter = outputFormat.getOutputCommitter(taskAttemptContext) match {
-      case c: FileOutputCommitter => c
-      case _ => sys.error(
-        s"Output committer must be ${classOf[FileOutputCommitter].getName} or its subclasses")
-    }
+    outputCommitter = newOutputCommitter(outputCommitterClass, outputPath, taskAttemptContext)
     outputCommitter.setupJob(jobContext)
   }
 
@@ -247,14 +246,22 @@ private[sql] abstract class BaseWriterContainer(
     setupIDs(taskContext.stageId(), taskContext.partitionId(), taskContext.attemptNumber())
     setupConf()
     taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
-    val outputFormat = outputFormatClass.newInstance()
-    outputCommitter = outputFormat.getOutputCommitter(taskAttemptContext) match {
-      case c: FileOutputCommitter => c
-      case _ => sys.error(
-        s"Output committer must be ${classOf[FileOutputCommitter].getName} or its subclasses")
-    }
+    outputCommitter = newOutputCommitter(outputCommitterClass, outputPath, taskAttemptContext)
     outputCommitter.setupTask(taskAttemptContext)
     initWriters()
+  }
+
+  private def newOutputCommitter(
+      clazz: Class[_ <: FileOutputCommitter],
+      path: String,
+      context: TaskAttemptContext): FileOutputCommitter = {
+    val ctor = outputCommitterClass.getConstructor(classOf[Path], classOf[TaskAttemptContext])
+    ctor.setAccessible(true)
+
+    val hadoopPath = new Path(path)
+    val fs = hadoopPath.getFileSystem(serializableConf.value)
+    val qualified = fs.makeQualified(hadoopPath)
+    ctor.newInstance(qualified, context)
   }
 
   private def setupIDs(jobId: Int, splitId: Int, attemptId: Int): Unit = {
@@ -305,7 +312,7 @@ private[sql] class DefaultWriterContainer(
   @transient private var writer: OutputWriter = _
 
   override protected def initWriters(): Unit = {
-    writer = relation.outputWriterClass.newInstance()
+    writer = outputWriterClass.newInstance()
     writer.init(outputCommitter.getWorkPath.toString, dataSchema, taskAttemptContext)
   }
 

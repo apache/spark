@@ -19,8 +19,10 @@ package org.apache.spark.sql.sources
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -28,12 +30,12 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.{StructType, UTF8String, StringType}
-import org.apache.spark.sql.{Row, Strategy, execution, sources}
+import org.apache.spark.sql._
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
-private[sql] object DataSourceStrategy extends Strategy {
+private[sql] object DataSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
     case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: CatalystScan)) =>
       pruneFilterProjectRaw(
@@ -59,7 +61,14 @@ private[sql] object DataSourceStrategy extends Strategy {
     // Scanning partitioned FSBasedRelation
     case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: FSBasedRelation))
         if t.partitionSpec.partitionColumns.nonEmpty =>
-      val selectedPartition = prunePartitions(filters, t.partitionSpec).toArray
+      val selectedPartitions = prunePartitions(filters, t.partitionSpec).toArray
+
+      logInfo {
+        val total = t.partitionSpec.partitions.length
+        val selected = selectedPartitions.length
+        val percentPruned = (1 - total.toDouble / selected.toDouble) * 100
+        s"Selected $selected partitions out of $total, pruned $percentPruned% partitions."
+      }
 
       // Only pushes down predicates that do not reference partition columns.
       val pushedFilters = {
@@ -75,7 +84,7 @@ private[sql] object DataSourceStrategy extends Strategy {
         projectList,
         pushedFilters,
         t.partitionSpec.partitionColumns,
-        selectedPartition) :: Nil
+        selectedPartitions) :: Nil
 
     // Scanning non-partitioned FSBasedRelation
     case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: FSBasedRelation)) =>
@@ -98,6 +107,12 @@ private[sql] object DataSourceStrategy extends Strategy {
       l @ LogicalRelation(t: InsertableRelation), part, query, overwrite, false) if part.isEmpty =>
       execution.ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
+    case i @ logical.InsertIntoTable(
+      l @ LogicalRelation(t: FSBasedRelation), part, query, overwrite, false) if part.isEmpty =>
+      val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
+      execution.ExecutedCommand(
+        InsertIntoFSBasedRelation(t, query, Array.empty[String], mode)) :: Nil
+
     case _ => Nil
   }
 
@@ -109,7 +124,6 @@ private[sql] object DataSourceStrategy extends Strategy {
       partitions: Array[Partition]) = {
     val output = projections.map(_.toAttribute)
     val relation = logicalRelation.relation.asInstanceOf[FSBasedRelation]
-    val dataSchema = relation.dataSchema
 
     // Builds RDD[Row]s for each selected partition.
     val perPartitionRows = partitions.map { case Partition(partitionValues, dir) =>
@@ -136,9 +150,11 @@ private[sql] object DataSourceStrategy extends Strategy {
           projections,
           filters,
           (requiredColumns, filters) => {
-            // Only columns appear in actual data, which possibly include some partition column(s)
+            // Don't require any partition columns to save I/O.  Note that here we are being
+            // optimistic and assuming partition columns data stored in data files are always
+            // consistent with those encoded in partition directory paths.
             relation.buildScan(
-              requiredColumns.filter(dataSchema.fieldNames.contains),
+              requiredColumns.filterNot(partitionColumns.fieldNames.contains),
               filters,
               dataFilePaths)
           })
@@ -147,8 +163,10 @@ private[sql] object DataSourceStrategy extends Strategy {
       mergePartitionValues(output, partitionValues, scan)
     }
 
-    val unionedRows =
-      perPartitionRows.reduceOption(_ ++ _).getOrElse(relation.sqlContext.emptyResult)
+    val unionedRows = perPartitionRows.reduceOption(_ ++ _).getOrElse {
+      relation.sqlContext.emptyResult
+    }
+
     createPhysicalRDD(logicalRelation.relation, output, unionedRows)
   }
 
