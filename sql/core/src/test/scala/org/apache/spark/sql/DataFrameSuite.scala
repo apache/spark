@@ -599,8 +599,20 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("SPARK-7319 showString") {
-    assert(testData.select($"*").showString(1).split("\n") === Seq("+---+-----+",
-      "|key|value|", "+---+-----+", "|  1|    1|", "+---+-----+"))
+    assert(testData.select($"*").showString(1) === """+---+-----+
+                                                     ||key|value|
+                                                     |+---+-----+
+                                                     ||  1|    1|
+                                                     |+---+-----+
+                                                     |""".stripMargin)
+  }
+
+  test("SPARK-7327 show with empty dataFrame") {
+    assert(testData.select($"*").filter($"key" < 0).showString(1) === """+---+-----+
+                                                                       ||key|value|
+                                                                       |+---+-----+
+                                                                       |+---+-----+
+                                                                       |""".stripMargin)
   }
 
   test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
