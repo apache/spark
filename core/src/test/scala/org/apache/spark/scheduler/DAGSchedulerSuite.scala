@@ -522,7 +522,7 @@ class DAGSchedulerSuite
   }
 
 
-  test("Multiple consecutive Fetch failures in a stage triggers an abort.") {
+  test("Multiple consecutive Fetch failures in a stage should trigger an abort.") {
     // Create a new Listener to confirm that the listenerBus sees the JobEnd message 
     // when we abort the stage. This message will also be consumed by the EventLoggingListener
     // so this will propagate up to the user. 
