@@ -64,7 +64,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       override def run() = try {
         SparkSubmit.main(input)
       } catch {
-        // If exceptions occur after the "exit" has happened, fine to test them.
+        // If exceptions occur after the "exit" has happened, fine to ignore them.
         // These represent code paths not reachable during normal execution.
         case e: Exception => if (!exitedCleanly) throw e
       }
