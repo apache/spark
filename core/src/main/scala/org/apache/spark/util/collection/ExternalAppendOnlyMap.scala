@@ -89,8 +89,10 @@ class ExternalAppendOnlyMap[K, V, C](
 
   // Number of bytes spilled in total
   private var _diskBytesSpilled = 0L
-
-  private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
+  
+  // Use getSizeAsKb (not bytes) to maintain backwards compatibility of on units are provided
+  private val fileBufferSize = 
+    sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
 
   // Write metrics for current spill
   private var curWriteMetrics: ShuffleWriteMetrics = _
@@ -172,7 +174,7 @@ class ExternalAppendOnlyMap[K, V, C](
       val it = currentMap.destructiveSortedIterator(keyComparator)
       while (it.hasNext) {
         val kv = it.next()
-        writer.write(kv)
+        writer.write(kv._1, kv._2)
         objectsWritten += 1
 
         if (objectsWritten == serializerBatchSize) {
@@ -433,7 +435,9 @@ class ExternalAppendOnlyMap[K, V, C](
      */
     private def readNextItem(): (K, C) = {
       try {
-        val item = deserializeStream.readObject().asInstanceOf[(K, C)]
+        val k = deserializeStream.readKey().asInstanceOf[K]
+        val c = deserializeStream.readValue().asInstanceOf[C]
+        val item = (k, c)
         objectsRead += 1
         if (objectsRead == serializerBatchSize) {
           objectsRead = 0

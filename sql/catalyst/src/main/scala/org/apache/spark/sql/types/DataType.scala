@@ -41,7 +41,7 @@ import org.apache.spark.util.Utils
 @DeveloperApi
 abstract class DataType {
   /**
-   * Enables matching against NumericType for expressions:
+   * Enables matching against DataType for expressions:
    * {{{
    *   case Cast(child @ BinaryType(), StringType) =>
    *     ...

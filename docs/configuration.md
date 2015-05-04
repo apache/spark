@@ -1,4 +1,4 @@
----
+--
 layout: global
 displayTitle: Spark Configuration
 title: Configuration
@@ -48,6 +48,17 @@ The following format is accepted:
     5d (days)
     1y (years)
     
+    
+Properties that specify a byte size should be configured with a unit of size.  
+The following format is accepted:
+
+    1b (bytes)
+    1k or 1kb (kibibytes = 1024 bytes)
+    1m or 1mb (mebibytes = 1024 kibibytes)
+    1g or 1gb (gibibytes = 1024 mebibytes)
+    1t or 1tb (tebibytes = 1024 gibibytes)
+    1p or 1pb (pebibytes = 1024 tebibytes)
+
 ## Dynamically Loading Spark Properties
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
 instance, if you'd like to run the same application with different masters or different
@@ -272,12 +283,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.logs.rolling.size.maxBytes</code></td>
+  <td><code>spark.executor.logs.rolling.maxSize</code></td>
   <td>(none)</td>
   <td>
     Set the max size of the file by which the executor logs will be rolled over.
-    Rolling is disabled by default. Value is set in terms of bytes.
-    See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
+    Rolling is disabled by default. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
     for automatic cleaning of old logs.
   </td>
 </tr>
@@ -366,10 +376,10 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.reducer.maxMbInFlight</code></td>
-  <td>48</td>
+  <td><code>spark.reducer.maxSizeInFlight</code></td>
+  <td>48m</td>
   <td>
-    Maximum size (in megabytes) of map outputs to fetch simultaneously from each reduce task. Since
+    Maximum size of map outputs to fetch simultaneously from each reduce task. Since
     each output requires us to create a buffer to receive it, this represents a fixed memory
     overhead per reduce task, so keep it small unless you have a large amount of memory.
   </td>
@@ -403,10 +413,10 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.file.buffer.kb</code></td>
-  <td>32</td>
+  <td><code>spark.shuffle.file.buffer</code></td>
+  <td>32k</td>
   <td>
-    Size of the in-memory buffer for each shuffle file output stream, in kilobytes. These buffers
+    Size of the in-memory buffer for each shuffle file output stream. These buffers
     reduce the number of disk seeks and system calls made in creating intermediate shuffle files.
   </td>
 </tr>
@@ -582,18 +592,18 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.io.compression.lz4.block.size</code></td>
-  <td>32768</td>
+  <td><code>spark.io.compression.lz4.blockSize</code></td>
+  <td>32k</td>
   <td>
-    Block size (in bytes) used in LZ4 compression, in the case when LZ4 compression codec
+    Block size used in LZ4 compression, in the case when LZ4 compression codec
     is used. Lowering this block size will also lower shuffle memory usage when LZ4 is used.
   </td>
 </tr>
 <tr>
-  <td><code>spark.io.compression.snappy.block.size</code></td>
-  <td>32768</td>
+  <td><code>spark.io.compression.snappy.blockSize</code></td>
+  <td>32k</td>
   <td>
-    Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec
+    Block size used in Snappy compression, in the case when Snappy compression codec
     is used. Lowering this block size will also lower shuffle memory usage when Snappy is used.
   </td>
 </tr>
@@ -641,19 +651,19 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.kryoserializer.buffer.max.mb</code></td>
-  <td>64</td>
+  <td><code>spark.kryoserializer.buffer.max</code></td>
+  <td>64m</td>
   <td>
-    Maximum allowable size of Kryo serialization buffer, in megabytes. This must be larger than any
+    Maximum allowable size of Kryo serialization buffer. This must be larger than any
     object you attempt to serialize. Increase this if you get a "buffer limit exceeded" exception
     inside Kryo.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kryoserializer.buffer.mb</code></td>
-  <td>0.064</td>
+  <td><code>spark.kryoserializer.buffer</code></td>
+  <td>64k</td>
   <td>
-    Initial size of Kryo's serialization buffer, in megabytes. Note that there will be one buffer
+    Initial size of Kryo's serialization buffer. Note that there will be one buffer
      <i>per core</i> on each worker. This buffer will grow up to
      <code>spark.kryoserializer.buffer.max.mb</code> if needed.
   </td>
@@ -698,9 +708,9 @@ Apart from these, the following properties are also available, and may be useful
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.broadcast.blockSize</code></td>
-  <td>4096</td>
+  <td>4m</td>
   <td>
-    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>.
+    Size of each piece of a block for <code>TorrentBroadcastFactory</code>.
     Too large a value decreases parallelism during broadcast (makes it slower); however, if it is
     too small, <code>BlockManager</code> might take a performance hit.
   </td>
@@ -816,9 +826,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.storage.memoryMapThreshold</code></td>
-  <td>2097152</td>
+  <td>2m</td>
   <td>
-    Size of a block, in bytes, above which Spark memory maps when reading a block from disk.
+    Size of a block above which Spark memory maps when reading a block from disk.
     This prevents Spark from memory mapping very small blocks. In general, memory
     mapping has high overhead for blocks close to or below the page size of the operating system.
   </td>
@@ -833,19 +843,27 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.tachyonStore.baseDir</code></td>
+  <td><code>spark.externalBlockStore.blockManager</code></td>
+  <td>org.apache.spark.storage.TachyonBlockManager</td>
+  <td>
+    Implementation of external block manager (file system) that store RDDs. The file system's URL is set by
+    <code>spark.externalBlockStore.url</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.externalBlockStore.baseDir</code></td>
   <td>System.getProperty("java.io.tmpdir")</td>
   <td>
-    Directories of the Tachyon File System that store RDDs. The Tachyon file system's URL is set by
-    <code>spark.tachyonStore.url</code>. It can also be a comma-separated list of multiple
+    Directories of the external block store that store RDDs. The file system's URL is set by
+   <code>spark.externalBlockStore.url</code> It can also be a comma-separated list of multiple
     directories on Tachyon file system.
   </td>
 </tr>
 <tr>
-  <td><code>spark.tachyonStore.url</code></td>
-  <td>tachyon://localhost:19998</td>
+  <td><code>spark.externalBlockStore.url</code></td>
+  <td>tachyon://localhost:19998 for Tachyon</td>
   <td>
-    The URL of the underlying Tachyon file system in the TachyonStore.
+    The URL of the underlying external blocker file system in the external block store.
   </td>
 </tr>
 </table>
@@ -1444,6 +1462,16 @@ Apart from these, the following properties are also available, and may be useful
     partition when using the new Kafka direct stream API. See the
     <a href="streaming-kafka-integration.html">Kafka Integration guide</a>
     for more details.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.kafka.maxRetries</code></td>
+  <td>1</td>
+  <td>
+    Maximum number of consecutive retries the driver will make in order to find
+    the latest offsets on the leader of each partition (a default value of 1
+    means that the driver will make a maximum of 2 attempts). Only applies to
+    the new Kafka direct stream API.
   </td>
 </tr>
 </table>

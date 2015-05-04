@@ -72,6 +72,38 @@ object MimaExcludes {
             // SPARK-6703 Add getOrCreate method to SparkContext
             ProblemFilters.exclude[IncompatibleResultTypeProblem]
                 ("org.apache.spark.SparkContext.org$apache$spark$SparkContext$$activeContext")
+          )++ Seq(
+            // SPARK-7090 Introduce LDAOptimizer to LDA to further improve extensibility
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.mllib.clustering.LDA$EMOptimizer")
+          ) ++ Seq(
+            // SPARK-6756 add toSparse, toDense, numActives, numNonzeros, and compressed to Vector
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.compressed"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.toDense"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.numNonzeros"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.toSparse"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.numActives")
+          ) ++ Seq(
+            // This `protected[sql]` method was removed in 1.3.1
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.sql.SQLContext.checkAnalysis"),
+            // This `private[sql]` class was removed in 1.4.0:
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.execution.AddExchange"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.execution.AddExchange$"),
+            // These test support classes were moved out of src/main and into src/test:
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetTestData"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetTestData$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.TestGroupWriteSupport")
           )
 
         case v if v.startsWith("1.3") =>

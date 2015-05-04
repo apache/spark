@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
  */
 class NoSuchTableException extends Exception
 
+class NoSuchDatabaseException extends Exception
+
 /**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
  */
