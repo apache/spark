@@ -19,7 +19,8 @@ package org.apache.spark.rdd
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import com.fasterxml.jackson.annotation.JsonIgnore
+import com.fasterxml.jackson.annotation.{JsonIgnore, JsonInclude, JsonPropertyOrder}
+import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
@@ -38,9 +39,11 @@ import org.apache.spark.SparkContext
  * There is no particular relationship between an operation scope and a stage or a job.
  * A scope may live inside one stage (e.g. map) or span across multiple jobs (e.g. take).
  */
+@JsonInclude(Include.NON_NULL)
+@JsonPropertyOrder(Array("id", "name", "parent"))
 private[spark] class RDDOperationScope(
     val name: String,
-    parent: Option[RDDOperationScope] = None) {
+    val parent: Option[RDDOperationScope] = None) {
 
   val id: Int = RDDOperationScope.nextScopeId()
 
@@ -56,6 +59,16 @@ private[spark] class RDDOperationScope(
   def getAllScopes: Seq[RDDOperationScope] = {
     parent.map(_.getAllScopes).getOrElse(Seq.empty) ++ Seq(this)
   }
+
+  override def equals(other: Any): Boolean = {
+    other match {
+      case s: RDDOperationScope =>
+        id == s.id && name == s.name && parent == s.parent
+      case _ => false
+    }
+  }
+
+  override def toString: String = toJson
 }
 
 /**
