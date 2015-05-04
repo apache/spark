@@ -117,7 +117,7 @@
     <java.version>1.6</java.version>
     <sbt.project.name>spark</sbt.project.name>
     <scala.macros.version>2.0.1</scala.macros.version>
-    <mesos.version>0.21.0</mesos.version>
+    <mesos.version>0.21.1</mesos.version>
     <mesos.classifier>shaded-protobuf</mesos.classifier>
     <slf4j.version>1.7.10</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
@@ -262,14 +262,6 @@
       <releases>
         <enabled>true</enabled>
       </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>bintray-mengxr-maven</id>
-      <name>bintray</name>
-      <url>http://dl.bintray.com/mengxr/maven</url>
       <snapshots>
         <enabled>false</enabled>
       </snapshots>
@@ -1621,20 +1613,6 @@
     <!-- Hadoop-a.b.c dependencies can be found at
     http://hadoop.apache.org/docs/ra.b.c/hadoop-project-dist/hadoop-common/dependency-analysis.html
     -->
-
-    <profile>
-      <id>hadoop-0.23</id>
-      <!-- SPARK-1121: Adds an explicit dependency on Avro to work around a Hadoop 0.23.X issue -->
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-      <properties>
-        <hadoop.version>0.23.10</hadoop.version>
-      </properties>
-    </profile>
 
     <profile>
       <id>hadoop-2.2</id>
