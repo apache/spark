@@ -4,107 +4,80 @@ displayTitle: Spark Security
 title: Security
 ---
 
-Spark currently supports authentication via a shared secret. Authentication can be configured to be on via the `spark.authenticate` configuration parameter. This parameter controls whether the Spark communication protocols do authentication using the shared secret. This authentication is a basic handshake to make sure both sides have the same shared secret and are allowed to communicate. If the shared secret is not identical they will not be allowed to communicate. The shared secret is created as follows:
+Spark currently supports authentication via a shared secret. Authentication can be configured to be
+on via the `spark.authenticate` configuration parameter. This parameter controls whether the Spark
+communication protocols do authentication using the shared secret. This authentication is a basic
+handshake to make sure both sides have the same shared secret and are allowed to communicate. If the
+shared secret is not identical they will not be allowed to communicate. The shared secret is created
+as follows:
 
-* For Spark on [YARN](running-on-yarn.html) deployments, configuring `spark.authenticate` to `true` will automatically handle generating and distributing the shared secret. Each application will use a unique shared secret. 
-* For other types of Spark deployments, the Spark parameter `spark.authenticate.secret` should be configured on each of the nodes. This secret will be used by all the Master/Workers and applications.
+* For Spark on [YARN](running-on-yarn.html) deployments, configuring `spark.authenticate` to `true`
+will automatically handle generating and distributing the shared secret. Each application will use
+a unique shared secret.
+* For other types of Spark deployments, the Spark parameter `spark.authenticate.secret` should be
+configured on each of the nodes. This secret will be used by all the Master/Workers and applications.
 
 ## Web UI
 
-The Spark UI can be secured by using [javax servlet filters](http://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html) via the `spark.ui.filters` setting and by using [Jetty https/SSL](http://www.eclipse.org/jetty/documentation/current/configuring-ssl.html) via the `spark.ui.https.enabled` setting.
+The Spark UI can be secured by using [javax servlet filters](http://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html)
+via the `spark.ui.filters` setting and by using [https/SSL](http://en.wikipedia.org/wiki/HTTPS) via the `spark.ui.https.enabled` setting.
 
 ### Authentication
 
-A user may want to secure the UI if it has data that other users should not be allowed to see. The javax servlet filter specified by the user can authenticate the user and then once the user is logged in, Spark can compare that user versus the view ACLs to make sure they are authorized to view the UI. The configs `spark.acls.enable` and `spark.ui.view.acls` control the behavior of the ACLs. Note that the user who started the application always has view access to the UI.  On YARN, the Spark UI uses the standard YARN web application proxy mechanism and will authenticate via any installed Hadoop filters.
+A user may want to secure the UI if it has data that other users should not be allowed to see. The
+javax servlet filter specified by the user can authenticate the user and then once the user is logged
+in, Spark can compare that user versus the view ACLs to make sure they are authorized to view the UI.
+The configs `spark.acls.enable` and `spark.ui.view.acls` control the behavior of the ACLs. Note that
+the user who started the application always has view access to the UI.  On YARN, the Spark UI uses
+the standard YARN web application proxy mechanism and will authenticate via any installed Hadoop filters.
 
-Spark also supports modify ACLs to control who has access to modify a running Spark application.  This includes things like killing the application or a task. This is controlled by the configs `spark.acls.enable` and `spark.modify.acls`. Note that if you are authenticating the web UI, in order to use the kill button on the web UI it might be necessary to add the users in the modify acls to the view acls also. On YARN, the modify acls are passed in and control who has modify access via YARN interfaces.
+Spark also supports modify ACLs to control who has access to modify a running Spark application.
+This includes things like killing the application or a task. This is controlled by the configs
+`spark.acls.enable` and `spark.modify.acls`. Note that if you are authenticating the web UI, in order
+to use the kill button on the web UI it might be necessary to add the users in the modify acls to
+the view acls also. On YARN, the modify acls are passed in and control who has modify access via YARN interfaces.
 
-Spark allows for a set of administrators to be specified in the acls who always have view and modify permissions to all the applications. is controlled by the config `spark.admin.acls`. This is useful on a shared cluster where you might have administrators or support staff who help users debug applications.
-
-### Encryption
-
-Spark use SSL(Secure Sockets Layer) to establish an encrypted link between UI server and browser client. The config `spark.ui.https.enabled` open switch for encryption, other configs of SSL encryption is as follows
-
-<table class="table">
-  <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
-  <tr>
-    <td>spark.ui.https.enabled</td>
-    <td>false</td>
-    <td>Whether to enable https in web ui.</td>
-  </tr>
-  <tr>
-      <td>spark.ui.https.keyStore</td>
-      <td>(none)</td>
-      <td>The file or URL of the SSL Key store.</td>
-  </tr>
-  <tr>
-      <td>spark.ui.https.keyStorePassword</td>
-      <td>(none)</td>
-      <td>The password for the key store.</td>
-  </tr>
-  <tr>
-    <td>spark.ui.https.keyPassword</td>
-    <td>(none)</td>
-    <td>The password for the specific key within the key store.</td>
-  </tr>
-  <tr>
-    <td>spark.ui.https.keyStoreType</td>
-    <td>JKS</td>
-    <td>The type of the key store (default "JKS").</td>
-  </tr>
-  <tr>
-    <td>spark.ui.https.needAuth</td>
-    <td>(none)</td>
-    <td>Set true if SSL needs client authentication.</td>
-  </tr>
-  <tr>
-    <td>spark.ui.https.trustStore</td>
-    <td>(none)</td>
-    <td>The file name or URL of the trust store location.</td>
-  </tr>
-  <tr>
-    <td>spark.ui.https.trustStorePassword</td>
-    <td>(none)</td>
-    <td>The password for the trust store</td>
-  </tr>
-  <tr>
-    <td>spark.ui.https.protocol</td>
-    <td>None</td>
-    <td>
-        A protocol name. The protocol must be supported by JVM. The reference list of protocols
-        one can find on <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
-        page.
-    </td>
-  </tr>
-  <tr>
-    <td>spark.ui.https.enabledAlgorithms</td>
-    <td>Empty</td>
-    <td>A comma separated list of ciphers. The specified ciphers must be supported by JVM.
-        The reference list of protocols one can find on
-        <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
-        page.
-        Note: If not set, it will use the default cipher suites of JVM.
-    </td>
-  </tr>
-</table>
+Spark allows for a set of administrators to be specified in the acls who always have view and modify
+ permissions to all the applications. is controlled by the config `spark.admin.acls`. This is useful
+ on a shared cluster where you might have administrators or support staff who help users debug applications.
 
 ## Event Logging
 
-If your applications are using event logging, the directory where the event logs go (`spark.eventLog.dir`) should be manually created and have the proper permissions set on it. If you want those log files secured, the permissions should be set to `drwxrwxrwxt` for that directory. The owner of the directory should be the super user who is running the history server and the group permissions should be restricted to super user group. This will allow all users to write to the directory but will prevent unprivileged users from removing or renaming a file unless they own the file or directory. The event log files will be created by Spark with permissions such that only the user and group have read and write access.
+If your applications are using event logging, the directory where the event logs go (`spark.eventLog.dir`)
+should be manually created and have the proper permissions set on it. If you want those log files secured,
+the permissions should be set to `drwxrwxrwxt` for that directory. The owner of the directory should
+be the super user who is running the history server and the group permissions should be restricted to
+super user group. This will allow all users to write to the directory but will prevent unprivileged
+users from removing or renaming a file unless they own the file or directory. The event log files will
+be created by Spark with permissions such that only the user and group have read and write access.
 
 ## Encryption
 
-Spark supports SSL for Akka and HTTP (for broadcast and file server) protocols. However SSL is not supported yet for WebUI and block transfer service.
+Spark supports SSL for Akka and HTTP protocols. However SSL is not supported yet for block transfer service.
 
-Connection encryption (SSL) configuration is organized hierarchically. The user can configure the default SSL settings which will be used for all the supported communication protocols unless they are overwritten by protocol-specific settings. This way the user can easily provide the common settings for all the protocols without disabling the ability to configure each one individually. The common SSL settings are at `spark.ssl` namespace in Spark configuration, while Akka SSL configuration is at `spark.ssl.akka` and HTTP for broadcast and file server SSL configuration is at `spark.ssl.fs`. The full breakdown can be found on the [configuration page](configuration.html).
+Connection encryption (SSL) configuration is organized hierarchically. The user can configure the
+default SSL settings which will be used for all the supported communication protocols unless they
+are overwritten by protocol-specific settings. This way the user can easily provide the common settings
+for all the protocols without disabling the ability to configure each one individually. The common SSL
+settings are at `spark.ssl` namespace in Spark configuration, while Akka SSL configuration is at
+`spark.ssl.akka`, HTTP for broadcast and file server SSL configuration is at `spark.ssl.fs`, and HTTP
+for web UI configuration is at `spark.ssl.ui`. The full breakdown can be found on the [configuration page](configuration.html).
 
 SSL must be configured on each node and configured for each component involved in communication using the particular protocol.
 
 ### YARN mode
-The key-store can be prepared on the client side and then distributed and used by the executors as the part of the application. It is possible because the user is able to deploy files before the application is started in YARN by using `spark.yarn.dist.files` or `spark.yarn.dist.archives` configuration settings. The responsibility for encryption of transferring these files is on YARN side and has nothing to do with Spark.
+The key-store can be prepared on the client side and then distributed and used by the executors as
+the part of the application. It is possible because the user is able to deploy files before the application
+is started in YARN by using `spark.yarn.dist.files` or `spark.yarn.dist.archives` configuration settings.
+The responsibility for encryption of transferring these files is on YARN side and has nothing to do with Spark.
 
 ### Standalone mode
-The user needs to provide key-stores and configuration options for master and workers. They have to be set by attaching appropriate Java system properties in `SPARK_MASTER_OPTS` and in `SPARK_WORKER_OPTS` environment variables, or just in `SPARK_DAEMON_JAVA_OPTS`. In this mode, the user may allow the executors to use the SSL settings inherited from the worker which spawned that executor. It can be accomplished by setting `spark.ssl.useNodeLocalConf` to `true`. If that parameter is set, the settings provided by user on the client side, are not used by the executors.
+The user needs to provide key-stores and configuration options for master and workers. They have to
+be set by attaching appropriate Java system properties in `SPARK_MASTER_OPTS` and in `SPARK_WORKER_OPTS`
+environment variables, or just in `SPARK_DAEMON_JAVA_OPTS`. In this mode, the user may allow the executors
+to use the SSL settings inherited from the worker which spawned that executor. It can be accomplished
+by setting `spark.ssl.useNodeLocalConf` to `true`. If that parameter is set, the settings provided
+by user on the client side, are not used by the executors.
 
 ### Preparing the key-stores
 Key-stores can be generated by `keytool` program. The reference documentation for this tool is

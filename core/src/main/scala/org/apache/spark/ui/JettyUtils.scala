@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui
 
-import java.net.URL
+import java.net.{URI, URL}
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
@@ -205,6 +205,7 @@ private[spark] object JettyUtils extends Logging {
   def startJettyServer(
       hostName: String,
       port: Int,
+      securityManager: SecurityManager,
       handlers: Seq[ServletContextHandler],
       conf: SparkConf,
       serverName: String = ""): ServerInfo = {
@@ -221,8 +222,7 @@ private[spark] object JettyUtils extends Logging {
       httpConnector.setPort(currentPort)
       connectors += httpConnector
 
-      val sslContextFactory =
-        SSLOptions.parse(conf, "spark.ui.https").createJettySslContextFactory()
+      val sslContextFactory = securityManager.webUISSLOptions.createJettySslContextFactory()
       sslContextFactory.foreach { factory =>
         // If the new port wraps around, do not try a privilege port
         val securePort = (currentPort + 400 - 1024) % (65536 - 1024) + 1024
@@ -259,23 +259,6 @@ private[spark] object JettyUtils extends Logging {
     ServerInfo(server, boundPort, collection)
   }
 
-  // Create a new URI from the arguments, handling IPv6 host encoding and default ports. Based on:
-  // https://github.com/eclipse/jetty.project/blob/master/jetty-util/src/main/java/org/eclipse/
-  // jetty/util/URIUtil.java#L726-L733
-  private def newURI(scheme: String, server: String, port: Int, path: String, query: String) = {
-    val builder = new StringBuilder
-
-    if (server.indexOf(':') >= 0 && server.charAt(0) != '[') {
-      builder.append(scheme).append("://").append('[').append(server).append(']')
-    } else {
-      builder.append(scheme).append("://").append(server)
-    }
-    builder.append(':').append(port)
-    builder.append(path)
-    if (query != null && query.length > 0) builder.append('?').append(query)
-    builder.toString
-  }
-
   private def createRedirectHttpsHandler(securePort: Int, scheme: String): ContextHandler = {
     val redirectHandler: ContextHandler = new ContextHandler
     redirectHandler.setContextPath("/")
@@ -288,7 +271,7 @@ private[spark] object JettyUtils extends Logging {
         if (baseRequest.isSecure) {
           return
         }
-        val httpsURI = newURI(scheme, baseRequest.getServerName, securePort,
+        val httpsURI = createRedirectURI(scheme, baseRequest.getServerName, securePort,
           baseRequest.getRequestURI, baseRequest.getQueryString)
         response.setContentLength(0)
         response.encodeRedirectURL(httpsURI)
@@ -297,6 +280,18 @@ private[spark] object JettyUtils extends Logging {
       }
     })
     redirectHandler
+  }
+
+  // Create a new URI from the arguments, handling IPv6 host encoding and default ports.
+  private def createRedirectURI(
+      scheme: String, server: String, port: Int, path: String, query: String) = {
+    val redirectServer = if (server.contains(":") && !server.startsWith("[")) {
+      s"[${server}]"
+    } else {
+      server
+    }
+    val authority = s"$redirectServer:$port"
+    new URI(scheme, authority, path, query, null).toString
   }
 
   /** Attach a prefix to the given path, but avoid returning an empty path */

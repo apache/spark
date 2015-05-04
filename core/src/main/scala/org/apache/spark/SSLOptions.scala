@@ -124,9 +124,12 @@ private[spark] object SSLOptions extends Logging {
     * $ - `[ns].keyStore` - a path to the key-store file; can be relative to the current directory
     * $ - `[ns].keyStorePassword` - a password to the key-store file
     * $ - `[ns].keyPassword` - a password to the private key
+    * $ - `[ns].keyStoreType` - the type of the key-store
+    * $ - `[ns].needAuth` - whether SSL needs client authentication
     * $ - `[ns].trustStore` - a path to the trust-store file; can be relative to the current
     *                         directory
     * $ - `[ns].trustStorePassword` - a password to the trust-store file
+    * $ - `[ns].trustStoreType` - the type of trust-store
     * $ - `[ns].protocol` - a protocol name supported by a particular Java version
     * $ - `[ns].enabledAlgorithms` - a comma separated list of ciphers
     *
