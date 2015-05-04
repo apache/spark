@@ -26,7 +26,8 @@ from pyspark.mllib.util import Saveable, Loader
 __all__ = ['LabeledPoint', 'LinearModel',
            'LinearRegressionModel', 'LinearRegressionWithSGD',
            'RidgeRegressionModel', 'RidgeRegressionWithSGD',
-           'LassoModel', 'LassoWithSGD']
+           'LassoModel', 'LassoWithSGD', 'IsotonicRegressionModel',
+           'IsotonicRegression']
 
 
 class LabeledPoint(object):
