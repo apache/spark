@@ -175,6 +175,9 @@ class DagBag(object):
         for subdag in dag.subdags:
             subdag.full_filepath = dag.full_filepath
             subdag.parent_dag = dag
+            subdag.last_expired = dag.last_expired
+            subdag.fileloc = dag.fileloc
+            subdag.last_expired = dag.last_expired
             subdag.is_subdag = True
             self.bag_dag(subdag)
         logging.info('Loaded DAG {dag}'.format(**locals()))
@@ -1469,7 +1472,8 @@ class DAG(Base):
         # backdoor
         cls = self.__class__
         result = cls.__new__(cls)
-        setattr(result, '_sa_instance_state', getattr(self, '_sa_instance_state'))
+        setattr(
+            result, '_sa_instance_state', getattr(self, '_sa_instance_state'))
         memo[id(self)] = result
         for k, v in self.__dict__.items():
             if k not in ('user_defined_macros', 'params'):
