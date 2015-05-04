@@ -190,6 +190,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_CLASSPATH, conf, props) : null;
 
     List<String> cmd = buildJavaCommand(extraClassPath);
+    // Take Thrift Server as daemon
+    if (isThriftServer(mainClass)) {
+      addOptionString(cmd, System.getenv("SPARK_DAEMON_JAVA_OPTS"));
+    }
     addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
     addOptionString(cmd, System.getenv("SPARK_JAVA_OPTS"));
 
@@ -201,7 +205,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       // - SPARK_DRIVER_MEMORY env variable
       // - SPARK_MEM env variable
       // - default value (512m)
-      String memory = firstNonEmpty(firstNonEmptyValue(SparkLauncher.DRIVER_MEMORY, conf, props),
+      // Take Thrift Server as daemon
+      String tsMemory =
+        isThriftServer(mainClass) ? System.getenv("SPARK_DAEMON_MEMORY") : null;
+      String memory = firstNonEmpty(tsMemory,
+        firstNonEmptyValue(SparkLauncher.DRIVER_MEMORY, conf, props),
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
       cmd.add("-Xms" + memory);
       cmd.add("-Xmx" + memory);
@@ -291,6 +299,15 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       "client".equals(deployMode) ||
       (!userMaster.equals("yarn-cluster") && deployMode == null);
   }
+
+  /**
+   * Return whether the given main class represents a thrift server.
+   */
+  private boolean isThriftServer(String mainClass) {
+    return (mainClass != null &&
+      mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"));
+  }
+
 
   private class OptionParser extends SparkSubmitOptionParser {
 

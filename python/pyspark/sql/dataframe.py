@@ -34,7 +34,8 @@ from pyspark.sql.types import *
 from pyspark.sql.types import _create_cls, _parse_datatype_json_string
 
 
-__all__ = ["DataFrame", "GroupedData", "Column", "SchemaRDD", "DataFrameNaFunctions"]
+__all__ = ["DataFrame", "GroupedData", "Column", "SchemaRDD", "DataFrameNaFunctions",
+           "DataFrameStatFunctions"]
 
 
 class DataFrame(object):
@@ -92,6 +93,12 @@ class DataFrame(object):
         """Returns a :class:`DataFrameNaFunctions` for handling missing values.
         """
         return DataFrameNaFunctions(self)
+
+    @property
+    def stat(self):
+        """Returns a :class:`DataFrameStatFunctions` for statistic functions.
+        """
+        return DataFrameStatFunctions(self)
 
     @ignore_unicode_prefix
     def toJSON(self, use_unicode=True):
@@ -237,7 +244,8 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
-        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at mapPartitions at SQLContext.scala:...
+        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at applySchemaToPythonRDD at\
+          NativeMethodAccessorImpl.java:...
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -267,9 +275,12 @@ class DataFrame(object):
         >>> df
         DataFrame[age: int, name: string]
         >>> df.show()
-        age name
-        2   Alice
-        5   Bob
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
         """
         print(self._jdf.showString(n))
 
@@ -425,13 +436,34 @@ class DataFrame(object):
     def sample(self, withReplacement, fraction, seed=None):
         """Returns a sampled subset of this :class:`DataFrame`.
 
-        >>> df.sample(False, 0.5, 97).count()
+        >>> df.sample(False, 0.5, 42).count()
         1
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         rdd = self._jdf.sample(withReplacement, fraction, long(seed))
         return DataFrame(rdd, self.sql_ctx)
+
+    def randomSplit(self, weights, seed=None):
+        """Randomly splits this :class:`DataFrame` with the provided weights.
+
+        :param weights: list of doubles as weights with which to split the DataFrame. Weights will
+            be normalized if they don't sum up to 1.0.
+        :param seed: The seed for sampling.
+
+        >>> splits = df4.randomSplit([1.0, 2.0], 24)
+        >>> splits[0].count()
+        1
+
+        >>> splits[1].count()
+        3
+        """
+        for w in weights:
+            if w < 0.0:
+                raise ValueError("Weights must be positive. Found weight value: %s" % w)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
+        rdd_array = self._jdf.randomSplit(_to_seq(self.sql_ctx._sc, weights), long(seed))
+        return [DataFrame(rdd, self.sql_ctx) for rdd in rdd_array]
 
     @property
     def dtypes(self):
@@ -453,22 +485,43 @@ class DataFrame(object):
         return [f.name for f in self.schema.fields]
 
     @ignore_unicode_prefix
+    def alias(self, alias):
+        """Returns a new :class:`DataFrame` with an alias set.
+
+        >>> from pyspark.sql.functions import *
+        >>> df_as1 = df.alias("df_as1")
+        >>> df_as2 = df.alias("df_as2")
+        >>> joined_df = df_as1.join(df_as2, col("df_as1.name") == col("df_as2.name"), 'inner')
+        >>> joined_df.select(col("df_as1.name"), col("df_as2.name"), col("df_as2.age")).collect()
+        [Row(name=u'Alice', name=u'Alice', age=2), Row(name=u'Bob', name=u'Bob', age=5)]
+        """
+        assert isinstance(alias, basestring), "alias should be a string"
+        return DataFrame(getattr(self._jdf, "as")(alias), self.sql_ctx)
+
+    @ignore_unicode_prefix
     def join(self, other, joinExprs=None, joinType=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 
         :param other: Right side of the join
-        :param joinExprs: Join expression
+        :param joinExprs: a string for join column name, or a join expression (Column).
+            If joinExprs is a string indicating the name of the join column,
+            the column must exist on both sides, and this performs an inner equi-join.
         :param joinType: str, default 'inner'.
             One of `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
+
+        >>> df.join(df2, 'name').select(df.name, df2.height).collect()
+        [Row(name=u'Bob', height=85)]
         """
 
         if joinExprs is None:
             jdf = self._jdf.join(other._jdf)
+        elif isinstance(joinExprs, basestring):
+            jdf = self._jdf.join(other._jdf, joinExprs)
         else:
             assert isinstance(joinExprs, Column), "joinExprs should be Column"
             if joinType is None:
@@ -541,12 +594,15 @@ class DataFrame(object):
         given, this function computes statistics for all numerical columns.
 
         >>> df.describe().show()
-        summary age
-        count   2
-        mean    3.5
-        stddev  1.5
-        min     2
-        max     5
+        +-------+---+
+        |summary|age|
+        +-------+---+
+        |  count|  2|
+        |   mean|3.5|
+        | stddev|1.5|
+        |    min|  2|
+        |    max|  5|
+        +-------+---+
         """
         jdf = self._jdf.describe(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
@@ -611,7 +667,8 @@ class DataFrame(object):
         [Row(age=2), Row(age=5)]
         """
         if name not in self.columns:
-            raise AttributeError("No such column: %s" % name)
+            raise AttributeError(
+                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name))
         jc = self._jdf.apply(name)
         return Column(jc)
 
@@ -750,12 +807,18 @@ class DataFrame(object):
         :param subset: optional list of column names to consider.
 
         >>> df4.dropna().show()
-        age height name
-        10  80     Alice
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        +---+------+-----+
 
         >>> df4.na.drop().show()
-        age height name
-        10  80     Alice
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        +---+------+-----+
         """
         if how is not None and how not in ['any', 'all']:
             raise ValueError("how ('" + how + "') should be 'any' or 'all'")
@@ -786,25 +849,34 @@ class DataFrame(object):
             then the non-string column is simply ignored.
 
         >>> df4.fillna(50).show()
-        age height name
-        10  80     Alice
-        5   50     Bob
-        50  50     Tom
-        50  50     null
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        |  5|    50|  Bob|
+        | 50|    50|  Tom|
+        | 50|    50| null|
+        +---+------+-----+
 
         >>> df4.fillna({'age': 50, 'name': 'unknown'}).show()
-        age height name
-        10  80     Alice
-        5   null   Bob
-        50  null   Tom
-        50  null   unknown
+        +---+------+-------+
+        |age|height|   name|
+        +---+------+-------+
+        | 10|    80|  Alice|
+        |  5|  null|    Bob|
+        | 50|  null|    Tom|
+        | 50|  null|unknown|
+        +---+------+-------+
 
         >>> df4.na.fill({'age': 50, 'name': 'unknown'}).show()
-        age height name
-        10  80     Alice
-        5   null   Bob
-        50  null   Tom
-        50  null   unknown
+        +---+------+-------+
+        |age|height|   name|
+        +---+------+-------+
+        | 10|    80|  Alice|
+        |  5|  null|    Bob|
+        | 50|  null|    Tom|
+        | 50|  null|unknown|
+        +---+------+-------+
         """
         if not isinstance(value, (float, int, long, basestring, dict)):
             raise ValueError("value should be a float, int, long, string, or dict")
@@ -823,6 +895,61 @@ class DataFrame(object):
                 raise ValueError("subset should be a list or tuple of column names")
 
             return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
+
+    def corr(self, col1, col2, method=None):
+        """
+        Calculates the correlation of two columns of a DataFrame as a double value. Currently only
+        supports the Pearson Correlation Coefficient.
+        :func:`DataFrame.corr` and :func:`DataFrameStatFunctions.corr` are aliases.
+
+        :param col1: The name of the first column
+        :param col2: The name of the second column
+        :param method: The correlation method. Currently only supports "pearson"
+        """
+        if not isinstance(col1, str):
+            raise ValueError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise ValueError("col2 should be a string.")
+        if not method:
+            method = "pearson"
+        if not method == "pearson":
+            raise ValueError("Currently only the calculation of the Pearson Correlation " +
+                             "coefficient is supported.")
+        return self._jdf.stat().corr(col1, col2, method)
+
+    def cov(self, col1, col2):
+        """
+        Calculate the sample covariance for the given columns, specified by their names, as a
+        double value. :func:`DataFrame.cov` and :func:`DataFrameStatFunctions.cov` are aliases.
+
+        :param col1: The name of the first column
+        :param col2: The name of the second column
+        """
+        if not isinstance(col1, str):
+            raise ValueError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise ValueError("col2 should be a string.")
+        return self._jdf.stat().cov(col1, col2)
+
+    def freqItems(self, cols, support=None):
+        """
+        Finding frequent items for columns, possibly with false positives. Using the
+        frequent element count algorithm described in
+        "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
+        :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
+
+        :param cols: Names of the columns to calculate frequent items for as a list or tuple of
+            strings.
+        :param support: The frequency with which to consider an item 'frequent'. Default is 1%.
+            The support must be greater than 1e-4.
+        """
+        if isinstance(cols, tuple):
+            cols = list(cols)
+        if not isinstance(cols, list):
+            raise ValueError("cols must be a list or tuple of column names as strings.")
+        if not support:
+            support = 0.01
+        return DataFrame(self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sql_ctx)
 
     @ignore_unicode_prefix
     def withColumn(self, colName, col):
@@ -1135,11 +1262,17 @@ class Column(object):
 
         >>> df = sc.parallelize([([1, 2], {"key": "value"})]).toDF(["l", "d"])
         >>> df.select(df.l.getItem(0), df.d.getItem("key")).show()
-        l[0] d[key]
-        1    value
+        +----+------+
+        |l[0]|d[key]|
+        +----+------+
+        |   1| value|
+        +----+------+
         >>> df.select(df.l[0], df.d["key"]).show()
-        l[0] d[key]
-        1    value
+        +----+------+
+        |l[0]|d[key]|
+        +----+------+
+        |   1| value|
+        +----+------+
         """
         return self[key]
 
@@ -1149,11 +1282,17 @@ class Column(object):
         >>> from pyspark.sql import Row
         >>> df = sc.parallelize([Row(r=Row(a=1, b="b"))]).toDF()
         >>> df.select(df.r.getField("b")).show()
-        r.b
-        b
+        +---+
+        |r.b|
+        +---+
+        |  b|
+        +---+
         >>> df.select(df.r.a).show()
-        r.a
-        1
+        +---+
+        |r.a|
+        +---+
+        |  1|
+        +---+
         """
         return Column(self._jc.getField(name))
 
@@ -1265,6 +1404,29 @@ class DataFrameNaFunctions(object):
         return self.df.fillna(value=value, subset=subset)
 
     fill.__doc__ = DataFrame.fillna.__doc__
+
+
+class DataFrameStatFunctions(object):
+    """Functionality for statistic functions with :class:`DataFrame`.
+    """
+
+    def __init__(self, df):
+        self.df = df
+
+    def corr(self, col1, col2, method=None):
+        return self.df.corr(col1, col2, method)
+
+    corr.__doc__ = DataFrame.corr.__doc__
+
+    def cov(self, col1, col2):
+        return self.df.cov(col1, col2)
+
+    cov.__doc__ = DataFrame.cov.__doc__
+
+    def freqItems(self, cols, support=None):
+        return self.df.freqItems(cols, support)
+
+    freqItems.__doc__ = DataFrame.freqItems.__doc__
 
 
 def _test():

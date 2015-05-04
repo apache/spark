@@ -95,6 +95,7 @@ class DAGSchedulerSuite
     override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
     override def defaultParallelism() = 2
     override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
+    override def applicationAttemptId(): Option[String] = None
   }
 
   /** Length of time to wait while draining listener events. */
@@ -404,6 +405,7 @@ class DAGSchedulerSuite
           taskMetrics: Array[(Long, TaskMetrics)],
           blockManagerId: BlockManagerId): Boolean = true
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
+      override def applicationAttemptId(): Option[String] = None
     }
     val noKillScheduler = new DAGScheduler(
       sc,

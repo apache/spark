@@ -18,9 +18,9 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.impl.estimator.{Predictor, PredictionModel}
+import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
 import org.apache.spark.ml.impl.tree._
-import org.apache.spark.ml.param.{Params, ParamMap}
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, Node}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
@@ -30,7 +30,6 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => O
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
-
 
 /**
  * :: AlphaComponent ::
@@ -43,8 +42,7 @@ import org.apache.spark.sql.DataFrame
 @AlphaComponent
 final class DecisionTreeClassifier
   extends Predictor[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
-  with DecisionTreeParams
-  with TreeClassifierParams {
+  with DecisionTreeParams with TreeClassifierParams {
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -59,44 +57,39 @@ final class DecisionTreeClassifier
 
   override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
 
-  override def setCacheNodeIds(value: Boolean): this.type =
-    super.setCacheNodeIds(value)
+  override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
 
-  override def setCheckpointInterval(value: Int): this.type =
-    super.setCheckpointInterval(value)
+  override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
-  override protected def train(
-      dataset: DataFrame,
-      paramMap: ParamMap): DecisionTreeClassificationModel = {
+  override protected def train(dataset: DataFrame): DecisionTreeClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
-      MetadataUtils.getCategoricalFeatures(dataset.schema(paramMap(featuresCol)))
-    val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema(paramMap(labelCol))) match {
+      MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+    val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
       case Some(n: Int) => n
       case None => throw new IllegalArgumentException("DecisionTreeClassifier was given input" +
-        s" with invalid label column, without the number of classes specified.")
-        // TODO: Automatically index labels.
+        s" with invalid label column ${$(labelCol)}, without the number of classes" +
+        " specified. See StringIndexer.")
+        // TODO: Automatically index labels: SPARK-7126
     }
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, paramMap)
+    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     val oldModel = OldDecisionTree.train(oldDataset, strategy)
-    DecisionTreeClassificationModel.fromOld(oldModel, this, paramMap, categoricalFeatures)
+    DecisionTreeClassificationModel.fromOld(oldModel, this, categoricalFeatures)
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
-  override private[ml] def getOldStrategy(
+  private[ml] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): OldStrategy = {
-    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
-    strategy.algo = OldAlgo.Classification
-    strategy.setImpurity(getOldImpurity)
-    strategy
+    super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity,
+      subsamplingRate = 1.0)
   }
 }
 
 object DecisionTreeClassifier {
-  /** Accessor for supported impurities */
+  /** Accessor for supported impurities: entropy, gini */
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 }
 
@@ -110,7 +103,6 @@ object DecisionTreeClassifier {
 @AlphaComponent
 final class DecisionTreeClassificationModel private[ml] (
     override val parent: DecisionTreeClassifier,
-    override val fittingParamMap: ParamMap,
     override val rootNode: Node)
   extends PredictionModel[Vector, DecisionTreeClassificationModel]
   with DecisionTreeModel with Serializable {
@@ -122,10 +114,8 @@ final class DecisionTreeClassificationModel private[ml] (
     rootNode.predict(features)
   }
 
-  override protected def copy(): DecisionTreeClassificationModel = {
-    val m = new DecisionTreeClassificationModel(parent, fittingParamMap, rootNode)
-    Params.inheritValues(this.extractParamMap(), this, m)
-    m
+  override def copy(extra: ParamMap): DecisionTreeClassificationModel = {
+    copyValues(new DecisionTreeClassificationModel(parent, rootNode), extra)
   }
 
   override def toString: String = {
@@ -144,12 +134,11 @@ private[ml] object DecisionTreeClassificationModel {
   def fromOld(
       oldModel: OldDecisionTreeModel,
       parent: DecisionTreeClassifier,
-      fittingParamMap: ParamMap,
       categoricalFeatures: Map[Int, Int]): DecisionTreeClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification,
       s"Cannot convert non-classification DecisionTreeModel (old API) to" +
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
-    new DecisionTreeClassificationModel(parent, fittingParamMap, rootNode)
+    new DecisionTreeClassificationModel(parent, rootNode)
   }
 }

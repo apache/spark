@@ -119,9 +119,9 @@ private[hive] trait HiveStrategies {
             val inputData = new GenericMutableRow(relation.partitionKeys.size)
             val pruningCondition =
               if (codegenEnabled) {
-                GeneratePredicate(castedPredicate)
+                GeneratePredicate.generate(castedPredicate)
               } else {
-                InterpretedPredicate(castedPredicate)
+                InterpretedPredicate.create(castedPredicate)
               }
 
             val partitions = relation.hiveQlPartitions.filter { part =>

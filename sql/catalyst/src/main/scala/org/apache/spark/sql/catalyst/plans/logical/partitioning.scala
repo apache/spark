@@ -32,5 +32,11 @@ abstract class RedistributeData extends UnaryNode {
 case class SortPartitions(sortExpressions: Seq[SortOrder], child: LogicalPlan)
   extends RedistributeData
 
-case class Repartition(partitionExpressions: Seq[Expression], child: LogicalPlan)
+/**
+ * This method repartitions data using [[Expression]]s, and receives information about the
+ * number of partitions during execution. Used when a specific ordering or distribution is
+ * expected by the consumer of the query result. Use [[Repartition]] for RDD-like
+ * `coalesce` and `repartition`.
+ */
+case class RepartitionByExpression(partitionExpressions: Seq[Expression], child: LogicalPlan)
   extends RedistributeData

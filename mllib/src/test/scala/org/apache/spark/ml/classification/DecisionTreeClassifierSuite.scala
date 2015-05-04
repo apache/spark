@@ -230,7 +230,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: Reinstate test once save/load are implemented
+  // TODO: Reinstate test once save/load are implemented   SPARK-6725
   /*
   test("model save/load") {
     val tempDir = Utils.createTempDir()
@@ -267,8 +267,8 @@ private[ml] object DecisionTreeClassifierSuite extends FunSuite {
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
     // Use parent, fittingParamMap from newTree since these are not checked anyways.
-    val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(oldTree, newTree.parent,
-      newTree.fittingParamMap, categoricalFeatures)
+    val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(
+      oldTree, newTree.parent, categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
   }
 }

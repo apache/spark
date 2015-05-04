@@ -278,12 +278,6 @@ package object dsl {
     def sfilter[T1](arg1: Symbol)(udf: (T1) => Boolean): LogicalPlan =
       Filter(ScalaUdf(udf, BooleanType, Seq(UnresolvedAttribute(arg1.name))), logicalPlan)
 
-    def sample(
-        fraction: Double,
-        withReplacement: Boolean = true,
-        seed: Int = (math.random * 1000).toInt): LogicalPlan =
-      Sample(fraction, withReplacement, seed, logicalPlan)
-
     // TODO specify the output column names
     def generate(
         generator: Generator,
@@ -296,7 +290,7 @@ package object dsl {
       InsertIntoTable(
         analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite, false)
 
-    def analyze: LogicalPlan = EliminateSubQueries(analysis.SimpleAnalyzer(logicalPlan))
+    def analyze: LogicalPlan = EliminateSubQueries(analysis.SimpleAnalyzer.execute(logicalPlan))
   }
 
   object plans {  // scalastyle:ignore
