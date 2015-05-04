@@ -47,8 +47,8 @@ def _closest_date(target_dt, date_list, before_target=None):
     :returns: The closest date
     :rtype: datetime.date or None
     '''
-    fb = lambda d: d - target_dt if d > target_dt else datetime.timedelta.max
-    fa = lambda d: d - target_dt if d < target_dt else datetime.timedelta.min
+    fb = lambda d: d - target_dt if d >= target_dt else datetime.timedelta.max
+    fa = lambda d: d - target_dt if d <= target_dt else datetime.timedelta.min
     fnone = lambda d: target_dt - d if d < target_dt else d - target_dt
     if before_target is None:
         return min(date_list, key=fnone).date()
@@ -81,16 +81,16 @@ def closest_ds_partition(
     from airflow.hooks import HiveMetastoreHook
     if '.' in table:
         schema, table = table.split('.')
-    target_dt = datetime.datetime.strptime(ds, '%Y-%m-%d')
     hh = HiveMetastoreHook(metastore_conn_id=metastore_conn_id)
     partitions = hh.get_partitions(schema=schema, table_name=table)
-    parts = [
-        datetime.datetime.strptime(p.values()[0], '%Y-%m-%d')
-        for p in partitions]
-    if partitions is None or partitions == []:
+    if not partitions:
         return None
-    if ds in partitions:
+    part_vals = [p.values()[0] for p in partitions]
+    if ds in part_vals:
         return ds
     else:
+        parts = [datetime.datetime.strptime(pv, '%Y-%m-%d')
+                 for pv in part_vals]
+        target_dt = datetime.datetime.strptime(ds, '%Y-%m-%d')
         closest_ds = _closest_date(target_dt, parts, before_target=before)
         return closest_ds.isoformat()
