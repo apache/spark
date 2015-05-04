@@ -20,12 +20,12 @@ package org.apache.spark.sql.json
 import java.io.IOException
 
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.Row
-
-import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 
 
 private[sql] class DefaultSource
@@ -112,6 +112,8 @@ private[sql] case class JSONRelation(
 
   // TODO: Support partitioned JSON relation.
   private def baseRDD = sqlContext.sparkContext.textFile(path)
+
+  override val needConversion: Boolean = false
 
   override val schema = userSpecifiedSchema.getOrElse(
     JsonRDD.nullTypeToStringType(

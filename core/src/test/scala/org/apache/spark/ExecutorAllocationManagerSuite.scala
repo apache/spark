@@ -19,7 +19,7 @@ package org.apache.spark
 
 import scala.collection.mutable
 
-import org.scalatest.{FunSuite, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -28,9 +28,19 @@ import org.apache.spark.util.ManualClock
 /**
  * Test add and remove behavior of ExecutorAllocationManager.
  */
-class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
+class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAfter {
   import ExecutorAllocationManager._
   import ExecutorAllocationManagerSuite._
+
+  private val contexts = new mutable.ListBuffer[SparkContext]()
+
+  before {
+    contexts.clear()
+  }
+
+  after {
+    contexts.foreach(_.stop())
+  }
 
   test("verify min/max executors") {
     val conf = new SparkConf()
@@ -39,25 +49,20 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
       .set("spark.dynamicAllocation.enabled", "true")
       .set("spark.dynamicAllocation.testing", "true")
     val sc0 = new SparkContext(conf)
+    contexts += sc0
     assert(sc0.executorAllocationManager.isDefined)
     sc0.stop()
 
     // Min < 0
     val conf1 = conf.clone().set("spark.dynamicAllocation.minExecutors", "-1")
-    intercept[SparkException] { new SparkContext(conf1) }
-    SparkEnv.get.stop()
-    SparkContext.clearActiveContext()
+    intercept[SparkException] { contexts += new SparkContext(conf1) }
 
     // Max < 0
     val conf2 = conf.clone().set("spark.dynamicAllocation.maxExecutors", "-1")
-    intercept[SparkException] { new SparkContext(conf2) }
-    SparkEnv.get.stop()
-    SparkContext.clearActiveContext()
+    intercept[SparkException] { contexts += new SparkContext(conf2) }
 
     // Both min and max, but min > max
     intercept[SparkException] { createSparkContext(2, 1) }
-    SparkEnv.get.stop()
-    SparkContext.clearActiveContext()
 
     // Both min and max, and min == max
     val sc1 = createSparkContext(1, 1)
@@ -665,6 +670,25 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(removeTimes(manager).contains("executor-2"))
     assert(!removeTimes(manager).contains("executor-1"))
   }
+
+  private def createSparkContext(minExecutors: Int = 1, maxExecutors: Int = 5): SparkContext = {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test-executor-allocation-manager")
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.minExecutors", minExecutors.toString)
+      .set("spark.dynamicAllocation.maxExecutors", maxExecutors.toString)
+      .set("spark.dynamicAllocation.schedulerBacklogTimeout",
+          s"${schedulerBacklogTimeout.toString}s")
+      .set("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout",
+        s"${sustainedSchedulerBacklogTimeout.toString}s")
+      .set("spark.dynamicAllocation.executorIdleTimeout", s"${executorIdleTimeout.toString}s")
+      .set("spark.dynamicAllocation.testing", "true")
+    val sc = new SparkContext(conf)
+    contexts += sc
+    sc
+  }
+
 }
 
 /**
@@ -675,21 +699,6 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val schedulerBacklogTimeout = 1L
   private val sustainedSchedulerBacklogTimeout = 2L
   private val executorIdleTimeout = 3L
-
-  private def createSparkContext(minExecutors: Int = 1, maxExecutors: Int = 5): SparkContext = {
-    val conf = new SparkConf()
-      .setMaster("local")
-      .setAppName("test-executor-allocation-manager")
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.minExecutors", minExecutors.toString)
-      .set("spark.dynamicAllocation.maxExecutors", maxExecutors.toString)
-      .set("spark.dynamicAllocation.schedulerBacklogTimeout", schedulerBacklogTimeout.toString)
-      .set("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout",
-        sustainedSchedulerBacklogTimeout.toString)
-      .set("spark.dynamicAllocation.executorIdleTimeout", executorIdleTimeout.toString)
-      .set("spark.dynamicAllocation.testing", "true")
-    new SparkContext(conf)
-  }
 
   private def createStageInfo(stageId: Int, numTasks: Int): StageInfo = {
     new StageInfo(stageId, 0, "name", numTasks, Seq.empty, "no details")
