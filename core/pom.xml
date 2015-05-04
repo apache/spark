@@ -360,7 +360,7 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.github.irmen</groupId>
+      <groupId>org.spark-project</groupId>
       <artifactId>pyrolite</artifactId>
       <version>4.4</version>
     </dependency>
