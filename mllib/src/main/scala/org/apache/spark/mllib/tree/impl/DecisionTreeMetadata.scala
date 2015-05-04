@@ -107,11 +107,11 @@ private[tree] object DecisionTreeMetadata extends Logging {
       numTrees: Int,
       featureSubsetStrategy: String): DecisionTreeMetadata = {
 
-    require(!input.isEmpty, s"DecisionTree requires size of input RDD > 0, " +
-      s"but was given by an empty one.")
-
+    val numFeatures = input.map(_.features.size).take(1).headOption.getOrElse {
+      throw new IllegalArgumentException(s"DecisionTree requires size of input RDD > 0, " +
+        s"but was given by empty one.")
+    }
     val numExamples = input.count()
-    val numFeatures = input.take(1)(0).features.size
     val numClasses = strategy.algo match {
       case Classification => strategy.numClasses
       case Regression => 0
