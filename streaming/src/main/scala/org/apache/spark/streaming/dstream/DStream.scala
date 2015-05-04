@@ -763,20 +763,20 @@ abstract class DStream[T: ClassTag] (
       throw new SparkException(this + " has not been initialized")
     }
 
-    val alignedToTime = (toTime - zeroTime).isMultipleOf(slideDuration) match {
-      case true => toTime
-      case false =>
-        logWarning("toTime (" + toTime + ") is not a multiple of slideDuration ("
+    val alignedToTime = if ((toTime - zeroTime).isMultipleOf(slideDuration)) {
+      toTime
+    } else {
+      logWarning("toTime (" + toTime + ") is not a multiple of slideDuration ("
           + slideDuration + ")")
         toTime.floor(slideDuration, zeroTime)
     }
 
-    val alignedFromTime = (fromTime - zeroTime).isMultipleOf(slideDuration) match {
-      case true => fromTime
-      case false =>
-        logWarning("fromTime (" + fromTime + ") is not a multiple of slideDuration ("
-        + slideDuration + ")")
-        fromTime.floor(slideDuration, zeroTime)
+    val alignedFromTime = if ((fromTime - zeroTime).isMultipleOf(slideDuration)) {
+      fromTime
+    } else {
+      logWarning("fromTime (" + fromTime + ") is not a multiple of slideDuration ("
+      + slideDuration + ")")
+      fromTime.floor(slideDuration, zeroTime)
     }
 
     logInfo("Slicing from " + fromTime + " to " + toTime +
