@@ -155,12 +155,12 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    assert(schema($(userCol)).dataType == IntegerType)
-    assert(schema($(itemCol)).dataType== IntegerType)
+    require(schema($(userCol)).dataType == IntegerType)
+    require(schema($(itemCol)).dataType== IntegerType)
     val ratingType = schema($(ratingCol)).dataType
-    assert(ratingType == FloatType || ratingType == DoubleType)
+    require(ratingType == FloatType || ratingType == DoubleType)
     val predictionColName = $(predictionCol)
-    assert(!schema.fieldNames.contains(predictionColName),
+    require(!schema.fieldNames.contains(predictionColName),
       s"Prediction column $predictionColName already exists.")
     val newFields = schema.fields :+ StructField($(predictionCol), FloatType, nullable = false)
     StructType(newFields)

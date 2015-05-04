@@ -34,9 +34,9 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage with Params {
    * Fits a single model to the input data with optional parameters.
    *
    * @param dataset input dataset
-   * @param firstParamPair the first param pair, overwrites embedded params
-   * @param otherParamPairs other param pairs.
-   *                   These values override any specified in this Estimator's embedded ParamMap.
+   * @param firstParamPair the first param pair, overrides embedded params
+   * @param otherParamPairs other param pairs.  These values override any specified in this
+   *                        Estimator's embedded ParamMap.
    * @return fitted model
    */
   @varargs
@@ -67,7 +67,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage with Params {
   /**
    * Fits multiple models to the input data with multiple sets of parameters.
    * The default implementation uses a for loop on each parameter map.
-   * Subclasses could overwrite this to optimize multi-model training.
+   * Subclasses could override this to optimize multi-model training.
    *
    * @param dataset input dataset
    * @param paramMaps An array of parameter maps.
