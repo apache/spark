@@ -615,7 +615,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
-    if (conf.useJsonRDD2) {
+    if (conf.useJacksonStreamingAPI) {
       baseRelationToDataFrame(new JSONRelation(json, None, 1.0, Some(schema))(this))
     } else {
       val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
@@ -649,7 +649,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
-    if (conf.useJsonRDD2) {
+    if (conf.useJacksonStreamingAPI) {
       baseRelationToDataFrame(new JSONRelation(json, None, samplingRatio, None)(this))
     } else {
       val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord

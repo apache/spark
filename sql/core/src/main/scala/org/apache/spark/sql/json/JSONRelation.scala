@@ -125,12 +125,12 @@ private[sql] class JSONRelation(
       samplingRatio,
       userSpecifiedSchema)(sqlContext)
 
-  private val useJsonRDD2: Boolean = sqlContext.conf.useJsonRDD2
+  private val useJacksonStreamingAPI: Boolean = sqlContext.conf.useJacksonStreamingAPI
 
   override val needConversion: Boolean = false
 
   override lazy val schema = userSpecifiedSchema.getOrElse {
-    if (useJsonRDD2) {
+    if (useJacksonStreamingAPI) {
       JsonRDD2.nullTypeToStringType(
         JsonRDD2.inferSchema(
           baseRDD,
@@ -146,7 +146,7 @@ private[sql] class JSONRelation(
   }
 
   override def buildScan(): RDD[Row] = {
-    if (useJsonRDD2) {
+    if (useJacksonStreamingAPI) {
       JsonRDD2.jsonStringToRow(
         baseRDD,
         schema,
@@ -160,7 +160,7 @@ private[sql] class JSONRelation(
   }
 
   override def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row] = {
-    if (useJsonRDD2) {
+    if (useJacksonStreamingAPI) {
       JsonRDD2.jsonStringToRow(
         baseRDD,
         StructType.fromAttributes(requiredColumns),

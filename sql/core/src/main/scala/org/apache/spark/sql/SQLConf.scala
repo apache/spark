@@ -67,7 +67,7 @@ private[spark] object SQLConf {
 
   val USE_SQL_SERIALIZER2 = "spark.sql.useSerializer2"
 
-  val USE_JSONRDD2 = "spark.sql.json.useJsonRDD2"
+  val USE_JACKSON_STREAMING_API = "spark.sql.json.useJacksonStreamingAPI"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -162,7 +162,7 @@ private[sql] class SQLConf extends Serializable {
 
   private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2, "true").toBoolean
 
-  private[spark] def useJsonRDD2: Boolean = getConf(USE_JSONRDD2, "true").toBoolean
+  private[spark] def useJacksonStreamingAPI: Boolean = getConf(USE_JACKSON_STREAMING_API, "true").toBoolean
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
