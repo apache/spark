@@ -98,7 +98,7 @@ class DagBag(object):
                 'example_dags')
             self.collect_dags(example_dag_folder)
         if sync_to_db:
-            self.merge_dags()
+            self.deactivate_inactive_dags()
 
     def get_dag(self, dag_id):
         """
@@ -106,16 +106,21 @@ class DagBag(object):
         """
         if dag_id in self.dags:
             dag = self.dags[dag_id]
+            if dag.is_subdag:
+                orm_dag = DagModel.get_current(dag.parent_dag.dag_id)
+            else:
+                orm_dag = DagModel.get_current(dag_id)
             if dag.last_loaded < (
-                    dag.last_expired_live or datetime(2100, 1, 1)):
+                    orm_dag.last_expired or datetime(2100, 1, 1)):
                 self.process_file(
-                    filepath=dag.fileloc, only_if_updated=False)
+                    filepath=orm_dag.fileloc, only_if_updated=False)
                 dag = self.dags[dag_id]
         else:
+            orm_dag = DagModel.get_current(dag_id)
             session = settings.Session()
             dag = session.query(DAG).filter(DAG.dag_id == dag_id).first()
             self.process_file(
-                filepath=dag.fileloc, only_if_updated=False)
+                filepath=orm_dag.fileloc, only_if_updated=False)
             if dag_id in self.dags:
                 dag = self.dags[dag_id]
             else:
@@ -123,7 +128,6 @@ class DagBag(object):
             session.commit()
             session.close()
         return dag
-
 
     def process_file(self, filepath, only_if_updated=True, safe_mode=True):
         """
@@ -157,29 +161,40 @@ class DagBag(object):
             for dag in m.__dict__.values():
                 if isinstance(dag, DAG):
                     dag.full_filepath = filepath
-                    dag.fileloc = filepath
-                    dag.last_loaded = datetime.now()
                     dag.is_subdag = False
-                    dag.owners = dag.owner
-                    self.bag_dag(dag)
+                    self.bag_dag(dag, parent_dag=dag, root_dag=dag)
                     # dag.pickle()
 
             self.file_last_changed[filepath] = dttm
 
-    def bag_dag(self, dag):
-        '''
+    def bag_dag(self, dag, parent_dag, root_dag):
+        """
         Adds the DAG into the bag, recurses into sub dags.
-        '''
+        """
         self.dags[dag.dag_id] = dag
         dag.resolve_template_files()
+        dag.last_loaded = datetime.now()
+
+        if self.sync_to_db:
+            session = settings.Session()
+            orm_dag = session.query(
+                DagModel).filter(DagModel.dag_id == dag.dag_id).first()
+            if not orm_dag:
+                orm_dag = DagModel(dag_id=dag.dag_id)
+            orm_dag.fileloc = root_dag.full_filepath
+            orm_dag.is_subdag = dag.is_subdag
+            orm_dag.owners = root_dag.owner
+            orm_dag.is_active = True
+            session.merge(orm_dag)
+            session.commit()
+            session.close()
+
         for subdag in dag.subdags:
             subdag.full_filepath = dag.full_filepath
             subdag.parent_dag = dag
-            subdag.last_expired = dag.last_expired
-            subdag.fileloc = dag.fileloc
-            subdag.last_expired = dag.last_expired
+            subdag.fileloc = root_dag.full_filepath
             subdag.is_subdag = True
-            self.bag_dag(subdag)
+            self.bag_dag(subdag, parent_dag=dag, root_dag=root_dag)
         logging.info('Loaded DAG {dag}'.format(**locals()))
 
     def collect_dags(
@@ -217,21 +232,20 @@ class DagBag(object):
                         self.process_file(
                             filepath, only_if_updated=only_if_updated)
 
-    def merge_dags(self):
+    def deactivate_inactive_dags(self):
+        active_dag_ids = [dag.dag_id for dag in self.dags.values()]
         session = settings.Session()
-        for dag in session.query(DAG).all():
+        for dag in session.query(
+                DagModel).filter(~DagModel.dag_id.in_(active_dag_ids)).all():
             dag.is_active = False
-            session.merge(dag)
-        for dag in self.dags.values():
-            dag.is_active = True
             session.merge(dag)
         session.commit()
         session.close()
 
     def paused_dags(self):
         session = settings.Session()
-        dag_ids = [dp.dag_id for dp in session.query(DAG).filter(
-            DAG.is_paused == True)]
+        dag_ids = [dp.dag_id for dp in session.query(DagModel).filter(
+            DagModel.is_paused == True)]
         session.commit()
         session.close()
         return dag_ids
@@ -1189,7 +1203,49 @@ class BaseOperator(Base):
         self._set_relatives(task_or_task_list, upstream=True)
 
 
-class DAG(Base):
+class DagModel(Base):
+
+    __tablename__ = "dag"
+    """
+    These items are stored in the database for state related information
+    """
+    dag_id = Column(String(ID_LEN), primary_key=True)
+    # A DAG can be paused from the UI / DB
+    is_paused = Column(Boolean, default=False)
+    # Whether the DAG is a subdag
+    is_subdag = Column(Boolean, default=False)
+    # Whether that DAG was seen on the last DagBag load
+    is_active = Column(Boolean, default=False)
+    # Last time the scheduler started
+    last_scheduler_run = Column(DateTime)
+    # Last time this DAG was pickled
+    last_pickled = Column(DateTime)
+    # When the DAG received a refreshed signal last, used to know when
+    # we need to force refresh
+    last_expired = Column(DateTime)
+    # Whether (one  of) the scheduler is scheduling this DAG at the moment
+    scheduler_lock = Column(Boolean)
+    # Foreign key to the latest pickle_id
+    pickle_id = Column(Integer)
+    # The location of the file containing the DAG object
+    fileloc = Column(String(2000))
+    # String representing the owners
+    owners = Column(String(2000))
+
+    def __repr__(self):
+        return "<DAG: {self.dag_id}>".format(self=self)
+
+    @classmethod
+    def get_current(cls, dag_id):
+        session = settings.Session()
+        obj = session.query(cls).filter(cls.dag_id == dag_id).first()
+        session.expunge_all()
+        session.commit()
+        session.close()
+        return obj
+
+
+class DAG(object):
     """
     A dag (directed acyclic graph) is a collection of tasks with directional
     dependencies. A dag also has a schedule, a start end an end date
@@ -1230,33 +1286,6 @@ class DAG(Base):
         params can be overriden at the task level.
     :type params: dict
     """
-
-    __tablename__ = "dag"
-    """
-    These items are stored in the database for state related information
-    """
-    dag_id = Column(String(ID_LEN), primary_key=True)
-    # A DAG can be paused from the UI / DB
-    is_paused = Column(Boolean, default=False)
-    # Whether the DAG is a subdag
-    is_subdag = Column(Boolean, default=False)
-    # Whether that DAG was seen on the last DagBag load
-    is_active = Column(Boolean, default=False)
-    # Last time the scheduler started
-    last_scheduler_run = Column(DateTime)
-    # Last time this DAG was pickled
-    last_pickled = Column(DateTime)
-    # When the DAG received a refreshed signal last, used to know when
-    # we need to force refresh
-    last_expired = Column(DateTime)
-    # Whether (one  of) the scheduler is scheduling this DAG at the moment
-    scheduler_lock = Column(Boolean)
-    # Foreign key to the latest pickle_id
-    pickle_id = Column(Integer)
-    # The location of the file containing the DAG object
-    fileloc = Column(String(2000))
-    # String representing the owners
-    owners = Column(String(2000))
 
     def __init__(
             self, dag_id,
@@ -1331,17 +1360,6 @@ class DAG(Base):
     def resolve_template_files(self):
         for t in self.tasks:
             t.resolve_template_files()
-
-    @property
-    def last_expired_live(self):
-        session = settings.Session()
-        dag = session.query(
-            DAG.last_expired).filter(DAG.dag_id==self.dag_id).first()
-        session.commit()
-        session.expunge_all()
-        session.close()
-        if dag:
-            return dag.last_expired
 
     def crawl_for_tasks(objects):
         """
@@ -1472,8 +1490,6 @@ class DAG(Base):
         # backdoor
         cls = self.__class__
         result = cls.__new__(cls)
-        setattr(
-            result, '_sa_instance_state', getattr(self, '_sa_instance_state'))
         memo[id(self)] = result
         for k, v in self.__dict__.items():
             if k not in ('user_defined_macros', 'params'):
@@ -1539,11 +1555,11 @@ class DAG(Base):
 
     def pickle(self, main_session=None):
         session = main_session or settings.Session()
-        dag = session.query(DAG).filter(DAG.dag_id==self.dag_id).first()
+        dag = session.query(DAG).filter(DAG.dag_id == self.dag_id).first()
         dp = None
         if dag and dag.pickle_id:
             dp = session.query(DagPickle).filter(
-                DagPickle.id==dag.pickle_id).first()
+                DagPickle.id == dag.pickle_id).first()
         if not dp or dp.pickle != self:
             dp = DagPickle(dag=self)
             session.add(dp)

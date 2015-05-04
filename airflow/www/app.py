@@ -1093,18 +1093,19 @@ class Airflow(BaseView):
     @expose('/refresh')
     @login_required
     def refresh(self):
-        DAG = models.DAG
+        DagModel = models.DagModel
         dag_id = request.args.get('dag_id')
         session = settings.Session()
-        dag = session.query(DAG).filter(DAG.dag_id == dag_id).all()[0]
+        orm_dag = session.query(
+            DagModel).filter(DagModel.dag_id == dag_id).first()
 
-        if dag:
-            dag.last_expired = datetime.now()
-            session.merge(dag)
+        if orm_dag:
+            orm_dag.last_expired = datetime.now()
+            session.merge(orm_dag)
         session.commit()
         session.close()
 
-        dag = dagbag.get_dag(dag_id)
+        dagbag.get_dag(dag_id)
         flash("DAG [{}] is now fresh as a daisy".format(dag_id))
         return redirect(url_for('index'))
 
@@ -1483,7 +1484,7 @@ class DagModelView(SuperUserMixin, ModelView):
     named_filter_urls = True
 
 mv = DagModelView(
-    models.DAG, Session, name="Pause DAGs", category="Admin")
+    models.DagModel, Session, name="Pause DAGs", category="Admin")
 admin.add_view(mv)
 
 
