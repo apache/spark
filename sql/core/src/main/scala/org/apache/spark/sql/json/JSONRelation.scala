@@ -104,7 +104,7 @@ private[sql] class DefaultSource
 }
 
 private[sql] class JSONRelation(
-    baseRDD: => RDD[String],
+    baseRDD: RDD[String],
     val path: Option[String],
     val samplingRatio: Double,
     userSpecifiedSchema: Option[StructType])(
