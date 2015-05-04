@@ -30,7 +30,7 @@ public final class UnsafeExternalSortSpillMerger {
   public static abstract class MergeableIterator {
     public abstract boolean hasNext();
 
-    public abstract void advanceRecord();
+    public abstract void loadNextRecord();
 
     public abstract long getPrefix();
 
@@ -68,6 +68,9 @@ public final class UnsafeExternalSortSpillMerger {
   }
 
   public void addSpill(MergeableIterator spillReader) {
+    if (spillReader.hasNext()) {
+      spillReader.loadNextRecord();
+    }
     priorityQueue.add(spillReader);
   }
 
@@ -79,17 +82,18 @@ public final class UnsafeExternalSortSpillMerger {
 
       @Override
       public boolean hasNext() {
-        return spillReader.hasNext() || !priorityQueue.isEmpty();
+        return !priorityQueue.isEmpty() || (spillReader != null && spillReader.hasNext());
       }
 
       @Override
       public RecordAddressAndKeyPrefix next() {
         if (spillReader != null) {
           if (spillReader.hasNext()) {
+            spillReader.loadNextRecord();
             priorityQueue.add(spillReader);
           }
         }
-        spillReader = priorityQueue.poll();
+        spillReader = priorityQueue.remove();
         record.baseObject = spillReader.getBaseObject();
         record.baseOffset = spillReader.getBaseOffset();
         record.keyPrefix = spillReader.getPrefix();

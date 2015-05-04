@@ -19,29 +19,117 @@ package org.apache.spark.unsafe.sort;
 
 
 import org.apache.spark.HashPartitioner;
+import org.apache.spark.SparkConf;
+import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.serializer.SerializerInstance;
+import org.apache.spark.shuffle.ShuffleMemoryManager;
+import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
-import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import org.apache.spark.util.Utils;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+import scala.Tuple2;
+import scala.Tuple2$;
+import scala.runtime.AbstractFunction1;
 
-import java.util.Arrays;
+import java.io.File;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
 import java.util.Iterator;
+import java.util.UUID;
 
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.*;
+import static org.mockito.AdditionalAnswers.*;
 
 public class UnsafeExternalSorterSuite {
-  private static String getStringFromDataPage(Object baseObject, long baseOffset) {
-    final int strLength = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset);
-    final byte[] strBytes = new byte[strLength];
-    PlatformDependent.copyMemory(
-      baseObject,
-      baseOffset + 8,
-      strBytes,
-      PlatformDependent.BYTE_ARRAY_OFFSET, strLength);
-    return new String(strBytes);
+
+  final TaskMemoryManager memoryManager =
+    new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP));
+  // Compute key prefixes based on the records' partition ids
+  final HashPartitioner hashPartitioner = new HashPartitioner(4);
+  // Use integer comparison for comparing prefixes (which are partition ids, in this case)
+  final UnsafeSorter.PrefixComparator prefixComparator = new UnsafeSorter.PrefixComparator() {
+    @Override
+    public int compare(long prefix1, long prefix2) {
+      return (int) prefix1 - (int) prefix2;
+    }
+  };
+  // Since the key fits within the 8-byte prefix, we don't need to do any record comparison, so
+  // use a dummy comparator
+  final UnsafeSorter.RecordComparator recordComparator = new UnsafeSorter.RecordComparator() {
+    @Override
+    public int compare(
+      Object leftBaseObject,
+      long leftBaseOffset,
+      Object rightBaseObject,
+      long rightBaseOffset) {
+      return 0;
+    }
+  };
+
+  ShuffleMemoryManager shuffleMemoryManager;
+  BlockManager blockManager;
+  DiskBlockManager diskBlockManager;
+  File tempDir;
+
+  private static final class CompressStream extends AbstractFunction1<OutputStream, OutputStream> {
+    @Override
+    public OutputStream apply(OutputStream stream) {
+      return stream;
+    }
+  }
+
+  @Before
+  public void setUp() {
+    shuffleMemoryManager = mock(ShuffleMemoryManager.class);
+    diskBlockManager = mock(DiskBlockManager.class);
+    blockManager = mock(BlockManager.class);
+    tempDir = new File(Utils.createTempDir$default$1());
+    when(shuffleMemoryManager.tryToAcquire(anyLong())).then(returnsFirstArg());
+    when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
+    when(diskBlockManager.createTempLocalBlock()).thenAnswer(new Answer<Tuple2<TempLocalBlockId, File>>() {
+      @Override
+      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock) throws Throwable {
+        TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
+        File file = File.createTempFile("spillFile", ".spill", tempDir);
+        return Tuple2$.MODULE$.apply(blockId, file);
+      }
+    });
+    when(blockManager.getDiskWriter(
+      any(BlockId.class),
+      any(File.class),
+      any(SerializerInstance.class),
+      anyInt(),
+      any(ShuffleWriteMetrics.class))).thenAnswer(new Answer<DiskBlockObjectWriter>() {
+      @Override
+      public DiskBlockObjectWriter answer(InvocationOnMock invocationOnMock) throws Throwable {
+        Object[] args = invocationOnMock.getArguments();
+
+        return new DiskBlockObjectWriter(
+          (BlockId) args[0],
+          (File) args[1],
+          (SerializerInstance) args[2],
+          (Integer) args[3],
+          new CompressStream(),
+          false,
+          (ShuffleWriteMetrics) args[4]
+        );
+      }
+    });
+    when(blockManager.wrapForCompression(any(BlockId.class), any(InputStream.class)))
+      .then(returnsSecondArg());
+  }
+
+  private static void insertNumber(UnsafeExternalSorter sorter, int value) throws Exception {
+    final int[] arr = new int[] { value };
+    sorter.insertRecord(arr, PlatformDependent.INT_ARRAY_OFFSET, 4, value);
   }
 
   /**
@@ -49,88 +137,36 @@ public class UnsafeExternalSorterSuite {
    */
   @Test
   public void testSortingOnlyByPartitionId() throws Exception {
-    final String[] dataToSort = new String[] {
-      "Boba",
-      "Pearls",
-      "Tapioca",
-      "Taho",
-      "Condensed Milk",
-      "Jasmine",
-      "Milk Tea",
-      "Lychee",
-      "Mango"
-    };
-    final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP));
-    final MemoryBlock dataPage = memoryManager.allocatePage(2048);
-    final Object baseObject = dataPage.getBaseObject();
-    // Write the records into the data page:
-    long position = dataPage.getBaseOffset();
-    for (String str : dataToSort) {
-      final byte[] strBytes = str.getBytes("utf-8");
-      PlatformDependent.UNSAFE.putLong(baseObject, position, strBytes.length);
-      position += 8;
-      PlatformDependent.copyMemory(
-        strBytes,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
-        baseObject,
-        position,
-        strBytes.length);
-      position += strBytes.length;
-    }
-    // Since the key fits within the 8-byte prefix, we don't need to do any record comparison, so
-    // use a dummy comparator
-    final UnsafeSorter.RecordComparator recordComparator = new UnsafeSorter.RecordComparator() {
-      @Override
-      public int compare(
-        Object leftBaseObject,
-        long leftBaseOffset,
-        Object rightBaseObject,
-        long rightBaseOffset) {
-        return 0;
-      }
-    };
-    // Compute key prefixes based on the records' partition ids
-    final HashPartitioner hashPartitioner = new HashPartitioner(4);
-    // Use integer comparison for comparing prefixes (which are partition ids, in this case)
-    final UnsafeSorter.PrefixComparator prefixComparator = new UnsafeSorter.PrefixComparator() {
-      @Override
-      public int compare(long prefix1, long prefix2) {
-        return (int) prefix1 - (int) prefix2;
-      }
-    };
-    final UnsafeSorter sorter = new UnsafeSorter(
+
+    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
       memoryManager,
+      shuffleMemoryManager,
+      blockManager,
       recordComparator,
       prefixComparator,
-      dataToSort.length);
-    // Given a page of records, insert those records into the sorter one-by-one:
-    position = dataPage.getBaseOffset();
-    for (int i = 0; i < dataToSort.length; i++) {
-      // position now points to the start of a record (which holds its length).
-      final long recordLength = PlatformDependent.UNSAFE.getLong(baseObject, position);
-      final long address = memoryManager.encodePageNumberAndOffset(dataPage, position);
-      final String str = getStringFromDataPage(baseObject, position);
-      final int partitionId = hashPartitioner.getPartition(str);
-      sorter.insertRecord(address, partitionId);
-      position += 8 + recordLength;
-    }
-    final Iterator<UnsafeSorter.RecordPointerAndKeyPrefix> iter = sorter.getSortedIterator();
-    int iterLength = 0;
-    long prevPrefix = -1;
-    Arrays.sort(dataToSort);
-    while (iter.hasNext()) {
-      final UnsafeSorter.RecordPointerAndKeyPrefix pointerAndPrefix = iter.next();
-      final Object recordBaseObject = memoryManager.getPage(pointerAndPrefix.recordPointer);
-      final long recordBaseOffset = memoryManager.getOffsetInPage(pointerAndPrefix.recordPointer);
-      final String str = getStringFromDataPage(recordBaseObject, recordBaseOffset);
-      Assert.assertTrue("String should be valid", Arrays.binarySearch(dataToSort, str) != -1);
-      Assert.assertTrue("Prefix " + pointerAndPrefix.keyPrefix + " should be >=  previous prefix " +
-        prevPrefix, pointerAndPrefix.keyPrefix >= prevPrefix);
-      prevPrefix = pointerAndPrefix.keyPrefix;
-      iterLength++;
-    }
-    Assert.assertEquals(dataToSort.length, iterLength);
+      1024,
+      new SparkConf());
+
+    insertNumber(sorter, 5);
+    insertNumber(sorter, 1);
+    insertNumber(sorter, 3);
+    sorter.spill();
+    insertNumber(sorter, 4);
+    insertNumber(sorter, 2);
+
+    Iterator<UnsafeExternalSortSpillMerger.RecordAddressAndKeyPrefix> iter =
+      sorter.getSortedIterator();
+
+    Assert.assertEquals(1, iter.next().keyPrefix);
+    Assert.assertEquals(2, iter.next().keyPrefix);
+    Assert.assertEquals(3, iter.next().keyPrefix);
+    Assert.assertEquals(4, iter.next().keyPrefix);
+    Assert.assertEquals(5, iter.next().keyPrefix);
+    Assert.assertFalse(iter.hasNext());
+    // TODO: check that the values are also read back properly.
+
+    // TODO: test for cleanup:
+    // assert(tempDir.isEmpty)
   }
 
 }

@@ -18,15 +18,9 @@
 package org.apache.spark.unsafe.sort;
 
 import com.google.common.io.ByteStreams;
-import org.apache.spark.executor.ShuffleWriteMetrics;
-import org.apache.spark.serializer.JavaSerializerInstance;
-import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
-import org.apache.spark.storage.BlockObjectWriter;
-import org.apache.spark.storage.TempLocalBlockId;
 import org.apache.spark.unsafe.PlatformDependent;
-import scala.Tuple2;
 
 import java.io.*;
 
@@ -39,6 +33,7 @@ public final class UnsafeSorterSpillReader extends UnsafeExternalSortSpillMerger
   private long keyPrefix;
   private final byte[] arr = new byte[1024 * 1024];  // TODO: tune this (maybe grow dynamically)?
   private final Object baseObject = arr;
+  private int nextRecordLength;
   private final long baseOffset = PlatformDependent.BYTE_ARRAY_OFFSET;
 
   public UnsafeSorterSpillReader(
@@ -46,11 +41,11 @@ public final class UnsafeSorterSpillReader extends UnsafeExternalSortSpillMerger
       File file,
       BlockId blockId) throws IOException {
     this.file = file;
+    assert (file.length() > 0);
     final BufferedInputStream bs = new BufferedInputStream(new FileInputStream(file));
     this.in = blockManager.wrapForCompression(blockId, bs);
     this.din = new DataInputStream(this.in);
-    assert (file.length() > 0);
-    advanceRecord();
+    nextRecordLength = din.readInt();
   }
 
   @Override
@@ -59,21 +54,19 @@ public final class UnsafeSorterSpillReader extends UnsafeExternalSortSpillMerger
   }
 
   @Override
-  public void advanceRecord() {
+  public void loadNextRecord() {
     try {
-      final int recordLength = din.readInt();
-      if (recordLength == UnsafeSorterSpillWriter.EOF_MARKER) {
+      keyPrefix = din.readLong();
+      ByteStreams.readFully(in, arr, 0, nextRecordLength);
+      nextRecordLength = din.readInt();
+      if (nextRecordLength == UnsafeSorterSpillWriter.EOF_MARKER) {
         in.close();
         in = null;
-        return;
+        din = null;
       }
-      keyPrefix = din.readLong();
-      ByteStreams.readFully(in, arr, 0, recordLength);
-
     } catch (Exception e) {
       PlatformDependent.throwException(e);
     }
-    throw new IllegalStateException();
   }
 
   @Override

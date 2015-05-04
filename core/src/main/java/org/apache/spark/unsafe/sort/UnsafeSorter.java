@@ -169,7 +169,8 @@ public final class UnsafeSorter {
 
   public UnsafeExternalSortSpillMerger.MergeableIterator getMergeableIterator() {
     sorter.sort(sortBuffer, 0, sortBufferInsertPosition / 2, sortComparator);
-    return new UnsafeExternalSortSpillMerger.MergeableIterator() {
+    UnsafeExternalSortSpillMerger.MergeableIterator iter =
+      new UnsafeExternalSortSpillMerger.MergeableIterator() {
 
       private int position = 0;
       private Object baseObject;
@@ -182,12 +183,12 @@ public final class UnsafeSorter {
       }
 
       @Override
-      public void advanceRecord() {
+      public void loadNextRecord() {
         final long recordPointer = sortBuffer[position];
-        baseObject = memoryManager.getPage(recordPointer);
-        baseOffset = memoryManager.getOffsetInPage(recordPointer);
         keyPrefix = sortBuffer[position + 1];
         position += 2;
+        baseObject = memoryManager.getPage(recordPointer);
+        baseOffset = memoryManager.getOffsetInPage(recordPointer);
       }
 
       @Override
@@ -205,5 +206,6 @@ public final class UnsafeSorter {
         return baseOffset;
       }
     };
+    return iter;
   }
 }

@@ -38,7 +38,6 @@ import static org.apache.spark.unsafe.sort.UnsafeSorter.*;
 public final class UnsafeExternalSorter {
 
   private static final int PAGE_SIZE = 1024 * 1024;  // TODO: tune this
-  private static final int SER_BUFFER_SIZE = 1024 * 1024;  // TODO: tune this
 
   private final PrefixComparator prefixComparator;
   private final RecordComparator recordComparator;
@@ -92,6 +91,7 @@ public final class UnsafeExternalSorter {
   public void spill() throws IOException {
     final UnsafeSorterSpillWriter spillWriter =
       new UnsafeSorterSpillWriter(blockManager, fileBufferSize, writeMetrics);
+    spillWriters.add(spillWriter);
     final Iterator<RecordPointerAndKeyPrefix> sortedRecords = sorter.getSortedIterator();
     while (sortedRecords.hasNext()) {
       final RecordPointerAndKeyPrefix recordPointer = sortedRecords.next();
@@ -110,8 +110,11 @@ public final class UnsafeExternalSorter {
     final Iterator<MemoryBlock> iter = allocatedPages.iterator();
     while (iter.hasNext()) {
       memoryManager.freePage(iter.next());
+      shuffleMemoryManager.release(PAGE_SIZE);
       iter.remove();
     }
+    currentPage = null;
+    currentPagePosition = -1;
   }
 
   private void ensureSpaceInDataPage(int requiredSpace) throws Exception {

@@ -18,7 +18,9 @@
 package org.apache.spark.unsafe.sort;
 
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.serializer.DeserializationStream;
 import org.apache.spark.serializer.JavaSerializerInstance;
+import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
@@ -26,10 +28,10 @@ import org.apache.spark.storage.BlockObjectWriter;
 import org.apache.spark.storage.TempLocalBlockId;
 import org.apache.spark.unsafe.PlatformDependent;
 import scala.Tuple2;
+import scala.reflect.ClassTag;
 
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
+import java.nio.ByteBuffer;
 
 public final class UnsafeSorterSpillWriter {
 
@@ -51,7 +53,47 @@ public final class UnsafeSorterSpillWriter {
     this.file = spilledFileInfo._2();
     this.blockId = spilledFileInfo._1();
     // Dummy serializer:
-    final SerializerInstance ser = new JavaSerializerInstance(0, false, null);
+    final SerializerInstance ser = new SerializerInstance() {
+      @Override
+      public SerializationStream serializeStream(OutputStream s) {
+        return new SerializationStream() {
+          @Override
+          public void flush() {
+
+          }
+
+          @Override
+          public <T> SerializationStream writeObject(T t, ClassTag<T> ev1) {
+            return null;
+          }
+
+          @Override
+          public void close() {
+
+          }
+        };
+      }
+
+      @Override
+      public <T> ByteBuffer serialize(T t, ClassTag<T> ev1) {
+        return null;
+      }
+
+      @Override
+      public DeserializationStream deserializeStream(InputStream s) {
+        return null;
+      }
+
+      @Override
+      public <T> T deserialize(ByteBuffer bytes, ClassLoader loader, ClassTag<T> ev1) {
+        return null;
+      }
+
+      @Override
+      public <T> T deserialize(ByteBuffer bytes, ClassTag<T> ev1) {
+        return null;
+      }
+    };
     writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, writeMetrics);
     dos = new DataOutputStream(writer);
   }
@@ -61,14 +103,14 @@ public final class UnsafeSorterSpillWriter {
       long baseOffset,
       int recordLength,
       long keyPrefix) throws IOException {
+    dos.writeInt(recordLength);
+    dos.writeLong(keyPrefix);
     PlatformDependent.copyMemory(
       baseObject,
       baseOffset + 4,
       arr,
       PlatformDependent.BYTE_ARRAY_OFFSET,
       recordLength);
-    dos.writeInt(recordLength);
-    dos.writeLong(keyPrefix);
     writer.write(arr, 0, recordLength);
     // TODO: add a test that detects whether we leave this call out:
     writer.recordWritten();
