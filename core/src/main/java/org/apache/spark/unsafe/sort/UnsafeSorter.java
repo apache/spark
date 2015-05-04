@@ -176,8 +176,7 @@ public final class UnsafeSorter {
 
   public UnsafeSorterSpillMerger.MergeableIterator getMergeableIterator() {
     sorter.sort(sortBuffer, 0, sortBufferInsertPosition / 2, sortComparator);
-    UnsafeSorterSpillMerger.MergeableIterator iter =
-      new UnsafeSorterSpillMerger.MergeableIterator() {
+    return new UnsafeSorterSpillMerger.MergeableIterator() {
 
       private int position = 0;
       private Object baseObject;
@@ -213,6 +212,5 @@ public final class UnsafeSorter {
         return baseOffset;
       }
     };
-    return iter;
   }
 }

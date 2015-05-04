@@ -18,12 +18,11 @@
 package org.apache.spark.unsafe.sort;
 
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.PriorityQueue;
 
 import static org.apache.spark.unsafe.sort.UnsafeSorter.*;
 
-public final class UnsafeSorterSpillMerger {
+final class UnsafeSorterSpillMerger {
 
   private final PriorityQueue<MergeableIterator> priorityQueue;
 
@@ -37,13 +36,6 @@ public final class UnsafeSorterSpillMerger {
     public abstract Object getBaseObject();
 
     public abstract long getBaseOffset();
-  }
-
-  public static final class RecordAddressAndKeyPrefix {
-    public Object baseObject;
-    public long baseOffset;
-    public int recordLength;
-    public long keyPrefix;
   }
 
   public UnsafeSorterSpillMerger(
@@ -74,11 +66,10 @@ public final class UnsafeSorterSpillMerger {
     priorityQueue.add(spillReader);
   }
 
-  public Iterator<RecordAddressAndKeyPrefix> getSortedIterator() {
-    return new Iterator<RecordAddressAndKeyPrefix>() {
+  public ExternalSorterIterator getSortedIterator() {
+    return new ExternalSorterIterator() {
 
       private MergeableIterator spillReader;
-      private final RecordAddressAndKeyPrefix record = new RecordAddressAndKeyPrefix();
 
       @Override
       public boolean hasNext() {
@@ -86,7 +77,7 @@ public final class UnsafeSorterSpillMerger {
       }
 
       @Override
-      public RecordAddressAndKeyPrefix next() {
+      public void loadNext() {
         if (spillReader != null) {
           if (spillReader.hasNext()) {
             spillReader.loadNextRecord();
@@ -94,17 +85,10 @@ public final class UnsafeSorterSpillMerger {
           }
         }
         spillReader = priorityQueue.remove();
-        record.baseObject = spillReader.getBaseObject();
-        record.baseOffset = spillReader.getBaseOffset();
-        record.keyPrefix = spillReader.getPrefix();
-        return record;
-      }
-
-      @Override
-      public void remove() {
-        throw new UnsupportedOperationException();
+        baseObject = spillReader.getBaseObject();
+        baseOffset = spillReader.getBaseOffset();
+        keyPrefix = spillReader.getPrefix();
       }
     };
   }
-
 }

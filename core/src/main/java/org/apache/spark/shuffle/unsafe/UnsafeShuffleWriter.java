@@ -17,21 +17,18 @@
 
 package org.apache.spark.shuffle.unsafe;
 
-import org.apache.spark.*;
-import org.apache.spark.unsafe.sort.ExternalSorterIterator;
-import org.apache.spark.unsafe.sort.UnsafeExternalSorter;
+import java.io.File;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+
 import scala.Option;
 import scala.Product2;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.LinkedList;
-
 import com.esotericsoftware.kryo.io.ByteBufferOutputStream;
 
+import org.apache.spark.*;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
@@ -44,10 +41,11 @@ import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.BlockObjectWriter;
 import org.apache.spark.storage.ShuffleBlockId;
 import org.apache.spark.unsafe.PlatformDependent;
-import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
-
-import static org.apache.spark.unsafe.sort.UnsafeSorter.*;
+import org.apache.spark.unsafe.sort.ExternalSorterIterator;
+import org.apache.spark.unsafe.sort.UnsafeExternalSorter;
+import static org.apache.spark.unsafe.sort.UnsafeSorter.PrefixComparator;
+import static org.apache.spark.unsafe.sort.UnsafeSorter.RecordComparator;
 
 // IntelliJ gets confused and claims that this class should be abstract, but this actually compiles
 public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {

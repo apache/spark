@@ -17,12 +17,13 @@
 
 package org.apache.spark.unsafe.sort;
 
+import java.io.*;
+
 import com.google.common.io.ByteStreams;
+
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.PlatformDependent;
-
-import java.io.*;
 
 final class UnsafeSorterSpillReader extends UnsafeSorterSpillMerger.MergeableIterator {
 

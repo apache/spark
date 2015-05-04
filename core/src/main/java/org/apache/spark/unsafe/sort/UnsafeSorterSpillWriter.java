@@ -17,9 +17,14 @@
 
 package org.apache.spark.unsafe.sort;
 
+import java.io.*;
+import java.nio.ByteBuffer;
+
+import scala.Tuple2;
+import scala.reflect.ClassTag;
+
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.serializer.DeserializationStream;
-import org.apache.spark.serializer.JavaSerializerInstance;
 import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.BlockId;
@@ -27,27 +32,23 @@ import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.BlockObjectWriter;
 import org.apache.spark.storage.TempLocalBlockId;
 import org.apache.spark.unsafe.PlatformDependent;
-import scala.Tuple2;
-import scala.reflect.ClassTag;
-
-import java.io.*;
-import java.nio.ByteBuffer;
 
 final class UnsafeSorterSpillWriter {
 
   private static final int SER_BUFFER_SIZE = 1024 * 1024;  // TODO: tune this
-  public static final int EOF_MARKER = -1;
-  byte[] arr = new byte[SER_BUFFER_SIZE];
+  static final int EOF_MARKER = -1;
+
+  private byte[] arr = new byte[SER_BUFFER_SIZE];
 
   private final File file;
   private final BlockId blockId;
-  BlockObjectWriter writer;
-  DataOutputStream dos;
+  private BlockObjectWriter writer;
+  private DataOutputStream dos;
 
   public UnsafeSorterSpillWriter(
       BlockManager blockManager,
       int fileBufferSize,
-      ShuffleWriteMetrics writeMetrics) throws IOException {
+      ShuffleWriteMetrics writeMetrics) {
     final Tuple2<TempLocalBlockId, File> spilledFileInfo =
       blockManager.diskBlockManager().createTempLocalBlock();
     this.file = spilledFileInfo._2();
@@ -119,6 +120,8 @@ final class UnsafeSorterSpillWriter {
   public void close() throws IOException {
     dos.writeInt(EOF_MARKER);
     writer.commitAndClose();
+    writer = null;
+    dos = null;
     arr = null;
   }
 
