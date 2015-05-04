@@ -898,7 +898,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       inputFormatClass,
       keyClass,
       valueClass,
-      minPartitions).setName(s"HadoopRDD[$path]")
+      minPartitions).setName(path)
   }
 
   /**

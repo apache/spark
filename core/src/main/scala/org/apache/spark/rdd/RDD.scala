@@ -140,7 +140,7 @@ abstract class RDD[T: ClassTag](
   val id: Int = sc.newRddId()
 
   /** A friendly name for this RDD */
-  @transient var name: String = Utils.getFormattedClassName(this)
+  @transient var name: String = null
 
   /** Assign a name to this RDD */
   def setName(_name: String): this.type = {
