@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-
-package org.apache.spark.ui
+package org.apache.spark.streaming.ui
 
 import java.util.concurrent.TimeUnit
 
@@ -48,5 +47,21 @@ class UIUtilsSuite extends FunSuite with Matchers{
     val (time, unit) = UIUtils.normalizeDuration(input)
     time should be (expectedTime +- 1E-6)
     unit should be (expectedUnit)
+  }
+
+  test("convertToTimeUnit") {
+    verifyConvertToTimeUnit(60.0 * 1000 * 1000 * 1000, 60 * 1000, TimeUnit.NANOSECONDS)
+    verifyConvertToTimeUnit(60.0 * 1000 * 1000, 60 * 1000, TimeUnit.MICROSECONDS)
+    verifyConvertToTimeUnit(60 * 1000, 60 * 1000, TimeUnit.MILLISECONDS)
+    verifyConvertToTimeUnit(60, 60 * 1000, TimeUnit.SECONDS)
+    verifyConvertToTimeUnit(1, 60 * 1000, TimeUnit.MINUTES)
+    verifyConvertToTimeUnit(1.0 / 60, 60 * 1000, TimeUnit.HOURS)
+    verifyConvertToTimeUnit(1.0 / 60 / 24, 60 * 1000, TimeUnit.DAYS)
+  }
+
+  private def verifyConvertToTimeUnit(
+      expectedTime: Double, milliseconds: Long, unit: TimeUnit): Unit = {
+    val convertedTime = UIUtils.convertToTimeUnit(milliseconds, unit)
+    convertedTime should be (expectedTime +- 1E-6)
   }
 }

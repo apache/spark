@@ -35,43 +35,6 @@ private[spark] object UIUtils extends Logging {
     override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   }
 
-  /**
-   * Return the short string for a `TimeUnit`.
-   */
-  def shortTimeUnitString(unit: TimeUnit): String = unit match {
-    case TimeUnit.NANOSECONDS => "ns"
-    case TimeUnit.MICROSECONDS => "us"
-    case TimeUnit.MILLISECONDS => "ms"
-    case TimeUnit.SECONDS => "sec"
-    case TimeUnit.MINUTES => "min"
-    case TimeUnit.HOURS => "hrs"
-    case TimeUnit.DAYS => "days"
-  }
-
-  /**
-   * Find the best `TimeUnit` for converting milliseconds to a friendly string. Return the value
-   * after converting, also with its TimeUnit.
-   */
-  def normalizeDuration(milliseconds: Long): (Double, TimeUnit) = {
-    if (milliseconds < 1000) {
-      return (milliseconds, TimeUnit.MILLISECONDS)
-    }
-    val seconds = milliseconds.toDouble / 1000
-    if (seconds < 60) {
-      return (seconds, TimeUnit.SECONDS)
-    }
-    val minutes = seconds / 60
-    if (minutes < 60) {
-      return (minutes, TimeUnit.MINUTES)
-    }
-    val hours = minutes / 60
-    if (hours < 24) {
-      return (hours, TimeUnit.HOURS)
-    }
-    val days = hours / 24
-    (days, TimeUnit.DAYS)
-  }
-
   def formatDate(date: Date): String = dateFormat.get.format(date)
 
   def formatDate(timestamp: Long): String = dateFormat.get.format(new Date(timestamp))

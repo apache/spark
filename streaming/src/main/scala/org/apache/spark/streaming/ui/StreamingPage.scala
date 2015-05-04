@@ -27,7 +27,7 @@ import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.Logging
 import org.apache.spark.ui._
-import org.apache.spark.ui.UIUtils._
+import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 
 /**
  * @param timelineDivId the timeline `id` used in the html `div` tag
@@ -103,13 +103,13 @@ private[ui] class MillisecondsStatUIData(data: Seq[(Long, Long)]) {
    * Converting the original data as per `unit`.
    */
   def timelineData(unit: TimeUnit): Seq[(Long, Double)] =
-    data.map(x => x._1 -> StreamingPage.convertToTimeUnit(x._2, unit))
+    data.map(x => x._1 -> UIUtils.convertToTimeUnit(x._2, unit))
 
   /**
    * Converting the original data as per `unit`.
    */
   def histogramData(unit: TimeUnit): Seq[Double] =
-    data.map(x => StreamingPage.convertToTimeUnit(x._2, unit))
+    data.map(x => UIUtils.convertToTimeUnit(x._2, unit))
 
   val avg: Option[Long] = if (data.isEmpty) None else Some(data.map(_._2).sum / data.size)
 
@@ -149,7 +149,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         generateStatTable() ++
           generateBatchListTables()
       }
-    UIUtils.headerSparkPage("Streaming Statistics", content, parent, Some(5000))
+    SparkUIUtils.headerSparkPage("Streaming Statistics", content, parent, Some(5000))
   }
 
   /**
@@ -157,9 +157,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
    */
   private def generateLoadResources(): Seq[Node] = {
     // scalastyle:off
-    <script src={UIUtils.prependBaseUri("/static/d3.min.js")}></script>
-      <link rel="stylesheet" href={UIUtils.prependBaseUri("/static/streaming-page.css")} type="text/css"/>
-      <script src={UIUtils.prependBaseUri("/static/streaming-page.js")}></script>
+    <script src={SparkUIUtils.prependBaseUri("/static/d3.min.js")}></script>
+      <link rel="stylesheet" href={SparkUIUtils.prependBaseUri("/static/streaming-page.css")} type="text/css"/>
+      <script src={SparkUIUtils.prependBaseUri("/static/streaming-page.js")}></script>
     // scalastyle:on
   }
 
@@ -168,15 +168,15 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val timeSinceStart = System.currentTimeMillis() - startTime
     <div>Running batches of
       <strong>
-        {formatDurationVerbose(listener.batchDuration)}
+        {SparkUIUtils.formatDurationVerbose(listener.batchDuration)}
       </strong>
       for
       <strong>
-        {formatDurationVerbose(timeSinceStart)}
+        {SparkUIUtils.formatDurationVerbose(timeSinceStart)}
       </strong>
       since
       <strong>
-        {UIUtils.formatDate(startTime)}
+        {SparkUIUtils.formatDate(startTime)}
       </strong>
     </div>
     <br />
@@ -247,7 +247,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
          |    document.title, window.location.pathname + '?show-streams-detail=' + status);"""
         .stripMargin.replaceAll("\\n", "") // it must be only one single line
 
-    val batchInterval = StreamingPage.convertToTimeUnit(listener.batchDuration, normalizedUnit)
+    val batchInterval = UIUtils.convertToTimeUnit(listener.batchDuration, normalizedUnit)
 
     val jsCollector = new JsCollector
 
@@ -423,7 +423,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       if (msg.size > 100) msg.take(97) + "..." else msg
     }.getOrElse(emptyCell)
     val receiverLastErrorTime = receiverInfo.map {
-      r => if (r.lastErrorTime < 0) "-" else UIUtils.formatDate(r.lastErrorTime)
+      r => if (r.lastErrorTime < 0) "-" else SparkUIUtils.formatDate(r.lastErrorTime)
     }.getOrElse(emptyCell)
     val receivedRecords = new EventRateUIData(eventRates)
 
@@ -491,22 +491,9 @@ private[ui] object StreamingPage {
    * Returns a human-readable string representing a duration such as "5 second 35 ms"
    */
   def formatDurationOption(msOption: Option[Long]): String = {
-    msOption.map(formatDurationVerbose).getOrElse(emptyCell)
+    msOption.map(SparkUIUtils.formatDurationVerbose).getOrElse(emptyCell)
   }
 
-  /**
-   * Convert `milliseconds` to the specified `unit`. We cannot use `TimeUnit.convert` because it
-   * will discard the fractional part.
-   */
-  def convertToTimeUnit(milliseconds: Long, unit: TimeUnit): Double =  unit match {
-    case TimeUnit.NANOSECONDS => milliseconds * 1000 * 1000
-    case TimeUnit.MICROSECONDS => milliseconds * 1000
-    case TimeUnit.MILLISECONDS => milliseconds
-    case TimeUnit.SECONDS => milliseconds / 1000.0
-    case TimeUnit.MINUTES => milliseconds / 1000.0 / 60.0
-    case TimeUnit.HOURS => milliseconds / 1000.0 / 60.0 / 60.0
-    case TimeUnit.DAYS => milliseconds / 1000.0 / 60.0 / 60.0 / 24.0
-  }
 }
 
 /**
