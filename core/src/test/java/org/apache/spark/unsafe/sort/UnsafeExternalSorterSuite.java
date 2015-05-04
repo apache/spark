@@ -21,8 +21,8 @@ package org.apache.spark.unsafe.sort;
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
-import org.apache.spark.TaskContextImpl;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.storage.*;
@@ -43,7 +43,6 @@ import scala.runtime.AbstractFunction1;
 import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.Iterator;
 import java.util.UUID;
 
 import static org.mockito.Mockito.*;
@@ -56,7 +55,7 @@ public class UnsafeExternalSorterSuite {
   // Compute key prefixes based on the records' partition ids
   final HashPartitioner hashPartitioner = new HashPartitioner(4);
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
-  final UnsafeSorter.PrefixComparator prefixComparator = new UnsafeSorter.PrefixComparator() {
+  final PrefixComparator prefixComparator = new PrefixComparator() {
     @Override
     public int compare(long prefix1, long prefix2) {
       return (int) prefix1 - (int) prefix2;
@@ -64,7 +63,7 @@ public class UnsafeExternalSorterSuite {
   };
   // Since the key fits within the 8-byte prefix, we don't need to do any record comparison, so
   // use a dummy comparator
-  final UnsafeSorter.RecordComparator recordComparator = new UnsafeSorter.RecordComparator() {
+  final RecordComparator recordComparator = new RecordComparator() {
     @Override
     public int compare(
       Object leftBaseObject,
@@ -95,6 +94,7 @@ public class UnsafeExternalSorterSuite {
     blockManager = mock(BlockManager.class);
     tempDir = new File(Utils.createTempDir$default$1());
     taskContext = mock(TaskContext.class);
+    when(taskContext.taskMetrics()).thenReturn(new TaskMetrics());
     when(shuffleMemoryManager.tryToAcquire(anyLong())).then(returnsFirstArg());
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
     when(diskBlockManager.createTempLocalBlock()).thenAnswer(new Answer<Tuple2<TempLocalBlockId, File>>() {
@@ -158,18 +158,18 @@ public class UnsafeExternalSorterSuite {
     insertNumber(sorter, 4);
     insertNumber(sorter, 2);
 
-    ExternalSorterIterator iter = sorter.getSortedIterator();
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
 
     iter.loadNext();
-    Assert.assertEquals(1, iter.keyPrefix);
+    Assert.assertEquals(1, iter.getKeyPrefix());
     iter.loadNext();
-    Assert.assertEquals(2, iter.keyPrefix);
+    Assert.assertEquals(2, iter.getKeyPrefix());
     iter.loadNext();
-    Assert.assertEquals(3, iter.keyPrefix);
+    Assert.assertEquals(3, iter.getKeyPrefix());
     iter.loadNext();
-    Assert.assertEquals(4, iter.keyPrefix);
+    Assert.assertEquals(4, iter.getKeyPrefix());
     iter.loadNext();
-    Assert.assertEquals(5, iter.keyPrefix);
+    Assert.assertEquals(5, iter.getKeyPrefix());
     Assert.assertFalse(iter.hasNext());
     // TODO: check that the values are also read back properly.
 

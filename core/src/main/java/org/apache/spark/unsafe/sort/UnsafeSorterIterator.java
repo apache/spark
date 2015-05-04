@@ -17,15 +17,19 @@
 
 package org.apache.spark.unsafe.sort;
 
-public abstract class ExternalSorterIterator {
+import java.io.IOException;
 
-  public Object baseObject;
-  public long baseOffset;
-  public int recordLength;
-  public long keyPrefix;
+public abstract class UnsafeSorterIterator {
 
   public abstract boolean hasNext();
 
-  public abstract void loadNext();
+  public abstract void loadNext() throws IOException;
 
+  public abstract Object getBaseObject();
+
+  public abstract long getBaseOffset();
+
+  public abstract int getRecordLength();
+
+  public abstract long getKeyPrefix();
 }

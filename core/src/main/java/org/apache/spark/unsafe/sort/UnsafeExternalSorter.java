@@ -33,8 +33,6 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedList;
 
-import static org.apache.spark.unsafe.sort.UnsafeSorter.*;
-
 /**
  * External sorter based on {@link UnsafeSorter}.
  */
@@ -111,13 +109,16 @@ public final class UnsafeExternalSorter {
     final UnsafeSorterSpillWriter spillWriter =
       new UnsafeSorterSpillWriter(blockManager, fileBufferSize, writeMetrics);
     spillWriters.add(spillWriter);
-    final Iterator<RecordPointerAndKeyPrefix> sortedRecords = sorter.getSortedIterator();
+    final UnsafeSorterIterator sortedRecords = sorter.getSortedIterator();
     while (sortedRecords.hasNext()) {
-      final RecordPointerAndKeyPrefix recordPointer = sortedRecords.next();
-      final Object baseObject = memoryManager.getPage(recordPointer.recordPointer);
-      final long baseOffset = memoryManager.getOffsetInPage(recordPointer.recordPointer);
+      sortedRecords.loadNext();
+      final Object baseObject = sortedRecords.getBaseObject();
+      final long baseOffset = sortedRecords.getBaseOffset();
+      // TODO: this assumption that the first long holds a length is not enforced via our interfaces
+      // We need to either always store this via the write path (e.g. not require the caller to do
+      // it), or provide interfaces / hooks for customizing the physical storage format etc.
       final int recordLength = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset);
-      spillWriter.write(baseObject, baseOffset, recordLength, recordPointer.keyPrefix);
+      spillWriter.write(baseObject, baseOffset, recordLength, sortedRecords.getKeyPrefix());
     }
     spillWriter.close();
     final long sorterMemoryUsage = sorter.getMemoryUsage();
@@ -220,14 +221,14 @@ public final class UnsafeExternalSorter {
     sorter.insertRecord(recordAddress, prefix);
   }
 
-  public ExternalSorterIterator getSortedIterator() throws IOException {
+  public UnsafeSorterIterator getSortedIterator() throws IOException {
     final UnsafeSorterSpillMerger spillMerger =
       new UnsafeSorterSpillMerger(recordComparator, prefixComparator);
     for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
       spillMerger.addSpill(spillWriter.getReader(blockManager));
     }
     spillWriters.clear();
-    spillMerger.addSpill(sorter.getMergeableIterator());
+    spillMerger.addSpill(sorter.getSortedIterator());
     return spillMerger.getSortedIterator();
   }
 }

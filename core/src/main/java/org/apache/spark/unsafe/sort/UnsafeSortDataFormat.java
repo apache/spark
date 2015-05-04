@@ -17,8 +17,8 @@
 
 package org.apache.spark.unsafe.sort;
 
-import static org.apache.spark.unsafe.sort.UnsafeSorter.RecordPointerAndKeyPrefix;
 import org.apache.spark.util.collection.SortDataFormat;
+import static org.apache.spark.unsafe.sort.UnsafeSortDataFormat.RecordPointerAndKeyPrefix;
 
 /**
  * Supports sorting an array of (record pointer, key prefix) pairs.  Used in {@link UnsafeSorter}.
@@ -27,6 +27,19 @@ import org.apache.spark.util.collection.SortDataFormat;
  * index {@code i}, while position {@code 2 * i + 1} in the array holds an 8-byte key prefix.
  */
 final class UnsafeSortDataFormat extends SortDataFormat<RecordPointerAndKeyPrefix, long[]> {
+
+  static final class RecordPointerAndKeyPrefix {
+    /**
+     * A pointer to a record; see {@link org.apache.spark.unsafe.memory.TaskMemoryManager} for a
+     * description of how these addresses are encoded.
+     */
+    public long recordPointer;
+
+    /**
+     * A key prefix, for use in comparisons.
+     */
+    public long keyPrefix;
+  }
 
   public static final UnsafeSortDataFormat INSTANCE = new UnsafeSortDataFormat();
 

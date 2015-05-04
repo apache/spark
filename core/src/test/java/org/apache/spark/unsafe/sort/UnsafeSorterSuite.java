@@ -18,7 +18,6 @@
 package org.apache.spark.unsafe.sort;
 
 import java.util.Arrays;
-import java.util.Iterator;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -48,10 +47,10 @@ public class UnsafeSorterSuite {
   public void testSortingEmptyInput() {
     final UnsafeSorter sorter = new UnsafeSorter(
       new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP)),
-      mock(UnsafeSorter.RecordComparator.class),
-      mock(UnsafeSorter.PrefixComparator.class),
+      mock(RecordComparator.class),
+      mock(PrefixComparator.class),
       100);
-    final Iterator<UnsafeSorter.RecordPointerAndKeyPrefix> iter = sorter.getSortedIterator();
+    final UnsafeSorterIterator iter = sorter.getSortedIterator();
     assert(!iter.hasNext());
   }
 
@@ -91,7 +90,7 @@ public class UnsafeSorterSuite {
     }
     // Since the key fits within the 8-byte prefix, we don't need to do any record comparison, so
     // use a dummy comparator
-    final UnsafeSorter.RecordComparator recordComparator = new UnsafeSorter.RecordComparator() {
+    final RecordComparator recordComparator = new RecordComparator() {
       @Override
       public int compare(
           Object leftBaseObject,
@@ -104,7 +103,7 @@ public class UnsafeSorterSuite {
     // Compute key prefixes based on the records' partition ids
     final HashPartitioner hashPartitioner = new HashPartitioner(4);
     // Use integer comparison for comparing prefixes (which are partition ids, in this case)
-    final UnsafeSorter.PrefixComparator prefixComparator = new UnsafeSorter.PrefixComparator() {
+    final PrefixComparator prefixComparator = new PrefixComparator() {
       @Override
       public int compare(long prefix1, long prefix2) {
         return (int) prefix1 - (int) prefix2;
@@ -123,19 +122,18 @@ public class UnsafeSorterSuite {
       sorter.insertRecord(address, partitionId);
       position += 8 + recordLength;
     }
-    final Iterator<UnsafeSorter.RecordPointerAndKeyPrefix> iter = sorter.getSortedIterator();
+    final UnsafeSorterIterator iter = sorter.getSortedIterator();
     int iterLength = 0;
     long prevPrefix = -1;
     Arrays.sort(dataToSort);
     while (iter.hasNext()) {
-      final UnsafeSorter.RecordPointerAndKeyPrefix pointerAndPrefix = iter.next();
-      final Object recordBaseObject = memoryManager.getPage(pointerAndPrefix.recordPointer);
-      final long recordBaseOffset = memoryManager.getOffsetInPage(pointerAndPrefix.recordPointer);
-      final String str = getStringFromDataPage(recordBaseObject, recordBaseOffset);
+      iter.loadNext();
+      final String str = getStringFromDataPage(iter.getBaseObject(), iter.getBaseOffset());
+      final long keyPrefix = iter.getKeyPrefix();
       Assert.assertTrue("String should be valid", Arrays.binarySearch(dataToSort, str) != -1);
-      Assert.assertTrue("Prefix " + pointerAndPrefix.keyPrefix + " should be >=  previous prefix " +
-        prevPrefix, pointerAndPrefix.keyPrefix >= prevPrefix);
-      prevPrefix = pointerAndPrefix.keyPrefix;
+      Assert.assertTrue("Prefix " + keyPrefix + " should be >=  previous prefix " +
+        prevPrefix, keyPrefix >= prevPrefix);
+      prevPrefix = keyPrefix;
       iterLength++;
     }
     Assert.assertEquals(dataToSort.length, iterLength);

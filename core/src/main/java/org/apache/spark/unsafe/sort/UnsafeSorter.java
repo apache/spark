@@ -18,10 +18,10 @@
 package org.apache.spark.unsafe.sort;
 
 import java.util.Comparator;
-import java.util.Iterator;
 
 import org.apache.spark.util.collection.Sorter;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import static org.apache.spark.unsafe.sort.UnsafeSortDataFormat.RecordPointerAndKeyPrefix;
 
 /**
  * Sorts records using an AlphaSort-style key-prefix sort. This sort stores pointers to records
@@ -31,45 +31,6 @@ import org.apache.spark.unsafe.memory.TaskMemoryManager;
  * random memory accesses improves cache hit rates.
  */
 public final class UnsafeSorter {
-
-  public static final class RecordPointerAndKeyPrefix {
-    /**
-     * A pointer to a record; see {@link org.apache.spark.unsafe.memory.TaskMemoryManager} for a
-     * description of how these addresses are encoded.
-     */
-    public long recordPointer;
-
-    /**
-     * A key prefix, for use in comparisons.
-     */
-    public long keyPrefix;
-  }
-
-  /**
-   * Compares records for ordering. In cases where the entire sorting key can fit in the 8-byte
-   * prefix, this may simply return 0.
-   */
-  public static abstract class RecordComparator {
-    /**
-     * Compare two records for order.
-     *
-     * @return a negative integer, zero, or a positive integer as the first record is less than,
-     *         equal to, or greater than the second.
-     */
-    public abstract int compare(
-      Object leftBaseObject,
-      long leftBaseOffset,
-      Object rightBaseObject,
-      long rightBaseOffset);
-  }
-
-  /**
-   * Compares 8-byte key prefixes in prefix sort. Subclasses may implement type-specific
-   * comparisons, such as lexicographic comparison for strings.
-   */
-  public static abstract class PrefixComparator {
-    public abstract int compare(long prefix1, long prefix2);
-  }
 
   private final TaskMemoryManager memoryManager;
   private final Sorter<RecordPointerAndKeyPrefix, long[]> sorter;
@@ -148,40 +109,15 @@ public final class UnsafeSorter {
    * Return an iterator over record pointers in sorted order. For efficiency, all calls to
    * {@code next()} will return the same mutable object.
    */
-  public Iterator<RecordPointerAndKeyPrefix> getSortedIterator() {
+  public UnsafeSorterIterator getSortedIterator() {
     sorter.sort(sortBuffer, 0, sortBufferInsertPosition / 2, sortComparator);
-    return new Iterator<RecordPointerAndKeyPrefix>() {
-      private int position = 0;
-      private final RecordPointerAndKeyPrefix keyPointerAndPrefix = new RecordPointerAndKeyPrefix();
-
-      @Override
-      public boolean hasNext() {
-        return position < sortBufferInsertPosition;
-      }
-
-      @Override
-      public RecordPointerAndKeyPrefix next() {
-        keyPointerAndPrefix.recordPointer = sortBuffer[position];
-        keyPointerAndPrefix.keyPrefix = sortBuffer[position + 1];
-        position += 2;
-        return keyPointerAndPrefix;
-      }
-
-      @Override
-      public void remove() {
-        throw new UnsupportedOperationException();
-      }
-    };
-  }
-
-  public UnsafeSorterSpillMerger.MergeableIterator getMergeableIterator() {
-    sorter.sort(sortBuffer, 0, sortBufferInsertPosition / 2, sortComparator);
-    return new UnsafeSorterSpillMerger.MergeableIterator() {
+    return new UnsafeSorterIterator() {
 
       private int position = 0;
       private Object baseObject;
       private long baseOffset;
       private long keyPrefix;
+      private int recordLength;
 
       @Override
       public boolean hasNext() {
@@ -189,28 +125,25 @@ public final class UnsafeSorter {
       }
 
       @Override
-      public void loadNextRecord() {
+      public void loadNext() {
         final long recordPointer = sortBuffer[position];
-        keyPrefix = sortBuffer[position + 1];
-        position += 2;
         baseObject = memoryManager.getPage(recordPointer);
         baseOffset = memoryManager.getOffsetInPage(recordPointer);
+        keyPrefix = sortBuffer[position + 1];
+        position += 2;
       }
 
       @Override
-      public long getPrefix() {
-        return keyPrefix;
-      }
+      public Object getBaseObject() { return baseObject; }
 
       @Override
-      public Object getBaseObject() {
-        return baseObject;
-      }
+      public long getBaseOffset() { return baseOffset; }
 
       @Override
-      public long getBaseOffset() {
-        return baseOffset;
-      }
+      public int getRecordLength() { return recordLength; }
+
+      @Override
+      public long getKeyPrefix() { return keyPrefix; }
     };
   }
 }

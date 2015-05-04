@@ -17,36 +17,23 @@
 
 package org.apache.spark.unsafe.sort;
 
+import java.io.IOException;
 import java.util.Comparator;
 import java.util.PriorityQueue;
 
-import static org.apache.spark.unsafe.sort.UnsafeSorter.*;
-
 final class UnsafeSorterSpillMerger {
 
-  private final PriorityQueue<MergeableIterator> priorityQueue;
-
-  public static abstract class MergeableIterator {
-    public abstract boolean hasNext();
-
-    public abstract void loadNextRecord();
-
-    public abstract long getPrefix();
-
-    public abstract Object getBaseObject();
-
-    public abstract long getBaseOffset();
-  }
+  private final PriorityQueue<UnsafeSorterIterator> priorityQueue;
 
   public UnsafeSorterSpillMerger(
     final RecordComparator recordComparator,
-    final UnsafeSorter.PrefixComparator prefixComparator) {
-    final Comparator<MergeableIterator> comparator = new Comparator<MergeableIterator>() {
+    final PrefixComparator prefixComparator) {
+    final Comparator<UnsafeSorterIterator> comparator = new Comparator<UnsafeSorterIterator>() {
 
       @Override
-      public int compare(MergeableIterator left, MergeableIterator right) {
+      public int compare(UnsafeSorterIterator left, UnsafeSorterIterator right) {
         final int prefixComparisonResult =
-          prefixComparator.compare(left.getPrefix(), right.getPrefix());
+          prefixComparator.compare(left.getKeyPrefix(), right.getKeyPrefix());
         if (prefixComparisonResult == 0) {
           return recordComparator.compare(
             left.getBaseObject(), left.getBaseOffset(),
@@ -56,20 +43,21 @@ final class UnsafeSorterSpillMerger {
         }
       }
     };
-    priorityQueue = new PriorityQueue<MergeableIterator>(10, comparator);
+    // TODO: the size is often known; incorporate size hints here.
+    priorityQueue = new PriorityQueue<UnsafeSorterIterator>(10, comparator);
   }
 
-  public void addSpill(MergeableIterator spillReader) {
+  public void addSpill(UnsafeSorterIterator spillReader) throws IOException {
     if (spillReader.hasNext()) {
-      spillReader.loadNextRecord();
+      spillReader.loadNext();
     }
     priorityQueue.add(spillReader);
   }
 
-  public ExternalSorterIterator getSortedIterator() {
-    return new ExternalSorterIterator() {
+  public UnsafeSorterIterator getSortedIterator() throws IOException {
+    return new UnsafeSorterIterator() {
 
-      private MergeableIterator spillReader;
+      private UnsafeSorterIterator spillReader;
 
       @Override
       public boolean hasNext() {
@@ -77,18 +65,27 @@ final class UnsafeSorterSpillMerger {
       }
 
       @Override
-      public void loadNext() {
+      public void loadNext() throws IOException {
         if (spillReader != null) {
           if (spillReader.hasNext()) {
-            spillReader.loadNextRecord();
+            spillReader.loadNext();
             priorityQueue.add(spillReader);
           }
         }
         spillReader = priorityQueue.remove();
-        baseObject = spillReader.getBaseObject();
-        baseOffset = spillReader.getBaseOffset();
-        keyPrefix = spillReader.getPrefix();
       }
+
+      @Override
+      public Object getBaseObject() { return spillReader.getBaseObject(); }
+
+      @Override
+      public long getBaseOffset() { return spillReader.getBaseOffset(); }
+
+      @Override
+      public int getRecordLength() { return spillReader.getRecordLength(); }
+
+      @Override
+      public long getKeyPrefix() { return spillReader.getKeyPrefix(); }
     };
   }
 }

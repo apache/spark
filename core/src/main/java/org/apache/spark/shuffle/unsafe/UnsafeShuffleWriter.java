@@ -42,10 +42,11 @@ import org.apache.spark.storage.BlockObjectWriter;
 import org.apache.spark.storage.ShuffleBlockId;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
-import org.apache.spark.unsafe.sort.ExternalSorterIterator;
+import org.apache.spark.unsafe.sort.UnsafeSorterIterator;
 import org.apache.spark.unsafe.sort.UnsafeExternalSorter;
-import static org.apache.spark.unsafe.sort.UnsafeSorter.PrefixComparator;
-import static org.apache.spark.unsafe.sort.UnsafeSorter.RecordComparator;
+import org.apache.spark.unsafe.sort.PrefixComparator;
+
+import org.apache.spark.unsafe.sort.RecordComparator;
 
 // IntelliJ gets confused and claims that this class should be abstract, but this actually compiles
 public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
@@ -104,7 +105,7 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
     // TODO: free sorter memory
   }
 
-  private ExternalSorterIterator sortRecords(
+  private UnsafeSorterIterator sortRecords(
     scala.collection.Iterator<? extends Product2<K, V>> records) throws Exception {
     final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
       memoryManager,
@@ -142,7 +143,7 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
     return sorter.getSortedIterator();
   }
 
-  private long[] writeSortedRecordsToFile(ExternalSorterIterator sortedRecords) throws IOException {
+  private long[] writeSortedRecordsToFile(UnsafeSorterIterator sortedRecords) throws IOException {
     final File outputFile = shuffleBlockManager.getDataFile(shuffleId, mapId);
     final ShuffleBlockId blockId =
       new ShuffleBlockId(shuffleId, mapId, IndexShuffleBlockManager.NOOP_REDUCE_ID());
@@ -154,7 +155,7 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
     final byte[] arr = new byte[SER_BUFFER_SIZE];
     while (sortedRecords.hasNext()) {
       sortedRecords.loadNext();
-      final int partition = (int) sortedRecords.keyPrefix;
+      final int partition = (int) sortedRecords.getKeyPrefix();
       assert (partition >= currentPartition);
       if (partition != currentPartition) {
         // Switch to the new partition
@@ -168,13 +169,13 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
       }
 
       PlatformDependent.copyMemory(
-        sortedRecords.baseObject,
-        sortedRecords.baseOffset + 4,
+          sortedRecords.getBaseObject(),
+        sortedRecords.getBaseOffset() + 4,
         arr,
         PlatformDependent.BYTE_ARRAY_OFFSET,
-        sortedRecords.recordLength);
+          sortedRecords.getRecordLength());
       assert (writer != null);  // To suppress an IntelliJ warning
-      writer.write(arr, 0, sortedRecords.recordLength);
+      writer.write(arr, 0, sortedRecords.getRecordLength());
       // TODO: add a test that detects whether we leave this call out:
       writer.recordWritten();
     }
