@@ -25,6 +25,7 @@ import org.apache.spark.ui.env.{EnvironmentListener, EnvironmentTab}
 import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
 import org.apache.spark.ui.jobs.{JobsTab, JobProgressListener, StagesTab}
 import org.apache.spark.ui.storage.{StorageListener, StorageTab}
+import org.apache.spark.ui.scope.RDDOperationGraphListener
 
 /**
  * Top level user interface for a Spark application.
@@ -38,6 +39,7 @@ private[spark] class SparkUI private (
     val executorsListener: ExecutorsListener,
     val jobProgressListener: JobProgressListener,
     val storageListener: StorageListener,
+    val operationGraphListener: RDDOperationGraphListener,
     var appName: String,
     val basePath: String)
   extends WebUI(securityManager, SparkUI.getUIPort(conf), conf, basePath, "SparkUI")
@@ -93,6 +95,9 @@ private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
 private[spark] object SparkUI {
   val DEFAULT_PORT = 4040
   val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
+  val DEFAULT_POOL_NAME = "default"
+  val DEFAULT_RETAINED_STAGES = 1000
+  val DEFAULT_RETAINED_JOBS = 1000
 
   def getUIPort(conf: SparkConf): Int = {
     conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
@@ -144,13 +149,16 @@ private[spark] object SparkUI {
     val storageStatusListener = new StorageStatusListener
     val executorsListener = new ExecutorsListener(storageStatusListener)
     val storageListener = new StorageListener(storageStatusListener)
+    val operationGraphListener = new RDDOperationGraphListener(conf)
 
     listenerBus.addListener(environmentListener)
     listenerBus.addListener(storageStatusListener)
     listenerBus.addListener(executorsListener)
     listenerBus.addListener(storageListener)
+    listenerBus.addListener(operationGraphListener)
 
     new SparkUI(sc, conf, securityManager, environmentListener, storageStatusListener,
-      executorsListener, _jobProgressListener, storageListener, appName, basePath)
+      executorsListener, _jobProgressListener, storageListener, operationGraphListener,
+      appName, basePath)
   }
 }

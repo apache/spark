@@ -145,7 +145,7 @@ pre {
   border: none;
 }
 
-span.expand-additional-metrics {
+span.expand-additional-metrics, span.expand-dag-viz {
   cursor: pointer;
 }
 

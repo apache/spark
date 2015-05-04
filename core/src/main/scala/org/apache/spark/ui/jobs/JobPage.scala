@@ -31,6 +31,7 @@ import org.apache.spark.ui.jobs.UIData.ExecutorUIData
 
 /** Page showing statistics and stage list for a given job */
 private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
+
   private val STAGES_LEGEND =
     <div class="legend-area"><svg width="150px" height="85px">
       <rect class="completed-stage-legend"
@@ -133,7 +134,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
     events.toSeq
   }
 
-  private def  makeTimeline(
+  private def makeTimeline(
       stages: Seq[StageInfo],
       executors: HashMap[String, ExecutorUIData],
       appStartTime: Long): Seq[Node] = {
@@ -160,7 +161,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
 
     <span class="expand-job-timeline">
       <span class="expand-job-timeline-arrow arrow-closed"></span>
-      <strong>Event Timeline</strong>
+      <strong>Event timeline</strong>
     </span> ++
     <div id="job-timeline" class="collapsed">
       <div class="control-panel">
@@ -198,7 +199,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
         // This could be empty if the JobProgressListener hasn't received information about the
         // stage or if the stage information has been garbage collected
         listener.stageIdToInfo.getOrElse(stageId,
-          new StageInfo(stageId, 0, "Unknown", 0, Seq.empty, "Unknown"))
+          new StageInfo(stageId, 0, "Unknown", 0, Seq.empty, Seq.empty, "Unknown"))
       }
 
       val activeStages = Buffer[StageInfo]()
@@ -303,8 +304,13 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       var content = summary
       val appStartTime = listener.startTime
       val executorListener = parent.executorListener
+      val operationGraphListener = parent.operationGraphListener
+
       content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,
           executorListener.executorIdToData, appStartTime)
+
+      content ++= UIUtils.showDagVizForJob(
+        jobId, operationGraphListener.getOperationGraphForJob(jobId))
 
       if (shouldShowActiveStages) {
         content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++
@@ -326,7 +332,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
         content ++= <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
           failedStagesTable.toNodeSeq
       }
-      UIUtils.headerSparkPage(s"Details for Job $jobId", content, parent)
+      UIUtils.headerSparkPage(s"Details for Job $jobId", content, parent, showVisualization = true)
     }
   }
 }
