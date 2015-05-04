@@ -274,10 +274,6 @@ private[sql] object JsonRDD2 extends Logging {
 
       case (_, udt: UserDefinedType[_]) =>
         udt.deserialize(convertField(factory, parser, udt.sqlType))
-
-      case _ =>
-        parser.skipChildren()
-        null
     }
   }
 
