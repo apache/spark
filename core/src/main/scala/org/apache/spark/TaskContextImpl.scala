@@ -28,7 +28,7 @@ private[spark] class TaskContextImpl(
     val partitionId: Int,
     override val taskAttemptId: Long,
     override val attemptNumber: Int,
-    override val taskMemoryManager: TaskMemoryManager,
+    override val taskMemoryManager: TaskMemoryManager = null,
     val runningLocally: Boolean = false,
     val taskMetrics: TaskMetrics = TaskMetrics.empty)
   extends TaskContext
