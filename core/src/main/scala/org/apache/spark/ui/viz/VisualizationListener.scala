@@ -25,7 +25,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 
 /**
- * A SparkListener that constructs RDD DAG visualization for the UI.
+ * A SparkListener that constructs the RDD DAG visualization for the UI.
  */
 private[ui] class VisualizationListener(conf: SparkConf) extends SparkListener {
   private val jobIdToStageIds = new mutable.HashMap[Int, Seq[Int]]

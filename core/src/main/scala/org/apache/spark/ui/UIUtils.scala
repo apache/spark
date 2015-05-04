@@ -358,7 +358,7 @@ private[spark] object UIUtils extends Logging {
       <div id="dag-viz-metadata">
         {
           graphs.map { g =>
-            <div class="stage-metadata" stageId={g.rootScope.id} style="display:none">
+            <div class="stage-metadata" stageId={g.rootCluster.id} style="display:none">
               <div class="dot-file">{VizGraph.makeDotFile(g, forJob)}</div>
               { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
               { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }
