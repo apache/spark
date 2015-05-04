@@ -1483,7 +1483,7 @@ class DagModelView(SuperUserMixin, ModelView):
     named_filter_urls = True
 
 mv = DagModelView(
-    models.DAG, Session, name="Pause DAGs", category="Admin")
+    models.DagModel, Session, name="Pause DAGs", category="Admin")
 admin.add_view(mv)
 
 
