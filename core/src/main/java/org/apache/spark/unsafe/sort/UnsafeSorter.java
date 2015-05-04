@@ -43,17 +43,6 @@ public final class UnsafeSorter {
      * A key prefix, for use in comparisons.
      */
     public long keyPrefix;
-
-    // TODO: this was a carryover from test code; may want to remove this
-    @Override
-    public int hashCode() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-      throw new UnsupportedOperationException();
-    }
   }
 
   /**
@@ -82,6 +71,7 @@ public final class UnsafeSorter {
     public abstract int compare(long prefix1, long prefix2);
   }
 
+  private final TaskMemoryManager memoryManager;
   private final Sorter<RecordPointerAndKeyPrefix, long[]> sorter;
   private final Comparator<RecordPointerAndKeyPrefix> sortComparator;
 
@@ -95,7 +85,6 @@ public final class UnsafeSorter {
    * The position in the sort buffer where new records can be inserted.
    */
   private int sortBufferInsertPosition = 0;
-
 
   private void expandSortBuffer(int newSize) {
     assert (newSize > sortBuffer.length);
@@ -111,6 +100,7 @@ public final class UnsafeSorter {
       int initialSize) {
     assert (initialSize > 0);
     this.sortBuffer = new long[initialSize * 2];
+    this.memoryManager = memoryManager;
     this.sorter =
       new Sorter<RecordPointerAndKeyPrefix, long[]>(UnsafeSortDataFormat.INSTANCE);
     this.sortComparator = new Comparator<RecordPointerAndKeyPrefix>() {
@@ -173,6 +163,46 @@ public final class UnsafeSorter {
       @Override
       public void remove() {
         throw new UnsupportedOperationException();
+      }
+    };
+  }
+
+  public UnsafeExternalSortSpillMerger.MergeableIterator getMergeableIterator() {
+    sorter.sort(sortBuffer, 0, sortBufferInsertPosition / 2, sortComparator);
+    return new UnsafeExternalSortSpillMerger.MergeableIterator() {
+
+      private int position = 0;
+      private Object baseObject;
+      private long baseOffset;
+      private long keyPrefix;
+
+      @Override
+      public boolean hasNext() {
+        return position < sortBufferInsertPosition;
+      }
+
+      @Override
+      public void advanceRecord() {
+        final long recordPointer = sortBuffer[position];
+        baseObject = memoryManager.getPage(recordPointer);
+        baseOffset = memoryManager.getOffsetInPage(recordPointer);
+        keyPrefix = sortBuffer[position + 1];
+        position += 2;
+      }
+
+      @Override
+      public long getPrefix() {
+        return keyPrefix;
+      }
+
+      @Override
+      public Object getBaseObject() {
+        return baseObject;
+      }
+
+      @Override
+      public long getBaseOffset() {
+        return baseOffset;
       }
     };
   }

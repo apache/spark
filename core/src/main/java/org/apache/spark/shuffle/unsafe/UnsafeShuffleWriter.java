@@ -17,6 +17,9 @@
 
 package org.apache.spark.shuffle.unsafe;
 
+import org.apache.spark.*;
+import org.apache.spark.unsafe.sort.UnsafeExternalSortSpillMerger;
+import org.apache.spark.unsafe.sort.UnsafeExternalSorter;
 import scala.Option;
 import scala.Product2;
 import scala.reflect.ClassTag;
@@ -30,10 +33,6 @@ import java.util.LinkedList;
 
 import com.esotericsoftware.kryo.io.ByteBufferOutputStream;
 
-import org.apache.spark.Partitioner;
-import org.apache.spark.ShuffleDependency;
-import org.apache.spark.SparkEnv;
-import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
@@ -54,7 +53,6 @@ import static org.apache.spark.unsafe.sort.UnsafeSorter.*;
 // IntelliJ gets confused and claims that this class should be abstract, but this actually compiles
 public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
 
-  private static final int PAGE_SIZE = 1024 * 1024;  // TODO: tune this
   private static final int SER_BUFFER_SIZE = 1024 * 1024;  // TODO: tune this
   private static final ClassTag<Object> OBJECT_CLASS_TAG = ClassTag$.MODULE$.Object();
 
@@ -69,9 +67,6 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
   private final LinkedList<MemoryBlock> allocatedPages = new LinkedList<MemoryBlock>();
   private final int fileBufferSize;
   private MapStatus mapStatus = null;
-
-  private MemoryBlock currentPage = null;
-  private long currentPagePosition = -1;
 
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
@@ -109,39 +104,20 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
     }
   }
 
-  private void ensureSpaceInDataPage(long requiredSpace) throws Exception {
-    final long spaceInCurrentPage;
-    if (currentPage != null) {
-      spaceInCurrentPage = PAGE_SIZE - (currentPagePosition - currentPage.getBaseOffset());
-    } else {
-      spaceInCurrentPage = 0;
-    }
-    if (requiredSpace > PAGE_SIZE) {
-      // TODO: throw a more specific exception?
-      throw new Exception("Required space " + requiredSpace + " is greater than page size (" +
-        PAGE_SIZE + ")");
-    } else if (requiredSpace > spaceInCurrentPage) {
-      currentPage = memoryManager.allocatePage(PAGE_SIZE);
-      currentPagePosition = currentPage.getBaseOffset();
-      allocatedPages.add(currentPage);
-    }
-  }
-
   private void freeMemory() {
-    final Iterator<MemoryBlock> iter = allocatedPages.iterator();
-    while (iter.hasNext()) {
-      memoryManager.freePage(iter.next());
-      iter.remove();
-    }
+    // TODO: free sorter memory
   }
 
-  private Iterator<RecordPointerAndKeyPrefix> sortRecords(
-      scala.collection.Iterator<? extends Product2<K, V>> records) throws Exception {
-    final UnsafeSorter sorter = new UnsafeSorter(
+  private Iterator<UnsafeExternalSortSpillMerger.RecordAddressAndKeyPrefix> sortRecords(
+    scala.collection.Iterator<? extends Product2<K, V>> records) throws Exception {
+    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
       memoryManager,
+      SparkEnv$.MODULE$.get().shuffleMemoryManager(),
+      SparkEnv$.MODULE$.get().blockManager(),
       RECORD_COMPARATOR,
       PREFIX_COMPARATOR,
-      4096 // Initial size (TODO: tune this!)
+      4096, // Initial size (TODO: tune this!)
+      SparkEnv$.MODULE$.get().conf()
     );
 
     final byte[] serArray = new byte[SER_BUFFER_SIZE];
@@ -161,30 +137,16 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
 
       final int serializedRecordSize = serByteBuffer.position();
       assert (serializedRecordSize > 0);
-      // Need 4 bytes to store the record length.
-      ensureSpaceInDataPage(serializedRecordSize + 4);
 
-      final long recordAddress =
-        memoryManager.encodePageNumberAndOffset(currentPage, currentPagePosition);
-      final Object baseObject = currentPage.getBaseObject();
-      PlatformDependent.UNSAFE.putInt(baseObject, currentPagePosition, serializedRecordSize);
-      currentPagePosition += 4;
-      PlatformDependent.copyMemory(
-        serArray,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
-        baseObject,
-        currentPagePosition,
-        serializedRecordSize);
-      currentPagePosition += serializedRecordSize;
-
-      sorter.insertRecord(recordAddress, partitionId);
+      sorter.insertRecord(
+        serArray, PlatformDependent.BYTE_ARRAY_OFFSET, serializedRecordSize, partitionId);
     }
 
     return sorter.getSortedIterator();
   }
 
   private long[] writeSortedRecordsToFile(
-      Iterator<RecordPointerAndKeyPrefix> sortedRecords) throws IOException {
+      Iterator<UnsafeExternalSortSpillMerger.RecordAddressAndKeyPrefix> sortedRecords) throws IOException {
     final File outputFile = shuffleBlockManager.getDataFile(shuffleId, mapId);
     final ShuffleBlockId blockId =
       new ShuffleBlockId(shuffleId, mapId, IndexShuffleBlockManager.NOOP_REDUCE_ID());
@@ -195,7 +157,7 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
 
     final byte[] arr = new byte[SER_BUFFER_SIZE];
     while (sortedRecords.hasNext()) {
-      final RecordPointerAndKeyPrefix recordPointer = sortedRecords.next();
+      final UnsafeExternalSortSpillMerger.RecordAddressAndKeyPrefix recordPointer = sortedRecords.next();
       final int partition = (int) recordPointer.keyPrefix;
       assert (partition >= currentPartition);
       if (partition != currentPartition) {
@@ -209,17 +171,14 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
           blockManager.getDiskWriter(blockId, outputFile, serializer, fileBufferSize, writeMetrics);
       }
 
-      final Object baseObject = memoryManager.getPage(recordPointer.recordPointer);
-      final long baseOffset = memoryManager.getOffsetInPage(recordPointer.recordPointer);
-      final int recordLength = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset);
       PlatformDependent.copyMemory(
-        baseObject,
-        baseOffset + 4,
+        recordPointer.baseObject,
+        recordPointer.baseOffset + 4,
         arr,
         PlatformDependent.BYTE_ARRAY_OFFSET,
-        recordLength);
+        recordPointer.recordLength);
       assert (writer != null);  // To suppress an IntelliJ warning
-      writer.write(arr, 0, recordLength);
+      writer.write(arr, 0, recordPointer.recordLength);
       // TODO: add a test that detects whether we leave this call out:
       writer.recordWritten();
     }
