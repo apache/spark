@@ -1615,20 +1615,6 @@
     -->
 
     <profile>
-      <id>hadoop-0.23</id>
-      <!-- SPARK-1121: Adds an explicit dependency on Avro to work around a Hadoop 0.23.X issue -->
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-      <properties>
-        <hadoop.version>0.23.10</hadoop.version>
-      </properties>
-    </profile>
-
-    <profile>
       <id>hadoop-2.2</id>
       <properties>
         <hadoop.version>2.2.0</hadoop.version>
