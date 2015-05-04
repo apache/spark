@@ -298,7 +298,9 @@ function styleDagVizForStage() {
   graphContainer().selectAll("svg g.node rect")
     .style("fill", "none")
     .style("stroke", VizConstants.rddColor)
-    .style("stroke-width", "2px");
+    .style("stroke-width", "2px")
+    .attr("rx", "5") // round corners
+    .attr("ry", "5");
     // TODO: add a legend to explain what a highlighted RDD means
   graphContainer().selectAll("svg g.cached rect")
     .style("stroke", VizConstants.rddCachedColor);
