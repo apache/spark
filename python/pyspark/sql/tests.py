@@ -408,7 +408,7 @@ class SQLTests(ReusedPySparkTestCase):
     def test_crosstab(self):
         df = self.sc.parallelize([Row(a=i % 3, b=i % 2) for i in range(1, 7)]).toDF()
         ct = df.stat.crosstab("a", "b").collect()
-        ct = sorted(ct, lambda r: r[0])
+        ct = sorted(ct, key=lambda x: x[0])
         for i, row in enumerate(ct):
             self.assertEqual(row[0], str(i))
             self.assertTrue(row[1], 1)
