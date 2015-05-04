@@ -86,10 +86,9 @@ public final class UnsafeSorter {
    */
   private int sortBufferInsertPosition = 0;
 
-  private void expandSortBuffer(int newSize) {
-    assert (newSize > sortBuffer.length);
+  public void expandSortBuffer() {
     final long[] oldBuffer = sortBuffer;
-    sortBuffer = new long[newSize];
+    sortBuffer = new long[oldBuffer.length * 2];
     System.arraycopy(oldBuffer, 0, sortBuffer, 0, oldBuffer.length);
   }
 
@@ -122,14 +121,22 @@ public final class UnsafeSorter {
     };
   }
 
+  public long getMemoryUsage() {
+    return sortBuffer.length * 8L;
+  }
+
+  public boolean hasSpaceForAnotherRecord() {
+    return sortBufferInsertPosition + 2 < sortBuffer.length;
+  }
+
   /**
    * Insert a record into the sort buffer.
    *
    * @param objectAddress pointer to a record in a data page, encoded by {@link TaskMemoryManager}.
    */
   public void insertRecord(long objectAddress, long keyPrefix) {
-    if (sortBufferInsertPosition + 2 == sortBuffer.length) {
-      expandSortBuffer(sortBuffer.length * 2);
+    if (!hasSpaceForAnotherRecord()) {
+      expandSortBuffer();
     }
     sortBuffer[sortBufferInsertPosition] = objectAddress;
     sortBufferInsertPosition++;
@@ -167,10 +174,10 @@ public final class UnsafeSorter {
     };
   }
 
-  public UnsafeExternalSortSpillMerger.MergeableIterator getMergeableIterator() {
+  public UnsafeSorterSpillMerger.MergeableIterator getMergeableIterator() {
     sorter.sort(sortBuffer, 0, sortBufferInsertPosition / 2, sortComparator);
-    UnsafeExternalSortSpillMerger.MergeableIterator iter =
-      new UnsafeExternalSortSpillMerger.MergeableIterator() {
+    UnsafeSorterSpillMerger.MergeableIterator iter =
+      new UnsafeSorterSpillMerger.MergeableIterator() {
 
       private int position = 0;
       private Object baseObject;

@@ -33,7 +33,7 @@ import scala.reflect.ClassTag;
 import java.io.*;
 import java.nio.ByteBuffer;
 
-public final class UnsafeSorterSpillWriter {
+final class UnsafeSorterSpillWriter {
 
   private static final int SER_BUFFER_SIZE = 1024 * 1024;  // TODO: tune this
   public static final int EOF_MARKER = -1;
@@ -120,6 +120,10 @@ public final class UnsafeSorterSpillWriter {
     dos.writeInt(EOF_MARKER);
     writer.commitAndClose();
     arr = null;
+  }
+
+  public long numberOfSpilledBytes() {
+    return file.length();
   }
 
   public UnsafeSorterSpillReader getReader(BlockManager blockManager) throws IOException {

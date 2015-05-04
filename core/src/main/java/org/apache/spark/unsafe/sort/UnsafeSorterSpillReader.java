@@ -24,7 +24,7 @@ import org.apache.spark.unsafe.PlatformDependent;
 
 import java.io.*;
 
-public final class UnsafeSorterSpillReader extends UnsafeExternalSortSpillMerger.MergeableIterator {
+final class UnsafeSorterSpillReader extends UnsafeSorterSpillMerger.MergeableIterator {
 
   private final File file;
   private InputStream in;

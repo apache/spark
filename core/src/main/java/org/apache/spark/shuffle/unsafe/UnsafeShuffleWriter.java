@@ -18,7 +18,7 @@
 package org.apache.spark.shuffle.unsafe;
 
 import org.apache.spark.*;
-import org.apache.spark.unsafe.sort.UnsafeExternalSortSpillMerger;
+import org.apache.spark.unsafe.sort.ExternalSorterIterator;
 import org.apache.spark.unsafe.sort.UnsafeExternalSorter;
 import scala.Option;
 import scala.Product2;
@@ -28,7 +28,6 @@ import scala.reflect.ClassTag$;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Iterator;
 import java.util.LinkedList;
 
 import com.esotericsoftware.kryo.io.ByteBufferOutputStream;
@@ -47,7 +46,7 @@ import org.apache.spark.storage.ShuffleBlockId;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
-import org.apache.spark.unsafe.sort.UnsafeSorter;
+
 import static org.apache.spark.unsafe.sort.UnsafeSorter.*;
 
 // IntelliJ gets confused and claims that this class should be abstract, but this actually compiles
@@ -64,7 +63,6 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
   private final SerializerInstance serializer;
   private final Partitioner partitioner;
   private final ShuffleWriteMetrics writeMetrics;
-  private final LinkedList<MemoryBlock> allocatedPages = new LinkedList<MemoryBlock>();
   private final int fileBufferSize;
   private MapStatus mapStatus = null;
 
@@ -108,12 +106,13 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
     // TODO: free sorter memory
   }
 
-  private Iterator<UnsafeExternalSortSpillMerger.RecordAddressAndKeyPrefix> sortRecords(
+  private ExternalSorterIterator sortRecords(
     scala.collection.Iterator<? extends Product2<K, V>> records) throws Exception {
     final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
       memoryManager,
       SparkEnv$.MODULE$.get().shuffleMemoryManager(),
       SparkEnv$.MODULE$.get().blockManager(),
+      TaskContext.get(),
       RECORD_COMPARATOR,
       PREFIX_COMPARATOR,
       4096, // Initial size (TODO: tune this!)
@@ -145,8 +144,7 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
     return sorter.getSortedIterator();
   }
 
-  private long[] writeSortedRecordsToFile(
-      Iterator<UnsafeExternalSortSpillMerger.RecordAddressAndKeyPrefix> sortedRecords) throws IOException {
+  private long[] writeSortedRecordsToFile(ExternalSorterIterator sortedRecords) throws IOException {
     final File outputFile = shuffleBlockManager.getDataFile(shuffleId, mapId);
     final ShuffleBlockId blockId =
       new ShuffleBlockId(shuffleId, mapId, IndexShuffleBlockManager.NOOP_REDUCE_ID());
@@ -157,8 +155,8 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
 
     final byte[] arr = new byte[SER_BUFFER_SIZE];
     while (sortedRecords.hasNext()) {
-      final UnsafeExternalSortSpillMerger.RecordAddressAndKeyPrefix recordPointer = sortedRecords.next();
-      final int partition = (int) recordPointer.keyPrefix;
+      sortedRecords.loadNext();
+      final int partition = (int) sortedRecords.keyPrefix;
       assert (partition >= currentPartition);
       if (partition != currentPartition) {
         // Switch to the new partition
@@ -172,13 +170,13 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
       }
 
       PlatformDependent.copyMemory(
-        recordPointer.baseObject,
-        recordPointer.baseOffset + 4,
+        sortedRecords.baseObject,
+        sortedRecords.baseOffset + 4,
         arr,
         PlatformDependent.BYTE_ARRAY_OFFSET,
-        recordPointer.recordLength);
+        sortedRecords.recordLength);
       assert (writer != null);  // To suppress an IntelliJ warning
-      writer.write(arr, 0, recordPointer.recordLength);
+      writer.write(arr, 0, sortedRecords.recordLength);
       // TODO: add a test that detects whether we leave this call out:
       writer.recordWritten();
     }

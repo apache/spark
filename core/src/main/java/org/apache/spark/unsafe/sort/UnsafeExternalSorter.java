@@ -19,12 +19,15 @@ package org.apache.spark.unsafe.sort;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.spark.SparkConf;
+import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -37,16 +40,20 @@ import static org.apache.spark.unsafe.sort.UnsafeSorter.*;
  */
 public final class UnsafeExternalSorter {
 
+  private final Logger logger = LoggerFactory.getLogger(UnsafeExternalSorter.class);
+
   private static final int PAGE_SIZE = 1024 * 1024;  // TODO: tune this
 
   private final PrefixComparator prefixComparator;
   private final RecordComparator recordComparator;
   private final int initialSize;
+  private int numSpills = 0;
   private UnsafeSorter sorter;
 
   private final TaskMemoryManager memoryManager;
   private final ShuffleMemoryManager shuffleMemoryManager;
   private final BlockManager blockManager;
+  private final TaskContext taskContext;
   private final LinkedList<MemoryBlock> allocatedPages = new LinkedList<MemoryBlock>();
   private final boolean spillingEnabled;
   private final int fileBufferSize;
@@ -63,13 +70,15 @@ public final class UnsafeExternalSorter {
       TaskMemoryManager memoryManager,
       ShuffleMemoryManager shuffleMemoryManager,
       BlockManager blockManager,
+      TaskContext taskContext,
       RecordComparator recordComparator,
       PrefixComparator prefixComparator,
       int initialSize,
-      SparkConf conf) {
+      SparkConf conf) throws IOException {
     this.memoryManager = memoryManager;
     this.shuffleMemoryManager = shuffleMemoryManager;
     this.blockManager = blockManager;
+    this.taskContext = taskContext;
     this.recordComparator = recordComparator;
     this.prefixComparator = prefixComparator;
     this.initialSize = initialSize;
@@ -81,9 +90,19 @@ public final class UnsafeExternalSorter {
 
   // TODO: metrics tracking + integration with shuffle write metrics
 
-  private void openSorter() {
+  private void openSorter() throws IOException {
     this.writeMetrics = new ShuffleWriteMetrics();
     // TODO: connect write metrics to task metrics?
+    // TODO: move this sizing calculation logic into a static method of sorter:
+    final long memoryRequested = initialSize * 8L * 2;
+    if (spillingEnabled) {
+      final long memoryAcquired = shuffleMemoryManager.tryToAcquire(memoryRequested);
+      if (memoryAcquired != memoryRequested) {
+        shuffleMemoryManager.release(memoryAcquired);
+        throw new IOException("Could not acquire memory!");
+      }
+    }
+
     this.sorter = new UnsafeSorter(memoryManager, recordComparator, prefixComparator, initialSize);
   }
 
@@ -101,23 +120,52 @@ public final class UnsafeExternalSorter {
       spillWriter.write(baseObject, baseOffset, recordLength, recordPointer.keyPrefix);
     }
     spillWriter.close();
+    final long sorterMemoryUsage = sorter.getMemoryUsage();
     sorter = null;
-    freeMemory();
+    shuffleMemoryManager.release(sorterMemoryUsage);
+    final long spillSize = freeMemory();
+    taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
+    taskContext.taskMetrics().incDiskBytesSpilled(spillWriter.numberOfSpilledBytes());
+    numSpills++;
+    final long threadId = Thread.currentThread().getId();
+    // TODO: messy; log _before_ spill
+    logger.info("Thread " + threadId + " spilling in-memory map of " +
+      org.apache.spark.util.Utils.bytesToString(spillSize) + " to disk (" +
+          (numSpills + ((numSpills > 1) ? " times" : " time")) + " so far)");
     openSorter();
   }
 
-  private void freeMemory() {
+  private long freeMemory() {
+    long memoryFreed = 0;
     final Iterator<MemoryBlock> iter = allocatedPages.iterator();
     while (iter.hasNext()) {
       memoryManager.freePage(iter.next());
       shuffleMemoryManager.release(PAGE_SIZE);
+      memoryFreed += PAGE_SIZE;
       iter.remove();
     }
     currentPage = null;
     currentPagePosition = -1;
+    return memoryFreed;
   }
 
   private void ensureSpaceInDataPage(int requiredSpace) throws Exception {
+    // TODO: merge these steps to first calculate total memory requirements for this insert,
+    // then try to acquire; no point in acquiring sort buffer only to spill due to no space in the
+    // data page.
+    if (!sorter.hasSpaceForAnotherRecord() && spillingEnabled) {
+      final long oldSortBufferMemoryUsage = sorter.getMemoryUsage();
+      final long memoryToGrowSortBuffer = oldSortBufferMemoryUsage * 2;
+      final long memoryAcquired = shuffleMemoryManager.tryToAcquire(memoryToGrowSortBuffer);
+      if (memoryAcquired < memoryToGrowSortBuffer) {
+        shuffleMemoryManager.release(memoryAcquired);
+        spill();
+      } else {
+        sorter.expandSortBuffer();
+        shuffleMemoryManager.release(oldSortBufferMemoryUsage);
+      }
+    }
+
     final long spaceInCurrentPage;
     if (currentPage != null) {
       spaceInCurrentPage = PAGE_SIZE - (currentPagePosition - currentPage.getBaseOffset());
@@ -129,12 +177,22 @@ public final class UnsafeExternalSorter {
       throw new Exception("Required space " + requiredSpace + " is greater than page size (" +
         PAGE_SIZE + ")");
     } else if (requiredSpace > spaceInCurrentPage) {
-      if (spillingEnabled && shuffleMemoryManager.tryToAcquire(PAGE_SIZE) < PAGE_SIZE) {
-        spill();
+      if (spillingEnabled) {
+        final long memoryAcquired = shuffleMemoryManager.tryToAcquire(PAGE_SIZE);
+        if (memoryAcquired < PAGE_SIZE) {
+          shuffleMemoryManager.release(memoryAcquired);
+          spill();
+          final long memoryAcquiredAfterSpill = shuffleMemoryManager.tryToAcquire(PAGE_SIZE);
+          if (memoryAcquiredAfterSpill != PAGE_SIZE) {
+            shuffleMemoryManager.release(memoryAcquiredAfterSpill);
+            throw new Exception("Can't allocate memory!");
+          }
+        }
       }
       currentPage = memoryManager.allocatePage(PAGE_SIZE);
       currentPagePosition = currentPage.getBaseOffset();
       allocatedPages.add(currentPage);
+      logger.info("Acquired new page! " + allocatedPages.size() * PAGE_SIZE);
     }
   }
 
@@ -162,9 +220,9 @@ public final class UnsafeExternalSorter {
     sorter.insertRecord(recordAddress, prefix);
   }
 
-  public Iterator<UnsafeExternalSortSpillMerger.RecordAddressAndKeyPrefix> getSortedIterator() throws IOException {
-    final UnsafeExternalSortSpillMerger spillMerger =
-      new UnsafeExternalSortSpillMerger(recordComparator, prefixComparator);
+  public ExternalSorterIterator getSortedIterator() throws IOException {
+    final UnsafeSorterSpillMerger spillMerger =
+      new UnsafeSorterSpillMerger(recordComparator, prefixComparator);
     for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
       spillMerger.addSpill(spillWriter.getReader(blockManager));
     }

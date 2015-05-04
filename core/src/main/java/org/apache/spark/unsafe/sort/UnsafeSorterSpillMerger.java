@@ -23,7 +23,7 @@ import java.util.PriorityQueue;
 
 import static org.apache.spark.unsafe.sort.UnsafeSorter.*;
 
-public final class UnsafeExternalSortSpillMerger {
+public final class UnsafeSorterSpillMerger {
 
   private final PriorityQueue<MergeableIterator> priorityQueue;
 
@@ -46,9 +46,9 @@ public final class UnsafeExternalSortSpillMerger {
     public long keyPrefix;
   }
 
-  public UnsafeExternalSortSpillMerger(
-      final RecordComparator recordComparator,
-      final UnsafeSorter.PrefixComparator prefixComparator) {
+  public UnsafeSorterSpillMerger(
+    final RecordComparator recordComparator,
+    final UnsafeSorter.PrefixComparator prefixComparator) {
     final Comparator<MergeableIterator> comparator = new Comparator<MergeableIterator>() {
 
       @Override

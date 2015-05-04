@@ -20,6 +20,8 @@ package org.apache.spark.unsafe.sort;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
+import org.apache.spark.TaskContext;
+import org.apache.spark.TaskContextImpl;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
@@ -41,7 +43,6 @@ import scala.runtime.AbstractFunction1;
 import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.file.Files;
 import java.util.Iterator;
 import java.util.UUID;
 
@@ -78,6 +79,7 @@ public class UnsafeExternalSorterSuite {
   BlockManager blockManager;
   DiskBlockManager diskBlockManager;
   File tempDir;
+  TaskContext taskContext;
 
   private static final class CompressStream extends AbstractFunction1<OutputStream, OutputStream> {
     @Override
@@ -92,6 +94,7 @@ public class UnsafeExternalSorterSuite {
     diskBlockManager = mock(DiskBlockManager.class);
     blockManager = mock(BlockManager.class);
     tempDir = new File(Utils.createTempDir$default$1());
+    taskContext = mock(TaskContext.class);
     when(shuffleMemoryManager.tryToAcquire(anyLong())).then(returnsFirstArg());
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
     when(diskBlockManager.createTempLocalBlock()).thenAnswer(new Answer<Tuple2<TempLocalBlockId, File>>() {
@@ -142,6 +145,7 @@ public class UnsafeExternalSorterSuite {
       memoryManager,
       shuffleMemoryManager,
       blockManager,
+      taskContext,
       recordComparator,
       prefixComparator,
       1024,
@@ -154,14 +158,18 @@ public class UnsafeExternalSorterSuite {
     insertNumber(sorter, 4);
     insertNumber(sorter, 2);
 
-    Iterator<UnsafeExternalSortSpillMerger.RecordAddressAndKeyPrefix> iter =
-      sorter.getSortedIterator();
+    ExternalSorterIterator iter = sorter.getSortedIterator();
 
-    Assert.assertEquals(1, iter.next().keyPrefix);
-    Assert.assertEquals(2, iter.next().keyPrefix);
-    Assert.assertEquals(3, iter.next().keyPrefix);
-    Assert.assertEquals(4, iter.next().keyPrefix);
-    Assert.assertEquals(5, iter.next().keyPrefix);
+    iter.loadNext();
+    Assert.assertEquals(1, iter.keyPrefix);
+    iter.loadNext();
+    Assert.assertEquals(2, iter.keyPrefix);
+    iter.loadNext();
+    Assert.assertEquals(3, iter.keyPrefix);
+    iter.loadNext();
+    Assert.assertEquals(4, iter.keyPrefix);
+    iter.loadNext();
+    Assert.assertEquals(5, iter.keyPrefix);
     Assert.assertFalse(iter.hasNext());
     // TODO: check that the values are also read back properly.
 
