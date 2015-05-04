@@ -54,6 +54,8 @@ private[hive] case object NativePlaceholder extends Command
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
+  protected val hiveConf = new HiveConf()
+
   protected val nativeCommands = Seq(
     "TOK_ALTERDATABASE_OWNER",
     "TOK_ALTERDATABASE_PROPERTIES",
@@ -230,7 +232,7 @@ private[hive] object HiveQl {
      * Otherwise, there will be Null pointer exception,
      * when retrieving properties form HiveConf.
      */
-    val hContext = new Context(new HiveConf())
+    val hContext = new Context(hiveConf)
     val node = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql, hContext))
     hContext.clear()
     node
