@@ -36,10 +36,10 @@ import org.apache.ivy.core.retrieve.RetrieveOptions
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
-
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
+
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -114,19 +114,21 @@ object SparkSubmit {
     }
   }
 
-  /** Kill an existing submission using the REST protocol. Standalone cluster mode only. */
+  /**
+   * Kill an existing submission using the REST protocol. Standalone and Mesos cluster mode only.
+   */
   private def kill(args: SparkSubmitArguments): Unit = {
-    new StandaloneRestClient()
-      .killSubmission(args.master, args.submissionToKill)
+    new RestSubmissionClient(args.master)
+      .killSubmission(args.submissionToKill)
   }
 
   /**
    * Request the status of an existing submission using the REST protocol.
-   * Standalone cluster mode only.
+   * Standalone and Mesos cluster mode only.
    */
   private def requestStatus(args: SparkSubmitArguments): Unit = {
-    new StandaloneRestClient()
-      .requestSubmissionStatus(args.master, args.submissionToRequestStatusFor)
+    new RestSubmissionClient(args.master)
+      .requestSubmissionStatus(args.submissionToRequestStatusFor)
   }
 
   /**
@@ -252,6 +254,7 @@ object SparkSubmit {
     }
 
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
+    val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
 
     // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
     // too for packages that include Python code
@@ -294,8 +297,9 @@ object SparkSubmit {
 
     // The following modes are not supported or applicable
     (clusterManager, deployMode) match {
-      case (MESOS, CLUSTER) =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
+      case (MESOS, CLUSTER) if args.isPython =>
+        printErrorAndExit("Cluster deploy mode is currently not supported for python " +
+          "applications on Mesos clusters.")
       case (STANDALONE, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python " +
           "applications on standalone clusters.")
@@ -377,15 +381,6 @@ object SparkSubmit {
       OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "spark.driver.extraLibraryPath"),
 
-      // Standalone cluster only
-      // Do not set CL arguments here because there are multiple possibilities for the main class
-      OptionAssigner(args.jars, STANDALONE, CLUSTER, sysProp = "spark.jars"),
-      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
-      OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, sysProp = "spark.driver.memory"),
-      OptionAssigner(args.driverCores, STANDALONE, CLUSTER, sysProp = "spark.driver.cores"),
-      OptionAssigner(args.supervise.toString, STANDALONE, CLUSTER,
-        sysProp = "spark.driver.supervise"),
-
       // Yarn client only
       OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
       OptionAssigner(args.numExecutors, YARN, CLIENT, sysProp = "spark.executor.instances"),
@@ -405,6 +400,10 @@ object SparkSubmit {
       OptionAssigner(args.archives, YARN, CLUSTER, clOption = "--archives"),
       OptionAssigner(args.jars, YARN, CLUSTER, clOption = "--addJars"),
 
+      // Yarn client or cluster
+      OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, clOption = "--principal"),
+      OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, clOption = "--keytab"),
+
       // Other options
       OptionAssigner(args.executorCores, STANDALONE, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.cores"),
@@ -413,7 +412,15 @@ object SparkSubmit {
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.cores.max"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
-        sysProp = "spark.files")
+        sysProp = "spark.files"),
+      OptionAssigner(args.jars, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars"),
+      OptionAssigner(args.driverMemory, STANDALONE | MESOS, CLUSTER,
+        sysProp = "spark.driver.memory"),
+      OptionAssigner(args.driverCores, STANDALONE | MESOS, CLUSTER,
+        sysProp = "spark.driver.cores"),
+      OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
+        sysProp = "spark.driver.supervise"),
+      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy")
     )
 
     // In client mode, launch the application main class directly
@@ -452,7 +459,7 @@ object SparkSubmit {
     // All Spark parameters are expected to be passed to the client through system properties.
     if (args.isStandaloneCluster) {
       if (args.useRest) {
-        childMainClass = "org.apache.spark.deploy.rest.StandaloneRestClient"
+        childMainClass = "org.apache.spark.deploy.rest.RestSubmissionClient"
         childArgs += (args.primaryResource, args.mainClass)
       } else {
         // In legacy standalone cluster mode, use Client as a wrapper around the user class
@@ -493,6 +500,15 @@ object SparkSubmit {
       }
       if (args.childArgs != null) {
         args.childArgs.foreach { arg => childArgs += ("--arg", arg) }
+      }
+    }
+
+    if (isMesosCluster) {
+      assert(args.useRest, "Mesos cluster mode is only supported through the REST submission API")
+      childMainClass = "org.apache.spark.deploy.rest.RestSubmissionClient"
+      childArgs += (args.primaryResource, args.mainClass)
+      if (args.childArgs != null) {
+        childArgs ++= args.childArgs
       }
     }
 
@@ -685,7 +701,7 @@ object SparkSubmit {
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */
-private[deploy] object SparkSubmitUtils {
+private[spark] object SparkSubmitUtils {
 
   // Exposed for testing
   var printStream = SparkSubmit.printStream
@@ -722,12 +738,30 @@ private[deploy] object SparkSubmitUtils {
   /**
    * Extracts maven coordinates from a comma-delimited string
    * @param remoteRepos Comma-delimited string of remote repositories
+   * @param ivySettings The Ivy settings for this session
    * @return A ChainResolver used by Ivy to search for and resolve dependencies.
    */
-  def createRepoResolvers(remoteRepos: Option[String]): ChainResolver = {
+  def createRepoResolvers(remoteRepos: Option[String], ivySettings: IvySettings): ChainResolver = {
     // We need a chain resolver if we want to check multiple repositories
     val cr = new ChainResolver
     cr.setName("list")
+
+    val localM2 = new IBiblioResolver
+    localM2.setM2compatible(true)
+    val m2Path = ".m2" + File.separator + "repository" + File.separator
+    localM2.setRoot(new File(System.getProperty("user.home"), m2Path).toURI.toString)
+    localM2.setUsepoms(true)
+    localM2.setName("local-m2-cache")
+    cr.add(localM2)
+
+    val localIvy = new IBiblioResolver
+    localIvy.setRoot(new File(ivySettings.getDefaultIvyUserDir,
+      "local" + File.separator).toURI.toString)
+    val ivyPattern = Seq("[organisation]", "[module]", "[revision]", "[type]s",
+      "[artifact](-[classifier]).[ext]").mkString(File.separator)
+    localIvy.setPattern(ivyPattern)
+    localIvy.setName("local-ivy-cache")
+    cr.add(localIvy)
 
     // the biblio resolver resolves POM declared dependencies
     val br: IBiblioResolver = new IBiblioResolver
@@ -761,8 +795,7 @@ private[deploy] object SparkSubmitUtils {
 
   /**
    * Output a comma-delimited list of paths for the downloaded jars to be added to the classpath
-   * (will append to jars in SparkSubmit). The name of the jar is given
-   * after a '!' by Ivy. It also sometimes contains '(bundle)' after '.jar'. Remove that as well.
+   * (will append to jars in SparkSubmit).
    * @param artifacts Sequence of dependencies that were resolved and retrieved
    * @param cacheDirectory directory where jars are cached
    * @return a comma-delimited list of paths for the dependencies
@@ -771,10 +804,9 @@ private[deploy] object SparkSubmitUtils {
       artifacts: Array[AnyRef],
       cacheDirectory: File): String = {
     artifacts.map { artifactInfo =>
-      val artifactString = artifactInfo.toString
-      val jarName = artifactString.drop(artifactString.lastIndexOf("!") + 1)
+      val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
       cacheDirectory.getAbsolutePath + File.separator +
-        jarName.substring(0, jarName.lastIndexOf(".jar") + 4)
+        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}.jar"
     }.mkString(",")
   }
 
@@ -856,6 +888,7 @@ private[deploy] object SparkSubmitUtils {
         if (alternateIvyCache.trim.isEmpty) {
           new File(ivySettings.getDefaultIvyUserDir, "jars")
         } else {
+          ivySettings.setDefaultIvyUserDir(new File(alternateIvyCache))
           ivySettings.setDefaultCache(new File(alternateIvyCache, "cache"))
           new File(alternateIvyCache, "jars")
         }
@@ -865,7 +898,7 @@ private[deploy] object SparkSubmitUtils {
       // create a pattern matcher
       ivySettings.addMatcher(new GlobPatternMatcher)
       // create the dependency resolvers
-      val repoResolver = createRepoResolvers(remoteRepos)
+      val repoResolver = createRepoResolvers(remoteRepos, ivySettings)
       ivySettings.addResolver(repoResolver)
       ivySettings.setDefaultResolver(repoResolver.getName)
 
@@ -899,7 +932,8 @@ private[deploy] object SparkSubmitUtils {
       }
       // retrieve all resolved dependencies
       ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId,
-        packagesDirectory.getAbsolutePath + File.separator + "[artifact](-[classifier]).[ext]",
+        packagesDirectory.getAbsolutePath + File.separator +
+          "[organization]_[artifact]-[revision].[ext]",
         retrieveOptions.setConfs(Array(ivyConfName)))
       System.setOut(sysOut)
       resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)

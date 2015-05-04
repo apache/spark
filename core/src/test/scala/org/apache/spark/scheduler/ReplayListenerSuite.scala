@@ -50,7 +50,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     val fstream = fileSystem.create(logFilePath)
     val writer = new PrintWriter(fstream)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
-      125L, "Mickey")
+      125L, "Mickey", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
@@ -146,7 +146,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
    * log the events.
    */
   private class EventMonster(conf: SparkConf)
-    extends EventLoggingListener("test", new URI("testdir"), conf) {
+    extends EventLoggingListener("test", None, new URI("testdir"), conf) {
 
     override def start() { }
 

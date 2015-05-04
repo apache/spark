@@ -58,7 +58,7 @@ while (( "$#" )); do
     --hadoop)
       echo "Error: '--hadoop' is no longer supported:"
       echo "Error: use Maven profiles and options -Dhadoop.version and -Dyarn.version instead."
-      echo "Error: Related profiles include hadoop-0.23, hdaoop-2.2, hadoop-2.3 and hadoop-2.4."
+      echo "Error: Related profiles include hadoop-2.2, hadoop-2.3 and hadoop-2.4."
       exit_with_usage
       ;;
     --with-yarn)
@@ -127,7 +127,7 @@ if [ ! $(command -v "$MVN") ] ; then
     exit -1;
 fi
 
-VERSION=$("$MVN" help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
+VERSION=$("$MVN" help:evaluate -Dexpression=project.version $@ 2>/dev/null | grep -v "INFO" | tail -n 1)
 SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ 2>/dev/null\
     | grep -v "INFO"\
     | tail -n 1)

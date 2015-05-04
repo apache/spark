@@ -626,7 +626,7 @@ abstract class DStream[T: ClassTag] (
         println("Time: " + time)
         println("-------------------------------------------")
         firstNum.take(num).foreach(println)
-        if (firstNum.size > num) println("...")
+        if (firstNum.length > num) println("...")
         println()
       }
     }

@@ -20,7 +20,6 @@ package org.apache.spark.mllib.clustering;
 import java.io.Serializable;
 import java.util.ArrayList;
 
-import org.apache.spark.api.java.JavaRDD;
 import scala.Tuple2;
 
 import org.junit.After;
@@ -30,6 +29,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
@@ -88,7 +88,7 @@ public class JavaLDASuite implements Serializable {
       .setMaxIterations(5)
       .setSeed(12345);
 
-    DistributedLDAModel model = lda.run(corpus);
+    DistributedLDAModel model = (DistributedLDAModel)lda.run(corpus);
 
     // Check: basic parameters
     LocalLDAModel localModel = model.toLocal();
@@ -109,11 +109,45 @@ public class JavaLDASuite implements Serializable {
     assert(model.logPrior() < 0.0);
   }
 
+  @Test
+  public void OnlineOptimizerCompatibility() {
+    int k = 3;
+    double topicSmoothing = 1.2;
+    double termSmoothing = 1.2;
+
+    // Train a model
+    OnlineLDAOptimizer op = new OnlineLDAOptimizer()
+      .setTau_0(1024)
+      .setKappa(0.51)
+      .setGammaShape(1e40)
+      .setMiniBatchFraction(0.5);
+
+    LDA lda = new LDA();
+    lda.setK(k)
+      .setDocConcentration(topicSmoothing)
+      .setTopicConcentration(termSmoothing)
+      .setMaxIterations(5)
+      .setSeed(12345)
+      .setOptimizer(op);
+
+    LDAModel model = lda.run(corpus);
+
+    // Check: basic parameters
+    assertEquals(model.k(), k);
+    assertEquals(model.vocabSize(), tinyVocabSize);
+
+    // Check: topic summaries
+    Tuple2<int[], double[]>[] roundedTopicSummary = model.describeTopics();
+    assertEquals(roundedTopicSummary.length, k);
+    Tuple2<int[], double[]>[] roundedLocalTopicSummary = model.describeTopics();
+    assertEquals(roundedLocalTopicSummary.length, k);
+  }
+
   private static int tinyK = LDASuite$.MODULE$.tinyK();
   private static int tinyVocabSize = LDASuite$.MODULE$.tinyVocabSize();
   private static Matrix tinyTopics = LDASuite$.MODULE$.tinyTopics();
   private static Tuple2<int[], double[]>[] tinyTopicDescription =
       LDASuite$.MODULE$.tinyTopicDescription();
-  JavaPairRDD<Long, Vector> corpus;
+  private JavaPairRDD<Long, Vector> corpus;
 
 }

@@ -23,7 +23,6 @@ import java.nio.{ByteBuffer, ByteOrder}
 import java.text.DecimalFormatSymbols
 import java.util.concurrent.TimeUnit
 import java.util.Locale
-import java.util.PriorityQueue
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
@@ -35,9 +34,11 @@ import org.scalatest.FunSuite
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.Logging
 import org.apache.spark.SparkConf
 
-class UtilsSuite extends FunSuite with ResetSystemProperties {
+class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
 
   test("timeConversion") {
     // Test -1
@@ -66,6 +67,10 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
 
     // Test invalid strings
     intercept[NumberFormatException] {
+      Utils.timeStringAsMs("600l")
+    }
+
+    intercept[NumberFormatException] {
       Utils.timeStringAsMs("This breaks 600s")
     }
 
@@ -79,6 +84,100 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
 
     intercept[NumberFormatException] {
       Utils.timeStringAsMs("This 123s breaks")
+    }
+  }
+
+  test("Test byteString conversion") {
+    // Test zero
+    assert(Utils.byteStringAsBytes("0") === 0)
+
+    assert(Utils.byteStringAsGb("1") === 1)
+    assert(Utils.byteStringAsGb("1g") === 1)
+    assert(Utils.byteStringAsGb("1023m") === 0)
+    assert(Utils.byteStringAsGb("1024m") === 1)
+    assert(Utils.byteStringAsGb("1048575k") === 0)
+    assert(Utils.byteStringAsGb("1048576k") === 1)
+    assert(Utils.byteStringAsGb("1k") === 0)
+    assert(Utils.byteStringAsGb("1t") === ByteUnit.TiB.toGiB(1))
+    assert(Utils.byteStringAsGb("1p") === ByteUnit.PiB.toGiB(1))
+
+    assert(Utils.byteStringAsMb("1") === 1)
+    assert(Utils.byteStringAsMb("1m") === 1)
+    assert(Utils.byteStringAsMb("1048575b") === 0)
+    assert(Utils.byteStringAsMb("1048576b") === 1)
+    assert(Utils.byteStringAsMb("1023k") === 0)
+    assert(Utils.byteStringAsMb("1024k") === 1)
+    assert(Utils.byteStringAsMb("3645k") === 3)
+    assert(Utils.byteStringAsMb("1024gb") === 1048576)
+    assert(Utils.byteStringAsMb("1g") === ByteUnit.GiB.toMiB(1))
+    assert(Utils.byteStringAsMb("1t") === ByteUnit.TiB.toMiB(1))
+    assert(Utils.byteStringAsMb("1p") === ByteUnit.PiB.toMiB(1))
+
+    assert(Utils.byteStringAsKb("1") === 1)
+    assert(Utils.byteStringAsKb("1k") === 1)
+    assert(Utils.byteStringAsKb("1m") === ByteUnit.MiB.toKiB(1))
+    assert(Utils.byteStringAsKb("1g") === ByteUnit.GiB.toKiB(1))
+    assert(Utils.byteStringAsKb("1t") === ByteUnit.TiB.toKiB(1))
+    assert(Utils.byteStringAsKb("1p") === ByteUnit.PiB.toKiB(1))
+
+    assert(Utils.byteStringAsBytes("1") === 1)
+    assert(Utils.byteStringAsBytes("1k") === ByteUnit.KiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1m") === ByteUnit.MiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1g") === ByteUnit.GiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1t") === ByteUnit.TiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1p") === ByteUnit.PiB.toBytes(1))
+
+    // Overflow handling, 1073741824p exceeds Long.MAX_VALUE if converted straight to Bytes
+    // This demonstrates that we can have e.g 1024^3 PB without overflowing.
+    assert(Utils.byteStringAsGb("1073741824p") === ByteUnit.PiB.toGiB(1073741824))
+    assert(Utils.byteStringAsMb("1073741824p") === ByteUnit.PiB.toMiB(1073741824))
+
+    // Run this to confirm it doesn't throw an exception
+    assert(Utils.byteStringAsBytes("9223372036854775807") === 9223372036854775807L)
+    assert(ByteUnit.PiB.toPiB(9223372036854775807L) === 9223372036854775807L)
+
+    // Test overflow exception
+    intercept[IllegalArgumentException] {
+      // This value exceeds Long.MAX when converted to bytes
+      Utils.byteStringAsBytes("9223372036854775808")
+    }
+
+    // Test overflow exception
+    intercept[IllegalArgumentException] {
+      // This value exceeds Long.MAX when converted to TB
+      ByteUnit.PiB.toTiB(9223372036854775807L)
+    }
+
+    // Test fractional string
+    intercept[NumberFormatException] {
+      Utils.byteStringAsMb("0.064")
+    }
+
+    // Test fractional string
+    intercept[NumberFormatException] {
+      Utils.byteStringAsMb("0.064m")
+    }
+
+    // Test invalid strings
+    intercept[NumberFormatException] {
+      Utils.byteStringAsBytes("500ub")
+    }
+
+    // Test invalid strings
+    intercept[NumberFormatException] {
+      Utils.byteStringAsBytes("This breaks 600b")
+    }
+
+    intercept[NumberFormatException] {
+      Utils.byteStringAsBytes("This breaks 600")
+    }
+
+    intercept[NumberFormatException] {
+      Utils.byteStringAsBytes("600gb This breaks")
+    }
+
+    intercept[NumberFormatException] {
+      Utils.byteStringAsBytes("This 123mb breaks")
     }
   }
 
@@ -375,6 +474,15 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
       Option(server1).foreach(_.close())
       Option(server2).foreach(_.close())
     }
+  }
+
+  // Test for using the util function to change our log levels.
+  test("log4j log level change") {
+    Utils.setLogLevel(org.apache.log4j.Level.ALL)
+    assert(log.isInfoEnabled())
+    Utils.setLogLevel(org.apache.log4j.Level.ERROR)
+    assert(!log.isInfoEnabled())
+    assert(log.isErrorEnabled())
   }
 
   test("deleteRecursively") {

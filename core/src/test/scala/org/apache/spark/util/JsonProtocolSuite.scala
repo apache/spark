@@ -74,7 +74,8 @@ class JsonProtocolSuite extends FunSuite {
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
       BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
-    val applicationStart = SparkListenerApplicationStart("The winner of all", None, 42L, "Garfield")
+    val applicationStart = SparkListenerApplicationStart("The winner of all", Some("appId"),
+      42L, "Garfield", Some("appAttempt"))
     val applicationEnd = SparkListenerApplicationEnd(42L)
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
@@ -274,9 +275,11 @@ class JsonProtocolSuite extends FunSuite {
 
   test("SparkListenerApplicationStart backwards compatibility") {
     // SparkListenerApplicationStart in Spark 1.0.0 do not have an "appId" property.
-    val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user")
+    // SparkListenerApplicationStart pre-Spark 1.4 does not have "appAttemptId".
+    val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user", None)
     val oldEvent = JsonProtocol.applicationStartToJson(applicationStart)
       .removeField({ _._1 == "App ID" })
+      .removeField({ _._1 == "App Attempt ID" })
     assert(applicationStart === JsonProtocol.applicationStartFromJson(oldEvent))
   }
 
@@ -785,14 +788,14 @@ class JsonProtocolSuite extends FunSuite {
       |        "Storage Level": {
       |          "Use Disk": true,
       |          "Use Memory": true,
-      |          "Use Tachyon": false,
+      |          "Use ExternalBlockStore": false,
       |          "Deserialized": true,
       |          "Replication": 1
       |        },
       |        "Number of Partitions": 201,
       |        "Number of Cached Partitions": 301,
       |        "Memory Size": 401,
-      |        "Tachyon Size": 0,
+      |        "ExternalBlockStore Size": 0,
       |        "Disk Size": 501
       |      }
       |    ],
@@ -969,12 +972,12 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": false,
       |            "Replication": 2
       |          },
       |          "Memory Size": 0,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 0
       |        }
       |      }
@@ -1052,12 +1055,12 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": false,
       |            "Replication": 2
       |          },
       |          "Memory Size": 0,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 0
       |        }
       |      }
@@ -1135,12 +1138,12 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": false,
       |            "Replication": 2
       |          },
       |          "Memory Size": 0,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 0
       |        }
       |      }
@@ -1168,14 +1171,14 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 200,
       |          "Number of Cached Partitions": 300,
       |          "Memory Size": 400,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 500
       |        }
       |      ],
@@ -1207,14 +1210,14 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 400,
       |          "Number of Cached Partitions": 600,
       |          "Memory Size": 800,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1000
       |        },
       |        {
@@ -1223,14 +1226,14 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 401,
       |          "Number of Cached Partitions": 601,
       |          "Memory Size": 801,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1001
       |        }
       |      ],
@@ -1262,14 +1265,14 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 600,
       |          "Number of Cached Partitions": 900,
       |          "Memory Size": 1200,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1500
       |        },
       |        {
@@ -1278,14 +1281,14 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 601,
       |          "Number of Cached Partitions": 901,
       |          "Memory Size": 1201,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1501
       |        },
       |        {
@@ -1294,14 +1297,14 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 602,
       |          "Number of Cached Partitions": 902,
       |          "Memory Size": 1202,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1502
       |        }
       |      ],
@@ -1333,14 +1336,14 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 800,
       |          "Number of Cached Partitions": 1200,
       |          "Memory Size": 1600,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 2000
       |        },
       |        {
@@ -1349,14 +1352,14 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 801,
       |          "Number of Cached Partitions": 1201,
       |          "Memory Size": 1601,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 2001
       |        },
       |        {
@@ -1365,14 +1368,14 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 802,
       |          "Number of Cached Partitions": 1202,
       |          "Memory Size": 1602,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 2002
       |        },
       |        {
@@ -1381,14 +1384,14 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 803,
       |          "Number of Cached Partitions": 1203,
       |          "Memory Size": 1603,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 2003
       |        }
       |      ],
@@ -1497,8 +1500,10 @@ class JsonProtocolSuite extends FunSuite {
       |{
       |  "Event": "SparkListenerApplicationStart",
       |  "App Name": "The winner of all",
+      |  "App ID": "appId",
       |  "Timestamp": 42,
-      |  "User": "Garfield"
+      |  "User": "Garfield",
+      |  "App Attempt ID": "appAttempt"
       |}
     """
 

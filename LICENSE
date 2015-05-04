@@ -814,6 +814,7 @@ BSD-style licenses
 The following components are provided under a BSD-style license. See project link for details.
 
      (BSD 3 Clause) core (com.github.fommil.netlib:core:1.1.2 - https://github.com/fommil/netlib-java/core)
+     (BSD 3 Clause) JPMML-Model (org.jpmml:pmml-model:1.1.15 - https://github.com/jpmml/jpmml-model)
      (BSD 3-clause style license) jblas (org.jblas:jblas:1.2.3 - http://jblas.org/)
      (BSD License) AntLR Parser Generator (antlr:antlr:2.7.7 - http://www.antlr.org/)
      (BSD License) Javolution (javolution:javolution:5.5.1 - http://javolution.org)
