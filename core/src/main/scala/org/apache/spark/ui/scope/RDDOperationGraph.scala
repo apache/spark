@@ -179,7 +179,7 @@ private[ui] object RDDOperationGraph extends Logging {
    */
   private def makeDotNode(node: RDDOperationNode, forJob: Boolean): String = {
     if (forJob) {
-      s"""${node.id} [label=" " shape="circle" padding="5" labelStyle="font-size: 0"]"""
+      s"""${node.id} [label="${node.name}" shape="circle" padding="5" labelStyle="font-size: 0"]"""
     } else {
       s"""${node.id} [label="${node.name} (${node.id})"]"""
     }

@@ -230,6 +230,19 @@ function renderDagVizForJob(svgContainer) {
       connectRDDs(fromRDDId, toRDDId, container);
     }
   }
+
+  // Add tooltips to the RDDs
+  var rdds = graphContainer()
+    .selectAll("g.node circle")
+    .attr("title", function(v) { return d3.select(this.parentNode).attr("name"); });
+  // Here we cheat a little and use jQuery because it's much easier to use tooltips there
+  // Note that we can't just use $(...).tooltip() because we're inside an SVG
+  $(rdds[0]).tooltipsy({
+    className: "dag_tooltip",
+    delay: 0,
+    show: function (_, e) { e.fadeIn(50); },
+    hide: function (_, e) { e.fadeOut(50); }
+  });
 }
 
 /* Render the dot file as an SVG in the given container. */
