@@ -53,7 +53,7 @@
 
 var VizConstants = {
   rddColor: "#444444",
-  rddCachedColor: "#7DDD00",
+  rddCachedColor: "#FF0000",
   rddOperationColor: "#AADFFF",
   stageColor: "#FFDDEE",
   clusterLabelColor: "#888888",
