@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.scheduler
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.collection.mutable.{HashMap, SynchronizedMap}
 import scala.language.existentials
 
@@ -70,6 +72,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   // This not being null means the tracker has been started and not stopped
   private var endpoint: RpcEndpointRef = null
 
+  private val stopped = new AtomicBoolean(false)
+
   /** Start the endpoint and receiver execution thread. */
   def start(): Unit = synchronized {
     if (endpoint != null) {
@@ -86,15 +90,17 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Stop the receiver execution thread. */
   def stop(graceful: Boolean): Unit = synchronized {
-    if (!receiverInputStreams.isEmpty && endpoint != null) {
-      // First, stop the receivers
-      if (!skipReceiverLaunch) receiverExecutor.stop(graceful)
+    if (stopped.compareAndSet(false, true)) {
+      if (!receiverInputStreams.isEmpty && endpoint != null) {
+        // First, stop the receivers
+        if (!skipReceiverLaunch) receiverExecutor.stop(graceful)
 
-      // Finally, stop the endpoint
-      ssc.env.rpcEnv.stop(endpoint)
-      endpoint = null
-      receivedBlockTracker.stop()
-      logInfo("ReceiverTracker stopped")
+        // Finally, stop the endpoint
+        ssc.env.rpcEnv.stop(endpoint)
+        endpoint = null
+        receivedBlockTracker.stop()
+        logInfo("ReceiverTracker stopped")
+      }
     }
   }
 
@@ -148,6 +154,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       streamId, s"${typ}-${streamId}", receiverEndpoint, true, host)
     listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
     logInfo("Registered receiver for stream " + streamId + " from " + senderAddress)
+    if (stopped.get) {
+      // If it's already stopped, the receiver may not receive "StopReceiver" because "receiverInfo"
+      // does not contain this receiver when stopping. So send it again.
+      receiverEndpoint.send(StopReceiver)
+    }
   }
 
   /** Deregister a receiver */
