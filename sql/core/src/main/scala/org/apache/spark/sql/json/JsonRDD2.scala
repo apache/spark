@@ -38,6 +38,12 @@ private[sql] object JsonRDD2 extends Logging {
     parseJson(json, schema, columnNameOfCorruptRecords)
   }
 
+  /**
+   * Infer the type of a collection of json records in three stages:
+   *   1. Infer the type of each record
+   *   2. Merge types by choosing the lowest type necessary to cover equal keys
+   *   3. Replace any remaining null fields with string, the top type
+   */
   def inferSchema(
       json: RDD[String],
       samplingRatio: Double = 1.0,
@@ -79,7 +85,15 @@ private[sql] object JsonRDD2 extends Logging {
         parser.nextToken()
         inferField(parser)
 
-      case VALUE_STRING if parser.getTextLength < 1 => NullType
+      case VALUE_STRING if parser.getTextLength < 1 =>
+        // Zero length strings and nulls have special handling to deal
+        // with JSON generators that do not distinguish between the two.
+        // To accurately infer types for empty strings that are really
+        // meant to represent nulls we assume that the two are isomorphic
+        // but will defer treating null fields as strings until all the
+        // record fields' types have been combined.
+        NullType
+
       case VALUE_STRING => StringType
       case START_OBJECT =>
         val builder = Seq.newBuilder[StructField]
