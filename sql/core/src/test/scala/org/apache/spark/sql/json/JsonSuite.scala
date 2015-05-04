@@ -25,7 +25,7 @@ import org.scalactic.Tolerance._
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.json.JsonRDD2.compatibleType
+import org.apache.spark.sql.json.InferSchema.compatibleType
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
@@ -57,7 +57,7 @@ class JsonSuite extends QueryTest {
 
       val parser = factory.createParser(writer.toString)
       parser.nextToken()
-      JsonRDD2.convertField(factory, parser, dataType)
+      JacksonParser.convertField(factory, parser, dataType)
     }
 
     val intNumber: Int = 2147483647
@@ -1069,7 +1069,7 @@ class JsonSuite extends QueryTest {
 
   test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val emptySchema = JsonRDD2.inferSchema(empty, 1.0, "")
+    val emptySchema = InferSchema(empty, 1.0, "")
     assert(StructType(Seq()) === emptySchema)
   }
 

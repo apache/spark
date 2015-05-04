@@ -131,11 +131,10 @@ private[sql] class JSONRelation(
 
   override lazy val schema = userSpecifiedSchema.getOrElse {
     if (useJacksonStreamingAPI) {
-      JsonRDD2.nullTypeToStringType(
-        JsonRDD2.inferSchema(
-          baseRDD,
-          samplingRatio,
-          sqlContext.conf.columnNameOfCorruptRecord))
+      InferSchema(
+        baseRDD,
+        samplingRatio,
+        sqlContext.conf.columnNameOfCorruptRecord)
     } else {
       JsonRDD.nullTypeToStringType(
         JsonRDD.inferSchema(
@@ -147,7 +146,7 @@ private[sql] class JSONRelation(
 
   override def buildScan(): RDD[Row] = {
     if (useJacksonStreamingAPI) {
-      JsonRDD2.jsonStringToRow(
+      JacksonParser(
         baseRDD,
         schema,
         sqlContext.conf.columnNameOfCorruptRecord)
@@ -161,7 +160,7 @@ private[sql] class JSONRelation(
 
   override def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row] = {
     if (useJacksonStreamingAPI) {
-      JsonRDD2.jsonStringToRow(
+      JacksonParser(
         baseRDD,
         StructType.fromAttributes(requiredColumns),
         sqlContext.conf.columnNameOfCorruptRecord)
