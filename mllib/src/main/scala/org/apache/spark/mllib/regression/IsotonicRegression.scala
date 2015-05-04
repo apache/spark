@@ -21,6 +21,7 @@ import java.io.Serializable
 import java.lang.{Double => JDouble}
 import java.util.Arrays.binarySearch
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.json4s._
@@ -56,6 +57,13 @@ class IsotonicRegressionModel (
   require(boundaries.length == predictions.length)
   assertOrdered(boundaries)
   assertOrdered(predictions)(predictionOrd)
+
+  /** A Java-friendly constructor that takes two Iterable parameters and one Boolean parameter. */
+  def this(boundaries: java.lang.Iterable[Double],
+           predictions: java.lang.Iterable[Double],
+           isotonic: java.lang.Boolean) = {
+    this(boundaries.asScala.toArray, predictions.asScala.toArray, isotonic)
+  }
 
   /** Asserts the input array is monotone with the given ordering. */
   private def assertOrdered(xs: Array[Double])(implicit ord: Ordering[Double]): Unit = {
