@@ -68,9 +68,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     // Feed data to the server to send to the network receiver
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val expectedOutput = input.map(_.toString)
-    if (!testServer.waitForStart(10000)) {
-      fail("Timeout: TestServer cannot start in 10 seconds")
-    }
     for (i <- 0 until input.size) {
       testServer.send(input(i).toString + "\n")
       Thread.sleep(500)
@@ -392,10 +389,11 @@ class TestServer(portToBind: Int = 0) extends Logging {
           if (startLatch.getCount == 1) {
             // The first connection is a test connection to implement "waitForStart", so skip it
             // and send a signal
-            clientSocket.close()
+            if (!clientSocket.isClosed) {
+              clientSocket.close()
+            }
             startLatch.countDown()
-          }
-          else {
+          } else {
             // Real connections
             logInfo("New connection")
             try {
@@ -415,7 +413,9 @@ class TestServer(portToBind: Int = 0) extends Logging {
               case e: SocketException => logError("TestServer error", e)
             } finally {
               logInfo("Connection closed")
-              if (!clientSocket.isClosed) clientSocket.close()
+              if (!clientSocket.isClosed) {
+                clientSocket.close()
+              }
             }
           }
         }
@@ -428,13 +428,18 @@ class TestServer(portToBind: Int = 0) extends Logging {
     }
   }
 
-  def start() { servingThread.start() }
+  def start(): Unit = {
+    servingThread.start()
+    if (!waitForStart(10000)) {
+      throw new AssertionError("Timeout: TestServer cannot start in 10 seconds")
+    }
+  }
 
   /**
    * Wait until the server starts. Return true if the server starts in "millis" milliseconds.
    * Otherwise, return false to indicate it's timeout.
    */
-  def waitForStart(millis: Long): Boolean = {
+  private def waitForStart(millis: Long): Boolean = {
     // We will create a test connection to the server so that we can make sure it has started.
     val socket = new Socket("localhost", port)
     try {
