@@ -52,12 +52,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
         val input = Seq(1, 2, 3, 4, 5)
         // Use "batchCount" to make sure we check the result after all batches finish
-        val batchCountLatch = new CountDownLatch(input.size)
-        ssc.addStreamingListener(new StreamingListener {
-          override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
-            batchCountLatch.countDown()
-          }
-        })
+        val batchCounter = new BatchCounter(ssc)
         val networkStream = ssc.socketTextStream(
           "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
         val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
@@ -74,7 +69,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
           clock.advance(batchDuration.milliseconds)
         }
         // Make sure we finish all batches before "stop"
-        if (!batchCountLatch.await(30, TimeUnit.SECONDS)) {
+        if (!batchCounter.waitUntilBatchesCompleted(input.size, 30000)) {
           fail("Timeout: cannot finish all batches in 30 seconds")
         }
         logInfo("Stopping server")
