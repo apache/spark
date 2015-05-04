@@ -236,7 +236,7 @@ echo "========================================================================="
 CURRENT_BLOCK=$BLOCK_PYSPARK_UNIT_TESTS
 
 # add path for python 3 in jenkins
-export PATH="${PATH}:/home/anaonda/envs/py3k/bin"
+export PATH="${PATH}:/home/anaconda/envs/py3k/bin"
 ./python/run-tests
 
 echo ""
