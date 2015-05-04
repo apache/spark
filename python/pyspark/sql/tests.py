@@ -394,6 +394,12 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(95 < g.agg(functions.approxCountDistinct(df.key)).first()[0])
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
+    def test_corr(self):
+        import math
+        df = self.sc.parallelize([Row(a=i, b=math.sqrt(i)) for i in range(10)]).toDF()
+        corr = df.stat.corr("a", "b")
+        self.assertTrue(abs(corr - 0.95734012) < 1e-6)
+
     def test_cov(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
         cov = df.stat.cov("a", "b")

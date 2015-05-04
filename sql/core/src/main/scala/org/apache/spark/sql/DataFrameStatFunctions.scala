@@ -28,6 +28,32 @@ import org.apache.spark.sql.execution.stat._
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
+   * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
+   * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in 
+   * MLlib's Statistics.
+   *
+   * @param col1 the name of the column
+   * @param col2 the name of the column to calculate the correlation against
+   * @return The Pearson Correlation Coefficient as a Double.
+   */
+  def corr(col1: String, col2: String, method: String): Double = {
+    require(method == "pearson", "Currently only the calculation of the Pearson Correlation " +
+      "coefficient is supported.")
+    StatFunctions.pearsonCorrelation(df, Seq(col1, col2))
+  }
+
+  /**
+   * Calculates the Pearson Correlation Coefficient of two columns of a DataFrame.
+   *
+   * @param col1 the name of the column
+   * @param col2 the name of the column to calculate the correlation against
+   * @return The Pearson Correlation Coefficient as a Double.
+   */
+  def corr(col1: String, col2: String): Double = {
+    corr(col1, col2, "pearson")
+  }
+
+  /**
    * Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
    * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
