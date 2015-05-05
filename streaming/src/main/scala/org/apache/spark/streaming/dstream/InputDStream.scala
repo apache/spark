@@ -47,7 +47,7 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
   /**
    * The name of this InputDStream. By default, it's the class name with its id.
    */
-  def name: String = s"${getClass.getSimpleName}-$id"
+  private[streaming] def name: String = s"${getClass.getSimpleName}-$id"
 
   /**
    * Checks whether the 'time' is valid wrt slideDuration for generating RDD.
