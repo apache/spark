@@ -9,6 +9,7 @@ import dill
 import re
 import signal
 import socket
+import sys
 
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType,
@@ -132,6 +133,7 @@ class DagBag(object):
         """
         dttm = datetime.fromtimestamp(os.path.getmtime(filepath))
         mod_name, file_ext = os.path.splitext(os.path.split(filepath)[-1])
+        mod_name = 'unusual_prefix_' + mod_name
 
         if safe_mode:
             # Skip file if no obvious references to airflow or DAG are found.
@@ -147,6 +149,8 @@ class DagBag(object):
                 dttm != self.file_last_changed[filepath]):
             try:
                 logging.info("Importing " + filepath)
+                if mod_name in sys.modules:
+                    del sys.modules[mod_name]
                 m = imp.load_source(mod_name, filepath)
             except:
                 logging.error("Failed to import: " + filepath)
