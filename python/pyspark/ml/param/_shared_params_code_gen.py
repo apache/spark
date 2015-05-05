@@ -93,6 +93,7 @@ if __name__ == "__main__":
         ("featuresCol", "features column name", "'features'"),
         ("labelCol", "label column name", "'label'"),
         ("predictionCol", "prediction column name", "'prediction'"),
+        ("rawPredictionCol", "raw prediction column name", "'rawPrediction'"),
         ("inputCol", "input column name", None),
         ("outputCol", "output column name", None),
         ("numFeatures", "number of features", None)]
