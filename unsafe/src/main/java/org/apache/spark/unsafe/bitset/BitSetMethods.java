@@ -73,12 +73,12 @@ public final class BitSetMethods {
    */
   public static boolean anySet(Object baseObject, long baseOffset, long bitSetWidthInBytes) {
     long widthInLong = bitSetWidthInBytes / SIZE_OF_LONG;
-    for (long i = 0; i <= widthInLong; i++) {
+    for (int i = 0; i <= widthInLong; i++) {
       if (PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + i) != 0) {
         return true;
       }
     }
-    for (long i = SIZE_OF_LONG * widthInLong; i < bitSetWidthInBytes; i++) {
+    for (int i = (int)(SIZE_OF_LONG * widthInLong); i < bitSetWidthInBytes; i++) {
       if (PlatformDependent.UNSAFE.getByte(baseObject, baseOffset + i) != 0) {
         return true;
       }
