@@ -1405,6 +1405,13 @@ class Column(object):
             raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
 
+    @ignore_unicode_prefix
+    def between(self, lowerBound, upperBound):
+        """ A boolean expression that is evaluated to true if the value of this
+        expression is between the given columns.
+        """
+        return (self >= lowerBound) & (self <= upperBound)
+
     def __repr__(self):
         return 'Column<%s>' % self._jc.toString().encode('utf8')
 
