@@ -148,7 +148,10 @@ else:
 mkdir_p(AIRFLOW_HOME)
 
 if 'AIRFLOW_CONFIG' not in os.environ:
-    AIRFLOW_CONFIG = AIRFLOW_HOME + '/airflow.cfg'
+    if os.path.isfile(os.path.expanduser('~/airflow.cfg')):
+        AIRFLOW_CONFIG = os.path.expanduser('~/airflow.cfg')
+    else:
+        AIRFLOW_CONFIG = AIRFLOW_HOME + '/airflow.cfg'
 else:
     AIRFLOW_CONFIG = os.environ['AIRFLOW_CONFIG']
 
