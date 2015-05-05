@@ -15,38 +15,43 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.sort;
+package org.apache.spark.shuffle.unsafe;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
+import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
+import org.apache.spark.storage.BlockObjectWriter;
+import org.apache.spark.storage.TempLocalBlockId;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.Tuple2;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedList;
 
 /**
- * External sorter based on {@link UnsafeSorter}.
+ * External sorter based on {@link UnsafeShuffleSorter}.
  */
-public final class UnsafeExternalSorter {
+public final class UnsafeShuffleSpillWriter {
 
-  private final Logger logger = LoggerFactory.getLogger(UnsafeExternalSorter.class);
+  private final Logger logger = LoggerFactory.getLogger(UnsafeShuffleSpillWriter.class);
 
+  private static final int SER_BUFFER_SIZE = 1024 * 1024;  // TODO: tune this / don't duplicate
   private static final int PAGE_SIZE = 1024 * 1024;  // TODO: tune this
 
-  private final PrefixComparator prefixComparator;
-  private final RecordComparator recordComparator;
   private final int initialSize;
-  private int numSpills = 0;
-  private UnsafeSorter sorter;
+  private final int numPartitions;
+  private UnsafeShuffleSorter sorter;
 
   private final TaskMemoryManager memoryManager;
   private final ShuffleMemoryManager shuffleMemoryManager;
@@ -61,25 +66,22 @@ public final class UnsafeExternalSorter {
   private MemoryBlock currentPage = null;
   private long currentPagePosition = -1;
 
-  private final LinkedList<UnsafeSorterSpillWriter> spillWriters =
-    new LinkedList<UnsafeSorterSpillWriter>();
+  private final LinkedList<SpillInfo> spills = new LinkedList<SpillInfo>();
 
-  public UnsafeExternalSorter(
-      TaskMemoryManager memoryManager,
-      ShuffleMemoryManager shuffleMemoryManager,
-      BlockManager blockManager,
-      TaskContext taskContext,
-      RecordComparator recordComparator,
-      PrefixComparator prefixComparator,
-      int initialSize,
-      SparkConf conf) throws IOException {
+  public UnsafeShuffleSpillWriter(
+    TaskMemoryManager memoryManager,
+    ShuffleMemoryManager shuffleMemoryManager,
+    BlockManager blockManager,
+    TaskContext taskContext,
+    int initialSize,
+    int numPartitions,
+    SparkConf conf) throws IOException {
     this.memoryManager = memoryManager;
     this.shuffleMemoryManager = shuffleMemoryManager;
     this.blockManager = blockManager;
     this.taskContext = taskContext;
-    this.recordComparator = recordComparator;
-    this.prefixComparator = prefixComparator;
     this.initialSize = initialSize;
+    this.numPartitions = numPartitions;
     this.spillingEnabled = conf.getBoolean("spark.shuffle.spill", true);
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     this.fileBufferSize = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
@@ -92,7 +94,7 @@ public final class UnsafeExternalSorter {
     this.writeMetrics = new ShuffleWriteMetrics();
     // TODO: connect write metrics to task metrics?
     // TODO: move this sizing calculation logic into a static method of sorter:
-    final long memoryRequested = initialSize * 8L * 2;
+    final long memoryRequested = initialSize * 8L;
     if (spillingEnabled) {
       final long memoryAcquired = shuffleMemoryManager.tryToAcquire(memoryRequested);
       if (memoryAcquired != memoryRequested) {
@@ -101,38 +103,77 @@ public final class UnsafeExternalSorter {
       }
     }
 
-    this.sorter = new UnsafeSorter(memoryManager, recordComparator, prefixComparator, initialSize);
+    this.sorter = new UnsafeShuffleSorter(initialSize);
+  }
+
+  private SpillInfo writeSpillFile() throws IOException {
+    final UnsafeShuffleSorter.UnsafeShuffleSorterIterator sortedRecords = sorter.getSortedIterator();
+
+    int currentPartition = -1;
+    BlockObjectWriter writer = null;
+    final byte[] arr = new byte[SER_BUFFER_SIZE];
+
+    final Tuple2<TempLocalBlockId, File> spilledFileInfo =
+      blockManager.diskBlockManager().createTempLocalBlock();
+    final File file = spilledFileInfo._2();
+    final BlockId blockId = spilledFileInfo._1();
+    final SpillInfo spillInfo = new SpillInfo(numPartitions, file, blockId);
+    spills.add(spillInfo);
+
+    final SerializerInstance ser = new DummySerializerInstance();
+    writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, writeMetrics);
+
+    while (sortedRecords.hasNext()) {
+      sortedRecords.loadNext();
+      final int partition = sortedRecords.packedRecordPointer.getPartitionId();
+      assert (partition >= currentPartition);
+      if (partition != currentPartition) {
+        // Switch to the new partition
+        if (currentPartition != -1) {
+          writer.commitAndClose();
+          spillInfo.partitionLengths[currentPartition] = writer.fileSegment().length();
+        }
+        currentPartition = partition;
+        writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, writeMetrics);
+      }
+
+      final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
+      final int recordLength = PlatformDependent.UNSAFE.getInt(
+        memoryManager.getPage(recordPointer), memoryManager.getOffsetInPage(recordPointer));
+      PlatformDependent.copyMemory(
+        memoryManager.getPage(recordPointer),
+        memoryManager.getOffsetInPage(recordPointer) + 4, // skip over record length
+        arr,
+        PlatformDependent.BYTE_ARRAY_OFFSET,
+        recordLength);
+      assert (writer != null);  // To suppress an IntelliJ warning
+      writer.write(arr, 0, recordLength);
+      // TODO: add a test that detects whether we leave this call out:
+      writer.recordWritten();
+    }
+
+    if (writer != null) {
+      writer.commitAndClose();
+      spillInfo.partitionLengths[currentPartition] = writer.fileSegment().length();
+    }
+    return spillInfo;
   }
 
   @VisibleForTesting
   public void spill() throws IOException {
-    final UnsafeSorterSpillWriter spillWriter =
-      new UnsafeSorterSpillWriter(blockManager, fileBufferSize, writeMetrics);
-    spillWriters.add(spillWriter);
-    final UnsafeSorterIterator sortedRecords = sorter.getSortedIterator();
-    while (sortedRecords.hasNext()) {
-      sortedRecords.loadNext();
-      final Object baseObject = sortedRecords.getBaseObject();
-      final long baseOffset = sortedRecords.getBaseOffset();
-      // TODO: this assumption that the first long holds a length is not enforced via our interfaces
-      // We need to either always store this via the write path (e.g. not require the caller to do
-      // it), or provide interfaces / hooks for customizing the physical storage format etc.
-      final int recordLength = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset);
-      spillWriter.write(baseObject, baseOffset, recordLength, sortedRecords.getKeyPrefix());
-    }
-    spillWriter.close();
+    final SpillInfo spillInfo = writeSpillFile();
+
     final long sorterMemoryUsage = sorter.getMemoryUsage();
     sorter = null;
     shuffleMemoryManager.release(sorterMemoryUsage);
     final long spillSize = freeMemory();
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
-    taskContext.taskMetrics().incDiskBytesSpilled(spillWriter.numberOfSpilledBytes());
-    numSpills++;
+    taskContext.taskMetrics().incDiskBytesSpilled(spillInfo.file.length());
     final long threadId = Thread.currentThread().getId();
     // TODO: messy; log _before_ spill
     logger.info("Thread " + threadId + " spilling in-memory map of " +
       org.apache.spark.util.Utils.bytesToString(spillSize) + " to disk (" +
-          (numSpills + ((numSpills > 1) ? " times" : " time")) + " so far)");
+          (spills.size() + ((spills.size() > 1) ? " times" : " time")) + " so far)");
     openSorter();
   }
 
@@ -201,7 +242,7 @@ public final class UnsafeExternalSorter {
       Object recordBaseObject,
       long recordBaseOffset,
       int lengthInBytes,
-      long prefix) throws Exception {
+      int prefix) throws Exception {
     // Need 4 bytes to store the record length.
     ensureSpaceInDataPage(lengthInBytes + 4);
 
@@ -221,14 +262,11 @@ public final class UnsafeExternalSorter {
     sorter.insertRecord(recordAddress, prefix);
   }
 
-  public UnsafeSorterIterator getSortedIterator() throws IOException {
-    final UnsafeSorterSpillMerger spillMerger =
-      new UnsafeSorterSpillMerger(recordComparator, prefixComparator);
-    for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
-      spillMerger.addSpill(spillWriter.getReader(blockManager));
+  public SpillInfo[] closeAndGetSpills() throws IOException {
+    if (sorter != null) {
+      writeSpillFile();
     }
-    spillWriters.clear();
-    spillMerger.addSpill(sorter.getSortedIterator());
-    return spillMerger.getSortedIterator();
+    return (SpillInfo[]) spills.toArray();
   }
+
 }

@@ -1,0 +1,105 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.shuffle.unsafe;
+
+import java.util.Comparator;
+
+import org.apache.spark.util.collection.Sorter;
+
+public final class UnsafeShuffleSorter {
+
+  private final Sorter<PackedRecordPointer, long[]> sorter;
+  private final Comparator<PackedRecordPointer> sortComparator;
+
+  private long[] sortBuffer;
+
+  /**
+   * The position in the sort buffer where new records can be inserted.
+   */
+  private int sortBufferInsertPosition = 0;
+
+  public UnsafeShuffleSorter(int initialSize) {
+    assert (initialSize > 0);
+    this.sortBuffer = new long[initialSize];
+    this.sorter =
+      new Sorter<PackedRecordPointer, long[]>(UnsafeShuffleSortDataFormat.INSTANCE);
+    this.sortComparator = new Comparator<PackedRecordPointer>() {
+      @Override
+      public int compare(PackedRecordPointer left, PackedRecordPointer right) {
+        return left.getPartitionId() - right.getPartitionId();
+      }
+    };
+  }
+
+  public void expandSortBuffer() {
+    final long[] oldBuffer = sortBuffer;
+    sortBuffer = new long[oldBuffer.length * 2];
+    System.arraycopy(oldBuffer, 0, sortBuffer, 0, oldBuffer.length);
+  }
+
+  public boolean hasSpaceForAnotherRecord() {
+    return sortBufferInsertPosition + 1 < sortBuffer.length;
+  }
+
+  public long getMemoryUsage() {
+    return sortBuffer.length * 8L;
+  }
+
+  // TODO: clairify assumption that pointer points to record length.
+  public void insertRecord(long recordPointer, int partitionId) {
+    if (!hasSpaceForAnotherRecord()) {
+      expandSortBuffer();
+    }
+    sortBuffer[sortBufferInsertPosition] =
+        PackedRecordPointer.packPointer(recordPointer, partitionId);
+    sortBufferInsertPosition++;
+  }
+
+  public static abstract class UnsafeShuffleSorterIterator {
+
+    final PackedRecordPointer packedRecordPointer = new PackedRecordPointer();
+
+    public abstract boolean hasNext();
+
+    public abstract void loadNext();
+
+  }
+
+  /**
+   * Return an iterator over record pointers in sorted order. For efficiency, all calls to
+   * {@code next()} will return the same mutable object.
+   */
+  public UnsafeShuffleSorterIterator getSortedIterator() {
+    sorter.sort(sortBuffer, 0, sortBufferInsertPosition, sortComparator);
+    return new UnsafeShuffleSorterIterator() {
+
+      private int position = 0;
+
+      @Override
+      public boolean hasNext() {
+        return position < sortBufferInsertPosition;
+      }
+
+      @Override
+      public void loadNext() {
+        packedRecordPointer.packedRecordPointer = sortBuffer[position];
+        position++;
+      }
+    };
+  }
+}

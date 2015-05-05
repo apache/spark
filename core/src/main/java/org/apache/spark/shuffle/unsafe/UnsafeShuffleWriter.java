@@ -18,8 +18,11 @@
 package org.apache.spark.shuffle.unsafe;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 
 import scala.Option;
 import scala.Product2;
@@ -38,15 +41,8 @@ import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.IndexShuffleBlockManager;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.BlockManager;
-import org.apache.spark.storage.BlockObjectWriter;
-import org.apache.spark.storage.ShuffleBlockId;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
-import org.apache.spark.unsafe.sort.UnsafeSorterIterator;
-import org.apache.spark.unsafe.sort.UnsafeExternalSorter;
-import org.apache.spark.unsafe.sort.PrefixComparator;
-
-import org.apache.spark.unsafe.sort.RecordComparator;
 
 // IntelliJ gets confused and claims that this class should be abstract, but this actually compiles
 public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
@@ -62,7 +58,6 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
   private final SerializerInstance serializer;
   private final Partitioner partitioner;
   private final ShuffleWriteMetrics writeMetrics;
-  private final int fileBufferSize;
   private MapStatus mapStatus = null;
 
   /**
@@ -86,14 +81,11 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
     this.partitioner = dep.partitioner();
     this.writeMetrics = new ShuffleWriteMetrics();
     context.taskMetrics().shuffleWriteMetrics_$eq(Option.apply(writeMetrics));
-    this.fileBufferSize =
-      // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
-      (int) SparkEnv.get().conf().getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
   }
 
   public void write(scala.collection.Iterator<Product2<K, V>> records) {
     try {
-      final long[] partitionLengths = writeSortedRecordsToFile(sortRecords(records));
+      final long[] partitionLengths = mergeSpills(insertRecordsIntoSorter(records));
       shuffleBlockManager.writeIndexFile(shuffleId, mapId, partitionLengths);
       mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
     } catch (Exception e) {
@@ -102,19 +94,18 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
   }
 
   private void freeMemory() {
-    // TODO: free sorter memory
+    // TODO
   }
 
-  private UnsafeSorterIterator sortRecords(
-    scala.collection.Iterator<? extends Product2<K, V>> records) throws Exception {
-    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
+  private SpillInfo[] insertRecordsIntoSorter(
+      scala.collection.Iterator<? extends Product2<K, V>> records) throws Exception {
+    final UnsafeShuffleSpillWriter sorter = new UnsafeShuffleSpillWriter(
       memoryManager,
       SparkEnv$.MODULE$.get().shuffleMemoryManager(),
       SparkEnv$.MODULE$.get().blockManager(),
       TaskContext.get(),
-      RECORD_COMPARATOR,
-      PREFIX_COMPARATOR,
       4096, // Initial size (TODO: tune this!)
+      partitioner.numPartitions(),
       SparkEnv$.MODULE$.get().conf()
     );
 
@@ -140,50 +131,50 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
         serArray, PlatformDependent.BYTE_ARRAY_OFFSET, serializedRecordSize, partitionId);
     }
 
-    return sorter.getSortedIterator();
+    return sorter.closeAndGetSpills();
   }
 
-  private long[] writeSortedRecordsToFile(UnsafeSorterIterator sortedRecords) throws IOException {
+  private long[] mergeSpills(SpillInfo[] spills) throws IOException {
     final File outputFile = shuffleBlockManager.getDataFile(shuffleId, mapId);
-    final ShuffleBlockId blockId =
-      new ShuffleBlockId(shuffleId, mapId, IndexShuffleBlockManager.NOOP_REDUCE_ID());
-    final long[] partitionLengths = new long[partitioner.numPartitions()];
+    final int numPartitions = partitioner.numPartitions();
+    final long[] partitionLengths = new long[numPartitions];
+    final FileChannel[] spillInputChannels = new FileChannel[spills.length];
 
-    int currentPartition = -1;
-    BlockObjectWriter writer = null;
+    // TODO: We need to add an option to bypass transferTo here since older Linux kernels are
+    // affected by a bug here that can lead to data truncation; see the comments Utils.scala,
+    // in the copyStream() method. I didn't use copyStream() here because we only want to copy
+    // a limited number of bytes from the stream and I didn't want to modify / extend that method
+    // to accept a length.
 
-    final byte[] arr = new byte[SER_BUFFER_SIZE];
-    while (sortedRecords.hasNext()) {
-      sortedRecords.loadNext();
-      final int partition = (int) sortedRecords.getKeyPrefix();
-      assert (partition >= currentPartition);
-      if (partition != currentPartition) {
-        // Switch to the new partition
-        if (currentPartition != -1) {
-          writer.commitAndClose();
-          partitionLengths[currentPartition] = writer.fileSegment().length();
+    // TODO: special case optimization for case where we only write one file (non-spill case).
+
+    for (int i = 0; i < spills.length; i++) {
+      spillInputChannels[i] = new FileInputStream(spills[i].file).getChannel();
+    }
+
+    final FileChannel mergedFileOutputChannel = new FileOutputStream(outputFile).getChannel();
+
+    for (int partition = 0; partition < numPartitions; partition++ ) {
+      for (int i = 0; i < spills.length; i++) {
+        final long bytesToTransfer = spills[i].partitionLengths[partition];
+        long bytesRemainingToBeTransferred = bytesToTransfer;
+        final FileChannel spillInputChannel = spillInputChannels[i];
+        long fromPosition = spillInputChannel.position();
+        while (bytesRemainingToBeTransferred > 0) {
+          bytesRemainingToBeTransferred -= spillInputChannel.transferTo(
+              fromPosition,
+              bytesRemainingToBeTransferred,
+              mergedFileOutputChannel);
         }
-        currentPartition = partition;
-        writer =
-          blockManager.getDiskWriter(blockId, outputFile, serializer, fileBufferSize, writeMetrics);
+        partitionLengths[partition] += bytesToTransfer;
       }
-
-      PlatformDependent.copyMemory(
-          sortedRecords.getBaseObject(),
-        sortedRecords.getBaseOffset() + 4,
-        arr,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
-          sortedRecords.getRecordLength());
-      assert (writer != null);  // To suppress an IntelliJ warning
-      writer.write(arr, 0, sortedRecords.getRecordLength());
-      // TODO: add a test that detects whether we leave this call out:
-      writer.recordWritten();
     }
 
-    if (writer != null) {
-      writer.commitAndClose();
-      partitionLengths[currentPartition] = writer.fileSegment().length();
+    // TODO: should this be in a finally block?
+    for (int i = 0; i < spills.length; i++) {
+      spillInputChannels[i].close();
     }
+    mergedFileOutputChannel.close();
 
     return partitionLengths;
   }
@@ -209,19 +200,4 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
       // TODO: increment the shuffle write time metrics
     }
   }
-
-  private static final RecordComparator RECORD_COMPARATOR = new RecordComparator() {
-    @Override
-    public int compare(
-        Object leftBaseObject, long leftBaseOffset, Object rightBaseObject, long rightBaseOffset) {
-      return 0;
-    }
-  };
-
-  private static final PrefixComparator PREFIX_COMPARATOR = new PrefixComparator() {
-    @Override
-    public int compare(long prefix1, long prefix2) {
-      return (int) (prefix1 - prefix2);
-    }
-  };
 }

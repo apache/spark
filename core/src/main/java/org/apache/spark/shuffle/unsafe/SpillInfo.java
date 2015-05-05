@@ -15,21 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.sort;
+package org.apache.spark.shuffle.unsafe;
 
-import java.io.IOException;
+import org.apache.spark.storage.BlockId;
 
-public abstract class UnsafeSorterIterator {
+import java.io.File;
 
-  public abstract boolean hasNext();
+final class SpillInfo {
+  final long[] partitionLengths;
+  final File file;
+  final BlockId blockId;
 
-  public abstract void loadNext() throws IOException;
-
-  public abstract Object getBaseObject();
-
-  public abstract long getBaseOffset();
-
-  public abstract int getRecordLength();
-
-  public abstract long getKeyPrefix();
+  public SpillInfo(int numPartitions, File file, BlockId blockId) {
+    this.partitionLengths = new long[numPartitions];
+    this.file = file;
+    this.blockId = blockId;
+  }
 }
