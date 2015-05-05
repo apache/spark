@@ -239,37 +239,43 @@ trait HiveTypeCoercion {
         a.makeCopy(Array(a.left, Cast(a.right, DoubleType)))
 
       // we should cast all timestamp/date/string compare into string compare
-      case p: BinaryPredicate if p.left.dataType == StringType
-        && p.right.dataType == DateType =>
+      case p: BinaryComparison if p.left.dataType == StringType &&
+                                  p.right.dataType == DateType =>
         p.makeCopy(Array(p.left, Cast(p.right, StringType)))
-      case p: BinaryPredicate if p.left.dataType == DateType
-        && p.right.dataType == StringType =>
+      case p: BinaryComparison if p.left.dataType == DateType &&
+                                  p.right.dataType == StringType =>
         p.makeCopy(Array(Cast(p.left, StringType), p.right))
-      case p: BinaryPredicate if p.left.dataType == StringType
-        && p.right.dataType == TimestampType =>
+      case p: BinaryComparison if p.left.dataType == StringType &&
+                                  p.right.dataType == TimestampType =>
         p.makeCopy(Array(p.left, Cast(p.right, StringType)))
-      case p: BinaryPredicate if p.left.dataType == TimestampType
-        && p.right.dataType == StringType =>
+      case p: BinaryComparison if p.left.dataType == TimestampType &&
+                                  p.right.dataType == StringType =>
         p.makeCopy(Array(Cast(p.left, StringType), p.right))
-      case p: BinaryPredicate if p.left.dataType == TimestampType
-        && p.right.dataType == DateType =>
+      case p: BinaryComparison if p.left.dataType == TimestampType &&
+                                  p.right.dataType == DateType =>
         p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
-      case p: BinaryPredicate if p.left.dataType == DateType
-        && p.right.dataType == TimestampType =>
+      case p: BinaryComparison if p.left.dataType == DateType &&
+                                  p.right.dataType == TimestampType =>
         p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
 
-      case p: BinaryPredicate if p.left.dataType == StringType && p.right.dataType != StringType =>
+      case p: BinaryComparison if p.left.dataType == StringType &&
+                                  p.right.dataType != StringType =>
         p.makeCopy(Array(Cast(p.left, DoubleType), p.right))
-      case p: BinaryPredicate if p.left.dataType != StringType && p.right.dataType == StringType =>
+      case p: BinaryComparison if p.left.dataType != StringType &&
+                                  p.right.dataType == StringType =>
         p.makeCopy(Array(p.left, Cast(p.right, DoubleType)))
 
-      case i @ In(a, b) if a.dataType == DateType && b.forall(_.dataType == StringType) =>
+      case i @ In(a, b) if a.dataType == DateType &&
+                           b.forall(_.dataType == StringType) =>
         i.makeCopy(Array(Cast(a, StringType), b))
-      case i @ In(a, b) if a.dataType == TimestampType && b.forall(_.dataType == StringType) =>
+      case i @ In(a, b) if a.dataType == TimestampType &&
+                           b.forall(_.dataType == StringType) =>
         i.makeCopy(Array(Cast(a, StringType), b))
-      case i @ In(a, b) if a.dataType == DateType && b.forall(_.dataType == TimestampType) =>
+      case i @ In(a, b) if a.dataType == DateType &&
+                           b.forall(_.dataType == TimestampType) =>
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
-      case i @ In(a, b) if a.dataType == TimestampType && b.forall(_.dataType == DateType) =>
+      case i @ In(a, b) if a.dataType == TimestampType &&
+                           b.forall(_.dataType == DateType) =>
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
 
       case Sum(e) if e.dataType == StringType =>
@@ -420,19 +426,19 @@ trait HiveTypeCoercion {
           )
 
         case LessThan(e1 @ DecimalType.Expression(p1, s1),
-        e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+                      e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
           LessThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
 
         case LessThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
-        e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+                             e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
           LessThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
 
         case GreaterThan(e1 @ DecimalType.Expression(p1, s1),
-        e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+                         e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
           GreaterThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
 
         case GreaterThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
-        e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+                                e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
           GreaterThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
 
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
@@ -481,8 +487,8 @@ trait HiveTypeCoercion {
       // No need to change the EqualNullSafe operators, too
       case e: EqualNullSafe => e
       // Otherwise turn them to Byte types so that there exists and ordering.
-      case p: BinaryComparison
-          if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
+      case p: BinaryComparison if p.left.dataType == BooleanType &&
+                                  p.right.dataType == BooleanType =>
         p.makeCopy(Array(Cast(p.left, ByteType), Cast(p.right, ByteType)))
     }
   }
@@ -563,10 +569,6 @@ trait HiveTypeCoercion {
       // Hive lets you do aggregation of timestamps... for some reason
       case Sum(e @ TimestampType()) => Sum(Cast(e, DoubleType))
       case Average(e @ TimestampType()) => Average(Cast(e, DoubleType))
-
-      // Compatible with Hive
-      case Substring(e, start, len) if e.dataType != StringType =>
-        Substring(Cast(e, StringType), start, len)
 
       // Coalesce should return the first non-null value, which could be any column
       // from the list. So we need to make sure the return type is deterministic and

@@ -27,7 +27,7 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 /** Page showing list of all ongoing and recently finished stages and pools */
 private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
   private val sc = parent.sc
-  private val listener = parent.listener
+  private val listener = parent.progressListener
   private def isFairScheduler = parent.isFairScheduler
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -42,18 +42,18 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
 
       val activeStagesTable =
         new StageTableBase(activeStages.sortBy(_.submissionTime).reverse,
-          parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+          parent.basePath, parent.progressListener, isFairScheduler = parent.isFairScheduler,
           killEnabled = parent.killEnabled)
       val pendingStagesTable =
         new StageTableBase(pendingStages.sortBy(_.submissionTime).reverse,
-          parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+          parent.basePath, parent.progressListener, isFairScheduler = parent.isFairScheduler,
           killEnabled = false)
       val completedStagesTable =
         new StageTableBase(completedStages.sortBy(_.submissionTime).reverse, parent.basePath,
-          parent.listener, isFairScheduler = parent.isFairScheduler, killEnabled = false)
+          parent.progressListener, isFairScheduler = parent.isFairScheduler, killEnabled = false)
       val failedStagesTable =
         new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse, parent.basePath,
-          parent.listener, isFairScheduler = parent.isFairScheduler)
+          parent.progressListener, isFairScheduler = parent.isFairScheduler)
 
       // For now, pool information is only accessible in live UIs
       val pools = sc.map(_.getAllPools).getOrElse(Seq.empty[Schedulable])
@@ -63,6 +63,12 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       val shouldShowPendingStages = pendingStages.nonEmpty
       val shouldShowCompletedStages = completedStages.nonEmpty
       val shouldShowFailedStages = failedStages.nonEmpty
+
+      val completedStageNumStr = if (numCompletedStages == completedStages.size) {
+        s"$numCompletedStages"
+      } else {
+        s"$numCompletedStages, only showing ${completedStages.size}"
+      }
 
       val summary: NodeSeq =
         <div>
@@ -98,9 +104,9 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
             }
             {
               if (shouldShowCompletedStages) {
-                <li>
+                <li id="completed-summary">
                   <a href="#completed"><strong>Completed Stages:</strong></a>
-                  {numCompletedStages}
+                  {completedStageNumStr}
                 </li>
               }
             }
@@ -132,7 +138,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         pendingStagesTable.toNodeSeq
       }
       if (shouldShowCompletedStages) {
-        content ++= <h4 id="completed">Completed Stages ({numCompletedStages})</h4> ++
+        content ++= <h4 id="completed">Completed Stages ({completedStageNumStr})</h4> ++
         completedStagesTable.toNodeSeq
       }
       if (shouldShowFailedStages) {

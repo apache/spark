@@ -174,6 +174,80 @@ making it easy to identify slow tasks, data skew, etc.
 
 Note that the history server only displays completed Spark jobs. One way to signal the completion of a Spark job is to stop the Spark Context explicitly (`sc.stop()`), or in Python using the `with SparkContext() as sc:` to handle the Spark Context setup and tear down, and still show the job history on the UI.
 
+## REST API
+
+In addition to viewing the metrics in the UI, they are also available as JSON.  This gives developers
+an easy way to create new visualizations and monitoring tools for Spark.  The JSON is available for
+both running applications, and in the history server.  The endpoints are mounted at `/json/v1`.  Eg.,
+for the history server, they would typically be accessible at `http://<server-url>:18080/json/v1`, and
+for a running application, at `http://localhost:4040/json/v1`.
+
+<table class="table">
+  <tr><th>Endpoint</th><th>Meaning</th></tr>
+  <tr>
+    <td><code>/applications</code></td>
+    <td>A list of all applications</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/jobs</code></td>
+    <td>A list of all jobs for a given application</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/jobs/[job-id]</code></td>
+    <td>Details for the given job</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/stages</code></td>
+    <td>A list of all stages for a given application</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
+    <td>A list of all attempts for the given stage</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]</code></td>
+    <td>Details for the given stage attempt</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskSummary</code></td>
+    <td>Summary metrics of all tasks in the given stage attempt</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskList</code></td>
+    <td>A list of all tasks for the given stage attempt</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/executors</code></td>
+    <td>A list of all executors for the given application</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/storage/rdd</code></td>
+    <td>A list of stored RDDs for the given application</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/storage/rdd/[rdd-id]</code></td>
+    <td>Details for the storage status of a given RDD</td>
+  </tr>
+</table>
+
+When running on Yarn, each application has multiple attempts, so `[app-id]` is actually
+`[app-id]/[attempt-id]` in all cases.
+
+These endpoints have been strongly versioned to make it easier to develop applications on top.
+ In particular, Spark guarantees:
+
+* Endpoints will never be removed from one version
+* Individual fields will never be removed for any given endpoint
+* New endpoints may be added
+* New fields may be added to existing endpoints
+* New versions of the api may be added in the future at a separate endpoint (eg., `json/v2`).  New versions are *not* required to be backwards compatible.
+* Api versions may be dropped, but only after at least one minor release of co-existing with a new api version
+
+Note that even when examining the UI of a running applications, the `applications/[app-id]` portion is
+still required, though there is only one application available.  Eg. to see the list of jobs for the
+running app, you would go to `http://localhost:4040/json/v1/applications/[app-id]/jobs`.  This is to
+keep the paths consistent in both modes.
+
 # Metrics
 
 Spark has a configurable metrics system based on the 
