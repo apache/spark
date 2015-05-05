@@ -498,6 +498,65 @@ class RowMatrix(
   }
 
   /**
+   * Compute QR decomposition for rowMatrix. The implementation is designed to optimize the QR
+   * decomposition (factorizations) for the RowMatrix of a tall and skinny shape, yet it applies
+   * to RowMatrix in general.
+   *
+   * Reference:
+   *  Austin R. Benson, David F. Gleich, James Demmel. "Direct QR factorizations for tall-and
+   *  -skinny matrices in MapReduce architectures", 2013 IEEE International Conference on Big Data
+   * @param computeQ: whether to computeQ, which is quite expensive.
+   * @return the decomposition result as (Option[Q], R), where Q is a RowMatrix and R is Matrix.
+   */
+  def TSQR(computeQ: Boolean = false): (Option[RowMatrix], Matrix) = {
+    val col = numCols().toInt
+
+    // split rows horizontally into smaller matrices, and compute QR for each of them
+    val blockQRs = rows.mapPartitions(rowsIterator =>{
+      val partRows = rowsIterator.toArray
+      val rowCount = partRows.size
+      var bdm = BDM.zeros[Double](partRows.size, col)
+      var i = 0
+      partRows.foreach(row =>{
+        bdm(i, ::) := row.toBreeze.t
+        i += 1
+      })
+
+      val blockQR = breeze.linalg.qr.reduced(bdm)
+      Iterator((blockQR.r, blockQR.q))
+    }).cache
+
+    // combine the R part from previous results horizontally into a tall matrix
+    val blockRsRdd = blockQRs.map(_._1).collect()
+    val CombinedR = blockRsRdd.reduceLeft((r1, r2) => BDM.vertcat(r1, r2))
+
+    val CombinedRDecomposition = breeze.linalg.qr.reduced(CombinedR)
+    val finalR = Matrices.fromBreeze(CombinedRDecomposition.r.toDenseMatrix)
+
+    val finalQ = if(computeQ){
+      val blockQ = blockQRs.map(_._2)
+      val rightPartQ = CombinedRDecomposition.q
+      val rightQArray = (0 until blockQ.count().toInt)
+        .map(i => rightPartQ(i * col until (i + 1) * col, ::))
+        .toArray
+      val rightQrdd = blockQ.context.parallelize(rightQArray)
+
+      val qProducts = blockQ.zip(rightQrdd).map(m => m._1 * m._2)
+      val newRows = qProducts.flatMap(m => {
+        val row = m.rows
+        (0 until row).map(i =>{
+          val bv = m(i, ::).t
+          Vectors.fromBreeze(bv)
+        })
+      })
+      Some(new RowMatrix(newRows))
+    }
+    else None
+
+    (finalQ, finalR)
+  }
+
+  /**
    * Find all similar columns using the DIMSUM sampling algorithm, described in two papers
    *
    * http://arxiv.org/abs/1206.2082
