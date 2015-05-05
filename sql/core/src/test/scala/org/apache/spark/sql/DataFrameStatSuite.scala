@@ -69,16 +69,21 @@ class DataFrameStatSuite extends FunSuite  {
     // > cor(y, z, method="spearman")
     // [1] 0.3162278
 
-    val df1 = x.zip(y).toDF("a", "b")
-    val corr1 = df1.stat.corr("a", "b", "spearman")
+    // No tie-correction
+    val params1: Map[String, Any] = Map("tie" -> false)
 
-    val params: Map[String, Any] = Map("tie" -> true)
+    val df1 = x.zip(y).toDF("a", "b")
+    val corr1 = df1.stat.corr("a", "b", "spearman", params1)
+
+    // With tie-correction
+    val params2: Map[String, Any] = Map("tie" -> true)
 
     val df2 = x.zip(z).toDF("a", "c")
-    val corr2 = df2.stat.corr("a", "c", "spearman", params)
+    val corr2 = df2.stat.corr("a", "c", "spearman", params2)
 
+    // Default is with tie-correction
     val df3 = y.zip(z).toDF("b", "c")
-    val corr3 = df3.stat.corr("b", "c", "spearman", params)
+    val corr3 = df3.stat.corr("b", "c", "spearman")
 
     assert(corr1 - 0.4 < 1e-12)
     assert(corr2 + 0.6324555 < 1e-12)
