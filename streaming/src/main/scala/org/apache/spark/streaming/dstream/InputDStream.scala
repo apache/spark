@@ -41,6 +41,14 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
 
   ssc.graph.addInputStream(this)
 
+  /** This is an unique identifier for the input stream. */
+  val id = ssc.getNewInputStreamId()
+
+  /**
+   * The name of this InputDStream. By default, it's the class name with its id.
+   */
+  private[streaming] def name: String = s"${getClass.getSimpleName}-$id"
+
   /**
    * Checks whether the 'time' is valid wrt slideDuration for generating RDD.
    * Additionally it also ensures valid times are in strictly increasing order.
@@ -61,7 +69,7 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
     }
   }
 
-  override def dependencies = List()
+  override def dependencies: List[DStream[_]] = List()
 
   override def slideDuration: Duration = {
     if (ssc == null) throw new Exception("ssc is null")

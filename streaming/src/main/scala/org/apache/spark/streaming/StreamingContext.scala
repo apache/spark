@@ -27,10 +27,12 @@ import scala.reflect.ClassTag
 import akka.actor.{Props, SupervisorStrategy}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.spark._
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.input.FixedLengthBinaryInputFormat
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream._
@@ -105,6 +107,19 @@ class StreamingContext private[streaming] (
    */
   def this(path: String) = this(path, new Configuration)
 
+  /**
+   * Recreate a StreamingContext from a checkpoint file using an existing SparkContext.
+   * @param path Path to the directory that was specified as the checkpoint directory
+   * @param sparkContext Existing SparkContext
+   */
+  def this(path: String, sparkContext: SparkContext) = {
+    this(
+      sparkContext,
+      CheckpointReader.read(path, sparkContext.conf, sparkContext.hadoopConfiguration).get,
+      null)
+  }
+
+
   if (sc_ == null && cp_ == null) {
     throw new Exception("Spark Streaming cannot be initialized with " +
       "both SparkContext and checkpoint as null")
@@ -113,10 +128,12 @@ class StreamingContext private[streaming] (
   private[streaming] val isCheckpointPresent = (cp_ != null)
 
   private[streaming] val sc: SparkContext = {
-    if (isCheckpointPresent) {
-      new SparkContext(cp_.sparkConf)
-    } else {
+    if (sc_ != null) {
       sc_
+    } else if (isCheckpointPresent) {
+      new SparkContext(cp_.createSparkConf())
+    } else {
+      throw new SparkException("Cannot create StreamingContext without a SparkContext")
     }
   }
 
@@ -127,7 +144,7 @@ class StreamingContext private[streaming] (
 
   private[streaming] val conf = sc.conf
 
-  private[streaming] val env = SparkEnv.get
+  private[streaming] val env = sc.env
 
   private[streaming] val graph: DStreamGraph = {
     if (isCheckpointPresent) {
@@ -142,7 +159,7 @@ class StreamingContext private[streaming] (
     }
   }
 
-  private val nextReceiverInputStreamId = new AtomicInteger(0)
+  private val nextInputStreamId = new AtomicInteger(0)
 
   private[streaming] var checkpointDir: String = {
     if (isCheckpointPresent) {
@@ -172,7 +189,9 @@ class StreamingContext private[streaming] (
 
   /** Register streaming source to metrics system */
   private val streamingSource = new StreamingSource(this)
-  SparkEnv.get.metricsSystem.registerSource(streamingSource)
+  assert(env != null)
+  assert(env.metricsSystem != null)
+  env.metricsSystem.registerSource(streamingSource)
 
   /** Enumeration to identify current state of the StreamingContext */
   private[streaming] object StreamingContextState extends Enumeration {
@@ -186,7 +205,7 @@ class StreamingContext private[streaming] (
   /**
    * Return the associated Spark context
    */
-  def sparkContext = sc
+  def sparkContext: SparkContext = sc
 
   /**
    * Set each DStreams in this context to remember RDDs it generated in the last given duration.
@@ -222,7 +241,7 @@ class StreamingContext private[streaming] (
     if (isCheckpointPresent) cp_ else null
   }
 
-  private[streaming] def getNewReceiverStreamId() = nextReceiverInputStreamId.getAndIncrement()
+  private[streaming] def getNewInputStreamId() = nextInputStreamId.getAndIncrement()
 
   /**
    * Create an input stream with any arbitrary user implemented receiver.
@@ -361,6 +380,30 @@ class StreamingContext private[streaming] (
 
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them using the given key-value types and input format.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system. File names starting with . are ignored.
+   * @param directory HDFS directory to monitor for new file
+   * @param filter Function to filter paths to process
+   * @param newFilesOnly Should process only new files and ignore existing files in the directory
+   * @param conf Hadoop configuration
+   * @tparam K Key type for reading HDFS file
+   * @tparam V Value type for reading HDFS file
+   * @tparam F Input format for reading HDFS file
+   */
+  def fileStream[
+    K: ClassTag,
+    V: ClassTag,
+    F <: NewInputFormat[K, V]: ClassTag
+  ] (directory: String,
+     filter: Path => Boolean,
+     newFilesOnly: Boolean,
+     conf: Configuration): InputDStream[(K, V)] = {
+    new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly, Option(conf))
+  }
+
+  /**
+   * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as text files (using key as LongWritable, value
    * as Text and input format as TextInputFormat). Files must be written to the
    * monitored directory by "moving" them from another location within the same
@@ -369,6 +412,37 @@ class StreamingContext private[streaming] (
    */
   def textFileStream(directory: String): DStream[String] = {
     fileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Create an input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them as flat binary files, assuming a fixed length per record,
+   * generating one byte array per record. Files must be written to the monitored directory
+   * by "moving" them from another location within the same file system. File names
+   * starting with . are ignored.
+   *
+   * '''Note:''' We ensure that the byte array for each record in the
+   * resulting RDDs of the DStream has the provided record length.
+   *
+   * @param directory HDFS directory to monitor for new file
+   * @param recordLength length of each record in bytes
+   */
+  @Experimental
+  def binaryRecordsStream(
+      directory: String,
+      recordLength: Int): DStream[Array[Byte]] = {
+    val conf = sc_.hadoopConfiguration
+    conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
+    val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](
+      directory, FileInputDStream.defaultFilter : Path => Boolean, newFilesOnly=true, conf)
+    val data = br.map { case (k, v) =>
+      val bytes = v.getBytes
+      assert(bytes.length == recordLength, "Byte array does not have correct length")
+      bytes
+    }
+    data
   }
 
   /**
@@ -453,6 +527,7 @@ class StreamingContext private[streaming] (
     validate()
     sparkContext.setCallSite(DStream.getCreationSite())
     scheduler.start()
+    uiTab.foreach(_.attach())
     state = Started
   }
 
@@ -469,7 +544,20 @@ class StreamingContext private[streaming] (
    * will be thrown in this thread.
    * @param timeout time to wait in milliseconds
    */
+  @deprecated("Use awaitTerminationOrTimeout(Long) instead", "1.3.0")
   def awaitTermination(timeout: Long) {
+    waiter.waitForStopOrError(timeout)
+  }
+
+  /**
+   * Wait for the execution to stop. Any exceptions that occurs during the execution
+   * will be thrown in this thread.
+   *
+   * @param timeout time to wait in milliseconds
+   * @return `true` if it's stopped; or throw the reported error during the execution; or `false`
+   *         if the waiting time elapsed before returning from the method.
+   */
+  def awaitTerminationOrTimeout(timeout: Long): Boolean = {
     waiter.waitForStopOrError(timeout)
   }
 
@@ -508,6 +596,7 @@ class StreamingContext private[streaming] (
     // Even if we have already stopped, we still need to attempt to stop the SparkContext because
     // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
     if (stopSparkContext) sc.stop()
+    uiTab.foreach(_.detach())
     // The state should always be Stopped after calling `stop()`, even if we haven't started yet:
     state = Stopped
   }
@@ -525,7 +614,8 @@ object StreamingContext extends Logging {
   @deprecated("Replaced by implicit functions in the DStream companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
   def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
-      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
+      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null)
+    : PairDStreamFunctions[K, V] = {
     DStream.toPairDStreamFunctions(stream)(kt, vt, ord)
   }
 
@@ -549,17 +639,57 @@ object StreamingContext extends Logging {
       hadoopConf: Configuration = new Configuration(),
       createOnError: Boolean = false
     ): StreamingContext = {
-    val checkpointOption = try {
-      CheckpointReader.read(checkpointPath,  new SparkConf(), hadoopConf)
-    } catch {
-      case e: Exception =>
-        if (createOnError) {
-          None
-        } else {
-          throw e
-        }
-    }
+    val checkpointOption = CheckpointReader.read(
+      checkpointPath, new SparkConf(), hadoopConf, createOnError)
     checkpointOption.map(new StreamingContext(null, _, null)).getOrElse(creatingFunc())
+  }
+
+
+  /**
+   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
+   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
+   * recreated from the checkpoint data. If the data does not exist, then the StreamingContext
+   * will be created by called the provided `creatingFunc` on the provided `sparkContext`. Note
+   * that the SparkConf configuration in the checkpoint data will not be restored as the
+   * SparkContext has already been created.
+   *
+   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
+   * @param creatingFunc   Function to create a new StreamingContext using the given SparkContext
+   * @param sparkContext   SparkContext using which the StreamingContext will be created
+   */
+  def getOrCreate(
+      checkpointPath: String,
+      creatingFunc: SparkContext => StreamingContext,
+      sparkContext: SparkContext
+    ): StreamingContext = {
+    getOrCreate(checkpointPath, creatingFunc, sparkContext, createOnError = false)
+  }
+
+  /**
+   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
+   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
+   * recreated from the checkpoint data. If the data does not exist, then the StreamingContext
+   * will be created by called the provided `creatingFunc` on the provided `sparkContext`. Note
+   * that the SparkConf configuration in the checkpoint data will not be restored as the
+   * SparkContext has already been created.
+   *
+   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
+   * @param creatingFunc   Function to create a new StreamingContext using the given SparkContext
+   * @param sparkContext   SparkContext using which the StreamingContext will be created
+   * @param createOnError  Whether to create a new StreamingContext if there is an
+   *                       error in reading checkpoint data. By default, an exception will be
+   *                       thrown on error.
+   */
+  def getOrCreate(
+      checkpointPath: String,
+      creatingFunc: SparkContext => StreamingContext,
+      sparkContext: SparkContext,
+      createOnError: Boolean
+    ): StreamingContext = {
+    val checkpointOption = CheckpointReader.read(
+      checkpointPath, sparkContext.conf, sparkContext.hadoopConfiguration, createOnError)
+    checkpointOption.map(new StreamingContext(sparkContext, _, null))
+                    .getOrElse(creatingFunc(sparkContext))
   }
 
   /**

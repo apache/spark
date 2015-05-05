@@ -20,64 +20,73 @@ package org.apache.spark.deploy.worker
 import java.io._
 
 import scala.collection.JavaConversions._
-import scala.collection.Map
 
 import akka.actor.ActorRef
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileUtil, Path}
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.deploy.{Command, DriverDescription, SparkHadoopUtil}
+import org.apache.spark.{Logging, SparkConf, SecurityManager}
+import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
+import org.apache.spark.util.{Utils, Clock, SystemClock}
 
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
  * This is currently only used in standalone cluster deploy mode.
  */
-private[spark] class DriverRunner(
-    val conf: SparkConf,
+private[deploy] class DriverRunner(
+    conf: SparkConf,
     val driverId: String,
     val workDir: File,
     val sparkHome: File,
     val driverDesc: DriverDescription,
     val worker: ActorRef,
-    val workerUrl: String)
+    val workerUrl: String,
+    val securityManager: SecurityManager)
   extends Logging {
 
-  @volatile var process: Option[Process] = None
-  @volatile var killed = false
+  @volatile private var process: Option[Process] = None
+  @volatile private var killed = false
 
   // Populated once finished
-  var finalState: Option[DriverState] = None
-  var finalException: Option[Exception] = None
-  var finalExitCode: Option[Int] = None
+  private[worker] var finalState: Option[DriverState] = None
+  private[worker] var finalException: Option[Exception] = None
+  private var finalExitCode: Option[Int] = None
 
   // Decoupled for testing
-  private[deploy] def setClock(_clock: Clock) = clock = _clock
-  private[deploy] def setSleeper(_sleeper: Sleeper) = sleeper = _sleeper
-  private var clock = new Clock {
-    def currentTimeMillis(): Long = System.currentTimeMillis()
+  def setClock(_clock: Clock): Unit = {
+    clock = _clock
   }
+
+  def setSleeper(_sleeper: Sleeper): Unit = {
+    sleeper = _sleeper
+  }
+
+  private var clock: Clock = new SystemClock()
   private var sleeper = new Sleeper {
     def sleep(seconds: Int): Unit = (0 until seconds).takeWhile(f => {Thread.sleep(1000); !killed})
   }
 
   /** Starts a thread to run and manage the driver. */
-  def start() = {
+  private[worker] def start() = {
     new Thread("DriverRunner for " + driverId) {
       override def run() {
         try {
           val driverDir = createWorkingDirectory()
           val localJarFilename = downloadUserJar(driverDir)
 
-          // Make sure user application jar is on the classpath
+          def substituteVariables(argument: String): String = argument match {
+            case "{{WORKER_URL}}" => workerUrl
+            case "{{USER_JAR}}" => localJarFilename
+            case other => other
+          }
+
           // TODO: If we add ability to submit multiple jars they should also be added here
           val builder = CommandUtils.buildProcessBuilder(driverDesc.command, driverDesc.mem,
-            sparkHome.getAbsolutePath, substituteVariables, Seq(localJarFilename))
+            sparkHome.getAbsolutePath, substituteVariables)
           launchDriver(builder, driverDir, driverDesc.supervise)
         }
         catch {
@@ -104,17 +113,11 @@ private[spark] class DriverRunner(
   }
 
   /** Terminate this driver (or prevent it from ever starting if not yet started) */
-  def kill() {
+  private[worker] def kill() {
     synchronized {
       process.foreach(p => p.destroy())
       killed = true
     }
-  }
-
-  /** Replace variables in a command argument passed to us */
-  private def substituteVariables(argument: String): String = argument match {
-    case "{{WORKER_URL}}" => workerUrl
-    case other => other
   }
 
   /**
@@ -134,12 +137,9 @@ private[spark] class DriverRunner(
    * Will throw an exception if there are errors downloading the jar.
    */
   private def downloadUserJar(driverDir: File): String = {
-
     val jarPath = new Path(driverDesc.jarUrl)
 
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-    val jarFileSystem = jarPath.getFileSystem(hadoopConf)
-
     val destPath = new File(driverDir.getAbsolutePath, jarPath.getName)
     val jarFileName = jarPath.getName
     val localJarFile = new File(driverDir, jarFileName)
@@ -147,7 +147,14 @@ private[spark] class DriverRunner(
 
     if (!localJarFile.exists()) { // May already exist if running multiple workers on one node
       logInfo(s"Copying user jar $jarPath to $destPath")
-      FileUtil.copy(jarFileSystem, jarPath, destPath, false, hadoopConf)
+      Utils.fetchFile(
+        driverDesc.jarUrl,
+        driverDir,
+        conf,
+        securityManager,
+        hadoopConf,
+        System.currentTimeMillis(),
+        useCache = false)
     }
 
     if (!localJarFile.exists()) { // Verify copy succeeded
@@ -159,7 +166,7 @@ private[spark] class DriverRunner(
 
   private def launchDriver(builder: ProcessBuilder, baseDir: File, supervise: Boolean) {
     builder.directory(baseDir)
-    def initialize(process: Process) = {
+    def initialize(process: Process): Unit = {
       // Redirect stdout and stderr to files
       val stdout = new File(baseDir, "stdout")
       CommandUtils.redirectStream(process.getInputStream, stdout)
@@ -173,8 +180,8 @@ private[spark] class DriverRunner(
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)
   }
 
-  private[deploy] def runCommandWithRetry(command: ProcessBuilderLike, initialize: Process => Unit,
-    supervise: Boolean) {
+  def runCommandWithRetry(
+      command: ProcessBuilderLike, initialize: Process => Unit, supervise: Boolean): Unit = {
     // Time to wait between submission retries.
     var waitSeconds = 1
     // A run of this many seconds resets the exponential back-off.
@@ -191,9 +198,9 @@ private[spark] class DriverRunner(
         initialize(process.get)
       }
 
-      val processStart = clock.currentTimeMillis()
+      val processStart = clock.getTimeMillis()
       val exitCode = process.get.waitFor()
-      if (clock.currentTimeMillis() - processStart > successfulRunDuration * 1000) {
+      if (clock.getTimeMillis() - processStart > successfulRunDuration * 1000) {
         waitSeconds = 1
       }
 
@@ -209,10 +216,6 @@ private[spark] class DriverRunner(
   }
 }
 
-private[deploy] trait Clock {
-  def currentTimeMillis(): Long
-}
-
 private[deploy] trait Sleeper {
   def sleep(seconds: Int)
 }
@@ -224,8 +227,8 @@ private[deploy] trait ProcessBuilderLike {
 }
 
 private[deploy] object ProcessBuilderLike {
-  def apply(processBuilder: ProcessBuilder) = new ProcessBuilderLike {
-    def start() = processBuilder.start()
-    def command = processBuilder.command()
+  def apply(processBuilder: ProcessBuilder): ProcessBuilderLike = new ProcessBuilderLike {
+    override def start(): Process = processBuilder.start()
+    override def command: Seq[String] = processBuilder.command()
   }
 }

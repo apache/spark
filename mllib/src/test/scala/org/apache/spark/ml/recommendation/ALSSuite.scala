@@ -17,29 +17,40 @@
 
 package org.apache.spark.ml.recommendation
 
+import java.io.File
 import java.util.Random
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.scalatest.FunSuite
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.util.Utils
 
 class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
 
   private var sqlContext: SQLContext = _
+  private var tempDir: File = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+    tempDir = Utils.createTempDir()
+    sc.setCheckpointDir(tempDir.getAbsolutePath)
     sqlContext = new SQLContext(sc)
+  }
+
+  override def afterAll(): Unit = {
+    Utils.deleteRecursively(tempDir)
+    super.afterAll()
   }
 
   test("LocalIndexEncoder") {
@@ -58,39 +69,42 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     }
   }
 
-  test("normal equation construction with explict feedback") {
+  test("normal equation construction") {
     val k = 2
     val ne0 = new NormalEquation(k)
-      .add(Array(1.0f, 2.0f), 3.0f)
-      .add(Array(4.0f, 5.0f), 6.0f)
+      .add(Array(1.0f, 2.0f), 3.0)
+      .add(Array(4.0f, 5.0f), 6.0, 2.0) // weighted
     assert(ne0.k === k)
     assert(ne0.triK === k * (k + 1) / 2)
-    assert(ne0.n === 2)
     // NumPy code that computes the expected values:
     // A = np.matrix("1 2; 4 5")
     // b = np.matrix("3; 6")
-    // ata = A.transpose() * A
-    // atb = A.transpose() * b
-    assert(Vectors.dense(ne0.ata) ~== Vectors.dense(17.0, 22.0, 29.0) relTol 1e-8)
-    assert(Vectors.dense(ne0.atb) ~== Vectors.dense(27.0, 36.0) relTol 1e-8)
+    // C = np.matrix(np.diag([1, 2]))
+    // ata = A.transpose() * C * A
+    // atb = A.transpose() * C * b
+    assert(Vectors.dense(ne0.ata) ~== Vectors.dense(33.0, 42.0, 54.0) relTol 1e-8)
+    assert(Vectors.dense(ne0.atb) ~== Vectors.dense(51.0, 66.0) relTol 1e-8)
 
     val ne1 = new NormalEquation(2)
-      .add(Array(7.0f, 8.0f), 9.0f)
+      .add(Array(7.0f, 8.0f), 9.0)
     ne0.merge(ne1)
-    assert(ne0.n === 3)
     // NumPy code that computes the expected values:
     // A = np.matrix("1 2; 4 5; 7 8")
     // b = np.matrix("3; 6; 9")
-    // ata = A.transpose() * A
-    // atb = A.transpose() * b
-    assert(Vectors.dense(ne0.ata) ~== Vectors.dense(66.0, 78.0, 93.0) relTol 1e-8)
-    assert(Vectors.dense(ne0.atb) ~== Vectors.dense(90.0, 108.0) relTol 1e-8)
+    // C = np.matrix(np.diag([1, 2, 1]))
+    // ata = A.transpose() * C * A
+    // atb = A.transpose() * C * b
+    assert(Vectors.dense(ne0.ata) ~== Vectors.dense(82.0, 98.0, 118.0) relTol 1e-8)
+    assert(Vectors.dense(ne0.atb) ~== Vectors.dense(114.0, 138.0) relTol 1e-8)
 
     intercept[IllegalArgumentException] {
-      ne0.add(Array(1.0f), 2.0f)
+      ne0.add(Array(1.0f), 2.0)
     }
     intercept[IllegalArgumentException] {
-      ne0.add(Array(1.0f, 2.0f, 3.0f), 4.0f)
+      ne0.add(Array(1.0f, 2.0f, 3.0f), 4.0)
+    }
+    intercept[IllegalArgumentException] {
+      ne0.add(Array(1.0f, 2.0f), 0.0, -1.0)
     }
     intercept[IllegalArgumentException] {
       val ne2 = new NormalEquation(3)
@@ -98,41 +112,16 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     }
 
     ne0.reset()
-    assert(ne0.n === 0)
     assert(ne0.ata.forall(_ == 0.0))
     assert(ne0.atb.forall(_ == 0.0))
-  }
-
-  test("normal equation construction with implicit feedback") {
-    val k = 2
-    val alpha = 0.5
-    val ne0 = new NormalEquation(k)
-      .addImplicit(Array(-5.0f, -4.0f), -3.0f, alpha)
-      .addImplicit(Array(-2.0f, -1.0f), 0.0f, alpha)
-      .addImplicit(Array(1.0f, 2.0f), 3.0f, alpha)
-    assert(ne0.k === k)
-    assert(ne0.triK === k * (k + 1) / 2)
-    assert(ne0.n === 0) // addImplicit doesn't increase the count.
-    // NumPy code that computes the expected values:
-    // alpha = 0.5
-    // A = np.matrix("-5 -4; -2 -1; 1 2")
-    // b = np.matrix("-3; 0; 3")
-    // b1 = b > 0
-    // c = 1.0 + alpha * np.abs(b)
-    // C = np.diag(c.A1)
-    // I = np.eye(3)
-    // ata = A.transpose() * (C - I) * A
-    // atb = A.transpose() * C * b1
-    assert(Vectors.dense(ne0.ata) ~== Vectors.dense(39.0, 33.0, 30.0) relTol 1e-8)
-    assert(Vectors.dense(ne0.atb) ~== Vectors.dense(2.5, 5.0) relTol 1e-8)
   }
 
   test("CholeskySolver") {
     val k = 2
     val ne0 = new NormalEquation(k)
-      .add(Array(1.0f, 2.0f), 4.0f)
-      .add(Array(1.0f, 3.0f), 9.0f)
-      .add(Array(1.0f, 4.0f), 16.0f)
+      .add(Array(1.0f, 2.0f), 4.0)
+      .add(Array(1.0f, 3.0f), 9.0)
+      .add(Array(1.0f, 4.0f), 16.0)
     val ne1 = new NormalEquation(k)
       .merge(ne0)
 
@@ -144,18 +133,17 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     // x0 = np.linalg.lstsq(A, b)[0]
     assert(Vectors.dense(x0) ~== Vectors.dense(-8.333333, 6.0) relTol 1e-6)
 
-    assert(ne0.n === 0)
     assert(ne0.ata.forall(_ == 0.0))
     assert(ne0.atb.forall(_ == 0.0))
 
-    val x1 = chol.solve(ne1, 0.5).map(_.toDouble)
+    val x1 = chol.solve(ne1, 1.5).map(_.toDouble)
     // NumPy code that computes the expected solution, where lambda is scaled by n:
-    // x0 = np.linalg.solve(A.transpose() * A + 0.5 * 3 * np.eye(2), A.transpose() * b)
+    // x0 = np.linalg.solve(A.transpose() * A + 1.5 * np.eye(2), A.transpose() * b)
     assert(Vectors.dense(x1) ~== Vectors.dense(-0.1155556, 3.28) relTol 1e-6)
   }
 
   test("RatingBlockBuilder") {
-    val emptyBuilder = new RatingBlockBuilder()
+    val emptyBuilder = new RatingBlockBuilder[Int]()
     assert(emptyBuilder.size === 0)
     val emptyBlock = emptyBuilder.build()
     assert(emptyBlock.srcIds.isEmpty)
@@ -179,12 +167,12 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
 
   test("UncompressedInBlock") {
     val encoder = new LocalIndexEncoder(10)
-    val uncompressed = new UncompressedInBlockBuilder(encoder)
+    val uncompressed = new UncompressedInBlockBuilder[Int](encoder)
       .add(0, Array(1, 0, 2), Array(0, 1, 4), Array(1.0f, 2.0f, 3.0f))
       .add(1, Array(3, 0), Array(2, 5), Array(4.0f, 5.0f))
       .build()
-    assert(uncompressed.size === 5)
-    val records = Seq.tabulate(uncompressed.size) { i =>
+    assert(uncompressed.length === 5)
+    val records = Seq.tabulate(uncompressed.length) { i =>
       val dstEncodedIndex = uncompressed.dstEncodedIndices(i)
       val dstBlockId = encoder.blockId(dstEncodedIndex)
       val dstLocalIndex = encoder.localIndex(dstEncodedIndex)
@@ -228,15 +216,15 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       numItems: Int,
       rank: Int,
       noiseStd: Double = 0.0,
-      seed: Long = 11L): (RDD[Rating], RDD[Rating]) = {
+      seed: Long = 11L): (RDD[Rating[Int]], RDD[Rating[Int]]) = {
     val trainingFraction = 0.6
     val testFraction = 0.3
     val totalFraction = trainingFraction + testFraction
     val random = new Random(seed)
     val userFactors = genFactors(numUsers, rank, random)
     val itemFactors = genFactors(numItems, rank, random)
-    val training = ArrayBuffer.empty[Rating]
-    val test = ArrayBuffer.empty[Rating]
+    val training = ArrayBuffer.empty[Rating[Int]]
+    val test = ArrayBuffer.empty[Rating[Int]]
     for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
       val x = random.nextDouble()
       if (x < totalFraction) {
@@ -268,7 +256,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       numItems: Int,
       rank: Int,
       noiseStd: Double = 0.0,
-      seed: Long = 11L): (RDD[Rating], RDD[Rating]) = {
+      seed: Long = 11L): (RDD[Rating[Int]], RDD[Rating[Int]]) = {
     // The assumption of the implicit feedback model is that unobserved ratings are more likely to
     // be negatives.
     val positiveFraction = 0.8
@@ -279,8 +267,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     val random = new Random(seed)
     val userFactors = genFactors(numUsers, rank, random)
     val itemFactors = genFactors(numItems, rank, random)
-    val training = ArrayBuffer.empty[Rating]
-    val test = ArrayBuffer.empty[Rating]
+    val training = ArrayBuffer.empty[Rating[Int]]
+    val test = ArrayBuffer.empty[Rating[Int]]
     for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
       val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
       val threshold = if (rating > 0) positiveFraction else negativeFraction
@@ -340,8 +328,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
    * @param targetRMSE target test RMSE
    */
   def testALS(
-      training: RDD[Rating],
-      test: RDD[Rating],
+      training: RDD[Rating[Int]],
+      test: RDD[Rating[Int]],
       rank: Int,
       maxIter: Int,
       regParam: Double,
@@ -350,7 +338,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       numItemBlocks: Int = 3,
       targetRMSE: Double = 0.05): Unit = {
     val sqlContext = this.sqlContext
-    import sqlContext.createDataFrame
+    import sqlContext.implicits._
     val als = new ALS()
       .setRank(rank)
       .setRegParam(regParam)
@@ -358,8 +346,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       .setNumUserBlocks(numUserBlocks)
       .setNumItemBlocks(numItemBlocks)
     val alpha = als.getAlpha
-    val model = als.fit(training)
-    val predictions = model.transform(test)
+    val model = als.fit(training.toDF())
+    val predictions = model.transform(test.toDF())
       .select("rating", "prediction")
       .map { case Row(rating: Float, prediction: Float) =>
         (rating.toDouble, prediction.toDouble)
@@ -414,7 +402,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     val (training, test) =
       genExplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
     for ((numUserBlocks, numItemBlocks) <- Seq((1, 1), (1, 2), (2, 1), (2, 2))) {
-      testALS(training, test, maxIter = 4, rank = 2, regParam = 0.01, targetRMSE = 0.03,
+      testALS(training, test, maxIter = 4, rank = 3, regParam = 0.01, targetRMSE = 0.03,
         numUserBlocks = numUserBlocks, numItemBlocks = numItemBlocks)
     }
   }
@@ -431,5 +419,65 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
     testALS(training, test, maxIter = 4, rank = 2, regParam = 0.01, implicitPrefs = true,
       targetRMSE = 0.3)
+  }
+
+  test("using generic ID types") {
+    val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
+
+    val longRatings = ratings.map(r => Rating(r.user.toLong, r.item.toLong, r.rating))
+    val (longUserFactors, _) = ALS.train(longRatings, rank = 2, maxIter = 4)
+    assert(longUserFactors.first()._1.getClass === classOf[Long])
+
+    val strRatings = ratings.map(r => Rating(r.user.toString, r.item.toString, r.rating))
+    val (strUserFactors, _) = ALS.train(strRatings, rank = 2, maxIter = 4)
+    assert(strUserFactors.first()._1.getClass === classOf[String])
+  }
+
+  test("nonnegative constraint") {
+    val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
+    val (userFactors, itemFactors) = ALS.train(ratings, rank = 2, maxIter = 4, nonnegative = true)
+    def isNonnegative(factors: RDD[(Int, Array[Float])]): Boolean = {
+      factors.values.map { _.forall(_ >= 0.0) }.reduce(_ && _)
+    }
+    assert(isNonnegative(userFactors))
+    assert(isNonnegative(itemFactors))
+    // TODO: Validate the solution.
+  }
+
+  test("als partitioner is a projection") {
+    for (p <- Seq(1, 10, 100, 1000)) {
+      val part = new ALSPartitioner(p)
+      var k = 0
+      while (k < p) {
+        assert(k === part.getPartition(k))
+        assert(k === part.getPartition(k.toLong))
+        k += 1
+      }
+    }
+  }
+
+  test("partitioner in returned factors") {
+    val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
+    val (userFactors, itemFactors) = ALS.train(
+      ratings, rank = 2, maxIter = 4, numUserBlocks = 3, numItemBlocks = 4)
+    for ((tpe, factors) <- Seq(("User", userFactors), ("Item", itemFactors))) {
+      assert(userFactors.partitioner.isDefined, s"$tpe factors should have partitioner.")
+      val part = userFactors.partitioner.get
+      userFactors.mapPartitionsWithIndex { (idx, items) =>
+        items.foreach { case (id, _) =>
+          if (part.getPartition(id) != idx) {
+            throw new SparkException(s"$tpe with ID $id should not be in partition $idx.")
+          }
+        }
+        Iterator.empty
+      }.count()
+    }
+  }
+
+  test("als with large number of iterations") {
+    val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
+    ALS.train(ratings, rank = 1, maxIter = 50, numUserBlocks = 2, numItemBlocks = 2)
+    ALS.train(
+      ratings, rank = 1, maxIter = 50, numUserBlocks = 2, numItemBlocks = 2, implicitPrefs = true)
   }
 }

@@ -151,10 +151,10 @@ class RowMatrix(
    * storing the right singular vectors, is computed via matrix multiplication as
    * U = A * (V * S^-1^), if requested by user. The actual method to use is determined
    * automatically based on the cost:
-   *  - If n is small (n &lt; 100) or k is large compared with n (k > n / 2), we compute the Gramian
-   *    matrix first and then compute its top eigenvalues and eigenvectors locally on the driver.
-   *    This requires a single pass with O(n^2^) storage on each executor and on the driver, and
-   *    O(n^2^ k) time on the driver.
+   *  - If n is small (n &lt; 100) or k is large compared with n (k &gt; n / 2), we compute
+   *    the Gramian matrix first and then compute its top eigenvalues and eigenvectors locally
+   *    on the driver. This requires a single pass with O(n^2^) storage on each executor and
+   *    on the driver, and O(n^2^ k) time on the driver.
    *  - Otherwise, we compute (A' * A) * v in a distributive way and send it to ARPACK's DSAUPD to
    *    compute (A' * A)'s top eigenvalues and eigenvectors on the driver node. This requires O(k)
    *    passes, O(n) storage on each executor, and O(n k) storage on the driver.
@@ -219,8 +219,12 @@ class RowMatrix(
 
     val computeMode = mode match {
       case "auto" =>
+        if(k > 5000) {
+          logWarning(s"computing svd with k=$k and n=$n, please check necessity")
+        }
+
         // TODO: The conditions below are not fully tested.
-        if (n < 100 || k > n / 2) {
+        if (n < 100 || (k > n / 2 && n <= 15000)) {
           // If n is small or k is large compared with n, we better compute the Gramian matrix first
           // and then compute its eigenvalues locally, instead of making multiple passes.
           if (k < n / 3) {
@@ -245,6 +249,8 @@ class RowMatrix(
         val G = computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
         EigenValueDecomposition.symmetricEigs(v => G * v, n, k, tol, maxIter)
       case SVDMode.LocalLAPACK =>
+        // breeze (v0.10) svd latent constraint, 7 * n * n + 4 * n < Int.MaxValue
+        require(n < 17515, s"$n exceeds the breeze svd capability")
         val G = computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
         val brzSvd.SVD(uFull: BDM[Double], sigmaSquaresFull: BDV[Double], _) = brzSvd(G)
         (sigmaSquaresFull, uFull)
@@ -525,7 +531,6 @@ class RowMatrix(
       val rand = new XORShiftRandom(indx)
       val scaled = new Array[Double](p.size)
       iter.flatMap { row =>
-        val buf = new ListBuffer[((Int, Int), Double)]()
         row match {
           case SparseVector(size, indices, values) =>
             val nnz = indices.size
@@ -534,8 +539,9 @@ class RowMatrix(
               scaled(k) = values(k) / q(indices(k))
               k += 1
             }
-            k = 0
-            while (k < nnz) {
+
+            Iterator.tabulate (nnz) { k =>
+              val buf = new ListBuffer[((Int, Int), Double)]()
               val i = indices(k)
               val iVal = scaled(k)
               if (iVal != 0 && rand.nextDouble() < p(i)) {
@@ -549,8 +555,8 @@ class RowMatrix(
                   l += 1
                 }
               }
-              k += 1
-            }
+              buf
+            }.flatten
           case DenseVector(values) =>
             val n = values.size
             var i = 0
@@ -558,8 +564,8 @@ class RowMatrix(
               scaled(i) = values(i) / q(i)
               i += 1
             }
-            i = 0
-            while (i < n) {
+            Iterator.tabulate (n) { i =>
+              val buf = new ListBuffer[((Int, Int), Double)]()
               val iVal = scaled(i)
               if (iVal != 0 && rand.nextDouble() < p(i)) {
                 var j = i + 1
@@ -571,10 +577,9 @@ class RowMatrix(
                   j += 1
                 }
               }
-              i += 1
-            }
+              buf
+            }.flatten
         }
-        buf
       }
     }.reduceByKey(_ + _).map { case ((i, j), sim) =>
       MatrixEntry(i.toLong, j.toLong, sim)

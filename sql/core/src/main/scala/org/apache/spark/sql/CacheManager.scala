@@ -71,9 +71,15 @@ private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
     }
   }
 
+  /** Clears all cached tables. */
   private[sql] def clearCache(): Unit = writeLock {
     cachedData.foreach(_.cachedRepresentation.cachedColumnBuffers.unpersist())
     cachedData.clear()
+  }
+
+  /** Checks if the cache is empty. */
+  private[sql] def isEmpty: Boolean = readLock {
+    cachedData.isEmpty
   }
 
   /**
@@ -106,7 +112,7 @@ private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
     val planToCache = query.queryExecution.analyzed
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
     require(dataIndex >= 0, s"Table $query is not cached.")
-    cachedData(dataIndex).cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
+    cachedData(dataIndex).cachedRepresentation.uncache(blocking)
     cachedData.remove(dataIndex)
   }
 

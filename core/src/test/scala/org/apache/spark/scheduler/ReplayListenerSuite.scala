@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.{File, PrintWriter}
+import java.net.URI
 
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -49,7 +50,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     val fstream = fileSystem.create(logFilePath)
     val writer = new PrintWriter(fstream)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
-      125L, "Mickey")
+      125L, "Mickey", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
@@ -61,7 +62,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
-      replayer.replay(logData, SPARK_VERSION)
+      replayer.replay(logData, logFilePath.toString)
     } finally {
       logData.close()
     }
@@ -115,12 +116,12 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     assert(!eventLog.isDir)
 
     // Replay events
-    val (logData, version) = EventLoggingListener.openEventLog(eventLog.getPath(), fileSystem)
+    val logData = EventLoggingListener.openEventLog(eventLog.getPath(), fileSystem)
     val eventMonster = new EventMonster(conf)
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
-      replayer.replay(logData, version)
+      replayer.replay(logData, eventLog.getPath().toString)
     } finally {
       logData.close()
     }
@@ -145,16 +146,9 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
    * log the events.
    */
   private class EventMonster(conf: SparkConf)
-    extends EventLoggingListener("test", "testdir", conf) {
+    extends EventLoggingListener("test", None, new URI("testdir"), conf) {
 
     override def start() { }
 
   }
-
-  private def getCompressionCodec(codecName: String) = {
-    val conf = new SparkConf
-    conf.set("spark.io.compression.codec", codecName)
-    CompressionCodec.createCodec(conf)
-  }
-
 }

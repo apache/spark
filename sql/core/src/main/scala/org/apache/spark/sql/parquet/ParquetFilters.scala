@@ -55,7 +55,7 @@ private[sql] object ParquetFilters {
       case StringType =>
         (n: String, v: Any) => FilterApi.eq(
           binaryColumn(n),
-          Option(v).map(s => Binary.fromString(s.asInstanceOf[String])).orNull)
+          Option(v).map(s => Binary.fromByteArray(s.asInstanceOf[UTF8String].getBytes)).orNull)
       case BinaryType =>
         (n: String, v: Any) => FilterApi.eq(
           binaryColumn(n),
@@ -76,7 +76,7 @@ private[sql] object ParquetFilters {
       case StringType =>
         (n: String, v: Any) => FilterApi.notEq(
           binaryColumn(n),
-          Option(v).map(s => Binary.fromString(s.asInstanceOf[String])).orNull)
+          Option(v).map(s => Binary.fromByteArray(s.asInstanceOf[UTF8String].getBytes)).orNull)
       case BinaryType =>
         (n: String, v: Any) => FilterApi.notEq(
           binaryColumn(n),
@@ -94,7 +94,7 @@ private[sql] object ParquetFilters {
         (n: String, v: Any) => FilterApi.lt(doubleColumn(n), v.asInstanceOf[java.lang.Double])
       case StringType =>
         (n: String, v: Any) =>
-          FilterApi.lt(binaryColumn(n), Binary.fromString(v.asInstanceOf[String]))
+          FilterApi.lt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[UTF8String].getBytes))
       case BinaryType =>
         (n: String, v: Any) =>
           FilterApi.lt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
@@ -111,7 +111,7 @@ private[sql] object ParquetFilters {
         (n: String, v: Any) => FilterApi.ltEq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
       case StringType =>
         (n: String, v: Any) =>
-          FilterApi.ltEq(binaryColumn(n), Binary.fromString(v.asInstanceOf[String]))
+          FilterApi.ltEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[UTF8String].getBytes))
       case BinaryType =>
         (n: String, v: Any) =>
           FilterApi.ltEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
@@ -128,7 +128,7 @@ private[sql] object ParquetFilters {
         (n: String, v: Any) => FilterApi.gt(doubleColumn(n), v.asInstanceOf[java.lang.Double])
       case StringType =>
         (n: String, v: Any) =>
-          FilterApi.gt(binaryColumn(n), Binary.fromString(v.asInstanceOf[String]))
+          FilterApi.gt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[UTF8String].getBytes))
       case BinaryType =>
         (n: String, v: Any) =>
           FilterApi.gt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
@@ -145,7 +145,7 @@ private[sql] object ParquetFilters {
         (n: String, v: Any) => FilterApi.gtEq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
       case StringType =>
         (n: String, v: Any) =>
-          FilterApi.gtEq(binaryColumn(n), Binary.fromString(v.asInstanceOf[String]))
+          FilterApi.gtEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[UTF8String].getBytes))
       case BinaryType =>
         (n: String, v: Any) =>
           FilterApi.gtEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
@@ -164,32 +164,56 @@ private[sql] object ParquetFilters {
 
       case EqualTo(NamedExpression(name, _), NonNullLiteral(value, dataType)) =>
         makeEq.lift(dataType).map(_(name, value))
+      case EqualTo(Cast(NamedExpression(name, _), dataType), NonNullLiteral(value, _)) =>
+        makeEq.lift(dataType).map(_(name, value))
       case EqualTo(NonNullLiteral(value, dataType), NamedExpression(name, _)) =>
         makeEq.lift(dataType).map(_(name, value))
-
+      case EqualTo(NonNullLiteral(value, _), Cast(NamedExpression(name, _), dataType)) =>
+        makeEq.lift(dataType).map(_(name, value))
+      
       case Not(EqualTo(NamedExpression(name, _), NonNullLiteral(value, dataType))) =>
         makeNotEq.lift(dataType).map(_(name, value))
+      case Not(EqualTo(Cast(NamedExpression(name, _), dataType), NonNullLiteral(value, _))) =>
+        makeNotEq.lift(dataType).map(_(name, value))
       case Not(EqualTo(NonNullLiteral(value, dataType), NamedExpression(name, _))) =>
+        makeNotEq.lift(dataType).map(_(name, value))
+      case Not(EqualTo(NonNullLiteral(value, _), Cast(NamedExpression(name, _), dataType))) =>
         makeNotEq.lift(dataType).map(_(name, value))
 
       case LessThan(NamedExpression(name, _), NonNullLiteral(value, dataType)) =>
         makeLt.lift(dataType).map(_(name, value))
+      case LessThan(Cast(NamedExpression(name, _), dataType), NonNullLiteral(value, _)) =>
+        makeLt.lift(dataType).map(_(name, value))
       case LessThan(NonNullLiteral(value, dataType), NamedExpression(name, _)) =>
+        makeGt.lift(dataType).map(_(name, value))
+      case LessThan(NonNullLiteral(value, _), Cast(NamedExpression(name, _), dataType)) =>
         makeGt.lift(dataType).map(_(name, value))
 
       case LessThanOrEqual(NamedExpression(name, _), NonNullLiteral(value, dataType)) =>
         makeLtEq.lift(dataType).map(_(name, value))
+      case LessThanOrEqual(Cast(NamedExpression(name, _), dataType), NonNullLiteral(value, _)) =>
+        makeLtEq.lift(dataType).map(_(name, value))      
       case LessThanOrEqual(NonNullLiteral(value, dataType), NamedExpression(name, _)) =>
+        makeGtEq.lift(dataType).map(_(name, value))
+      case LessThanOrEqual(NonNullLiteral(value, _), Cast(NamedExpression(name, _), dataType)) =>
         makeGtEq.lift(dataType).map(_(name, value))
 
       case GreaterThan(NamedExpression(name, _), NonNullLiteral(value, dataType)) =>
         makeGt.lift(dataType).map(_(name, value))
+      case GreaterThan(Cast(NamedExpression(name, _), dataType), NonNullLiteral(value, _)) =>
+        makeGt.lift(dataType).map(_(name, value)) 
       case GreaterThan(NonNullLiteral(value, dataType), NamedExpression(name, _)) =>
+        makeLt.lift(dataType).map(_(name, value))
+      case GreaterThan(NonNullLiteral(value, _), Cast(NamedExpression(name, _), dataType)) =>
         makeLt.lift(dataType).map(_(name, value))
 
       case GreaterThanOrEqual(NamedExpression(name, _), NonNullLiteral(value, dataType)) =>
         makeGtEq.lift(dataType).map(_(name, value))
+      case GreaterThanOrEqual(Cast(NamedExpression(name, _), dataType), NonNullLiteral(value, _)) =>
+        makeGtEq.lift(dataType).map(_(name, value)) 
       case GreaterThanOrEqual(NonNullLiteral(value, dataType), NamedExpression(name, _)) =>
+        makeLtEq.lift(dataType).map(_(name, value))
+      case GreaterThanOrEqual(NonNullLiteral(value, _), Cast(NamedExpression(name, _), dataType)) =>
         makeLtEq.lift(dataType).map(_(name, value))
 
       case And(lhs, rhs) =>

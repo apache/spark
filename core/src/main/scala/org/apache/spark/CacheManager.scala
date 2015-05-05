@@ -44,13 +44,17 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
     blockManager.get(key) match {
       case Some(blockResult) =>
         // Partition is already materialized, so just return its values
-        val inputMetrics = blockResult.inputMetrics
         val existingMetrics = context.taskMetrics
-          .getInputMetricsForReadMethod(inputMetrics.readMethod)
-        existingMetrics.addBytesRead(inputMetrics.bytesRead)
+          .getInputMetricsForReadMethod(blockResult.readMethod)
+        existingMetrics.incBytesRead(blockResult.bytes)
 
-        new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[T]])
-
+        val iter = blockResult.data.asInstanceOf[Iterator[T]]
+        new InterruptibleIterator[T](context, iter) {
+          override def next(): T = {
+            existingMetrics.incRecordsRead(1)
+            delegate.next()
+          }
+        }
       case None =>
         // Acquire a lock for loading this partition
         // If another thread already holds the lock, wait for it to finish return its results

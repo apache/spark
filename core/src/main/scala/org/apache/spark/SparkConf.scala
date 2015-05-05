@@ -18,11 +18,13 @@
 package org.apache.spark
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
 
 import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.util.Utils
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -53,8 +55,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   if (loadDefaults) {
     // Load any spark.* system properties
-    for ((k, v) <- System.getProperties.asScala if k.startsWith("spark.")) {
-      set(k, v)
+    for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
+      set(key, value)
     }
   }
 
@@ -66,6 +68,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     if (value == null) {
       throw new NullPointerException("null value for " + key)
     }
+    logDeprecationWarning(key)
     settings.put(key, value)
     this
   }
@@ -131,14 +134,16 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   /** Set multiple parameters together */
-  def setAll(settings: Traversable[(String, String)]) = {
-    this.settings.putAll(settings.toMap.asJava)
+  def setAll(settings: Traversable[(String, String)]): SparkConf = {
+    settings.foreach { case (k, v) => set(k, v) }
     this
   }
 
   /** Set a parameter if it isn't already configured */
   def setIfMissing(key: String, value: String): SparkConf = {
-    settings.putIfAbsent(key, value)
+    if (settings.putIfAbsent(key, value) == null) {
+      logDeprecationWarning(key)
+    }
     this
   }
 
@@ -172,9 +177,111 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     getOption(key).getOrElse(defaultValue)
   }
 
+  /**
+   * Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then seconds are assumed.
+   * @throws NoSuchElementException
+   */
+  def getTimeAsSeconds(key: String): Long = {
+    Utils.timeStringAsSeconds(get(key))
+  }
+
+  /**
+   * Get a time parameter as seconds, falling back to a default if not set. If no
+   * suffix is provided then seconds are assumed.
+   */
+  def getTimeAsSeconds(key: String, defaultValue: String): Long = {
+    Utils.timeStringAsSeconds(get(key, defaultValue))
+  }
+
+  /**
+   * Get a time parameter as milliseconds; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then milliseconds are assumed.
+   * @throws NoSuchElementException
+   */
+  def getTimeAsMs(key: String): Long = {
+    Utils.timeStringAsMs(get(key))
+  }
+
+  /**
+   * Get a time parameter as milliseconds, falling back to a default if not set. If no
+   * suffix is provided then milliseconds are assumed.
+   */
+  def getTimeAsMs(key: String, defaultValue: String): Long = {
+    Utils.timeStringAsMs(get(key, defaultValue))
+  }
+
+  /**
+   * Get a size parameter as bytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then bytes are assumed.
+   * @throws NoSuchElementException
+   */
+  def getSizeAsBytes(key: String): Long = {
+    Utils.byteStringAsBytes(get(key))
+  }
+
+  /**
+   * Get a size parameter as bytes, falling back to a default if not set. If no
+   * suffix is provided then bytes are assumed.
+   */
+  def getSizeAsBytes(key: String, defaultValue: String): Long = {
+    Utils.byteStringAsBytes(get(key, defaultValue))
+  }
+  
+  /**
+   * Get a size parameter as Kibibytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then Kibibytes are assumed.
+   * @throws NoSuchElementException
+   */
+  def getSizeAsKb(key: String): Long = {
+    Utils.byteStringAsKb(get(key))
+  }
+
+  /**
+   * Get a size parameter as Kibibytes, falling back to a default if not set. If no
+   * suffix is provided then Kibibytes are assumed.
+   */
+  def getSizeAsKb(key: String, defaultValue: String): Long = {
+    Utils.byteStringAsKb(get(key, defaultValue))
+  }
+  
+  /**
+   * Get a size parameter as Mebibytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then Mebibytes are assumed.
+   * @throws NoSuchElementException
+   */
+  def getSizeAsMb(key: String): Long = {
+    Utils.byteStringAsMb(get(key))
+  }
+
+  /**
+   * Get a size parameter as Mebibytes, falling back to a default if not set. If no
+   * suffix is provided then Mebibytes are assumed.
+   */
+  def getSizeAsMb(key: String, defaultValue: String): Long = {
+    Utils.byteStringAsMb(get(key, defaultValue))
+  }
+  
+  /**
+   * Get a size parameter as Gibibytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then Gibibytes are assumed.
+   * @throws NoSuchElementException
+   */
+  def getSizeAsGb(key: String): Long = {
+    Utils.byteStringAsGb(get(key))
+  }
+
+  /**
+   * Get a size parameter as Gibibytes, falling back to a default if not set. If no
+   * suffix is provided then Gibibytes are assumed.
+   */
+  def getSizeAsGb(key: String, defaultValue: String): Long = {
+    Utils.byteStringAsGb(get(key, defaultValue))
+  }
+  
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
-    Option(settings.get(key))
+    Option(settings.get(key)).orElse(getDeprecatedConfig(key, this))
   }
 
   /** Get all parameters as a list of pairs */
@@ -284,7 +391,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     // Validate memory fractions
     val memoryKeys = Seq(
       "spark.storage.memoryFraction",
-      "spark.shuffle.memoryFraction", 
+      "spark.shuffle.memoryFraction",
       "spark.shuffle.safetyFraction",
       "spark.storage.unrollFraction",
       "spark.storage.safetyFraction")
@@ -350,9 +457,91 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def toDebugString: String = {
     getAll.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
   }
+
 }
 
-private[spark] object SparkConf {
+private[spark] object SparkConf extends Logging {
+
+  /**
+   * Maps deprecated config keys to information about the deprecation.
+   *
+   * The extra information is logged as a warning when the config is present in the user's
+   * configuration.
+   */
+  private val deprecatedConfigs: Map[String, DeprecatedConfig] = {
+    val configs = Seq(
+      DeprecatedConfig("spark.cache.class", "0.8",
+        "The spark.cache.class property is no longer being used! Specify storage levels using " +
+        "the RDD.persist() method instead."),
+      DeprecatedConfig("spark.yarn.user.classpath.first", "1.3",
+        "Please use spark.{driver,executor}.userClassPathFirst instead."),
+      DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
+        "Please use spark.kryoserializer.buffer instead. The default value for " +
+          "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
+          "are no longer accepted. To specify the equivalent now, one may use '64k'.")
+    )
+    
+    Map(configs.map { cfg => (cfg.key -> cfg) }:_*)
+  }
+
+  /**
+   * Maps a current config key to alternate keys that were used in previous version of Spark.
+   *
+   * The alternates are used in the order defined in this map. If deprecated configs are
+   * present in the user's configuration, a warning is logged.
+   */
+  private val configsWithAlternatives = Map[String, Seq[AlternateConfig]](
+    "spark.executor.userClassPathFirst" -> Seq(
+      AlternateConfig("spark.files.userClassPathFirst", "1.3")),
+    "spark.history.fs.update.interval" -> Seq(
+      AlternateConfig("spark.history.fs.update.interval.seconds", "1.4"),
+      AlternateConfig("spark.history.fs.updateInterval", "1.3"),
+      AlternateConfig("spark.history.updateInterval", "1.3")),
+    "spark.history.fs.cleaner.interval" -> Seq(
+      AlternateConfig("spark.history.fs.cleaner.interval.seconds", "1.4")),
+    "spark.history.fs.cleaner.maxAge" -> Seq(
+      AlternateConfig("spark.history.fs.cleaner.maxAge.seconds", "1.4")),
+    "spark.yarn.am.waitTime" -> Seq(
+      AlternateConfig("spark.yarn.applicationMaster.waitTries", "1.3",
+        // Translate old value to a duration, with 10s wait time per try.
+        translation = s => s"${s.toLong * 10}s")),
+    "spark.reducer.maxSizeInFlight" -> Seq(
+      AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
+    "spark.kryoserializer.buffer" ->
+        Seq(AlternateConfig("spark.kryoserializer.buffer.mb", "1.4", 
+          translation = s => s"${s.toDouble * 1000}k")),
+    "spark.kryoserializer.buffer.max" -> Seq(
+      AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),
+    "spark.shuffle.file.buffer" -> Seq(
+      AlternateConfig("spark.shuffle.file.buffer.kb", "1.4")),
+    "spark.executor.logs.rolling.maxSize" -> Seq(
+      AlternateConfig("spark.executor.logs.rolling.size.maxBytes", "1.4")),
+    "spark.io.compression.snappy.blockSize" -> Seq(
+      AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),
+    "spark.io.compression.lz4.blockSize" -> Seq(
+      AlternateConfig("spark.io.compression.lz4.block.size", "1.4")),
+    "spark.rpc.numRetries" -> Seq(
+      AlternateConfig("spark.akka.num.retries", "1.4")),
+    "spark.rpc.retry.wait" -> Seq(
+      AlternateConfig("spark.akka.retry.wait", "1.4")),
+    "spark.rpc.askTimeout" -> Seq(
+      AlternateConfig("spark.akka.askTimeout", "1.4")),
+    "spark.rpc.lookupTimeout" -> Seq(
+      AlternateConfig("spark.akka.lookupTimeout", "1.4"))
+    )
+
+  /**
+   * A view of `configsWithAlternatives` that makes it more efficient to look up deprecated
+   * config keys.
+   *
+   * Maps the deprecated config name to a 2-tuple (new config name, alternate config info).
+   */
+  private val allAlternatives: Map[String, (String, AlternateConfig)] = {
+    configsWithAlternatives.keys.flatMap { key =>
+      configsWithAlternatives(key).map { cfg => (cfg.key -> (key -> cfg)) }
+    }.toMap
+  }
+
   /**
    * Return whether the given config is an akka config (e.g. akka.actor.provider).
    * Note that this does not include spark-specific akka configs (e.g. spark.akka.timeout).
@@ -369,6 +558,7 @@ private[spark] object SparkConf {
     isAkkaConf(name) ||
     name.startsWith("spark.akka") ||
     name.startsWith("spark.auth") ||
+    name.startsWith("spark.ssl") ||
     isSparkPortConf(name)
   }
 
@@ -378,4 +568,59 @@ private[spark] object SparkConf {
   def isSparkPortConf(name: String): Boolean = {
     (name.startsWith("spark.") && name.endsWith(".port")) || name.startsWith("spark.port.")
   }
+
+  /**
+   * Looks for available deprecated keys for the given config option, and return the first
+   * value available.
+   */
+  def getDeprecatedConfig(key: String, conf: SparkConf): Option[String] = {
+    configsWithAlternatives.get(key).flatMap { alts =>
+      alts.collectFirst { case alt if conf.contains(alt.key) =>
+        val value = conf.get(alt.key)
+        if (alt.translation != null) alt.translation(value) else value
+      }
+    }
+  }
+
+  /**
+   * Logs a warning message if the given config key is deprecated.
+   */
+  def logDeprecationWarning(key: String): Unit = {
+    deprecatedConfigs.get(key).foreach { cfg =>
+      logWarning(
+        s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
+        s"may be removed in the future. ${cfg.deprecationMessage}")
+    }
+
+    allAlternatives.get(key).foreach { case (newKey, cfg) =>
+      logWarning(
+        s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
+        s"and may be removed in the future. Please use the new key '$newKey' instead.")
+    }
+  }
+
+  /**
+   * Holds information about keys that have been deprecated and do not have a replacement.
+   *
+   * @param key The deprecated key.
+   * @param version Version of Spark where key was deprecated.
+   * @param deprecationMessage Message to include in the deprecation warning.
+   */
+  private case class DeprecatedConfig(
+      key: String,
+      version: String,
+      deprecationMessage: String)
+
+  /**
+   * Information about an alternate configuration key that has been deprecated.
+   *
+   * @param key The deprecated config key.
+   * @param version The Spark version in which the key was deprecated.
+   * @param translation A translation function for converting old config values into new ones.
+   */
+  private case class AlternateConfig(
+      key: String,
+      version: String,
+      translation: String => String = null)
+
 }

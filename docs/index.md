@@ -1,6 +1,8 @@
 ---
 layout: global
-title: Spark Overview
+displayTitle: Spark Overview
+title: Overview
+description: Apache Spark SPARK_VERSION_SHORT documentation homepage
 ---
 
 Apache Spark is a fast and general-purpose cluster computing system.
@@ -72,7 +74,7 @@ options for deployment:
   in all supported languages (Scala, Java, Python)
 * Modules built on Spark:
   * [Spark Streaming](streaming-programming-guide.html): processing real-time data streams
-  * [Spark SQL](sql-programming-guide.html): support for structured data and relational queries
+  * [Spark SQL and DataFrames](sql-programming-guide.html): support for structured data and relational queries
   * [MLlib](mllib-guide.html): built-in machine learning library
   * [GraphX](graphx-programming-guide.html): Spark's new API for graph processing
   * [Bagel (Pregel on Spark)](bagel-programming-guide.html): older, simple graph processing model
@@ -113,6 +115,8 @@ options for deployment:
 
 * [Spark Homepage](http://spark.apache.org)
 * [Spark Wiki](https://cwiki.apache.org/confluence/display/SPARK)
+* [Spark Community](http://spark.apache.org/community.html) resources, including local meetups
+* [StackOverflow tag `apache-spark`](http://stackoverflow.com/questions/tagged/apache-spark)
 * [Mailing Lists](http://spark.apache.org/mailing-lists.html): ask questions about Spark here
 * [AMP Camps](http://ampcamp.berkeley.edu/): a series of training camps at UC Berkeley that featured talks and
   exercises about Spark, Spark Streaming, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/3/),
@@ -121,11 +125,3 @@ options for deployment:
 * [Code Examples](http://spark.apache.org/examples.html): more are also available in the `examples` subfolder of Spark ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
  [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python))
-
-# Community
-
-To get help using Spark or keep up with Spark development, sign up for the [user mailing list](http://spark.apache.org/mailing-lists.html).
-
-If you're in the San Francisco Bay Area, there's a regular [Spark meetup](http://www.meetup.com/spark-users/) every few weeks. Come by to meet the developers and other users.
-
-Finally, if you'd like to contribute code to Spark, read [how to contribute](contributing-to-spark.html).

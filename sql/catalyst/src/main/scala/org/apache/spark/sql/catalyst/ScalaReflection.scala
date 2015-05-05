@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.sql.{Date, Timestamp}
-
 import org.apache.spark.util.Utils
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference, Row}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
-
 
 /**
  * A default version of ScalaReflection that uses the runtime universe.
@@ -47,61 +44,18 @@ trait ScalaReflection {
 
   case class Schema(dataType: DataType, nullable: Boolean)
 
-  /**
-   * Converts Scala objects to catalyst rows / types.
-   * Note: This is always called after schemaFor has been called.
-   *       This ordering is important for UDT registration.
-   */
-  def convertToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
-    // Check UDT first since UDTs can override other types
-    case (obj, udt: UserDefinedType[_]) => udt.serialize(obj)
-    case (o: Option[_], _) => o.map(convertToCatalyst(_, dataType)).orNull
-    case (s: Seq[_], arrayType: ArrayType) => s.map(convertToCatalyst(_, arrayType.elementType))
-    case (s: Array[_], arrayType: ArrayType) => s.toSeq
-    case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
-      convertToCatalyst(k, mapType.keyType) -> convertToCatalyst(v, mapType.valueType)
-    }
-    case (p: Product, structType: StructType) =>
-      new GenericRow(
-        p.productIterator.toSeq.zip(structType.fields).map { case (elem, field) =>
-          convertToCatalyst(elem, field.dataType)
-        }.toArray)
-    case (d: BigDecimal, _) => Decimal(d)
-    case (d: java.math.BigDecimal, _) => Decimal(d)
-    case (other, _) => other
-  }
-
-  /** Converts Catalyst types used internally in rows to standard Scala types */
-  def convertToScala(a: Any, dataType: DataType): Any = (a, dataType) match {
-    // Check UDT first since UDTs can override other types
-    case (d, udt: UserDefinedType[_]) => udt.deserialize(d)
-    case (s: Seq[_], arrayType: ArrayType) => s.map(convertToScala(_, arrayType.elementType))
-    case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
-      convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
-    }
-    case (r: Row, s: StructType) => convertRowToScala(r, s)
-    case (d: Decimal, _: DecimalType) => d.toJavaBigDecimal
-    case (other, _) => other
-  }
-
-  def convertRowToScala(r: Row, schema: StructType): Row = {
-    // TODO: This is very slow!!!
-    new GenericRow(
-      r.toSeq.zip(schema.fields.map(_.dataType))
-        .map(r_dt => convertToScala(r_dt._1, r_dt._2)).toArray)
-  }
-
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
     case Schema(s: StructType, _) =>
-      s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
+      s.toAttributes
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
-  def schemaFor[T: TypeTag]: Schema = schemaFor(typeOf[T])
+  def schemaFor[T: TypeTag]: Schema =
+    ScalaReflectionLock.synchronized { schemaFor(typeOf[T]) }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
-  def schemaFor(tpe: `Type`): Schema = {
+  def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
     val className: String = tpe.erasure.typeSymbol.asClass.fullName
     tpe match {
       case t if Utils.classIsLoadable(className) &&
@@ -116,6 +70,21 @@ trait ScalaReflection {
       case t if t <:< typeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
         Schema(schemaFor(optType).dataType, nullable = true)
+      // Need to decide if we actually need a special type here.
+      case t if t <:< typeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
+      case t if t <:< typeOf[Array[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+        val Schema(dataType, nullable) = schemaFor(elementType)
+        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
+      case t if t <:< typeOf[Seq[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+        val Schema(dataType, nullable) = schemaFor(elementType)
+        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
+      case t if t <:< typeOf[Map[_, _]] =>
+        val TypeRef(_, _, Seq(keyType, valueType)) = t
+        val Schema(valueDataType, valueNullable) = schemaFor(valueType)
+        Schema(MapType(schemaFor(keyType).dataType,
+          valueDataType, valueContainsNull = valueNullable), nullable = true)
       case t if t <:< typeOf[Product] =>
         val formalTypeArgs = t.typeSymbol.asClass.typeParams
         val TypeRef(_, _, actualTypeArgs) = t
@@ -138,24 +107,9 @@ trait ScalaReflection {
               schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs))
             StructField(p.name.toString, dataType, nullable)
           }), nullable = true)
-      // Need to decide if we actually need a special type here.
-      case t if t <:< typeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
-      case t if t <:< typeOf[Array[_]] =>
-        val TypeRef(_, _, Seq(elementType)) = t
-        val Schema(dataType, nullable) = schemaFor(elementType)
-        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
-      case t if t <:< typeOf[Seq[_]] =>
-        val TypeRef(_, _, Seq(elementType)) = t
-        val Schema(dataType, nullable) = schemaFor(elementType)
-        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
-      case t if t <:< typeOf[Map[_, _]] =>
-        val TypeRef(_, _, Seq(keyType, valueType)) = t
-        val Schema(valueDataType, valueNullable) = schemaFor(valueType)
-        Schema(MapType(schemaFor(keyType).dataType,
-          valueDataType, valueContainsNull = valueNullable), nullable = true)
       case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
-      case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
-      case t if t <:< typeOf[Date] => Schema(DateType, nullable = true)
+      case t if t <:< typeOf[java.sql.Timestamp] => Schema(TimestampType, nullable = true)
+      case t if t <:< typeOf[java.sql.Date] => Schema(DateType, nullable = true)
       case t if t <:< typeOf[BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
       case t if t <:< typeOf[java.math.BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
       case t if t <:< typeOf[Decimal] => Schema(DecimalType.Unlimited, nullable = true)
@@ -173,24 +127,27 @@ trait ScalaReflection {
       case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
       case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
       case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
+      case other =>
+        throw new UnsupportedOperationException(s"Schema for type $other is not supported")
     }
   }
 
   def typeOfObject: PartialFunction[Any, DataType] = {
     // The data type can be determined without ambiguity.
-    case obj: BooleanType.JvmType => BooleanType
-    case obj: BinaryType.JvmType => BinaryType
-    case obj: StringType.JvmType => StringType
-    case obj: ByteType.JvmType => ByteType
-    case obj: ShortType.JvmType => ShortType
-    case obj: IntegerType.JvmType => IntegerType
-    case obj: LongType.JvmType => LongType
-    case obj: FloatType.JvmType => FloatType
-    case obj: DoubleType.JvmType => DoubleType
-    case obj: DateType.JvmType => DateType
+    case obj: Boolean => BooleanType
+    case obj: Array[Byte] => BinaryType
+    case obj: String => StringType
+    case obj: UTF8String => StringType
+    case obj: Byte => ByteType
+    case obj: Short => ShortType
+    case obj: Int => IntegerType
+    case obj: Long => LongType
+    case obj: Float => FloatType
+    case obj: Double => DoubleType
+    case obj: java.sql.Date => DateType
     case obj: java.math.BigDecimal => DecimalType.Unlimited
     case obj: Decimal => DecimalType.Unlimited
-    case obj: TimestampType.JvmType => TimestampType
+    case obj: java.sql.Timestamp => TimestampType
     case null => NullType
     // For other cases, there is no obvious mapping from the type of the given object to a
     // Catalyst data type. A user should provide his/her specific rules
@@ -206,7 +163,7 @@ trait ScalaReflection {
      */
     def asRelation: LocalRelation = {
       val output = attributesFor[A]
-      LocalRelation(output, data)
+      LocalRelation.fromProduct(output, data)
     }
   }
 }

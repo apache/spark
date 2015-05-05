@@ -101,6 +101,8 @@ private[deploy] object DeployMessages {
   case class RegisterApplication(appDescription: ApplicationDescription)
     extends DeployMessage
 
+  case class UnregisterApplication(appId: String)
+
   case class MasterChangeAcknowledged(appId: String)
 
   // Master to AppClient
@@ -148,15 +150,22 @@ private[deploy] object DeployMessages {
 
   // Master to MasterWebUI
 
-  case class MasterStateResponse(host: String, port: Int, workers: Array[WorkerInfo],
-    activeApps: Array[ApplicationInfo], completedApps: Array[ApplicationInfo],
-    activeDrivers: Array[DriverInfo], completedDrivers: Array[DriverInfo],
-    status: MasterState) {
+  case class MasterStateResponse(
+      host: String,
+      port: Int,
+      restPort: Option[Int],
+      workers: Array[WorkerInfo],
+      activeApps: Array[ApplicationInfo],
+      completedApps: Array[ApplicationInfo],
+      activeDrivers: Array[DriverInfo],
+      completedDrivers: Array[DriverInfo],
+      status: MasterState) {
 
     Utils.checkHost(host, "Required hostname")
     assert (port > 0)
 
-    def uri = "spark://" + host + ":" + port
+    def uri: String = "spark://" + host + ":" + port
+    def restUri: Option[String] = restPort.map { p => "spark://" + host + ":" + p }
   }
 
   //  WorkerWebUI to Worker

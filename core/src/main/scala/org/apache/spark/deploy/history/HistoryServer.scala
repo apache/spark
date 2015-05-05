@@ -25,9 +25,10 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.status.api.v1.{ApplicationInfo, ApplicationsListResource, JsonRootResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.SignalLogger
+import org.apache.spark.util.{SignalLogger, Utils}
 
 /**
  * A web server that renders SparkUIs of completed applications.
@@ -45,14 +46,18 @@ class HistoryServer(
     provider: ApplicationHistoryProvider,
     securityManager: SecurityManager,
     port: Int)
-  extends WebUI(securityManager, port, conf) with Logging {
+  extends WebUI(securityManager, port, conf) with Logging with UIRoot {
 
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
 
   private val appLoader = new CacheLoader[String, SparkUI] {
     override def load(key: String): SparkUI = {
-      val ui = provider.getAppUI(key).getOrElse(throw new NoSuchElementException())
+      val parts = key.split("/")
+      require(parts.length == 1 || parts.length == 2, s"Invalid app key $key")
+      val ui = provider
+        .getAppUI(parts(0), if (parts.length > 1) Some(parts(1)) else None)
+        .getOrElse(throw new NoSuchElementException(s"no app with key $key"))
       attachSparkUI(ui)
       ui
     }
@@ -61,7 +66,7 @@ class HistoryServer(
   private val appCache = CacheBuilder.newBuilder()
     .maximumSize(retainedApplications)
     .removalListener(new RemovalListener[String, SparkUI] {
-      override def onRemoval(rm: RemovalNotification[String, SparkUI]) = {
+      override def onRemoval(rm: RemovalNotification[String, SparkUI]): Unit = {
         detachSparkUI(rm.getValue())
       }
     })
@@ -69,6 +74,8 @@ class HistoryServer(
 
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+      // Parse the URI created by getAttemptURI(). It contains an app ID and an optional
+      // attempt ID (separated by a slash).
       val parts = Option(req.getPathInfo()).getOrElse("").split("/")
       if (parts.length < 2) {
         res.sendError(HttpServletResponse.SC_BAD_REQUEST,
@@ -76,18 +83,23 @@ class HistoryServer(
         return
       }
 
-      val appId = parts(1)
+      val appKey =
+        if (parts.length == 3) {
+          s"${parts(1)}/${parts(2)}"
+        } else {
+          parts(1)
+        }
 
       // Note we don't use the UI retrieved from the cache; the cache loader above will register
       // the app's UI, and all we need to do is redirect the user to the same URI that was
       // requested, and the proper data should be served at that point.
       try {
-        appCache.get(appId)
+        appCache.get(appKey)
         res.sendRedirect(res.encodeRedirectURL(req.getRequestURI()))
       } catch {
         case e: Exception => e.getCause() match {
           case nsee: NoSuchElementException =>
-            val msg = <div class="row-fluid">Application {appId} not found.</div>
+            val msg = <div class="row-fluid">Application {appKey} not found.</div>
             res.setStatus(HttpServletResponse.SC_NOT_FOUND)
             UIUtils.basicSparkPage(msg, "Not Found").foreach(
               n => res.getWriter().write(n.toString))
@@ -96,6 +108,14 @@ class HistoryServer(
         }
       }
     }
+    // SPARK-5983 ensure TRACE is not supported
+    protected override def doTrace(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+      res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
+    }
+  }
+
+  def getSparkUI(appKey: String): Option[SparkUI] = {
+    Option(appCache.get(appKey))
   }
 
   initialize()
@@ -108,6 +128,9 @@ class HistoryServer(
    */
   def initialize() {
     attachPage(new HistoryPage(this))
+
+    attachHandler(JsonRootResource.getJsonServlet(this))
+
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
 
     val contextHandler = new ServletContextHandler
@@ -145,14 +168,20 @@ class HistoryServer(
    *
    * @return List of all known applications.
    */
-  def getApplicationList() = provider.getListing()
+  def getApplicationList(): Iterable[ApplicationHistoryInfo] = {
+    provider.getListing()
+  }
+
+  def getApplicationInfoList: Iterator[ApplicationInfo] = {
+    getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+  }
 
   /**
    * Returns the provider configuration to show in the listing page.
    *
    * @return A map with the provider's configuration.
    */
-  def getProviderConfig() = provider.getConfig()
+  def getProviderConfig(): Map[String, String] = provider.getConfig()
 
 }
 
@@ -190,11 +219,7 @@ object HistoryServer extends Logging {
     val server = new HistoryServer(conf, provider, securityManager, port)
     server.bind()
 
-    Runtime.getRuntime().addShutdownHook(new Thread("HistoryServerStopper") {
-      override def run() = {
-        server.stop()
-      }
-    })
+    Utils.addShutdownHook { () => server.stop() }
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }
@@ -211,6 +236,11 @@ object HistoryServer extends Logging {
       val keytabFilename = conf.get("spark.history.kerberos.keytab")
       SparkHadoopUtil.get.loginUserFromKeytab(principalName, keytabFilename)
     }
+  }
+
+  private[history] def getAttemptURI(appId: String, attemptId: Option[String]): String = {
+    val attemptSuffix = attemptId.map { id => s"/$id" }.getOrElse("")
+    s"${HistoryServer.UI_PATH_PREFIX}/${appId}${attemptSuffix}"
   }
 
 }

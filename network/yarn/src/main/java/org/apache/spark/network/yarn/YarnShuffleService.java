@@ -17,9 +17,10 @@
 
 package org.apache.spark.network.yarn;
 
-import java.lang.Override;
 import java.nio.ByteBuffer;
+import java.util.List;
 
+import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -32,10 +33,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.TransportContext;
-import org.apache.spark.network.sasl.SaslRpcHandler;
+import org.apache.spark.network.sasl.SaslServerBootstrap;
 import org.apache.spark.network.sasl.ShuffleSecretManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.yarn.util.HadoopConfigProvider;
@@ -76,6 +78,9 @@ public class YarnShuffleService extends AuxiliaryService {
   // The actual server that serves shuffle files
   private TransportServer shuffleServer = null;
 
+  // Handles registering executors and opening shuffle blocks
+  private ExternalShuffleBlockHandler blockHandler;
+
   public YarnShuffleService() {
     super("spark_shuffle");
     logger.info("Initializing YARN shuffle service for Spark");
@@ -99,16 +104,18 @@ public class YarnShuffleService extends AuxiliaryService {
     // If authentication is enabled, set up the shuffle server to use a
     // special RPC handler that filters out unauthenticated fetch requests
     boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
-    RpcHandler rpcHandler = new ExternalShuffleBlockHandler(transportConf);
+    blockHandler = new ExternalShuffleBlockHandler(transportConf);
+
+    List<TransportServerBootstrap> bootstraps = Lists.newArrayList();
     if (authEnabled) {
       secretManager = new ShuffleSecretManager();
-      rpcHandler = new SaslRpcHandler(rpcHandler, secretManager);
+      bootstraps.add(new SaslServerBootstrap(transportConf, secretManager));
     }
 
     int port = conf.getInt(
       SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
-    TransportContext transportContext = new TransportContext(transportConf, rpcHandler);
-    shuffleServer = transportContext.createServer(port);
+    TransportContext transportContext = new TransportContext(transportConf, blockHandler);
+    shuffleServer = transportContext.createServer(port, bootstraps);
     String authEnabledString = authEnabled ? "enabled" : "not enabled";
     logger.info("Started YARN shuffle service for Spark on port {}. " +
       "Authentication is {}.", port, authEnabledString);
@@ -136,6 +143,7 @@ public class YarnShuffleService extends AuxiliaryService {
       if (isAuthenticationEnabled()) {
         secretManager.unregisterApp(appId);
       }
+      blockHandler.applicationRemoved(appId, false /* clean up local dirs */);
     } catch (Exception e) {
       logger.error("Exception when stopping application {}", appId, e);
     }

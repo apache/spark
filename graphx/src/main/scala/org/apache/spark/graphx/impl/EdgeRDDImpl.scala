@@ -19,7 +19,7 @@ package org.apache.spark.graphx.impl
 
 import scala.reflect.{classTag, ClassTag}
 
-import org.apache.spark.{OneToOneDependency, HashPartitioner, TaskContext}
+import org.apache.spark.{OneToOneDependency, HashPartitioner}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -70,10 +70,20 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     this
   }
 
-  override def checkpoint() = {
+  override def getStorageLevel: StorageLevel = partitionsRDD.getStorageLevel
+
+  override def checkpoint(): Unit = {
     partitionsRDD.checkpoint()
   }
-    
+
+  override def isCheckpointed: Boolean = {
+    firstParent[(PartitionID, EdgePartition[ED, VD])].isCheckpointed
+  }
+
+  override def getCheckpointFile: Option[String] = {
+    partitionsRDD.getCheckpointFile
+  }
+
   /** The number of edges in the RDD. */
   override def count(): Long = {
     partitionsRDD.map(_._2.size.toLong).reduce(_ + _)

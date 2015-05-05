@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 import os
 import shutil
 import sys
@@ -30,11 +32,13 @@ from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
     PairDeserializer, AutoBatchedSerializer, NoOpSerializer
 from pyspark.storagelevel import StorageLevel
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.traceback_utils import CallSite, first_spark_call
+from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler
 
-from py4j.java_collections import ListConverter
+if sys.version > '3':
+    xrange = range
 
 
 __all__ = ['SparkContext']
@@ -58,11 +62,12 @@ class SparkContext(object):
 
     _gateway = None
     _jvm = None
-    _writeToFile = None
     _next_accum_id = 0
     _active_spark_context = None
     _lock = Lock()
     _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
+
+    PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
                  environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
@@ -131,7 +136,7 @@ class SparkContext(object):
         if sparkHome:
             self._conf.setSparkHome(sparkHome)
         if environment:
-            for key, value in environment.iteritems():
+            for key, value in environment.items():
                 self._conf.setExecutorEnv(key, value)
         for key, value in DEFAULT_CONFIGS.items():
             self._conf.setIfMissing(key, value)
@@ -151,6 +156,10 @@ class SparkContext(object):
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
                 self.environment[varName] = v
+        if sys.version >= '3.3' and 'PYTHONHASHSEED' not in os.environ:
+            # disable randomness of hash of string in worker, if this is not
+            # launched by spark-submit
+            self.environment["PYTHONHASHSEED"] = "0"
 
         # Create the Java SparkContext through Py4J
         self._jsc = jsc or self._initialize_context(self._conf._jconf)
@@ -185,14 +194,15 @@ class SparkContext(object):
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
                 (dirname, filename) = os.path.split(path)
-                if filename.lower().endswith("zip") or filename.lower().endswith("egg"):
+                if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
                     self._python_includes.append(filename)
                     sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
 
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
         self._temp_dir = \
-            self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
+            self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir, "pyspark") \
+                .getAbsolutePath()
 
         # profiling stats collected for each PythonRDD
         if self._conf.get("spark.python.profile", "false") == "true":
@@ -217,7 +227,6 @@ class SparkContext(object):
             if not SparkContext._gateway:
                 SparkContext._gateway = gateway or launch_gateway()
                 SparkContext._jvm = SparkContext._gateway.jvm
-                SparkContext._writeToFile = SparkContext._jvm.PythonRDD.writeToFile
 
             if instance:
                 if (SparkContext._active_spark_context and
@@ -257,6 +266,13 @@ class SparkContext(object):
         Specifically stop the context on exit of the with block.
         """
         self.stop()
+
+    def setLogLevel(self, logLevel):
+        """
+        Control our logLevel. This overrides any user-defined log settings.
+        Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
+        """
+        self._jsc.setLogLevel(logLevel)
 
     @classmethod
     def setSystemProperty(cls, key, value):
@@ -321,7 +337,7 @@ class SparkContext(object):
             start0 = c[0]
 
             def getStart(split):
-                return start0 + (split * size / numSlices) * step
+                return start0 + int((split * size / numSlices)) * step
 
             def f(split, iterator):
                 return xrange(getStart(split), getStart(split + 1), step)
@@ -355,6 +371,7 @@ class SparkContext(object):
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.objectFile(name, minPartitions), self)
 
+    @ignore_unicode_prefix
     def textFile(self, name, minPartitions=None, use_unicode=True):
         """
         Read a text file from HDFS, a local file system (available on all
@@ -367,7 +384,7 @@ class SparkContext(object):
 
         >>> path = os.path.join(tempdir, "sample-text.txt")
         >>> with open(path, "w") as testFile:
-        ...    testFile.write("Hello world!")
+        ...    _ = testFile.write("Hello world!")
         >>> textFile = sc.textFile(path)
         >>> textFile.collect()
         [u'Hello world!']
@@ -376,6 +393,7 @@ class SparkContext(object):
         return RDD(self._jsc.textFile(name, minPartitions), self,
                    UTF8Deserializer(use_unicode))
 
+    @ignore_unicode_prefix
     def wholeTextFiles(self, path, minPartitions=None, use_unicode=True):
         """
         Read a directory of text files from HDFS, a local file system
@@ -409,9 +427,9 @@ class SparkContext(object):
         >>> dirPath = os.path.join(tempdir, "files")
         >>> os.mkdir(dirPath)
         >>> with open(os.path.join(dirPath, "1.txt"), "w") as file1:
-        ...    file1.write("1")
+        ...    _ = file1.write("1")
         >>> with open(os.path.join(dirPath, "2.txt"), "w") as file2:
-        ...    file2.write("2")
+        ...    _ = file2.write("2")
         >>> textFiles = sc.wholeTextFiles(dirPath)
         >>> sorted(textFiles.collect())
         [(u'.../1.txt', u'1'), (u'.../2.txt', u'2')]
@@ -454,7 +472,7 @@ class SparkContext(object):
         jm = self._jvm.java.util.HashMap()
         if not d:
             d = {}
-        for k, v in d.iteritems():
+        for k, v in d.items():
             jm[k] = v
         return jm
 
@@ -606,6 +624,7 @@ class SparkContext(object):
         jrdd = self._jsc.checkpointFile(name)
         return RDD(jrdd, self, input_deserializer)
 
+    @ignore_unicode_prefix
     def union(self, rdds):
         """
         Build the union of a list of RDDs.
@@ -616,7 +635,7 @@ class SparkContext(object):
 
         >>> path = os.path.join(tempdir, "union-text.txt")
         >>> with open(path, "w") as testFile:
-        ...    testFile.write("Hello")
+        ...    _ = testFile.write("Hello")
         >>> textFile = sc.textFile(path)
         >>> textFile.collect()
         [u'Hello']
@@ -629,7 +648,6 @@ class SparkContext(object):
             rdds = [x._reserialize() for x in rdds]
         first = rdds[0]._jrdd
         rest = [x._jrdd for x in rdds[1:]]
-        rest = ListConverter().convert(rest, self._gateway._gateway_client)
         return RDD(self._jsc.union(first, rest), self, rdds[0]._jrdd_deserializer)
 
     def broadcast(self, value):
@@ -657,7 +675,7 @@ class SparkContext(object):
             elif isinstance(value, complex):
                 accum_param = accumulators.COMPLEX_ACCUMULATOR_PARAM
             else:
-                raise Exception("No default accumulator param for type %s" % type(value))
+                raise TypeError("No default accumulator param for type %s" % type(value))
         SparkContext._next_accum_id += 1
         return Accumulator(SparkContext._next_accum_id - 1, value, accum_param)
 
@@ -675,7 +693,7 @@ class SparkContext(object):
         >>> from pyspark import SparkFiles
         >>> path = os.path.join(tempdir, "test.txt")
         >>> with open(path, "w") as testFile:
-        ...    testFile.write("100")
+        ...    _ = testFile.write("100")
         >>> sc.addFile(path)
         >>> def func(iterator):
         ...    with open(SparkFiles.get("test.txt")) as testFile:
@@ -703,11 +721,13 @@ class SparkContext(object):
         """
         self.addFile(path)
         (dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
-
-        if filename.endswith('.zip') or filename.endswith('.ZIP') or filename.endswith('.egg'):
+        if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
             self._python_includes.append(filename)
             # for tests in local mode
             sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
+        if sys.version > '3':
+            import importlib
+            importlib.invalidate_caches()
 
     def setCheckpointDir(self, dirName):
         """
@@ -742,7 +762,7 @@ class SparkContext(object):
         The application can use L{SparkContext.cancelJobGroup} to cancel all
         running jobs in this group.
 
-        >>> import thread, threading
+        >>> import threading
         >>> from time import sleep
         >>> result = "Not Set"
         >>> lock = threading.Lock()
@@ -761,10 +781,10 @@ class SparkContext(object):
         ...     sleep(5)
         ...     sc.cancelJobGroup("job_to_cancel")
         >>> supress = lock.acquire()
-        >>> supress = thread.start_new_thread(start_job, (10,))
-        >>> supress = thread.start_new_thread(stop_job, tuple())
+        >>> supress = threading.Thread(target=start_job, args=(10,)).start()
+        >>> supress = threading.Thread(target=stop_job).start()
         >>> supress = lock.acquire()
-        >>> print result
+        >>> print(result)
         Cancelled
 
         If interruptOnCancel is set to true for the job group, then job cancellation will result
@@ -807,6 +827,12 @@ class SparkContext(object):
         """
         self._jsc.sc().cancelAllJobs()
 
+    def statusTracker(self):
+        """
+        Return :class:`StatusTracker` object
+        """
+        return StatusTracker(self._jsc.statusTracker())
+
     def runJob(self, rdd, partitionFunc, partitions=None, allowLocal=False):
         """
         Executes the given partitionFunc on the specified set of partitions,
@@ -824,14 +850,14 @@ class SparkContext(object):
         """
         if partitions is None:
             partitions = range(rdd._jrdd.partitions().size())
-        javaPartitions = ListConverter().convert(partitions, self._gateway._gateway_client)
 
         # Implementation note: This is implemented as a mapPartitions followed
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
-        it = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions, allowLocal)
-        return list(mappedRDD._collect_iterator_through_file(it))
+        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions,
+                                          allowLocal)
+        return list(_load_from_socket(port, mappedRDD._jrdd_deserializer))
 
     def show_profiles(self):
         """ Print the profile stats to stdout """

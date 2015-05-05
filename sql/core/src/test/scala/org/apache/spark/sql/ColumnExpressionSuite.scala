@@ -17,24 +17,35 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.api.scala.dsl._
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
+import org.scalatest.Matchers._
 
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.TestSQLContext.implicits._
+import org.apache.spark.sql.types._
 
 class ColumnExpressionSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
   // TODO: Add test cases for bitwise operations.
 
+  test("collect on column produced by a binary operator") {
+    val df = Seq((1, 2, 3)).toDF("a", "b", "c")
+    checkAnswer(df.select(df("a") + df("b")), Seq(Row(3)))
+    checkAnswer(df.select(df("a") + df("b").as("c")), Seq(Row(3)))
+  }
+
   test("star") {
     checkAnswer(testData.select($"*"), testData.collect().toSeq)
   }
 
-  ignore("star qualified by data frame object") {
-    // This is not yet supported.
-    val df = testData.toDataFrame
-    checkAnswer(df.select(df("*")), df.collect().toSeq)
+  test("star qualified by data frame object") {
+    val df = testData.toDF
+    val goldAnswer = df.collect().toSeq
+    checkAnswer(df.select(df("*")), goldAnswer)
+
+    val df1 = df.select(df("*"), lit("abcd").as("litCol"))
+    checkAnswer(df1.select(df("*")), goldAnswer)
   }
 
   test("star qualified by table name") {
@@ -106,13 +117,13 @@ class ColumnExpressionSuite extends QueryTest {
 
   test("isNull") {
     checkAnswer(
-      nullStrings.toDataFrame.where($"s".isNull),
+      nullStrings.toDF.where($"s".isNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
   }
 
   test("isNotNull") {
     checkAnswer(
-      nullStrings.toDataFrame.where($"s".isNotNull),
+      nullStrings.toDF.where($"s".isNotNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
   }
 
@@ -137,7 +148,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("!==") {
-    val nullData = TestSQLContext.applySchema(TestSQLContext.sparkContext.parallelize(
+    val nullData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
       Row(1, 1) ::
       Row(1, 2) ::
       Row(1, null) ::
@@ -197,7 +208,21 @@ class ColumnExpressionSuite extends QueryTest {
       testData2.collect().toSeq.filter(r => r.getInt(0) <= r.getInt(1)))
   }
 
-  val booleanData = TestSQLContext.applySchema(TestSQLContext.sparkContext.parallelize(
+  test("between") {
+    val testData = TestSQLContext.sparkContext.parallelize(
+      (0, 1, 2) ::
+      (1, 2, 3) ::
+      (2, 1, 0) ::
+      (2, 2, 4) ::
+      (3, 1, 6) ::
+      (3, 2, 0) :: Nil).toDF("a", "b", "c")
+    val expectAnswer = testData.collect().toSeq.
+      filter(r => r.getInt(0) >= r.getInt(1) && r.getInt(0) <= r.getInt(2))
+
+    checkAnswer(testData.filter($"a".between($"b", $"c")), expectAnswer)
+  }
+
+  val booleanData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
     Row(false, false) ::
       Row(false, true) ::
       Row(true, false) ::
@@ -298,5 +323,66 @@ class ColumnExpressionSuite extends QueryTest {
       testData.select(lower(lit(null))),
       (1 to 100).map(n => Row(null))
     )
+  }
+
+  test("monotonicallyIncreasingId") {
+    // Make sure we have 2 partitions, each with 2 records.
+    val df = TestSQLContext.sparkContext.parallelize(1 to 2, 2).mapPartitions { iter =>
+      Iterator(Tuple1(1), Tuple1(2))
+    }.toDF("a")
+    checkAnswer(
+      df.select(monotonicallyIncreasingId()),
+      Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
+    )
+  }
+
+  test("sparkPartitionId") {
+    val df = TestSQLContext.sparkContext.parallelize(1 to 1, 1).map(i => (i, i)).toDF("a", "b")
+    checkAnswer(
+      df.select(sparkPartitionId()),
+      Row(0)
+    )
+  }
+
+  test("lift alias out of cast") {
+    compareExpressions(
+      col("1234").as("name").cast("int").expr,
+      col("1234").cast("int").as("name").expr)
+  }
+
+  test("columns can be compared") {
+    assert('key.desc == 'key.desc)
+    assert('key.desc != 'key.asc)
+  }
+
+  test("alias with metadata") {
+    val metadata = new MetadataBuilder()
+      .putString("originName", "value")
+      .build()
+    val schema = testData
+      .select($"*", col("value").as("abc", metadata))
+      .schema
+    assert(schema("value").metadata === Metadata.empty)
+    assert(schema("abc").metadata === metadata)
+  }
+
+  test("rand") {
+    val randCol = testData.select('key, rand(5L).as("rand"))
+    randCol.columns.length should be (2)
+    val rows = randCol.collect()
+    rows.foreach { row =>
+      assert(row.getDouble(1) <= 1.0)
+      assert(row.getDouble(1) >= 0.0)
+    }
+  }
+
+  test("randn") {
+    val randCol = testData.select('key, randn(5L).as("rand"))
+    randCol.columns.length should be (2)
+    val rows = randCol.collect()
+    rows.foreach { row =>
+      assert(row.getDouble(1) <= 4.0)
+      assert(row.getDouble(1) >= -4.0)
+    }
   }
 }

@@ -22,6 +22,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 class MatrixFactorizationModelSuite extends FunSuite with MLlibTestSparkContext {
 
@@ -52,5 +53,43 @@ class MatrixFactorizationModelSuite extends FunSuite with MLlibTestSparkContext 
     intercept[IllegalArgumentException] {
       new MatrixFactorizationModel(rank, userFeatures, prodFeatures1)
     }
+  }
+
+  test("save/load") {
+    val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+    def collect(features: RDD[(Int, Array[Double])]): Set[(Int, Seq[Double])] = {
+      features.mapValues(_.toSeq).collect().toSet
+    }
+    try {
+      model.save(sc, path)
+      val newModel = MatrixFactorizationModel.load(sc, path)
+      assert(newModel.rank === rank)
+      assert(collect(newModel.userFeatures) === collect(userFeatures))
+      assert(collect(newModel.productFeatures) === collect(prodFeatures))
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
+  test("batch predict API recommendProductsForUsers") {
+    val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
+    val topK = 10
+    val recommendations = model.recommendProductsForUsers(topK).collectAsMap()
+
+    assert(recommendations(0)(0).rating ~== 17.0 relTol 1e-14)
+    assert(recommendations(1)(0).rating ~== 39.0 relTol 1e-14)
+  }
+
+  test("batch predict API recommendUsersForProducts") {
+    val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
+    val topK = 10
+    val recommendations = model.recommendUsersForProducts(topK).collectAsMap()
+
+    assert(recommendations(2)(0).user == 1)
+    assert(recommendations(2)(0).rating ~== 39.0 relTol 1e-14)
+    assert(recommendations(2)(1).user == 0)
+    assert(recommendations(2)(1).rating ~== 17.0 relTol 1e-14)
   }
 }

@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.api.scala.dsl.StringToColumn
 import org.apache.spark.sql.test._
 
 /* Implicits */
 import TestSQLContext._
+import TestSQLContext.implicits._
 
 case class FunctionResult(f1: String, f2: String)
 
@@ -45,9 +45,15 @@ class UDFSuite extends QueryTest {
   test("struct UDF") {
     udf.register("returnStruct", (f1: String, f2: String) => FunctionResult(f1, f2))
 
-    val result=
+    val result =
       sql("SELECT returnStruct('test', 'test2') as ret")
         .select($"ret.f1").head().getString(0)
     assert(result === "test")
+  }
+
+  test("udf that is transformed") {
+    udf.register("makeStruct", (x: Int, y: Int) => (x, y))
+    // 1 + 1 is constant folded causing a transformation.
+    assert(sql("SELECT makeStruct(1 + 1, 2)").first().getAs[Row](0) === Row(2, 2))
   }
 }

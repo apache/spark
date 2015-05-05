@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.expressions.{VirtualColumn, Attribute, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{ArrayType, DataType, StructField, StructType}
 
@@ -47,8 +47,12 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
    * Attributes that are referenced by expressions but not provided by this nodes children.
    * Subclasses should override this method if they produce attributes internally as it is used by
    * assertions designed to prevent the construction of invalid plans.
+   *
+   * Note that virtual columns should be excluded. Currently, we only support the grouping ID
+   * virtual column.
    */
-  def missingInput: AttributeSet = references -- inputSet
+  def missingInput: AttributeSet =
+    (references -- inputSet).filter(_.name != VirtualColumn.groupingIdName)
 
   /**
    * Runs [[transform]] with `rule` on all expressions present in this query operator.
@@ -67,7 +71,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def transformExpressionsDown(rule: PartialFunction[Expression, Expression]): this.type = {
     var changed = false
 
-    @inline def transformExpressionDown(e: Expression) = {
+    @inline def transformExpressionDown(e: Expression): Expression = {
       val newE = e.transformDown(rule)
       if (newE.fastEquals(e)) {
         e
@@ -81,6 +85,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
       case e: Expression => transformExpressionDown(e)
       case Some(e: Expression) => Some(transformExpressionDown(e))
       case m: Map[_,_] => m
+      case d: DataType => d // Avoid unpacking Structs
       case seq: Traversable[_] => seq.map {
         case e: Expression => transformExpressionDown(e)
         case other => other
@@ -99,7 +104,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def transformExpressionsUp(rule: PartialFunction[Expression, Expression]): this.type = {
     var changed = false
 
-    @inline def transformExpressionUp(e: Expression) = {
+    @inline def transformExpressionUp(e: Expression): Expression = {
       val newE = e.transformUp(rule)
       if (newE.fastEquals(e)) {
         e
@@ -113,6 +118,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
       case e: Expression => transformExpressionUp(e)
       case Some(e: Expression) => Some(transformExpressionUp(e))
       case m: Map[_,_] => m
+      case d: DataType => d // Avoid unpacking Structs
       case seq: Traversable[_] => seq.map {
         case e: Expression => transformExpressionUp(e)
         case other => other
@@ -144,7 +150,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     }.toSeq
   }
 
-  def schema: StructType = StructType.fromAttributes(output)
+  lazy val schema: StructType = StructType.fromAttributes(output)
 
   /** Returns the output schema in the tree format. */
   def schemaString: String = schema.treeString
@@ -152,7 +158,12 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   /** Prints out the schema in the tree format */
   def printSchema(): Unit = println(schemaString)
 
+  /**
+   * A prefix string used when printing the plan.
+   *
+   * We use "!" to indicate an invalid plan, and "'" to indicate an unresolved plan.
+   */
   protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
 
-  override def simpleString = statePrefix + super.simpleString
+  override def simpleString: String = statePrefix + super.simpleString
 }

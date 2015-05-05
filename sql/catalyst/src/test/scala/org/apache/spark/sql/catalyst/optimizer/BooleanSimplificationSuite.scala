@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
+import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -30,7 +30,7 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("AnalysisNodes", Once,
-        EliminateAnalysisOperators) ::
+        EliminateSubQueries) ::
       Batch("Constant Folding", FixedPoint(50),
         NullPropagation,
         ConstantFolding,
@@ -61,7 +61,7 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
   def checkCondition(input: Expression, expected: Expression): Unit = {
     val plan = testRelation.where(input).analyze
-    val actual = Optimize(plan).expressions.head
+    val actual = Optimize.execute(plan).expressions.head
     compareConditions(actual, expected)
   }
 

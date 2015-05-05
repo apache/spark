@@ -5,7 +5,7 @@ title: Running Spark on EC2
 
 The `spark-ec2` script, located in Spark's `ec2` directory, allows you
 to launch, manage and shut down Spark clusters on Amazon EC2. It automatically
-sets up Spark, Shark and HDFS on the cluster for you. This guide describes 
+sets up Spark and HDFS on the cluster for you. This guide describes 
 how to use `spark-ec2` to launch clusters, how to run jobs on them, and how 
 to shut them down. It assumes you've already signed up for an EC2 account 
 on the [Amazon Web Services site](http://aws.amazon.com/).
@@ -52,7 +52,7 @@ identify machines belonging to each cluster in the Amazon EC2 Console.
     ```bash
     export AWS_SECRET_ACCESS_KEY=AaBbCcDdEeFGgHhIiJjKkLlMmNnOoPpQqRrSsTtU
 export AWS_ACCESS_KEY_ID=ABCDEFG1234567890123
-./spark-ec2 --key-pair=awskey --identity-file=awskey.pem --region=us-west-1 --zone=us-west-1a --spark-version=1.1.0 launch my-spark-cluster
+./spark-ec2 --key-pair=awskey --identity-file=awskey.pem --region=us-west-1 --zone=us-west-1a launch my-spark-cluster
     ```
 
 -   After everything launches, check that the cluster scheduler is up and sees

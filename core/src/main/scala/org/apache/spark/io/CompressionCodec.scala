@@ -26,7 +26,6 @@ import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
-import org.apache.spark.Logging
 
 /**
  * :: DeveloperApi ::
@@ -53,8 +52,12 @@ private[spark] object CompressionCodec {
     "lzf" -> classOf[LZFCompressionCodec].getName,
     "snappy" -> classOf[SnappyCompressionCodec].getName)
 
+  def getCodecName(conf: SparkConf): String = {
+    conf.get(configKey, DEFAULT_COMPRESSION_CODEC)
+  }
+
   def createCodec(conf: SparkConf): CompressionCodec = {
-    createCodec(conf, conf.get(configKey, DEFAULT_COMPRESSION_CODEC))
+    createCodec(conf, getCodecName(conf))
   }
 
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
@@ -71,6 +74,20 @@ private[spark] object CompressionCodec {
       s"Consider setting $configKey=$FALLBACK_COMPRESSION_CODEC"))
   }
 
+  /**
+   * Return the short version of the given codec name.
+   * If it is already a short name, just return it.
+   */
+  def getShortName(codecName: String): String = {
+    if (shortCompressionCodecNames.contains(codecName)) {
+      codecName
+    } else {
+      shortCompressionCodecNames
+        .collectFirst { case (k, v) if v == codecName => k }
+        .getOrElse { throw new IllegalArgumentException(s"No short name for codec $codecName.") }
+    }
+  }
+
   val FALLBACK_COMPRESSION_CODEC = "lzf"
   val DEFAULT_COMPRESSION_CODEC = "snappy"
   val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
@@ -80,7 +97,7 @@ private[spark] object CompressionCodec {
 /**
  * :: DeveloperApi ::
  * LZ4 implementation of [[org.apache.spark.io.CompressionCodec]].
- * Block size can be configured by `spark.io.compression.lz4.block.size`.
+ * Block size can be configured by `spark.io.compression.lz4.blockSize`.
  *
  * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
  *       of Spark. This is intended for use as an internal compression utility within a single Spark
@@ -90,7 +107,7 @@ private[spark] object CompressionCodec {
 class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
-    val blockSize = conf.getInt("spark.io.compression.lz4.block.size", 32768)
+    val blockSize = conf.getSizeAsBytes("spark.io.compression.lz4.blockSize", "32k").toInt
     new LZ4BlockOutputStream(s, blockSize)
   }
 
@@ -120,7 +137,7 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 /**
  * :: DeveloperApi ::
  * Snappy implementation of [[org.apache.spark.io.CompressionCodec]].
- * Block size can be configured by `spark.io.compression.snappy.block.size`.
+ * Block size can be configured by `spark.io.compression.snappy.blockSize`.
  *
  * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
  *       of Spark. This is intended for use as an internal compression utility within a single Spark
@@ -136,7 +153,7 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
   }
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
-    val blockSize = conf.getInt("spark.io.compression.snappy.block.size", 32768)
+    val blockSize = conf.getSizeAsBytes("spark.io.compression.snappy.blockSize", "32k").toInt
     new SnappyOutputStream(s, blockSize)
   }
 

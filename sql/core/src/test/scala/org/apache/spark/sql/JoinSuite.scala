@@ -20,10 +20,11 @@ package org.apache.spark.sql
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.api.scala.dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 
 
 class JoinSuite extends QueryTest with BeforeAndAfterEach {
@@ -33,14 +34,14 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   test("equi-join is hash-join") {
     val x = testData2.as("x")
     val y = testData2.as("y")
-    val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.analyzed
+    val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.optimizedPlan
     val planned = planner.HashJoin(join)
     assert(planned.size === 1)
   }
 
   def assertJoin(sqlString: String, c: Class[_]): Any = {
-    val rdd = sql(sqlString)
-    val physical = rdd.queryExecution.sparkPlan
+    val df = sql(sqlString)
+    val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
       case j: ShuffledHashJoin => j
       case j: HashOuterJoin => j
@@ -50,6 +51,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       case j: CartesianProduct => j
       case j: BroadcastNestedLoopJoin => j
       case j: BroadcastLeftSemiJoinHash => j
+      case j: SortMergeJoin => j
     }
 
     assert(operators.size === 1)
@@ -61,6 +63,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   test("join operator selection") {
     cacheManager.clearCache()
 
+    val SORTMERGEJOIN_ENABLED: Boolean = conf.sortMergeJoinEnabled
     Seq(
       ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
       ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[LeftSemiJoinBNL]),
@@ -90,17 +93,41 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       ("SELECT * FROM testData full JOIN testData2 ON (key * a != key + a)",
         classOf[BroadcastNestedLoopJoin])
     ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    try {
+      conf.setConf("spark.sql.planner.sortMergeJoin", "true")
+      Seq(
+        ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoin]),
+        ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoin]),
+        ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin])
+      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    } finally {
+      conf.setConf("spark.sql.planner.sortMergeJoin", SORTMERGEJOIN_ENABLED.toString)
+    }
   }
 
   test("broadcasted hash join operator selection") {
     cacheManager.clearCache()
     sql("CACHE TABLE testData")
 
+    val SORTMERGEJOIN_ENABLED: Boolean = conf.sortMergeJoinEnabled
     Seq(
       ("SELECT * FROM testData join testData2 ON key = a", classOf[BroadcastHashJoin]),
       ("SELECT * FROM testData join testData2 ON key = a and key = 2", classOf[BroadcastHashJoin]),
-      ("SELECT * FROM testData join testData2 ON key = a where key = 2", classOf[BroadcastHashJoin])
+      ("SELECT * FROM testData join testData2 ON key = a where key = 2",
+        classOf[BroadcastHashJoin])
     ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    try {
+      conf.setConf("spark.sql.planner.sortMergeJoin", "true")
+      Seq(
+        ("SELECT * FROM testData join testData2 ON key = a", classOf[BroadcastHashJoin]),
+        ("SELECT * FROM testData join testData2 ON key = a and key = 2",
+          classOf[BroadcastHashJoin]),
+        ("SELECT * FROM testData join testData2 ON key = a where key = 2",
+          classOf[BroadcastHashJoin])
+      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    } finally {
+      conf.setConf("spark.sql.planner.sortMergeJoin", SORTMERGEJOIN_ENABLED.toString)
+    }
 
     sql("UNCACHE TABLE testData")
   }
@@ -108,7 +135,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   test("multiple-key equi-join is hash-join") {
     val x = testData2.as("x")
     val y = testData2.as("y")
-    val join = x.join(y, ($"x.a" === $"y.a") && ($"x.b" === $"y.b")).queryExecution.analyzed
+    val join = x.join(y, ($"x.a" === $"y.a") && ($"x.b" === $"y.b")).queryExecution.optimizedPlan
     val planned = planner.HashJoin(join)
     assert(planned.size === 1)
   }
@@ -409,8 +436,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("left semi join") {
-    val rdd = sql("SELECT * FROM testData2 LEFT SEMI JOIN testData ON key = a")
-    checkAnswer(rdd,
+    val df = sql("SELECT * FROM testData2 LEFT SEMI JOIN testData ON key = a")
+    checkAnswer(df,
       Row(1, 1) ::
         Row(1, 2) ::
         Row(2, 1) ::

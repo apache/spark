@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
 
 import scala.collection.mutable.ArrayBuffer
@@ -27,13 +28,14 @@ private[spark] class TaskContextImpl(
     val partitionId: Int,
     override val taskAttemptId: Long,
     override val attemptNumber: Int,
+    override val taskMemoryManager: TaskMemoryManager,
     val runningLocally: Boolean = false,
     val taskMetrics: TaskMetrics = TaskMetrics.empty)
   extends TaskContext
   with Logging {
 
   // For backwards-compatibility; this method is now deprecated as of 1.3.0.
-  override def attemptId: Long = taskAttemptId
+  override def attemptId(): Long = taskAttemptId
 
   // List of callback functions to execute when the task completes.
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
@@ -87,10 +89,10 @@ private[spark] class TaskContextImpl(
     interrupted = true
   }
 
-  override def isCompleted: Boolean = completed
+  override def isCompleted(): Boolean = completed
 
-  override def isRunningLocally: Boolean = runningLocally
+  override def isRunningLocally(): Boolean = runningLocally
 
-  override def isInterrupted: Boolean = interrupted
+  override def isInterrupted(): Boolean = interrupted
 }
 

@@ -92,7 +92,7 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
   test("RangePartitioner for keys that are not Comparable (but with Ordering)") {
     // Row does not extend Comparable, but has an implicit Ordering defined.
     implicit object RowOrdering extends Ordering[Row] {
-      override def compare(x: Row, y: Row) = x.value - y.value
+      override def compare(x: Row, y: Row): Int = x.value - y.value
     }
 
     val rdd = sc.parallelize(1 to 4500).map(x => (Row(x), Row(x)))
@@ -212,20 +212,24 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     val arrPairs: RDD[(Array[Int], Int)] =
       sc.parallelize(Array(1, 2, 3, 4), 2).map(x => (Array(x), x))
 
-    assert(intercept[SparkException]{ arrs.distinct() }.getMessage.contains("array"))
+    def verify(testFun: => Unit): Unit = {
+      intercept[SparkException](testFun).getMessage.contains("array")
+    }
+
+    verify(arrs.distinct())
     // We can't catch all usages of arrays, since they might occur inside other collections:
     // assert(fails { arrPairs.distinct() })
-    assert(intercept[SparkException]{ arrPairs.partitionBy(new HashPartitioner(2)) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.join(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.leftOuterJoin(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.rightOuterJoin(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.fullOuterJoin(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.groupByKey() }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.countByKey() }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.countByKeyApprox(1) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.cogroup(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.reduceByKeyLocally(_ + _) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.reduceByKey(_ + _) }.getMessage.contains("array"))
+    verify(arrPairs.partitionBy(new HashPartitioner(2)))
+    verify(arrPairs.join(arrPairs))
+    verify(arrPairs.leftOuterJoin(arrPairs))
+    verify(arrPairs.rightOuterJoin(arrPairs))
+    verify(arrPairs.fullOuterJoin(arrPairs))
+    verify(arrPairs.groupByKey())
+    verify(arrPairs.countByKey())
+    verify(arrPairs.countByKeyApprox(1))
+    verify(arrPairs.cogroup(arrPairs))
+    verify(arrPairs.reduceByKeyLocally(_ + _))
+    verify(arrPairs.reduceByKey(_ + _))
   }
 
   test("zero-length partitions should be correctly handled") {
