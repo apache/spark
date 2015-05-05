@@ -177,17 +177,18 @@ class DirectKafkaInputDStream[
     val offsetUpdateEnabled = context.conf.getBoolean("spark.streaming.kafka.offsetUpdate", false)
     val groupId = kafkaParams.getOrElse("group.id", "directKafkaConsumer")
 
-    override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) = synchronized {
-      if (offsetUpdateEnabled) {
-        for (offsets <- offsetMap.get(batchCompleted.batchInfo.batchTime)) {
-          val o = kc.setConsumerOffsets(groupId, offsets)
-          if (o.isLeft) {
-            logWarning(s"Error updating the offset to Kafka cluster: ${o.left.get}")
+    override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit =
+      synchronized {
+        if (offsetUpdateEnabled) {
+          for (offsets <- offsetMap.get(batchCompleted.batchInfo.batchTime)) {
+            val o = kc.setConsumerOffsets(groupId, offsets)
+            if (o.isLeft) {
+              logWarning(s"Error updating the offset to Kafka cluster: ${o.left.get}")
+            }
           }
         }
-      }
 
-      offsetMap --= offsetMap.filter(_._1 <= batchCompleted.batchInfo.batchTime).keys
+        offsetMap --= offsetMap.filter(_._1 <= batchCompleted.batchInfo.batchTime).keys
     }
   }
 }
