@@ -16,8 +16,13 @@
 #
 
 import itertools
+import numpy as np
 
-__all__ = ['ParamGridBuilder']
+from pyspark.ml.param import Params, Param
+from pyspark.ml import Estimator, Model
+from pyspark.sql.functions import rand
+
+__all__ = ['ParamGridBuilder', 'CrossValidator']
 
 
 class ParamGridBuilder(object):
@@ -78,7 +83,163 @@ class ParamGridBuilder(object):
         grid_values = self._param_grid.values()
         return [dict(zip(keys, prod)) for prod in itertools.product(*grid_values)]
 
+class CrossValidator(Estimator):
+    """
+    K-fold cross validation.
+
+    >>> from pyspark.ml.classification import LogisticRegression
+    >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> dataset = sqlContext.createDataFrame(
+    ...     [(Vectors.dense([0.0, 1.0]), 0.0),
+    ...      (Vectors.dense([1.0, 2.0]), 1.0),
+    ...      (Vectors.dense([0.55, 3.0]), 0.0),
+    ...      (Vectors.dense([0.45, 4.0]), 1.0),
+    ...      (Vectors.dense([0.51, 5.0]), 1.0)] * 10,
+    ...     ["features", "label"])
+    >>> lr = LogisticRegression()
+    >>> grid = ParamGridBuilder() \
+            .addGrid(lr.maxIter, [0, 1, 5]) \
+            .build()
+    >>> evaluator = BinaryClassificationEvaluator()
+    >>> cv = CrossValidator() \
+            .setEstimator(lr) \
+            .setEstimatorParamMaps(grid) \
+            .setEvaluator(evaluator) \
+            .setNumFolds(3)
+    >>> cvModel = cv.fit(dataset)
+    >>> expected = lr.fit(dataset, {lr.maxIter: 5}).transform(dataset)
+    >>> cvModel.transform(dataset).collect() == expected.collect()
+    True
+    """
+
+    # a placeholder to make it appear in the generated doc
+    estimator = Param(Params._dummy(), "estimator", "estimator to be cross-validated")
+
+    # a placeholder to make it appear in the generated doc
+    estimatorParamMaps = Param(Params._dummy(), "estimatorParamMaps", "estimator param maps")
+
+    # a placeholder to make it appear in the generated doc
+    evaluator = Param(Params._dummy(), "evaluator", "evaluator for selection")
+
+    # a placeholder to make it appear in the generated doc
+    numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation")
+
+    def __init__(self):
+        super(CrossValidator, self).__init__()
+        #: param for estimator to be cross-validated
+        self.estimator = Param(self, "estimator", "estimator to be cross-validated")
+        #: param for estimator param maps
+        self.estimatorParamMaps = Param(self, "estimatorParamMaps", "estimator param maps")
+        #: param for evaluator for selection
+        self.evaluator = Param(self, "evaluator", "evaluator for selection")
+        #: param for number of folds for cross validation
+        self.numFolds = Param(self, "numFolds", "number of folds for cross validation")
+
+    def setEstimator(self, value):
+        """
+        Sets the value of :py:attr:`estimator`.
+        """
+        self.paramMap[self.estimator] = value
+        return self
+
+    def getEstimator(self):
+        """
+        Gets the value of estimator or its default value.
+        """
+        return self.getOrDefault(self.estimator)
+
+    def setEstimatorParamMaps(self, value):
+        """
+        Sets the value of :py:attr:`estimatorParamMaps`.
+        """
+        self.paramMap[self.estimatorParamMaps] = value
+        return self
+
+    def getEstimatorParamMaps(self):
+        """
+        Gets the value of estimatorParamMaps or its default value.
+        """
+        return self.getOrDefault(self.estimatorParamMaps)
+
+    def setEvaluator(self, value):
+        """
+        Sets the value of :py:attr:`evaluator`.
+        """
+        self.paramMap[self.evaluator] = value
+        return self
+
+    def getEvaluator(self):
+        """
+        Gets the value of evaluator or its default value.
+        """
+        return self.getOrDefault(self.evaluator)
+
+    def setNumFolds(self, value):
+        """
+        Sets the value of :py:attr:`numFolds`.
+        """
+        self.paramMap[self.numFolds] = value
+        return self
+
+    def getNumFolds(self):
+        """
+        Gets the value of numFolds or its default value.
+        """
+        return self.getOrDefault(self.numFolds)
+
+    def fit(self, dataset, params={}):
+        paramMap = self.extractParamMap(params)
+        est = paramMap[self.estimator]
+        epm = paramMap[self.estimatorParamMaps]
+        numModels = len(epm)
+        eva = paramMap[self.evaluator]
+        nFolds = paramMap[self.numFolds]
+        h = 1.0 / nFolds
+        randCol = self.uid + "_rand"
+        df = dataset.select("*", rand(0).alias(randCol))
+        metrics = np.zeros(numModels)
+        for i in range(nFolds):
+            validateLB = i * h
+            validateUB = (i + 1) * h
+            condition = (df[randCol] >= validateLB) & (df[randCol] < validateUB)
+            validation = df.filter(condition)
+            train = df.filter(~condition)
+            for j in range(numModels):
+                model = est.fit(train, epm[j])
+                metric = eva.evaluate(model.transform(validation, epm[j]))
+                metrics[j] += metric
+        bestIndex = np.argmax(metrics)
+        bestModel = est.fit(dataset, epm[bestIndex])
+        return CrossValidatorModel(bestModel)
+
+
+class CrossValidatorModel(Model):
+    """
+    Model from k-fold corss validation.
+    """
+
+    def __init__(self, bestModel):
+        #: best model from cross validation
+        self.bestModel = bestModel
+
+    def transform(self, dataset, params={}):
+        return self.bestModel.transform(dataset, params)
+
 
 if __name__ == "__main__":
     import doctest
-    doctest.testmod()
+    from pyspark.context import SparkContext
+    from pyspark.sql import SQLContext
+    globs = globals().copy()
+    # The small batch size here ensures that we see multiple batches,
+    # even in these small test examples:
+    sc = SparkContext("local[2]", "ml.tuning tests")
+    sqlContext = SQLContext(sc)
+    globs['sc'] = sc
+    globs['sqlContext'] = sqlContext
+    (failure_count, test_count) = doctest.testmod(
+        globs=globs, optionflags=doctest.ELLIPSIS)
+    sc.stop()
+    if failure_count:
+        exit(-1)
