@@ -17,6 +17,7 @@
 
 package org.apache.spark.graphx
 
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark._
@@ -158,26 +159,6 @@ abstract class VertexRDD[VD](
     : VertexRDD[VD3]
 
   /**
-   * Left joins this RDD with another VertexRDD sharing the same index passing in a fold-style
-   * initial value. The resulting vertex set contains an entry for each vertex in `this`. If
-   * `other` is missing any vertex in this VertexRDD, `f` is passed `None`.
-   *
-   * @tparam VD2 the attribute type of the other VertexRDD
-   * @tparam VD3 the attribute type of the resulting VertexRDD
-   * @tparam A the type of the given starting value
-   *
-   * @param other the other VertexRDD with which to join.
-   * @param initVal the initial value for the fold operation
-   * @param f the function mapping a vertex id and its attributes in this and the other vertex set
-   * to a new vertex attribute.
-   * @return a VertexRDD containing the results of `f`
-   */
-  def leftZipJoinWithFold[VD2: ClassTag, VD3: ClassTag, A]
-      (other: VertexRDD[VD2], initVal: A)
-      (f: (A, VertexId, VD, Option[VD2]) => VD3)
-    : VertexRDD[VD3]
-
-  /**
    * Left joins this VertexRDD with an RDD containing vertex attribute pairs. If the other RDD is
    * backed by a VertexRDD with the same index then the efficient [[leftZipJoin]] implementation is
    * used. The resulting VertexRDD contains an entry for each vertex in `this`. If `other` is
@@ -198,28 +179,6 @@ abstract class VertexRDD[VD](
       (f: (VertexId, VD, Option[VD2]) => VD3)
     : VertexRDD[VD3]
 
-  /**
-   * Left joins this VertexRDD with an RDD containing vertex attribute pairs and a fold-style
-   * initial value. If the other RDD is backed by a VertexRDD with the same index then the efficient
-   * [[leftZipJoinWithFold]] implementation is used. The resulting VertexRDD contains an entry for
-   * each vertex in `this`. If `other` is missing any vertex in this VertexRDD, `f` is passed
-   * `None`. If there are duplicates, the vertex is picked arbitrarily.
-   *
-   * @tparam VD2 the attribute type of the other VertexRDD
-   * @tparam VD3 the attribute type of the resulting VertexRDD
-   * @tparam A the type of the given starting value
-   *
-   * @param other the other VertexRDD with which to join
-   * @param initVal the initial value for the fold operation
-   * @param f the function mapping a vertex id and its attributes in this and the other vertex set
-   * to a new vertex attribute.
-   * @return a VertexRDD containing all the vertices in this VertexRDD with the attributes emitted
-   * by `f`.
-   */
-  def leftJoinWithFold[VD2: ClassTag, VD3: ClassTag, A]
-      (other: RDD[(VertexId, VD2)], initVal: A)
-      (f: (A, VertexId, VD, Option[VD2]) => VD3)
-    : VertexRDD[VD3]
 
   /**
    * Efficiently inner joins this VertexRDD with another VertexRDD sharing the same index. See
@@ -230,14 +189,6 @@ abstract class VertexRDD[VD](
       (f: (VertexId, VD, U) => VD2)
     : VertexRDD[VD2]
 
-  /**
-   * Efficiently inner joins this VertexRDD with another VertexRDD sharing the same index with a
-   * fold-style initial value. See [[innerJoinWithFold]] for the behavior of the join.
-   */
-  def innerZipJoinWithFold[U: ClassTag, VD2: ClassTag, A]
-      (other: VertexRDD[U], initVal: A)
-      (f: (A, VertexId, VD, U) => VD2)
-    : VertexRDD[VD2]
 
   /**
    * Inner joins this VertexRDD with an RDD containing vertex attribute pairs. If the other RDD is
@@ -253,24 +204,6 @@ abstract class VertexRDD[VD](
   def innerJoin[U: ClassTag, VD2: ClassTag]
       (other: RDD[(VertexId, U)])
       (f: (VertexId, VD, U) => VD2)
-    : VertexRDD[VD2]
-
-  /**
-   * Inner joins this VertexRDD with an RDD containing vertex attribute pairs applying the fold
-   * function with the passed in initial value. If the other RDD is backed by a VertexRDD with
-   * the same index then the efficient [[innerZipJoinWithFold]] implementation is used.
-   *
-   * @param other an RDD containing vertices to join. If there are multiple entries for the same
-   * vertex, one is picked arbitrarily. Use [[aggregateUsingIndexWithFold]] to merge multiple
-   * entries.
-   * @param initVal the initial value for the fold operation
-   * @param f the join function applied to corresponding values of `this` and `other`
-   * @return a VertexRDD co-indexed with `this`, containing only vertices that appear in both
-   *         `this` and `other`, with values supplied by `f`
-   */
-  def innerJoinWithFold[U: ClassTag, VD2: ClassTag, A]
-      (other: RDD[(VertexId, U)], initVal: A)
-      (f: (A, VertexId, VD, U) => VD2)
     : VertexRDD[VD2]
 
   /**
@@ -294,15 +227,13 @@ abstract class VertexRDD[VD](
    *
    * @param messages an RDD containing messages to aggregate, where each message is a pair of its
    * target vertex ID and the message data
-   * @param initVal the initial value for the fold operation
-   * @param foldFunc the fold-style aggregation function for merging messages to the same vertex
+   * @param foldFunc the associative aggregation function for merging messages to the same vertex
    * @return a VertexRDD co-indexed with `this`, containing only vertices that received messages.
    * For those vertices, their values are the result of applying `reduceFunc` to all received
    * messages.
    */
-  def aggregateUsingIndexWithFold[VD2: ClassTag, A]
-      (messages: RDD[(VertexId, VD2)], initVal: A)
-      (foldFunc: (A, VD2, VD2) => VD2)
+  def aggregateWithFold[VD: ClassTag, VD2: ClassTag]
+      (messages: RDD[(VertexId, VD)], acc: VD2, foldFunc: (VD2, VD) => VD2)
     : VertexRDD[VD2]
 
   /**
@@ -405,6 +336,28 @@ object VertexRDD {
         Iterator(ShippableVertexPartition(vertexIter, routingTable, defaultVal, mergeFunc))
     }
     new VertexRDDImpl(vertexPartitions)
+  }
+
+  /**
+   * Constructs a `VertexRDD` from an RDD of vertex-attribute pairs. Duplicate vertex entries are
+   * joined and their values are folded together by the `foldFunc`.
+   *
+   * @tparam VD the vertex attribute type
+   * @tparam VD2 the new vertex attribute type after fold operations
+   *
+   * @param vertices the collection of vertex-attribute pairs
+   */
+  def createWithFold[VD: ClassTag, VD2: ClassTag]
+      (vertices: RDD[(VertexId, VD)], acc: VD2)
+      (foldFunc: (VD2, VD) => VD2)
+    : VertexRDD[VD2] = {
+    val folded: RDD[(VertexId, VD2)] =
+      vertices.groupByKey.map { case (vid, vdata) =>
+        var thisAcc: VD2 = acc
+        vdata.foreach(v => thisAcc = foldFunc(thisAcc, v))
+        (vid, thisAcc)
+      }
+    return apply(folded)
   }
 
   /**

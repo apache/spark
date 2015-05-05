@@ -136,19 +136,6 @@ class VertexRDDImpl[VD] private[graphx] (
     this.withPartitionsRDD(newPartitionsRDD)
   }
 
-  override def leftZipJoinWithFold[VD2: ClassTag, VD3: ClassTag, A]
-      (other: VertexRDD[VD2], acc: A)
-      (f: (A, VertexId, VD, Option[VD2]) => VD3): VertexRDD[VD3] = {
-    val newPartitionsRDD = partitionsRDD.zipPartitions(
-      other.partitionsRDD, preservesPartitioning = true
-    ) { (thisIter, otherIter) =>
-      val thisPart = thisIter.next()
-      val otherPart = otherIter.next()
-      Iterator(thisPart.leftJoinWithFold(otherPart, acc)(f))
-    }
-    this.withPartitionsRDD(newPartitionsRDD)
-  }
-
   override def leftJoin[VD2: ClassTag, VD3: ClassTag]
       (other: RDD[(VertexId, VD2)])
       (f: (VertexId, VD, Option[VD2]) => VD3)
@@ -168,23 +155,6 @@ class VertexRDDImpl[VD] private[graphx] (
     }
   }
 
-  override def leftJoinWithFold[VD2: ClassTag, VD3: ClassTag, A]
-      (other: RDD[(VertexId, VD2)], acc: A)
-      (f: (A, VertexId, VD, Option[VD2]) => VD3)
-    : VertexRDD[VD3] = {
-    other match {
-      case other: VertexRDD[_] if this.partitioner == other.partitioner =>
-        leftZipJoinWithFold(other, acc)(f)
-      case _ =>
-        this.withPartitionsRDD[VD3](
-          partitionsRDD.zipPartitions(
-            other.partitionBy(this.partitioner.get), preservesPartitioning = true) {
-            (partIter, msgs) => partIter.map(_.leftJoinWithFold(msgs, acc)(f))
-          }
-        )
-    }
-  }
-
   override def innerZipJoin[U: ClassTag, VD2: ClassTag]
       (other: VertexRDD[U])
       (f: (VertexId, VD, U) => VD2): VertexRDD[VD2] = {
@@ -194,19 +164,6 @@ class VertexRDDImpl[VD] private[graphx] (
       val thisPart = thisIter.next()
       val otherPart = otherIter.next()
       Iterator(thisPart.innerJoin(otherPart)(f))
-    }
-    this.withPartitionsRDD(newPartitionsRDD)
-  }
-
-  override def innerZipJoinWithFold[U: ClassTag, VD2: ClassTag, A]
-      (other: VertexRDD[U], acc: A)
-      (f: (A, VertexId, VD, U) => VD2): VertexRDD[VD2] = {
-    val newPartitionsRDD = partitionsRDD.zipPartitions(
-      other.partitionsRDD, preservesPartitioning = true
-    ) { (thisIter, otherIter) =>
-      val thisPart = thisIter.next()
-      val otherPart = otherIter.next()
-      Iterator(thisPart.innerJoinWithFold(otherPart, acc)(f))
     }
     this.withPartitionsRDD(newPartitionsRDD)
   }
@@ -229,24 +186,6 @@ class VertexRDDImpl[VD] private[graphx] (
     }
   }
 
-  override def innerJoinWithFold[U: ClassTag, VD2: ClassTag, A]
-      (other: RDD[(VertexId, U)], acc: A)
-      (f: (A, VertexId, VD, U) => VD2): VertexRDD[VD2] = {
-    // Test if the other vertex is a VertexRDD to choose the optimal join strategy.
-    // If the other set is a VertexRDD then we use the much more efficient innerZipJoin
-    other match {
-      case other: VertexRDD[_] if this.partitioner == other.partitioner =>
-        innerZipJoinWithFold(other, acc)(f)
-      case _ =>
-        this.withPartitionsRDD(
-          partitionsRDD.zipPartitions(
-            other.partitionBy(this.partitioner.get), preservesPartitioning = true) {
-            (partIter, msgs) => partIter.map(_.innerJoinWithFold(msgs, acc)(f))
-          }
-        )
-    }
-  }
-
   override def aggregateUsingIndex[VD2: ClassTag]
       (messages: RDD[(VertexId, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2] = {
     val shuffled = messages.partitionBy(this.partitioner.get)
@@ -256,12 +195,12 @@ class VertexRDDImpl[VD] private[graphx] (
     this.withPartitionsRDD[VD2](parts)
   }
 
-  override def aggregateUsingIndexWithFold[VD2: ClassTag, A]
-      (messages: RDD[(VertexId, VD2)], acc: A)
-      (foldFunc: (A, VD2, VD2) => VD2): VertexRDD[VD2] = {
+  override def aggregateWithFold[VD: ClassTag, VD2: ClassTag]
+      (messages: RDD[(VertexId, VD)], acc: VD2, foldFunc: (VD2, VD) => VD2)
+    : VertexRDD[VD2] = {
     val shuffled = messages.partitionBy(this.partitioner.get)
     val parts = partitionsRDD.zipPartitions(shuffled, true) { (thisIter, msgIter) =>
-      thisIter.map(_.aggregateUsingIndexWithFold(msgIter, acc)(foldFunc))
+      thisIter.map(_.aggregateWithFold(msgIter, acc, foldFunc))
     }
     this.withPartitionsRDD[VD2](parts)
   }
