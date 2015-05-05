@@ -260,7 +260,10 @@ abstract class OutputWriter {
   /**
    * Initializes this [[OutputWriter]] before any rows are persisted.
    *
-   * @param path The file path to which this [[OutputWriter]] is supposed to write.
+   * @param path Path of the file to which this [[OutputWriter]] is supposed to write.  Note that
+   *        this may not point to the final output file.  For example, `FileOutputFormat` writes to
+   *        temporary directories and then merge written files back to the final destination.  In
+   *        this case, `path` points to a temporary output file under the temporary directory.
    * @param dataSchema Schema of the rows to be written. Partition columns are not included in the
    *        schema if the corresponding relation is partitioned.
    * @param context The Hadoop MapReduce task context.
@@ -309,6 +312,19 @@ abstract class FSBasedRelation private[sql](
     val paths: Array[String],
     maybePartitionSpec: Option[PartitionSpec])
   extends BaseRelation {
+
+  /**
+   * Constructs an [[FSBasedRelation]].
+   *
+   * @param paths Base paths of this relation.  For partitioned relations, it should be either root
+   *        directories of all partition directories.
+   * @param partitionColumns Partition columns of this relation.
+   */
+  def this(paths: Array[String], partitionColumns: StructType) =
+    this(paths, {
+      if (partitionColumns.isEmpty) None
+      else Some(PartitionSpec(partitionColumns, Array.empty[Partition]))
+    })
 
   /**
    * Constructs an [[FSBasedRelation]].

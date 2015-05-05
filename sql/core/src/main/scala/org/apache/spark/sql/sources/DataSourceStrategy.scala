@@ -142,25 +142,31 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
       // The table scan operator (PhysicalRDD) which retrieves required columns from data files.
       // Notice that the schema of data files, represented by `relation.dataSchema`, may contain
-      // some partition column(s). Those partition columns that are only encoded in partition
-      // directory paths are not covered by this table scan operator.
+      // some partition column(s).
       val scan =
         pruneFilterProject(
           logicalRelation,
           projections,
           filters,
           (requiredColumns, filters) => {
-            // Don't require any partition columns to save I/O.  Note that here we are being
-            // optimistic and assuming partition columns data stored in data files are always
-            // consistent with those encoded in partition directory paths.
-            relation.buildScan(
-              requiredColumns.filterNot(partitionColumns.fieldNames.contains),
-              filters,
-              dataFilePaths)
+            val partitionColNames = partitionColumns.fieldNames
+
+            // Don't scan any partition columns to save I/O.  Here we are being optimistic and
+            // assuming partition columns data stored in data files are always consistent with those
+            // partition values encoded in partition directory paths.
+            val nonPartitionColumns = requiredColumns.filterNot(partitionColNames.contains)
+            val dataRows = relation.buildScan(nonPartitionColumns, filters, dataFilePaths)
+
+            // Merges data values with partition values.
+            mergeWithPartitionValues(
+              relation.schema,
+              requiredColumns,
+              partitionColNames,
+              partitionValues,
+              dataRows)
           })
 
-      // Merges in those partition values that are not contained in data rows.
-      mergePartitionValues(output, partitionValues, scan)
+      scan.execute()
     }
 
     val unionedRows = perPartitionRows.reduceOption(_ ++ _).getOrElse {
@@ -170,41 +176,48 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     createPhysicalRDD(logicalRelation.relation, output, unionedRows)
   }
 
-  private def mergePartitionValues(
-      output: Seq[Attribute],
+  private def mergeWithPartitionValues(
+      schema: StructType,
+      requiredColumns: Array[String],
+      partitionColumns: Array[String],
       partitionValues: Row,
-      scan: SparkPlan): RDD[Row] = {
-    val mergeWithPartitionValues = {
-      val outputColNames = output.map(_.name)
-      val outputDataColNames = scan.schema.fieldNames
+      dataRows: RDD[Row]): RDD[Row] = {
+    val nonPartitionColumns = requiredColumns.filterNot(partitionColumns.contains)
 
-      outputColNames.zipWithIndex.map { case (name, index) =>
-        val i = outputDataColNames.indexOf(name)
-        if (i > -1) {
-          // Column appears in data files, retrieve it from data rows
-          (mutableRow: MutableRow, dataRow: expressions.Row, ordinal: Int) => {
-            mutableRow(ordinal) = dataRow(i)
-          }
-        } else {
-          // Column doesn't appear in data file (must be a partition column), retrieve it from
-          // partition values of this partition.
+    // If output columns contain any partition column(s), we need to merge scanned data
+    // columns and requested partition columns to form the final result.
+    if (!requiredColumns.sameElements(nonPartitionColumns)) {
+      val mergers = requiredColumns.zipWithIndex.map { case (name, index) =>
+        // To see whether the `index`-th column is a partition column...
+        val i = partitionColumns.indexOf(name)
+        if (i != -1) {
+          // If yes, gets column value from partition values.
           (mutableRow: MutableRow, dataRow: expressions.Row, ordinal: Int) => {
             mutableRow(ordinal) = partitionValues(i)
           }
+        } else {
+          // Otherwise, inherits the value from scanned data.
+          val i = nonPartitionColumns.indexOf(name)
+          (mutableRow: MutableRow, dataRow: expressions.Row, ordinal: Int) => {
+            mutableRow(ordinal) = dataRow(i)
+          }
         }
       }
-    }
 
-    scan.execute().mapPartitions { iterator =>
-      val mutableRow = new SpecificMutableRow(output.map(_.dataType))
-      iterator.map { row =>
-        var i = 0
-        while (i < mutableRow.length) {
-          mergeWithPartitionValues(i)(mutableRow, row, i)
-          i += 1
+      dataRows.mapPartitions { iterator =>
+        val dataTypes = requiredColumns.map(schema(_).dataType)
+        val mutableRow = new SpecificMutableRow(dataTypes)
+        iterator.map { dataRow =>
+          var i = 0
+          while (i < mutableRow.length) {
+            mergers(i)(mutableRow, dataRow, i)
+            i += 1
+          }
+          mutableRow.asInstanceOf[expressions.Row]
         }
-        mutableRow.asInstanceOf[expressions.Row]
       }
+    } else {
+      dataRows
     }
   }
 
