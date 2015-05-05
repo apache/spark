@@ -45,6 +45,11 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
   val id = ssc.getNewInputStreamId()
 
   /**
+   * The name of this InputDStream. By default, it's the class name with its id.
+   */
+  private[streaming] def name: String = s"${getClass.getSimpleName}-$id"
+
+  /**
    * Checks whether the 'time' is valid wrt slideDuration for generating RDD.
    * Additionally it also ensures valid times are in strictly increasing order.
    * This ensures that InputDStream.compute() is called strictly on increasing
