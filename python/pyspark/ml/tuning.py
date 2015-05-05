@@ -21,6 +21,7 @@ import numpy as np
 from pyspark.ml.param import Params, Param
 from pyspark.ml import Estimator, Model
 from pyspark.sql.functions import rand
+from pyspark.ml.util import keyword_only
 
 __all__ = ['ParamGridBuilder', 'CrossValidator']
 
@@ -102,11 +103,7 @@ class CrossValidator(Estimator):
             .addGrid(lr.maxIter, [0, 1, 5]) \
             .build()
     >>> evaluator = BinaryClassificationEvaluator()
-    >>> cv = CrossValidator() \
-            .setEstimator(lr) \
-            .setEstimatorParamMaps(grid) \
-            .setEvaluator(evaluator) \
-            .setNumFolds(3)
+    >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
     >>> cvModel = cv.fit(dataset)
     >>> expected = lr.fit(dataset, {lr.maxIter: 5}).transform(dataset)
     >>> cvModel.transform(dataset).collect() == expected.collect()
@@ -125,7 +122,11 @@ class CrossValidator(Estimator):
     # a placeholder to make it appear in the generated doc
     numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation")
 
-    def __init__(self):
+    @keyword_only
+    def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3):
+        """
+        __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3)
+        """
         super(CrossValidator, self).__init__()
         #: param for estimator to be cross-validated
         self.estimator = Param(self, "estimator", "estimator to be cross-validated")
@@ -135,6 +136,18 @@ class CrossValidator(Estimator):
         self.evaluator = Param(self, "evaluator", "evaluator for selection")
         #: param for number of folds for cross validation
         self.numFolds = Param(self, "numFolds", "number of folds for cross validation")
+        self._setDefault(numFolds=3)
+        kwargs = self.__init__._input_kwargs
+        self._set(**kwargs)
+
+    @keyword_only
+    def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3):
+        """
+        setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3):
+        Sets params for cross validator.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
 
     def setEstimator(self, value):
         """
