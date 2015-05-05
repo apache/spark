@@ -737,6 +737,24 @@ class RDD(object):
                 return iter([])
         self.mapPartitions(func).count()  # Force evaluation
 
+    def foreachPartitionWithIndex(self, f):
+        """
+        Applies a function to each partition of this RDD,
+        while tracking the index of the original partition.
+
+        >>> def f(idx, iterator):
+        ...      for x in iterator:
+        ...           print(idx, x)
+        >>> sc.parallelize([1, 2, 3, 4, 5]).foreachPartitionWithIndex(f)
+        """
+        def func(idx, it):
+            r = f(idx, it)
+            try:
+                return iter(r)
+            except TypeError:
+                return iter([])
+        self.mapPartitionsWithIndex(func).count()  # Force evaluation
+
     def collect(self):
         """
         Return a list that contains all of the elements in this RDD.

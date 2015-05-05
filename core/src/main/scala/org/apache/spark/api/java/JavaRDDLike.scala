@@ -220,6 +220,14 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
+   * Applies a function f to each partition of this RDD, while tracking the index
+   * of the original partition.
+   */
+  def foreachPartitionWithIndex(f: VoidFunction2[java.lang.Integer, java.util.Iterator[T]]) {
+    rdd.foreachPartitionWithIndex((idx, iter) => f.call(idx, asJavaIterator(iter)))
+  }
+
+  /**
    * Return an RDD created by coalescing all elements within each partition into an array.
    */
   def glom(): JavaRDD[JList[T]] =
