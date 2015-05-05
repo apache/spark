@@ -86,7 +86,7 @@ abstract class Attribute extends NamedExpression {
   def withQualifiers(newQualifiers: Seq[String]): Attribute
   def withName(newName: String): Attribute
 
-  def toAttribute: Attribute = this
+  override def toAttribute: Attribute = this
   def newInstance(): Attribute
 
 }
