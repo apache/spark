@@ -443,8 +443,8 @@ class SQLTests(ReusedPySparkTestCase):
             Row(a=1, b=2, c=3),
             Row(a=2, b=1, c=3),
             Row(a=4, b=1, c=4)]).toDF()
-        self.assertEqual([False, True, True],
-                         df.select(df.a.between(df.b, df.c)).collect())
+        self.assertEqual([Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)],
+                         df.filter(df.a.between(df.b, df.c)).collect())
 
     def test_save_and_load(self):
         df = self.df
