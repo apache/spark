@@ -405,6 +405,15 @@ class SQLTests(ReusedPySparkTestCase):
         cov = df.stat.cov("a", "b")
         self.assertTrue(abs(cov - 55.0 / 3) < 1e-6)
 
+    def test_crosstab(self):
+        df = self.sc.parallelize([Row(a=i % 3, b=i % 2) for i in range(1, 7)]).toDF()
+        ct = df.stat.crosstab("a", "b").collect()
+        ct = sorted(ct, key=lambda x: x[0])
+        for i, row in enumerate(ct):
+            self.assertEqual(row[0], str(i))
+            self.assertTrue(row[1], 1)
+            self.assertTrue(row[2], 1)
+
     def test_math_functions(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
         from pyspark.sql import mathfunctions as functions
