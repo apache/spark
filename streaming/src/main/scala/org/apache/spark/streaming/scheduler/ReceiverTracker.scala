@@ -62,6 +62,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     ssc.sparkContext.hadoopConfiguration,
     receiverInputStreamIds,
     ssc.scheduler.clock,
+    ssc.isCheckpointPresent,
     Option(ssc.checkpointDir)
   )
   private val listenerBus = ssc.scheduler.listenerBus
