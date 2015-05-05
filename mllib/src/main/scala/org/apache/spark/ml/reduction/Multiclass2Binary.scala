@@ -26,10 +26,10 @@ import org.apache.spark.ml.param.{IntParam, Param, ParamMap}
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Params for [[Multiclass2Binary]].
@@ -102,6 +102,7 @@ private[ml] class Multiclass2BinaryModel(
     val parentSchema = dataset.schema
     transformSchema(parentSchema, logging = true)
     val sqlCtx = dataset.sqlContext
+
     // score each model on every data point and pick the model with highest score
     // TODO: Add randomization when there are ties.
     val predictions = baseClassificationModels.zipWithIndex.par.map { case (model, index) =>
@@ -113,10 +114,12 @@ private[ml] class Multiclass2BinaryModel(
       }
     }.
       map(_.maxBy(_._2))
+
     // ensure that we pass through columns that are part of the original dataset.
     val results = dataset.select(col("*")).rdd.zip(predictions).map { case ((row, (label, _))) =>
       Row.fromSeq(row.toSeq ++ List(label.toDouble))
     }
+
     // the output schema should retain all input fields and add prediction column.
     val outputSchema = SchemaUtils.appendColumn(parentSchema, $(predictionCol), DoubleType)
     sqlCtx.createDataFrame(results, outputSchema)
@@ -154,10 +157,17 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
   def setNumClasses(value: Int): this.type = set(k, value)
 
   override def fit(dataset: DataFrame): Multiclass2BinaryModel = {
-    val sqlCtx = dataset.sqlContext
+
     val numClasses = $(k)
+    val multiclassLabeled = dataset.select($(labelCol), $(featuresCol))
+
+    // persist if underlying dataset is not persistent
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    if (handlePersistence) {
+      multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
+    }
+
     // create k columns, one for each binary classifier.
-    val multiclassLabeled = dataset.select($(labelCol), $(featuresCol)).cache()
     val models = Range(0, numClasses).par.map { index =>
       val labelColName = "mc2b$" + index
       val label: Double => Double = (label: Double) => {
@@ -165,9 +175,14 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
       }
       val labelUDF = callUDF(label, DoubleType, col($(labelCol)))
       val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDF)
-      newClassifier(sqlCtx, labelColName).fit(trainingDataset)
+      val classifier = newClassifier(extractParamMap(), labelColName)
+      classifier.fit(trainingDataset)
     }.toList
-    multiclassLabeled.unpersist()
+
+    if (handlePersistence) {
+      multiclassLabeled.unpersist()
+    }
+
     new Multiclass2BinaryModel(this, models)
   }
 
@@ -179,20 +194,14 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
    * Create an initialized classifier with label column overridden
    * to point to the right column.
    *
-   * @param sqlCtx
+   * @param paramMap
    * @param labelColName
    * @return
    */
-  private def newClassifier(sqlCtx: SQLContext, labelColName: String) = {
+  private def newClassifier(paramMap: ParamMap, labelColName: String) = {
 
-    val serializer = sqlCtx.sparkContext.env.serializer
-    val serializerInstance = serializer.newInstance()
-    // create a copy of the classifier
-    // TODO: Should there be a copy method on Estimator?
     val origClassifier = getBaseClassifier
-    val newClassifier = Utils.clone[ClassifierType](origClassifier, serializerInstance)
-
-    // set the label column to use the appropriate column as label.
+    val newClassifier = origClassifier.copy(paramMap).asInstanceOf[ClassifierType]
     newClassifier.setLabelCol(labelColName)
     newClassifier
   }
