@@ -17,13 +17,15 @@
 
 package org.apache.spark.ml.reduction
 
+import org.apache.spark.ml.attribute.BinaryAttribute
+
 import scala.language.existentials
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.classification.{ClassificationModel, Classifier, ClassifierParams}
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap}
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
@@ -32,33 +34,15 @@ import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
 /**
- * Params for [[Multiclass2Binary]].
+ * Params for [[OneVsRestClassifier]].
  */
-private[ml] trait Multiclass2BinaryParams extends ClassifierParams {
+private[ml] trait OneVsRestParams extends ClassifierParams {
 
   type ClassifierType = Classifier[F, E, M] forSome {
     type F ;
     type M <: ClassificationModel[F,M];
     type E <:  Classifier[F, E,M]
   }
-
-  /**
-   * param for prediction column name
-   * @group param
-   */
-  val idCol: Param[String] =
-    new Param(this, "idCol", "id column name")
-
-  setDefault(idCol, "id")
-
-  /**
-   * param for base classifier index column name
-   * @group param
-   */
-  val indexCol: Param[String] =
-    new Param(this, "indexCol", "classifier index column name")
-
-  setDefault(indexCol, "index")
 
   /**
    * param for the base classifier that we reduce multiclass classification into.
@@ -70,15 +54,6 @@ private[ml] trait Multiclass2BinaryParams extends ClassifierParams {
   /** @group getParam */
   def getBaseClassifier: ClassifierType = getOrDefault(baseClassifier)
 
-  /**
-   * param for number of classes.
-   * @group param
-   */
-  val k: IntParam = new IntParam(this, "k", "number of classes")
-
-  /** @group getParam */
-  def getK(): Int = getOrDefault(k)
-
 }
 
 /**
@@ -87,10 +62,10 @@ private[ml] trait Multiclass2BinaryParams extends ClassifierParams {
  * @param baseClassificationModels the binary classification models for reduction.
  */
 @AlphaComponent
-private[ml] class Multiclass2BinaryModel(
-    override val parent: Multiclass2Binary,
-    val baseClassificationModels: Seq[Model[_]])
-  extends Model[Multiclass2BinaryModel] with Multiclass2BinaryParams {
+private[ml] class OneVsRestModel(
+    override val parent: OneVsRestClassifier,
+    val baseClassificationModels: Array[Model[_]])
+  extends Model[OneVsRestModel] with OneVsRestParams {
 
   /**
    * Transforms the dataset with provided parameter map as additional parameters.
@@ -104,7 +79,6 @@ private[ml] class Multiclass2BinaryModel(
     val sqlCtx = dataset.sqlContext
 
     // score each model on every data point and pick the model with highest score
-    // TODO: Add randomization when there are ties.
     val predictions = baseClassificationModels.zipWithIndex.par.map { case (model, index) =>
       val output = model.transform(dataset)
       output.select($(rawPredictionCol)).map { case Row(p: Vector) => List((index, p(1))) }
@@ -144,8 +118,8 @@ private[ml] class Multiclass2BinaryModel(
  * is picked to label the example.
  *
  */
-class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
-  with Multiclass2BinaryParams {
+class OneVsRestClassifier extends Estimator[OneVsRestModel]
+  with OneVsRestParams {
 
   @DeveloperApi
   protected def featuresDataType: DataType = new VectorUDT
@@ -153,15 +127,18 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
   /** @group setParam */
   def setBaseClassifier(value: ClassifierType): this.type = set(baseClassifier, value)
 
-  /** @group setParam */
-  def setNumClasses(value: Int): this.type = set(k, value)
+  override def fit(dataset: DataFrame): OneVsRestModel = {
 
-  override def fit(dataset: DataFrame): Multiclass2BinaryModel = {
+    // determine number of classes either from metadata if provided, or via computation.
+    val labelSchema = dataset.schema($(labelCol))
+    val computeNumClasses: () => Int = () => {
+      dataset.select($(labelCol)).distinct.count().toInt
+    }
+    val numClasses = MetadataUtils.getNumClasses(labelSchema).fold(computeNumClasses())(identity)
 
-    val numClasses = $(k)
     val multiclassLabeled = dataset.select($(labelCol), $(featuresCol))
 
-    // persist if underlying dataset is not persistent
+    // persist if underlying dataset is not persistent.
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) {
       multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
@@ -173,37 +150,26 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
       val label: Double => Double = (label: Double) => {
         if (label.toInt == index) 1.0 else 0.0
       }
+
+      // generate new label for each binary classifier.
+      // generate new label metadata for the binary problem.
       val labelUDF = callUDF(label, DoubleType, col($(labelCol)))
-      val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDF)
-      val classifier = newClassifier(extractParamMap(), labelColName)
-      classifier.fit(trainingDataset)
-    }.toList
+      val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
+      val labelUDFWithNewMeta = labelUDF.as(labelColName, newLabelMeta)
+      val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDFWithNewMeta)
+      val classifier = getBaseClassifier
+      classifier.fit(trainingDataset, classifier.labelCol -> labelColName)
+    }.toArray[Model[_]]
 
     if (handlePersistence) {
       multiclassLabeled.unpersist()
     }
 
-    new Multiclass2BinaryModel(this, models)
+    new OneVsRestModel(this, models)
   }
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, featuresDataType)
-  }
-
-  /**
-   * Create an initialized classifier with label column overridden
-   * to point to the right column.
-   *
-   * @param paramMap
-   * @param labelColName
-   * @return
-   */
-  private def newClassifier(paramMap: ParamMap, labelColName: String) = {
-
-    val origClassifier = getBaseClassifier
-    val newClassifier = origClassifier.copy(paramMap).asInstanceOf[ClassifierType]
-    newClassifier.setLabelCol(labelColName)
-    newClassifier
   }
 
 }

@@ -123,9 +123,15 @@ private[attribute] trait AttributeFactory {
   /**
    * Creates an [[Attribute]] from a [[StructField]] instance.
    */
-  def fromStructField(field: StructField): Attribute = {
+  def fromStructField(field: StructField): Option[Attribute] = {
     require(field.dataType == DoubleType)
-    fromMetadata(field.metadata.getMetadata(AttributeKeys.ML_ATTR)).withName(field.name)
+    val metadata = field.metadata
+    val mlAttr = AttributeKeys.ML_ATTR
+    if (metadata.contains(mlAttr)) {
+      Some(fromMetadata(metadata.getMetadata(mlAttr)).withName(field.name))
+    } else {
+      None
+    }
   }
 }
 

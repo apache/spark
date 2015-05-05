@@ -17,7 +17,11 @@
 
 package org.apache.spark.ml.reduction
 
-import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.util.MetadataUtils
+import org.scalatest.FunSuite
+
+import org.apache.spark.ml.attribute.NominalAttribute
+import org.apache.spark.ml.classification.{LogisticRegressionModel, LogisticRegression}
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
@@ -26,9 +30,8 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.scalatest.FunSuite
 
-class Multiclass2BinarySuite extends FunSuite with MLlibTestSparkContext {
+class OneVsRestClassifierSuite extends FunSuite with MLlibTestSparkContext {
 
   @transient var sqlContext: SQLContext = _
   @transient var dataset: DataFrame = _
@@ -54,10 +57,9 @@ class Multiclass2BinarySuite extends FunSuite with MLlibTestSparkContext {
     dataset = sqlContext.createDataFrame(rdd)
   }
 
-  test("one-against-all: default params") {
+  test("one-vs-rest: default params") {
     val numClasses = 3
-    val ova = new Multiclass2Binary().
-      setNumClasses(numClasses).
+    val ova = new OneVsRestClassifier().
       setBaseClassifier(new LogisticRegression)
 
     assert(ova.getLabelCol == "label")
@@ -80,4 +82,39 @@ class Multiclass2BinarySuite extends FunSuite with MLlibTestSparkContext {
     assert(expectedMetrics.confusionMatrix ~== ovaMetrics.confusionMatrix absTol 400)
   }
 
+  test("one-vs-rest: test read label metadata") {
+    val numClasses = 8
+    val ova = new OneVsRestClassifier().
+      setBaseClassifier(new LogisticRegression)
+
+    val labelMetadata = NominalAttribute.defaultAttr.withName("label").withNumValues(8)
+    val labelWithMetadata = dataset("label").as("label", labelMetadata.toMetadata())
+    val features = dataset("features").as("features")
+    val datasetWithLabelMetadata = dataset.select(labelWithMetadata, features)
+    val ovaModel = ova.fit(datasetWithLabelMetadata)
+    // The number of distinct classes in the training dataset = 3, but metadata has value 8
+    assert(ovaModel.baseClassificationModels.size == numClasses)
+  }
+
+  test("one-vs-rest: pass label metadata correctly during train") {
+    val numClasses = 3
+    val ova = new OneVsRestClassifier().
+      setBaseClassifier(new MockLogisticRegression)
+
+    val labelMetadata = NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses)
+    val labelWithMetadata = dataset("label").as("label", labelMetadata.toMetadata())
+    val features = dataset("features").as("features")
+    val datasetWithLabelMetadata = dataset.select(labelWithMetadata, features)
+    ova.fit(datasetWithLabelMetadata)
+  }
+}
+
+class MockLogisticRegression extends LogisticRegression {
+
+  override protected def train(dataset: DataFrame): LogisticRegressionModel = {
+    val labelSchema = dataset.schema($(labelCol))
+    // check for label attribute propagation.
+    assert(MetadataUtils.getNumClasses(labelSchema).fold(false)(_ == 2))
+    super.train(dataset)
+  }
 }
