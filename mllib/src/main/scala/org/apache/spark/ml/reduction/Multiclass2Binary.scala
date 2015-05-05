@@ -160,28 +160,19 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
   override def fit(dataset: DataFrame, paramMap: ParamMap): Multiclass2BinaryModel = {
     val map = extractParamMap(paramMap)
     val sqlCtx = dataset.sqlContext
-    val schema = dataset.schema
     val numClasses = map(k)
-    val labelMetadata = dataset.schema(map(labelCol)).metadata
     // create k columns, one for each binary classifier.
-    val multiclassLabeled = dataset.select(map(labelCol), map(featuresCol))
-    val binaryDataset = multiclassLabeled.map { case (Row(label: Double, features: Vector)) =>
-      val labels = Range(0, numClasses).map { index =>
+    val multiclassLabeled = dataset.select(map(labelCol), map(featuresCol)).cache()
+    val models = Range(0, numClasses).par.map { index =>
+      val labelColName = "mc2b$" + index
+      val label: Double => Double = (label: Double) => {
         if (label.toInt == index) 1.0 else 0.0
       }
-      Row.fromSeq(List(label, features) ++ labels)
-    }
-
-    val estimatorsWithLabels = newClassifiers(sqlCtx, numClasses)
-    val additionalFlds = estimatorsWithLabels.map { case (labelColName, _) =>
-      StructField(labelColName, DoubleType, false, labelMetadata)
-    }
-    val newSchema = StructType(multiclassLabeled.schema.fields ++ additionalFlds)
-    val trainingDataset = sqlCtx.createDataFrame(binaryDataset, newSchema)
-    // learn k models, one for each label value.
-    val models = estimatorsWithLabels.par.map { case (labelColName, newClassifier) =>
-      newClassifier.fit(trainingDataset)
+      val labelUDF = callUDF(label, DoubleType, col(map(labelCol)))
+      val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDF)
+      newClassifier(sqlCtx, labelColName).fit(trainingDataset, paramMap)
     }.toList
+    multiclassLabeled.unpersist()
     new Multiclass2BinaryModel(this, paramMap, models)
   }
 
@@ -193,25 +184,21 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
    * Create k initialized classifiers one for each label class.
    *
    * @param sqlCtx
-   * @param numClasses
+   * @param labelColName
    * @return
    */
-  private def newClassifiers(sqlCtx: SQLContext, numClasses: Int) = {
+  private def newClassifier(sqlCtx: SQLContext, labelColName: String) = {
 
     val serializer = sqlCtx.sparkContext.env.serializer
     val serializerInstance = serializer.newInstance()
     // create a copy of the classifier
     // TODO: Should there be a copy method on Estimator?
     val origClassifier = getBaseClassifier
-    val baseClassifierClass = origClassifier.getClass()
-    Range(0, numClasses).map{ index =>
-      val newClassifier = Utils.clone[ClassifierType](origClassifier, serializerInstance)
+    val newClassifier = Utils.clone[ClassifierType](origClassifier, serializerInstance)
 
-      val labelColName = "mc2b$" + index
-      // set the label column to use the appropriate column as label.
-      newClassifier.setLabelCol(labelColName)
-      (labelColName, newClassifier)
-    }
+    // set the label column to use the appropriate column as label.
+    newClassifier.setLabelCol(labelColName)
+    newClassifier
   }
 
 }
