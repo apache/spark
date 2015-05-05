@@ -240,11 +240,11 @@ class StorageSuite extends FunSuite {
     assert(status.rddBlocksById(1000).size === status.numRddBlocksById(1000))
   }
 
-  test("storage status memUsed, diskUsed, tachyonUsed") {
+  test("storage status memUsed, diskUsed, externalBlockStoreUsed") {
     val status = storageStatus2
     def actualMemUsed: Long = status.blocks.values.map(_.memSize).sum
     def actualDiskUsed: Long = status.blocks.values.map(_.diskSize).sum
-    def actualOffHeapUsed: Long = status.blocks.values.map(_.tachyonSize).sum
+    def actualOffHeapUsed: Long = status.blocks.values.map(_.externalBlockStoreSize).sum
     assert(status.memUsed === actualMemUsed)
     assert(status.diskUsed === actualDiskUsed)
     assert(status.offHeapUsed === actualOffHeapUsed)
@@ -287,8 +287,8 @@ class StorageSuite extends FunSuite {
 
   // For testing StorageUtils.updateRddInfo
   private def stockRDDInfos: Seq[RDDInfo] = {
-    val info0 = new RDDInfo(0, "0", 10, memAndDisk)
-    val info1 = new RDDInfo(1, "1", 3, memAndDisk)
+    val info0 = new RDDInfo(0, "0", 10, memAndDisk, Seq(3))
+    val info1 = new RDDInfo(1, "1", 3, memAndDisk, Seq(4))
     Seq(info0, info1)
   }
 
@@ -300,12 +300,12 @@ class StorageSuite extends FunSuite {
     assert(rddInfos(0).numCachedPartitions === 5)
     assert(rddInfos(0).memSize === 5L)
     assert(rddInfos(0).diskSize === 10L)
-    assert(rddInfos(0).tachyonSize === 0L)
+    assert(rddInfos(0).externalBlockStoreSize === 0L)
     assert(rddInfos(1).storageLevel === memAndDisk)
     assert(rddInfos(1).numCachedPartitions === 3)
     assert(rddInfos(1).memSize === 3L)
     assert(rddInfos(1).diskSize === 6L)
-    assert(rddInfos(1).tachyonSize === 0L)
+    assert(rddInfos(1).externalBlockStoreSize === 0L)
   }
 
   test("StorageUtils.getRddBlockLocations") {

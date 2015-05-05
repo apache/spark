@@ -1253,18 +1253,6 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     unaryMathFunctionEvaluation[Double](Signum, math.signum)
   }
 
-  test("isignum") {
-    unaryMathFunctionEvaluation[Int](ISignum, math.signum, (-5 to 5))
-  }
-
-  test("fsignum") {
-    unaryMathFunctionEvaluation[Float](FSignum, math.signum, (-5 to 5).map(_.toFloat))
-  }
-
-  test("lsignum") {
-    unaryMathFunctionEvaluation[Long](LSignum, math.signum, (5 to 5).map(_.toLong))
-  }
-
   test("log") {
     unaryMathFunctionEvaluation(Log, math.log, (0 to 20).map(_ * 0.1))
     unaryMathFunctionEvaluation(Log, math.log, (-5 to -1).map(_ * 0.1), true)

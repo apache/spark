@@ -184,6 +184,16 @@ acquire. By default, it will acquire *all* cores in the cluster (that get offere
 only makes sense if you run just one application at a time. You can cap the maximum number of cores
 using `conf.set("spark.cores.max", "10")` (for example).
 
+# Mesos Docker Support
+
+Spark can make use of a Mesos Docker containerizer by setting the property `spark.mesos.executor.docker.image`
+in your [SparkConf](configuration.html#spark-properties).
+
+The Docker image used must have an appropriate version of Spark already part of the image, or you can
+have Mesos download Spark via the usual methods.
+
+Requires Mesos version 0.20.1 or later.
+
 # Running Alongside Hadoop
 
 You can run Spark and Mesos alongside your existing Hadoop cluster by just launching them as a
@@ -235,6 +245,38 @@ See the [configuration page](configuration.html) for information on Spark config
     include the cores used to run the Spark tasks. In other words, even if no Spark task
     is being run, each Mesos executor will occupy the number of cores configured here.
     The value can be a floating point number.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.docker.image</code></td>
+  <td>(none)</td>
+  <td>
+    Set the name of the docker image that the Spark executors will run in. The selected
+    image must have Spark installed, as well as a compatible version of the Mesos library.
+    The installed path of Spark in the image can be specified with <code>spark.mesos.executor.home</code>;
+    the installed path of the Mesos library can be specified with <code>spark.executorEnv.MESOS_NATIVE_LIBRARY</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.docker.volumes</code></td>
+  <td>(none)</td>
+  <td>
+    Set the list of volumes which will be mounted into the Docker image, which was set using
+    <code>spark.mesos.executor.docker.image</code>. The format of this property is a comma-separated list of
+    mappings following the form passed to <tt>docker run -v</tt>. That is they take the form:
+
+    <pre>[host_path:]container_path[:ro|:rw]</pre>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.docker.portmaps</code></td>
+  <td>(none)</td>
+  <td>
+    Set the list of incoming ports exposed by the Docker image, which was set using
+    <code>spark.mesos.executor.docker.image</code>. The format of this property is a comma-separated list of
+    mappings which take the form:
+
+    <pre>host_port:container_port[:tcp|:udp]</pre>
   </td>
 </tr>
 <tr>

@@ -167,7 +167,7 @@ setMethod("isLocal",
 setMethod("showDF",
           signature(x = "DataFrame"),
           function(x, numRows = 20) {
-            cat(callJMethod(x@sdf, "showString", numToInt(numRows)), "\n")
+            callJMethod(x@sdf, "showString", numToInt(numRows))
           })
 
 #' show

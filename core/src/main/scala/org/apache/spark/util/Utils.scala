@@ -1299,16 +1299,18 @@ private[spark] object Utils extends Logging {
   }
 
   /** Default filtering function for finding call sites using `getCallSite`. */
-  private def coreExclusionFunction(className: String): Boolean = {
-    // A regular expression to match classes of the "core" Spark API that we want to skip when
-    // finding the call site of a method.
+  private def sparkInternalExclusionFunction(className: String): Boolean = {
+    // A regular expression to match classes of the internal Spark API's
+    // that we want to skip when finding the call site of a method.
     val SPARK_CORE_CLASS_REGEX =
       """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.broadcast)?\.[A-Z]""".r
+    val SPARK_SQL_CLASS_REGEX = """^org\.apache\.spark\.sql.*""".r
     val SCALA_CORE_CLASS_PREFIX = "scala"
-    val isSparkCoreClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined
+    val isSparkClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined ||
+      SPARK_SQL_CLASS_REGEX.findFirstIn(className).isDefined
     val isScalaClass = className.startsWith(SCALA_CORE_CLASS_PREFIX)
     // If the class is a Spark internal class or a Scala class, then exclude.
-    isSparkCoreClass || isScalaClass
+    isSparkClass || isScalaClass
   }
 
   /**
@@ -1318,7 +1320,7 @@ private[spark] object Utils extends Logging {
    *
    * @param skipClass Function that is used to exclude non-user-code classes.
    */
-  def getCallSite(skipClass: String => Boolean = coreExclusionFunction): CallSite = {
+  def getCallSite(skipClass: String => Boolean = sparkInternalExclusionFunction): CallSite = {
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
     // transformation, a SparkContext function (such as parallelize), or anything else that leads
@@ -1357,9 +1359,17 @@ private[spark] object Utils extends Logging {
     }
 
     val callStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
-    CallSite(
-      shortForm = s"$lastSparkMethod at $firstUserFile:$firstUserLine",
-      longForm = callStack.take(callStackDepth).mkString("\n"))
+    val shortForm =
+      if (firstUserFile == "HiveSessionImpl.java") {
+        // To be more user friendly, show a nicer string for queries submitted from the JDBC
+        // server.
+        "Spark JDBC Server Query"
+      } else {
+        s"$lastSparkMethod at $firstUserFile:$firstUserLine"
+      }
+    val longForm = callStack.take(callStackDepth).mkString("\n")
+
+    CallSite(shortForm, longForm)
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */
@@ -2013,6 +2023,13 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * configure a new log4j level
+   */
+  def setLogLevel(l: org.apache.log4j.Level) {
+    org.apache.log4j.Logger.getRootLogger().setLevel(l)
+  }
+
+  /**
    * config a log4j properties used for testsuite
    */
   def configTestLog4j(level: String): Unit = {
@@ -2140,6 +2157,22 @@ private[spark] object Utils extends Logging {
   def getCurrentUserName(): String = {
     Option(System.getenv("SPARK_USER"))
       .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
+  }
+
+  /**
+   * Split the comma delimited string of master URLs into a list.
+   * For instance, "spark://abc,def" becomes [spark://abc, spark://def].
+   */
+  def parseStandaloneMasterUrls(masterUrls: String): Array[String] = {
+    masterUrls.stripPrefix("spark://").split(",").map("spark://" + _)
+  }
+
+  /** An identifier that backup masters use in their responses. */
+  val BACKUP_STANDALONE_MASTER_PREFIX = "Current state is not alive"
+
+  /** Return true if the response message is sent from a backup Master on standby. */
+  def responseFromBackup(msg: String): Boolean = {
+    msg.startsWith(BACKUP_STANDALONE_MASTER_PREFIX)
   }
 
   /**

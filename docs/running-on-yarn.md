@@ -190,6 +190,13 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.am.extraLibraryPath</code></td>
+  <td>(none)</td>
+  <td>
+    Set a special library path to use when launching the application master in client mode.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.maxAppAttempts</code></td>
   <td>yarn.resourcemanager.am.max-attempts in YARN</td>
   <td>
