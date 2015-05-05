@@ -1334,9 +1334,6 @@ class Column(object):
     def between(self, lowerBound, upperBound):
         """ A boolean expression that is evaluated to true if the value of this
         expression is between the given columns.
-
-        >>> df[df.col1.between(lowerBound, upperBound)].collect()
-        [Row(col1=5, col2=6, col3=8)]
         """
         return (self >= lowerBound) & (self <= upperBound)
 

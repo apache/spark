@@ -439,9 +439,10 @@ class SQLTests(ReusedPySparkTestCase):
             assert row[1] >= -4.0 and row[1] <= 4.0, "got: %s" % row[1]
 
     def test_between_function(self):
-        df = self.sqlCtx.parallelize([Row(a=1, b=2, c=3),
-                                      Row(a=2, b=1, c=3),
-                                      Row(a=4, b=1, c=4)]).toDF()
+        df = self.sqlCtx.parallelize([
+            Row(a=1, b=2, c=3),
+            Row(a=2, b=1, c=3),
+            Row(a=4, b=1, c=4)]).toDF()
         self.assertEqual([False, True, True],
                      df.select(df.a.between(df.b, df.c)).collect())
 
