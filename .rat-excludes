@@ -34,7 +34,6 @@ d3.min.js
 dagre-d3.min.js
 graphlib-dot.min.js
 sorttable.js
-d3.min.js
 vis.min.js
 vis.min.css
 vis.map
