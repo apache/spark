@@ -2264,6 +2264,20 @@ object SparkContext extends Logging {
   def jarOfObject(obj: AnyRef): Option[String] = jarOfClass(obj.getClass)
 
   /**
+   * :: DeveloperApi ::
+   * Estimate the number of bytes that the given object takes up on the JVM heap. The estimate
+   * includes space taken up by objects referenced by the given object, their references, and so on
+   * and so forth.
+   *
+   * This is useful for determining the amount of heap space a broadcast variable will occupy on
+   * each executor or the amount of space each object will take when caching objects in
+   * deserialized form. This is not the same as the serialized size of the object, which will
+   * typically be much smaller.
+   */
+  @DeveloperApi
+  def estimateSizeOf(obj: AnyRef): Long = SizeEstimator.estimate(obj)
+
+  /**
    * Creates a modified version of a SparkConf with the parameters that can be passed separately
    * to SparkContext, to make it easier to write SparkContext's constructors. This ignores
    * parameters that are passed as the default value of null, instead of throwing an exception

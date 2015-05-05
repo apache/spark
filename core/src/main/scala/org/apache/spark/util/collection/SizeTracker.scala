@@ -19,7 +19,7 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable
 
-import org.apache.spark.SizeEstimator
+import org.apache.spark.util.SizeEstimator
 
 /**
  * A general interface for collections to keep track of their estimated sizes in bytes.

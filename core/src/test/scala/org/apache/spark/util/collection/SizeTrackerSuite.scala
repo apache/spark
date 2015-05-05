@@ -22,7 +22,7 @@ import scala.util.Random
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.SizeEstimator
+import org.apache.spark.util.SizeEstimator
 
 class SizeTrackerSuite extends FunSuite {
   val NORMAL_ERROR = 0.20

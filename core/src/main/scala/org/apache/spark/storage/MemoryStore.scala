@@ -23,8 +23,7 @@ import java.util.LinkedHashMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SizeEstimator
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 
 private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)

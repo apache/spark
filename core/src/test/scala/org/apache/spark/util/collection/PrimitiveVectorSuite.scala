@@ -19,7 +19,7 @@ package org.apache.spark.util.collection
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.SizeEstimator
+import org.apache.spark.util.SizeEstimator
 
 class PrimitiveVectorSuite extends FunSuite {
 
