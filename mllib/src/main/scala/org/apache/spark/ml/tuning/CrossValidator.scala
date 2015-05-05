@@ -136,7 +136,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
-    copyValues(new CrossValidatorModel(this, bestModel))
+    copyValues(new CrossValidatorModel(this, bestModel, metrics))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -151,7 +151,8 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
 @AlphaComponent
 class CrossValidatorModel private[ml] (
     override val parent: CrossValidator,
-    val bestModel: Model[_])
+    val bestModel: Model[_],
+    val crossValidationMetrics: Array[Double])
   extends Model[CrossValidatorModel] with CrossValidatorParams {
 
   override def validateParams(paramMap: ParamMap): Unit = {
