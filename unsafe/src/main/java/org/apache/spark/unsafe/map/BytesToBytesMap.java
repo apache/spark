@@ -177,9 +177,9 @@ public final class BytesToBytesMap {
 
       private int pageCur = 0;
 
-      private MemoryBlock currentPage = dataPages.get(0);
+      private MemoryBlock currentPage;
 
-      private long addr = currentPage.getBaseOffset();
+      private long addr;
 
       @Override
       public boolean hasNext() {
@@ -188,16 +188,20 @@ public final class BytesToBytesMap {
 
       @Override
       public Location next() {
+        if (currentPage == null) {
+          currentPage = dataPages.get(pageCur++);
+          addr = currentPage.getBaseOffset();
+        }
         long keySize = PlatformDependent.UNSAFE.getLong(memoryManager.getPage(addr), addr);
         if (keySize == -1L) {
           currentPage = dataPages.get(pageCur++);
           addr = currentPage.getBaseOffset();
         }
-        long keyAddr = addr;
+        loc.with(addr, true);
         addr += keySize + 8;
         addr += PlatformDependent.UNSAFE.getLong(memoryManager.getPage(addr), addr) + 8;
         cur++;
-        return loc.with(keyAddr, true);
+        return loc;
       }
 
       @Override
