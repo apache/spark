@@ -67,7 +67,8 @@ private[spark] object SQLConf {
   // Set to false when debugging requires the ability to look at invalid query plans.
   val DATAFRAME_EAGER_ANALYSIS = "spark.sql.eagerAnalysis"
 
-  // Whether to automatically alias the input tables in the case of self join on DataFrames.
+  // Whether to automatically resolve ambiguity in join conditions for self-joins.
+  // See SPARK-6231.
   val DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY = "spark.sql.selfJoinAutoResolveAmbiguity"
 
   val USE_SQL_SERIALIZER2 = "spark.sql.useSerializer2"
