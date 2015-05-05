@@ -449,7 +449,8 @@ private[master] class Master(
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
           "Can only request driver status in ALIVE state."
-        context.reply(DriverStatusResponse(found = false, None, None, None, Some(new Exception(msg))))
+        context.reply(
+          DriverStatusResponse(found = false, None, None, None, Some(new Exception(msg))))
       } else {
         (drivers ++ completedDrivers).find(_.id == driverId) match {
           case Some(driver) =>
