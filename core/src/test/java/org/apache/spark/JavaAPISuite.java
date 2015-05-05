@@ -157,7 +157,7 @@ public class JavaAPISuite implements Serializable {
   public void randomSplit() {
     List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
     JavaRDD<Integer> rdd = sc.parallelize(ints);
-    JavaRDD<Integer>[] splits = rdd.randomSplit(new double[] { 0.4, 0.6, 1.0 }, 31);
+    JavaRDD<Integer>[] splits = rdd.randomSplit(new double[]{0.4, 0.6, 1.0}, 31);
     Assert.assertEquals(3, splits.length);
     Assert.assertEquals(1, splits[0].count());
     Assert.assertEquals(2, splits[1].count());
@@ -269,6 +269,25 @@ public class JavaAPISuite implements Serializable {
       }
     });
     Assert.assertEquals(2, accum.value().intValue());
+  }
+
+  @Test
+  public void foreachPartitionWithIndex() {
+    final Accumulator<Integer> accum = sc.accumulator(0);
+    final Accumulator<Integer> accum2 = sc.accumulator(0);
+    JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
+    rdd.foreachPartitionWithIndex(new VoidFunction2<Integer, Iterator<String>>() {
+      @Override
+      public void call(Integer index, Iterator<String> iter) throws IOException {
+        while (iter.hasNext()) {
+          iter.next();
+          accum.add(1);
+          accum2.add(index);
+        }
+      }
+    });
+    Assert.assertEquals(2, accum.value().intValue());
+    Assert.assertEquals(1, accum2.value().intValue());
   }
 
   @Test
