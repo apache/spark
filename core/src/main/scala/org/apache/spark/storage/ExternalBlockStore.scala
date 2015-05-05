@@ -46,7 +46,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
   }
 
   override def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult = {
-    putIntoExternalBlockStore(blockId, bytes, returnValues = true)
+    putIntoExternalBlockStore(blockId, Right(bytes), returnValues = true)
   }
 
   override def putArray(
@@ -62,42 +62,50 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
       values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
-    logDebug(s"Attempting to write values for block $blockId")
-    val bytes = blockManager.dataSerialize(blockId, values)
-    putIntoExternalBlockStore(blockId, bytes, returnValues)
+    putIntoExternalBlockStore(blockId, Left(values), returnValues)
   }
 
   private def putIntoExternalBlockStore(
       blockId: BlockId,
-      bytes: ByteBuffer,
+      data: Either[Iterator[_], ByteBuffer],
       returnValues: Boolean): PutResult = {
-    // So that we do not modify the input offsets !
-    // duplicate does not copy buffer, so inexpensive
-    val byteBuffer = bytes.duplicate()
-    byteBuffer.rewind()
     logDebug(s"Attempting to put block $blockId into ExtBlk store")
     // we should never hit here if externalBlockManager is None. Handle it anyway for safety.
     try {
       val startTime = System.currentTimeMillis
       if (externalBlockManager.isDefined) {
-        externalBlockManager.get.putBytes(blockId, bytes)
+        var size: Long = 0
+        var returnData: Either[Iterator[_], ByteBuffer] = null
+        data match {
+          case Left(values) =>
+            externalBlockManager.get.putValues(blockId, values)
+            size = getSize(blockId)
+            if (returnValues) {
+              returnData = Left(getValues(blockId).get)
+            }
+          case Right(buffer) =>
+            // So that we do not modify the input offsets !
+            // duplicate does not copy buffer, so inexpensive
+            val byteBuffer = buffer.duplicate()
+            byteBuffer.rewind()
+            externalBlockManager.get.putBytes(blockId, byteBuffer)
+            size = buffer.limit()
+            if (returnValues) {
+              returnData = Right(buffer)
+            }
+          }
         val finishTime = System.currentTimeMillis
         logDebug("Block %s stored as %s file in ExternalBlockStore in %d ms".format(
-          blockId, Utils.bytesToString(byteBuffer.limit), finishTime - startTime))
-
-        if (returnValues) {
-          PutResult(bytes.limit(), Right(bytes.duplicate()))
-        } else {
-          PutResult(bytes.limit(), null)
-        }
+          blockId, Utils.bytesToString(size), finishTime - startTime))
+        PutResult(size, returnData)
       } else {
         logError(s"error in putBytes $blockId")
-        PutResult(bytes.limit(), null, Seq((blockId, BlockStatus.empty)))
+        PutResult(-1, null, Seq((blockId, BlockStatus.empty)))
       }
     } catch {
       case NonFatal(t) =>
         logError(s"error in putBytes $blockId", t)
-        PutResult(bytes.limit(), null, Seq((blockId, BlockStatus.empty)))
+        PutResult(-1, null, Seq((blockId, BlockStatus.empty)))
     }
   }
 
@@ -113,7 +121,13 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
   }
 
   override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
-    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
+    try {
+      externalBlockManager.flatMap(_.getValues(blockId))
+    } catch {
+      case NonFatal(t) =>
+        logError(s"error in getValues from $blockId", t)
+        None
+    }
   }
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {

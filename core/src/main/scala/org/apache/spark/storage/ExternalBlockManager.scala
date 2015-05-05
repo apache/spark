@@ -73,6 +73,8 @@ private[spark] abstract class ExternalBlockManager {
    */
   def putBytes(blockId: BlockId, bytes: ByteBuffer): Unit
 
+  def putValues(blockId: BlockId, values: Iterator[_]): Unit
+
   /**
    * Retrieve the block bytes.
    * @return Some(ByteBuffer) if the block bytes is successfully retrieved
@@ -81,6 +83,15 @@ private[spark] abstract class ExternalBlockManager {
    * @throws java.io.IOException if there is any file system failure in getting the block.
    */
   def getBytes(blockId: BlockId): Option[ByteBuffer]
+
+    /**
+   * Retrieve the block data.
+   * @return Some(Iterator[Any]) if the block data is successfully retrieved
+   *         None if the block does not exist in the external block store.
+   *
+   * @throws java.io.IOException if there is any file system failure in getting the block.
+   */
+  def getValues(blockId: BlockId): Option[Iterator[_]]
 
   /**
    * Get the size of the block saved in the underlying external block store,
