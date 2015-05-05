@@ -24,7 +24,7 @@ import scala.xml.{NodeSeq, Node}
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.streaming.Time
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 import org.apache.spark.streaming.ui.StreamingJobProgressListener.{SparkJobId, OutputOpId}
 import org.apache.spark.ui.jobs.UIData.JobUIData
 
@@ -73,8 +73,8 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
       sparkJob.stageIds.sorted.reverse.flatMap(sparkListener.stageIdToInfo.get).
       dropWhile(_.failureReason == None).take(1). // get the first info that contains failure
       flatMap(info => info.failureReason).headOption.getOrElse("")
-    val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("-")
-    val detailUrl = s"${UIUtils.prependBaseUri(parent.basePath)}/jobs/job?id=${sparkJob.jobId}"
+    val formattedDuration = duration.map(d => SparkUIUtils.formatDuration(d)).getOrElse("-")
+    val detailUrl = s"${SparkUIUtils.prependBaseUri(parent.basePath)}/jobs/job?id=${sparkJob.jobId}"
 
     // In the first row, output op id and its information needs to be shown. In other rows, these
     // cells will be taken up due to "rowspan".
@@ -110,7 +110,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
       </td>
       <td class="progress-cell">
         {
-          UIUtils.makeProgressBar(
+          SparkUIUtils.makeProgressBar(
             started = sparkJob.numActiveTasks,
             completed = sparkJob.numCompletedTasks,
             failed = sparkJob.numFailedTasks,
@@ -135,7 +135,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
         // If any job does not finish, set "formattedOutputOpDuration" to "-"
         "-"
       } else {
-        UIUtils.formatDuration(sparkjobDurations.flatMap(x => x).sum)
+        SparkUIUtils.formatDuration(sparkjobDurations.flatMap(x => x).sum)
       }
     generateJobRow(outputOpId, formattedOutputOpDuration, sparkJobs.size, true, sparkJobs.head) ++
       sparkJobs.tail.map { sparkJob =>
@@ -212,24 +212,24 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     val batchTime = Option(request.getParameter("id")).map(id => Time(id.toLong)).getOrElse {
       throw new IllegalArgumentException(s"Missing id parameter")
     }
-    val formattedBatchTime = UIUtils.formatDate(batchTime.milliseconds)
+    val formattedBatchTime = SparkUIUtils.formatDate(batchTime.milliseconds)
 
     val batchUIData = streamingListener.getBatchUIData(batchTime).getOrElse {
       throw new IllegalArgumentException(s"Batch $formattedBatchTime does not exist")
     }
 
     val formattedSchedulingDelay =
-      batchUIData.schedulingDelay.map(UIUtils.formatDuration).getOrElse("-")
+      batchUIData.schedulingDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
     val formattedProcessingTime =
-      batchUIData.processingDelay.map(UIUtils.formatDuration).getOrElse("-")
-    val formattedTotalDelay = batchUIData.totalDelay.map(UIUtils.formatDuration).getOrElse("-")
+      batchUIData.processingDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
+    val formattedTotalDelay = batchUIData.totalDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
 
     val summary: NodeSeq =
       <div>
         <ul class="unstyled">
           <li>
             <strong>Batch Duration: </strong>
-            {UIUtils.formatDuration(streamingListener.batchDuration)}
+            {SparkUIUtils.formatDuration(streamingListener.batchDuration)}
           </li>
           <li>
             <strong>Input data size: </strong>
@@ -259,6 +259,6 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
 
     val content = summary ++ jobTable
 
-    UIUtils.headerSparkPage(s"Details of batch at $formattedBatchTime", content, parent)
+    SparkUIUtils.headerSparkPage(s"Details of batch at $formattedBatchTime", content, parent)
   }
 }

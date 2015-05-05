@@ -32,9 +32,12 @@ import org.apache.spark.util.Utils
 private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private val master = parent.masterEndpointRef
 
+  def getMasterState: MasterStateResponse = {
+    master.askWithRetry[MasterStateResponse](RequestMasterState)
+  }
+
   override def renderJson(request: HttpServletRequest): JValue = {
-    val state = master.askWithRetry[MasterStateResponse](RequestMasterState)
-    JsonProtocol.writeMasterState(state)
+    JsonProtocol.writeMasterState(getMasterState)
   }
 
   def handleAppKillRequest(request: HttpServletRequest): Unit = {
@@ -66,7 +69,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val state = master.askWithRetry[MasterStateResponse](RequestMasterState)
+    val state = getMasterState
 
     val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory")
     val workers = state.workers.sortBy(_.id)

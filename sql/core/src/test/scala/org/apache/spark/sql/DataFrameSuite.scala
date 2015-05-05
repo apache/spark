@@ -598,6 +598,25 @@ class DataFrameSuite extends QueryTest {
     testData.select($"*").show(1000)
   }
 
+  test("SPARK-7319 showString") {
+    val expectedAnswer = """+---+-----+
+                           ||key|value|
+                           |+---+-----+
+                           ||  1|    1|
+                           |+---+-----+
+                           |""".stripMargin
+    assert(testData.select($"*").showString(1) === expectedAnswer)
+  }
+
+  test("SPARK-7327 show with empty dataFrame") {
+    val expectedAnswer = """+---+-----+
+                           ||key|value|
+                           |+---+-----+
+                           |+---+-----+
+                           |""".stripMargin
+    assert(testData.select($"*").filter($"key" < 0).showString(1) === expectedAnswer)
+  }
+
   test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
     val rowRDD = TestSQLContext.sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
     val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))

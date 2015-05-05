@@ -769,9 +769,9 @@ private[master] class Master(
 
   /**
    * Rebuild a new SparkUI from the given application's event logs.
-   * Return whether this is successful.
+   * Return the UI if successful, else None
    */
-  private def rebuildSparkUI(app: ApplicationInfo): Boolean = {
+  private[master] def rebuildSparkUI(app: ApplicationInfo): Option[SparkUI] = {
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
     try {
@@ -779,7 +779,7 @@ private[master] class Master(
         .getOrElse {
           // Event logging is not enabled for this application
           app.desc.appUiUrl = notFoundBasePath
-          return false
+          return None
         }
       
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
@@ -802,7 +802,7 @@ private[master] class Master(
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
-        appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
+        appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
       val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {
         replayBus.replay(logInput, eventLogFile, maybeTruncated)
@@ -813,7 +813,7 @@ private[master] class Master(
       webUi.attachSparkUI(ui)
       // Application UI is successfully rebuilt, so link the Master UI to it
       app.desc.appUiUrl = ui.basePath
-      true
+      Some(ui)
     } catch {
       case fnf: FileNotFoundException =>
         // Event logging is enabled for this application, but no event logs are found
@@ -823,7 +823,7 @@ private[master] class Master(
         msg += " Did you specify the correct logging directory?"
         msg = URLEncoder.encode(msg, "UTF-8")
         app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
-        false
+        None
       case e: Exception =>
         // Relay exception message to application UI page
         val title = s"Application history load error (${app.id})"
@@ -832,7 +832,7 @@ private[master] class Master(
         logError(msg, e)
         msg = URLEncoder.encode(msg, "UTF-8")
         app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title"
-        false
+        None
     }
   }
 

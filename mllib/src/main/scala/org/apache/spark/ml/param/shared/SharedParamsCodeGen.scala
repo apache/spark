@@ -21,8 +21,6 @@ import java.io.PrintWriter
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.ml.param.ParamValidators
-
 /**
  * Code generator for shared params (sharedParams.scala). Run under the Spark folder with
  * {{{
@@ -142,7 +140,7 @@ private[shared] object SharedParamsCodeGen {
       |  final val $name: $Param = new $Param(this, "$name", "$doc"$isValid)
       |$setDefault
       |  /** @group getParam */
-      |  final def get$Name: $T = getOrDefault($name)
+      |  final def get$Name: $T = $$($name)
       |}
       |""".stripMargin
   }
@@ -169,7 +167,6 @@ private[shared] object SharedParamsCodeGen {
         |
         |package org.apache.spark.ml.param.shared
         |
-        |import org.apache.spark.annotation.DeveloperApi
         |import org.apache.spark.ml.param._
         |import org.apache.spark.util.Utils
         |
