@@ -74,14 +74,12 @@ abstract class BinaryArithmetic extends BinaryExpression {
 
   type EvaluatedType = Any
 
-  def nullable: Boolean = left.nullable || right.nullable
-
   override lazy val resolved =
     left.resolved && right.resolved &&
     left.dataType == right.dataType &&
     !DecimalType.isFixed(left.dataType)
 
-  def dataType: DataType = {
+  override def dataType: DataType = {
     if (!resolved) {
       throw new UnresolvedException(this,
         s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
