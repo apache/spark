@@ -12,6 +12,7 @@ import dateutil.parser
 from datetime import datetime
 import logging
 import os
+import signal
 import subprocess
 import sys
 
@@ -214,12 +215,31 @@ def webserver(args):
         from tornado.httpserver import HTTPServer
         from tornado.ioloop import IOLoop
         from tornado.wsgi import WSGIContainer
+        import threading
+        import tornado.ioloop
+        import tornado.web
 
-        # simple multi-process server
-        server = HTTPServer(WSGIContainer(app))
-        server.bind(args.port)
-        server.start(4)  # Forks multiple sub-processes
-        IOLoop.instance().start()
+        def start_tornado(port, *args, **kwargs):
+            print "Starting Torando"
+            server = HTTPServer(WSGIContainer(app))
+            server.bind(port)
+            server.start(4)  # Forks multiple sub-processes
+            IOLoop.instance().start()
+            print "Tornado finished"
+
+        def stop_tornado():
+            ioloop = tornado.ioloop.IOLoop.instance()
+            ioloop.add_callback(lambda x: x.stop(), ioloop)
+
+        def signal_handler(signum, frame):
+            print("SIGINT (ctrl-c) received")
+            stop_tornado()
+            #sys.exit(1)
+        signal.signal(signal.SIGINT, signal_handler)
+
+        t = threading.Thread(target=start_tornado, args=[args.port])
+        t.start()
+        t.join()
 
 
 def scheduler(args):

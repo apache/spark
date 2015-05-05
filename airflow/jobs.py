@@ -348,8 +348,6 @@ class SchedulerJob(BaseJob):
                     dag for dag in dagbag.dags.values() if not dag.parent_dag]
             paused_dag_ids = dagbag.paused_dags()
             for dag in dags:
-                if 'backfill' not in dag.dag_id:
-                    continue
                 dag = dagbag.get_dag(dag.dag_id)
                 if not dag or (dag.dag_id in paused_dag_ids):
                     continue
@@ -422,6 +420,7 @@ class BackfillJob(BaseJob):
         for task in self.dag.tasks:
             if (not self.include_adhoc) and task.adhoc:
                 continue
+
             start_date = start_date or task.start_date
             end_date = end_date or task.end_date or datetime.now()
             for dttm in utils.date_range(
