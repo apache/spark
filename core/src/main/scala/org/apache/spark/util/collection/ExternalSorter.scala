@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.io.ByteStreams
 
 import org.apache.spark._
+import org.apache.spark.crypto.{CryptoConf, CryptoStreamUtils}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
@@ -522,7 +523,10 @@ private[spark] class ExternalSorter[K, V, C](
           ", batchOffsets = " + batchOffsets.mkString("[", ", ", "]"))
 
         val bufferedStream = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
-        val compressedStream = serializerManager.wrapForCompression(spill.blockId, bufferedStream)
+
+        val encryptedStream = SparkEnv.get.serializerManager.wrapForEncryption(bufferedStream)
+        val compressedStream = SparkEnv.get.serializerManager.wrapForCompression(spill.blockId,
+          encryptedStream)
         serInstance.deserializeStream(compressedStream)
       } else {
         // No more batches left

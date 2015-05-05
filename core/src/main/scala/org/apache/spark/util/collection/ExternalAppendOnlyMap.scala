@@ -486,7 +486,8 @@ class ExternalAppendOnlyMap[K, V, C](
           ", batchOffsets = " + batchOffsets.mkString("[", ", ", "]"))
 
         val bufferedStream = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
-        val compressedStream = serializerManager.wrapForCompression(blockId, bufferedStream)
+        val encryptedStream = serializerManager.wrapForEncryption(bufferedStream)
+        val compressedStream = serializerManager.wrapForCompression(blockId, encryptedStream)
         ser.deserializeStream(compressedStream)
       } else {
         // No more batches left

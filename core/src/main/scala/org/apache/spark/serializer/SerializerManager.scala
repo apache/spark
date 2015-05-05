@@ -23,6 +23,7 @@ import java.nio.ByteBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
+import org.apache.spark.crypto.{CryptoConf, CryptoStreamUtils}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.storage._
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
@@ -60,6 +61,9 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
   private[this] val compressRdds = conf.getBoolean("spark.rdd.compress", false)
   // Whether to compress shuffle output temporarily spilled to disk
   private[this] val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
+
+  // Whether to encrypt shuffle file encryption
+  private[this] val enableShuffleFileEncryption = CryptoConf.isShuffleEncryptionEnabled(conf)
 
   /* The compression codec to use. Note that the "lazy" val is necessary because we want to delay
    * the initialization of the compression codec until it is first used. The reason is that a Spark
@@ -103,6 +107,20 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
   }
 
   /**
+   * Wrap an input stream for encryption if shuffle encryption is enabled
+   */
+  def wrapForEncryption(s: InputStream): InputStream = {
+    if (enableShuffleFileEncryption) CryptoStreamUtils.createCryptoInputStream(s, conf) else s
+  }
+
+  /**
+   * Wrap an output stream for encryption if shuffle encryption is enabled
+   */
+  def wrapForEncryption(s: OutputStream): OutputStream = {
+    if (enableShuffleFileEncryption) CryptoStreamUtils.createCryptoOutputStream(s, conf) else s
+  }
+
+  /**
    * Wrap an output stream for compression if block compression is enabled for its block type
    */
   def wrapForCompression(blockId: BlockId, s: OutputStream): OutputStream = {
@@ -123,7 +141,8 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
       values: Iterator[T]): Unit = {
     val byteStream = new BufferedOutputStream(outputStream)
     val ser = getSerializer(implicitly[ClassTag[T]]).newInstance()
-    ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
+    ser.serializeStream(wrapForEncryption(wrapForCompression(blockId, byteStream))).writeAll(
+      values).close()
   }
 
   /** Serializes into a chunked byte buffer. */
@@ -153,7 +172,7 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
     val stream = new BufferedInputStream(inputStream)
     getSerializer(implicitly[ClassTag[T]])
       .newInstance()
-      .deserializeStream(wrapForCompression(blockId, stream))
+      .deserializeStream(wrapForCompression(blockId, wrapForEncryption(stream)))
       .asIterator.asInstanceOf[Iterator[T]]
   }
 }

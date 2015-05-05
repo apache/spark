@@ -40,6 +40,7 @@ private[spark] class DiskBlockObjectWriter(
     serializerInstance: SerializerInstance,
     bufferSize: Int,
     compressStream: OutputStream => OutputStream,
+    encryptStream: OutputStream => OutputStream,
     syncWrites: Boolean,
     // These write metrics concurrently shared with other active DiskBlockObjectWriters who
     // are themselves performing writes. All updates must be relative.
@@ -115,7 +116,9 @@ private[spark] class DiskBlockObjectWriter(
       initialize()
       initialized = true
     }
-    bs = compressStream(mcs)
+
+    bs = encryptStream(mcs)
+    bs = compressStream(bs)
     objOut = serializerInstance.serializeStream(bs)
     streamOpen = true
     this

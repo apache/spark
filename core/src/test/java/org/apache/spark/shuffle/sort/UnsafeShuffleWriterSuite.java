@@ -97,6 +97,13 @@ public class UnsafeShuffleWriterSuite {
     }
   }
 
+  private static final class EncryptStream extends AbstractFunction1<OutputStream, OutputStream> {
+    @Override
+    public OutputStream apply(OutputStream stream) {
+      return stream;
+    }
+  }
+
   @After
   public void tearDown() {
     Utils.deleteRecursively(tempDir);
@@ -137,6 +144,7 @@ public class UnsafeShuffleWriterSuite {
           (SerializerInstance) args[2],
           (Integer) args[3],
           new CompressStream(),
+          new EncryptStream(),
           false,
           (ShuffleWriteMetrics) args[4],
           (BlockId) args[0]

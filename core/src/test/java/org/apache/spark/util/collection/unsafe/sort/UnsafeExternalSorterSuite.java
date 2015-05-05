@@ -95,6 +95,13 @@ public class UnsafeExternalSorterSuite {
     }
   }
 
+  private static final class EncryptStream extends AbstractFunction1<OutputStream, OutputStream> {
+    @Override
+    public OutputStream apply(OutputStream stream) {
+      return stream;
+    }
+  }
+
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
@@ -129,6 +136,7 @@ public class UnsafeExternalSorterSuite {
           (SerializerInstance) args[2],
           (Integer) args[3],
           new CompressStream(),
+          new EncryptStream(),
           false,
           (ShuffleWriteMetrics) args[4],
           (BlockId) args[0]

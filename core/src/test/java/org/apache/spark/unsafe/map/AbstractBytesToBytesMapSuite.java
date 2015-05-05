@@ -82,6 +82,13 @@ public abstract class AbstractBytesToBytesMapSuite {
     }
   }
 
+  private static final class EncryptStream extends AbstractFunction1<OutputStream, OutputStream> {
+    @Override
+    public OutputStream apply(OutputStream stream) {
+      return stream;
+    }
+  }
+
   @Before
   public void setup() {
     memoryManager =
@@ -123,6 +130,7 @@ public abstract class AbstractBytesToBytesMapSuite {
           (SerializerInstance) args[2],
           (Integer) args[3],
           new CompressStream(),
+          new EncryptStream(),
           false,
           (ShuffleWriteMetrics) args[4],
           (BlockId) args[0]
