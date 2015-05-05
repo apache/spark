@@ -19,22 +19,22 @@ package org.apache.spark.ml.regression
 
 import scala.collection.mutable
 
-import breeze.linalg.{norm => brzNorm, DenseVector => BDV}
-import breeze.optimize.{LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
-import breeze.optimize.{CachedDiffFunction, DiffFunction}
+import breeze.linalg.{DenseVector => BDV, norm => brzNorm}
+import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS,
+  OWLQN => BreezeOWLQN}
 
+import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.param.{Params, ParamMap}
-import org.apache.spark.ml.param.shared.{HasTol, HasElasticNetParam, HasMaxIter, HasRegParam}
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared.{HasElasticNetParam, HasMaxIter, HasRegParam, HasTol}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.StatCounter
-import org.apache.spark.Logging
 
 /**
  * Params for linear regression.
@@ -96,9 +96,9 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
   def setTol(value: Double): this.type = set(tol, value)
   setDefault(tol -> 1E-6)
 
-  override protected def train(dataset: DataFrame, paramMap: ParamMap): LinearRegressionModel = {
+  override protected def train(dataset: DataFrame): LinearRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist instances.
-    val instances = extractLabeledPoints(dataset, paramMap).map {
+    val instances = extractLabeledPoints(dataset).map {
       case LabeledPoint(label: Double, features: Vector) => (label, features)
     }
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
@@ -125,7 +125,7 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
       logWarning(s"The standard deviation of the label is zero, so the weights will be zeros " +
         s"and the intercept will be the mean of the label; as a result, training is not needed.")
       if (handlePersistence) instances.unpersist()
-      return new LinearRegressionModel(this, paramMap, Vectors.sparse(numFeatures, Seq()), yMean)
+      return new LinearRegressionModel(this, Vectors.sparse(numFeatures, Seq()), yMean)
     }
 
     val featuresMean = summarizer.mean.toArray
@@ -133,17 +133,17 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
 
     // Since we implicitly do the feature scaling when we compute the cost function
     // to improve the convergence, the effective regParam will be changed.
-    val effectiveRegParam = paramMap(regParam) / yStd
-    val effectiveL1RegParam = paramMap(elasticNetParam) * effectiveRegParam
-    val effectiveL2RegParam = (1.0 - paramMap(elasticNetParam)) * effectiveRegParam
+    val effectiveRegParam = $(regParam) / yStd
+    val effectiveL1RegParam = $(elasticNetParam) * effectiveRegParam
+    val effectiveL2RegParam = (1.0 - $(elasticNetParam)) * effectiveRegParam
 
     val costFun = new LeastSquaresCostFun(instances, yStd, yMean,
       featuresStd, featuresMean, effectiveL2RegParam)
 
-    val optimizer = if (paramMap(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
-      new BreezeLBFGS[BDV[Double]](paramMap(maxIter), 10, paramMap(tol))
+    val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
+      new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
     } else {
-      new BreezeOWLQN[Int, BDV[Double]](paramMap(maxIter), 10, effectiveL1RegParam, paramMap(tol))
+      new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, effectiveL1RegParam, $(tol))
     }
 
     val initialWeights = Vectors.zeros(numFeatures)
@@ -178,7 +178,7 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     if (handlePersistence) instances.unpersist()
 
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
-    new LinearRegressionModel(this, paramMap, weights.compressed, intercept)
+    new LinearRegressionModel(this, weights.compressed, intercept)
   }
 }
 
@@ -190,7 +190,6 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
 @AlphaComponent
 class LinearRegressionModel private[ml] (
     override val parent: LinearRegression,
-    override val fittingParamMap: ParamMap,
     val weights: Vector,
     val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
@@ -200,10 +199,8 @@ class LinearRegressionModel private[ml] (
     dot(features, weights) + intercept
   }
 
-  override protected def copy(): LinearRegressionModel = {
-    val m = new LinearRegressionModel(parent, fittingParamMap, weights, intercept)
-    Params.inheritValues(extractParamMap(), this, m)
-    m
+  override def copy(extra: ParamMap): LinearRegressionModel = {
+    copyValues(new LinearRegressionModel(parent, weights, intercept), extra)
   }
 }
 

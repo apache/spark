@@ -52,6 +52,8 @@ private[spark] object SQLConf {
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
+  val THRIFTSERVER_UI_STATEMENT_LIMIT = "spark.sql.thriftserver.ui.retainedStatements"
+  val THRIFTSERVER_UI_SESSION_LIMIT = "spark.sql.thriftserver.ui.retainedSessions"
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = "spark.sql.sources.default"

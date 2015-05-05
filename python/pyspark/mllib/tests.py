@@ -92,6 +92,9 @@ class VectorTests(MLlibTestCase):
         self._test_serialize(SparseVector(4, {1: 1, 3: 2}))
         self._test_serialize(SparseVector(3, {}))
         self._test_serialize(DenseMatrix(2, 3, range(6)))
+        sm1 = SparseMatrix(
+            3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0])
+        self._test_serialize(sm1)
 
     def test_dot(self):
         sv = SparseVector(4, {1: 1, 3: 2})
@@ -233,7 +236,8 @@ class ListTests(MLlibTestCase):
             [1.1, 0],
             [1.2, 0],
         ]
-        clusters = KMeans.train(self.sc.parallelize(data), 2, initializationMode="k-means||")
+        clusters = KMeans.train(self.sc.parallelize(data), 2, initializationMode="k-means||",
+                                initializationSteps=7, epsilon=1e-4)
         self.assertEquals(clusters.predict(data[0]), clusters.predict(data[1]))
         self.assertEquals(clusters.predict(data[2]), clusters.predict(data[3]))
 
@@ -243,9 +247,11 @@ class ListTests(MLlibTestCase):
         Y = range(0, 100, 10)
         data = [[x, y] for x, y in zip(X, Y)]
         clusters1 = KMeans.train(self.sc.parallelize(data),
-                                 3, initializationMode="k-means||", seed=42)
+                                 3, initializationMode="k-means||",
+                                 seed=42, initializationSteps=7, epsilon=1e-4)
         clusters2 = KMeans.train(self.sc.parallelize(data),
-                                 3, initializationMode="k-means||", seed=42)
+                                 3, initializationMode="k-means||",
+                                 seed=42, initializationSteps=7, epsilon=1e-4)
         centers1 = clusters1.centers
         centers2 = clusters2.centers
         for c1, c2 in zip(centers1, centers2):

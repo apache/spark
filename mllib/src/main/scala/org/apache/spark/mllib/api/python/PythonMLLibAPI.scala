@@ -291,12 +291,16 @@ private[python] class PythonMLLibAPI extends Serializable {
       maxIterations: Int,
       runs: Int,
       initializationMode: String,
-      seed: java.lang.Long): KMeansModel = {
+      seed: java.lang.Long,
+      initializationSteps: Int,
+      epsilon: Double): KMeansModel = {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
+      .setInitializationSteps(initializationSteps)
+      .setEpsilon(epsilon)
 
     if (seed != null) kMeansAlg.setSeed(seed)
 
@@ -305,6 +309,15 @@ private[python] class PythonMLLibAPI extends Serializable {
     } finally {
       data.rdd.unpersist(blocking = false)
     }
+  }
+
+  /**
+   * Java stub for Python mllib KMeansModel.computeCost()
+   */
+  def computeCostKmeansModel(
+      data: JavaRDD[Vector],
+      centers: java.util.ArrayList[Vector]): Double = {
+    new KMeansModel(centers).computeCost(data)
   }
 
   /**
@@ -1015,6 +1028,61 @@ private[spark] object SerDe extends Serializable {
     }
   }
 
+  // Pickler for SparseMatrix
+  private[python] class SparseMatrixPickler extends BasePickler[SparseMatrix] {
+
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
+      val s = obj.asInstanceOf[SparseMatrix]
+      val order = ByteOrder.nativeOrder()
+
+      val colPtrsBytes = new Array[Byte](4 * s.colPtrs.length)
+      val indicesBytes = new Array[Byte](4 * s.rowIndices.length)
+      val valuesBytes = new Array[Byte](8 * s.values.length)
+      val isTransposed = if (s.isTransposed) 1 else 0
+      ByteBuffer.wrap(colPtrsBytes).order(order).asIntBuffer().put(s.colPtrs)
+      ByteBuffer.wrap(indicesBytes).order(order).asIntBuffer().put(s.rowIndices)
+      ByteBuffer.wrap(valuesBytes).order(order).asDoubleBuffer().put(s.values)
+
+      out.write(Opcodes.MARK)
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(s.numRows))
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(s.numCols))
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(colPtrsBytes.length))
+      out.write(colPtrsBytes)
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(indicesBytes.length))
+      out.write(indicesBytes)
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(valuesBytes.length))
+      out.write(valuesBytes)
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(isTransposed))
+      out.write(Opcodes.TUPLE)
+    }
+
+    def construct(args: Array[Object]): Object = {
+      if (args.length != 6) {
+        throw new PickleException("should be 6")
+      }
+      val order = ByteOrder.nativeOrder()
+      val colPtrsBytes = getBytes(args(2))
+      val indicesBytes = getBytes(args(3))
+      val valuesBytes = getBytes(args(4))
+      val colPtrs = new Array[Int](colPtrsBytes.length / 4)
+      val rowIndices = new Array[Int](indicesBytes.length / 4)
+      val values = new Array[Double](valuesBytes.length / 8)
+      ByteBuffer.wrap(colPtrsBytes).order(order).asIntBuffer().get(colPtrs)
+      ByteBuffer.wrap(indicesBytes).order(order).asIntBuffer().get(rowIndices)
+      ByteBuffer.wrap(valuesBytes).order(order).asDoubleBuffer().get(values)
+      val isTransposed = args(5).asInstanceOf[Int] == 1
+      new SparseMatrix(
+        args(0).asInstanceOf[Int], args(1).asInstanceOf[Int], colPtrs, rowIndices, values,
+        isTransposed)
+    }
+  }
+
   // Pickler for SparseVector
   private[python] class SparseVectorPickler extends BasePickler[SparseVector] {
 
@@ -1099,6 +1167,7 @@ private[spark] object SerDe extends Serializable {
       if (!initialized) {
         new DenseVectorPickler().register()
         new DenseMatrixPickler().register()
+        new SparseMatrixPickler().register()
         new SparseVectorPickler().register()
         new LabeledPointPickler().register()
         new RatingPickler().register()

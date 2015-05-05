@@ -20,13 +20,10 @@ package org.apache.spark.ml.impl.tree
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.impl.estimator.PredictorParams
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasSeed, HasMaxIter}
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo,
-  BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
-import org.apache.spark.mllib.tree.impurity.{Gini => OldGini, Entropy => OldEntropy,
-  Impurity => OldImpurity, Variance => OldVariance}
+import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
+import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
-
 
 /**
  * :: DeveloperApi ::
@@ -123,43 +120,43 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   def setMaxDepth(value: Int): this.type = set(maxDepth, value)
 
   /** @group getParam */
-  final def getMaxDepth: Int = getOrDefault(maxDepth)
+  final def getMaxDepth: Int = $(maxDepth)
 
   /** @group setParam */
   def setMaxBins(value: Int): this.type = set(maxBins, value)
 
   /** @group getParam */
-  final def getMaxBins: Int = getOrDefault(maxBins)
+  final def getMaxBins: Int = $(maxBins)
 
   /** @group setParam */
   def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
   /** @group getParam */
-  final def getMinInstancesPerNode: Int = getOrDefault(minInstancesPerNode)
+  final def getMinInstancesPerNode: Int = $(minInstancesPerNode)
 
   /** @group setParam */
   def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
   /** @group getParam */
-  final def getMinInfoGain: Double = getOrDefault(minInfoGain)
+  final def getMinInfoGain: Double = $(minInfoGain)
 
   /** @group expertSetParam */
   def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
 
   /** @group expertGetParam */
-  final def getMaxMemoryInMB: Int = getOrDefault(maxMemoryInMB)
+  final def getMaxMemoryInMB: Int = $(maxMemoryInMB)
 
   /** @group expertSetParam */
   def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
 
   /** @group expertGetParam */
-  final def getCacheNodeIds: Boolean = getOrDefault(cacheNodeIds)
+  final def getCacheNodeIds: Boolean = $(cacheNodeIds)
 
   /** @group expertSetParam */
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
   /** @group expertGetParam */
-  final def getCheckpointInterval: Int = getOrDefault(checkpointInterval)
+  final def getCheckpointInterval: Int = $(checkpointInterval)
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(
@@ -206,7 +203,7 @@ private[ml] trait TreeClassifierParams extends Params {
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
-  final def getImpurity: String = getOrDefault(impurity).toLowerCase
+  final def getImpurity: String = $(impurity).toLowerCase
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -248,7 +245,7 @@ private[ml] trait TreeRegressorParams extends Params {
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
-  final def getImpurity: String = getOrDefault(impurity).toLowerCase
+  final def getImpurity: String = $(impurity).toLowerCase
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -291,7 +288,7 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
   def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
 
   /** @group getParam */
-  final def getSubsamplingRate: Double = getOrDefault(subsamplingRate)
+  final def getSubsamplingRate: Double = $(subsamplingRate)
 
   /** @group setParam */
   def setSeed(value: Long): this.type = set(seed, value)
@@ -364,13 +361,13 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
   def setNumTrees(value: Int): this.type = set(numTrees, value)
 
   /** @group getParam */
-  final def getNumTrees: Int = getOrDefault(numTrees)
+  final def getNumTrees: Int = $(numTrees)
 
   /** @group setParam */
   def setFeatureSubsetStrategy(value: String): this.type = set(featureSubsetStrategy, value)
 
   /** @group getParam */
-  final def getFeatureSubsetStrategy: String = getOrDefault(featureSubsetStrategy).toLowerCase
+  final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase
 }
 
 private[ml] object RandomForestParams {
@@ -418,7 +415,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
   /** @group getParam */
-  final def getStepSize: Double = getOrDefault(stepSize)
+  final def getStepSize: Double = $(stepSize)
 
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(

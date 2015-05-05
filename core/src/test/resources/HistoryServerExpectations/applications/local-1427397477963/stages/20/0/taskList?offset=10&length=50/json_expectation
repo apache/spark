@@ -1,0 +1,1201 @@
+[ {
+  "taskId" : 5020,
+  "index" : 10,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.579GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 1,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9601,
+      "writeTime" : 306724,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5021,
+  "index" : 11,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.579GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9599,
+      "writeTime" : 280729,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5022,
+  "index" : 12,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.579GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 6,
+    "executorRunTime" : 5,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9601,
+      "writeTime" : 273837,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5023,
+  "index" : 13,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.579GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 6,
+    "executorRunTime" : 5,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9602,
+      "writeTime" : 282108,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5024,
+  "index" : 14,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.586GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9604,
+      "writeTime" : 266308,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5025,
+  "index" : 15,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.586GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 8,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9602,
+      "writeTime" : 330830,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5026,
+  "index" : 16,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.586GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 5,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9598,
+      "writeTime" : 247775,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5027,
+  "index" : 17,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.586GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 1,
+    "executorRunTime" : 5,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9601,
+      "writeTime" : 289503,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5028,
+  "index" : 18,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.592GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9601,
+      "writeTime" : 355545,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5029,
+  "index" : 19,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.593GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 7,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9598,
+      "writeTime" : 339081,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5030,
+  "index" : 20,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.593GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 9,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9600,
+      "writeTime" : 367295,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5031,
+  "index" : 21,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.593GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 9,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9597,
+      "writeTime" : 493701,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5032,
+  "index" : 22,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.593GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 1,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9601,
+      "writeTime" : 345941,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5033,
+  "index" : 23,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.593GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9600,
+      "writeTime" : 301382,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5034,
+  "index" : 24,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.594GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9603,
+      "writeTime" : 340547,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5035,
+  "index" : 25,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.600GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 1,
+    "executorRunTime" : 5,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9602,
+      "writeTime" : 324374,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5036,
+  "index" : 26,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.600GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9603,
+      "writeTime" : 321083,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5037,
+  "index" : 27,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.601GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 7,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9600,
+      "writeTime" : 318662,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5038,
+  "index" : 28,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.601GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 1,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9599,
+      "writeTime" : 334376,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5039,
+  "index" : 29,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.601GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 7,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9602,
+      "writeTime" : 287042,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5040,
+  "index" : 30,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.601GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9601,
+      "writeTime" : 332938,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5041,
+  "index" : 31,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.602GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 4,
+    "executorRunTime" : 5,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9603,
+      "writeTime" : 255099,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5042,
+  "index" : 32,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.602GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 1,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9598,
+      "writeTime" : 297534,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5043,
+  "index" : 33,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.607GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9601,
+      "writeTime" : 265929,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5044,
+  "index" : 34,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.607GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 5,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9601,
+      "writeTime" : 279851,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5045,
+  "index" : 35,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.608GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 5,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9600,
+      "writeTime" : 278965,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5046,
+  "index" : 36,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.609GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 1,
+    "executorRunTime" : 5,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9599,
+      "writeTime" : 340518,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5047,
+  "index" : 37,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.609GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9597,
+      "writeTime" : 402877,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5048,
+  "index" : 38,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.609GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 7,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9600,
+      "writeTime" : 265447,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5049,
+  "index" : 39,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.611GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 3,
+    "executorRunTime" : 23,
+    "resultSize" : 930,
+    "jvmGcTime" : 16,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9598,
+      "writeTime" : 304745,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5050,
+  "index" : 40,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.615GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 24,
+    "resultSize" : 930,
+    "jvmGcTime" : 16,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9600,
+      "writeTime" : 302371,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5051,
+  "index" : 41,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.615GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 1,
+    "executorRunTime" : 25,
+    "resultSize" : 930,
+    "jvmGcTime" : 16,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9600,
+      "writeTime" : 296177,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5052,
+  "index" : 42,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.615GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 24,
+    "resultSize" : 930,
+    "jvmGcTime" : 16,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9601,
+      "writeTime" : 962033,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5053,
+  "index" : 43,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.616GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 26,
+    "resultSize" : 930,
+    "jvmGcTime" : 16,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9600,
+      "writeTime" : 310335,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5054,
+  "index" : 44,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.616GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 110,
+    "resultSize" : 930,
+    "jvmGcTime" : 22,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9602,
+      "writeTime" : 299315,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5055,
+  "index" : 45,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.617GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 25,
+    "resultSize" : 930,
+    "jvmGcTime" : 16,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9603,
+      "writeTime" : 307821,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5056,
+  "index" : 46,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.617GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 17,
+    "executorRunTime" : 7,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9604,
+      "writeTime" : 306911,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5057,
+  "index" : 47,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.639GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 1,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9600,
+      "writeTime" : 274191,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5058,
+  "index" : 48,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.640GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 48,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9598,
+      "writeTime" : 10442141,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5059,
+  "index" : 49,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.641GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 7,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9601,
+      "writeTime" : 300675,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5060,
+  "index" : 50,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.642GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 24,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9602,
+      "writeTime" : 812196,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5061,
+  "index" : 51,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.642GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 1,
+    "executorRunTime" : 6,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9600,
+      "writeTime" : 313090,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5062,
+  "index" : 52,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.642GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 17,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9598,
+      "writeTime" : 1572828,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5063,
+  "index" : 53,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.643GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 7,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9597,
+      "writeTime" : 312481,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5064,
+  "index" : 54,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.646GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 13,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9600,
+      "writeTime" : 296976,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5065,
+  "index" : 55,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.650GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 7,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9600,
+      "writeTime" : 670271,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5066,
+  "index" : 56,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.650GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 10,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9601,
+      "writeTime" : 1240309,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5067,
+  "index" : 57,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.650GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 9,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9601,
+      "writeTime" : 678632,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5068,
+  "index" : 58,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.659GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 7,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9600,
+      "writeTime" : 302888,
+      "recordsWritten" : 100
+    }
+  }
+}, {
+  "taskId" : 5069,
+  "index" : 59,
+  "attempt" : 0,
+  "launchTime" : "2015-03-26T19:19:59.660GMT",
+  "executorId" : "<driver>",
+  "host" : "localhost",
+  "taskLocality" : "PROCESS_LOCAL",
+  "speculative" : false,
+  "accumulatorUpdates" : [ ],
+  "taskMetrics" : {
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 7,
+    "resultSize" : 930,
+    "jvmGcTime" : 0,
+    "resultSerializationTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "diskBytesSpilled" : 0,
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 9610,
+      "writeTime" : 383153,
+      "recordsWritten" : 100
+    }
+  }
+} ]
