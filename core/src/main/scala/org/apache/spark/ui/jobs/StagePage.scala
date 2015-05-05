@@ -28,14 +28,16 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
 import org.apache.spark.ui.jobs.UIData._
+import org.apache.spark.ui.scope.RDDOperationGraph
 import org.apache.spark.util.{Utils, Distribution}
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
-  private val listener = parent.listener
+  private val progressListener = parent.progressListener
+  private val operationGraphListener = parent.operationGraphListener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    listener.synchronized {
+    progressListener.synchronized {
       val parameterId = request.getParameter("id")
       require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
@@ -44,7 +46,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val stageId = parameterId.toInt
       val stageAttemptId = parameterAttempt.toInt
-      val stageDataOption = listener.stageIdToData.get((stageId, stageAttemptId))
+      val stageDataOption = progressListener.stageIdToData.get((stageId, stageAttemptId))
 
       val stageHeader = s"Details for Stage $stageId (Attempt $stageAttemptId)"
       if (stageDataOption.isEmpty) {
@@ -68,7 +70,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
 
       val numCompleted = tasks.count(_.taskInfo.finished)
-      val accumulables = listener.stageIdToData((stageId, stageAttemptId)).accumulables
+      val accumulables = progressListener.stageIdToData((stageId, stageAttemptId)).accumulables
       val hasAccumulators = accumulables.size > 0
 
       val summary =
@@ -176,6 +178,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             </ul>
           </div>
         </div>
+
+      val dagViz = UIUtils.showDagVizForStage(
+        stageId, operationGraphListener.getOperationGraphForStage(stageId))
 
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
       def accumulableRow(acc: AccumulableInfo): Elem =
@@ -442,13 +447,14 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val content =
         summary ++
         showAdditionalMetrics ++
+        dagViz ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         maybeAccumulableTable ++
         <h4>Tasks</h4> ++ taskTable
 
-      UIUtils.headerSparkPage(stageHeader, content, parent)
+      UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
     }
   }
 

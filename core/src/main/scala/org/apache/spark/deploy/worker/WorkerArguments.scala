@@ -105,7 +105,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
       if (masters != null) {  // Two positional arguments were given
         printUsageAndExit(1)
       }
-      masters = value.stripPrefix("spark://").split(",").map("spark://" + _)
+      masters = Utils.parseStandaloneMasterUrls(value)
       parse(tail)
 
     case Nil =>

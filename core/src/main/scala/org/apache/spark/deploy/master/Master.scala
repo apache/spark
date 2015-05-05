@@ -254,7 +254,8 @@ private[master] class Master(
 
     case RequestSubmitDriver(description) => {
       if (state != RecoveryState.ALIVE) {
-        val msg = s"Can only accept driver submissions in ALIVE state. Current state: $state."
+        val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
+          "Can only accept driver submissions in ALIVE state."
         sender ! SubmitDriverResponse(false, None, msg)
       } else {
         logInfo("Driver submitted " + description.command.mainClass)
@@ -274,7 +275,8 @@ private[master] class Master(
 
     case RequestKillDriver(driverId) => {
       if (state != RecoveryState.ALIVE) {
-        val msg = s"Can only kill drivers in ALIVE state. Current state: $state."
+        val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
+          s"Can only kill drivers in ALIVE state."
         sender ! KillDriverResponse(driverId, success = false, msg)
       } else {
         logInfo("Asked to kill driver " + driverId)
@@ -305,12 +307,18 @@ private[master] class Master(
     }
 
     case RequestDriverStatus(driverId) => {
-      (drivers ++ completedDrivers).find(_.id == driverId) match {
-        case Some(driver) =>
-          sender ! DriverStatusResponse(found = true, Some(driver.state),
-            driver.worker.map(_.id), driver.worker.map(_.hostPort), driver.exception)
-        case None =>
-          sender ! DriverStatusResponse(found = false, None, None, None, None)
+      if (state != RecoveryState.ALIVE) {
+        val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
+          "Can only request driver status in ALIVE state."
+        sender ! DriverStatusResponse(found = false, None, None, None, Some(new Exception(msg)))
+      } else {
+        (drivers ++ completedDrivers).find(_.id == driverId) match {
+          case Some(driver) =>
+            sender ! DriverStatusResponse(found = true, Some(driver.state),
+              driver.worker.map(_.id), driver.worker.map(_.hostPort), driver.exception)
+          case None =>
+            sender ! DriverStatusResponse(found = false, None, None, None, None)
+        }
       }
     }
 

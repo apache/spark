@@ -28,6 +28,59 @@ import org.apache.spark.sql.execution.stat._
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
+   * Calculate the sample covariance of two numerical columns of a DataFrame.
+   * @param col1 the name of the first column
+   * @param col2 the name of the second column
+   * @return the covariance of the two columns.
+   */
+  def cov(col1: String, col2: String): Double = {
+    StatFunctions.calculateCov(df, Seq(col1, col2))
+  }
+
+  /*
+   * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
+   * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in 
+   * MLlib's Statistics.
+   *
+   * @param col1 the name of the column
+   * @param col2 the name of the column to calculate the correlation against
+   * @return The Pearson Correlation Coefficient as a Double.
+   */
+  def corr(col1: String, col2: String, method: String): Double = {
+    require(method == "pearson", "Currently only the calculation of the Pearson Correlation " +
+      "coefficient is supported.")
+    StatFunctions.pearsonCorrelation(df, Seq(col1, col2))
+  }
+
+  /**
+   * Calculates the Pearson Correlation Coefficient of two columns of a DataFrame.
+   *
+   * @param col1 the name of the column
+   * @param col2 the name of the column to calculate the correlation against
+   * @return The Pearson Correlation Coefficient as a Double.
+   */
+  def corr(col1: String, col2: String): Double = {
+    corr(col1, col2, "pearson")
+  }
+
+  /**
+   * Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
+   * The number of distinct values for each column should be less than 1e4. The first
+   * column of each row will be the distinct values of `col1` and the column names will be the
+   * distinct values of `col2`. The name of the first column will be `$col1_$col2`. Counts will be
+   * returned as `Long`s. Pairs that have no occurrences will have `null` as their counts.
+   *
+   * @param col1 The name of the first column. Distinct items will make the first item of
+   *             each row.
+   * @param col2 The name of the second column. Distinct items will make the column names
+   *             of the DataFrame.
+   * @return A Local DataFrame containing the table
+   */
+  def crosstab(col1: String, col2: String): DataFrame = {
+    StatFunctions.crossTabulate(df, col1, col2)
+  }
+
+  /**
    * Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
    * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
@@ -43,7 +96,10 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Runs `freqItems` with a default `support` of 1%.
+   * Finding frequent items for columns, possibly with false positives. Using the
+   * frequent element count algorithm described in
+   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * Uses a `default` support of 1%.
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
@@ -55,24 +111,14 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * Python friendly implementation for `freqItems`
    */
-  def freqItems(cols: List[String], support: Double): DataFrame = {
+  def freqItems(cols: Seq[String], support: Double): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, support)
   }
 
   /**
    * Python friendly implementation for `freqItems` with a default `support` of 1%.
    */
-  def freqItems(cols: List[String]): DataFrame = {
+  def freqItems(cols: Seq[String]): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, 0.01)
-  }
-
-  /**
-   * Calculate the sample covariance of two numerical columns of a DataFrame.
-   * @param col1 the name of the first column
-   * @param col2 the name of the second column
-   * @return the covariance of the two columns.
-   */
-  def cov(col1: String, col2: String): Double = {
-    StatFunctions.calculateCov(df, Seq(col1, col2))
   }
 }

@@ -19,8 +19,11 @@ package org.apache.spark.network.server;
 
 import java.io.Closeable;
 import java.net.InetSocketAddress;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
@@ -44,15 +47,23 @@ public class TransportServer implements Closeable {
 
   private final TransportContext context;
   private final TransportConf conf;
+  private final RpcHandler appRpcHandler;
+  private final List<TransportServerBootstrap> bootstraps;
 
   private ServerBootstrap bootstrap;
   private ChannelFuture channelFuture;
   private int port = -1;
 
   /** Creates a TransportServer that binds to the given port, or to any available if 0. */
-  public TransportServer(TransportContext context, int portToBind) {
+  public TransportServer(
+      TransportContext context,
+      int portToBind,
+      RpcHandler appRpcHandler,
+      List<TransportServerBootstrap> bootstraps) {
     this.context = context;
     this.conf = context.getConf();
+    this.appRpcHandler = appRpcHandler;
+    this.bootstraps = Lists.newArrayList(Preconditions.checkNotNull(bootstraps));
 
     init(portToBind);
   }
@@ -95,7 +106,11 @@ public class TransportServer implements Closeable {
     bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
       @Override
       protected void initChannel(SocketChannel ch) throws Exception {
-        context.initializePipeline(ch);
+        RpcHandler rpcHandler = appRpcHandler;
+        for (TransportServerBootstrap bootstrap : bootstraps) {
+          rpcHandler = bootstrap.doBootstrap(ch, rpcHandler);
+        }
+        context.initializePipeline(ch, rpcHandler);
       }
     });
 
