@@ -17,6 +17,23 @@
 
 package org.apache.spark.unsafe.sort;
 
+import java.io.File;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.UUID;
+
+import scala.Tuple2;
+import scala.Tuple2$;
+import scala.runtime.AbstractFunction1;
+
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+import static org.mockito.AdditionalAnswers.returnsFirstArg;
+import static org.mockito.AdditionalAnswers.returnsSecondArg;
+import static org.mockito.Mockito.*;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
@@ -31,22 +48,6 @@ import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 import org.apache.spark.util.Utils;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
-import scala.Tuple2;
-import scala.Tuple2$;
-import scala.runtime.AbstractFunction1;
-
-import java.io.File;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.UUID;
-
-import static org.mockito.Mockito.*;
-import static org.mockito.AdditionalAnswers.*;
 
 public class UnsafeExternalSorterSuite {
 
