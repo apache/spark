@@ -44,16 +44,21 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   // These type aliases are public because they're used in the types of public fields:
 
   type JobId = Int
+  type JobGroupId = String
   type StageId = Int
   type StageAttemptId = Int
   type PoolName = String
   type ExecutorId = String
+
+  // Applicatin:
+  @volatile var startTime = -1L
 
   // Jobs:
   val activeJobs = new HashMap[JobId, JobUIData]
   val completedJobs = ListBuffer[JobUIData]()
   val failedJobs = ListBuffer[JobUIData]()
   val jobIdToData = new HashMap[JobId, JobUIData]
+  val jobGroupToJobIds = new HashMap[JobGroupId, HashSet[JobId]]
 
   // Stages:
   val pendingStages = new HashMap[StageId, StageInfo]
@@ -73,6 +78,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   // Misc:
   val executorIdToBlockManagerId = HashMap[ExecutorId, BlockManagerId]()
+
   def blockManagerIds: Seq[BlockManagerId] = executorIdToBlockManagerId.values.toSeq
 
   var schedulingMode: Option[SchedulingMode] = None
@@ -119,7 +125,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     Map(
       "jobIdToData" -> jobIdToData.size,
       "stageIdToData" -> stageIdToData.size,
-      "stageIdToStageInfo" -> stageIdToInfo.size
+      "stageIdToStageInfo" -> stageIdToInfo.size,
+      "jobGroupToJobIds" -> jobGroupToJobIds.values.map(_.size).sum,
+      // Since jobGroupToJobIds is map of sets, check that we don't leak keys with empty values:
+      "jobGroupToJobIds keySet" -> jobGroupToJobIds.keys.size
     )
   }
 
@@ -140,7 +149,19 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     if (jobs.size > retainedJobs) {
       val toRemove = math.max(retainedJobs / 10, 1)
       jobs.take(toRemove).foreach { job =>
-        jobIdToData.remove(job.jobId)
+        // Remove the job's UI data, if it exists
+        jobIdToData.remove(job.jobId).foreach { removedJob =>
+          // A null jobGroupId is used for jobs that are run without a job group
+          val jobGroupId = removedJob.jobGroup.orNull
+          // Remove the job group -> job mapping entry, if it exists
+          jobGroupToJobIds.get(jobGroupId).foreach { jobsInGroup =>
+            jobsInGroup.remove(job.jobId)
+            // If this was the last job in this job group, remove the map entry for the job group
+            if (jobsInGroup.isEmpty) {
+              jobGroupToJobIds.remove(jobGroupId)
+            }
+          }
+        }
       }
       jobs.trimStart(toRemove)
     }
@@ -158,6 +179,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         stageIds = jobStart.stageIds,
         jobGroup = jobGroup,
         status = JobExecutionStatus.RUNNING)
+    // A null jobGroupId is used for jobs that are run without a job group
+    jobGroupToJobIds.getOrElseUpdate(jobGroup.orNull, new HashSet[JobId]).add(jobStart.jobId)
     jobStart.stageInfos.foreach(x => pendingStages(x.stageId) = x)
     // Compute (a potential underestimate of) the number of tasks that will be run by this job.
     // This may be an underestimate because the job start event references all of the result
@@ -497,6 +520,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     }
   }
 
+  override def onApplicationStart(appStarted: SparkListenerApplicationStart) {
+    startTime = appStarted.time
+  }
 }
 
 private object JobProgressListener {

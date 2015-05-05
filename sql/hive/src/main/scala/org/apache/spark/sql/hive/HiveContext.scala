@@ -20,6 +20,9 @@ package org.apache.spark.sql.hive
 import java.io.{BufferedReader, InputStreamReader, PrintStream}
 import java.sql.Timestamp
 
+import org.apache.hadoop.hive.ql.parse.VariableSubstitution
+import org.apache.spark.sql.catalyst.Dialect
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 
@@ -43,6 +46,15 @@ import org.apache.spark.sql.sources.{DDLParser, DataSourceStrategy}
 import org.apache.spark.sql.types._
 
 /**
+ * This is the HiveQL Dialect, this dialect is strongly bind with HiveContext
+ */
+private[hive] class HiveQLDialect extends Dialect {
+  override def parse(sqlText: String): LogicalPlan = {
+    HiveQl.parseSql(sqlText)
+  }
+}
+
+/**
  * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
  * Configuration for Hive is read from hive-site.xml on the classpath.
  */
@@ -56,6 +68,15 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   protected[sql] def convertMetastoreParquet: Boolean =
     getConf("spark.sql.hive.convertMetastoreParquet", "true") == "true"
+
+  /**
+   * When true, also tries to merge possibly different but compatible Parquet schemas in different
+   * Parquet data files.
+   *
+   * This configuration is only effective when "spark.sql.hive.convertMetastoreParquet" is true.
+   */
+  protected[sql] def convertMetastoreParquetWithSchemaMerging: Boolean =
+    getConf("spark.sql.hive.convertMetastoreParquet.mergeSchema", "false") == "true"
 
   /**
    * When true, a table created by a Hive CTAS statement (no USING clause) will be
@@ -72,24 +93,15 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[sql] def convertCTAS: Boolean =
     getConf("spark.sql.hive.convertCTAS", "false").toBoolean
 
+  @transient
+  protected[sql] lazy val substitutor = new VariableSubstitution()
+
+  protected[sql] override def parseSql(sql: String): LogicalPlan = {
+    super.parseSql(substitutor.substitute(hiveconf, sql))
+  }
+
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
-
-  @transient
-  protected[sql] val ddlParserWithHiveQL = new DDLParser(HiveQl.parseSql(_))
-
-  override def sql(sqlText: String): DataFrame = {
-    val substituted = new VariableSubstitution().substitute(hiveconf, sqlText)
-    // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
-    if (conf.dialect == "sql") {
-      super.sql(substituted)
-    } else if (conf.dialect == "hiveql") {
-      val ddlPlan = ddlParserWithHiveQL(sqlText, exceptionOnError = false)
-      DataFrame(this, ddlPlan.getOrElse(HiveQl.parseSql(substituted)))
-    }  else {
-      sys.error(s"Unsupported SQL dialect: ${conf.dialect}. Try 'sql' or 'hiveql'")
-    }
-  }
 
   /**
    * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
@@ -172,12 +184,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           val tableFullName =
             relation.hiveQlTable.getDbName + "." + relation.hiveQlTable.getTableName
 
-          catalog.client.alterTable(tableFullName, new Table(hiveTTable))
+          catalog.synchronized {
+            catalog.client.alterTable(tableFullName, new Table(hiveTTable))
+          }
         }
       case otherRelation =>
-        throw new NotImplementedError(
-          s"Analyze has only implemented for Hive tables, " +
-            s"but $tableName is a ${otherRelation.nodeName}")
+        throw new UnsupportedOperationException(
+          s"Analyze only works for Hive tables, but $tableName is a ${otherRelation.nodeName}")
     }
   }
 
@@ -239,7 +252,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
         ExtractPythonUdfs ::
-        ResolveUdtfsAlias ::
         sources.PreInsertCastAndRename ::
         Nil
     }
@@ -345,6 +357,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           """.stripMargin)
         throw e
     }
+  }
+
+  override protected[sql] def dialectClassName = if (conf.dialect == "hiveql") {
+    classOf[HiveQLDialect].getCanonicalName
+  } else {
+    super.dialectClassName
   }
 
   @transient

@@ -269,11 +269,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             </td> +: getFormattedTimeQuantiles(serializationTimes)
 
           val gettingResultTimes = validTasks.map { case TaskUIData(info, _, _) =>
-            if (info.gettingResultTime > 0) {
-              (info.finishTime - info.gettingResultTime).toDouble
-            } else {
-              0.0
-            }
+            getGettingResultTime(info).toDouble
           }
           val gettingResultQuantiles =
             <td>
@@ -464,7 +460,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
       val taskDeserializationTime = metrics.map(_.executorDeserializeTime).getOrElse(0L)
       val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
-      val gettingResultTime = info.gettingResultTime
+      val gettingResultTime = getGettingResultTime(info)
 
       val maybeAccumulators = info.accumulables
       val accumulatorsReadable = maybeAccumulators.map{acc => s"${acc.name}: ${acc.update.get}"}
@@ -627,6 +623,19 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     <td>{errorSummary}{details}</td>
   }
 
+  private def getGettingResultTime(info: TaskInfo): Long = {
+    if (info.gettingResultTime > 0) {
+      if (info.finishTime > 0) {
+        info.finishTime - info.gettingResultTime
+      } else {
+        // The task is still fetching the result.
+        System.currentTimeMillis - info.gettingResultTime
+      }
+    } else {
+      0L
+    }
+  }
+
   private def getSchedulerDelay(info: TaskInfo, metrics: TaskMetrics): Long = {
     val totalExecutionTime =
       if (info.gettingResult) {
@@ -638,6 +647,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       }
     val executorOverhead = (metrics.executorDeserializeTime +
       metrics.resultSerializationTime)
-    math.max(0, totalExecutionTime - metrics.executorRunTime - executorOverhead)
+    math.max(
+      0,
+      totalExecutionTime - metrics.executorRunTime - executorOverhead - getGettingResultTime(info))
   }
 }

@@ -28,6 +28,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * Data corresponding to one partition of a JDBCRDD.
@@ -99,7 +100,7 @@ private[sql] class DefaultSource extends RelationProvider {
     val upperBound = parameters.getOrElse("upperBound", null)
     val numPartitions = parameters.getOrElse("numPartitions", null)
 
-    if (driver != null) Class.forName(driver)
+    if (driver != null) DriverRegistry.register(driver)
 
     if (partitionColumn != null
         && (lowerBound == null || upperBound == null || numPartitions == null)) {
@@ -130,10 +131,12 @@ private[sql] case class JDBCRelation(
   extends BaseRelation
   with PrunedFilteredScan {
 
+  override val needConversion: Boolean = false
+
   override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-    val driver: String = DriverManager.getDriver(url).getClass.getCanonicalName
+    val driver: String = DriverRegistry.getDriverClassName(url)
     JDBCRDD.scanTable(
       sqlContext.sparkContext,
       schema,

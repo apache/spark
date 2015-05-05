@@ -66,7 +66,7 @@ private[hive] abstract class HiveFunctionRegistry
     } else if (classOf[UDAF].isAssignableFrom(functionInfo.getFunctionClass)) {
       HiveUdaf(new HiveFunctionWrapper(functionClassName), children)
     } else if (classOf[GenericUDTF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      HiveGenericUdtf(new HiveFunctionWrapper(functionClassName), Nil, children)
+      HiveGenericUdtf(new HiveFunctionWrapper(functionClassName), children)
     } else {
       sys.error(s"No handler for udf ${functionInfo.getFunctionClass}")
     }
@@ -266,7 +266,6 @@ private[hive] case class HiveUdaf(
  */
 private[hive] case class HiveGenericUdtf(
     funcWrapper: HiveFunctionWrapper,
-    aliasNames: Seq[String],
     children: Seq[Expression])
   extends Generator with HiveInspectors {
 
@@ -282,23 +281,8 @@ private[hive] case class HiveGenericUdtf(
   @transient
   protected lazy val udtInput = new Array[AnyRef](children.length)
 
-  protected lazy val outputDataTypes = outputInspector.getAllStructFieldRefs.map {
-    field => inspectorToDataType(field.getFieldObjectInspector)
-  }
-
-  override protected def makeOutput() = {
-    // Use column names when given, otherwise _c1, _c2, ... _cn.
-    if (aliasNames.size == outputDataTypes.size) {
-      aliasNames.zip(outputDataTypes).map {
-        case (attrName, attrDataType) =>
-          AttributeReference(attrName, attrDataType, nullable = true)()
-      }
-    } else {
-      outputDataTypes.zipWithIndex.map {
-        case (attrDataType, i) =>
-          AttributeReference(s"_c$i", attrDataType, nullable = true)()
-      }
-    }
+  lazy val elementTypes = outputInspector.getAllStructFieldRefs.map {
+    field => (inspectorToDataType(field.getFieldObjectInspector), true)
   }
 
   override def eval(input: Row): TraversableOnce[Row] = {
@@ -333,22 +317,6 @@ private[hive] case class HiveGenericUdtf(
   }
 }
 
-/**
- * Resolve Udtfs Alias.
- */
-private[spark] object ResolveUdtfsAlias extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case p @ Project(projectList, _)
-      if projectList.exists(_.isInstanceOf[MultiAlias]) && projectList.size != 1 =>
-      throw new TreeNodeException(p, "only single Generator supported for SELECT clause")
-
-    case Project(Seq(Alias(udtf @ HiveGenericUdtf(_, _, _), name)), child) =>
-        Generate(udtf.copy(aliasNames = Seq(name)), join = false, outer = false, None, child)
-    case Project(Seq(MultiAlias(udtf @ HiveGenericUdtf(_, _, _), names)), child) =>
-        Generate(udtf.copy(aliasNames = names), join = false, outer = false, None, child)
-  }
-}
-
 private[hive] case class HiveUdafFunction(
     funcWrapper: HiveFunctionWrapper,
     exprs: Seq[Expression],
@@ -375,9 +343,8 @@ private[hive] case class HiveUdafFunction(
 
   private val returnInspector = function.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
 
-  // Cast required to avoid type inference selecting a deprecated Hive API.
   private val buffer =
-    function.getNewAggregationBuffer.asInstanceOf[GenericUDAFEvaluator.AbstractAggregationBuffer]
+    function.getNewAggregationBuffer
 
   override def eval(input: Row): Any = unwrap(function.evaluate(buffer), returnInspector)
 

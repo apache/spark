@@ -35,8 +35,10 @@ class HiveTypeCoercionSuite extends HiveComparisonTest {
 
   val nullVal = "null"
   baseTypes.init.foreach { i =>
-    createQueryTest(s"case when then $i else $nullVal end ", s"SELECT case when true then $i else $nullVal end FROM src limit 1")
-    createQueryTest(s"case when then $nullVal else $i end ", s"SELECT case when true then $nullVal else $i end FROM src limit 1")
+    createQueryTest(s"case when then $i else $nullVal end ",
+      s"SELECT case when true then $i else $nullVal end FROM src limit 1")
+    createQueryTest(s"case when then $nullVal else $i end ",
+      s"SELECT case when true then $nullVal else $i end FROM src limit 1")
   }
 
   test("[SPARK-2210] boolean cast on boolean value should be removed") {

@@ -126,6 +126,16 @@ abstract class BaseRelation {
    * could lead to execution plans that are suboptimal (i.e. broadcasting a very large table).
    */
   def sizeInBytes: Long = sqlContext.conf.defaultSizeInBytes
+
+  /**
+   * Whether does it need to convert the objects in Row to internal representation, for example:
+   *  java.lang.String -> UTF8String
+   *  java.lang.Decimal -> Decimal
+   *
+   * Note: The internal representation is not stable across releases and thus data sources outside
+   * of Spark SQL should leave this as true.
+   */
+  def needConversion: Boolean = true
 }
 
 /**
@@ -151,6 +161,9 @@ trait PrunedScan {
  * ::DeveloperApi::
  * A BaseRelation that can eliminate unneeded columns and filter using selected
  * predicates before producing an RDD containing all matching tuples as Row objects.
+ *
+ * The actual filter should be the conjunction of all `filters`,
+ * i.e. they should be "and" together.
  *
  * The pushed down filters are currently purely an optimization as they will all be evaluated
  * again.  This means it is safe to use them with methods that produce false positives such

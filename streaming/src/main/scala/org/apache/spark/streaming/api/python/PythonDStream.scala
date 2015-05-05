@@ -176,11 +176,11 @@ private[python] abstract class PythonDStream(
 
   val func = new TransformFunction(pfunc)
 
-  override def dependencies = List(parent)
+  override def dependencies: List[DStream[_]] = List(parent)
 
   override def slideDuration: Duration = parent.slideDuration
 
-  val asJavaDStream  = JavaDStream.fromDStream(this)
+  val asJavaDStream: JavaDStream[Array[Byte]] = JavaDStream.fromDStream(this)
 }
 
 /**
@@ -212,7 +212,7 @@ private[python] class PythonTransformed2DStream(
 
   val func = new TransformFunction(pfunc)
 
-  override def dependencies = List(parent, parent2)
+  override def dependencies: List[DStream[_]] = List(parent, parent2)
 
   override def slideDuration: Duration = parent.slideDuration
 
@@ -223,7 +223,7 @@ private[python] class PythonTransformed2DStream(
     func(Some(rdd1), Some(rdd2), validTime)
   }
 
-  val asJavaDStream  = JavaDStream.fromDStream(this)
+  val asJavaDStream: JavaDStream[Array[Byte]] = JavaDStream.fromDStream(this)
 }
 
 /**
@@ -260,12 +260,15 @@ private[python] class PythonReducedWindowedDStream(
   extends PythonDStream(parent, preduceFunc) {
 
   super.persist(StorageLevel.MEMORY_ONLY)
-  override val mustCheckpoint = true
 
-  val invReduceFunc = new TransformFunction(pinvReduceFunc)
+  override val mustCheckpoint: Boolean = true
+
+  val invReduceFunc: TransformFunction = new TransformFunction(pinvReduceFunc)
 
   def windowDuration: Duration = _windowDuration
+
   override def slideDuration: Duration = _slideDuration
+
   override def parentRememberDuration: Duration = rememberDuration + windowDuration
 
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {

@@ -48,6 +48,11 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
 
   override def size: Int = _keySet.size
 
+  /** Tests whether this map contains a binding for a key. */
+  def contains(k: K): Boolean = {
+    _keySet.getPos(k) != OpenHashSet.INVALID_POS
+  }
+
   /** Get the value for a given key */
   def apply(k: K): V = {
     val pos = _keySet.getPos(k)

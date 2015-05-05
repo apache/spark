@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
 import org.apache.hadoop.hive.serde2.Deserializer
-import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
@@ -35,6 +35,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.DateUtils
+import org.apache.spark.util.Utils
 
 /**
  * A trait for subclasses that handle table scans.
@@ -76,7 +77,9 @@ class HadoopTableReader(
   override def makeRDDForTable(hiveTable: HiveTable): RDD[Row] =
     makeRDDForTable(
       hiveTable,
-      relation.tableDesc.getDeserializerClass.asInstanceOf[Class[Deserializer]],
+      Class.forName(
+        relation.tableDesc.getSerdeClassName, true, sc.sessionState.getConf.getClassLoader)
+        .asInstanceOf[Class[Deserializer]],
       filterOpt = None)
 
   /**
@@ -116,7 +119,7 @@ class HadoopTableReader(
       val hconf = broadcastedHiveConf.value.value
       val deserializer = deserializerClass.newInstance()
       deserializer.initialize(hconf, tableDesc.getProperties)
-      HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow)
+      HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
     }
 
     deserializedHadoopRDD
@@ -142,7 +145,46 @@ class HadoopTableReader(
       partitionToDeserializer: Map[HivePartition,
       Class[_ <: Deserializer]],
       filterOpt: Option[PathFilter]): RDD[Row] = {
-    val hivePartitionRDDs = partitionToDeserializer.map { case (partition, partDeserializer) =>
+        
+    // SPARK-5068:get FileStatus and do the filtering locally when the path is not exists
+    def verifyPartitionPath(
+        partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]]):
+        Map[HivePartition, Class[_ <: Deserializer]] = {
+      if (!sc.conf.verifyPartitionPath) {
+        partitionToDeserializer
+      } else {
+        var existPathSet = collection.mutable.Set[String]()
+        var pathPatternSet = collection.mutable.Set[String]()
+        partitionToDeserializer.filter {
+          case (partition, partDeserializer) =>
+            def updateExistPathSetByPathPattern(pathPatternStr: String) {
+              val pathPattern = new Path(pathPatternStr)
+              val fs = pathPattern.getFileSystem(sc.hiveconf)
+              val matches = fs.globStatus(pathPattern)
+              matches.foreach(fileStatus => existPathSet += fileStatus.getPath.toString)
+            }
+            // convert  /demo/data/year/month/day  to  /demo/data/*/*/*/
+            def getPathPatternByPath(parNum: Int, tempPath: Path): String = {
+              var path = tempPath
+              for (i <- (1 to parNum)) path = path.getParent
+              val tails = (1 to parNum).map(_ => "*").mkString("/", "/", "/")
+              path.toString + tails
+            }
+
+            val partPath = HiveShim.getDataLocationPath(partition)
+            val partNum = Utilities.getPartitionDesc(partition).getPartSpec.size();
+            var pathPatternStr = getPathPatternByPath(partNum, partPath)
+            if (!pathPatternSet.contains(pathPatternStr)) {
+              pathPatternSet += pathPatternStr
+              updateExistPathSetByPathPattern(pathPatternStr)
+            }
+            existPathSet.contains(partPath.toString)
+        }
+      }
+    }
+
+    val hivePartitionRDDs = verifyPartitionPath(partitionToDeserializer)
+      .map { case (partition, partDeserializer) =>
       val partDesc = Utilities.getPartitionDesc(partition)
       val partPath = HiveShim.getDataLocationPath(partition)
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
@@ -189,9 +231,13 @@ class HadoopTableReader(
         val hconf = broadcastedHiveConf.value.value
         val deserializer = localDeserializer.newInstance()
         deserializer.initialize(hconf, partProps)
+        // get the table deserializer
+        val tableSerDe = tableDesc.getDeserializerClass.newInstance()
+        tableSerDe.initialize(hconf, tableDesc.getProperties)
 
         // fill the non partition key attributes
-        HadoopTableReader.fillObject(iter, deserializer, nonPartitionKeyAttrs, mutableRow)
+        HadoopTableReader.fillObject(iter, deserializer, nonPartitionKeyAttrs,
+          mutableRow, tableSerDe)
       }
     }.toSeq
 
@@ -261,25 +307,36 @@ private[hive] object HadoopTableReader extends HiveInspectors {
    * Transform all given raw `Writable`s into `Row`s.
    *
    * @param iterator Iterator of all `Writable`s to be transformed
-   * @param deserializer The `Deserializer` associated with the input `Writable`
+   * @param rawDeser The `Deserializer` associated with the input `Writable`
    * @param nonPartitionKeyAttrs Attributes that should be filled together with their corresponding
    *                             positions in the output schema
    * @param mutableRow A reusable `MutableRow` that should be filled
+   * @param tableDeser Table Deserializer
    * @return An `Iterator[Row]` transformed from `iterator`
    */
   def fillObject(
       iterator: Iterator[Writable],
-      deserializer: Deserializer,
+      rawDeser: Deserializer,
       nonPartitionKeyAttrs: Seq[(Attribute, Int)],
-      mutableRow: MutableRow): Iterator[Row] = {
+      mutableRow: MutableRow,
+      tableDeser: Deserializer): Iterator[Row] = {
 
-    val soi = deserializer.getObjectInspector().asInstanceOf[StructObjectInspector]
+    val soi = if (rawDeser.getObjectInspector.equals(tableDeser.getObjectInspector)) {
+      rawDeser.getObjectInspector.asInstanceOf[StructObjectInspector]
+    } else {
+      HiveShim.getConvertedOI(
+        rawDeser.getObjectInspector,
+        tableDeser.getObjectInspector).asInstanceOf[StructObjectInspector]
+    }
+
     val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map { case (attr, ordinal) =>
       soi.getStructFieldRef(attr.name) -> ordinal
     }.unzip
 
-    // Builds specific unwrappers ahead of time according to object inspector types to avoid pattern
-    // matching and branching costs per row.
+    /**
+     * Builds specific unwrappers ahead of time according to object inspector
+     * types to avoid pattern matching and branching costs per row.
+     */
     val unwrappers: Seq[(Any, MutableRow, Int) => Unit] = fieldRefs.map {
       _.getFieldObjectInspector match {
         case oi: BooleanObjectInspector =>
@@ -316,9 +373,11 @@ private[hive] object HadoopTableReader extends HiveInspectors {
       }
     }
 
+    val converter = ObjectInspectorConverters.getConverter(rawDeser.getObjectInspector, soi)
+
     // Map each tuple to a row object
     iterator.map { value =>
-      val raw = deserializer.deserialize(value)
+      val raw = converter.convert(rawDeser.deserialize(value))
       var i = 0
       while (i < fieldRefs.length) {
         val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))

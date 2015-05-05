@@ -425,6 +425,12 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
 
     val model = lr.run(testRDD)
 
+    val numFeatures = testRDD.map(_.features.size).first()
+    val initialWeights = Vectors.dense(new Array[Double]((numFeatures + 1) * 2))
+    val model2 = lr.run(testRDD, initialWeights)
+
+    LogisticRegressionSuite.checkModelsEqual(model, model2)
+
     /**
      * The following is the instruction to reproduce the model using R's glmnet package.
      *

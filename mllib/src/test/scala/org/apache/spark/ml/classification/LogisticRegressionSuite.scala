@@ -46,6 +46,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(lr.getPredictionCol == "prediction")
     assert(lr.getRawPredictionCol == "rawPrediction")
     assert(lr.getProbabilityCol == "probability")
+    assert(lr.getFitIntercept == true)
     val model = lr.fit(dataset)
     model.transform(dataset)
       .select("label", "probability", "prediction", "rawPrediction")
@@ -55,6 +56,14 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.getPredictionCol == "prediction")
     assert(model.getRawPredictionCol == "rawPrediction")
     assert(model.getProbabilityCol == "probability")
+    assert(model.intercept !== 0.0)
+  }
+
+  test("logistic regression doesn't fit intercept when fitIntercept is off") {
+    val lr = new LogisticRegression
+    lr.setFitIntercept(false)
+    val model = lr.fit(dataset)
+    assert(model.intercept === 0.0)
   }
 
   test("logistic regression with setters") {
@@ -65,9 +74,10 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
       .setThreshold(0.6)
       .setProbabilityCol("myProbability")
     val model = lr.fit(dataset)
-    assert(model.fittingParamMap.get(lr.maxIter) === Some(10))
-    assert(model.fittingParamMap.get(lr.regParam) === Some(1.0))
-    assert(model.fittingParamMap.get(lr.threshold) === Some(0.6))
+    val parent = model.parent
+    assert(parent.getMaxIter === 10)
+    assert(parent.getRegParam === 1.0)
+    assert(parent.getThreshold === 0.6)
     assert(model.getThreshold === 0.6)
 
     // Modify model params, and check that the params worked.
@@ -90,9 +100,10 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     // Call fit() with new params, and check as many params as we can.
     val model2 = lr.fit(dataset, lr.maxIter -> 5, lr.regParam -> 0.1, lr.threshold -> 0.4,
       lr.probabilityCol -> "theProb")
-    assert(model2.fittingParamMap.get(lr.maxIter).get === 5)
-    assert(model2.fittingParamMap.get(lr.regParam).get === 0.1)
-    assert(model2.fittingParamMap.get(lr.threshold).get === 0.4)
+    val parent2 = model2.parent
+    assert(parent2.getMaxIter === 5)
+    assert(parent2.getRegParam === 0.1)
+    assert(parent2.getThreshold === 0.4)
     assert(model2.getThreshold === 0.4)
     assert(model2.getProbabilityCol == "theProb")
   }
@@ -108,7 +119,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     val results = model.transform(dataset)
 
     // Compare rawPrediction with probability
-    results.select("rawPrediction", "probability").collect().map {
+    results.select("rawPrediction", "probability").collect().foreach {
       case Row(raw: Vector, prob: Vector) =>
         assert(raw.size === 2)
         assert(prob.size === 2)
@@ -118,7 +129,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     }
 
     // Compare prediction with probability
-    results.select("prediction", "probability").collect().map {
+    results.select("prediction", "probability").collect().foreach {
       case Row(pred: Double, prob: Vector) =>
         val predFromProb = prob.toArray.zipWithIndex.maxBy(_._1)._2
         assert(pred == predFromProb)
