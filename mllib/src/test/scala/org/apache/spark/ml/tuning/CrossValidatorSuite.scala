@@ -56,6 +56,7 @@ class CrossValidatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
+    assert(cvModel.crossValidationMetrics.length == 4)
   }
 
   test("validateParams should check estimatorParamMaps") {
