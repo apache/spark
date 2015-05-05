@@ -527,6 +527,7 @@ class StreamingContext private[streaming] (
     validate()
     sparkContext.setCallSite(DStream.getCreationSite())
     scheduler.start()
+    uiTab.foreach(_.attach())
     state = Started
   }
 
