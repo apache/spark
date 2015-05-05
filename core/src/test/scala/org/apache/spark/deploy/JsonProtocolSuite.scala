@@ -28,9 +28,9 @@ import org.scalatest.FunSuite
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, RecoveryState, WorkerInfo}
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf}
 
-class JsonProtocolSuite extends FunSuite {
+class JsonProtocolSuite extends FunSuite with JsonTestUtils {
 
   test("writeApplicationInfo") {
     val output = JsonProtocol.writeApplicationInfo(createAppInfo())
@@ -135,16 +135,6 @@ class JsonProtocolSuite extends FunSuite {
     } catch {
       case e: JsonParseException => fail("Invalid Json detected", e)
     }
-  }
-
-  def assertValidDataInJson(validateJson: JValue, expectedJson: JValue) {
-    val Diff(c, a, d) = validateJson diff expectedJson
-    val validatePretty = JsonMethods.pretty(validateJson)
-    val expectedPretty = JsonMethods.pretty(expectedJson)
-    val errorMessage = s"Expected:\n$expectedPretty\nFound:\n$validatePretty"
-    assert(c === JNothing, s"$errorMessage\nChanged:\n${JsonMethods.pretty(c)}")
-    assert(a === JNothing, s"$errorMessage\nAdded:\n${JsonMethods.pretty(a)}")
-    assert(d === JNothing, s"$errorMessage\nDelected:\n${JsonMethods.pretty(d)}")
   }
 }
 
