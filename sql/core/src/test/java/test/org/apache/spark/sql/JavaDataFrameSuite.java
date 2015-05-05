@@ -188,6 +188,13 @@ public class JavaDataFrameSuite {
   }
 
   @Test
+  public void testCorrelation() {
+    DataFrame df = context.table("testData2");
+    Double pearsonCorr = df.stat().corr("a", "b", "pearson");
+    Assert.assertTrue(Math.abs(pearsonCorr) < 1e-6);
+  }
+
+  @Test
   public void testCovariance() {
     DataFrame df = context.table("testData2");
     Double result = df.stat().cov("a", "b");

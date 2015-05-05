@@ -179,7 +179,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
     <span class="expand-application-timeline">
       <span class="expand-application-timeline-arrow arrow-closed"></span>
-      <strong>Event Timeline</strong>
+      <strong>Event timeline</strong>
     </span> ++
     <div id="application-timeline" class="collapsed">
       <div class="control-panel">

@@ -66,7 +66,7 @@ private[ui] object BatchUIData {
   def apply(batchInfo: BatchInfo): BatchUIData = {
     new BatchUIData(
       batchInfo.batchTime,
-      batchInfo.receivedBlockInfo.mapValues(_.map(_.numRecords).sum),
+      batchInfo.streamIdToNumRecords,
       batchInfo.submissionTime,
       batchInfo.processingStartTime,
       batchInfo.processingEndTime

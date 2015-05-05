@@ -34,13 +34,16 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage with Params {
    * Fits a single model to the input data with optional parameters.
    *
    * @param dataset input dataset
-   * @param paramPairs Optional list of param pairs.
-   *                   These values override any specified in this Estimator's embedded ParamMap.
+   * @param firstParamPair the first param pair, overrides embedded params
+   * @param otherParamPairs other param pairs.  These values override any specified in this
+   *                        Estimator's embedded ParamMap.
    * @return fitted model
    */
   @varargs
-  def fit(dataset: DataFrame, paramPairs: ParamPair[_]*): M = {
-    val map = ParamMap(paramPairs: _*)
+  def fit(dataset: DataFrame, firstParamPair: ParamPair[_], otherParamPairs: ParamPair[_]*): M = {
+    val map = new ParamMap()
+      .put(firstParamPair)
+      .put(otherParamPairs: _*)
     fit(dataset, map)
   }
 
@@ -52,12 +55,19 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage with Params {
    *                 These values override any specified in this Estimator's embedded ParamMap.
    * @return fitted model
    */
-  def fit(dataset: DataFrame, paramMap: ParamMap): M
+  def fit(dataset: DataFrame, paramMap: ParamMap): M = {
+    copy(paramMap).fit(dataset)
+  }
+
+  /**
+   * Fits a model to the input data.
+   */
+  def fit(dataset: DataFrame): M
 
   /**
    * Fits multiple models to the input data with multiple sets of parameters.
    * The default implementation uses a for loop on each parameter map.
-   * Subclasses could overwrite this to optimize multi-model training.
+   * Subclasses could override this to optimize multi-model training.
    *
    * @param dataset input dataset
    * @param paramMaps An array of parameter maps.
@@ -66,5 +76,9 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage with Params {
    */
   def fit(dataset: DataFrame, paramMaps: Array[ParamMap]): Seq[M] = {
     paramMaps.map(fit(dataset, _))
+  }
+
+  override def copy(extra: ParamMap): Estimator[M] = {
+    super.copy(extra).asInstanceOf[Estimator[M]]
   }
 }

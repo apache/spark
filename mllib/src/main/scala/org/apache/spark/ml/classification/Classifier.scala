@@ -19,14 +19,12 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor, PredictorParams}
-import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
-
 
 /**
  * :: DeveloperApi ::
@@ -40,12 +38,10 @@ private[spark] trait ClassifierParams extends PredictorParams
 
   override protected def validateAndTransformSchema(
       schema: StructType,
-      paramMap: ParamMap,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    val parentSchema = super.validateAndTransformSchema(schema, paramMap, fitting, featuresDataType)
-    val map = extractParamMap(paramMap)
-    SchemaUtils.appendColumn(parentSchema, map(rawPredictionCol), new VectorUDT)
+    val parentSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    SchemaUtils.appendColumn(parentSchema, $(rawPredictionCol), new VectorUDT)
   }
 }
 
@@ -102,27 +98,16 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    *  - raw predictions (confidences) as [[rawPredictionCol]] of type [[Vector]].
    *
    * @param dataset input dataset
-   * @param paramMap additional parameters, overwrite embedded params
    * @return transformed dataset
    */
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
+  override def transform(dataset: DataFrame): DataFrame = {
     // This default implementation should be overridden as needed.
 
     // Check schema
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
-
-    // Prepare model
-    val tmpModel = if (paramMap.size != 0) {
-      val tmpModel = this.copy()
-      Params.inheritValues(paramMap, parent, tmpModel)
-      tmpModel
-    } else {
-      this
-    }
+    transformSchema(dataset.schema, logging = true)
 
     val (numColsOutput, outputData) =
-      ClassificationModel.transformColumnsImpl[FeaturesType](dataset, tmpModel, map)
+      ClassificationModel.transformColumnsImpl[FeaturesType](dataset, this)
     if (numColsOutput == 0) {
       logWarning(s"$uid: ClassificationModel.transform() was called as NOOP" +
         " since no output columns were set.")
@@ -158,7 +143,6 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    */
   @DeveloperApi
   protected def predictRaw(features: FeaturesType): Vector
-
 }
 
 private[ml] object ClassificationModel {
@@ -167,38 +151,35 @@ private[ml] object ClassificationModel {
    * Added prediction column(s).  This is separated from [[ClassificationModel.transform()]]
    * since it is used by [[org.apache.spark.ml.classification.ProbabilisticClassificationModel]].
    * @param dataset  Input dataset
-   * @param map  Parameter map.  This will NOT be merged with the embedded paramMap; the merge
-   *             should already be done.
    * @return (number of columns added, transformed dataset)
    */
   def transformColumnsImpl[FeaturesType](
       dataset: DataFrame,
-      model: ClassificationModel[FeaturesType, _],
-      map: ParamMap): (Int, DataFrame) = {
+      model: ClassificationModel[FeaturesType, _]): (Int, DataFrame) = {
 
     // Output selected columns only.
     // This is a bit complicated since it tries to avoid repeated computation.
     var tmpData = dataset
     var numColsOutput = 0
-    if (map(model.rawPredictionCol) != "") {
+    if (model.getRawPredictionCol != "") {
       // output raw prediction
       val features2raw: FeaturesType => Vector = model.predictRaw
-      tmpData = tmpData.withColumn(map(model.rawPredictionCol),
-        callUDF(features2raw, new VectorUDT, col(map(model.featuresCol))))
+      tmpData = tmpData.withColumn(model.getRawPredictionCol,
+        callUDF(features2raw, new VectorUDT, col(model.getFeaturesCol)))
       numColsOutput += 1
-      if (map(model.predictionCol) != "") {
+      if (model.getPredictionCol != "") {
         val raw2pred: Vector => Double = (rawPred) => {
           rawPred.toArray.zipWithIndex.maxBy(_._1)._2
         }
-        tmpData = tmpData.withColumn(map(model.predictionCol),
-          callUDF(raw2pred, DoubleType, col(map(model.rawPredictionCol))))
+        tmpData = tmpData.withColumn(model.getPredictionCol,
+          callUDF(raw2pred, DoubleType, col(model.getRawPredictionCol)))
         numColsOutput += 1
       }
-    } else if (map(model.predictionCol) != "") {
+    } else if (model.getPredictionCol != "") {
       // output prediction
       val features2pred: FeaturesType => Double = model.predict
-      tmpData = tmpData.withColumn(map(model.predictionCol),
-        callUDF(features2pred, DoubleType, col(map(model.featuresCol))))
+      tmpData = tmpData.withColumn(model.getPredictionCol,
+        callUDF(features2pred, DoubleType, col(model.getFeaturesCol)))
       numColsOutput += 1
     }
     (numColsOutput, tmpData)
