@@ -84,7 +84,7 @@ private[spark] abstract class ExternalBlockManager {
    */
   def getBytes(blockId: BlockId): Option[ByteBuffer]
 
-    /**
+  /**
    * Retrieve the block data.
    * @return Some(Iterator[Any]) if the block data is successfully retrieved
    *         None if the block does not exist in the external block store.

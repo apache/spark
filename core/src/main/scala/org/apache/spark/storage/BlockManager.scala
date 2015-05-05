@@ -17,7 +17,8 @@
 
 package org.apache.spark.storage
 
-import java.io.{BufferedOutputStream, ByteArrayOutputStream, File, InputStream, OutputStream}
+import java.io.{BufferedOutputStream, BufferedInputStream, ByteArrayOutputStream, File,
+  InputStream, OutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -489,14 +490,15 @@ private[spark] class BlockManager(
         if (level.useOffHeap) {
           logDebug(s"Getting block $blockId from ExternalBlockStore")
           if (externalBlockStore.contains(blockId)) {
-            externalBlockStore.getBytes(blockId) match {
-              case Some(bytes) =>
-                if (!asBlockResult) {
-                  return Some(bytes)
-                } else {
-                  return Some(new BlockResult(
-                    dataDeserialize(blockId, bytes), DataReadMethod.Memory, info.size))
-                }
+            val result = if (asBlockResult) {
+              externalBlockStore.getValues(blockId)
+              .map(new BlockResult(_, DataReadMethod.Memory, info.size))
+            } else {
+              externalBlockStore.getBytes(blockId)
+            }
+            result match {
+              case Some(values) =>
+                return result
               case None =>
                 logDebug(s"Block $blockId not found in externalBlockStore")
             }
@@ -1206,8 +1208,19 @@ private[spark] class BlockManager(
       bytes: ByteBuffer,
       serializer: Serializer = defaultSerializer): Iterator[Any] = {
     bytes.rewind()
-    val stream = wrapForCompression(blockId, new ByteBufferInputStream(bytes, true))
-    serializer.newInstance().deserializeStream(stream).asIterator
+    dataDeserializeStream(blockId, new ByteBufferInputStream(bytes, true), serializer)
+  }
+
+  /**
+   * Deserializes a InputStream into an iterator of values and disposes of it when the end of
+   * the iterator is reached.
+   */
+  def dataDeserializeStream(
+      blockId: BlockId,
+      inputStream: InputStream,
+      serializer: Serializer = defaultSerializer): Iterator[Any] = {
+    val stream = new BufferedInputStream(inputStream)
+    serializer.newInstance().deserializeStream(wrapForCompression(blockId, stream)).asIterator
   }
 
   def stop(): Unit = {

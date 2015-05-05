@@ -95,8 +95,23 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
   override def putBytes(blockId: BlockId, bytes: ByteBuffer): Unit = {
     val file = getFile(blockId)
     val os = file.getOutStream(WriteType.TRY_CACHE)
-    os.write(bytes.array())
-    os.close()
+    try {
+      os.write(bytes.array())
+      os.close()
+    } catch {
+      case e : Exception => os.cancel()
+    }
+  }
+
+  override def putValues(blockId: BlockId, values: Iterator[_]): Unit = {
+    val file = getFile(blockId)
+    val os = file.getOutStream(WriteType.TRY_CACHE)
+    try {
+      blockManager.dataSerializeStream(blockId, os, values)
+      os.close()
+    } catch {
+      case e : Exception =>  os.cancel()
+    }
   }
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
@@ -118,6 +133,16 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     } finally {
       is.close()
     }
+  }
+
+  override def getValues(blockId: BlockId): Option[Iterator[_]] = {
+    val file = getFile(blockId)
+    if (file == null || file.getLocationHosts().size() == 0) {
+      return None
+    }
+    val is = file.getInStream(ReadType.CACHE)
+    assert (is != null)
+    return Some(blockManager.dataDeserializeStream(blockId, is))
   }
 
   override def getSize(blockId: BlockId): Long = {
