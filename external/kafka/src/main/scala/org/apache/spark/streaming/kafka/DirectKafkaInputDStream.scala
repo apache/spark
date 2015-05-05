@@ -116,10 +116,9 @@ class DirectKafkaInputDStream[
     val rdd = KafkaRDD[K, V, U, T, R](
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
 
-    // Report the number of records of the batch interval to InputInfoTracker.
-    val currentNumRecords = currentOffsets.map(_._2).sum
-    val toBeProcessedNumRecords = untilOffsets.map(_._2.offset).sum
-    val inputInfo = InputInfo(id, toBeProcessedNumRecords - currentNumRecords)
+    // Report the record number of this batch interval to InputInfoTracker.
+    val numRecords = rdd.offsetRanges.map(r => r.untilOffset - r.fromOffset).sum
+    val inputInfo = InputInfo(id, numRecords)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
     currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)

@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.kafka
 
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -330,18 +331,13 @@ class DirectKafkaStreamSuite
     eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
       assert(allReceived.size === totalSent,
         "didn't get expected number of messages, messages:\n" + allReceived.mkString("\n"))
+
+      // Calculate all the record number collected in the StreamingListener.
+      assert(collector.numRecordsSubmitted.get() === totalSent)
+      assert(collector.numRecordsStarted.get() === totalSent)
+      assert(collector.numRecordsCompleted.get() === totalSent)
     }
     ssc.stop()
-
-    // Calculate all the record number collected in the StreamingListener.
-    val numRecordsSubmitted = collector.streamIdToNumRecordsSubmitted.map(_.values.sum).sum
-    assert(numRecordsSubmitted === totalSent)
-
-    val numRecordsStarted = collector.streamIdToNumRecordsStarted.map(_.values.sum).sum
-    assert(numRecordsStarted === totalSent)
-
-    val numRecordsCompleted = collector.streamIdToNumRecordsCompleted.map(_.values.sum).sum
-    assert(numRecordsCompleted === totalSent)
   }
 
   /** Get the generated offset ranges from the DirectKafkaStream */
@@ -358,22 +354,20 @@ object DirectKafkaStreamSuite {
   var total = -1L
 
   class InputInfoCollector extends StreamingListener {
-    val streamIdToNumRecordsSubmitted = new ArrayBuffer[Map[Int, Long]]()
-    val streamIdToNumRecordsStarted = new ArrayBuffer[Map[Int, Long]]()
-    val streamIdToNumRecordsCompleted = new ArrayBuffer[Map[Int, Long]]()
+    val numRecordsSubmitted = new AtomicLong(0L)
+    val numRecordsStarted = new AtomicLong(0L)
+    val numRecordsCompleted = new AtomicLong(0L)
 
-    override def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted): Unit =
-      synchronized {
-        streamIdToNumRecordsSubmitted += batchSubmitted.batchInfo.streamIdToNumRecords
+    override def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted): Unit = {
+      numRecordsSubmitted.addAndGet(batchSubmitted.batchInfo.numRecords)
     }
 
-    override def onBatchStarted(batchStarted: StreamingListenerBatchStarted): Unit = synchronized {
-      streamIdToNumRecordsStarted += batchStarted.batchInfo.streamIdToNumRecords
+    override def onBatchStarted(batchStarted: StreamingListenerBatchStarted): Unit = {
+      numRecordsStarted.addAndGet(batchStarted.batchInfo.numRecords)
     }
 
-    override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit =
-      synchronized {
-        streamIdToNumRecordsCompleted += batchCompleted.batchInfo.streamIdToNumRecords
+    override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
+      numRecordsCompleted.addAndGet(batchCompleted.batchInfo.numRecords)
     }
   }
 }
