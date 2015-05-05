@@ -119,7 +119,7 @@ class LogisticRegressionModel private[ml] (
     if (score(features) > getThreshold) 1 else 0
   }
 
-  override protected def raw2probabilitiesInPlace(rawPrediction: Vector): Vector = {
+  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {
       case dv: DenseVector =>
         var i = 0

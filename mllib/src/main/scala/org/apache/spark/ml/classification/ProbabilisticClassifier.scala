@@ -104,9 +104,9 @@ private[spark] abstract class ProbabilisticClassificationModel[
     }
     if ($(probabilityCol).nonEmpty) {
       val probUDF = if ($(rawPredictionCol).nonEmpty) {
-        callUDF(raw2probabilities _, new VectorUDT, col($(rawPredictionCol)))
+        callUDF(raw2probability _, new VectorUDT, col($(rawPredictionCol)))
       } else {
-        callUDF(predictProbabilities _, new VectorUDT, col($(featuresCol)))
+        callUDF(predictProbability _, new VectorUDT, col($(featuresCol)))
       }
       outputData = outputData.withColumn($(probabilityCol), probUDF)
       numColsOutput += 1
@@ -139,12 +139,12 @@ private[spark] abstract class ProbabilisticClassificationModel[
    *
    * @return Estimated class conditional probabilities (modified input vector)
    */
-  protected def raw2probabilitiesInPlace(rawPrediction: Vector): Vector
+  protected def raw2probabilityInPlace(rawPrediction: Vector): Vector
 
-  /** Non-in-place version of raw2probabilitiesInPlace */
-  protected def raw2probabilities(rawPrediction: Vector): Vector = {
+  /** Non-in-place version of [[raw2probabilityInPlace()]] */
+  protected def raw2probability(rawPrediction: Vector): Vector = {
     val probs = rawPrediction.copy
-    raw2probabilitiesInPlace(probs)
+    raw2probabilityInPlace(probs)
   }
 
   /**
@@ -155,9 +155,9 @@ private[spark] abstract class ProbabilisticClassificationModel[
    *
    * @return Estimated class conditional probabilities
    */
-  protected def predictProbabilities(features: FeaturesType): Vector = {
+  protected def predictProbability(features: FeaturesType): Vector = {
     val rawPreds = predictRaw(features)
-    raw2probabilitiesInPlace(rawPreds)
+    raw2probabilityInPlace(rawPreds)
   }
 
   /**
