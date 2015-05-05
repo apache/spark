@@ -19,12 +19,17 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
+
 import org.apache.spark.sql.types._
+
+/** A SQL Dialect for testing purpose, and it can not be nested type */
+class MyDialect extends DefaultDialect
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
@@ -46,6 +51,16 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
+  test("support table.star") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.*
+          |FROM testData l join testData2 r on (l.key = r.a)
+        """.stripMargin),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+  }
+
   test("self join with alias in agg") {
       Seq(1,2,3)
         .map(i => (i, i.toString))
@@ -62,6 +77,23 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
           |GROUP BY x.str
         """.stripMargin),
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+  }
+
+  test("SQL Dialect Switching to a new SQL parser") {
+    val newContext = new SQLContext(TestSQLContext.sparkContext)
+    newContext.setConf("spark.sql.dialect", classOf[MyDialect].getCanonicalName())
+    assert(newContext.getSQLDialect().getClass === classOf[MyDialect])
+    assert(newContext.sql("SELECT 1").collect() === Array(Row(1)))
+  }
+
+  test("SQL Dialect Switch to an invalid parser with alias") {
+    val newContext = new SQLContext(TestSQLContext.sparkContext)
+    newContext.sql("SET spark.sql.dialect=MyTestClass")
+    intercept[DialectException] {
+      newContext.sql("SELECT 1")
+    }
+    // test if the dialect set back to DefaultSQLDialect
+    assert(newContext.getSQLDialect().getClass === classOf[DefaultDialect])
   }
 
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {

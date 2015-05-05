@@ -15,6 +15,7 @@ TAGS
 RELEASE
 control
 docs
+docker.properties.template
 fairscheduler.xml.template
 spark-defaults.conf.template
 log4j.properties
@@ -29,7 +30,13 @@ spark-env.sh.template
 log4j-defaults.properties
 bootstrap-tooltip.js
 jquery-1.11.1.min.js
+d3.min.js
+dagre-d3.min.js
+graphlib-dot.min.js
 sorttable.js
+vis.min.js
+vis.min.css
+vis.map
 .*avsc
 .*txt
 .*json
@@ -67,5 +74,12 @@ logs
 .*scalastyle-output.xml
 .*dependency-reduced-pom.xml
 known_translations
+json_expectation
+local-1422981759269/*
+local-1422981780767/*
+local-1425081759269/*
+local-1426533911241/*
+local-1426633911242/*
+local-1427397477963/*
 DESCRIPTION
 NAMESPACE

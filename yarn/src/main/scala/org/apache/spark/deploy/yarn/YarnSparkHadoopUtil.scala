@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io._
+import java.io.File
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
@@ -25,7 +25,7 @@ import scala.collection.mutable.HashMap
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs._
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.{Master, JobConf}
 import org.apache.hadoop.security.Credentials
@@ -43,6 +43,8 @@ import org.apache.spark.util.Utils
  * Contains util methods to interact with Hadoop from spark.
  */
 class YarnSparkHadoopUtil extends SparkHadoopUtil {
+
+  private var tokenRenewer: Option[ExecutorDelegationTokenUpdater] = None
 
   override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     dest.addCredentials(source.getCredentials())
@@ -123,6 +125,15 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
         dstFs.addDelegationTokens(delegTokenRenewer, creds)
       }
     }
+  }
+
+  private[spark] override def startExecutorDelegationTokenRenewer(sparkConf: SparkConf): Unit = {
+    tokenRenewer = Some(new ExecutorDelegationTokenUpdater(sparkConf, conf))
+    tokenRenewer.get.updateCredentialsIfRequired()
+  }
+
+  private[spark] override def stopExecutorDelegationTokenRenewer(): Unit = {
+    tokenRenewer.foreach(_.stop())
   }
 
 }

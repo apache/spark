@@ -91,6 +91,10 @@ private[spark] class ApplicationMaster(
 
         // Propagate the application ID so that YarnClusterSchedulerBackend can pick it up.
         System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
+
+        // Propagate the attempt if, so that in case of event logging,
+        // different attempt's logs gets created in different directory
+        System.setProperty("spark.yarn.app.attemptId", appAttemptId.getAttemptId().toString())
       }
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
@@ -220,10 +224,11 @@ private[spark] class ApplicationMaster(
     val sc = sparkContextRef.get()
 
     val appId = client.getAttemptId().getApplicationId().toString()
+    val attemptId = client.getAttemptId().getAttemptId().toString()
     val historyAddress =
       sparkConf.getOption("spark.yarn.historyServer.address")
         .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
-        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}" }
+        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
         .getOrElse("")
 
     allocator = client.register(yarnConf,
@@ -280,7 +285,8 @@ private[spark] class ApplicationMaster(
   }
 
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
-    rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, 0, sparkConf, securityMgr)
+    val port = sparkConf.getInt("spark.yarn.am.port", 0)
+    rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, port, sparkConf, securityMgr)
     waitForSparkDriver()
     addAmIpFilter()
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)

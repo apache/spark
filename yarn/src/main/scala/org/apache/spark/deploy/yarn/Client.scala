@@ -390,9 +390,11 @@ private[spark] class Client(
       try {
         hadoopConfStream.setLevel(0)
         hadoopConfFiles.foreach { case (name, file) =>
-          hadoopConfStream.putNextEntry(new ZipEntry(name))
-          Files.copy(file, hadoopConfStream)
-          hadoopConfStream.closeEntry()
+          if (file.canRead()) {
+            hadoopConfStream.putNextEntry(new ZipEntry(name))
+            Files.copy(file, hadoopConfStream)
+            hadoopConfStream.closeEntry()
+          }
         }
       } finally {
         hadoopConfStream.close()
@@ -590,6 +592,10 @@ private[spark] class Client(
           throw new SparkException(msg)
         }
         javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+      }
+
+      sparkConf.getOption("spark.yarn.am.extraLibraryPath").foreach { paths =>
+        prefixEnv = Some(Utils.libraryPathEnvPrefix(Seq(paths)))
       }
     }
 

@@ -37,6 +37,7 @@ import org.apache.spark.util.Utils
 
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 /**
  * :: DeveloperApi ::
@@ -292,6 +293,17 @@ class SparkHadoopUtil extends Logging {
       }
     }
   }
+
+  /**
+   * Start a thread to periodically update the current user's credentials with new delegation
+   * tokens so that writes to HDFS do not fail.
+   */
+  private[spark] def startExecutorDelegationTokenRenewer(conf: SparkConf) {}
+
+  /**
+   * Stop the thread that does the delegation token updates.
+   */
+  private[spark] def stopExecutorDelegationTokenRenewer() {}
 }
 
 object SparkHadoopUtil {

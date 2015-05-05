@@ -365,6 +365,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val baseExpression: Parser[Expression] =
     ( "*" ^^^ UnresolvedStar(None)
+    | ident <~ "." ~ "*" ^^ { case tableName  => UnresolvedStar(Option(tableName)) }
     | primary
     )
 

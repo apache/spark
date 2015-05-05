@@ -19,6 +19,8 @@ package org.apache.spark.deploy.yarn
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{Executors, TimeUnit}
 
+import scala.language.postfixOps
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
@@ -131,7 +133,7 @@ private[yarn] class AMDelegationTokenRenewer(
       // Such errors are not fatal, so don't throw. Make sure they are logged though
       case e: Exception =>
         logWarning("Error while attempting to cleanup old tokens. If you are seeing many such " +
-          "warnings there may be an issue with your HDFS cluster.")
+          "warnings there may be an issue with your HDFS cluster.", e)
     }
   }
 

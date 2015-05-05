@@ -34,12 +34,12 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
   val jobCompletionTime = 1421191296660L
 
   private def createStageStartEvent(stageId: Int) = {
-    val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
+    val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, null, "")
     SparkListenerStageSubmitted(stageInfo)
   }
 
   private def createStageEndEvent(stageId: Int, failed: Boolean = false) = {
-    val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
+    val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, null, "")
     if (failed) {
       stageInfo.failureReason = Some("Failed!")
     }
@@ -51,7 +51,7 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
       stageIds: Seq[Int],
       jobGroup: Option[String] = None): SparkListenerJobStart = {
     val stageInfos = stageIds.map { stageId =>
-      new StageInfo(stageId, 0, stageId.toString, 0, null, "")
+      new StageInfo(stageId, 0, stageId.toString, 0, null, null, "")
     }
     val properties: Option[Properties] = jobGroup.map { groupId =>
       val props = new Properties()

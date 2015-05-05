@@ -17,20 +17,168 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.collection.mutable
-import scala.xml.{NodeSeq, Node}
+import java.util.Date
+
+import scala.collection.mutable.{Buffer, HashMap, ListBuffer}
+import scala.xml.{NodeSeq, Node, Unparsed}
 
 import javax.servlet.http.HttpServletRequest
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.jobs.UIData.ExecutorUIData
 
 /** Page showing statistics and stage list for a given job */
 private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
-  private val listener = parent.listener
+
+  private val STAGES_LEGEND =
+    <div class="legend-area"><svg width="150px" height="85px">
+      <rect class="completed-stage-legend"
+        x="5px" y="5px" width="20px" height="15px" rx="2px" ry="2px"></rect>
+      <text x="35px" y="17px">Completed</text>
+      <rect class="failed-stage-legend"
+        x="5px" y="30px" width="20px" height="15px" rx="2px" ry="2px"></rect>
+      <text x="35px" y="42px">Failed</text>
+      <rect class="active-stage-legend"
+        x="5px" y="55px" width="20px" height="15px" rx="2px" ry="2px"></rect>
+      <text x="35px" y="67px">Active</text>
+    </svg></div>.toString.filter(_ != '\n')
+
+  private val EXECUTORS_LEGEND =
+    <div class="legend-area"><svg width="150px" height="55px">
+      <rect class="executor-added-legend"
+        x="5px" y="5px" width="20px" height="15px" rx="2px" ry="2px"></rect>
+      <text x="35px" y="17px">Added</text>
+      <rect class="executor-removed-legend"
+        x="5px" y="30px" width="20px" height="15px" rx="2px" ry="2px"></rect>
+      <text x="35px" y="42px">Removed</text>
+    </svg></div>.toString.filter(_ != '\n')
+
+  private def makeStageEvent(stageInfos: Seq[StageInfo]): Seq[String] = {
+    stageInfos.map { stage =>
+      val stageId = stage.stageId
+      val attemptId = stage.attemptId
+      val name = stage.name
+      val status = stage.getStatusString
+      val submissionTime = stage.submissionTime.get
+      val completionTime = stage.completionTime.getOrElse(System.currentTimeMillis())
+
+      s"""
+         |{
+         |  'className': 'stage job-timeline-object ${status}',
+         |  'group': 'stages',
+         |  'start': new Date(${submissionTime}),
+         |  'end': new Date(${completionTime}),
+         |  'content': '<div class="job-timeline-content" data-toggle="tooltip"' +
+         |   'data-placement="top" data-html="true"' +
+         |   'data-title="${name} (Stage ${stageId}.${attemptId})<br>' +
+         |   'Status: ${status.toUpperCase}<br>' +
+         |   'Submission Time: ${UIUtils.formatDate(new Date(submissionTime))}' +
+         |   '${
+                 if (status != "running") {
+                   s"""<br>Completion Time: ${UIUtils.formatDate(new Date(completionTime))}"""
+                 } else {
+                   ""
+                 }
+              }">' +
+         |    '${name} (Stage ${stageId}.${attemptId})</div>',
+         |}
+       """.stripMargin
+    }
+  }
+
+  def makeExecutorEvent(executorUIDatas: HashMap[String, ExecutorUIData]): Seq[String] = {
+    val events = ListBuffer[String]()
+    executorUIDatas.foreach {
+      case (executorId, event) =>
+        val addedEvent =
+          s"""
+             |{
+             |  'className': 'executor added',
+             |  'group': 'executors',
+             |  'start': new Date(${event.startTime}),
+             |  'content': '<div class="executor-event-content"' +
+             |    'data-toggle="tooltip" data-placement="bottom"' +
+             |    'data-title="Executor ${executorId}<br>' +
+             |    'Added at ${UIUtils.formatDate(new Date(event.startTime))}"' +
+             |    'data-html="true">Executor ${executorId} added</div>'
+             |}
+           """.stripMargin
+        events += addedEvent
+
+        if (event.finishTime.isDefined) {
+          val removedEvent =
+            s"""
+               |{
+               |  'className': 'executor removed',
+               |  'group': 'executors',
+               |  'start': new Date(${event.finishTime.get}),
+               |  'content': '<div class="executor-event-content"' +
+               |    'data-toggle="tooltip" data-placement="bottom"' +
+               |    'data-title="Executor ${executorId}<br>' +
+               |    'Removed at ${UIUtils.formatDate(new Date(event.finishTime.get))}' +
+               |    '${
+                        if (event.finishReason.isDefined) {
+                          s"""<br>Reason: ${event.finishReason.get}"""
+                        } else {
+                          ""
+                        }
+                     }"' +
+               |    'data-html="true">Executor ${executorId} removed</div>'
+               |}
+             """.stripMargin
+            events += removedEvent
+        }
+    }
+    events.toSeq
+  }
+
+  private def makeTimeline(
+      stages: Seq[StageInfo],
+      executors: HashMap[String, ExecutorUIData],
+      appStartTime: Long): Seq[Node] = {
+
+    val stageEventJsonAsStrSeq = makeStageEvent(stages)
+    val executorsJsonAsStrSeq = makeExecutorEvent(executors)
+
+    val groupJsonArrayAsStr =
+      s"""
+          |[
+          |  {
+          |    'id': 'executors',
+          |    'content': '<div>Executors</div>${EXECUTORS_LEGEND}',
+          |  },
+          |  {
+          |    'id': 'stages',
+          |    'content': '<div>Stages</div>${STAGES_LEGEND}',
+          |  }
+          |]
+        """.stripMargin
+
+    val eventArrayAsStr =
+      (stageEventJsonAsStrSeq ++ executorsJsonAsStrSeq).mkString("[", ",", "]")
+
+    <span class="expand-job-timeline">
+      <span class="expand-job-timeline-arrow arrow-closed"></span>
+      <strong>Event timeline</strong>
+    </span> ++
+    <div id="job-timeline" class="collapsed">
+      <div class="control-panel">
+        <div id="job-timeline-zoom-lock">
+          <input type="checkbox" checked="checked"></input>
+          <span>Zoom Lock</span>
+        </div>
+      </div>
+    </div> ++
+    <script type="text/javascript">
+      {Unparsed(s"drawJobTimeline(${groupJsonArrayAsStr}, ${eventArrayAsStr}, ${appStartTime});")}
+    </script>
+  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val listener = parent.jobProgresslistener
+
     listener.synchronized {
       val parameterId = request.getParameter("id")
       require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
@@ -39,7 +187,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       val jobDataOption = listener.jobIdToData.get(jobId)
       if (jobDataOption.isEmpty) {
         val content =
-          <div>
+          <div id="no-info">
             <p>No information to display for job {jobId}</p>
           </div>
         return UIUtils.headerSparkPage(
@@ -51,14 +199,14 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
         // This could be empty if the JobProgressListener hasn't received information about the
         // stage or if the stage information has been garbage collected
         listener.stageIdToInfo.getOrElse(stageId,
-          new StageInfo(stageId, 0, "Unknown", 0, Seq.empty, "Unknown"))
+          new StageInfo(stageId, 0, "Unknown", 0, Seq.empty, Seq.empty, "Unknown"))
       }
 
-      val activeStages = mutable.Buffer[StageInfo]()
-      val completedStages = mutable.Buffer[StageInfo]()
+      val activeStages = Buffer[StageInfo]()
+      val completedStages = Buffer[StageInfo]()
       // If the job is completed, then any pending stages are displayed as "skipped":
-      val pendingOrSkippedStages = mutable.Buffer[StageInfo]()
-      val failedStages = mutable.Buffer[StageInfo]()
+      val pendingOrSkippedStages = Buffer[StageInfo]()
+      val failedStages = Buffer[StageInfo]()
       for (stage <- stages) {
         if (stage.submissionTime.isEmpty) {
           pendingOrSkippedStages += stage
@@ -75,18 +223,18 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
 
       val activeStagesTable =
         new StageTableBase(activeStages.sortBy(_.submissionTime).reverse,
-          parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+          parent.basePath, parent.jobProgresslistener, isFairScheduler = parent.isFairScheduler,
           killEnabled = parent.killEnabled)
       val pendingOrSkippedStagesTable =
         new StageTableBase(pendingOrSkippedStages.sortBy(_.stageId).reverse,
-          parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+          parent.basePath, parent.jobProgresslistener, isFairScheduler = parent.isFairScheduler,
           killEnabled = false)
       val completedStagesTable =
         new StageTableBase(completedStages.sortBy(_.submissionTime).reverse, parent.basePath,
-          parent.listener, isFairScheduler = parent.isFairScheduler, killEnabled = false)
+          parent.jobProgresslistener, isFairScheduler = parent.isFairScheduler, killEnabled = false)
       val failedStagesTable =
         new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse, parent.basePath,
-          parent.listener, isFairScheduler = parent.isFairScheduler)
+          parent.jobProgresslistener, isFairScheduler = parent.isFairScheduler)
 
       val shouldShowActiveStages = activeStages.nonEmpty
       val shouldShowPendingStages = !isComplete && pendingOrSkippedStages.nonEmpty
@@ -154,6 +302,16 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
         </div>
 
       var content = summary
+      val appStartTime = listener.startTime
+      val executorListener = parent.executorListener
+      val operationGraphListener = parent.operationGraphListener
+
+      content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,
+          executorListener.executorIdToData, appStartTime)
+
+      content ++= UIUtils.showDagVizForJob(
+        jobId, operationGraphListener.getOperationGraphForJob(jobId))
+
       if (shouldShowActiveStages) {
         content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++
           activeStagesTable.toNodeSeq
@@ -174,7 +332,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
         content ++= <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
           failedStagesTable.toNodeSeq
       }
-      UIUtils.headerSparkPage(s"Details for Job $jobId", content, parent)
+      UIUtils.headerSparkPage(s"Details for Job $jobId", content, parent, showVisualization = true)
     }
   }
 }
