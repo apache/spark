@@ -179,6 +179,11 @@ private[spark] object ClosureCleaner extends Logging {
       cleanTransitively: Boolean,
       accessedFields: Map[Class[_], Set[String]]): Unit = {
 
+    if (!isClosure(func.getClass)) {
+      logWarning("Expected a closure; got " + func.getClass.getName)
+      return
+    }
+
     // TODO: clean all inner closures first. This requires us to find the inner objects.
     // TODO: cache outerClasses / innerClasses / accessedFields
 
