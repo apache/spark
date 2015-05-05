@@ -948,11 +948,11 @@ class Airflow(BaseView):
         dag_id = request.args.get('dag_id')
         blur = request.args.get('blur') == 'true'
         arrange = request.args.get('arrange', "LR")
+        dag = dagbag.get_dag(dag_id)
         if dag_id not in dagbag.dags:
             flash('DAG "{0}" seems to be missing.'.format(dag_id), "error")
             return redirect(url_for('index'))
 
-        dag = dagbag.get_dag(dag_id)
         root = request.args.get('root')
         if root:
             dag = dag.sub_dag(
