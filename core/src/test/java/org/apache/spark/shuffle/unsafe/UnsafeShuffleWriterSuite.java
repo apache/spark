@@ -158,13 +158,18 @@ public class UnsafeShuffleWriterSuite {
 
 
     writer.write(numbersToSort.iterator());
-    final MapStatus mapStatus = writer.stop(true).get();
+    final Option<MapStatus> mapStatus = writer.stop(true);
+    Assert.assertTrue(mapStatus.isDefined());
 
     long sumOfPartitionSizes = 0;
     for (long size: partitionSizes) {
       sumOfPartitionSizes += size;
     }
     Assert.assertEquals(mergedOutputFile.length(), sumOfPartitionSizes);
+
+    // TODO: actually try to read the shuffle output?
+
+    // TODO: add a test that manually triggers spills in order to exercise the merging.
 
     // TODO: test that the temporary spill files were cleaned up after the merge.
   }

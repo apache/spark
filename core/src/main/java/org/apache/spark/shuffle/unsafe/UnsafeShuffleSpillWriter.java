@@ -118,7 +118,6 @@ public final class UnsafeShuffleSpillWriter {
     final File file = spilledFileInfo._2();
     final BlockId blockId = spilledFileInfo._1();
     final SpillInfo spillInfo = new SpillInfo(numPartitions, file, blockId);
-    spills.add(spillInfo);
 
     final SerializerInstance ser = new DummySerializerInstance();
     writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, writeMetrics);
@@ -154,7 +153,11 @@ public final class UnsafeShuffleSpillWriter {
 
     if (writer != null) {
       writer.commitAndClose();
-      spillInfo.partitionLengths[currentPartition] = writer.fileSegment().length();
+      // TODO: comment and explain why our handling of empty spills, etc.
+      if (currentPartition != -1) {
+        spillInfo.partitionLengths[currentPartition] = writer.fileSegment().length();
+        spills.add(spillInfo);
+      }
     }
     return spillInfo;
   }

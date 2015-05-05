@@ -157,7 +157,14 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
     final File outputFile = shuffleBlockManager.getDataFile(shuffleId, mapId);
     final int numPartitions = partitioner.numPartitions();
     final long[] partitionLengths = new long[numPartitions];
+
+    if (spills.length == 0) {
+      new FileOutputStream(outputFile).close();
+      return partitionLengths;
+    }
+
     final FileChannel[] spillInputChannels = new FileChannel[spills.length];
+    final long[] spillInputChannelPositions = new long[spills.length];
 
     // TODO: We need to add an option to bypass transferTo here since older Linux kernels are
     // affected by a bug here that can lead to data truncation; see the comments Utils.scala,
@@ -173,24 +180,29 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
 
     final FileChannel mergedFileOutputChannel = new FileOutputStream(outputFile).getChannel();
 
-    for (int partition = 0; partition < numPartitions; partition++ ) {
+    for (int partition = 0; partition < numPartitions; partition++) {
       for (int i = 0; i < spills.length; i++) {
-        final long bytesToTransfer = spills[i].partitionLengths[partition];
-        long bytesRemainingToBeTransferred = bytesToTransfer;
+        System.out.println("In partition " + partition + " and spill " + i );
+        final long partitionLengthInSpill = spills[i].partitionLengths[partition];
+        System.out.println("Partition length in spill is " + partitionLengthInSpill);
+        System.out.println("input channel position is " + spillInputChannels[i].position());
+        long bytesRemainingToBeTransferred = partitionLengthInSpill;
         final FileChannel spillInputChannel = spillInputChannels[i];
-        long fromPosition = spillInputChannel.position();
         while (bytesRemainingToBeTransferred > 0) {
-          bytesRemainingToBeTransferred -= spillInputChannel.transferTo(
-              fromPosition,
+          final long actualBytesTransferred = spillInputChannel.transferTo(
+              spillInputChannelPositions[i],
               bytesRemainingToBeTransferred,
               mergedFileOutputChannel);
+          spillInputChannelPositions[i] += actualBytesTransferred;
+          bytesRemainingToBeTransferred -= actualBytesTransferred;
         }
-        partitionLengths[partition] += bytesToTransfer;
+        partitionLengths[partition] += partitionLengthInSpill;
       }
     }
 
     // TODO: should this be in a finally block?
     for (int i = 0; i < spills.length; i++) {
+      assert(spillInputChannelPositions[i] == spills[i].file.length());
       spillInputChannels[i].close();
     }
     mergedFileOutputChannel.close();
