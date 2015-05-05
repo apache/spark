@@ -18,7 +18,6 @@
 package org.apache.spark.ui
 
 import java.text.SimpleDateFormat
-import java.util.concurrent.TimeUnit
 import java.util.{Locale, Date}
 
 import scala.xml.{Node, Text}
