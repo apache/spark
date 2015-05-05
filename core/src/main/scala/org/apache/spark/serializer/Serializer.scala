@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.annotation.{Experimental, DeveloperApi}
+import org.apache.spark.annotation.{Private, Experimental, DeveloperApi}
 import org.apache.spark.util.{Utils, ByteBufferInputStream, NextIterator}
 
 /**
@@ -65,28 +65,36 @@ abstract class Serializer {
   def newInstance(): SerializerInstance
 
   /**
+   * :: Private ::
    * Returns true if this serializer supports relocation of its serialized objects and false
-   * otherwise.  This should return true if and only if reordering the bytes of serialized objects
-   * in serialization stream output results in re-ordered input that can be read with the
-   * deserializer. For instance, the following should work if the serializer supports relocation:
+   * otherwise. This should return true if and only if reordering the bytes of serialized objects
+   * in serialization stream output is equivalent to having re-ordered those elements prior to
+   * serializing them. More specifically, the following should hold if a serializer supports
+   * relocation:
    *
-   *  serOut.open()
-   *  position = 0
-   *  serOut.write(obj1)
-   *  serOut.flush()
-   *  position = # of bytes writen to stream so far
-   *  obj1Bytes = [bytes 0 through position of stream]
-   *  serOut.write(obj2)
-   *  serOut.flush
-   *  position2 = # of bytes written to stream so far
-   *  obj2Bytes = bytes[position through position2 of stream]
+   * {{{
+   * serOut.open()
+   * position = 0
+   * serOut.write(obj1)
+   * serOut.flush()
+   * position = # of bytes writen to stream so far
+   * obj1Bytes = output[0:position-1]
+   * serOut.write(obj2)
+   * serOut.flush()
+   * position2 = # of bytes written to stream so far
+   * obj2Bytes = output[position:position2-1]
+   * serIn.open([obj2bytes] concatenate [obj1bytes]) should return (obj2, obj1)
+   * }}}
    *
-   *  serIn.open([obj2bytes] concatenate [obj1bytes]) should return (obj2, obj1)
+   * In general, this property should hold for serializers that are stateless.
    *
-   * See SPARK-7311 for more discussion.
+   * This API is private to Spark; this method should not be overridden in third-party subclasses
+   * or called in user code and is subject to removal in future Spark releases.
+   *
+   * See SPARK-7311 for more details.
    */
-  @Experimental
-  def supportsRelocationOfSerializedObjects: Boolean = false
+  @Private
+  private[spark] def supportsRelocationOfSerializedObjects: Boolean = false
 }
 
 
