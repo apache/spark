@@ -222,10 +222,11 @@ class SchedulerJob(BaseJob):
         function takes a lock on the DAG and timestamps the last run
         in ``last_scheduler_run``.
         """
+        DagModel = models.DagModel
         session = settings.Session()
 
-        DAG = models.DAG
-        db_dag = session.query(DAG).filter(DAG.dag_id==dag.dag_id).first()
+        db_dag = session.query(
+            DagModel).filter(DagModel.dag_id==dag.dag_id).first()
         last_scheduler_run = db_dag.last_scheduler_run or datetime(2000, 1, 1)
         secs_since_last = (
             datetime.now() - last_scheduler_run).total_seconds()
@@ -306,7 +307,7 @@ class SchedulerJob(BaseJob):
                         cmd = ti.command(local=True)
                         executor.queue_command(ti.key, cmd)
         # Releasing the lock
-        db_dag = session.query(DAG).filter(DAG.dag_id==dag.dag_id).first()
+        db_dag = session.query(DagModel).filter(DagModel.dag_id==dag.dag_id).first()
         db_dag.scheduler_lock = False
         session.merge(db_dag)
         session.commit()

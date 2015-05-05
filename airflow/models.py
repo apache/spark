@@ -117,16 +117,12 @@ class DagBag(object):
                 dag = self.dags[dag_id]
         else:
             orm_dag = DagModel.get_current(dag_id)
-            session = settings.Session()
-            dag = session.query(DAG).filter(DAG.dag_id == dag_id).first()
             self.process_file(
                 filepath=orm_dag.fileloc, only_if_updated=False)
             if dag_id in self.dags:
                 dag = self.dags[dag_id]
             else:
                 dag = None
-            session.commit()
-            session.close()
         return dag
 
     def process_file(self, filepath, only_if_updated=True, safe_mode=True):
@@ -1555,7 +1551,8 @@ class DAG(object):
 
     def pickle(self, main_session=None):
         session = main_session or settings.Session()
-        dag = session.query(DAG).filter(DAG.dag_id == self.dag_id).first()
+        dag = session.query(
+            DagModel).filter(DAG.dag_id == self.dag_id).first()
         dp = None
         if dag and dag.pickle_id:
             dp = session.query(DagPickle).filter(
