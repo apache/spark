@@ -22,19 +22,19 @@ import scala.collection.Map
 
 import org.apache.spark.JobExecutionStatus
 
-class ApplicationInfo(
+class ApplicationInfo private[spark](
     val id: String,
     val name: String,
     val attempts: Seq[ApplicationAttemptInfo])
 
-class ApplicationAttemptInfo(
+class ApplicationAttemptInfo private[spark](
     val attemptId: Option[String],
     val startTime: Date,
     val endTime: Date,
     val sparkUser: String,
     val completed: Boolean = false)
 
-class ExecutorStageSummary(
+class ExecutorStageSummary private[spark](
     val taskTime : Long,
     val failedTasks : Int,
     val succeededTasks : Int,
@@ -45,7 +45,7 @@ class ExecutorStageSummary(
     val memoryBytesSpilled : Long,
     val diskBytesSpilled : Long)
 
-class ExecutorSummary(
+class ExecutorSummary private[spark](
     val id: String,
     val hostPort: String,
     val rddBlocks: Int,
@@ -62,7 +62,7 @@ class ExecutorSummary(
     val maxMemory: Long,
     val executorLogs: Map[String, String])
 
-class JobData(
+class JobData private[spark](
     val jobId: Int,
     val name: String,
     val description: Option[String],
@@ -83,7 +83,7 @@ class JobData(
 
 // Q: should Tachyon size go in here as well?  currently the UI only shows it on the overall storage
 // page ... does anybody pay attention to it?
-class RDDStorageInfo(
+class RDDStorageInfo private[spark](
     val id: Int,
     val name: String,
     val numPartitions: Int,
@@ -94,20 +94,20 @@ class RDDStorageInfo(
     val dataDistribution: Option[Seq[RDDDataDistribution]],
     val partitions: Option[Seq[RDDPartitionInfo]])
 
-class RDDDataDistribution(
+class RDDDataDistribution private[spark](
     val address: String,
     val memoryUsed: Long,
     val memoryRemaining: Long,
     val diskUsed: Long)
 
-class RDDPartitionInfo(
+class RDDPartitionInfo private[spark](
     val blockName: String,
     val storageLevel: String,
     val memoryUsed: Long,
     val diskUsed: Long,
     val executors: Seq[String])
 
-class StageData(
+class StageData private[spark](
     val status: StageStatus,
     val stageId: Int,
     val attemptId: Int,
@@ -136,7 +136,7 @@ class StageData(
     val tasks: Option[Map[Long, TaskData]],
     val executorSummary:Option[Map[String,ExecutorStageSummary]])
 
-class TaskData(
+class TaskData private[spark](
     val taskId: Long,
     val index: Int,
     val attempt: Int,
@@ -149,7 +149,7 @@ class TaskData(
     val errorMessage: Option[String] = None,
     val taskMetrics: Option[TaskMetrics] = None)
 
-class TaskMetrics(
+class TaskMetrics private[spark](
     val executorDeserializeTime: Long,
     val executorRunTime: Long,
     val resultSize: Long,
@@ -162,15 +162,15 @@ class TaskMetrics(
     val shuffleReadMetrics: Option[ShuffleReadMetrics],
     val shuffleWriteMetrics: Option[ShuffleWriteMetrics])
 
-class InputMetrics(
+class InputMetrics private[spark](
     val bytesRead: Long,
     val recordsRead: Long)
 
-class OutputMetrics(
+class OutputMetrics private[spark](
     val bytesWritten: Long,
     val recordsWritten: Long)
 
-class ShuffleReadMetrics(
+class ShuffleReadMetrics private[spark](
     val remoteBlocksFetched: Int,
     val localBlocksFetched: Int,
     val fetchWaitTime: Long,
@@ -178,12 +178,12 @@ class ShuffleReadMetrics(
     val totalBlocksFetched: Int,
     val recordsRead: Long)
 
-class ShuffleWriteMetrics(
+class ShuffleWriteMetrics private[spark](
     val bytesWritten: Long,
     val writeTime: Long,
     val recordsWritten: Long)
 
-class TaskMetricDistributions(
+class TaskMetricDistributions private[spark](
     val quantiles: IndexedSeq[Double],
 
     val executorDeserializeTime: IndexedSeq[Double],
@@ -199,15 +199,15 @@ class TaskMetricDistributions(
     val shuffleReadMetrics: Option[ShuffleReadMetricDistributions],
     val shuffleWriteMetrics: Option[ShuffleWriteMetricDistributions])
 
-class InputMetricDistributions(
+class InputMetricDistributions private[spark](
     val bytesRead: IndexedSeq[Double],
     val recordsRead: IndexedSeq[Double])
 
-class OutputMetricDistributions(
+class OutputMetricDistributions private[spark](
     val bytesWritten: IndexedSeq[Double],
     val recordsWritten: IndexedSeq[Double])
 
-class ShuffleReadMetricDistributions(
+class ShuffleReadMetricDistributions private[spark](
     val readBytes: IndexedSeq[Double],
     val readRecords: IndexedSeq[Double],
     val remoteBlocksFetched: IndexedSeq[Double],
@@ -216,12 +216,12 @@ class ShuffleReadMetricDistributions(
     val remoteBytesRead: IndexedSeq[Double],
     val totalBlocksFetched: IndexedSeq[Double])
 
-class ShuffleWriteMetricDistributions(
+class ShuffleWriteMetricDistributions private[spark](
     val writeBytes: IndexedSeq[Double],
     val writeRecords: IndexedSeq[Double],
     val writeTime: IndexedSeq[Double])
 
-class AccumulableInfo (
+class AccumulableInfo private[spark](
     val id: Long,
     val name: String,
     val update: Option[String],
