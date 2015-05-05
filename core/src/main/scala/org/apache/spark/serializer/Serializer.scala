@@ -86,7 +86,8 @@ abstract class Serializer {
    * serIn.open([obj2bytes] concatenate [obj1bytes]) should return (obj2, obj1)
    * }}}
    *
-   * In general, this property should hold for serializers that are stateless.
+   * In general, this property should hold for serializers that are stateless and that do not
+   * write special metadata at the beginning or end of the serialization stream.
    *
    * This API is private to Spark; this method should not be overridden in third-party subclasses
    * or called in user code and is subject to removal in future Spark releases.
