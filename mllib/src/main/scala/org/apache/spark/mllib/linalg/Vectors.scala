@@ -150,6 +150,26 @@ sealed trait Vector extends Serializable {
       toDense
     }
   }
+
+  /**
+   * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
+   * Returns -1 if vector has length 0.
+   */
+  private[spark] def findMax: Int = {
+    if (size == 0) {
+      0
+    } else {
+      var maxIdx = 0
+      var maxValue = apply(0)
+      foreachActive { (idx, value) =>
+        if (value > maxValue) {
+          maxIdx = idx
+          maxValue = value
+        }
+      }
+      maxIdx
+    }
+  }
 }
 
 /**
