@@ -31,11 +31,10 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     columns: rawPrediction and label.
 
     >>> from pyspark.mllib.linalg import Vectors
-    >>> scoreAndLabels = sc.parallelize([
-    ...    (0.1, 0.0), (0.1, 1.0), (0.4, 0.0), (0.6, 0.0), (0.6, 1.0), (0.6, 1.0), (0.8, 1.0)])
-    >>> rawPredictionAndLabels = scoreAndLabels.map(
-    ...    lambda x: (Vectors.dense([1.0 - x[0], x[0]]), x[1]))
-    >>> dataset = rawPredictionAndLabels.toDF(["raw", "label"])
+    >>> scoreAndLabels = map(lambda x: (Vectors.dense([1.0 - x[0], x[0]]), x[1]),
+    ...    [(0.1, 0.0), (0.1, 1.0), (0.4, 0.0), (0.6, 0.0), (0.6, 1.0), (0.6, 1.0), (0.8, 1.0)])
+    >>> dataset = sqlContext.createDataFrame(scoreAndLabels, ["raw", "label"])
+    ...
     >>> evaluator = BinaryClassificationEvaluator(rawPredictionCol="raw")
     >>> evaluator.evaluate(dataset)
     0.70...
@@ -97,7 +96,7 @@ if __name__ == "__main__":
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    sc = SparkContext("local[2]", "ml.feature tests")
+    sc = SparkContext("local[2]", "ml.evaluation tests")
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
