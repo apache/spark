@@ -175,12 +175,8 @@ public final class TaskMemoryManager {
    * This address will remain valid as long as the corresponding page has not been freed.
    */
   public long encodePageNumberAndOffset(MemoryBlock page, long offsetInPage) {
-    if (inHeap) {
-      assert (page.pageNumber != -1) : "encodePageNumberAndOffset called with invalid page";
-      return (((long) page.pageNumber) << 51) | (offsetInPage & MASK_LONG_LOWER_51_BITS);
-    } else {
-      return offsetInPage;
-    }
+    assert (page.pageNumber != -1) : "encodePageNumberAndOffset called with invalid page";
+    return (((long) page.pageNumber) << 51) | (offsetInPage & MASK_LONG_LOWER_51_BITS);
   }
 
   /**
@@ -204,10 +200,13 @@ public final class TaskMemoryManager {
    * {@link TaskMemoryManager#encodePageNumberAndOffset(MemoryBlock, long)}
    */
   public long getOffsetInPage(long pagePlusOffsetAddress) {
+    final long offsetInPage = (pagePlusOffsetAddress & MASK_LONG_LOWER_51_BITS);
     if (inHeap) {
-      return (pagePlusOffsetAddress & MASK_LONG_LOWER_51_BITS);
+      return offsetInPage;
     } else {
-      return pagePlusOffsetAddress;
+      final int pageNumber = (int) ((pagePlusOffsetAddress & MASK_LONG_UPPER_13_BITS) >>> 51);
+      assert (pageNumber >= 0 && pageNumber < PAGE_TABLE_SIZE);
+      return pageTable[pageNumber].getBaseOffset() + offsetInPage;
     }
   }
 
