@@ -52,5 +52,7 @@ class CrossValidatorSuite extends FunSuite with MLlibTestSparkContext {
     val bestParamMap = cvModel.bestModel.fittingParamMap
     assert(bestParamMap(lr.regParam) === 0.001)
     assert(bestParamMap(lr.maxIter) === 10)
+    val cvMetrics = cvModel.crossValidatorMetrics
+    assert(cvMetrics.length == 4)
   }
 }

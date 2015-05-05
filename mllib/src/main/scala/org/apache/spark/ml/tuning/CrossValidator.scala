@@ -124,7 +124,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
-    val cvModel = new CrossValidatorModel(this, map, bestModel)
+    val cvModel = new CrossValidatorModel(this, map, bestModel, metrics)
     Params.inheritValues(map, this, cvModel)
     cvModel
   }
@@ -143,7 +143,8 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
 class CrossValidatorModel private[ml] (
     override val parent: CrossValidator,
     override val fittingParamMap: ParamMap,
-    val bestModel: Model[_])
+    val bestModel: Model[_],
+    val crossValidatorMetrics: Array[Double])
   extends Model[CrossValidatorModel] with CrossValidatorParams {
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
