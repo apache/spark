@@ -23,6 +23,8 @@ import org.apache.spark.{HashPartitioner, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
+import scala.collection.mutable.ArrayBuffer
+
 class VertexRDDSuite extends FunSuite with LocalSparkContext {
 
   private def vertices(sc: SparkContext, n: Int) = {
@@ -182,7 +184,8 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val verts = vertices(sc, n)
       val messageTargets = (0 to n) ++ (0 to n by 2)
       val messages = sc.parallelize(messageTargets.map(x => (x.toLong, 1)))
-      assert(verts.aggregateWithFold(messages, 10, _ + _).collect.toSet ===
+      assert(verts.aggregateWithFold(messages, new ArrayBuffer[Int](),
+        (buf, v) => buf.append(v)).collect.toSet ===
         (0 to n).map(x => (x.toLong, if (x % 2 == 0) 12 else 1)).toSet)
     }
   }
