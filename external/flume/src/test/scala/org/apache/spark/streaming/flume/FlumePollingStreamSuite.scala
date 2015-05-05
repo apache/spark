@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.flume
 
 import java.net.InetSocketAddress
-import java.util.concurrent.{Callable, ExecutorCompletionService, Executors}
+import java.util.concurrent._
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
@@ -57,11 +57,11 @@ class FlumePollingStreamSuite extends FunSuite with BeforeAndAfter with Logging 
 
   before(beforeFunction())
 
-  ignore("flume polling test") {
+  test("flume polling test") {
     testMultipleTimes(testFlumePolling)
   }
 
-  ignore("flume polling test multiple hosts") {
+  test("flume polling test multiple hosts") {
     testMultipleTimes(testFlumePollingMultipleHost)
   }
 
@@ -111,7 +111,7 @@ class FlumePollingStreamSuite extends FunSuite with BeforeAndAfter with Logging 
     outputStream.register()
     ssc.start()
 
-    writeAndVerify(Seq(channel), ssc, outputBuffer)
+    writeAndVerify(Seq(sink), Seq(channel), ssc, outputBuffer)
     assertChannelIsEmpty(channel)
     sink.stop()
     channel.stop()
@@ -156,7 +156,7 @@ class FlumePollingStreamSuite extends FunSuite with BeforeAndAfter with Logging 
 
     ssc.start()
     try {
-      writeAndVerify(Seq(channel, channel2), ssc, outputBuffer)
+      writeAndVerify(Seq(sink, sink2), Seq(channel, channel2), ssc, outputBuffer)
       assertChannelIsEmpty(channel)
       assertChannelIsEmpty(channel2)
     } finally {
@@ -167,26 +167,24 @@ class FlumePollingStreamSuite extends FunSuite with BeforeAndAfter with Logging 
     }
   }
 
-  def writeAndVerify(channels: Seq[MemoryChannel], ssc: StreamingContext,
+  def writeAndVerify(sinks: Seq[SparkSink], channels: Seq[MemoryChannel], ssc: StreamingContext,
     outputBuffer: ArrayBuffer[Seq[SparkFlumeEvent]]) {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val executor = Executors.newCachedThreadPool()
     val executorCompletion = new ExecutorCompletionService[Void](executor)
-    channels.map(channel => {
+
+    val latch = new CountDownLatch(batchCount * channels.size)
+    sinks.foreach(_.countdownWhenBatchReceived(latch))
+
+    channels.foreach(channel => {
       executorCompletion.submit(new TxnSubmitter(channel, clock))
     })
+
     for (i <- 0 until channels.size) {
       executorCompletion.take()
     }
-    val startTime = System.currentTimeMillis()
-    while (outputBuffer.size < batchCount * channels.size &&
-      System.currentTimeMillis() - startTime < 15000) {
-      logInfo("output.size = " + outputBuffer.size)
-      Thread.sleep(100)
-    }
-    val timeTaken = System.currentTimeMillis() - startTime
-    assert(timeTaken < 15000, "Operation timed out after " + timeTaken + " ms")
-    logInfo("Stopping context")
+
+    latch.await(15, TimeUnit.SECONDS)
     ssc.stop()
 
     val flattenedBuffer = outputBuffer.flatten
