@@ -78,7 +78,7 @@ public final class BitSetMethods {
         return true;
       }
     }
-    for (long i = SIZE_OF_LONG * widthInLong; i <= bitSetWidthInBytes; i++) {
+    for (long i = SIZE_OF_LONG * widthInLong; i < bitSetWidthInBytes; i++) {
       if (PlatformDependent.UNSAFE.getByte(baseObject, baseOffset + i) != 0) {
         return true;
       }
