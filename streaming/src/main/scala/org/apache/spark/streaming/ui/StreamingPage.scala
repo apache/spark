@@ -30,6 +30,8 @@ import org.apache.spark.ui._
 import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 
 /**
+ * A helper class to generate JavaScript and HTML for both timeline and histogram graphs.
+ *
  * @param timelineDivId the timeline `id` used in the html `div` tag
  * @param histogramDivId the timeline `id` used in the html `div` tag
  * @param data the data for the graph
@@ -95,6 +97,9 @@ private[ui] class GraphUIData(
 }
 
 /**
+ * A helper class for "scheduling delay", "processing time" and "total delay" to generate data that
+ * will be used in the timeline and histogram graphs.
+ *
  * @param data (batchTime, milliseconds). "milliseconds" is something like "processing time".
  */
 private[ui] class MillisecondsStatUIData(data: Seq[(Long, Long)]) {
@@ -119,6 +124,9 @@ private[ui] class MillisecondsStatUIData(data: Seq[(Long, Long)]) {
 }
 
 /**
+ * A helper class for "input rate" to generate data that will be used in the timeline and histogram
+ * graphs.
+ *
  * @param data (batchTime, event-rate).
  */
 private[ui] class EventRateUIData(val data: Seq[(Long, Double)]) {

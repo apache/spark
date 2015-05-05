@@ -186,7 +186,8 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   def streamIds: Seq[Int] = ssc.graph.getInputStreams().map(_.id)
 
   /**
-   * Return all of the event rates for each InputDStream in each batch.
+   * Return all of the event rates for each InputDStream in each batch. The key of the return value
+   * is the stream id, and the value is a sequence of batch time with its event rate.
    */
   def receivedEventRateWithBatchTime: Map[Int, Seq[(Long, Double)]] = synchronized {
     val _retainedBatches = retainedBatches
