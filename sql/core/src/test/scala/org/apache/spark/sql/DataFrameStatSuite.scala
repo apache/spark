@@ -24,26 +24,9 @@ import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 
 class DataFrameStatSuite extends FunSuite  {
-
-  import TestData._
+  
   val sqlCtx = TestSQLContext
   def toLetter(i: Int): String = (i + 97).toChar.toString
-  
-  test("Frequent Items") {
-    val rows = Seq.tabulate(1000) { i =>
-      if (i % 3 == 0) (1, toLetter(1), -1.0) else (i, toLetter(i), i * -1.0)
-    }
-    val df = rows.toDF("numbers", "letters", "negDoubles")
-
-    val results = df.stat.freqItems(Array("numbers", "letters"), 0.1)
-    val items = results.collect().head
-    items.getSeq[Int](0) should contain (1)
-    items.getSeq[String](1) should contain (toLetter(1))
-
-    val singleColResults = df.stat.freqItems(Array("negDoubles"), 0.1)
-    val items2 = singleColResults.collect().head
-    items2.getSeq[Double](0) should contain (-1.0)
-  }
 
   test("pearson correlation") {
     val df = Seq.tabulate(10)(i => (i, 2 * i, i * -1.0)).toDF("a", "b", "c")
@@ -76,7 +59,43 @@ class DataFrameStatSuite extends FunSuite  {
     intercept[IllegalArgumentException] {
       df.stat.cov("singles", "letters") // doesn't accept non-numerical dataTypes
     }
+    val decimalData = Seq.tabulate(6)(i => (BigDecimal(i % 3), BigDecimal(i % 2))).toDF("a", "b")
     val decimalRes = decimalData.stat.cov("a", "b")
     assert(math.abs(decimalRes) < 1e-12)
+  }
+
+  test("crosstab") {
+    val df = Seq((0, 0), (2, 1), (1, 0), (2, 0), (0, 0), (2, 0)).toDF("a", "b")
+    val crosstab = df.stat.crosstab("a", "b")
+    val columnNames = crosstab.schema.fieldNames
+    assert(columnNames(0) === "a_b")
+    assert(columnNames(1) === "0")
+    assert(columnNames(2) === "1")
+    val rows: Array[Row] = crosstab.collect().sortBy(_.getString(0))
+    assert(rows(0).get(0).toString === "0")
+    assert(rows(0).getLong(1) === 2L)
+    assert(rows(0).get(2) === null)
+    assert(rows(1).get(0).toString === "1")
+    assert(rows(1).getLong(1) === 1L)
+    assert(rows(1).get(2) === null)
+    assert(rows(2).get(0).toString === "2")
+    assert(rows(2).getLong(1) === 2L)
+    assert(rows(2).getLong(2) === 1L)
+  }
+
+  test("Frequent Items") {
+    val rows = Seq.tabulate(1000) { i =>
+      if (i % 3 == 0) (1, toLetter(1), -1.0) else (i, toLetter(i), i * -1.0)
+    }
+    val df = rows.toDF("numbers", "letters", "negDoubles")
+
+    val results = df.stat.freqItems(Array("numbers", "letters"), 0.1)
+    val items = results.collect().head
+    items.getSeq[Int](0) should contain (1)
+    items.getSeq[String](1) should contain (toLetter(1))
+
+    val singleColResults = df.stat.freqItems(Array("negDoubles"), 0.1)
+    val items2 = singleColResults.collect().head
+    items2.getSeq[Double](0) should contain (-1.0)
   }
 }

@@ -31,7 +31,7 @@ private[spark]
 class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds: Array[BlockId])
   extends RDD[T](sc, Nil) {
 
-  @transient lazy val locations_ = BlockManager.blockIdsToHosts(blockIds, SparkEnv.get)
+  @transient lazy val _locations = BlockManager.blockIdsToHosts(blockIds, SparkEnv.get)
   @volatile private var _isValid = true
 
   override def getPartitions: Array[Partition] = {
@@ -54,7 +54,7 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     assertValid()
-    locations_(split.asInstanceOf[BlockRDDPartition].blockId)
+    _locations(split.asInstanceOf[BlockRDDPartition].blockId)
   }
 
   /**
@@ -79,14 +79,14 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
 
   /** Check if this BlockRDD is valid. If not valid, exception is thrown. */
   private[spark] def assertValid() {
-    if (!_isValid) {
+    if (!isValid) {
       throw new SparkException(
         "Attempted to use %s after its blocks have been removed!".format(toString))
     }
   }
 
   protected def getBlockIdLocations(): Map[BlockId, Seq[String]] = {
-    locations_
+    _locations
   }
 }
 
