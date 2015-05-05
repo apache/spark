@@ -23,9 +23,12 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.Iterator;
 
+import org.apache.spark.shuffle.ShuffleMemoryManager;
 import scala.Option;
 import scala.Product2;
+import scala.collection.JavaConversions;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
 
@@ -50,14 +53,18 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
   private static final int SER_BUFFER_SIZE = 1024 * 1024;  // TODO: tune this
   private static final ClassTag<Object> OBJECT_CLASS_TAG = ClassTag$.MODULE$.Object();
 
+  private final BlockManager blockManager;
   private final IndexShuffleBlockManager shuffleBlockManager;
-  private final BlockManager blockManager = SparkEnv.get().blockManager();
-  private final int shuffleId;
-  private final int mapId;
   private final TaskMemoryManager memoryManager;
+  private final ShuffleMemoryManager shuffleMemoryManager;
   private final SerializerInstance serializer;
   private final Partitioner partitioner;
   private final ShuffleWriteMetrics writeMetrics;
+  private final int shuffleId;
+  private final int mapId;
+  private final TaskContext taskContext;
+  private final SparkConf sparkConf;
+
   private MapStatus mapStatus = null;
 
   /**
@@ -68,19 +75,31 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
   private boolean stopping = false;
 
   public UnsafeShuffleWriter(
+      BlockManager blockManager,
       IndexShuffleBlockManager shuffleBlockManager,
+      TaskMemoryManager memoryManager,
+      ShuffleMemoryManager shuffleMemoryManager,
       UnsafeShuffleHandle<K, V> handle,
       int mapId,
-      TaskContext context) {
+      TaskContext taskContext,
+      SparkConf sparkConf) {
+    this.blockManager = blockManager;
     this.shuffleBlockManager = shuffleBlockManager;
+    this.memoryManager = memoryManager;
+    this.shuffleMemoryManager = shuffleMemoryManager;
     this.mapId = mapId;
-    this.memoryManager = context.taskMemoryManager();
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.shuffleId = dep.shuffleId();
     this.serializer = Serializer.getSerializer(dep.serializer()).newInstance();
     this.partitioner = dep.partitioner();
     this.writeMetrics = new ShuffleWriteMetrics();
-    context.taskMetrics().shuffleWriteMetrics_$eq(Option.apply(writeMetrics));
+    taskContext.taskMetrics().shuffleWriteMetrics_$eq(Option.apply(writeMetrics));
+    this.taskContext = taskContext;
+    this.sparkConf = sparkConf;
+  }
+
+  public void write(Iterator<Product2<K, V>> records) {
+    write(JavaConversions.asScalaIterator(records));
   }
 
   public void write(scala.collection.Iterator<Product2<K, V>> records) {
@@ -101,12 +120,12 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
       scala.collection.Iterator<? extends Product2<K, V>> records) throws Exception {
     final UnsafeShuffleSpillWriter sorter = new UnsafeShuffleSpillWriter(
       memoryManager,
-      SparkEnv$.MODULE$.get().shuffleMemoryManager(),
-      SparkEnv$.MODULE$.get().blockManager(),
-      TaskContext.get(),
+      shuffleMemoryManager,
+      blockManager,
+      taskContext,
       4096, // Initial size (TODO: tune this!)
       partitioner.numPartitions(),
-      SparkEnv$.MODULE$.get().conf()
+      sparkConf
     );
 
     final byte[] serArray = new byte[SER_BUFFER_SIZE];

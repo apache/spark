@@ -88,12 +88,17 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
       context: TaskContext): ShuffleWriter[K, V] = {
     handle match {
       case unsafeShuffleHandle: UnsafeShuffleHandle[K, V] =>
+        val env = SparkEnv.get
         // TODO: do we need to do anything to register the shuffle here?
         new UnsafeShuffleWriter(
+          env.blockManager,
           shuffleBlockResolver.asInstanceOf[IndexShuffleBlockManager],
+          context.taskMemoryManager(),
+          env.shuffleMemoryManager,
           unsafeShuffleHandle,
           mapId,
-          context)
+          context,
+          env.conf)
       case other =>
         sortShuffleManager.getWriter(handle, mapId, context)
     }

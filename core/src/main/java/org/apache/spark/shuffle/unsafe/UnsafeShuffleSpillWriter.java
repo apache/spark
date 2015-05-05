@@ -69,13 +69,13 @@ public final class UnsafeShuffleSpillWriter {
   private final LinkedList<SpillInfo> spills = new LinkedList<SpillInfo>();
 
   public UnsafeShuffleSpillWriter(
-    TaskMemoryManager memoryManager,
-    ShuffleMemoryManager shuffleMemoryManager,
-    BlockManager blockManager,
-    TaskContext taskContext,
-    int initialSize,
-    int numPartitions,
-    SparkConf conf) throws IOException {
+      TaskMemoryManager memoryManager,
+      ShuffleMemoryManager shuffleMemoryManager,
+      BlockManager blockManager,
+      TaskContext taskContext,
+      int initialSize,
+      int numPartitions,
+      SparkConf conf) throws IOException {
     this.memoryManager = memoryManager;
     this.shuffleMemoryManager = shuffleMemoryManager;
     this.blockManager = blockManager;
@@ -266,7 +266,7 @@ public final class UnsafeShuffleSpillWriter {
     if (sorter != null) {
       writeSpillFile();
     }
-    return (SpillInfo[]) spills.toArray();
+    return spills.toArray(new SpillInfo[0]);
   }
 
 }
