@@ -259,7 +259,6 @@
     <dependency>
       <groupId>org.apache.ivy</groupId>
       <artifactId>ivy</artifactId>
-      <version>${ivy.version}</version>
     </dependency>
     <dependency>
       <groupId>oro</groupId>
