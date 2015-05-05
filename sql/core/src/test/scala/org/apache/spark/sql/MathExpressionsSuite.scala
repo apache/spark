@@ -19,8 +19,7 @@ package org.apache.spark.sql
 
 import java.lang.{Double => JavaDouble}
 
-import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.mathfunctions._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 
