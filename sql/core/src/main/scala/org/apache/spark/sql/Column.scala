@@ -113,7 +113,6 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def === (other: Any): Column = {
     val right = lit(other).expr
     if (this.expr == right) {
-      println("other is " + other + " " + other.asInstanceOf[Column].expr.getClass)
       logWarning(
         s"Constructing trivially true equals predicate, '${this.expr} = $right'. " +
           "Perhaps you need to use aliases.")
