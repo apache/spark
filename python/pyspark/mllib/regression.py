@@ -402,26 +402,22 @@ class IsotonicRegressionModel(Saveable, Loader):
 
     """Regression model for isotonic regression.
 
-    >>> data = [(2, 1, 1), (1, 1, 1), (4, 2, 1), (2, 2, 1), (6, 3, 1), (5, 3, 1)]
+    >>> data = [(1, 0, 1), (2, 1, 1), (3, 2, 1), (1, 3, 1), (6, 4, 1), (17, 5, 1), (16, 6, 1)]
     >>> irm = IsotonicRegression.train(sc.parallelize(data))
-    >>> irm.predict(1.5)
+    >>> irm.predict(3)
     2.0
-    >>> irm.predict(2.5)
-    4.5
-    >>> irm.predict(4)
-    6.0
-    >>> irm.predict(sc.parallelize([1.5, 2.5, 4])).collect()
-    [2.0, 4.5, 6.0]
+    >>> irm.predict(5)
+    16.5
+    >>> irm.predict(sc.parallelize([3, 5])).collect()
+    [2.0, 16.5]
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> irm.save(sc, path)
     >>> sameModel = IsotonicRegressionModel.load(sc, path)
-    >>> sameModel.predict(1.5)
+    >>> sameModel.predict(3)
     2.0
-    >>> sameModel.predict(2.5)
-    4.5
-    >>> sameModel.predict(4)
-    6.0
+    >>> sameModel.predict(5)
+    16.5
     >>> try:
     ...     os.removedirs(path)
     ... except OSError:
