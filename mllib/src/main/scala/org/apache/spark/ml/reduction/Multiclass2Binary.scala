@@ -84,33 +84,29 @@ private[ml] trait Multiclass2BinaryParams extends ClassifierParams {
 /**
  *
  * @param parent
- * @param fittingParamMap
  * @param baseClassificationModels the binary classification models for reduction.
  */
 @AlphaComponent
 private[ml] class Multiclass2BinaryModel(
     override val parent: Multiclass2Binary,
-    override val fittingParamMap: ParamMap,
     val baseClassificationModels: Seq[Model[_]])
   extends Model[Multiclass2BinaryModel] with Multiclass2BinaryParams {
 
   /**
    * Transforms the dataset with provided parameter map as additional parameters.
    * @param dataset input dataset
-   * @param paramMap additional parameters, overwrite embedded params
    * @return transformed dataset
    */
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
+  override def transform(dataset: DataFrame): DataFrame = {
     // Check schema
     val parentSchema = dataset.schema
-    transformSchema(parentSchema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
+    transformSchema(parentSchema, logging = true)
     val sqlCtx = dataset.sqlContext
     // score each model on every data point and pick the model with highest score
     // TODO: Add randomization when there are ties.
     val predictions = baseClassificationModels.zipWithIndex.par.map { case (model, index) =>
-      val output = model.transform(dataset, paramMap)
-      output.select(map(rawPredictionCol)).map { case Row(p: Vector) => List((index, p(1))) }
+      val output = model.transform(dataset)
+      output.select($(rawPredictionCol)).map { case Row(p: Vector) => List((index, p(1))) }
     }.reduce[RDD[List[(Int, Double)]]] { case (x, y) =>
       x.zip(y).map { case ((a, b)) =>
         a ++ b
@@ -122,15 +118,15 @@ private[ml] class Multiclass2BinaryModel(
       Row.fromSeq(row.toSeq ++ List(label.toDouble))
     }
     // the output schema should retain all input fields and add prediction column.
-    val outputSchema = SchemaUtils.appendColumn(parentSchema, map(predictionCol), DoubleType)
+    val outputSchema = SchemaUtils.appendColumn(parentSchema, $(predictionCol), DoubleType)
     sqlCtx.createDataFrame(results, outputSchema)
   }
 
   @DeveloperApi
   protected def featuresDataType: DataType = new VectorUDT
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap, fitting = false, featuresDataType)
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema, fitting = false, featuresDataType)
   }
 
 }
@@ -157,31 +153,31 @@ class Multiclass2Binary extends Estimator[Multiclass2BinaryModel]
   /** @group setParam */
   def setNumClasses(value: Int): this.type = set(k, value)
 
-  override def fit(dataset: DataFrame, paramMap: ParamMap): Multiclass2BinaryModel = {
-    val map = extractParamMap(paramMap)
+  override def fit(dataset: DataFrame): Multiclass2BinaryModel = {
     val sqlCtx = dataset.sqlContext
-    val numClasses = map(k)
+    val numClasses = $(k)
     // create k columns, one for each binary classifier.
-    val multiclassLabeled = dataset.select(map(labelCol), map(featuresCol)).cache()
+    val multiclassLabeled = dataset.select($(labelCol), $(featuresCol)).cache()
     val models = Range(0, numClasses).par.map { index =>
       val labelColName = "mc2b$" + index
       val label: Double => Double = (label: Double) => {
         if (label.toInt == index) 1.0 else 0.0
       }
-      val labelUDF = callUDF(label, DoubleType, col(map(labelCol)))
+      val labelUDF = callUDF(label, DoubleType, col($(labelCol)))
       val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDF)
-      newClassifier(sqlCtx, labelColName).fit(trainingDataset, paramMap)
+      newClassifier(sqlCtx, labelColName).fit(trainingDataset)
     }.toList
     multiclassLabeled.unpersist()
-    new Multiclass2BinaryModel(this, paramMap, models)
+    new Multiclass2BinaryModel(this, models)
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap, fitting = true, featuresDataType)
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema, fitting = true, featuresDataType)
   }
 
   /**
-   * Create k initialized classifiers one for each label class.
+   * Create an initialized classifier with label column overridden
+   * to point to the right column.
    *
    * @param sqlCtx
    * @param labelColName
