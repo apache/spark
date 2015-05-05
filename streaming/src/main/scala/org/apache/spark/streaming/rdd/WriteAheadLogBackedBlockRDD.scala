@@ -187,8 +187,14 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
     blockLocations.getOrElse {
       partition.walRecordHandle match {
         case fileSegment: FileBasedWriteAheadLogSegment =>
-          HdfsUtils.getFileSegmentLocations(
-            fileSegment.path, fileSegment.offset, fileSegment.length, hadoopConfig)
+          try {
+            HdfsUtils.getFileSegmentLocations(
+              fileSegment.path, fileSegment.offset, fileSegment.length, hadoopConfig)
+          } catch {
+            case NonFatal(e) =>
+              logError("Error getting WAL file segment locations", e)
+              Seq.empty
+          }
         case _ =>
           Seq.empty
       }
