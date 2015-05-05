@@ -39,10 +39,10 @@
     </div>
     {% endfor %}
 
-    <div class="legend_item" style="border-color:grey;">no status</div>
-    <div class="legend_item" style="border-color:red;">error</div>
-    <div class="legend_item" style="border-color:lime;">running</div>
-    <div class="legend_item" style="border-color:green;">success</div>
+    <div class="legend_item state" style="border-color:grey;">no status</div>
+    <div class="legend_item state" style="border-color:red;">error</div>
+    <div class="legend_item state" style="border-color:lime;">running</div>
+    <div class="legend_item state" style="border-color:green;">success</div>
     <div style="clear:both;"></div>
 </div>
 <hr style="margin-bottom: 0px;"/>
@@ -73,6 +73,7 @@
     var execution_date = "{{ execution_date }}";
     var arrange = "{{ arrange }}";
     var g = dagreD3.json.decode(nodes, edges);
+    var duration = 500;
 
 
     var layout = dagreD3.layout().rankDir(arrange).nodeSep(15).rankSep(15);
@@ -113,8 +114,36 @@
       html: true,
       container: "body",
     });
+    d3.selectAll("div.legend_item.state")
+        .style("cursor", "s-resize")
+        .on("mouseover", function(){
+            d3.selectAll("g.node")
+                .transition(duration)
+                .style("opacity", 0.2);
+            state = d3.select(this).text();
+            d3.selectAll("g.node."+state)
+                .transition(duration)
+                .style("opacity", 1);
+            d3.selectAll("g.node." + state + " rect")
+                .transition(duration)
+                .style("stroke-width", "10px")
+                .style("opacity", 1);
+            d3.select("g.edgePaths")
+                .transition().duration(duration)
+                .style("opacity", 0.2);
+        })
+        .on("mouseout", function(){
+            d3.selectAll("g.node")
+                .transition(duration)
+                .style("opacity", 1);
+            d3.selectAll("g.node rect")
+                .transition(duration)
+                .style("stroke-width", "2px");
+            d3.select("g.edgePaths")
+                .transition().duration(duration)
+                .style("opacity", 1);
+        });
     d3.select("#searchbox").on("keyup", function(){
-        var duration = 500;
         var s = document.getElementById("searchbox").value;
         var match = null;
         d3.selectAll("g.nodes g.node").filter(function(d, i){
