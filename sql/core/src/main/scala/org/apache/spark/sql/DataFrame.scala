@@ -25,7 +25,6 @@ import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
-import scala.util.Random
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonFactory
@@ -457,7 +456,7 @@ class DataFrame private[sql](
       return plan
     }
 
-    // If neither sides have no output set intersection, return the plan.
+    // If left/right have no output set intersection, return the plan.
     val lanalyzed = this.logicalPlan.queryExecution.analyzed
     val ranalyzed = right.logicalPlan.queryExecution.analyzed
     if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
