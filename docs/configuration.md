@@ -1382,7 +1382,7 @@ Apart from these, the following properties are also available, and may be useful
         </td>
     </tr>
     <tr>
-        <td><code>spark.ssl.needAuth</code></td>
+        <td><code>spark.ssl.needClientAuth</code></td>
         <td>false</td>
         <td>
             Set true if SSL needs client authentication.

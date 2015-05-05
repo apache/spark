@@ -245,7 +245,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
 
   logDebug(s"SSLConfiguration for file server: $fileServerSSLOptions")
   logDebug(s"SSLConfiguration for Akka: $akkaSSLOptions")
-  logDebug(s"SSLConfiguration for Akka: $webUISSLOptions")
+  logDebug(s"SSLConfiguration for web UI: $webUISSLOptions")
 
   val (sslSocketFactory, hostnameVerifier) = if (fileServerSSLOptions.enabled) {
     val trustStoreManagers =

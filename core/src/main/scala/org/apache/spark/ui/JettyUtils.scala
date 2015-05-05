@@ -35,7 +35,7 @@ import org.eclipse.jetty.server.ssl.SslSelectChannelConnector
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
-import org.apache.spark.{SSLOptions, Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SSLOptions, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
 
 /**
