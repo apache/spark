@@ -29,6 +29,17 @@ object HBaseTest {
     val sparkConf = new SparkConf().setAppName("HBaseTest")
     val sc = new SparkContext(sparkConf)
     val conf = HBaseConfiguration.create()
+
+    if (args.length < 1) {
+      System.err.println("Usage: HBaseTest <table_name>")
+      System.exit(1)
+    }
+
+    // please ensure HBASE_CONF_DIR is on classpath of spark driver
+    // e.g: set it through spark.driver.extraClassPath property
+    // in spark-defaults.conf or --driver-class-path
+    // command line option of spark-submit
+
     // Other options for configuring scan behavior are available. More information available at
     // http://hbase.apache.org/apidocs/org/apache/hadoop/hbase/mapreduce/TableInputFormat.html
     conf.set(TableInputFormat.INPUT_TABLE, args(0))
