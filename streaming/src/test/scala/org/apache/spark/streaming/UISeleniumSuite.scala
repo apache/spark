@@ -106,7 +106,7 @@ class UISeleniumSuite
 
         val statTableCells = findAll(cssSelector("#stat-table td")).map(_.text).toSeq
         statTableCells.exists(_.contains("Input Rate")) should be (true)
-        statTableCells.exists(_.contains("Streaming Scheduling Delay")) should be (true)
+        statTableCells.exists(_.contains("Scheduling Delay")) should be (true)
         statTableCells.exists(_.contains("Processing Time")) should be (true)
         statTableCells.exists(_.contains("Total Delay")) should be (true)
 
@@ -116,11 +116,11 @@ class UISeleniumSuite
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
         findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Streaming Scheduling Delay", "Processing Time",
+          List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time",
             "Status")
         }
         findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Streaming Scheduling Delay", "Processing Time",
+          List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time",
             "Total Delay")
         }
 

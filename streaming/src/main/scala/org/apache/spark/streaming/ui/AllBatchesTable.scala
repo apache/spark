@@ -26,7 +26,7 @@ private[ui] abstract class BatchTableBase(tableId: String) {
   protected def columns: Seq[Node] = {
     <th>Batch Time</th>
       <th>Input Size</th>
-      <th>Streaming Scheduling Delay</th>
+      <th>Scheduling Delay</th>
       <th>Processing Time</th>
   }
 
