@@ -91,10 +91,10 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
            |  'content': '<div class="application-timeline-content"' +
            |     'data-html="true" data-placement="top" data-toggle="tooltip"' +
            |     'data-title="${displayJobDescription} (Job ${jobId})<br>Status: ${status}<br>' +
-           |     'Submission Time: ${UIUtils.formatDate(new Date(submissionTime))}' +
+           |     'Submitted: ${UIUtils.formatDate(new Date(submissionTime))}' +
            |     '${
                      if (status != JobExecutionStatus.RUNNING) {
-                       s"""<br>Completion Time: ${UIUtils.formatDate(new Date(completionTime))}"""
+                       s"""<br>Completed: ${UIUtils.formatDate(new Date(completionTime))}"""
                      } else {
                        ""
                      }
@@ -179,13 +179,13 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
     <span class="expand-application-timeline">
       <span class="expand-application-timeline-arrow arrow-closed"></span>
-      <strong>Event timeline</strong>
+      <strong>Event Timeline</strong>
     </span> ++
     <div id="application-timeline" class="collapsed">
       <div class="control-panel">
         <div id="application-timeline-zoom-lock">
-          <input type="checkbox" checked="checked"></input>
-          <span>Zoom Lock</span>
+          <input type="checkbox"></input>
+          <span>Enable zooming</span>
         </div>
       </div>
     </div> ++
@@ -277,7 +277,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
             {if (parent.sc.isDefined) {
               // Total duration is not meaningful unless the UI is live
               <li>
-                <strong>Total Duration: </strong>
+                <strong>Total Uptime: </strong>
                 {UIUtils.formatDuration(System.currentTimeMillis() - startTime)}
               </li>
             }}

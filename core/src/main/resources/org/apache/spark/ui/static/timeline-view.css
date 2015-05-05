@@ -23,6 +23,10 @@ div#application-timeline, div#job-timeline {
   margin-top: 5px;
 }
 
+.vis.timeline {
+  line-height: 14px;
+}
+
 .vis.timeline div.content {
   width: 100%;
 }
@@ -32,48 +36,51 @@ div#application-timeline, div#job-timeline {
 }
 
 .vis.timeline .item.stage.succeeded {
-  background-color: #D5DDF6;
+  background-color: #A0DFFF;
+  border-color: #3EC0FF;
 }
 
 .vis.timeline .item.stage.succeeded.selected {
-   background-color: #D5DDF6;
-   border-color: #97B0F8;
-   z-index: auto;
+  background-color: #A0DFFF;
+  border-color: #3EC0FF;
+  z-index: auto;
 }
 
 .legend-area rect.completed-stage-legend {
-  fill: #D5DDF6;
-  stroke: #97B0F8;
+  fill: #A0DFFF;
+  stroke: #3EC0FF;
 }
 
 .vis.timeline .item.stage.failed {
-   background-color: #FF5475;
+  background-color: #ffa1b0;
+  border-color: #ff4d6d;
 }
 
 .vis.timeline .item.stage.failed.selected {
-   background-color: #FF5475;
-   border-color: #97B0F8;
-   z-index: auto;
+  background-color: #ffa1b0;
+  border-color: #ff4d6d;
+  z-index: auto;
 }
 
 .legend-area rect.failed-stage-legend {
-  fill: #FF5475;
-  stroke: #97B0F8;
+  fill: #ffa1b0;
+  stroke: #ff4d6d;
 }
 
 .vis.timeline .item.stage.running {
-   background-color: #FDFFCA;
+  background-color: #a3ffc2;
+  border-color: #36f572;
 }
 
 .vis.timeline .item.stage.running.selected {
-   background-color: #FDFFCA;
-   border-color: #97B0F8;
-   z-index: auto;
+  background-color: #a3ffc2;
+  border-color: #36f572;
+  z-index: auto;
 }
 
 .legend-area rect.active-stage-legend {
-  fill: #FDFFCA;
-  stroke: #97B0F8;
+  fill: #a3ffc2;
+  stroke: #36f572;
 }
 
 .vis.timeline .item.job {
@@ -81,76 +88,79 @@ div#application-timeline, div#job-timeline {
 }
 
 .vis.timeline .item.job.succeeded {
-  background-color: #D5DDF6;
+  background-color: #A0DFFF;
 }
 
 .vis.timeline .item.job.succeeded.selected {
-   background-color: #D5DDF6;
-   border-color: #97B0F8;
-   z-index: auto;
+  background-color: #A0DFFF;
+  border-color: #3EC0FF;
+  z-index: auto;
 }
 
 .legend-area rect.succeeded-job-legend {
-  fill: #D5DDF6;
-  stroke: #97B0F8;
+  fill: #A0DFFF;
+  stroke: #3EC0FF;
 }
 
 .vis.timeline .item.job.failed {
-   background-color: #FF5475;
+  background-color: #ffa1b0;
+  border-color: #ff4d6d;
 }
 
 .vis.timeline .item.job.failed.selected {
-   background-color: #FF5475;
-   border-color: #97B0F8;
-   z-index: auto;
+  background-color: #ffa1b0;
+  border-color: #ff4d6d;
+  z-index: auto;
 }
 
 .legend-area rect.failed-job-legend {
-  fill: #FF5475;
-  stroke: #97B0F8;
+  fill: #ffa1b0;
+  stroke: #ff4d6d;
 }
 
 .vis.timeline .item.job.running {
-   background-color: #FDFFCA;
+  background-color: #a3ffc2;
+  border-color: #36f572;
 }
 
 .vis.timeline .item.job.running.selected {
-   background-color: #FDFFCA;
-   border-color: #97B0F8;
-   z-index: auto;
+  background-color: #a3ffc2;
+  border-color: #36f572;
+  z-index: auto;
 }
 
 .legend-area rect.running-job-legend {
-  fill: #FDFFCA;
-  stroke: #97B0F8;
+  fill: #a3ffc2;
+  stroke: #36f572;
 }
 
 .vis.timeline .item.executor.added {
-  background-color: #D5DDF6;
+  background-color: #A0DFFF;
 }
 
 .legend-area rect.executor-added-legend {
-  fill: #D5DDF6;
-  stroke: #97B0F8;
+  fill: #A0DFFF;
+  stroke: #3EC0FF;
 }
 
 .vis.timeline .item.executor.removed {
-  background-color: #EBCA59;
+  background-color: #ffa1b0;
+  border-color: #ff4d6d;
 }
 
 .legend-area rect.executor-removed-legend {
-  fill: #EBCA59;
-  stroke: #97B0F8;
+  fill: #ffa1b0;
+  stroke: #ff4d6d;
 }
 
 .vis.timeline .item.executor.selected {
-  border-color: #FFC200;
-  background-color: #FFF785;
+  background-color: #a3ffc2;
+  border-color: #36f572;
   z-index: 2;
 }
 
-tr.corresponding-item-hover>td, tr.corresponding-item-hover>th {
-  background-color: #FFE1FA !important;
+tr.corresponding-item-hover > td, tr.corresponding-item-hover > th {
+  background-color: #d6ffe4 !important;
 }
 
 #application-timeline.collapsed {
@@ -169,7 +179,7 @@ span.expand-application-timeline, span.expand-job-timeline {
   cursor: pointer;
 }
 
-.control-panel input+span {
+.control-panel input + span {
   cursor: pointer;
 }
 

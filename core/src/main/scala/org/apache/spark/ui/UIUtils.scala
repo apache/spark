@@ -250,7 +250,7 @@ private[spark] object UIUtils extends Logging {
               <h3 style="vertical-align: middle; display: inline-block;">
                 <a style="text-decoration: none" href={prependBaseUri("/")}>
                   <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
-                  <span class="version" 
+                  <span class="version"
                         style="margin-right: 15px;">{org.apache.spark.SPARK_VERSION}</span>
                 </a>
                 {title}
@@ -350,7 +350,7 @@ private[spark] object UIUtils extends Logging {
     <div>
       <span class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
         <span class="expand-dag-viz-arrow arrow-closed"></span>
-        <strong>DAG visualization</strong>
+        <strong>DAG Visualization</strong>
       </span>
       <div id="dag-viz-graph"></div>
       <div id="dag-viz-metadata">

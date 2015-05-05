@@ -161,13 +161,13 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
 
     <span class="expand-job-timeline">
       <span class="expand-job-timeline-arrow arrow-closed"></span>
-      <strong>Event timeline</strong>
+      <strong>Event Timeline</strong>
     </span> ++
     <div id="job-timeline" class="collapsed">
       <div class="control-panel">
         <div id="job-timeline-zoom-lock">
-          <input type="checkbox" checked="checked"></input>
-          <span>Zoom Lock</span>
+          <input type="checkbox"></input>
+          <span>Enable zooming</span>
         </div>
       </div>
     </div> ++
