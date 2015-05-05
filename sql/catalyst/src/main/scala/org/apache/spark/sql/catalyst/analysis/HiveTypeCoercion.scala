@@ -79,6 +79,7 @@ trait HiveTypeCoercion {
     CaseWhenCoercion ::
     Division ::
     PropagateTypes ::
+    ExpectedInputConversion ::
     Nil
 
   /**
@@ -115,7 +116,7 @@ trait HiveTypeCoercion {
    * the appropriate numeric equivalent.
    */
   object ConvertNaNs extends Rule[LogicalPlan] {
-    val stringNaN = Literal.create("NaN", StringType)
+    val stringNaN = Literal("NaN")
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan => q transformExpressions {
@@ -238,37 +239,43 @@ trait HiveTypeCoercion {
         a.makeCopy(Array(a.left, Cast(a.right, DoubleType)))
 
       // we should cast all timestamp/date/string compare into string compare
-      case p: BinaryPredicate if p.left.dataType == StringType
-        && p.right.dataType == DateType =>
+      case p: BinaryComparison if p.left.dataType == StringType &&
+                                  p.right.dataType == DateType =>
         p.makeCopy(Array(p.left, Cast(p.right, StringType)))
-      case p: BinaryPredicate if p.left.dataType == DateType
-        && p.right.dataType == StringType =>
+      case p: BinaryComparison if p.left.dataType == DateType &&
+                                  p.right.dataType == StringType =>
         p.makeCopy(Array(Cast(p.left, StringType), p.right))
-      case p: BinaryPredicate if p.left.dataType == StringType
-        && p.right.dataType == TimestampType =>
+      case p: BinaryComparison if p.left.dataType == StringType &&
+                                  p.right.dataType == TimestampType =>
         p.makeCopy(Array(p.left, Cast(p.right, StringType)))
-      case p: BinaryPredicate if p.left.dataType == TimestampType
-        && p.right.dataType == StringType =>
+      case p: BinaryComparison if p.left.dataType == TimestampType &&
+                                  p.right.dataType == StringType =>
         p.makeCopy(Array(Cast(p.left, StringType), p.right))
-      case p: BinaryPredicate if p.left.dataType == TimestampType
-        && p.right.dataType == DateType =>
+      case p: BinaryComparison if p.left.dataType == TimestampType &&
+                                  p.right.dataType == DateType =>
         p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
-      case p: BinaryPredicate if p.left.dataType == DateType
-        && p.right.dataType == TimestampType =>
+      case p: BinaryComparison if p.left.dataType == DateType &&
+                                  p.right.dataType == TimestampType =>
         p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
 
-      case p: BinaryPredicate if p.left.dataType == StringType && p.right.dataType != StringType =>
+      case p: BinaryComparison if p.left.dataType == StringType &&
+                                  p.right.dataType != StringType =>
         p.makeCopy(Array(Cast(p.left, DoubleType), p.right))
-      case p: BinaryPredicate if p.left.dataType != StringType && p.right.dataType == StringType =>
+      case p: BinaryComparison if p.left.dataType != StringType &&
+                                  p.right.dataType == StringType =>
         p.makeCopy(Array(p.left, Cast(p.right, DoubleType)))
 
-      case i @ In(a, b) if a.dataType == DateType && b.forall(_.dataType == StringType) =>
+      case i @ In(a, b) if a.dataType == DateType &&
+                           b.forall(_.dataType == StringType) =>
         i.makeCopy(Array(Cast(a, StringType), b))
-      case i @ In(a, b) if a.dataType == TimestampType && b.forall(_.dataType == StringType) =>
+      case i @ In(a, b) if a.dataType == TimestampType &&
+                           b.forall(_.dataType == StringType) =>
         i.makeCopy(Array(Cast(a, StringType), b))
-      case i @ In(a, b) if a.dataType == DateType && b.forall(_.dataType == TimestampType) =>
+      case i @ In(a, b) if a.dataType == DateType &&
+                           b.forall(_.dataType == TimestampType) =>
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
-      case i @ In(a, b) if a.dataType == TimestampType && b.forall(_.dataType == DateType) =>
+      case i @ In(a, b) if a.dataType == TimestampType &&
+                           b.forall(_.dataType == DateType) =>
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
 
       case Sum(e) if e.dataType == StringType =>
@@ -419,19 +426,19 @@ trait HiveTypeCoercion {
           )
 
         case LessThan(e1 @ DecimalType.Expression(p1, s1),
-        e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+                      e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
           LessThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
 
         case LessThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
-        e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+                             e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
           LessThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
 
         case GreaterThan(e1 @ DecimalType.Expression(p1, s1),
-        e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+                         e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
           GreaterThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
 
         case GreaterThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
-        e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+                                e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
           GreaterThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
 
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
@@ -480,8 +487,8 @@ trait HiveTypeCoercion {
       // No need to change the EqualNullSafe operators, too
       case e: EqualNullSafe => e
       // Otherwise turn them to Byte types so that there exists and ordering.
-      case p: BinaryComparison
-          if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
+      case p: BinaryComparison if p.left.dataType == BooleanType &&
+                                  p.right.dataType == BooleanType =>
         p.makeCopy(Array(Cast(p.left, ByteType), Cast(p.right, ByteType)))
     }
   }
@@ -639,4 +646,22 @@ trait HiveTypeCoercion {
     }
   }
 
+  /**
+   * Casts types according to the expected input types for Expressions that have the trait
+   * `ExpectsInputTypes`.
+   */
+  object ExpectedInputConversion extends Rule[LogicalPlan] {
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      case e: ExpectsInputTypes if e.children.map(_.dataType) != e.expectedChildTypes =>
+        val newC = (e.children, e.children.map(_.dataType), e.expectedChildTypes).zipped.map {
+          case (child, actual, expected) =>
+            if (actual == expected) child else Cast(child, expected)
+        }
+        e.withNewChildren(newC)
+    }
+  }
 }

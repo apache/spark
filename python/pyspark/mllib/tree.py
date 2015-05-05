@@ -163,14 +163,16 @@ class DecisionTree(object):
         ...     LabeledPoint(1.0, [3.0])
         ... ]
         >>> model = DecisionTree.trainClassifier(sc.parallelize(data), 2, {})
-        >>> print model,  # it already has newline
+        >>> print(model)
         DecisionTreeModel classifier of depth 1 with 3 nodes
-        >>> print model.toDebugString(),  # it already has newline
+
+        >>> print(model.toDebugString())
         DecisionTreeModel classifier of depth 1 with 3 nodes
           If (feature 0 <= 0.0)
            Predict: 0.0
           Else (feature 0 > 0.0)
            Predict: 1.0
+        <BLANKLINE>
         >>> model.predict(array([1.0]))
         1.0
         >>> model.predict(array([0.0]))
@@ -318,9 +320,10 @@ class RandomForest(object):
         3
         >>> model.totalNumNodes()
         7
-        >>> print model,
+        >>> print(model)
         TreeEnsembleModel classifier with 3 trees
-        >>> print model.toDebugString(),
+        <BLANKLINE>
+        >>> print(model.toDebugString())
         TreeEnsembleModel classifier with 3 trees
         <BLANKLINE>
           Tree 0:
@@ -335,6 +338,7 @@ class RandomForest(object):
              Predict: 0.0
             Else (feature 0 > 1.0)
              Predict: 1.0
+        <BLANKLINE>
         >>> model.predict([2.0])
         1.0
         >>> model.predict([0.0])
@@ -478,13 +482,14 @@ class GradientBoostedTrees(object):
         ...     LabeledPoint(1.0, [3.0])
         ... ]
         >>>
-        >>> model = GradientBoostedTrees.trainClassifier(sc.parallelize(data), {})
+        >>> model = GradientBoostedTrees.trainClassifier(sc.parallelize(data), {}, numIterations=10)
         >>> model.numTrees()
-        100
+        10
         >>> model.totalNumNodes()
-        300
-        >>> print model,  # it already has newline
-        TreeEnsembleModel classifier with 100 trees
+        30
+        >>> print(model)  # it already has newline
+        TreeEnsembleModel classifier with 10 trees
+        <BLANKLINE>
         >>> model.predict([2.0])
         1.0
         >>> model.predict([0.0])
@@ -536,11 +541,12 @@ class GradientBoostedTrees(object):
         ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
         ... ]
         >>>
-        >>> model = GradientBoostedTrees.trainRegressor(sc.parallelize(sparse_data), {})
+        >>> data = sc.parallelize(sparse_data)
+        >>> model = GradientBoostedTrees.trainRegressor(data, {}, numIterations=10)
         >>> model.numTrees()
-        100
+        10
         >>> model.totalNumNodes()
-        102
+        12
         >>> model.predict(SparseVector(2, {1: 1.0}))
         1.0
         >>> model.predict(SparseVector(2, {0: 1.0}))

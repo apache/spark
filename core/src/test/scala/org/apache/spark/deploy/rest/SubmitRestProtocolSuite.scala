@@ -129,7 +129,8 @@ class SubmitRestProtocolSuite extends FunSuite {
     assert(newMessage.sparkProperties("spark.files") === "fireball.png")
     assert(newMessage.sparkProperties("spark.driver.memory") === "512m")
     assert(newMessage.sparkProperties("spark.driver.cores") === "180")
-    assert(newMessage.sparkProperties("spark.driver.extraJavaOptions") === " -Dslices=5 -Dcolor=mostly_red")
+    assert(newMessage.sparkProperties("spark.driver.extraJavaOptions") ===
+      " -Dslices=5 -Dcolor=mostly_red")
     assert(newMessage.sparkProperties("spark.driver.extraClassPath") === "food-coloring.jar")
     assert(newMessage.sparkProperties("spark.driver.extraLibraryPath") === "pickle.jar")
     assert(newMessage.sparkProperties("spark.driver.supervise") === "false")

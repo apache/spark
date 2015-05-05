@@ -33,7 +33,6 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.{InputSplit, Job, JobContext}
-
 import parquet.filter2.predicate.FilterApi
 import parquet.format.converter.ParquetMetadataConverter
 import parquet.hadoop.metadata.CompressionCodecName
@@ -45,13 +44,13 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.{NewHadoopPartition, NewHadoopRDD, RDD}
-import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, expressions}
 import org.apache.spark.sql.parquet.ParquetTypesConverter._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType, _}
 import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext, SaveMode}
-import org.apache.spark.{Logging, Partition => SparkPartition, SerializableWritable, SparkException, TaskContext}
+import org.apache.spark.{Logging, SerializableWritable, SparkException, TaskContext, Partition => SparkPartition}
 
 /**
  * Allows creation of Parquet based tables using the syntax:
@@ -409,6 +408,9 @@ private[sql] case class ParquetRelation2(
       file.getName == ParquetFileWriter.PARQUET_METADATA_FILE
   }
 
+  // Skip type conversion
+  override val needConversion: Boolean = false
+
   // TODO Should calculate per scan size
   // It's common that a query only scans a fraction of a large Parquet file.  Returning size of the
   // whole Parquet file disables some optimizations in this case (e.g. broadcast join).
@@ -432,7 +434,10 @@ private[sql] case class ParquetRelation2(
 
     // FileInputFormat cannot handle empty lists.
     if (selectedFiles.nonEmpty) {
-      FileInputFormat.setInputPaths(job, selectedFiles.map(_.getPath): _*)
+      // In order to encode the authority of a Path containning special characters such as /,
+      // we need to use the string retruned by the URI of the path to create a new Path.
+      val selectedPaths = selectedFiles.map(status => new Path(status.getPath.toUri.toString))
+      FileInputFormat.setInputPaths(job, selectedPaths: _*)
     }
 
     // Try to push down filters when filter push-down is enabled.
@@ -484,10 +489,31 @@ private[sql] case class ParquetRelation2(
         val cacheMetadata = useCache
 
         @transient
-        val cachedStatus = selectedFiles
+        val cachedStatus = selectedFiles.map { st =>
+          // In order to encode the authority of a Path containning special characters such as /,
+          // we need to use the string retruned by the URI of the path to create a new Path.
+          val newPath = new Path(st.getPath.toUri.toString)
+
+          new FileStatus(
+            st.getLen,
+            st.isDir,
+            st.getReplication,
+            st.getBlockSize,
+            st.getModificationTime,
+            st.getAccessTime,
+            st.getPermission,
+            st.getOwner,
+            st.getGroup,
+            newPath)
+        }
 
         @transient
-        val cachedFooters = selectedFooters
+        val cachedFooters = selectedFooters.map { f =>
+          // In order to encode the authority of a Path containning special characters such as /,
+          // we need to use the string retruned by the URI of the path to create a new Path.
+          new Footer(new Path(f.getFile.toUri.toString), f.getParquetMetadata)
+        }
+
 
         // Overridden so we can inject our own cached files statuses.
         override def getPartitions: Array[SparkPartition] = {
@@ -526,7 +552,8 @@ private[sql] case class ParquetRelation2(
 
       baseRDD.mapPartitionsWithInputSplit { case (split: ParquetInputSplit, iterator) =>
         val partValues = selectedPartitions.collectFirst {
-          case p if split.getPath.getParent.toString == p.path => p.values
+          case p if split.getPath.getParent.toString == p.path =>
+            CatalystTypeConverters.convertToCatalyst(p.values).asInstanceOf[Row]
         }.get
 
         val requiredPartOrdinal = partitionKeyLocations.keys.toSeq
@@ -584,7 +611,7 @@ private[sql] case class ParquetRelation2(
 
     val rawPredicate =
       partitionPruningPredicates.reduceOption(expressions.And).getOrElse(Literal(true))
-    val boundPredicate = InterpretedPredicate(rawPredicate transform {
+    val boundPredicate = InterpretedPredicate.create(rawPredicate transform {
       case a: AttributeReference =>
         val index = partitionColumns.indexWhere(a.name == _.name)
         BoundReference(index, partitionColumns(index).dataType, nullable = true)
@@ -607,12 +634,13 @@ private[sql] case class ParquetRelation2(
     // before calling execute().
 
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
-    val writeSupport = if (parquetSchema.map(_.dataType).forall(_.isPrimitive)) {
-      log.debug("Initializing MutableRowWriteSupport")
-      classOf[MutableRowWriteSupport]
-    } else {
-      classOf[RowWriteSupport]
-    }
+    val writeSupport =
+      if (parquetSchema.map(_.dataType).forall(ParquetTypesConverter.isPrimitiveType)) {
+        log.debug("Initializing MutableRowWriteSupport")
+        classOf[MutableRowWriteSupport]
+      } else {
+        classOf[RowWriteSupport]
+      }
 
     ParquetOutputFormat.setWriteSupportClass(job, writeSupport)
 
