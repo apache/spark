@@ -50,7 +50,7 @@ class ClosureCleanerSuite extends FunSuite {
     val obj = new TestClassWithNesting(1)
     assert(obj.run() === 96) // 4 * (1+2+3+4) + 4 * (1+2+3+4) + 16 * 1
   }
-  
+
   test("toplevel return statements in closures are identified at cleaning time") {
     val ex = intercept[SparkException] {
       TestObjectWithBogusReturns.run()
@@ -61,13 +61,20 @@ class ClosureCleanerSuite extends FunSuite {
 
   test("return statements from named functions nested in closures don't raise exceptions") {
     val result = TestObjectWithNestedReturns.run()
-    assert(result == 1)
+    assert(result === 1)
   }
 }
 
 // A non-serializable class we create in closures to make sure that we aren't
 // keeping references to unneeded variables from our outer closures.
-class NonSerializable {}
+class NonSerializable(val id: Int = -1) {
+  override def equals(other: Any): Boolean = {
+    other match {
+      case o: NonSerializable => id == o.id
+      case _ => false
+    }
+  }
+}
 
 object TestObject {
   def run(): Int = {

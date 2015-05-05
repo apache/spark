@@ -84,7 +84,7 @@ object RDDConversions {
 }
 
 /** Logical plan node for scanning data from an RDD. */
-case class LogicalRDD(output: Seq[Attribute], rdd: RDD[Row])(sqlContext: SQLContext)
+private[sql] case class LogicalRDD(output: Seq[Attribute], rdd: RDD[Row])(sqlContext: SQLContext)
   extends LogicalPlan with MultiInstanceRelation {
 
   override def children: Seq[LogicalPlan] = Nil
@@ -105,11 +105,12 @@ case class LogicalRDD(output: Seq[Attribute], rdd: RDD[Row])(sqlContext: SQLCont
 }
 
 /** Physical plan node for scanning data from an RDD. */
-case class PhysicalRDD(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
+private[sql] case class PhysicalRDD(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
   override def execute(): RDD[Row] = rdd
 }
 
 /** Logical plan node for scanning data from a local collection. */
+private[sql]
 case class LogicalLocalTable(output: Seq[Attribute], rows: Seq[Row])(sqlContext: SQLContext)
    extends LogicalPlan with MultiInstanceRelation {
 

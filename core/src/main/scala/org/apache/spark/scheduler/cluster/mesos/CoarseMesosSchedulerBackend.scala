@@ -196,9 +196,14 @@ private[spark] class CoarseMesosSchedulerBackend(
             .addResources(createResource("cpus", cpusToUse))
             .addResources(createResource("mem",
               MemoryUtils.calculateTotalMemory(sc)))
-            .build()
+
+          sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
+            MesosSchedulerBackendUtil
+              .setupContainerBuilderDockerInfo(image, sc.conf, task.getContainerBuilder())
+          }
+
           d.launchTasks(
-            Collections.singleton(offer.getId),  Collections.singletonList(task), filters)
+            Collections.singleton(offer.getId), Collections.singletonList(task.build()), filters)
         } else {
           // Filter it out
           d.launchTasks(

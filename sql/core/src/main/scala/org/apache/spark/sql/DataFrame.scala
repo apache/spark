@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.sql.DriverManager
 
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -28,6 +29,7 @@ import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonFactory
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
@@ -175,6 +177,7 @@ class DataFrame private[sql](
    * @param numRows Number of rows to show
    */
   private[sql] def showString(numRows: Int): String = {
+    val sb = new StringBuilder
     val data = take(numRows)
     val numCols = schema.fieldNames.length
 
@@ -194,12 +197,25 @@ class DataFrame private[sql](
       }
     }
 
-    // Pad the cells
-    rows.map { row =>
-      row.zipWithIndex.map { case (cell, i) =>
-        String.format(s"%-${colWidths(i)}s", cell)
-      }.mkString(" ")
-    }.mkString("\n")
+    // Create SeparateLine
+    val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
+
+    // column names
+    rows.head.zipWithIndex.map { case (cell, i) =>
+      StringUtils.leftPad(cell.toString, colWidths(i))
+    }.addString(sb, "|", "|", "|\n")
+
+    sb.append(sep)
+
+    // data
+    rows.tail.map {
+      _.zipWithIndex.map { case (cell, i) =>
+        StringUtils.leftPad(cell.toString, colWidths(i))
+      }.addString(sb, "|", "|", "|\n")
+    }
+
+    sb.append(sep)
+    sb.toString()
   }
 
   override def toString: String = {
@@ -329,6 +345,17 @@ class DataFrame private[sql](
    * @group dfops
    */
   def na: DataFrameNaFunctions = new DataFrameNaFunctions(this)
+
+  /**
+   * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
+   * {{{
+   *   // Finding frequent items in column with name 'a'.
+   *   df.stat.freqItems(Seq("a"))
+   * }}}
+   *
+   * @group dfops
+   */
+  def stat: DataFrameStatFunctions = new DataFrameStatFunctions(this)
 
   /**
    * Cartesian join with another [[DataFrame]].
@@ -752,7 +779,7 @@ class DataFrame private[sql](
    * @param seed Seed for sampling.
    * @group dfops
    */
-  def randomSplit(weights: List[Double], seed: Long): Array[DataFrame] = {
+  private[spark] def randomSplit(weights: List[Double], seed: Long): Array[DataFrame] = {
     randomSplit(weights.toArray, seed)
   }
 
@@ -840,15 +867,40 @@ class DataFrame private[sql](
 
   /**
    * Returns a new [[DataFrame]] with a column renamed.
+   * This is a no-op if schema doesn't contain existingName.
    * @group dfops
    */
   def withColumnRenamed(existingName: String, newName: String): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val colNames = schema.map { field =>
-      val name = field.name
-      if (resolver(name, existingName)) Column(name).as(newName) else Column(name)
+    val shouldRename = schema.exists(f => resolver(f.name, existingName))
+    if (shouldRename) {
+      val colNames = schema.map { field =>
+        val name = field.name
+        if (resolver(name, existingName)) Column(name).as(newName) else Column(name)
+      }
+      select(colNames : _*)
+    } else {
+      this
     }
-    select(colNames :_*)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] with a column dropped.
+   * This is a no-op if schema doesn't contain column name.
+   * @group dfops
+   */
+  def drop(colName: String): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
+    val shouldDrop = schema.exists(f => resolver(f.name, colName))
+    if (shouldDrop) {
+      val colsAfterDrop = schema.filter { field =>
+        val name = field.name
+        !resolver(name, colName)
+      }.map(f => Column(f.name))
+      select(colsAfterDrop : _*)
+    } else {
+      this
+    }
   }
 
   /**

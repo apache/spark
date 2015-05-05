@@ -22,6 +22,7 @@ import java.sql.DriverManager
 import java.util.{Calendar, GregorianCalendar, Properties}
 
 import org.apache.spark.sql.test._
+import org.apache.spark.sql.types._
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{FunSuite, BeforeAndAfter}
 import TestSQLContext._
@@ -271,6 +272,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(rows(0).getDouble(1) === 1.00000011920928955) // Yes, I meant ==.
     assert(rows(0).getAs[BigDecimal](2)
         .equals(new BigDecimal("123456789012345.54321543215432100000")))
+    assert(rows(0).schema.fields(2).dataType === DecimalType(40, 20))
   }
 
   test("SQL query as table name") {

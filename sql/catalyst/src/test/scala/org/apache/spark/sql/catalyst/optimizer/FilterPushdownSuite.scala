@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.expressions.{Count, Explode}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.{PlanTest, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -42,6 +42,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+
+  val testRelation1 = LocalRelation('d.int)
 
   // This test already passes.
   test("eliminate subqueries") {
@@ -90,7 +92,23 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+  
+  test("column pruning for Project(ne, Limit)") {
+    val originalQuery =
+      testRelation
+        .select('a,'b)
+        .limit(2)
+        .select('a)
 
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select('a)
+        .limit(2).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+  
   // After this line is unimplemented.
   test("simple push down") {
     val originalQuery =
@@ -193,6 +211,23 @@ class FilterPushdownSuite extends PlanTest {
     val right = testRelation.where('b === 2)
     val correctAnswer =
       left.join(right).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("joins: push down left semi join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery = {
+      x.join(y, LeftSemi, Option("x.a".attr === "y.d".attr && "x.b".attr >= 1 && "y.d".attr >= 2))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.where('b >= 1)
+    val right = testRelation1.where('d >= 2)
+    val correctAnswer =
+      left.join(right, LeftSemi, Option("a".attr === "d".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }

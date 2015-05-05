@@ -499,6 +499,22 @@ class DataFrameSuite extends QueryTest {
       Row(2) :: Row(3) :: Row(4) :: Nil)
   }
 
+  test("drop column using drop") {
+    val df = testData.drop("key")
+    checkAnswer(
+      df,
+      testData.collect().map(x => Row(x.getString(1))).toSeq)
+    assert(df.schema.map(_.name) === Seq("value"))
+  }
+
+  test("drop unknown column (no-op)") {
+    val df = testData.drop("random")
+    checkAnswer(
+      df,
+      testData.collect().toSeq)
+    assert(df.schema.map(_.name) === Seq("key","value"))
+  }
+
   test("withColumnRenamed") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
       .withColumnRenamed("value", "valueRenamed")
@@ -580,6 +596,25 @@ class DataFrameSuite extends QueryTest {
     // This test case is intended ignored, but to make sure it compiles correctly
     testData.select($"*").show()
     testData.select($"*").show(1000)
+  }
+
+  test("SPARK-7319 showString") {
+    val expectedAnswer = """+---+-----+
+                           ||key|value|
+                           |+---+-----+
+                           ||  1|    1|
+                           |+---+-----+
+                           |""".stripMargin
+    assert(testData.select($"*").showString(1) === expectedAnswer)
+  }
+
+  test("SPARK-7327 show with empty dataFrame") {
+    val expectedAnswer = """+---+-----+
+                           ||key|value|
+                           |+---+-----+
+                           |+---+-----+
+                           |""".stripMargin
+    assert(testData.select($"*").filter($"key" < 0).showString(1) === expectedAnswer)
   }
 
   test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {

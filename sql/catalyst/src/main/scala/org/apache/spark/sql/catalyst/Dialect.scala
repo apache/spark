@@ -15,20 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.collection
+package org.apache.spark.sql.catalyst
 
-import java.util.Comparator
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
- * A common interface for our size-tracking collections of key-value pairs, which are used in
- * external operations. These all support estimating the size and obtaining a memory-efficient
- * sorted iterator.
+ * Root class of SQL Parser Dialect, and we don't guarantee the binary
+ * compatibility for the future release, let's keep it as the internal
+ * interface for advanced user.
+ *
  */
-// TODO: should extend Iterable[Product2[K, V]] instead of (K, V)
-private[spark] trait SizeTrackingPairCollection[K, V] extends Iterable[(K, V)] {
-  /** Estimate the collection's current memory usage in bytes. */
-  def estimateSize(): Long
-
-  /** Iterate through the data in a given key order. This may destroy the underlying collection. */
-  def destructiveSortedIterator(keyComparator: Comparator[K]): Iterator[(K, V)]
+@DeveloperApi
+abstract class Dialect {
+  // this is the main function that will be implemented by sql parser.
+  def parse(sqlText: String): LogicalPlan
 }

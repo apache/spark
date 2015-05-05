@@ -15,22 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.network.sasl;
 
-import java.util.Random
+import javax.security.sasl.SaslException;
 
-import org.apache.spark.sql.types.{DataType, DoubleType}
+interface SaslEncryptionBackend {
 
+  /** Disposes of resources used by the backend. */
+  void dispose();
 
-case object Rand extends LeafExpression {
-  override def dataType: DataType = DoubleType
-  override def nullable: Boolean = false
+  /** Encrypt data. */
+  byte[] wrap(byte[] data, int offset, int len) throws SaslException;
 
-  private[this] lazy val rand = new Random
+  /** Decrypt data. */
+  byte[] unwrap(byte[] data, int offset, int len) throws SaslException;
 
-  override def eval(input: Row = null): EvaluatedType = {
-    rand.nextDouble().asInstanceOf[EvaluatedType]
-  }
-
-  override def toString: String = "RAND()"
 }

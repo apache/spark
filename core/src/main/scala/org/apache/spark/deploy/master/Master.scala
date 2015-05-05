@@ -62,7 +62,7 @@ private[master] class Master(
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
 
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
-  
+
   private val WORKER_TIMEOUT = conf.getLong("spark.worker.timeout", 60) * 1000
   private val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 200)
   private val RETAINED_DRIVERS = conf.getInt("spark.deploy.retainedDrivers", 200)
@@ -86,7 +86,7 @@ private[master] class Master(
   private val drivers = new HashSet[DriverInfo]
   private val completedDrivers = new ArrayBuffer[DriverInfo]
   // Drivers currently spooled for scheduling
-  private val waitingDrivers = new ArrayBuffer[DriverInfo] 
+  private val waitingDrivers = new ArrayBuffer[DriverInfo]
   private var nextDriverNumber = 0
 
   Utils.checkHost(host, "Expected hostname")
@@ -254,7 +254,8 @@ private[master] class Master(
 
     case RequestSubmitDriver(description) => {
       if (state != RecoveryState.ALIVE) {
-        val msg = s"Can only accept driver submissions in ALIVE state. Current state: $state."
+        val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
+          "Can only accept driver submissions in ALIVE state."
         sender ! SubmitDriverResponse(false, None, msg)
       } else {
         logInfo("Driver submitted " + description.command.mainClass)
@@ -274,7 +275,8 @@ private[master] class Master(
 
     case RequestKillDriver(driverId) => {
       if (state != RecoveryState.ALIVE) {
-        val msg = s"Can only kill drivers in ALIVE state. Current state: $state."
+        val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
+          s"Can only kill drivers in ALIVE state."
         sender ! KillDriverResponse(driverId, success = false, msg)
       } else {
         logInfo("Asked to kill driver " + driverId)
@@ -305,12 +307,18 @@ private[master] class Master(
     }
 
     case RequestDriverStatus(driverId) => {
-      (drivers ++ completedDrivers).find(_.id == driverId) match {
-        case Some(driver) =>
-          sender ! DriverStatusResponse(found = true, Some(driver.state),
-            driver.worker.map(_.id), driver.worker.map(_.hostPort), driver.exception)
-        case None =>
-          sender ! DriverStatusResponse(found = false, None, None, None, None)
+      if (state != RecoveryState.ALIVE) {
+        val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
+          "Can only request driver status in ALIVE state."
+        sender ! DriverStatusResponse(found = false, None, None, None, Some(new Exception(msg)))
+      } else {
+        (drivers ++ completedDrivers).find(_.id == driverId) match {
+          case Some(driver) =>
+            sender ! DriverStatusResponse(found = true, Some(driver.state),
+              driver.worker.map(_.id), driver.worker.map(_.hostPort), driver.exception)
+          case None =>
+            sender ! DriverStatusResponse(found = false, None, None, None, None)
+        }
       }
     }
 
@@ -758,24 +766,24 @@ private[master] class Master(
           app.desc.appUiUrl = notFoundBasePath
           return false
         }
-      
+
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
-          eventLogDir, app.id, app.desc.eventLogCodec)
+          eventLogDir, app.id, None, app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
-      val inProgressExists = fs.exists(new Path(eventLogFilePrefix + 
+      val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
           EventLoggingListener.IN_PROGRESS))
-      
+
       if (inProgressExists) {
         // Event logging is enabled for this application, but the application is still in progress
         logWarning(s"Application $appName is still in progress, it may be terminated abnormally.")
       }
-      
+
       val (eventLogFile, status) = if (inProgressExists) {
         (eventLogFilePrefix + EventLoggingListener.IN_PROGRESS, " (in progress)")
       } else {
         (eventLogFilePrefix, " (completed)")
       }
-      
+
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
@@ -859,8 +867,8 @@ private[master] class Master(
   }
 
   private def removeDriver(
-      driverId: String, 
-      finalState: DriverState, 
+      driverId: String,
+      finalState: DriverState,
       exception: Option[Exception]) {
     drivers.find(d => d.id == driverId) match {
       case Some(driver) =>

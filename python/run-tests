@@ -98,6 +98,7 @@ function run_ml_tests() {
     echo "Run ml tests ..."
     run_test "pyspark/ml/feature.py"
     run_test "pyspark/ml/classification.py"
+    run_test "pyspark/ml/tuning.py"
     run_test "pyspark/ml/tests.py"
 }
 
