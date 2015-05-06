@@ -122,19 +122,21 @@ class ParamsSuite extends FunSuite {
 
     assert(solver.getParam("inputCol").eq(inputCol))
     assert(solver.getParam("maxIter").eq(maxIter))
+    assert(solver.hasParam("inputCol"))
+    assert(!solver.hasParam("abc"))
     intercept[NoSuchElementException] {
       solver.getParam("abc")
     }
 
     intercept[IllegalArgumentException] {
-      solver.validate()
+      solver.validateParams()
     }
-    solver.validate(ParamMap(inputCol -> "input"))
+    solver.validateParams(ParamMap(inputCol -> "input"))
     solver.setInputCol("input")
     assert(solver.isSet(inputCol))
     assert(solver.isDefined(inputCol))
     assert(solver.getInputCol === "input")
-    solver.validate()
+    solver.validateParams()
     intercept[IllegalArgumentException] {
       ParamMap(maxIter -> -10)
     }
@@ -144,6 +146,11 @@ class ParamsSuite extends FunSuite {
 
     solver.clearMaxIter()
     assert(!solver.isSet(maxIter))
+
+    val copied = solver.copy(ParamMap(solver.maxIter -> 50))
+    assert(copied.uid !== solver.uid)
+    assert(copied.getInputCol === solver.getInputCol)
+    assert(copied.getMaxIter === 50)
   }
 
   test("ParamValidate") {

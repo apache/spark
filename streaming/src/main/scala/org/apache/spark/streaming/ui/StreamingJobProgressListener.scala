@@ -29,7 +29,6 @@ import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchStarted
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchSubmitted
-import org.apache.spark.util.Distribution
 
 
 private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
@@ -38,7 +37,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   private val waitingBatchUIData = new HashMap[Time, BatchUIData]
   private val runningBatchUIData = new HashMap[Time, BatchUIData]
   private val completedBatchUIData = new Queue[BatchUIData]
-  private val batchUIDataLimit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 100)
+  private val batchUIDataLimit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 1000)
   private var totalCompletedBatches = 0L
   private var totalReceivedRecords = 0L
   private var totalProcessedRecords = 0L
@@ -145,7 +144,9 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     }
   }
 
-  def numReceivers: Int = ssc.graph.getReceiverInputStreams().size
+  def numReceivers: Int = synchronized {
+    receiverInfos.size
+  }
 
   def numTotalCompletedBatches: Long = synchronized {
     totalCompletedBatches
@@ -175,38 +176,42 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     completedBatchUIData.toSeq
   }
 
-  def processingDelayDistribution: Option[Distribution] = synchronized {
-    extractDistribution(_.processingDelay)
+  def streamName(streamId: Int): Option[String] = {
+    ssc.graph.getInputStreamName(streamId)
   }
 
-  def schedulingDelayDistribution: Option[Distribution] = synchronized {
-    extractDistribution(_.schedulingDelay)
-  }
+  /**
+   * Return all InputDStream Ids
+   */
+  def streamIds: Seq[Int] = ssc.graph.getInputStreams().map(_.id)
 
-  def totalDelayDistribution: Option[Distribution] = synchronized {
-    extractDistribution(_.totalDelay)
-  }
-
-  def receivedRecordsDistributions: Map[Int, Option[Distribution]] = synchronized {
-    val latestBatches = retainedBatches.reverse.take(batchUIDataLimit)
-    (0 until numReceivers).map { receiverId =>
-      val recordsOfParticularReceiver = latestBatches.map { batch =>
-        // calculate records per second for each batch
-        batch.receiverNumRecords.get(receiverId).sum.toDouble * 1000 / batchDuration
+  /**
+   * Return all of the event rates for each InputDStream in each batch. The key of the return value
+   * is the stream id, and the value is a sequence of batch time with its event rate.
+   */
+  def receivedEventRateWithBatchTime: Map[Int, Seq[(Long, Double)]] = synchronized {
+    val _retainedBatches = retainedBatches
+    val latestBatches = _retainedBatches.map { batchUIData =>
+      (batchUIData.batchTime.milliseconds, batchUIData.streamIdToNumRecords)
+    }
+    streamIds.map { streamId =>
+      val eventRates = latestBatches.map {
+        case (batchTime, streamIdToNumRecords) =>
+          val numRecords = streamIdToNumRecords.getOrElse(streamId, 0L)
+          (batchTime, numRecords * 1000.0 / batchDuration)
       }
-      val distributionOption = Distribution(recordsOfParticularReceiver)
-      (receiverId, distributionOption)
+      (streamId, eventRates)
     }.toMap
   }
 
   def lastReceivedBatchRecords: Map[Int, Long] = synchronized {
-    val lastReceivedBlockInfoOption = lastReceivedBatch.map(_.receiverNumRecords)
+    val lastReceivedBlockInfoOption = lastReceivedBatch.map(_.streamIdToNumRecords)
     lastReceivedBlockInfoOption.map { lastReceivedBlockInfo =>
-      (0 until numReceivers).map { receiverId =>
-        (receiverId, lastReceivedBlockInfo.getOrElse(receiverId, 0L))
+      streamIds.map { streamId =>
+        (streamId, lastReceivedBlockInfo.getOrElse(streamId, 0L))
       }.toMap
     }.getOrElse {
-      (0 until numReceivers).map(receiverId => (receiverId, 0L)).toMap
+      streamIds.map(streamId => (streamId, 0L)).toMap
     }
   }
 
@@ -222,13 +227,9 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     retainedBatches.lastOption
   }
 
-  private def retainedBatches: Seq[BatchUIData] = {
+  def retainedBatches: Seq[BatchUIData] = synchronized {
     (waitingBatchUIData.values.toSeq ++
       runningBatchUIData.values.toSeq ++ completedBatchUIData).sortBy(_.batchTime)(Time.ordering)
-  }
-
-  private def extractDistribution(getMetric: BatchUIData => Option[Long]): Option[Distribution] = {
-    Distribution(completedBatchUIData.flatMap(getMetric(_)).map(_.toDouble))
   }
 
   def getBatchUIData(batchTime: Time): Option[BatchUIData] = synchronized {
