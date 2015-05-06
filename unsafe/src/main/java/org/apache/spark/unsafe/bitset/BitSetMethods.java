@@ -70,11 +70,9 @@ public final class BitSetMethods {
   /**
    * Returns {@code true} if any bit is set.
    */
-  public static boolean anySet(Object baseObject, long baseOffset, long bitSetWidthInBytes) {
-    assert bitSetWidthInBytes % WORD_SIZE == 0;
-    int widthInLong = (int)(bitSetWidthInBytes / WORD_SIZE);
+  public static boolean anySet(Object baseObject, long baseOffset, long bitSetWidthInWords) {
     long addr = baseOffset;
-    for (int i = 0; i < widthInLong; i++, addr += WORD_SIZE) {
+    for (int i = 0; i < bitSetWidthInWords; i++, addr += WORD_SIZE) {
       if (PlatformDependent.UNSAFE.getLong(baseObject, addr) != 0) {
         return true;
       }

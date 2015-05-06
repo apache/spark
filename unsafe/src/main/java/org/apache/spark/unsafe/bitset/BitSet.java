@@ -107,7 +107,7 @@ public final class BitSet {
    * @return whether any bit in the BitSet is set
    */
   public boolean anySet() {
-    return BitSetMethods.anySet(baseObject, baseOffset, numWords*BitSetMethods.WORD_SIZE);
+    return BitSetMethods.anySet(baseObject, baseOffset, numWords);
   }
 
 }

@@ -39,6 +39,7 @@ public class BitSetSuite {
     for (int i = 0; i < bs.capacity(); i++) {
       Assert.assertFalse(bs.isSet(i));
     }
+    // another form of asserting that the bit set is empty
     Assert.assertFalse(bs.anySet());
 
     // Set every bit and check it.
@@ -53,6 +54,11 @@ public class BitSetSuite {
       bs.unset(i);
       Assert.assertFalse(bs.isSet(i));
     }
+
+    // Make sure anySet() can detect any set bit
+    bs = createBitSet(256);
+    bs.set(64);
+    Assert.assertTrue(bs.anySet());
   }
 
   @Test
