@@ -257,6 +257,24 @@ class ColumnExpressionSuite extends QueryTest {
       Row(false, true) :: Row(true, false) :: Row(true, true) :: Nil)
   }
 
+  test("SPARK-7321 case") {
+    val testData = (1 to 3).map(i => TestData(i, i.toString)).toDF()
+    checkAnswer(
+      testData.select($"key".when(1, -1).when(2, -2).otherwise(0)),
+      Seq(Row(-1), Row(-2), Row(0))
+    )
+
+    checkAnswer(
+      testData.select($"key".when(1, -1).when(2, -2)),
+      Seq(Row(-1), Row(-2), Row(null))
+    )
+
+    checkAnswer(
+      testData.select($"key".otherwise(0)),
+      Seq(Row(0), Row(0), Row(0))
+    )
+  }
+
   test("sqrt") {
     checkAnswer(
       testData.select(sqrt('key)).orderBy('key.asc),

@@ -1412,6 +1412,24 @@ class Column(object):
         """
         return (self >= lowerBound) & (self <= upperBound)
 
+    @ignore_unicode_prefix
+    def when(self, whenExpr, thenExpr):
+        """ A case when otherwise expression..
+        >>> df.select(df.age.when(2, 3).otherwise(4).alias("age")).collect()
+        [Row(age=3), Row(age=4)]
+        >>> df.select(df.age.when(2, 3).alias("age")).collect()
+        [Row(age=3), Row(age=None)]
+        >>> df.select(df.age.otherwise(4).alias("age")).collect()
+        [Row(age=4), Row(age=4)]
+        """
+        jc = self._jc.when(whenExpr, thenExpr)
+        return Column(jc)
+
+    @ignore_unicode_prefix
+    def otherwise(self, elseExpr):
+        jc = self._jc.otherwise(elseExpr)
+        return Column(jc)
+
     def __repr__(self):
         return 'Column<%s>' % self._jc.toString().encode('utf8')
 
