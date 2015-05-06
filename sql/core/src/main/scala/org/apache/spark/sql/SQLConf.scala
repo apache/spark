@@ -162,6 +162,9 @@ private[sql] class SQLConf extends Serializable {
 
   private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2, "true").toBoolean
 
+  /**
+   * Selects between the new (true) and old (false) JSON handlers, to be removed in Spark 1.5.0
+   */
   private[spark] def useJacksonStreamingAPI: Boolean =
     getConf(USE_JACKSON_STREAMING_API, "true").toBoolean
 
