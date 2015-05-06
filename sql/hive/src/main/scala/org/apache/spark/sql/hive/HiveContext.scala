@@ -254,7 +254,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
     hiveconf.set(key, value)
-    runSqlHive(s"SET $key=$value")
+    executionHive.runSqlHive(s"SET $key=$value")
+    metadataHive.runSqlHive(s"SET $key=$value")
   }
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */

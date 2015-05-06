@@ -215,7 +215,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   sparkContext.getConf.getAll.foreach {
-    case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
+    case (key, value) if key.startsWith("spark.sql") => 
+      println(s"$key=$value")
+      setConf(key, value)
     case _ =>
   }
 

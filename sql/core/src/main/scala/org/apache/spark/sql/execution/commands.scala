@@ -32,7 +32,7 @@ import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext}
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
  * wrapped in `ExecutedCommand` during execution.
  */
-trait RunnableCommand extends LogicalPlan with logical.Command {
+private[sql] trait RunnableCommand extends LogicalPlan with logical.Command {
   self: Product =>
 
   override def output: Seq[Attribute] = Seq.empty

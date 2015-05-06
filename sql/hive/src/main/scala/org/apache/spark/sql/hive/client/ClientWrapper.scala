@@ -62,12 +62,6 @@ class ClientWrapper(
   with Logging
   with ReflectionMagic {
 
-  private val conf = new HiveConf(classOf[SessionState])
-  config.foreach { case (k, v) =>
-    logDebug(s"Hive Config: $k=$v")
-    conf.set(k, v)
-  }
-
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   private val outputBuffer = new java.io.OutputStream {
     var pos: Int = 0
@@ -100,16 +94,29 @@ class ClientWrapper(
     val original = Thread.currentThread().getContextClassLoader
     Thread.currentThread().setContextClassLoader(getClass.getClassLoader)
     val ret = try {
-      val newState = new SessionState(conf)
-      SessionState.start(newState)
-      newState.out = new PrintStream(outputBuffer, true, "UTF-8")
-      newState.err = new PrintStream(outputBuffer, true, "UTF-8")
-      newState
+      val oldState = SessionState.get()
+      if (oldState == null) {
+        val initialConf = new HiveConf(classOf[SessionState])
+        config.foreach { case (k, v) =>
+          logDebug(s"Hive Config: $k=$v")
+          initialConf.set(k, v)
+        }
+        val newState = new SessionState(initialConf)
+        SessionState.start(newState)
+        newState.out = new PrintStream(outputBuffer, true, "UTF-8")
+        newState.err = new PrintStream(outputBuffer, true, "UTF-8")
+        newState
+      } else {
+        oldState
+      }
     } finally {
       Thread.currentThread().setContextClassLoader(original)
     }
     ret
   }
+
+  /** Returns the configuration for the current session. */
+  def conf = SessionState.get().getConf
 
   private val client = Hive.get(conf)
 
@@ -132,6 +139,18 @@ class ClientWrapper(
       Thread.currentThread().setContextClassLoader(original)
     }
     ret
+  }
+
+  def setOut(stream: PrintStream): Unit = withHiveState {
+    state.out = stream
+  }
+
+  def setInfo(stream: PrintStream): Unit = withHiveState {
+    state.info = stream
+  }
+  
+  def setError(stream: PrintStream): Unit = withHiveState {
+    state.err = stream
   }
 
   override def currentDatabase: String = withHiveState {

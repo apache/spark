@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
+import java.io.PrintStream
 import java.util.{Map => JMap}
 
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
@@ -87,6 +88,10 @@ trait ClientInterface {
    * result in one string.
    */
   def runSqlHive(sql: String): Seq[String]
+
+  def setOut(stream: PrintStream): Unit
+  def setInfo(stream: PrintStream): Unit
+  def setError(stream: PrintStream): Unit
 
   /** Returns the names of all tables in the given database. */
   def listTables(dbName: String): Seq[String]
