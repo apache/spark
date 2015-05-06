@@ -28,7 +28,6 @@ import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
@@ -60,13 +59,13 @@ class OneVsRestClassifierSuite extends FunSuite with MLlibTestSparkContext {
 
   test("one-vs-rest: default params") {
     val numClasses = 3
-    val ova = new OneVsRestClassifier().
-      setBaseClassifier(new LogisticRegression)
+    val ova = new OneVsRest().
+      setClassifier(new LogisticRegression)
 
     assert(ova.getLabelCol == "label")
     assert(ova.getPredictionCol == "prediction")
     val ovaModel = ova.fit(dataset)
-    assert(ovaModel.baseClassificationModels.size == numClasses)
+    assert(ovaModel.models.size == numClasses)
     val ovaResults = ovaModel.transform(dataset)
       .select("prediction", "label")
       .map(row => (row(0).asInstanceOf[Double], row(1).asInstanceOf[Double]))
@@ -85,8 +84,8 @@ class OneVsRestClassifierSuite extends FunSuite with MLlibTestSparkContext {
 
   test("one-vs-rest: test read label metadata") {
     val numClasses = 8
-    val ova = new OneVsRestClassifier().
-      setBaseClassifier(new LogisticRegression)
+    val ova = new OneVsRest().
+      setClassifier(new LogisticRegression)
 
     val labelMetadata = NominalAttribute.defaultAttr.withName("label").withNumValues(8)
     val labelWithMetadata = dataset("label").as("label", labelMetadata.toMetadata())
@@ -94,13 +93,13 @@ class OneVsRestClassifierSuite extends FunSuite with MLlibTestSparkContext {
     val datasetWithLabelMetadata = dataset.select(labelWithMetadata, features)
     val ovaModel = ova.fit(datasetWithLabelMetadata)
     // The number of distinct classes in the training dataset = 3, but metadata has value 8
-    assert(ovaModel.baseClassificationModels.size == numClasses)
+    assert(ovaModel.models.size == numClasses)
   }
 
   test("one-vs-rest: pass label metadata correctly during train") {
     val numClasses = 3
-    val ova = new OneVsRestClassifier().
-      setBaseClassifier(new MockLogisticRegression)
+    val ova = new OneVsRest().
+      setClassifier(new MockLogisticRegression)
 
     val labelMetadata = NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses)
     val labelWithMetadata = dataset("label").as("label", labelMetadata.toMetadata())

@@ -24,7 +24,7 @@ import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.classification.{ClassificationModel, Classifier, ClassifierParams}
-import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.param.{ParamMap, Param}
 import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
@@ -34,44 +34,40 @@ import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
 /**
- * Params for [[OneVsRestClassifier]].
+ * Params for [[OneVsRest]].
  */
 private[ml] trait OneVsRestParams extends ClassifierParams {
 
   type ClassifierType = Classifier[F, E, M] forSome {
-    type F ;
-    type M <: ClassificationModel[F,M];
-    type E <:  Classifier[F, E,M]
+    type F;
+    type M <: ClassificationModel[F, M];
+    type E <: Classifier[F, E, M]
   }
 
   /**
-   * param for the base classifier that we reduce multiclass classification into.
+   * param for the classifier that we reduce multiclass classification into.
    * @group param
    */
-  val baseClassifier: Param[ClassifierType]  =
-    new Param(this, "baseClassifier", "base binary classifier/regressor ")
+  val classifier: Param[ClassifierType]  =
+    new Param(this, "classifier", "base binary classifier")
 
   /** @group getParam */
-  def getBaseClassifier: ClassifierType = getOrDefault(baseClassifier)
+  def getClassifier: ClassifierType = $(classifier)
 
 }
 
 /**
+ * Model produced by [[OneVsRest]].
  *
  * @param parent
- * @param baseClassificationModels the binary classification models for reduction.
+ * @param models the binary classification models for reduction.
  */
 @AlphaComponent
-private[ml] class OneVsRestModel(
-    override val parent: OneVsRestClassifier,
-    val baseClassificationModels: Array[Model[_]])
+class OneVsRestModel(
+    override val parent: OneVsRest,
+    val models: Array[Model[_]])
   extends Model[OneVsRestModel] with OneVsRestParams {
 
-  /**
-   * Transforms the dataset with provided parameter map as additional parameters.
-   * @param dataset input dataset
-   * @return transformed dataset
-   */
   override def transform(dataset: DataFrame): DataFrame = {
     // Check schema
     val parentSchema = dataset.schema
@@ -79,18 +75,18 @@ private[ml] class OneVsRestModel(
     val sqlCtx = dataset.sqlContext
 
     // score each model on every data point and pick the model with highest score
-    val predictions = baseClassificationModels.zipWithIndex.par.map { case (model, index) =>
+    // TODO: Use DataFrame expressions to leverage performance here
+    val predictions = models.zipWithIndex.par.map { case (model, index) =>
       val output = model.transform(dataset)
       output.select($(rawPredictionCol)).map { case Row(p: Vector) => List((index, p(1))) }
     }.reduce[RDD[List[(Int, Double)]]] { case (x, y) =>
       x.zip(y).map { case ((a, b)) =>
         a ++ b
       }
-    }.
-      map(_.maxBy(_._2))
+    }.map(_.maxBy(_._2))
 
     // ensure that we pass through columns that are part of the original dataset.
-    val results = dataset.select(col("*")).rdd.zip(predictions).map { case ((row, (label, _))) =>
+    val results = dataset.select(col("*")).rdd.zip(predictions).map { case (row, (label, _)) =>
       Row.fromSeq(row.toSeq ++ List(label.toDouble))
     }
 
@@ -117,15 +113,17 @@ private[ml] class OneVsRestModel(
  * Each example is scored against all k models and the model with highest score
  * is picked to label the example.
  *
+ * Classifier parameters like featuresCol, PredictionCol and rawPredictionCol are
+ * set directly on the OneVsRest and are ignored on the underlying classifier.
+ *
  */
-class OneVsRestClassifier extends Estimator[OneVsRestModel]
+class OneVsRest extends Estimator[OneVsRestModel]
   with OneVsRestParams {
 
   @DeveloperApi
   protected def featuresDataType: DataType = new VectorUDT
 
-  /** @group setParam */
-  def setBaseClassifier(value: ClassifierType): this.type = set(baseClassifier, value)
+  def setClassifier(value: ClassifierType): this.type = set(classifier, value)
 
   override def fit(dataset: DataFrame): OneVsRestModel = {
 
@@ -153,19 +151,25 @@ class OneVsRestClassifier extends Estimator[OneVsRestModel]
 
       // generate new label for each binary classifier.
       // generate new label metadata for the binary problem.
+      // TODO use when ... otherwise after SPARK-7321 is merged
       val labelUDF = callUDF(label, DoubleType, col($(labelCol)))
       val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
       val labelUDFWithNewMeta = labelUDF.as(labelColName, newLabelMeta)
       val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDFWithNewMeta)
-      val classifier = getBaseClassifier
-      classifier.fit(trainingDataset, classifier.labelCol -> labelColName)
+      val classifier = getClassifier
+      val map = new ParamMap()
+      map.put(classifier.labelCol -> labelColName)
+      map.put(classifier.featuresCol -> $(featuresCol))
+      map.put(classifier.predictionCol -> $(predictionCol))
+      map.put(classifier.rawPredictionCol -> $(rawPredictionCol))
+      classifier.fit(trainingDataset, map)
     }.toArray[Model[_]]
 
     if (handlePersistence) {
       multiclassLabeled.unpersist()
     }
 
-    new OneVsRestModel(this, models)
+    copyValues(new OneVsRestModel(this, models))
   }
 
   override def transformSchema(schema: StructType): StructType = {
