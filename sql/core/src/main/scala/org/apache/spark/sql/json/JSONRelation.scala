@@ -104,7 +104,12 @@ private[sql] class DefaultSource
 }
 
 private[sql] class JSONRelation(
-    baseRDD: RDD[String],
+    // baseRDD is not immutable with respect to INSERT OVERWRITE
+    // and so it must be recreated at least as often as the
+    // underlying inputs are modified. To be safe, a function is
+    // used instead of a regular RDD value to ensure a fresh RDD is
+    // recreated for each and every operation.
+    baseRDD: () => RDD[String],
     val path: Option[String],
     val samplingRatio: Double,
     userSpecifiedSchema: Option[StructType])(
@@ -120,7 +125,7 @@ private[sql] class JSONRelation(
       userSpecifiedSchema: Option[StructType],
       sqlContext: SQLContext) =
     this(
-      sqlContext.sparkContext.textFile(path),
+      () => sqlContext.sparkContext.textFile(path),
       Some(path),
       samplingRatio,
       userSpecifiedSchema)(sqlContext)
@@ -132,13 +137,13 @@ private[sql] class JSONRelation(
   override lazy val schema = userSpecifiedSchema.getOrElse {
     if (useJacksonStreamingAPI) {
       InferSchema(
-        baseRDD,
+        baseRDD(),
         samplingRatio,
         sqlContext.conf.columnNameOfCorruptRecord)
     } else {
       JsonRDD.nullTypeToStringType(
         JsonRDD.inferSchema(
-          baseRDD,
+          baseRDD(),
           samplingRatio,
           sqlContext.conf.columnNameOfCorruptRecord))
     }
@@ -147,12 +152,12 @@ private[sql] class JSONRelation(
   override def buildScan(): RDD[Row] = {
     if (useJacksonStreamingAPI) {
       JacksonParser(
-        baseRDD,
+        baseRDD(),
         schema,
         sqlContext.conf.columnNameOfCorruptRecord)
     } else {
       JsonRDD.jsonStringToRow(
-        baseRDD,
+        baseRDD(),
         schema,
         sqlContext.conf.columnNameOfCorruptRecord)
     }
@@ -161,12 +166,12 @@ private[sql] class JSONRelation(
   override def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row] = {
     if (useJacksonStreamingAPI) {
       JacksonParser(
-        baseRDD,
+        baseRDD(),
         StructType.fromAttributes(requiredColumns),
         sqlContext.conf.columnNameOfCorruptRecord)
     } else {
       JsonRDD.jsonStringToRow(
-        baseRDD,
+        baseRDD(),
         StructType.fromAttributes(requiredColumns),
         sqlContext.conf.columnNameOfCorruptRecord)
     }
