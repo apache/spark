@@ -19,7 +19,7 @@ package org.apache.spark.sql.sources
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -432,10 +432,14 @@ abstract class FSBasedRelation private[sql](
   }
 
   /**
-   * The output committer class to use. Default to
-   * [[org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter]].
+   * Client side preparation for data writing can be put here.  For example, user defined output
+   * committer can be configured here.
+   *
+   * Note that the only side effect expected here is mutating `job` via its setters.  Especially,
+   * Spark SQL caches [[BaseRelation]] instances for performance, mutating relation internal states
+   * may cause unexpected behaviors.
    */
-  def outputCommitterClass: Class[_ <: FileOutputCommitter] = classOf[FileOutputCommitter]
+  def prepareForWrite(job: Job): Unit = ()
 
   /**
    * This method is responsible for producing a new [[OutputWriter]] for each newly opened output

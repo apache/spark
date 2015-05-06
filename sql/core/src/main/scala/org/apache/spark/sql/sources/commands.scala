@@ -229,16 +229,17 @@ private[sql] abstract class BaseWriterContainer(
 
   protected val dataSchema = relation.dataSchema
 
-  protected val outputCommitterClass: Class[_ <: FileOutputCommitter] =
-    relation.outputCommitterClass
-
   protected val outputWriterClass: Class[_ <: OutputWriter] = relation.outputWriterClass
+
+  private var outputFormatClass: Class[_ <: OutputFormat[_, _]] = _
 
   def driverSideSetup(): Unit = {
     setupIDs(0, 0, 0)
     setupConf()
     taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
-    outputCommitter = newOutputCommitter(outputCommitterClass, outputPath, taskAttemptContext)
+    relation.prepareForWrite(job)
+    outputFormatClass = job.getOutputFormatClass
+    outputCommitter = newOutputCommitter(taskAttemptContext)
     outputCommitter.setupJob(jobContext)
   }
 
@@ -246,22 +247,17 @@ private[sql] abstract class BaseWriterContainer(
     setupIDs(taskContext.stageId(), taskContext.partitionId(), taskContext.attemptNumber())
     setupConf()
     taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
-    outputCommitter = newOutputCommitter(outputCommitterClass, outputPath, taskAttemptContext)
+    outputCommitter = newOutputCommitter(taskAttemptContext)
     outputCommitter.setupTask(taskAttemptContext)
     initWriters()
   }
 
-  private def newOutputCommitter(
-      clazz: Class[_ <: FileOutputCommitter],
-      path: String,
-      context: TaskAttemptContext): FileOutputCommitter = {
-    val ctor = outputCommitterClass.getConstructor(classOf[Path], classOf[TaskAttemptContext])
-    ctor.setAccessible(true)
-
-    val hadoopPath = new Path(path)
-    val fs = hadoopPath.getFileSystem(serializableConf.value)
-    val qualified = fs.makeQualified(hadoopPath)
-    ctor.newInstance(qualified, context)
+  private def newOutputCommitter(context: TaskAttemptContext): FileOutputCommitter = {
+    outputFormatClass.newInstance().getOutputCommitter(context) match {
+      case f: FileOutputCommitter => f
+      case f => sys.error(
+        s"FileOutputCommitter or its subclass is expected, but got a ${f.getClass.getName}.")
+    }
   }
 
   private def setupIDs(jobId: Int, splitId: Int, attemptId: Int): Unit = {
