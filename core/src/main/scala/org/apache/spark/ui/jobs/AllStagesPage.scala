@@ -64,12 +64,6 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       val shouldShowCompletedStages = completedStages.nonEmpty
       val shouldShowFailedStages = failedStages.nonEmpty
 
-      val completedStageNumStr = if (numCompletedStages == completedStages.size) {
-        s"$numCompletedStages"
-      } else {
-        s"$numCompletedStages, only showing ${completedStages.size}"
-      }
-
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
@@ -104,9 +98,9 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
             }
             {
               if (shouldShowCompletedStages) {
-                <li id="completed-summary">
+                <li>
                   <a href="#completed"><strong>Completed Stages:</strong></a>
-                  {completedStageNumStr}
+                  {numCompletedStages}
                 </li>
               }
             }
@@ -138,7 +132,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         pendingStagesTable.toNodeSeq
       }
       if (shouldShowCompletedStages) {
-        content ++= <h4 id="completed">Completed Stages ({completedStageNumStr})</h4> ++
+        content ++= <h4 id="completed">Completed Stages ({numCompletedStages})</h4> ++
         completedStagesTable.toNodeSeq
       }
       if (shouldShowFailedStages) {

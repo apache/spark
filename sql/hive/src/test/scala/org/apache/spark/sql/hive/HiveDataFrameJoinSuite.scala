@@ -15,11 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark;
+package org.apache.spark.sql.hive
 
-public enum JobExecutionStatus {
-  RUNNING,
-  SUCCEEDED,
-  FAILED,
-  UNKNOWN
+import org.apache.spark.sql.{Row, QueryTest}
+import org.apache.spark.sql.hive.test.TestHive.implicits._
+
+
+class HiveDataFrameJoinSuite extends QueryTest {
+
+  // We should move this into SQL package if we make case sensitivity configurable in SQL.
+  test("join - self join auto resolve ambiguity with case insensitivity") {
+    val df = Seq((1, "1"), (2, "2")).toDF("key", "value")
+    checkAnswer(
+      df.join(df, df("key") === df("Key")),
+      Row(1, "1", 1, "1") :: Row(2, "2", 2, "2") :: Nil)
+
+    checkAnswer(
+      df.join(df.filter($"value" === "2"), df("key") === df("Key")),
+      Row(2, "2", 2, "2") :: Nil)
+  }
+
 }

@@ -15,11 +15,44 @@
  * limitations under the License.
  */
 
-package org.apache.spark;
 
-public enum JobExecutionStatus {
-  RUNNING,
-  SUCCEEDED,
-  FAILED,
-  UNKNOWN
+.graph {
+  font: 10px sans-serif;
+}
+
+.axis path, .axis line {
+  fill: none;
+  stroke: gray;
+  shape-rendering: crispEdges;
+}
+
+.axis text {
+  fill: gray;
+}
+
+.tooltip-inner {
+  max-width: 500px !important; // Make sure we only have one line tooltip
+}
+
+.line {
+  fill: none;
+  stroke: #0088cc;
+  stroke-width: 1.5px;
+}
+
+.bar rect {
+  fill: #0088cc;
+  shape-rendering: crispEdges;
+}
+
+.bar rect:hover {
+  fill: #00c2ff;
+}
+
+.timeline {
+  width: 500px;
+}
+
+.histogram {
+  width: auto;
 }
