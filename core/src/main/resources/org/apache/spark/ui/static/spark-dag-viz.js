@@ -59,7 +59,7 @@ var VizConstants = {
   clusterLabelColor: "#888888",
   edgeColor: "#444444",
   edgeWidth: "1.5px",
-  svgMarginX: 0,
+  svgMarginX: 20,
   svgMarginY: 20,
   stageSep: 50,
   graphPrefix: "graph_",
@@ -132,20 +132,29 @@ function renderDagViz(forJob) {
     graphContainer().selectAll("#" + nodeId).classed("cached", true);
   });
 
-  // Set the appropriate SVG dimensions to ensure that all elements are displayed
-  var boundingBox = svg.node().getBBox();
-  svg.style("width", (boundingBox.width + VizConstants.svgMarginX) + "px");
-  svg.style("height", (boundingBox.height + VizConstants.svgMarginY) + "px");
+  //
+  createClusterLabels(svg, forJob);
 
-  // Add labels to clusters because dagre-d3 doesn't do this for us
+  //
+  resizeSvg(svg);
+
+  //
+  styleDagViz(forJob);
+}
+
+/*
+ *
+ */
+function createClusterLabels(svg, forJob) {
+  var extraSpace = forJob ? 10 : 20;
   svg.selectAll("g.cluster rect").each(function() {
     var rect = d3.select(this);
     var cluster = d3.select(this.parentNode);
     // Shift the boxes up a little to make room for the labels
-    rect.attr("y", toFloat(rect.attr("y")) - 10);
-    rect.attr("height", toFloat(rect.attr("height")) + 10);
-    var labelX = toFloat(rect.attr("x")) + toFloat(rect.attr("width")) - 5;
-    var labelY = toFloat(rect.attr("y")) + 15;
+    rect.attr("y", toFloat(rect.attr("y")) - extraSpace);
+    rect.attr("height", toFloat(rect.attr("height")) + extraSpace);
+    var labelX = toFloat(rect.attr("x")) + toFloat(rect.attr("width")) - extraSpace / 2;
+    var labelY = toFloat(rect.attr("y")) + extraSpace / 2 + 10;
     var labelText = cluster.attr("name").replace(VizConstants.clusterPrefix, "");
     cluster.append("text")
       .attr("x", labelX)
@@ -153,17 +162,37 @@ function renderDagViz(forJob) {
       .attr("text-anchor", "end")
       .text(labelText);
   });
+}
 
-  // We have shifted a few elements upwards, so we should fix the SVG views
-  var startX = -VizConstants.svgMarginX;
-  var startY = -VizConstants.svgMarginY;
-  var endX = toFloat(svg.style("width")) + VizConstants.svgMarginX;
-  var endY = toFloat(svg.style("height")) + VizConstants.svgMarginY;
-  var newViewBox = startX + " " + startY + " " + endX + " " + endY;
-  svg.attr("viewBox", newViewBox);
-
-  // Lastly, apply some custom style to the DAG
-  styleDagViz(forJob);
+/*
+ * Helper method to size the SVG appropriately such that all elements are displyed.
+ * This assumes that all nodes are embeded in clusters (rectangles).
+ */
+function resizeSvg(svg) {
+  var allClusters = svg.selectAll("g.cluster rect")[0];
+  var startX = -VizConstants.svgMarginX +
+    toFloat(d3.min(allClusters, function(e) {
+      return getAbsolutePosition(d3.select(e)).x;
+    }));
+  var startY = -VizConstants.svgMarginY +
+    toFloat(d3.min(allClusters, function(e) {
+      return getAbsolutePosition(d3.select(e)).y;
+    }));
+  var endX = VizConstants.svgMarginX +
+    toFloat(d3.max(allClusters, function(e) {
+      var t = d3.select(e)
+      return getAbsolutePosition(t).x + toFloat(t.attr("width"));
+    }));
+  var endY = VizConstants.svgMarginY +
+    toFloat(d3.max(allClusters, function(e) {
+      var t = d3.select(e)
+      return getAbsolutePosition(t).y + toFloat(t.attr("height"));
+    }));
+  var width = endX - startX;
+  var height = endY - startY;
+  svg.attr("viewBox", startX + " " + startY + " " + width + " " + height)
+     .attr("width", width)
+     .attr("height", height);
 }
 
 /* Render the RDD DAG visualization for a stage. */
@@ -203,10 +232,13 @@ function renderDagVizForJob(svgContainer) {
       // Take into account the position and width of the last stage's container
       var existingStages = stageClusters();
       if (!existingStages.empty()) {
-        var lastStage = existingStages[0].pop();
-        var lastStageId = d3.select(lastStage).attr("id");
-        var lastStageWidth = toFloat(d3.select("#" + lastStageId + " rect").attr("width"));
-        var lastStagePosition = getAbsolutePosition(lastStageId);
+        var lastStage = d3.select(existingStages[0].pop());
+        var lastStageId = lastStage.attr("id");
+        var lastStageWidth = toFloat(graphContainer()
+          .select("#" + lastStageId)
+          .select("rect")
+          .attr("width"));
+        var lastStagePosition = getAbsolutePosition(lastStage);
         var offset = lastStagePosition.x + lastStageWidth + VizConstants.stageSep;
         container.attr("transform", "translate(" + offset + ", 0)");
       }
@@ -250,9 +282,6 @@ function styleDagViz(forJob) {
     .style("stroke", VizConstants.rddOperationColor)
     .style("stroke-width", "4px")
     .style("stroke-opacity", "0.5");
-  graphContainer().selectAll("svg g.cluster text")
-    .attr("fill", VizConstants.clusterLabelColor)
-    .attr("font-size", "11px");
   graphContainer().selectAll("svg path")
     .style("stroke", VizConstants.edgeColor)
     .style("stroke-width", VizConstants.edgeWidth);
@@ -291,6 +320,9 @@ function styleDagVizForJob() {
     .style("fill", VizConstants.rddCachedColor);
   graphContainer().selectAll("svg g#cross-stage-edges path")
     .style("fill", "none");
+  graphContainer().selectAll("svg g.cluster text")
+    .attr("fill", VizConstants.clusterLabelColor)
+    .attr("font-size", "11px");
 }
 
 /* Apply stage-page-specific style to the visualization. */
@@ -306,21 +338,38 @@ function styleDagVizForStage() {
     .style("stroke", VizConstants.rddCachedColor);
   graphContainer().selectAll("svg g.node g.label text tspan")
     .style("fill", VizConstants.rddColor);
+  graphContainer().selectAll("svg g.cluster text")
+    .attr("fill", "#444444")
+    .attr("font-size", "14px")
+    .attr("font-weight", "bold");
 }
 
 /*
  * (Job page only) Helper method to compute the absolute
- * position of the group element identified by the given ID.
+ * position of the specified element in our graph.
  */
-function getAbsolutePosition(groupId) {
-  var obj = d3.select("#" + groupId).filter("g");
-  var _x = 0, _y = 0;
+function getAbsolutePosition(d3selection) {
+  if (d3selection.empty()) {
+    throw "Attempted to get absolute position of an empty selection.";
+  }
+  var obj = d3selection;
+  var _x = obj.attr("x") || 0,
+      _y = obj.attr("y") || 0;
+  _x = toFloat(_x);
+  _y = toFloat(_y);
   while (!obj.empty()) {
     var transformText = obj.attr("transform");
-    var translate = d3.transform(transformText).translate
-    _x += translate[0];
-    _y += translate[1];
-    obj = d3.select(obj.node().parentNode).filter("g")
+    if (transformText) {
+      var translate = d3.transform(transformText).translate;
+      _x += toFloat(translate[0]);
+      _y += toFloat(translate[1]);
+    }
+    // Climb upwards to find how our parents are translated
+    obj = d3.select(obj.node().parentNode);
+    // Stop when we've reached the graph container itself
+    if (obj.node() == graphContainer().node()) {
+      break;
+    }
   }
   return { x: _x, y: _y };
 }
@@ -329,8 +378,8 @@ function getAbsolutePosition(groupId) {
 function connectRDDs(fromRDDId, toRDDId, container) {
   var fromNodeId = VizConstants.nodePrefix + fromRDDId;
   var toNodeId = VizConstants.nodePrefix + toRDDId
-  var fromPos = getAbsolutePosition(fromNodeId);
-  var toPos = getAbsolutePosition(toNodeId);
+  var fromPos = getAbsolutePosition(graphContainer().select("#" + fromNodeId));
+  var toPos = getAbsolutePosition(graphContainer().select("#" + toNodeId));
 
   // On the job page, RDDs are rendered as dots (circles). When rendering the path,
   // we need to account for the radii of these circles. Otherwise the arrow heads
@@ -387,6 +436,6 @@ function stageClusters() {
 
 /* Helper method to convert attributes to numeric values. */
 function toFloat(f) {
-  return parseFloat(f.replace(/px$/, ""));
+  return parseFloat(f.toString().replace(/px$/, ""));
 }
 
