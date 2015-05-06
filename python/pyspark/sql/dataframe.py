@@ -1308,17 +1308,17 @@ class Column(object):
         >>> from pyspark.sql import Row
         >>> df = sc.parallelize([Row(r=Row(a=1, b="b"))]).toDF()
         >>> df.select(df.r.getField("b")).show()
-        +---+
+        +----+
         |r[b]|
-        +---+
-        |  b|
-        +---+
+        +----+
+        |   b|
+        +----+
         >>> df.select(df.r.a).show()
-        +---+
+        +----+
         |r[a]|
-        +---+
-        |  1|
-        +---+
+        +----+
+        |   1|
+        +----+
         """
         return self[name]
 
