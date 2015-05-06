@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.serializer._
 import org.apache.spark.Logging
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.types._
 
 /**
@@ -91,26 +91,19 @@ private[sql] class Serializer2DeserializationStream(
 
   val rowIn = new DataInputStream(new BufferedInputStream(in))
 
-  val key = if (keySchema != null) new SpecificMutableRow(keySchema) else null
-  val value = if (valueSchema != null) new SpecificMutableRow(valueSchema) else null
-  val readKeyFunc = SparkSqlSerializer2.createDeserializationFunction(keySchema, rowIn, key)
-  val readValueFunc = SparkSqlSerializer2.createDeserializationFunction(valueSchema, rowIn, value)
+  val readKeyFunc = SparkSqlSerializer2.createDeserializationFunction(keySchema, rowIn)
+  val readValueFunc = SparkSqlSerializer2.createDeserializationFunction(valueSchema, rowIn)
 
   override def readObject[T: ClassTag](): T = {
-    readKeyFunc()
-    readValueFunc()
-
-    (key, value).asInstanceOf[T]
+    (readKeyFunc(), readValueFunc()).asInstanceOf[T]
   }
 
   override def readKey[T: ClassTag](): T = {
-    readKeyFunc()
-    key.asInstanceOf[T]
+    readKeyFunc().asInstanceOf[T]
   }
 
   override def readValue[T: ClassTag](): T = {
-    readValueFunc()
-    value.asInstanceOf[T]
+    readValueFunc().asInstanceOf[T]
   }
 
   override def close(): Unit = {
@@ -118,7 +111,7 @@ private[sql] class Serializer2DeserializationStream(
   }
 }
 
-private[sql] class ShuffleSerializerInstance(
+private[sql] class SparkSqlSerializer2Instance(
     keySchema: Array[DataType],
     valueSchema: Array[DataType])
   extends SerializerInstance {
@@ -153,7 +146,7 @@ private[sql] class SparkSqlSerializer2(keySchema: Array[DataType], valueSchema: 
   with Logging
   with Serializable{
 
-  def newInstance(): SerializerInstance = new ShuffleSerializerInstance(keySchema, valueSchema)
+  def newInstance(): SerializerInstance = new SparkSqlSerializer2Instance(keySchema, valueSchema)
 
   override def supportsRelocationOfSerializedObjects: Boolean = {
     // SparkSqlSerializer2 is stateless and writes no stream headers
@@ -323,12 +316,12 @@ private[sql] object SparkSqlSerializer2 {
    */
   def createDeserializationFunction(
       schema: Array[DataType],
-      in: DataInputStream,
-      mutableRow: SpecificMutableRow): () => Unit = {
+      in: DataInputStream): () => Row = {
     () => {
       // If the schema is null, the returned function does nothing when it get called.
       if (schema != null) {
         var i = 0
+        val mutableRow = new GenericMutableRow(schema.length)
         while (i < schema.length) {
           schema(i) match {
             // When we read values from the underlying stream, we also first read the null byte
@@ -440,6 +433,10 @@ private[sql] object SparkSqlSerializer2 {
           }
           i += 1
         }
+
+        mutableRow
+      } else {
+        null
       }
     }
   }
