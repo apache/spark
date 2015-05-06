@@ -52,10 +52,12 @@ private[ml] trait CrossValidatorParams extends Params {
   def getEstimatorParamMaps: Array[ParamMap] = $(estimatorParamMaps)
 
   /**
-   * param for the evaluator for selection
+   * param for the evaluator used to select hyper-parameters that maximize the cross-validated
+   * metric
    * @group param
    */
-  val evaluator: Param[Evaluator] = new Param(this, "evaluator", "evaluator for selection")
+  val evaluator: Param[Evaluator] = new Param(this, "evaluator",
+    "evaluator used to select hyper-parameters that maximize the cross-validated metric")
 
   /** @group getParam */
   def getEvaluator: Evaluator = $(evaluator)
@@ -120,6 +122,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
       trainingDataset.unpersist()
       var i = 0
       while (i < numModels) {
+        // TODO: duplicate evaluator to take extra params from input
         val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)))
         logDebug(s"Got metric $metric for model trained with ${epm(i)}.")
         metrics(i) += metric

@@ -67,6 +67,10 @@ private[spark] object SQLConf {
   // Set to false when debugging requires the ability to look at invalid query plans.
   val DATAFRAME_EAGER_ANALYSIS = "spark.sql.eagerAnalysis"
 
+  // Whether to automatically resolve ambiguity in join conditions for self-joins.
+  // See SPARK-6231.
+  val DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY = "spark.sql.selfJoinAutoResolveAmbiguity"
+
   val USE_SQL_SERIALIZER2 = "spark.sql.useSerializer2"
 
   object Deprecated {
@@ -219,6 +223,9 @@ private[sql] class SQLConf extends Serializable {
   private[spark] def dataFrameEagerAnalysis: Boolean =
     getConf(DATAFRAME_EAGER_ANALYSIS, "true").toBoolean
 
+  private[spark] def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
+    getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY, "true").toBoolean
+  
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
