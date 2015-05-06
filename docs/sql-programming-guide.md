@@ -137,8 +137,15 @@ df.show()
 
 DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/index.html#org.apache.spark.sql.DataFrame), [Java](api/java/index.html?org/apache/spark/sql/DataFrame.html), and [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame).
 
-Here we include some basic examples of structured data processing using DataFrames:
+<div data-lang="python"  markdown="1">
+In Python it's possible to access a DataFrame's columns either by attribute
+(`df.age`) or by indexing (`df['age']`). While the former is convenient for
+interactive data exploration, users are highly encouraged to use the
+latter form, which is future proof and won't break with column names that
+are also attributes on the DataFrame class.
+</div>
 
+Here we include some basic examples of structured data processing using DataFrames:
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
@@ -270,14 +277,14 @@ df.select("name").show()
 ## Justin
 
 # Select everybody, but increment the age by 1
-df.select(df.name, df.age + 1).show()
+df.select(df['name'], df['age'] + 1).show()
 ## name    (age + 1)
 ## Michael null
 ## Andy    31
 ## Justin  20
 
 # Select people older than 21
-df.filter(df.age > 21).show()
+df.filter(df['age'] > 21).show()
 ## age name
 ## 30  Andy
 
