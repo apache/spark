@@ -101,5 +101,9 @@ class VersionsSuite extends FunSuite with Logging {
     test(s"$version: getTable") {
       client.getTable("default", "src")
     }
+
+    test(s"$version: set command") {
+      client.runSqlHive("SET spark.sql.test.key=1")
+    }
   }
 }

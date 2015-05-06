@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.File
-import java.net.URLClassLoader
+import java.net.{URL, URLClassLoader}
 import java.util
 
 import scala.language.reflectiveCalls
@@ -49,7 +49,7 @@ object IsolatedClientLoader {
     case "13" | "0.13" | "0.13.0" | "0.13.1" => hive.v13
   }
 
-  private def downloadVersion(version: HiveVersion): Seq[File] = {
+  private def downloadVersion(version: HiveVersion): Seq[URL] = {
     val hiveArtifacts =
       (Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde") ++
         (if (version.hasBuiltinsJar) "hive-builtins" :: Nil else Nil))
@@ -72,10 +72,10 @@ object IsolatedClientLoader {
     tempDir.mkdir()
 
     allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
-    tempDir.listFiles()
+    tempDir.listFiles().map(_.toURL)
   }
 
-  private def resolvedVersions = new scala.collection.mutable.HashMap[HiveVersion, Seq[File]]
+  private def resolvedVersions = new scala.collection.mutable.HashMap[HiveVersion, Seq[URL]]
 }
 
 /**
@@ -101,7 +101,7 @@ object IsolatedClientLoader {
  */
 class IsolatedClientLoader(
     val version: HiveVersion,
-    val execJars: Seq[File] = Seq.empty,
+    val execJars: Seq[URL] = Seq.empty,
     val config: Map[String, String] = Map.empty,
     val isolationOn: Boolean = true,
     val rootClassLoader: ClassLoader = ClassLoader.getSystemClassLoader.getParent.getParent,
@@ -112,7 +112,7 @@ class IsolatedClientLoader(
   assert(Try(baseClassLoader.loadClass("org.apache.hive.HiveConf")).isFailure)
 
   /** All jars used by the hive specific classloader. */
-  protected def allJars = execJars.map(_.toURI.toURL).toArray
+  protected def allJars = execJars.toArray
 
   protected def isSharedClass(name: String): Boolean =
     name.contains("slf4j") ||

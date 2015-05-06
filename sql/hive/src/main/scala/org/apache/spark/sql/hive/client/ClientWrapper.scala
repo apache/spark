@@ -307,11 +307,12 @@ class ClientWrapper(
     try {
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
+      // The remainder of the command.
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
       val proc: CommandProcessor = version match {
         case hive.v12 =>
           classOf[CommandProcessorFactory]
-            .callStatic[String, HiveConf, CommandProcessor]("get", cmd_1, conf)
+            .callStatic[String, HiveConf, CommandProcessor]("get", tokens(0), conf)
         case hive.v13 =>
           classOf[CommandProcessorFactory]
             .callStatic[Array[String], HiveConf, CommandProcessor]("get", Array(tokens(0)), conf)

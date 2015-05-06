@@ -102,8 +102,19 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * this does not necessarily need to be the same version of Hive that is used internally by
    * Spark SQL for execution.
    */
-  protected[hive] def hiveVersion: String =
-    getConf("spark.sql.hive.version", "0.13.1")
+  protected[hive] def hiveMetastoreVersion: String =
+    getConf("spark.sql.hive.metastore.version", "0.13.1")
+
+  /**
+   * The location of the jars that should be used to instantiate the HiveMetastoreClient.  This
+   * property can be one of three option:
+   *  - a comma-separated list of jar files that could be passed to a URLClassLoader
+   *  - builtin - attempt to discover the jars that were used to load Spark SQL and use those. This
+   *              option is only valid when using the execution version of Hive.
+   *  - maven - download the correct version of hive on demand from maven.
+   */
+  protected[hive] def hiveMetastoreJars: String =
+    getConf("spark.sql.hive.metastore.jars", "builtin")
 
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
@@ -121,6 +132,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   executionConf.set(
     "javax.jdo.option.ConnectionURL", s"jdbc:derby:;databaseName=$localMetastore;create=true")
 
+  /** The version of hive used internally by Spark SQL. */
+  lazy val hiveExecutionVersion: String = "0.13.1"
+
   /**
    * The copy of the hive client that is used for execution.  Currently this must always be
    * Hive 13 as this is the version of Hive that is packaged with Spark SQL.  This copy of the
@@ -129,31 +143,71 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * for storing peristent metadata, and only point to a dummy metastore in a temporary directory.
    */
   @transient
-  protected[hive] lazy val executionHive: ClientWrapper =
-    new IsolatedClientLoader(
-      version = IsolatedClientLoader.hiveVersion("13"),
-      isolationOn = false,
+  protected[hive] lazy val executionHive: ClientWrapper = {
+    logInfo(s"Initilizing execution hive, version $hiveExecutionVersion")
+    new ClientWrapper(
+      version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
       config = Map(
         "javax.jdo.option.ConnectionURL" ->
-          s"jdbc:derby:;databaseName=$localMetastore;create=true"),
-      rootClassLoader = Utils.getContextOrSparkClassLoader).client.asInstanceOf[ClientWrapper]
+        s"jdbc:derby:;databaseName=$localMetastore;create=true"))
+  }
   SessionState.setCurrentSessionState(executionHive.state)
 
   /**
-   * The copy of the Hive client that is used to retrieve metadata from the Hive MetaStore.  This
+   * The copy of the Hive client that is used to retrieve metadata from the Hive MetaStore.
    * The version of the Hive client that is used here must match the metastore that is configured
    * in the hive-site.xml file.
    */
   @transient
   protected[hive] lazy val metadataHive: ClientInterface = {
+    val metaVersion = IsolatedClientLoader.hiveVersion(hiveMetastoreVersion)
+
     // We instantiate a HiveConf here to read in the hive-site.xml file and then pass the options
     // into the isolated client loader
     val metadataConf = new HiveConf()
-    val allConfig = metadataConf.iterator.map(e => e.getKey -> e.getValue).toMap
+    // `configure` goes second to override other settings.
+    val allConfig = metadataConf.iterator.map(e => e.getKey -> e.getValue).toMap ++ configure
 
-    // Config goes second to override other settings.
-    // TODO: Support for loading the jars from an already downloaded location.
-    IsolatedClientLoader.forVersion(hiveVersion, allConfig ++ configure).client
+    val isolatedLoader = if (hiveMetastoreJars == "builtin") {
+      if (hiveExecutionVersion != hiveMetastoreVersion) {
+        throw new IllegalArgumentException(
+          "Builtin jars can only be used when hive execution version == hive metastore version. " +
+          s"Execution: ${hiveExecutionVersion} != Metastore: ${hiveMetastoreVersion}. " +
+          "Specify a vaild path to the correct hive jars using spark.sql.hive.metastore.jars " +
+          s"or change spark.sql.hive.metastore.version to ${hiveExecutionVersion}.")
+      }
+      val jars = getClass.getClassLoader match {
+        case urlClassLoader: java.net.URLClassLoader => urlClassLoader.getURLs
+        case other =>
+          throw new IllegalArgumentException(
+            "Unable to locate hive jars to connect to metastore " +
+            s"using classloader ${other.getClass.getName}. " +
+            "Please set spark.sql.hive.metastore.jars")
+      }
+
+      logInfo(
+        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using Spark classes.")
+      new IsolatedClientLoader(
+        version = metaVersion,
+        execJars = jars.toSeq,
+        config = allConfig,
+        isolationOn = true)
+    } else if (hiveMetastoreJars == "maven") {
+      // TODO: Support for loading the jars from an already downloaded location.
+      logInfo(
+        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using maven.")
+      IsolatedClientLoader.forVersion(hiveMetastoreVersion, allConfig )
+    } else {
+      val jars = hiveMetastoreJars.split(",").map(new java.net.URL(_))
+      logInfo(
+        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using $jars")
+      new IsolatedClientLoader(
+        version = metaVersion,
+        execJars = jars.toSeq,
+        config = allConfig,
+        isolationOn = true)
+    }
+    isolatedLoader.client
   }
 
   protected[sql] override def parseSql(sql: String): LogicalPlan = {
