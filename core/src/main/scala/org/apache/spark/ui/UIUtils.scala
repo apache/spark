@@ -196,11 +196,7 @@ private[spark] object UIUtils extends Logging {
         <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
       </li>
     }
-    val helpButton: Seq[Node] = helpText.map { helpText =>
-      <sup>
-        (<a data-toggle="tooltip" data-placement="bottom" title={helpText}>?</a>)
-      </sup>
-    }.getOrElse(Seq.empty)
+    val helpButton: Seq[Node] = helpText.map(tooltip(_, "bottom")).getOrElse(Seq.empty)
 
     <html>
       <head>
@@ -372,5 +368,11 @@ private[spark] object UIUtils extends Logging {
         }
       </div>
     </div>
+  }
+
+  def tooltip(text: String, position: String): Seq[Node] = {
+    <sup>
+      (<a data-toggle="tooltip" data-placement={position} title={text}>?</a>)
+    </sup>
   }
 }
