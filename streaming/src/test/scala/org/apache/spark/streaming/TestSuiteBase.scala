@@ -29,10 +29,10 @@ import org.scalatest.time.{Span, Seconds => ScalaTestSeconds}
 import org.scalatest.concurrent.Eventually.timeout
 import org.scalatest.concurrent.PatienceConfiguration
 
-import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
-import org.apache.spark.streaming.scheduler.{StreamingListenerBatchStarted, StreamingListenerBatchCompleted, StreamingListener}
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
+import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{ManualClock, Utils}
 
 /**
@@ -56,6 +56,10 @@ class TestInputStream[T: ClassTag](ssc_ : StreamingContext, input: Seq[Seq[T]], 
     if (selectedInput == null) {
       return None
     }
+
+    // Report the input data's information to InputInfoTracker for testing
+    val inputInfo = InputInfo(id, selectedInput.length.toLong)
+    ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
     val rdd = ssc.sc.makeRDD(selectedInput, numPartitions)
     logInfo("Created RDD " + rdd.id + " with " + selectedInput)
@@ -141,6 +145,40 @@ class BatchCounter(ssc: StreamingContext) {
 
   def getNumStartedBatches: Int = this.synchronized {
     numStartedBatches
+  }
+
+  /**
+   * Wait until `expectedNumCompletedBatches` batches are completed, or timeout. Return true if
+   * `expectedNumCompletedBatches` batches are completed. Otherwise, return false to indicate it's
+   * timeout.
+   *
+   * @param expectedNumCompletedBatches the `expectedNumCompletedBatches` batches to wait
+   * @param timeout the maximum time to wait in milliseconds.
+   */
+  def waitUntilBatchesCompleted(expectedNumCompletedBatches: Int, timeout: Long): Boolean =
+    waitUntilConditionBecomeTrue(numCompletedBatches >= expectedNumCompletedBatches, timeout)
+
+  /**
+   * Wait until `expectedNumStartedBatches` batches are completed, or timeout. Return true if
+   * `expectedNumStartedBatches` batches are completed. Otherwise, return false to indicate it's
+   * timeout.
+   *
+   * @param expectedNumStartedBatches the `expectedNumStartedBatches` batches to wait
+   * @param timeout the maximum time to wait in milliseconds.
+   */
+  def waitUntilBatchesStarted(expectedNumStartedBatches: Int, timeout: Long): Boolean =
+    waitUntilConditionBecomeTrue(numStartedBatches >= expectedNumStartedBatches, timeout)
+
+  private def waitUntilConditionBecomeTrue(condition: => Boolean, timeout: Long): Boolean = {
+    synchronized {
+      var now = System.currentTimeMillis()
+      val timeoutTick = now + timeout
+      while (!condition && timeoutTick > now) {
+        wait(timeoutTick - now)
+        now = System.currentTimeMillis()
+      }
+      condition
+    }
   }
 }
 

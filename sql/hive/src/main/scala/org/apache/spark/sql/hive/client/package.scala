@@ -15,20 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.collection
+package org.apache.spark.sql.hive
 
-import java.util.Comparator
+/** Support for interacting with different versions of the HiveMetastoreClient */
+package object client {
+  private[client] abstract class HiveVersion(val fullVersion: String, val hasBuiltinsJar: Boolean)
 
-/**
- * A common interface for our size-tracking collections of key-value pairs, which are used in
- * external operations. These all support estimating the size and obtaining a memory-efficient
- * sorted iterator.
- */
-// TODO: should extend Iterable[Product2[K, V]] instead of (K, V)
-private[spark] trait SizeTrackingPairCollection[K, V] extends Iterable[(K, V)] {
-  /** Estimate the collection's current memory usage in bytes. */
-  def estimateSize(): Long
-
-  /** Iterate through the data in a given key order. This may destroy the underlying collection. */
-  def destructiveSortedIterator(keyComparator: Comparator[K]): Iterator[(K, V)]
+  // scalastyle:off
+  private[client] object hive {
+    case object v10 extends HiveVersion("0.10.0", true)
+    case object v11 extends HiveVersion("0.11.0", false)
+    case object v12 extends HiveVersion("0.12.0", false)
+    case object v13 extends HiveVersion("0.13.1", false)
+  }
+  // scalastyle:on
+  
 }

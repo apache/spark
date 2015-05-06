@@ -23,6 +23,7 @@ import java.util.{Locale, Date}
 import scala.xml.{Node, Text}
 
 import org.apache.spark.Logging
+import org.apache.spark.ui.scope.RDDOperationGraph
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
@@ -159,12 +160,24 @@ private[spark] object UIUtils extends Logging {
           type="text/css" />
     <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
           type="text/css" />
+    <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")}
+          typ="text/css" />
+    <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")}></link>
     <script src={prependBaseUri("/static/sorttable.js")} ></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
+    <script src={prependBaseUri("/static/vis.min.js")}></script>
     <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri("/static/table.js")}></script>
     <script src={prependBaseUri("/static/additional-metrics.js")}></script>
+    <script src={prependBaseUri("/static/timeline-view.js")}></script>
+  }
+
+  def vizHeaderNodes: Seq[Node] = {
+    <script src={prependBaseUri("/static/d3.min.js")}></script>
+    <script src={prependBaseUri("/static/dagre-d3.min.js")}></script>
+    <script src={prependBaseUri("/static/graphlib-dot.min.js")}></script>
+    <script src={prependBaseUri("/static/spark-dag-viz.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
@@ -173,7 +186,8 @@ private[spark] object UIUtils extends Logging {
       content: => Seq[Node],
       activeTab: SparkUITab,
       refreshInterval: Option[Int] = None,
-      helpText: Option[String] = None): Seq[Node] = {
+      helpText: Option[String] = None,
+      showVisualization: Boolean = false): Seq[Node] = {
 
     val appName = activeTab.appName
     val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
@@ -191,6 +205,7 @@ private[spark] object UIUtils extends Logging {
     <html>
       <head>
         {commonHeaderNodes}
+        {if (showVisualization) vizHeaderNodes else Seq.empty}
         <title>{appName} - {title}</title>
       </head>
       <body>
@@ -313,6 +328,49 @@ private[spark] object UIUtils extends Logging {
       </span>
       <div class="bar bar-completed" style={completeWidth}></div>
       <div class="bar bar-running" style={startWidth}></div>
+    </div>
+  }
+
+  /** Return a "DAG visualization" DOM element that expands into a visualization for a stage. */
+  def showDagVizForStage(stageId: Int, graph: Option[RDDOperationGraph]): Seq[Node] = {
+    showDagViz(graph.toSeq, forJob = false)
+  }
+
+  /** Return a "DAG visualization" DOM element that expands into a visualization for a job. */
+  def showDagVizForJob(jobId: Int, graphs: Seq[RDDOperationGraph]): Seq[Node] = {
+    showDagViz(graphs, forJob = true)
+  }
+
+  /**
+   * Return a "DAG visualization" DOM element that expands into a visualization on the UI.
+   *
+   * This populates metadata necessary for generating the visualization on the front-end in
+   * a format that is expected by spark-dag-viz.js. Any changes in the format here must be
+   * reflected there.
+   */
+  private def showDagViz(graphs: Seq[RDDOperationGraph], forJob: Boolean): Seq[Node] = {
+    <div>
+      <span class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
+        <span class="expand-dag-viz-arrow arrow-closed"></span>
+        <strong>DAG visualization</strong>
+      </span>
+      <div id="dag-viz-graph"></div>
+      <div id="dag-viz-metadata">
+        {
+          graphs.map { g =>
+            <div class="stage-metadata" stageId={g.rootCluster.id} style="display:none">
+              <div class="dot-file">{RDDOperationGraph.makeDotFile(g, forJob)}</div>
+              { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
+              { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }
+              {
+                g.rootCluster.getAllNodes.filter(_.cached).map { n =>
+                  <div class="cached-rdd">{n.id}</div>
+                }
+              }
+            </div>
+          }
+        }
+      </div>
     </div>
   }
 }

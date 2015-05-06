@@ -15,41 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network;
+package org.apache.spark.sql.hive
 
-import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
+import org.apache.spark.sql.{Row, QueryTest}
+import org.apache.spark.sql.hive.test.TestHive.implicits._
 
-public class ByteArrayWritableChannel implements WritableByteChannel {
 
-  private final byte[] data;
-  private int offset;
+class HiveDataFrameJoinSuite extends QueryTest {
 
-  public ByteArrayWritableChannel(int size) {
-    this.data = new byte[size];
-    this.offset = 0;
-  }
+  // We should move this into SQL package if we make case sensitivity configurable in SQL.
+  test("join - self join auto resolve ambiguity with case insensitivity") {
+    val df = Seq((1, "1"), (2, "2")).toDF("key", "value")
+    checkAnswer(
+      df.join(df, df("key") === df("Key")),
+      Row(1, "1", 1, "1") :: Row(2, "2", 2, "2") :: Nil)
 
-  public byte[] getData() {
-    return data;
-  }
-
-  @Override
-  public int write(ByteBuffer src) {
-    int available = src.remaining();
-    src.get(data, offset, available);
-    offset += available;
-    return available;
-  }
-
-  @Override
-  public void close() {
-
-  }
-
-  @Override
-  public boolean isOpen() {
-    return true;
+    checkAnswer(
+      df.join(df.filter($"value" === "2"), df("key") === df("Key")),
+      Row(2, "2", 2, "2") :: Nil)
   }
 
 }

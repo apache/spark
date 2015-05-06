@@ -183,7 +183,9 @@ private[spark] object AkkaUtils extends Logging {
           lastException = e
           logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
       }
-      Thread.sleep(retryInterval)
+      if (attempts < maxAttempts) {
+        Thread.sleep(retryInterval)
+      }
     }
 
     throw new SparkException(

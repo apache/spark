@@ -15,22 +15,44 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
 
-import java.util.Random
+.graph {
+  font: 10px sans-serif;
+}
 
-import org.apache.spark.sql.types.{DataType, DoubleType}
+.axis path, .axis line {
+  fill: none;
+  stroke: gray;
+  shape-rendering: crispEdges;
+}
 
+.axis text {
+  fill: gray;
+}
 
-case object Rand extends LeafExpression {
-  override def dataType: DataType = DoubleType
-  override def nullable: Boolean = false
+.tooltip-inner {
+  max-width: 500px !important; // Make sure we only have one line tooltip
+}
 
-  private[this] lazy val rand = new Random
+.line {
+  fill: none;
+  stroke: #0088cc;
+  stroke-width: 1.5px;
+}
 
-  override def eval(input: Row = null): EvaluatedType = {
-    rand.nextDouble().asInstanceOf[EvaluatedType]
-  }
+.bar rect {
+  fill: #0088cc;
+  shape-rendering: crispEdges;
+}
 
-  override def toString: String = "RAND()"
+.bar rect:hover {
+  fill: #00c2ff;
+}
+
+.timeline {
+  width: 500px;
+}
+
+.histogram {
+  width: auto;
 }

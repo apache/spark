@@ -15,16 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.network.server;
 
-import tachyon.client.TachyonFile
+import io.netty.channel.Channel;
 
 /**
- * References a particular segment of a file (potentially the entire file), based off an offset and
- * a length.
+ * A bootstrap which is executed on a TransportServer's client channel once a client connects
+ * to the server. This allows customizing the client channel to allow for things such as SASL
+ * authentication.
  */
-private[spark] class TachyonFileSegment(val file: TachyonFile, val offset: Long, val length: Long) {
-  override def toString: String = {
-    "(name=%s, offset=%d, length=%d)".format(file.getPath(), offset, length)
-  }
+public interface TransportServerBootstrap {
+  /**
+   * Customizes the channel to include new features, if needed.
+   *
+   * @param channel The connected channel opened by the client.
+   * @param rpcHandler The RPC handler for the server.
+   * @return The RPC handler to use for the channel.
+   */
+  RpcHandler doBootstrap(Channel channel, RpcHandler rpcHandler);
 }
