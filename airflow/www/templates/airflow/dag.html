@@ -64,8 +64,11 @@
       <div class="modal-content">
         <div class="modal-header">
           <h4 class="modal-title" id="myModalLabel">
-            Task Instance:
-            <span id='task_id'></span> on
+            <span id='task_id'></span> 
+            <button id="btn_filter" type="button" class="btn btn-default" title="Filter on this task and upstream ">
+              <span class="glyphicon glyphicon-filter" style="margin-left: 0px;" aria-hidden="true"></span>
+            </button>
+              on
             <span id='execution_date'></span>
           </h4>
         </div>
@@ -138,6 +141,17 @@
 {% block tail %}
   {{ super() }}
   <script>
+function updateQueryStringParameter(uri, key, value) {
+  var re = new RegExp("([?&])" + key + "=.*?(&|$)", "i");
+  var separator = uri.indexOf('?') !== -1 ? "&" : "?";
+  if (uri.match(re)) {
+    return uri.replace(re, '$1' + key + "=" + value + '$2');
+  }
+  else {
+    return uri + separator + key + "=" + value;
+  }
+}
+
     // Pills highlighting
     $(document).ready(function () {
       $('a[href*="' + this.location.pathname + '"]').parent().addClass('active');
@@ -150,6 +164,10 @@
     var subdag_id = '';
     function call_modal(t, d, sd) {
       task_id = t;
+      loc = String(window.location);
+      $("#btn_filter").on("click", function(){
+        window.location = updateQueryStringParameter(loc, "root", task_id);
+      });
       subdag_id = sd;
       execution_date = d;
       $('#task_id').html(t);
