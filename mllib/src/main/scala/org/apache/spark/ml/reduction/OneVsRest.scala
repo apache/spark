@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.reduction
 
-
 import scala.language.existentials
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
