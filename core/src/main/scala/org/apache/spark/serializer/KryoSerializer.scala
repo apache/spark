@@ -51,9 +51,9 @@ class KryoSerializer(conf: SparkConf)
 
   private val bufferSizeKb = conf.getSizeAsKb("spark.kryoserializer.buffer", "64k")
   
-  if (bufferSizeKb >= 2048) {
+  if (bufferSizeKb >= 2048 * 1024) {
     throw new IllegalArgumentException("spark.kryoserializer.buffer must be less than " +
-      s"2048 mb, got: + $bufferSizeKb mb.")
+      s"2048 mb, got: + ${bufferSizeKb/1024} mb.")
   }
   private val bufferSize = (bufferSizeKb * 1024).toInt
 
