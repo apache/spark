@@ -99,19 +99,22 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "one stage json" -> "applications/local-1422981780767/stages/1",
     "one stage attempt json" -> "applications/local-1422981780767/stages/1/0",
 
-    "stage task summary" -> "applications/local-1427397477963/stages/20/0/taskSummary",
+    "stage task summary w shuffle write"
+      -> "applications/local-1430917381534/stages/0/0/taskSummary",
+    "stage task summary w shuffle read"
+      -> "applications/local-1430917381534/stages/1/0/taskSummary",
     "stage task summary w/ custom quantiles" ->
-      "applications/local-1427397477963/stages/20/0/taskSummary?quantiles=0.01,0.5,0.99",
+      "applications/local-1430917381534/stages/0/0/taskSummary?quantiles=0.01,0.5,0.99",
 
-    "stage task list" -> "applications/local-1427397477963/stages/20/0/taskList",
+    "stage task list" -> "applications/local-1430917381534/stages/0/0/taskList",
     "stage task list w/ offset & length" ->
-      "applications/local-1427397477963/stages/20/0/taskList?offset=10&length=50",
+      "applications/local-1430917381534/stages/0/0/taskList?offset=10&length=50",
     "stage task list w/ sortBy" ->
-      "applications/local-1427397477963/stages/20/0/taskList?sortBy=DECREASING_RUNTIME",
+      "applications/local-1430917381534/stages/0/0/taskList?sortBy=DECREASING_RUNTIME",
     "stage task list w/ sortBy short names: -runtime" ->
-      "applications/local-1427397477963/stages/20/0/taskList?sortBy=-runtime",
+      "applications/local-1430917381534/stages/0/0/taskList?sortBy=-runtime",
     "stage task list w/ sortBy short names: runtime" ->
-      "applications/local-1427397477963/stages/20/0/taskList?sortBy=runtime",
+      "applications/local-1430917381534/stages/0/0/taskList?sortBy=runtime",
 
     "stage list with accumulable json" -> "applications/local-1426533911241/1/stages",
     "stage with accumulable json" -> "applications/local-1426533911241/1/stages/0/0",
@@ -134,7 +137,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
       errOpt should be (None)
       val json = jsonOpt.get
       val exp = IOUtils.toString(new FileInputStream(
-        new File(expRoot, path + "/json_expectation")))
+        new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")))
       // compare the ASTs so formatting differences don't cause failures
       import org.json4s._
       import org.json4s.jackson.JsonMethods._
@@ -162,7 +165,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     // will take some mucking w/ jersey to get a better error msg in this case
 
     val badQuantiles = getContentAndCode(
-      "applications/local-1427397477963/stages/20/0/taskSummary?quantiles=foo,0.1")
+      "applications/local-1430917381534/stages/0/0/taskSummary?quantiles=foo,0.1")
     badQuantiles._1 should be (HttpServletResponse.SC_BAD_REQUEST)
     badQuantiles._3 should be (Some("Bad value for parameter \"quantiles\".  Expected a double, " +
       "got \"foo\""))
@@ -202,11 +205,10 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     HistoryServerSuite.getUrl(new URL(s"http://localhost:$port/json/v1/$path"))
   }
 
-  def generateExpectation(path: String): Unit = {
+  def generateExpectation(name: String, path: String): Unit = {
     val json = getUrl(path)
-    val dir = new File(expRoot, path)
-    dir.mkdirs()
-    val out = new FileWriter(new File(dir, "json_expectation"))
+    val file = new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")
+    val out = new FileWriter(file)
     out.write(json)
     out.close()
   }
@@ -222,8 +224,8 @@ object HistoryServerSuite {
     suite.expRoot.mkdirs()
     try {
       suite.init()
-      suite.cases.foreach { case (_, path) =>
-        suite.generateExpectation(path)
+      suite.cases.foreach { case (name, path) =>
+        suite.generateExpectation(name, path)
       }
     } finally {
       suite.stop()
@@ -237,17 +239,23 @@ object HistoryServerSuite {
     val code = connection.getResponseCode()
     val inString = try {
       val in = Option(connection.getInputStream())
-      in.map{IOUtils.toString}
+      in.map(IOUtils.toString)
     } catch {
       case io: IOException => None
     }
     val errString = try {
       val err = Option(connection.getErrorStream())
-      err.map{IOUtils.toString}
+      err.map(IOUtils.toString)
     } catch {
       case io: IOException => None
     }
     (code, inString, errString)
+  }
+
+
+  def sanitizePath(path: String): String = {
+    // this doesn't need to be perfect, just good enough to avoid collisions
+    path.replaceAll("\\W", "_")
   }
 
   def getUrl(path: URL): String = {
