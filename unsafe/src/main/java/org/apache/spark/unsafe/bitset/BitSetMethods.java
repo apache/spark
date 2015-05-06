@@ -28,8 +28,7 @@ import org.apache.spark.unsafe.PlatformDependent;
  */
 public final class BitSetMethods {
 
-  private static final long WORD_SIZE = 8;
-  private static final int SIZE_OF_LONG = Long.SIZE;
+  static final long WORD_SIZE = 8;
 
   private BitSetMethods() {
     // Make the default constructor private, since this only holds static methods.
@@ -72,10 +71,10 @@ public final class BitSetMethods {
    * Returns {@code true} if any bit is set.
    */
   public static boolean anySet(Object baseObject, long baseOffset, long bitSetWidthInBytes) {
-    assert bitSetWidthInBytes % SIZE_OF_LONG == 0;
-    int widthInLong = (int)(bitSetWidthInBytes / SIZE_OF_LONG);
+    assert bitSetWidthInBytes % WORD_SIZE == 0;
+    int widthInLong = (int)(bitSetWidthInBytes / WORD_SIZE);
     long addr = baseOffset;
-    for (int i = 0; i <= widthInLong; i++, addr += SIZE_OF_LONG) {
+    for (int i = 0; i <= widthInLong; i++, addr += WORD_SIZE) {
       if (PlatformDependent.UNSAFE.getLong(baseObject, addr) != 0) {
         return true;
       }

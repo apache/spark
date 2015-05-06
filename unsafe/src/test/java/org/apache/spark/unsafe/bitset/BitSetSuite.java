@@ -39,6 +39,7 @@ public class BitSetSuite {
     for (int i = 0; i < bs.capacity(); i++) {
       Assert.assertFalse(bs.isSet(i));
     }
+    Assert.assertFalse(bs.anySet());
 
     // Set every bit and check it.
     for (int i = 0; i < bs.capacity(); i++) {
