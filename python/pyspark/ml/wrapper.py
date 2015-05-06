@@ -20,7 +20,7 @@ from abc import ABCMeta
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml.param import Params
-from pyspark.ml.pipeline import Estimator, Transformer, Evaluator
+from pyspark.ml.pipeline import Estimator, Transformer, Evaluator, Model
 from pyspark.mllib.common import inherit_doc
 
 
@@ -133,7 +133,7 @@ class JavaTransformer(Transformer, JavaWrapper):
 
 
 @inherit_doc
-class JavaModel(JavaTransformer):
+class JavaModel(Model, JavaTransformer):
     """
     Base class for :py:class:`Model`s that wrap Java/Scala
     implementations.
