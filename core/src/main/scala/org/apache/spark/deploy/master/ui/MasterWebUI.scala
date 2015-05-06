@@ -19,7 +19,6 @@ package org.apache.spark.deploy.master.ui
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.status.api.v1.{ApplicationsListResource, ApplicationInfo, JsonRootResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.RpcUtils
@@ -29,14 +28,11 @@ import org.apache.spark.util.RpcUtils
  */
 private[master]
 class MasterWebUI(val master: Master, requestedPort: Int)
-  extends WebUI(master.securityMgr, requestedPort, master.conf, name = "MasterUI") with Logging
-  with UIRoot {
+  extends WebUI(master.securityMgr, requestedPort, master.conf, name = "MasterUI") with Logging {
 
   val masterActorRef = master.self
   val timeout = RpcUtils.askTimeout(master.conf)
   val killEnabled = master.conf.getBoolean("spark.ui.killEnabled", true)
-
-  val masterPage = new MasterPage(this)
 
   initialize()
 
@@ -47,7 +43,6 @@ class MasterWebUI(val master: Master, requestedPort: Int)
     attachPage(new HistoryNotFoundPage(this))
     attachPage(masterPage)
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
-    attachHandler(JsonRootResource.getJsonServlet(this))
     attachHandler(createRedirectHandler(
       "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST")))
     attachHandler(createRedirectHandler(
@@ -64,23 +59,6 @@ class MasterWebUI(val master: Master, requestedPort: Int)
   def detachSparkUI(ui: SparkUI) {
     assert(serverInfo.isDefined, "Master UI must be bound to a server before detaching SparkUIs")
     ui.getHandlers.foreach(detachHandler)
-  }
-
-  def getApplicationInfoList: Iterator[ApplicationInfo] = {
-    val state = masterPage.getMasterState
-    val activeApps = state.activeApps.sortBy(_.startTime).reverse
-    val completedApps = state.completedApps.sortBy(_.endTime).reverse
-    activeApps.iterator.map { ApplicationsListResource.convertApplicationInfo(_, false) } ++
-      completedApps.iterator.map { ApplicationsListResource.convertApplicationInfo(_, true) }
-  }
-
-  def getSparkUI(appId: String): Option[SparkUI] = {
-    val state = masterPage.getMasterState
-    val activeApps = state.activeApps.sortBy(_.startTime).reverse
-    val completedApps = state.completedApps.sortBy(_.endTime).reverse
-    (activeApps ++ completedApps).find { _.id == appId }.flatMap {
-      master.rebuildSparkUI
-    }
   }
 }
 

@@ -17,21 +17,23 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{BufferedInputStream, FileNotFoundException, IOException, InputStream}
+import java.io.{IOException, BufferedInputStream, FileNotFoundException, InputStream}
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
 
 import scala.collection.mutable
+import scala.concurrent.duration.Duration
 
-import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
-import org.apache.hadoop.fs.{FileStatus, Path}
+import com.google.common.util.concurrent.ThreadFactoryBuilder
+
+import com.google.common.util.concurrent.MoreExecutors
 import org.apache.hadoop.fs.permission.AccessControlException
-
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /**
  * A class that provides application history from event logs stored in the file system.
@@ -149,7 +151,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             val conf = this.conf.clone()
             val appSecManager = new SecurityManager(conf)
             SparkUI.createHistoryUI(conf, replayBus, appSecManager, appId,
-              HistoryServer.getAttemptURI(appId, attempt.attemptId), attempt.startTime)
+              HistoryServer.getAttemptURI(appId, attempt.attemptId))
             // Do not call ui.bind() to avoid creating a new server for each application
           }
 

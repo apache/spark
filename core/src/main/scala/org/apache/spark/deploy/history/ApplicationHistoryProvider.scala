@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history
 
 import org.apache.spark.ui.SparkUI
 
-private[spark] case class ApplicationAttemptInfo(
+private[history] case class ApplicationAttemptInfo(
     attemptId: Option[String],
     startTime: Long,
     endTime: Long,
@@ -27,7 +27,7 @@ private[spark] case class ApplicationAttemptInfo(
     sparkUser: String,
     completed: Boolean = false)
 
-private[spark] case class ApplicationHistoryInfo(
+private[history] case class ApplicationHistoryInfo(
     id: String,
     name: String,
     attempts: List[ApplicationAttemptInfo])
