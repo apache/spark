@@ -56,7 +56,7 @@ public class JavaAffinityPropagation {
       .setMaxIterations(20);
     AffinityPropagationModel model = ap.run(similarities);
 
-    for (AffinityPropagationCluster c: model.clusters().toJavaRDD().collect()) {
+    for (AffinityPropagationCluster c: model.fromAssignToClusters().toJavaRDD().collect()) {
       StringBuilder builder = new StringBuilder();
       builder.append("cluster id: " + c.id() + " -> ");
       builder.append(" exemplar: " + c.exemplar() + " members:");
@@ -79,7 +79,7 @@ public class JavaAffinityPropagation {
 
     AffinityPropagationModel model2 = ap.run(ap.determinePreferences(similarities2));
 
-    for (AffinityPropagationCluster c: model2.clusters().toJavaRDD().collect()) {
+    for (AffinityPropagationCluster c: model2.fromAssignToClusters().toJavaRDD().collect()) {
       StringBuilder builder = new StringBuilder();
       builder.append("cluster id: " + c.id() + " -> ");
       builder.append(" exemplar: " + c.exemplar() + " members:");
@@ -91,7 +91,7 @@ public class JavaAffinityPropagation {
 
     AffinityPropagationModel model3 = ap.run(ap.embedPreferences(similarities2, -0.5));
 
-    for (AffinityPropagationCluster c: model3.clusters().toJavaRDD().collect()) {
+    for (AffinityPropagationCluster c: model3.fromAssignToClusters().toJavaRDD().collect()) {
       StringBuilder builder = new StringBuilder();
       builder.append("cluster id: " + c.id() + " -> ");
       builder.append(" exemplar: " + c.exemplar() + " members:");

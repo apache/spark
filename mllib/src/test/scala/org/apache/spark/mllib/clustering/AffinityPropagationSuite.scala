@@ -30,16 +30,16 @@ class AffinityPropagationSuite extends FunSuite with MLlibTestSparkContext {
   import org.apache.spark.mllib.clustering.AffinityPropagation._
 
   test("affinity propagation") {
-    /*
-     We use the following graph to test AP.
-
-     15-14 -13  12
-     . \      /    
-     4 . 3 . 2  
-     |   .   |
-     5   0 . 1  10
-     | \     .   .
-     6   7 . 8 - 9 - 11
+    /**
+     * We use the following graph to test AP.
+     * 
+     * 15-14 -13  12
+     * . \      /    
+     * 4 . 3 . 2  
+     * |   .   |
+     * 5   0 . 1  10
+     * | \     .   .
+     * 6   7 . 8 - 9 - 11
      */
 
     val similarities = Seq[(Long, Long, Double)]((0, 1, -8.2), (0, 3, -5.8), (1, 2, -0.4),
@@ -54,8 +54,8 @@ class AffinityPropagationSuite extends FunSuite with MLlibTestSparkContext {
       .setMaxIterations(30)
       .run(sc.parallelize(similarities, 2))
 
-    assert(model.getK == 7)
-    assert(model.findCluster(5).sorted === Array[Long](4, 5, 6, 7))
+    assert(model.k == 7)
+    assert(model.findCluster(5).collect().sorted === Array[Long](4, 5, 6, 7))
     assert(model.findClusterID(14) != -1)
     assert(model.findClusterID(14) === model.findClusterID(15))
   }
@@ -83,8 +83,8 @@ class AffinityPropagationSuite extends FunSuite with MLlibTestSparkContext {
     val model = ap.setMaxIterations(30)
       .run(similaritiesWithPreferneces)
 
-    assert(model.getK == 7)
-    assert(model.findCluster(5).sorted === Array[Long](4, 5, 6, 7))
+    assert(model.k == 7)
+    assert(model.findCluster(5).collect().sorted === Array[Long](4, 5, 6, 7))
     assert(model.findClusterID(14) != -1)
     assert(model.findClusterID(14) === model.findClusterID(15))
     assert(model.findClusterID(100) == -1)
@@ -108,34 +108,34 @@ class AffinityPropagationSuite extends FunSuite with MLlibTestSparkContext {
     val model = ap.setMaxIterations(30)
       .run(similaritiesWithPreferneces)
 
-    assert(model.getK == 7)
-    assert(model.findCluster(5).sorted === Array[Long](4, 5, 6, 7))
+    assert(model.k == 7)
+    assert(model.findCluster(5).collect().sorted === Array[Long](4, 5, 6, 7))
     assert(model.findClusterID(14) != -1)
     assert(model.findClusterID(14) === model.findClusterID(15))
     assert(model.findClusterID(100) == -1)
   }
 
   test("normalize") {
-    /*
-     Test normalize() with the following graph:
-
-     0 - 3
-     | \ |
-     1 - 2
-
-     The similarity matrix (A) is
-
-     0 1 1 1
-     1 0 1 0
-     1 1 0 1
-     1 0 1 0
-
-     D is diag(3, 2, 3, 2) and hence S is
-
-       0 1/3 1/3 1/3
-     1/2   0 1/2   0
-     1/3 1/3   0 1/3
-     1/2   0 1/2   0
+    /**
+     * Test normalize() with the following graph:
+     *
+     * 0 - 3
+     * | \ |
+     * 1 - 2
+     *
+     * The similarity matrix (A) is
+     *
+     * 0 1 1 1
+     * 1 0 1 0
+     * 1 1 0 1
+     * 1 0 1 0
+     *
+     * D is diag(3, 2, 3, 2) and hence S is
+     *
+     * 0 1/3 1/3 1/3
+     * 1/2   0 1/2   0
+     * 1/3 1/3   0 1/3
+     * 1/2   0 1/2   0
      */
     val similarities = Seq[(Long, Long, Double)](
       (0, 1, 1.0), (1, 0, 1.0), (0, 2, 1.0), (2, 0, 1.0), (0, 3, 1.0), (3, 0, 1.0),
