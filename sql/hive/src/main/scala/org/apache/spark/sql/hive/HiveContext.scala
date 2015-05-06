@@ -290,7 +290,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /** Overridden by child classes that need to set configuration before the client init. */
   protected def configure(): Map[String, String] = Map.empty
 
-
   protected[hive] class SQLSession extends super.SQLSession {
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
@@ -298,7 +297,27 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     protected[hive] def localSession = executionHive.state
 
-    protected[hive] def hiveconf = executionConf
+    /**
+     * SQLConf and HiveConf contracts:
+     *
+     * 1. reuse existing started SessionState if any
+     * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
+     *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
+     *    set in the SQLConf *as well as* in the HiveConf.
+     */
+    protected[hive] lazy val sessionState: SessionState = {
+      var state = SessionState.get()
+      if (state == null) {
+        state = new SessionState(new HiveConf(classOf[SessionState]))
+        SessionState.start(state)
+      }
+      state
+    }
+
+    protected[hive] lazy val hiveconf: HiveConf = {
+      setConf(sessionState.getConf.getAllProperties)
+      sessionState.getConf
+    }
   }
 
   override protected[sql] def dialectClassName = if (conf.dialect == "hiveql") {

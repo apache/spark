@@ -100,10 +100,14 @@ private[hive] object SparkSQLCLIDriver {
 
     // Set all properties specified via command line.
     val conf: HiveConf = sessionState.getConf
-    sessionState.cmdProperties.entrySet().foreach { item: java.util.Map.Entry[Object, Object] =>
-      //conf.set(item.getKey.asInstanceOf[String], item.getValue.asInstanceOf[String])
-      //sessionState.getOverriddenConfigurations.put(
-      //  item.getKey.asInstanceOf[String], item.getValue.asInstanceOf[String])
+    sessionState.cmdProperties.entrySet().foreach { item =>
+      val key = item.getKey.asInstanceOf[String]
+      val value = item.getValue.asInstanceOf[String]
+      // We do not propogate metastore options to the execution copy of hive.
+      if (key != "javax.jdo.option.ConnectionURL") {
+        conf.set(key, value)
+        sessionState.getOverriddenConfigurations.put(key, value)
+      }
     }
 
     SessionState.start(sessionState)

@@ -205,6 +205,9 @@ object SparkBuild extends PomBuild {
     sparkShell := {
       (runMain in Compile).toTask(" org.apache.spark.repl.Main -usejavacp").value
     },
+
+    javaOptions in Compile += "-Dspark.master=local",
+
     sparkSql := {
       (runMain in Compile).toTask(" org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver").value
     }
