@@ -73,7 +73,7 @@ class Transformer(Params):
 @inherit_doc
 class Model(Transformer):
     """
-    Abstract class for models that fitted by estimators.
+    Abstract class for models that are fitted by estimators.
     """
 
     __metaclass__ = ABCMeta
@@ -163,7 +163,7 @@ class Pipeline(Estimator):
 
 
 @inherit_doc
-class PipelineModel(Transformer):
+class PipelineModel(Model):
     """
     Represents a compiled pipeline with transformers and fitted models.
     """

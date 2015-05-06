@@ -52,10 +52,12 @@ private[ml] trait CrossValidatorParams extends Params {
   def getEstimatorParamMaps: Array[ParamMap] = $(estimatorParamMaps)
 
   /**
-   * param for the evaluator for selection
+   * param for the evaluator used to select hyper-parameters that maximize the cross-validated
+   * metric
    * @group param
    */
-  val evaluator: Param[Evaluator] = new Param(this, "evaluator", "evaluator for selection")
+  val evaluator: Param[Evaluator] = new Param(this, "evaluator",
+    "evaluator used to select hyper-parameters that maximize the cross-validated metric")
 
   /** @group getParam */
   def getEvaluator: Evaluator = $(evaluator)
