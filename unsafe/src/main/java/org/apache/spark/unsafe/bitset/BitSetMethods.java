@@ -74,8 +74,9 @@ public final class BitSetMethods {
   public static boolean anySet(Object baseObject, long baseOffset, long bitSetWidthInBytes) {
     assert bitSetWidthInBytes % SIZE_OF_LONG == 0;
     int widthInLong = (int)(bitSetWidthInBytes / SIZE_OF_LONG);
-    for (int i = 0; i <= widthInLong; i++) {
-      if (PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + i) != 0) {
+    long addr = baseOffset;
+    for (int i = 0; i <= widthInLong; i++, addr += 8) {
+      if (PlatformDependent.UNSAFE.getLong(baseObject, addr) != 0) {
         return true;
       }
     }
