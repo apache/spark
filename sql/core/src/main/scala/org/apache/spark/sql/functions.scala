@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction, Star}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.mathfuncs._
 import org.apache.spark.sql.types._
@@ -86,10 +86,10 @@ object functions {
 
   /**
    * Returns a sort expression based on ascending order of the column.
-   * {{
+   * {{{
    *   // Sort by dept in ascending order, and then age in descending order.
    *   df.sort(asc("dept"), desc("age"))
-   * }}
+   * }}}
    *
    * @group sort_funcs
    */
@@ -97,10 +97,10 @@ object functions {
 
   /**
    * Returns a sort expression based on the descending order of the column.
-   * {{
+   * {{{
    *   // Sort by dept in ascending order, and then age in descending order.
    *   df.sort(asc("dept"), desc("age"))
-   * }}
+   * }}}
    *
    * @group sort_funcs
    */
@@ -353,13 +353,13 @@ object functions {
 
   /**
    * Inversion of boolean expression, i.e. NOT.
-   * {{
+   * {{{
    *   // Scala: select rows that are not active (isActive === false)
    *   df.filter( !df("isActive") )
    *
    *   // Java:
    *   df.filter( not(df.col("isActive")) );
-   * }}
+   * }}}
    *
    * @group normal_funcs
    */
