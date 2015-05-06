@@ -333,6 +333,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
         ExtractPythonUdfs ::
+        ResolveHiveWindowFunction ::
         sources.PreInsertCastAndRename ::
         Nil
     }

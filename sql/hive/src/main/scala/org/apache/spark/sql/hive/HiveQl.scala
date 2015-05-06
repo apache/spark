@@ -682,7 +682,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             clusterByClause ::
             distributeByClause ::
             limitClause ::
-            lateralViewClause :: Nil) = {
+            lateralViewClause ::
+            windowClause :: Nil) = {
           getClauses(
             Seq(
               "TOK_INSERT_INTO",
@@ -700,7 +701,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               "TOK_CLUSTERBY",
               "TOK_DISTRIBUTEBY",
               "TOK_LIMIT",
-              "TOK_LATERAL_VIEW"),
+              "TOK_LATERAL_VIEW",
+              "WINDOW"),
             singleInsert)
         }
 
@@ -833,31 +835,34 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             Some(Project(selectExpressions, withLateralView))).flatten.head
         }
 
-        val withDistinct =
-          if (selectDistinctClause.isDefined) Distinct(withProject) else withProject
-
+        // Handle HAVING clause.
         val withHaving = havingClause.map { h =>
           val havingExpr = h.getChildren.toSeq match { case Seq(hexpr) => nodeToExpr(hexpr) }
           // Note that we added a cast to boolean. If the expression itself is already boolean,
           // the optimizer will get rid of the unnecessary cast.
-          Filter(Cast(havingExpr, BooleanType), withDistinct)
-        }.getOrElse(withDistinct)
+          Filter(Cast(havingExpr, BooleanType), withProject)
+        }.getOrElse(withProject)
 
+        // Handle SELECT DISTINCT
+        val withDistinct =
+          if (selectDistinctClause.isDefined) Distinct(withHaving) else withHaving
+
+        // Handle ORDER BY, SORT BY, DISTRIBETU BY, and CLUSTER BY clause.
         val withSort =
           (orderByClause, sortByClause, distributeByClause, clusterByClause) match {
             case (Some(totalOrdering), None, None, None) =>
-              Sort(totalOrdering.getChildren.map(nodeToSortOrder), true, withHaving)
+              Sort(totalOrdering.getChildren.map(nodeToSortOrder), true, withDistinct)
             case (None, Some(perPartitionOrdering), None, None) =>
-              Sort(perPartitionOrdering.getChildren.map(nodeToSortOrder), false, withHaving)
+              Sort(perPartitionOrdering.getChildren.map(nodeToSortOrder), false, withDistinct)
             case (None, None, Some(partitionExprs), None) =>
-              RepartitionByExpression(partitionExprs.getChildren.map(nodeToExpr), withHaving)
+              RepartitionByExpression(partitionExprs.getChildren.map(nodeToExpr), withDistinct)
             case (None, Some(perPartitionOrdering), Some(partitionExprs), None) =>
               Sort(perPartitionOrdering.getChildren.map(nodeToSortOrder), false,
-                RepartitionByExpression(partitionExprs.getChildren.map(nodeToExpr), withHaving))
+                RepartitionByExpression(partitionExprs.getChildren.map(nodeToExpr), withDistinct))
             case (None, None, None, Some(clusterExprs)) =>
               Sort(clusterExprs.getChildren.map(nodeToExpr).map(SortOrder(_, Ascending)), false,
-                RepartitionByExpression(clusterExprs.getChildren.map(nodeToExpr), withHaving))
-            case (None, None, None, None) => withHaving
+                RepartitionByExpression(clusterExprs.getChildren.map(nodeToExpr), withDistinct))
+            case (None, None, None, None) => withDistinct
             case _ => sys.error("Unsupported set of ordering / distribution clauses.")
           }
 
@@ -866,6 +871,27 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             .map(Limit(_, withSort))
             .getOrElse(withSort)
 
+        // Collect all window specifications defined in the WINDOW clause.
+        val windowDefinitions = windowClause.map(_.getChildren.toSeq.collect {
+          case Token("TOK_WINDOWDEF",
+          Token(windowName, Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) =>
+            windowName -> nodesToWindowSpecification(spec)
+        }.toMap)
+        // Handle cases like
+        // window w1 as (partition by p_mfgr order by p_name
+        //               range between 2 preceding and 2 following),
+        //        w2 as w1
+        val resolvedCrossReference = windowDefinitions.map {
+          windowDefMap => windowDefMap.map {
+            case (windowName, WindowSpecReference(other)) =>
+              (windowName, windowDefMap(other).asInstanceOf[WindowSpecDefinition])
+            case o => o.asInstanceOf[(String, WindowSpecDefinition)]
+          }
+        }
+
+        val withWindowDefinitions =
+          resolvedCrossReference.map(WithWindowDefinition(_, withLimit)).getOrElse(withLimit)
+
         // TOK_INSERT_INTO means to add files to the table.
         // TOK_DESTINATION means to overwrite the table.
         val resultDestination =
@@ -873,7 +899,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         val overwrite = intoClause.isEmpty
         nodeToDest(
           resultDestination,
-          withLimit,
+          withWindowDefinitions,
           overwrite)
       }
 
@@ -1122,7 +1148,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
 
-
   protected val escapedIdentifier = "`([^`]+)`".r
   protected val singleQuotedString = "\"([^\"]+)\"".r
   protected val doubleQuotedString = "'([^']+)'".r
@@ -1328,6 +1353,25 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       Substring(nodeToExpr(string), nodeToExpr(pos), nodeToExpr(length))
     case Token("TOK_FUNCTION", Token(COALESCE(), Nil) :: list) => Coalesce(list.map(nodeToExpr))
 
+    /* Window Functions */
+    case Token("TOK_FUNCTION", Token(name, Nil) +: args :+ Token("TOK_WINDOWSPEC", spec)) =>
+      val function = UnresolvedWindowFunction(name, args.map(nodeToExpr))
+      nodesToWindowSpecification(spec) match {
+        case reference: WindowSpecReference =>
+          UnresolvedWindowExpression(function, reference)
+        case definition: WindowSpecDefinition =>
+          WindowExpression(function, definition)
+      }
+    case Token("TOK_FUNCTIONSTAR", Token(name, Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) =>
+      // Safe to use Literal(1)?
+      val function = UnresolvedWindowFunction(name, Literal(1) :: Nil)
+      nodesToWindowSpecification(spec) match {
+        case reference: WindowSpecReference =>
+          UnresolvedWindowExpression(function, reference)
+        case definition: WindowSpecDefinition =>
+          WindowExpression(function, definition)
+      }
+
     /* UDFs - Must be last otherwise will preempt built in functions */
     case Token("TOK_FUNCTION", Token(name, Nil) :: args) =>
       UnresolvedFunction(name, args.map(nodeToExpr))
@@ -1390,6 +1434,89 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
          """.stripMargin)
   }
 
+  def nodesToWindowSpecification(nodes: Seq[ASTNode]): WindowSpec = nodes match {
+    case Token(windowName, Nil) :: Nil =>
+      // Refer to a window spec defined in the window clause.
+      WindowSpecReference(windowName)
+    case Nil =>
+      // OVER()
+      WindowSpecDefinition(
+        partitionSpec = Nil,
+        orderSpec = Nil,
+        frameSpecification = UnspecifiedFrame)
+    case spec =>
+      val (partitionClause :: rowFrame :: rangeFrame :: Nil) =
+        getClauses(
+          Seq(
+            "TOK_PARTITIONINGSPEC",
+            "TOK_WINDOWRANGE",
+            "TOK_WINDOWVALUES"),
+          spec)
+
+      // Handle Partition By and Order By.
+      val (partitionSpec, orderSpec) = partitionClause.map { partitionAndOrdering =>
+        val (partitionByClause :: orderByClause :: sortByClause :: clusterByClause :: Nil) =
+          getClauses(
+            Seq("TOK_DISTRIBUTEBY", "TOK_ORDERBY", "TOK_SORTBY", "TOK_CLUSTERBY"),
+            partitionAndOrdering.getChildren.toSeq.asInstanceOf[Seq[ASTNode]])
+
+        (partitionByClause, orderByClause.orElse(sortByClause), clusterByClause) match {
+          case (Some(partitionByExpr), Some(orderByExpr), None) =>
+            (partitionByExpr.getChildren.map(nodeToExpr),
+              orderByExpr.getChildren.map(nodeToSortOrder))
+          case (Some(partitionByExpr), None, None) =>
+            (partitionByExpr.getChildren.map(nodeToExpr), Nil)
+          case (None, Some(orderByExpr), None) =>
+            (Nil, orderByExpr.getChildren.map(nodeToSortOrder))
+          case (None, None, Some(clusterByExpr)) =>
+            val expressions = clusterByExpr.getChildren.map(nodeToExpr)
+            (expressions, expressions.map(SortOrder(_, Ascending)))
+          case _ =>
+            throw new NotImplementedError(
+              s"""No parse rules for Node ${partitionAndOrdering.getName}
+              """.stripMargin)
+        }
+      }.getOrElse {
+        (Nil, Nil)
+      }
+
+      // Handle Window Frame
+      val windowFrame =
+        if (rowFrame.isEmpty && rangeFrame.isEmpty) {
+          UnspecifiedFrame
+        } else {
+          val frameType = rowFrame.map(_ => RowFrame).getOrElse(RangeFrame)
+          def nodeToBoundary(node: Node): FrameBoundary = node match {
+            case Token("preceding", Token(count, Nil) :: Nil) =>
+              if (count == "unbounded") UnboundedPreceding else ValuePreceding(count.toInt)
+            case Token("following", Token(count, Nil) :: Nil) =>
+              if (count == "unbounded") UnboundedFollowing else ValueFollowing(count.toInt)
+            case Token("current", Nil) => CurrentRow
+            case _ =>
+              throw new NotImplementedError(
+                s"""No parse rules for the Window Frame Boundary based on Node ${node.getName}
+              """.stripMargin)
+          }
+
+          rowFrame.orElse(rangeFrame).map { frame =>
+            frame.getChildren.toList match {
+              case precedingNode :: followingNode :: Nil =>
+                SpecifiedWindowFrame(
+                  frameType,
+                  nodeToBoundary(precedingNode),
+                  nodeToBoundary(followingNode))
+              case precedingNode :: Nil =>
+                SpecifiedWindowFrame(frameType, nodeToBoundary(precedingNode), CurrentRow)
+              case _ =>
+                throw new NotImplementedError(
+                  s"""No parse rules for the Window Frame based on Node ${frame.getName}
+                  """.stripMargin)
+            }
+          }.getOrElse(sys.error(s"If you see this, please file a bug report with your query."))
+        }
+
+      WindowSpecDefinition(partitionSpec, orderSpec, windowFrame)
+  }
 
   val explode = "(?i)explode".r
   def nodesToGenerator(nodes: Seq[Node]): (Generator, Seq[String]) = {

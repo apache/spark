@@ -185,7 +185,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Hive does not support buckets.
     ".*bucket.*",
 
-    // No window support yet
+    // We have our own tests based on these query files.
     ".*window.*",
 
     // Fails in hive with authorization errors.
