@@ -897,28 +897,28 @@ object functions {
    *
    * @group math_funcs
    */
-  def toDeg(e: Column): Column = ToDegrees(e.expr)
+  def toDegrees(e: Column): Column = ToDegrees(e.expr)
 
   /**
    * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
    *
    * @group math_funcs
    */
-  def toDeg(columnName: String): Column = toDeg(Column(columnName))
+  def toDegrees(columnName: String): Column = toDegrees(Column(columnName))
 
   /**
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
    *
    * @group math_funcs
    */
-  def toRad(e: Column): Column = ToRadians(e.expr)
+  def toRadians(e: Column): Column = ToRadians(e.expr)
 
   /**
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
    *
    * @group math_funcs
    */
-  def toRad(columnName: String): Column = toRad(Column(columnName))
+  def toRadians(columnName: String): Column = toRadians(Column(columnName))
     
 
   //////////////////////////////////////////////////////////////////////////////////////////////

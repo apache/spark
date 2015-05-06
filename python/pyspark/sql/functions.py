@@ -56,12 +56,8 @@ def _create_binary_mathfunction(name, doc=""):
     def _(col1, col2):
         sc = SparkContext._active_spark_context
         # users might write ints for simplicity. This would throw an error on the JVM side.
-        if type(col1) is int:
-            col1 = col1 * 1.0
-        if type(col2) is int:
-            col2 = col2 * 1.0
-        jc = getattr(sc._jvm.functions, name)(col1._jc if isinstance(col1, Column) else col1,
-                                              col2._jc if isinstance(col2, Column) else col2)
+        jc = getattr(sc._jvm.functions, name)(col1._jc if isinstance(col1, Column) else float(col1),
+                                              col2._jc if isinstance(col2, Column) else float(col2))
         return Column(jc)
     _.__name__ = name
     _.__doc__ = doc
@@ -103,9 +99,9 @@ _functions = {
     'sinh': 'Computes the hyperbolic sine of the given value.',
     'tan': 'Computes the tangent of the given value.',
     'tanh': 'Computes the hyperbolic tangent of the given value.',
-    'toDeg': 'Converts an angle measured in radians to an approximately equivalent angle ' +
+    'toDegrees': 'Converts an angle measured in radians to an approximately equivalent angle ' +
              'measured in degrees.',
-    'toRad': 'Converts an angle measured in degrees to an approximately equivalent angle ' +
+    'toRadians': 'Converts an angle measured in degrees to an approximately equivalent angle ' +
              'measured in radians.',
 
     'max': 'Aggregate function: returns the maximum value of the expression in a group.',

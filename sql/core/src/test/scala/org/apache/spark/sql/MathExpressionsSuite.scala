@@ -158,11 +158,11 @@ class MathExpressionsSuite extends QueryTest {
   }
 
   test("toDeg") {
-    testOneToOneMathFunction(toDeg, math.toDegrees)
+    testOneToOneMathFunction(toDegrees, math.toDegrees)
   }
 
   test("toRad") {
-    testOneToOneMathFunction(toRad, math.toRadians)
+    testOneToOneMathFunction(toRadians, math.toRadians)
   }
 
   test("cbrt") {
