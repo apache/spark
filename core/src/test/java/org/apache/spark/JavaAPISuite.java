@@ -275,15 +275,15 @@ public class JavaAPISuite implements Serializable {
   public void foreachPartitionWithIndex() {
     final Accumulator<Integer> accum = sc.accumulator(0);
     final Accumulator<Integer> accum2 = sc.accumulator(0);
-    JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
+    JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"), 2);
     rdd.foreachPartitionWithIndex(new VoidFunction2<Integer, Iterator<String>>() {
       @Override
       public void call(Integer index, Iterator<String> iter) throws IOException {
         while (iter.hasNext()) {
           iter.next();
           accum.add(1);
-          accum2.add(index);
         }
+        accum2.add(index);
       }
     });
     Assert.assertEquals(2, accum.value().intValue());
