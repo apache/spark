@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import akka.actor._
 import akka.remote._
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
@@ -34,6 +35,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.SparkException
+import org.apache.spark.crypto.CryptoConf
 import org.apache.spark.deploy.{PythonRunner, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
@@ -273,6 +275,7 @@ private[spark] class ApplicationMaster(
         sc.getConf.get("spark.driver.host"),
         sc.getConf.get("spark.driver.port"),
         isClusterMode = true)
+      initJobCredentialsAndUGI()
       registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       userClassThread.join()
     }
@@ -283,6 +286,7 @@ private[spark] class ApplicationMaster(
       conf = sparkConf, securityManager = securityMgr)._1
     waitForSparkDriver()
     addAmIpFilter()
+    initJobCredentialsAndUGI()
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
 
     // In client mode the actor will stop the reporter thread.
@@ -552,7 +556,21 @@ private[spark] class ApplicationMaster(
     }
   }
 
+  /** set  "SPARK_SHUFFLE_TOKEN" before registerAM
+    * @return
+    */
+  private def initJobCredentialsAndUGI() = {
+    val sc = sparkContextRef.get()
+    val conf = if (sc != null) sc.getConf else sparkConf
+    val cryptoConf = CryptoConf.parse(conf)
+    if (cryptoConf.enabled) {
+      val credentials = SparkHadoopUtil.get.getCurrentUserCredentials
+      CryptoConf.initSparkShuffleCredentials(conf, credentials)
+      SparkHadoopUtil.get.addCurrentUserCredentials(credentials)
+    }
+  }
 }
+
 
 object ApplicationMaster extends Logging {
 

@@ -17,16 +17,21 @@
 
 package org.apache.spark.storage
 
-import java.io.{InputStream, IOException}
+import java.io.InputStream
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 import scala.util.{Failure, Success, Try}
 
+import com.intel.chimera.{CipherSuite, CryptoCodec, CryptoInputStream}
+
 import org.apache.spark.{Logging, TaskContext}
+import org.apache.spark.crypto.CommonConfigurationKeys._
+import org.apache.spark.crypto.CryptoConf
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
-import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.{CompletionIterator, Utils}
 
@@ -296,8 +301,27 @@ final class ShuffleBlockFetcherIterator(
         // There is a chance that createInputStream can fail (e.g. fetching a local file that does
         // not exist, SPARK-4085). In that case, we should propagate the right exception so
         // the scheduler gets a FetchFailedException.
+        // is0:InputStream
         Try(buf.createInputStream()).map { is0 =>
-          val is = blockManager.wrapForCompression(blockId, is0)
+          var is: InputStream = null
+          val sparkConf = blockManager.conf
+          val cryptoConf = CryptoConf.parse(sparkConf)
+          if (cryptoConf.enabled) {
+            val cryptoCodec: CryptoCodec = CryptoCodec.getInstance(CipherSuite.AES_CTR_NOPADDING)
+            val bufferSize: Int = sparkConf.getInt(
+              SPARK_ENCRYPTED_INTERMEDIATE_DATA_BUFFER_KB,
+              DEFAULT_SPARK_ENCRYPTED_INTERMEDIATE_DATA_BUFFER_KB) * 1024
+            val iv: Array[Byte] = new Array[Byte](16)
+            is0.read(iv, 0, iv.length)
+            val streamOffset: Long = iv.length
+            val credentials = SparkHadoopUtil.get.getCurrentUserCredentials()
+            var key: Array[Byte] = credentials.getSecretKey(SPARK_SHUFFLE_TOKEN)
+            var cos = new CryptoInputStream(is0, cryptoCodec, bufferSize, key,
+              iv, streamOffset)
+            is = blockManager.wrapForCompression(blockId, cos)
+          } else {
+            is = blockManager.wrapForCompression(blockId, is0)
+          }
           val iter = serializer.newInstance().deserializeStream(is).asIterator
           CompletionIterator[Any, Iterator[Any]](iter, {
             // Once the iterator is exhausted, release the buffer and set currentResult to null

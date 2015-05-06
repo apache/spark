@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
+import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions._
@@ -26,12 +26,13 @@ import scala.util.{Try, Success, Failure}
 
 import com.google.common.base.Objects
 
-import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
+import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.mapreduce.MRJobConfig
+import org.apache.hadoop.mapreduce.security.TokenCache
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
@@ -43,6 +44,8 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.crypto.CommonConfigurationKeys._
+import org.apache.spark.crypto.CryptoConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
@@ -534,6 +537,11 @@ private[spark] class Client(
     // send the acl settings into YARN to control who has access via YARN interfaces
     val securityManager = new SecurityManager(sparkConf)
     amContainer.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager))
+
+    val cryptoConf = CryptoConf.parse(sparkConf)
+    if (cryptoConf.enabled) {
+      CryptoConf.initSparkShuffleCredentials(sparkConf, credentials)
+    }
     setupSecurityToken(amContainer)
     UserGroupInformation.getCurrentUser().addCredentials(credentials)
 
