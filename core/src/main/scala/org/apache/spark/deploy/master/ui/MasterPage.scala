@@ -35,13 +35,10 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private val master = parent.masterActorRef
   private val timeout = parent.timeout
 
-  def getMasterState: MasterStateResponse = {
-    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
-    Await.result(stateFuture, timeout)
-  }
-
   override def renderJson(request: HttpServletRequest): JValue = {
-    JsonProtocol.writeMasterState(getMasterState)
+    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
+    val state = Await.result(stateFuture, timeout)
+    JsonProtocol.writeMasterState(state)
   }
 
   def handleAppKillRequest(request: HttpServletRequest): Unit = {
@@ -71,7 +68,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val state = getMasterState
+    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
+    val state = Await.result(stateFuture, timeout)
 
     val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory")
     val workers = state.workers.sortBy(_.id)
