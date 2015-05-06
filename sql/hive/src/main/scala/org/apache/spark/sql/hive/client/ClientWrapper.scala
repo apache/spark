@@ -118,6 +118,7 @@ class ClientWrapper(
   /** Returns the configuration for the current session. */
   def conf: HiveConf = SessionState.get().getConf
 
+  // TODO: should be a def?s
   private val client = Hive.get(conf)
 
   /**
