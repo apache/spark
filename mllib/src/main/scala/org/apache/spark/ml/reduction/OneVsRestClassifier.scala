@@ -17,12 +17,12 @@
 
 package org.apache.spark.ml.reduction
 
-import org.apache.spark.ml.attribute.BinaryAttribute
 
 import scala.language.existentials
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.classification.{ClassificationModel, Classifier, ClassifierParams}
 import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
