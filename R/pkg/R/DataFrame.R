@@ -1276,3 +1276,40 @@ setMethod("saveAsTable",
             callJMethod(df@sdf, "saveAsTable", tableName, source, jmode, options)
           })
 
+#' describe
+#'
+#' Computes statistics for numeric columns.
+#' If no columns are given, this function computes statistics for all numerical columns.
+#'
+#' @param x A DataFrame to be computed.
+#' @param col A string of name
+#' @param ... Additional expressions
+#' @return A DataFrame
+#' @rdname describe 
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' describe(df)
+#' describe(df, "col1")
+#' describe(df, "col1", "col2")
+#' }
+setMethod("describe",
+          signature(x = "DataFrame", col = "character"),
+          function(x, col, ...) {
+            colList <- list(col, ...)
+            sdf <- callJMethod(x@sdf, "describe", listToSeq(colList))
+            dataFrame(sdf)
+          })
+
+#' @rdname describe
+setMethod("describe",
+          signature(x = "DataFrame"),
+          function(x) {
+            colList <- as.list(c(columns(x)))
+            sdf <- callJMethod(x@sdf, "describe", listToSeq(colList))
+            dataFrame(sdf)
+          })
