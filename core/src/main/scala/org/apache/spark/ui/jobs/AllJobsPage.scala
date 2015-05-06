@@ -18,7 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import scala.collection.mutable.{HashMap, ListBuffer}
-import scala.xml.{Node, NodeSeq, Unparsed}
+import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
@@ -81,6 +81,9 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         case JobExecutionStatus.RUNNING => "running"
       }
 
+      // The timeline library treats contents as HTML, so we have to escape them; for the
+      // data-title attribute string we have to escape them twice since that's in a string.
+      val escapedDesc = Utility.escape(displayJobDescription)
       val jobEventJsonAsStr =
         s"""
            |{
@@ -90,7 +93,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
            |  'end': new Date(${completionTime}),
            |  'content': '<div class="application-timeline-content"' +
            |     'data-html="true" data-placement="top" data-toggle="tooltip"' +
-           |     'data-title="${displayJobDescription} (Job ${jobId})<br>Status: ${status}<br>' +
+           |     'data-title="${Utility.escape(escapedDesc)} (Job ${jobId})<br>' +
+           |     'Status: ${status}<br>' +
            |     'Submitted: ${UIUtils.formatDate(new Date(submissionTime))}' +
            |     '${
                      if (status != JobExecutionStatus.RUNNING) {
@@ -99,7 +103,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
                        ""
                      }
                   }">' +
-           |    '${displayJobDescription} (Job ${jobId})</div>'
+           |    '${escapedDesc} (Job ${jobId})</div>'
            |}
          """.stripMargin
       jobEventJsonAsStr
@@ -179,7 +183,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
     <span class="expand-application-timeline">
       <span class="expand-application-timeline-arrow arrow-closed"></span>
-      <strong>Event Timeline</strong>
+      <a>Event Timeline</a>
     </span> ++
     <div id="application-timeline" class="collapsed">
       <div class="control-panel">
@@ -331,8 +335,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       }
 
       val helpText = """A job is triggered by an action, like "count()" or "saveAsTextFile()".""" +
-        " Click on a job's title to see information about the stages of tasks associated with" +
-        " the job."
+        " Click on a job to see information about the stages of tasks inside it."
 
       UIUtils.headerSparkPage("Spark Jobs", content, parent, helpText = Some(helpText))
     }

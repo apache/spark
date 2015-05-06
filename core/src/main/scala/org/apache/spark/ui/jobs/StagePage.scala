@@ -119,10 +119,10 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         <div>
           <span class="expand-additional-metrics">
             <span class="expand-additional-metrics-arrow arrow-closed"></span>
-            <strong>Show Additional Metrics</strong>
+            <a>Show Additional Metrics</a>
           </span>
           <div class="additional-metrics collapsed">
-            <ul style="list-style-type:none">
+            <ul>
               <li>
                   <input type="checkbox" id="select-all-metrics"/>
                   <span class="additional-metric-title"><em>(De)select All</em></span>

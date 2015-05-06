@@ -68,18 +68,18 @@ div#application-timeline, div#job-timeline {
 }
 
 .vis.timeline .item.stage.running {
-  background-color: #a3ffc2;
+  background-color: #a2fcc0;
   border-color: #36f572;
 }
 
 .vis.timeline .item.stage.running.selected {
-  background-color: #a3ffc2;
+  background-color: #a2fcc0;
   border-color: #36f572;
   z-index: auto;
 }
 
 .legend-area rect.active-stage-legend {
-  fill: #a3ffc2;
+  fill: #a2fcc0;
   stroke: #36f572;
 }
 
@@ -89,6 +89,7 @@ div#application-timeline, div#job-timeline {
 
 .vis.timeline .item.job.succeeded {
   background-color: #A0DFFF;
+  border-color: #3EC0FF;
 }
 
 .vis.timeline .item.job.succeeded.selected {
@@ -119,23 +120,24 @@ div#application-timeline, div#job-timeline {
 }
 
 .vis.timeline .item.job.running {
-  background-color: #a3ffc2;
+  background-color: #a2fcc0;
   border-color: #36f572;
 }
 
 .vis.timeline .item.job.running.selected {
-  background-color: #a3ffc2;
+  background-color: #a2fcc0;
   border-color: #36f572;
   z-index: auto;
 }
 
 .legend-area rect.running-job-legend {
-  fill: #a3ffc2;
+  fill: #a2fcc0;
   stroke: #36f572;
 }
 
 .vis.timeline .item.executor.added {
   background-color: #A0DFFF;
+  border-color: #3EC0FF;
 }
 
 .legend-area rect.executor-added-legend {
@@ -154,7 +156,7 @@ div#application-timeline, div#job-timeline {
 }
 
 .vis.timeline .item.executor.selected {
-  background-color: #a3ffc2;
+  background-color: #a2fcc0;
   border-color: #36f572;
   z-index: 2;
 }
@@ -175,6 +177,10 @@ tr.corresponding-item-hover > td, tr.corresponding-item-hover > th {
   margin-bottom: 5px;
 }
 
+.control-panel input[type="checkbox"] {
+  margin: 0;
+}
+
 span.expand-application-timeline, span.expand-job-timeline {
   cursor: pointer;
 }
@@ -189,4 +195,18 @@ span.expand-application-timeline, span.expand-job-timeline {
 
 .vis.timeline .item .tooltip-inner {
   max-width: unset !important;
+}
+
+.vispanel.center {
+  font-size: 12px;
+  line-height: 12px;
+}
+
+.legend-area text {
+  fill: #4d4d4d;
+}
+
+.additional-metrics ul {
+  list-style: none;
+  margin-left: 15px;
 }
