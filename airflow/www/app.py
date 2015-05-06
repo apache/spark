@@ -54,6 +54,8 @@ if AUTHENTICATE is False:
 class VisiblePasswordInput(widgets.PasswordInput):
     def __init__(self, hide_value=False):
         self.hide_value = hide_value
+
+
 class VisiblePasswordField(PasswordField):
     widget = VisiblePasswordInput()
 
@@ -158,23 +160,90 @@ def shutdown_session(exception=None):
     settings.Session.remove()
 
 
+class SuperUserMixin(object):
+    def is_accessible(self):
+        return (
+            not AUTHENTICATE or
+            (not current_user.is_anonymous() and current_user.is_superuser())
+        )
+
+
+def dag_link(v, c, m, p):
+    url = url_for(
+        'airflow.graph',
+        dag_id=m.dag_id)
+    return Markup(
+        '<a href="{url}">{m.dag_id}</a>'.format(**locals()))
+
+
+class DagModelView(SuperUserMixin, ModelView):
+    column_list = ('dag_id', 'owners')
+    column_editable_list = ('is_paused',)
+    column_searchable_list = ('dag_id',)
+    column_filters = (
+        'dag_id', 'owners', 'is_paused', 'is_active', 'is_subdag',
+        'last_scheduler_run', 'last_expired')
+    form_widget_args = {
+        'last_scheduler_run': {'disabled': True},
+        'fileloc': {'disabled': True},
+        'last_pickled': {'disabled': True},
+        'pickle_id': {'disabled': True},
+        'last_loaded': {'disabled': True},
+        'last_expired': {'disabled': True},
+        'pickle_size': {'disabled': True},
+        'is_subdag': {'disabled': True},
+        'is_active': {'disabled': True},
+        'scheduler_lock': {'disabled': True},
+        'owners': {'disabled': True},
+    }
+    column_formatters = dict(
+        dag_id=dag_link,
+    )
+    can_delete = False
+    can_create = False
+    page_size = 50
+    list_template = 'airflow/list_dags.html'
+    named_filter_urls = True
+
+    def get_query(self):
+        """
+        Default filters for model
+        """
+        return (
+            super(DagModelView, self)
+            .get_query()
+            .filter(models.DagModel.is_active)
+            .filter(~models.DagModel.is_subdag)
+        )
+
+    def get_count_query(self):
+        """
+        Default filters for model
+        """
+        return (
+            super(DagModelView, self)
+            .get_count_query()
+            .filter(models.DagModel.is_active)
+            .filter(~models.DagModel.is_subdag)
+        )
+
+mv = DagModelView(
+    models.DagModel, Session, name="DAGs")
+
+
 class HomeView(AdminIndexView):
-    """
-    Basic home view, just showing the README.md file
-    """
     @expose("/")
     @login_required
     def index(self):
-        dags = dagbag.dags.values()
-        dags = [dag for dag in dags if not dag.parent_dag]
-        dags = sorted(dags, key=lambda dag: dag.dag_id)
-        return self.render('airflow/dags.html', dags=dags)
+        return redirect('/admin/dagmodel/')
 
 admin = Admin(
     app,
     name="Airflow",
-    index_view=HomeView(name='DAGs'),
+    index_view=HomeView(),
     template_mode='bootstrap3')
+admin._menu = []
+admin.add_view(mv)
 
 
 class Airflow(BaseView):
@@ -294,7 +363,8 @@ class Airflow(BaseView):
                 payload['data'] = data
                 payload['state'] = 'SUCCESS'
                 return Response(
-                    response=json.dumps(payload, indent=4, default=date_handler),
+                    response=json.dumps(
+                        payload, indent=4, default=date_handler),
                     status=200,
                     mimetype="application/json")
 
@@ -458,7 +528,6 @@ class Airflow(BaseView):
             payload['data'] = data
             payload['request_dict'] = request_dict
 
-
         return Response(
             response=json.dumps(payload, indent=4, default=date_handler),
             status=200,
@@ -590,7 +659,7 @@ class Airflow(BaseView):
     @expose('/logout')
     def logout(self):
         logout_user()
-        return redirect('/admin')
+        return redirect('/admin/dagmodel/')
 
     @expose('/rendered')
     @login_required
@@ -951,7 +1020,7 @@ class Airflow(BaseView):
         dag = dagbag.get_dag(dag_id)
         if dag_id not in dagbag.dags:
             flash('DAG "{0}" seems to be missing.'.format(dag_id), "error")
-            return redirect(url_for('index'))
+            return redirect('/admin/dagmodel/')
 
         root = request.args.get('root')
         if root:
@@ -1107,7 +1176,7 @@ class Airflow(BaseView):
 
         dagbag.get_dag(dag_id)
         flash("DAG [{}] is now fresh as a daisy".format(dag_id))
-        return redirect(url_for('index'))
+        return redirect('/admin/dagmodel/')
 
     @expose('/gantt')
     @login_required
@@ -1222,14 +1291,6 @@ class DataProfilingMixin(object):
         )
 
 
-class SuperUserMixin(object):
-    def is_accessible(self):
-        return (
-            not AUTHENTICATE or
-            (not current_user.is_anonymous() and current_user.is_superuser())
-        )
-
-
 class QueryView(DataProfilingMixin, BaseView):
     @expose('/')
     @wwwutils.gzipped
@@ -1326,14 +1387,6 @@ def task_instance_link(v, c, m, p):
         execution_date=m.execution_date.isoformat())
     return Markup(
         '<a href="{url}">{m.task_id}</a>'.format(**locals()))
-
-
-def dag_link(v, c, m, p):
-    url = url_for(
-        'airflow.graph',
-        dag_id=m.dag_id)
-    return Markup(
-        '<a href="{url}">{m.dag_id}</a>'.format(**locals()))
 
 
 def duration_f(v, c, m, p):
@@ -1452,40 +1505,6 @@ class ConfigurationView(SuperUserMixin, BaseView):
                 pre_subtitle=settings.HEADER + "  v" + airflow.__version__,
                 code_html=code_html, title=title, subtitle=subtitle)
 admin.add_view(ConfigurationView(name='Configuration', category="Admin"))
-
-
-class DagModelView(SuperUserMixin, ModelView):
-    column_list = ('dag_id', 'owners')
-    column_editable_list = ('is_paused',)
-    column_searchable_list = ('dag_id',)
-    column_filters = (
-        'dag_id', 'owners', 'is_paused', 'is_active', 'is_subdag',
-        'last_scheduler_run', 'last_expired')
-    form_widget_args = {
-        'last_scheduler_run': {'disabled': True},
-        'fileloc': {'disabled': True},
-        'last_pickled': {'disabled': True},
-        'pickle_id': {'disabled': True},
-        'last_loaded': {'disabled': True},
-        'last_expired': {'disabled': True},
-        'pickle_size': {'disabled': True},
-        'is_subdag': {'disabled': True},
-        'is_active': {'disabled': True},
-        'scheduler_lock': {'disabled': True},
-        'owners': {'disabled': True},
-    }
-    column_formatters = dict(
-        dag_id=dag_link,
-    )
-    can_delete = False
-    can_create = False
-    page_size = 100
-    list_template = 'airflow/list_dags.html'
-    named_filter_urls = True
-
-mv = DagModelView(
-    models.DagModel, Session, name="Pause DAGs", category="Admin")
-admin.add_view(mv)
 
 
 def label_link(v, c, m, p):
