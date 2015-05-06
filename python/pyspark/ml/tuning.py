@@ -224,6 +224,7 @@ class CrossValidator(Estimator):
             train = df.filter(~condition)
             for j in range(numModels):
                 model = est.fit(train, epm[j])
+                # TODO: duplicate evaluator to take extra params from input
                 metric = eva.evaluate(model.transform(validation, epm[j]))
                 metrics[j] += metric
         bestIndex = np.argmax(metrics)

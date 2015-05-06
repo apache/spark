@@ -122,6 +122,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
       trainingDataset.unpersist()
       var i = 0
       while (i < numModels) {
+        // TODO: duplicate evaluator to take extra params from input
         val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)))
         logDebug(s"Got metric $metric for model trained with ${epm(i)}.")
         metrics(i) += metric
