@@ -231,7 +231,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     val childArgsStr = childArgs.mkString(" ")
     if (useRest) {
       childArgsStr should endWith ("thejar.jar org.SomeClass arg1 arg2")
-      mainClass should be ("org.apache.spark.deploy.rest.StandaloneRestClient")
+      mainClass should be ("org.apache.spark.deploy.rest.RestSubmissionClient")
     } else {
       childArgsStr should startWith ("--supervise --memory 4g --cores 5")
       childArgsStr should include regex "launch spark://h:p .*thejar.jar org.SomeClass arg1 arg2"
@@ -320,7 +320,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     runSparkSubmit(args)
   }
 
-  test("includes jars passed in through --jars") {
+  ignore("includes jars passed in through --jars") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
@@ -334,7 +334,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     runSparkSubmit(args)
   }
 
-  test("includes jars passed in through --packages") {
+  ignore("includes jars passed in through --packages") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val packagesString = "com.databricks:spark-csv_2.10:0.1,com.databricks:spark-avro_2.10:0.1"
     val args = Seq(

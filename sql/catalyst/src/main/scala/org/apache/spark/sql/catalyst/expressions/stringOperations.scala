@@ -19,13 +19,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.regex.Pattern
 
-import scala.collection.IndexedSeqOptimized
-
-
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType, StringType}
+import org.apache.spark.sql.types._
 
-trait StringRegexExpression {
+trait StringRegexExpression extends ExpectsInputTypes {
   self: BinaryExpression =>
 
   type EvaluatedType = Any
@@ -35,6 +32,7 @@ trait StringRegexExpression {
 
   override def nullable: Boolean = left.nullable || right.nullable
   override def dataType: DataType = BooleanType
+  override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
 
   // try cache the pattern for Literal
   private lazy val cache: Pattern = right match {
@@ -60,34 +58,13 @@ trait StringRegexExpression {
       if(r == null) {
         null
       } else {
-        val regex = pattern(r.asInstanceOf[String])
+        val regex = pattern(r.asInstanceOf[UTF8String].toString())
         if(regex == null) {
           null
         } else {
-          matches(regex, l.asInstanceOf[String])
+          matches(regex, l.asInstanceOf[UTF8String].toString())
         }
       }
-    }
-  }
-}
-
-trait CaseConversionExpression {
-  self: UnaryExpression =>
-
-  type EvaluatedType = Any
-
-  def convert(v: String): String
-
-  override def foldable: Boolean = child.foldable
-  def nullable: Boolean = child.nullable
-  def dataType: DataType = StringType
-
-  override def eval(input: Row): Any = {
-    val evaluated = child.eval(input)
-    if (evaluated == null) {
-      null
-    } else {
-      convert(evaluated.toString)
     }
   }
 }
@@ -134,12 +111,34 @@ case class RLike(left: Expression, right: Expression)
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
 }
 
+trait CaseConversionExpression extends ExpectsInputTypes {
+  self: UnaryExpression =>
+
+  type EvaluatedType = Any
+
+  def convert(v: UTF8String): UTF8String
+
+  override def foldable: Boolean = child.foldable
+  override def nullable: Boolean = child.nullable
+  override def dataType: DataType = StringType
+  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+
+  override def eval(input: Row): Any = {
+    val evaluated = child.eval(input)
+    if (evaluated == null) {
+      null
+    } else {
+      convert(evaluated.asInstanceOf[UTF8String])
+    }
+  }
+}
+
 /**
  * A function that converts the characters of a string to uppercase.
  */
 case class Upper(child: Expression) extends UnaryExpression with CaseConversionExpression {
   
-  override def convert(v: String): String = v.toUpperCase()
+  override def convert(v: UTF8String): UTF8String = v.toUpperCase()
 
   override def toString: String = s"Upper($child)"
 }
@@ -149,28 +148,31 @@ case class Upper(child: Expression) extends UnaryExpression with CaseConversionE
  */
 case class Lower(child: Expression) extends UnaryExpression with CaseConversionExpression {
   
-  override def convert(v: String): String = v.toLowerCase()
+  override def convert(v: UTF8String): UTF8String = v.toLowerCase()
 
   override def toString: String = s"Lower($child)"
 }
 
 /** A base trait for functions that compare two strings, returning a boolean. */
-trait StringComparison {
-  self: BinaryPredicate =>
+trait StringComparison extends ExpectsInputTypes {
+  self: BinaryExpression =>
+
+  def compare(l: UTF8String, r: UTF8String): Boolean
 
   override type EvaluatedType = Any
 
   override def nullable: Boolean = left.nullable || right.nullable
 
-  def compare(l: String, r: String): Boolean
+  override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def eval(input: Row): Any = {
-    val leftEval = left.eval(input).asInstanceOf[String]
+    val leftEval = left.eval(input)
     if(leftEval == null) {
       null
     } else {
-      val rightEval = right.eval(input).asInstanceOf[String]
-      if (rightEval == null) null else compare(leftEval, rightEval)
+      val rightEval = right.eval(input)
+      if (rightEval == null) null
+      else compare(leftEval.asInstanceOf[UTF8String], rightEval.asInstanceOf[UTF8String])
     }
   }
 
@@ -183,31 +185,32 @@ trait StringComparison {
  * A function that returns true if the string `left` contains the string `right`.
  */
 case class Contains(left: Expression, right: Expression)
-    extends BinaryPredicate with StringComparison {
-  override def compare(l: String, r: String): Boolean = l.contains(r)
+    extends BinaryExpression with Predicate with StringComparison {
+  override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
 }
 
 /**
  * A function that returns true if the string `left` starts with the string `right`.
  */
 case class StartsWith(left: Expression, right: Expression)
-    extends BinaryPredicate with StringComparison {
-  override def compare(l: String, r: String): Boolean = l.startsWith(r)
+    extends BinaryExpression with Predicate with StringComparison {
+  override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
 }
 
 /**
  * A function that returns true if the string `left` ends with the string `right`.
  */
 case class EndsWith(left: Expression, right: Expression)
-    extends BinaryPredicate with StringComparison {
-  override def compare(l: String, r: String): Boolean = l.endsWith(r)
+    extends BinaryExpression with Predicate with StringComparison {
+  override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
 }
 
 /**
  * A function that takes a substring of its first argument starting at a given position.
  * Defined for String and Binary types.
  */
-case class Substring(str: Expression, pos: Expression, len: Expression) extends Expression {
+case class Substring(str: Expression, pos: Expression, len: Expression)
+  extends Expression with ExpectsInputTypes {
   
   type EvaluatedType = Any
 
@@ -221,12 +224,12 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
     if (str.dataType == BinaryType) str.dataType else StringType
   }
 
+  override def expectedChildTypes: Seq[DataType] = Seq(StringType, IntegerType, IntegerType)
+
   override def children: Seq[Expression] = str :: pos :: len :: Nil
 
   @inline
-  def slice[T, C <: Any](str: C, startPos: Int, sliceLen: Int)
-      (implicit ev: (C=>IndexedSeqOptimized[T,_])): Any = {
-    val len = str.length
+  def slicePos(startPos: Int, sliceLen: Int, length: () => Int): (Int, Int) = {
     // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
     // negative indices for start positions. If a start index i is greater than 0, it 
     // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
@@ -235,7 +238,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
 
     val start = startPos match {
       case pos if pos > 0 => pos - 1
-      case neg if neg < 0 => len + neg
+      case neg if neg < 0 => length() + neg
       case _ => 0
     }
 
@@ -244,12 +247,11 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
       case x => start + x
     }
 
-    str.slice(start, end)    
+    (start, end)
   }
 
   override def eval(input: Row): Any = {
     val string = str.eval(input)
-
     val po = pos.eval(input)
     val ln = len.eval(input)
 
@@ -257,11 +259,14 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
       null
     } else {
       val start = po.asInstanceOf[Int]
-      val length = ln.asInstanceOf[Int] 
-
+      val length = ln.asInstanceOf[Int]
       string match {
-        case ba: Array[Byte] => slice(ba, start, length)
-        case other => slice(other.toString, start, length)
+        case ba: Array[Byte] =>
+          val (st, end) = slicePos(start, length, () => ba.length)
+          ba.slice(st, end)
+        case s: UTF8String =>
+          val (st, end) = slicePos(start, length, () => s.length())
+          s.slice(st, end)
       }
     }
   }

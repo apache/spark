@@ -72,4 +72,24 @@ class MatrixFactorizationModelSuite extends FunSuite with MLlibTestSparkContext 
       Utils.deleteRecursively(tempDir)
     }
   }
+
+  test("batch predict API recommendProductsForUsers") {
+    val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
+    val topK = 10
+    val recommendations = model.recommendProductsForUsers(topK).collectAsMap()
+
+    assert(recommendations(0)(0).rating ~== 17.0 relTol 1e-14)
+    assert(recommendations(1)(0).rating ~== 39.0 relTol 1e-14)
+  }
+
+  test("batch predict API recommendUsersForProducts") {
+    val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
+    val topK = 10
+    val recommendations = model.recommendUsersForProducts(topK).collectAsMap()
+
+    assert(recommendations(2)(0).user == 1)
+    assert(recommendations(2)(0).rating ~== 39.0 relTol 1e-14)
+    assert(recommendations(2)(1).user == 0)
+    assert(recommendations(2)(1).rating ~== 17.0 relTol 1e-14)
+  }
 }

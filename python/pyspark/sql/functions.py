@@ -18,19 +18,26 @@
 """
 A collections of builtin functions
 """
+import sys
 
-from itertools import imap
-
-from py4j.java_collections import ListConverter
+if sys.version < "3":
+    from itertools import imap as map
 
 from pyspark import SparkContext
-from pyspark.rdd import _prepare_for_python_RDD
+from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
-from pyspark.sql.dataframe import Column, _to_java_column
+from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
 
 
-__all__ = ['countDistinct', 'approxCountDistinct', 'udf']
+__all__ = [
+    'approxCountDistinct',
+    'countDistinct',
+    'monotonicallyIncreasingId',
+    'rand',
+    'randn',
+    'sparkPartitionId',
+    'udf']
 
 
 def _create_function(name, doc=""):
@@ -38,6 +45,19 @@ def _create_function(name, doc=""):
     def _(col):
         sc = SparkContext._active_spark_context
         jc = getattr(sc._jvm.functions, name)(col._jc if isinstance(col, Column) else col)
+        return Column(jc)
+    _.__name__ = name
+    _.__doc__ = doc
+    return _
+
+
+def _create_binary_mathfunction(name, doc=""):
+    """ Create a binary mathfunction by name"""
+    def _(col1, col2):
+        sc = SparkContext._active_spark_context
+        # users might write ints for simplicity. This would throw an error on the JVM side.
+        jc = getattr(sc._jvm.functions, name)(col1._jc if isinstance(col1, Column) else float(col1),
+                                              col2._jc if isinstance(col2, Column) else float(col2))
         return Column(jc)
     _.__name__ = name
     _.__doc__ = doc
@@ -54,7 +74,35 @@ _functions = {
     'upper': 'Converts a string expression to upper case.',
     'lower': 'Converts a string expression to upper case.',
     'sqrt': 'Computes the square root of the specified float value.',
-    'abs': 'Computes the absolutle value.',
+    'abs': 'Computes the absolute value.',
+
+    # unary math functions
+    'acos': 'Computes the cosine inverse of the given value; the returned angle is in the range' +
+            '0.0 through pi.',
+    'asin': 'Computes the sine inverse of the given value; the returned angle is in the range' +
+            '-pi/2 through pi/2.',
+    'atan': 'Computes the tangent inverse of the given value.',
+    'cbrt': 'Computes the cube-root of the given value.',
+    'ceil': 'Computes the ceiling of the given value.',
+    'cos': 'Computes the cosine of the given value.',
+    'cosh': 'Computes the hyperbolic cosine of the given value.',
+    'exp': 'Computes the exponential of the given value.',
+    'expm1': 'Computes the exponential of the given value minus one.',
+    'floor': 'Computes the floor of the given value.',
+    'log': 'Computes the natural logarithm of the given value.',
+    'log10': 'Computes the logarithm of the given value in Base 10.',
+    'log1p': 'Computes the natural logarithm of the given value plus one.',
+    'rint': 'Returns the double value that is closest in value to the argument and' +
+            ' is equal to a mathematical integer.',
+    'signum': 'Computes the signum of the given value.',
+    'sin': 'Computes the sine of the given value.',
+    'sinh': 'Computes the hyperbolic sine of the given value.',
+    'tan': 'Computes the tangent of the given value.',
+    'tanh': 'Computes the hyperbolic tangent of the given value.',
+    'toDegrees': 'Converts an angle measured in radians to an approximately equivalent angle ' +
+             'measured in degrees.',
+    'toRadians': 'Converts an angle measured in degrees to an approximately equivalent angle ' +
+             'measured in radians.',
 
     'max': 'Aggregate function: returns the maximum value of the expression in a group.',
     'min': 'Aggregate function: returns the minimum value of the expression in a group.',
@@ -67,26 +115,39 @@ _functions = {
     'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
 }
 
+# math functions that take two arguments as input
+_binary_mathfunctions = {
+    'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
+             'polar coordinates (r, theta).',
+    'hypot': 'Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.',
+    'pow': 'Returns the value of the first argument raised to the power of the second argument.'
+}
 
 for _name, _doc in _functions.items():
     globals()[_name] = _create_function(_name, _doc)
+for _name, _doc in _binary_mathfunctions.items():
+    globals()[_name] = _create_binary_mathfunction(_name, _doc)
 del _name, _doc
 __all__ += _functions.keys()
+__all__ += _binary_mathfunctions.keys()
 __all__.sort()
 
 
-def countDistinct(col, *cols):
-    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
+def array(*cols):
+    """Creates a new array column.
 
-    >>> df.agg(countDistinct(df.age, df.name).alias('c')).collect()
-    [Row(c=2)]
+    :param cols: list of column names (string) or list of :class:`Column` expressions that have
+        the same data type.
 
-    >>> df.agg(countDistinct("age", "name").alias('c')).collect()
-    [Row(c=2)]
+    >>> df.select(array('age', 'age').alias("arr")).collect()
+    [Row(arr=[2, 2]), Row(arr=[5, 5])]
+    >>> df.select(array([df.age, df.age]).alias("arr")).collect()
+    [Row(arr=[2, 2]), Row(arr=[5, 5])]
     """
     sc = SparkContext._active_spark_context
-    jcols = ListConverter().convert([_to_java_column(c) for c in cols], sc._gateway._gateway_client)
-    jc = sc._jvm.functions.countDistinct(_to_java_column(col), sc._jvm.PythonUtils.toSeq(jcols))
+    if len(cols) == 1 and isinstance(cols[0], (list, set)):
+        cols = cols[0]
+    jc = sc._jvm.functions.array(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
 
@@ -104,6 +165,93 @@ def approxCountDistinct(col, rsd=None):
     return Column(jc)
 
 
+def countDistinct(col, *cols):
+    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
+
+    >>> df.agg(countDistinct(df.age, df.name).alias('c')).collect()
+    [Row(c=2)]
+
+    >>> df.agg(countDistinct("age", "name").alias('c')).collect()
+    [Row(c=2)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.countDistinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
+def monotonicallyIncreasingId():
+    """A column that generates monotonically increasing 64-bit integers.
+
+    The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+    The current implementation puts the partition ID in the upper 31 bits, and the record number
+    within each partition in the lower 33 bits. The assumption is that the data frame has
+    less than 1 billion partitions, and each partition has less than 8 billion records.
+
+    As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+    This expression would return the following IDs:
+    0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+
+    >>> df0 = sc.parallelize(range(2), 2).mapPartitions(lambda x: [(1,), (2,), (3,)]).toDF(['col1'])
+    >>> df0.select(monotonicallyIncreasingId().alias('id')).collect()
+    [Row(id=0), Row(id=1), Row(id=2), Row(id=8589934592), Row(id=8589934593), Row(id=8589934594)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.monotonicallyIncreasingId())
+
+
+def rand(seed=None):
+    """Generates a random column with i.i.d. samples from U[0.0, 1.0].
+    """
+    sc = SparkContext._active_spark_context
+    if seed:
+        jc = sc._jvm.functions.rand(seed)
+    else:
+        jc = sc._jvm.functions.rand()
+    return Column(jc)
+
+
+def randn(seed=None):
+    """Generates a column with i.i.d. samples from the standard normal distribution.
+    """
+    sc = SparkContext._active_spark_context
+    if seed:
+        jc = sc._jvm.functions.randn(seed)
+    else:
+        jc = sc._jvm.functions.randn()
+    return Column(jc)
+
+
+def sparkPartitionId():
+    """A column for partition ID of the Spark task.
+
+    Note that this is indeterministic because it depends on data partitioning and task scheduling.
+
+    >>> df.repartition(1).select(sparkPartitionId().alias("pid")).collect()
+    [Row(pid=0), Row(pid=0)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.sparkPartitionId())
+
+
+@ignore_unicode_prefix
+def struct(*cols):
+    """Creates a new struct column.
+
+    :param cols: list of column names (string) or list of :class:`Column` expressions
+        that are named or aliased.
+
+    >>> df.select(struct('age', 'name').alias("struct")).collect()
+    [Row(struct=Row(age=2, name=u'Alice')), Row(struct=Row(age=5, name=u'Bob'))]
+    >>> df.select(struct([df.age, df.name]).alias("struct")).collect()
+    [Row(struct=Row(age=2, name=u'Alice')), Row(struct=Row(age=5, name=u'Bob'))]
+    """
+    sc = SparkContext._active_spark_context
+    if len(cols) == 1 and isinstance(cols[0], (list, set)):
+        cols = cols[0]
+    jc = sc._jvm.functions.struct(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
 class UserDefinedFunction(object):
     """
     User defined function in Python
@@ -116,7 +264,7 @@ class UserDefinedFunction(object):
 
     def _create_judf(self):
         f = self.func  # put it in closure `func`
-        func = lambda _, it: imap(lambda x: f(*x), it)
+        func = lambda _, it: map(lambda x: f(*x), it)
         ser = AutoBatchedSerializer(PickleSerializer())
         command = (func, None, ser, ser)
         sc = SparkContext._active_spark_context
@@ -136,9 +284,7 @@ class UserDefinedFunction(object):
 
     def __call__(self, *cols):
         sc = SparkContext._active_spark_context
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        sc._gateway._gateway_client)
-        jc = self._judf.apply(sc._jvm.PythonUtils.toSeq(jcols))
+        jc = self._judf.apply(_to_seq(sc, cols, _to_java_column))
         return Column(jc)
 
 
@@ -161,7 +307,7 @@ def _test():
     globs = pyspark.sql.functions.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlCtx'] = SQLContext(sc)
+    globs['sqlContext'] = SQLContext(sc)
     globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions, globs=globs,

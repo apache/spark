@@ -1,0 +1,118 @@
+# Imports from base R
+importFrom(methods, setGeneric, setMethod, setOldClass)
+useDynLib(SparkR, stringHashCode)
+
+# S3 methods exported
+export("sparkR.init")
+export("sparkR.stop")
+export("print.jobj")
+
+exportClasses("DataFrame")
+
+exportMethods("cache",
+              "collect",
+              "columns",
+              "count",
+              "describe",
+              "distinct",
+              "dtypes",
+              "except",
+              "explain",
+              "filter",
+              "first",
+              "groupBy",
+              "head",
+              "insertInto",
+              "intersect",
+              "isLocal",
+              "join",
+              "length",
+              "limit",
+              "orderBy",
+              "names",
+              "persist",
+              "printSchema",
+              "registerTempTable",
+              "repartition",
+              "sampleDF",
+              "saveAsParquetFile",
+              "saveAsTable",
+              "saveDF",
+              "schema",
+              "select",
+              "selectExpr",
+              "show",
+              "showDF",
+              "sortDF",
+              "take",
+              "toJSON",
+              "toRDD",
+              "unionAll",
+              "unpersist",
+              "where",
+              "withColumn",
+              "withColumnRenamed")
+
+exportClasses("Column")
+
+exportMethods("abs",
+              "alias",
+              "approxCountDistinct",
+              "asc",
+              "avg",
+              "cast",
+              "contains",
+              "countDistinct",
+              "desc",
+              "endsWith",
+              "getField",
+              "getItem",
+              "isNotNull",
+              "isNull",
+              "last",
+              "like",
+              "lower",
+              "max",
+              "mean",
+              "min",
+              "rlike",
+              "sqrt",
+              "startsWith",
+              "substr",
+              "sum",
+              "sumDistinct",
+              "upper")
+
+exportClasses("GroupedData")
+exportMethods("agg")
+
+export("sparkRSQL.init",
+       "sparkRHive.init")
+
+export("cacheTable",
+       "clearCache",
+       "createDataFrame",
+       "createExternalTable",
+       "dropTempTable",
+       "jsonFile",
+       "jsonRDD",
+       "loadDF",
+       "parquetFile",
+       "sql",
+       "table",
+       "tableNames",
+       "tables",
+       "toDF",
+       "uncacheTable")
+
+export("sparkRSQL.init",
+       "sparkRHive.init")
+
+export("structField",
+       "structField.jobj",
+       "structField.character",
+       "print.structField",
+       "structType",
+       "structType.jobj",
+       "structType.structField",
+       "print.structType")

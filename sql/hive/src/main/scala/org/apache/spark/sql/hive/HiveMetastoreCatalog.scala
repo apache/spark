@@ -279,7 +279,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       }
     }
 
-    if (metastoreRelation.hiveQlTable.isPartitioned) {
+    val result = if (metastoreRelation.hiveQlTable.isPartitioned) {
       val partitionSchema = StructType.fromAttributes(metastoreRelation.partitionKeys)
       val partitionColumnDataTypes = partitionSchema.map(_.dataType)
       val partitions = metastoreRelation.hiveQlPartitions.map { p =>
@@ -314,6 +314,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
       parquetRelation
     }
+
+    result.newInstance()
   }
 
   override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = synchronized {
@@ -525,7 +527,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       // Collects all `MetastoreRelation`s which should be replaced
       val toBeReplaced = plan.collect {
         // Write path
-        case InsertIntoTable(relation: MetastoreRelation, _, _, _)
+        case InsertIntoTable(relation: MetastoreRelation, _, _, _, _)
             // Inserting into partitioned table is not supported in Parquet data source (yet).
             if !relation.hiveQlTable.isPartitioned &&
               hive.convertMetastoreParquet &&
@@ -536,7 +538,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           (relation, parquetRelation, attributedRewrites)
 
         // Write path
-        case InsertIntoHiveTable(relation: MetastoreRelation, _, _, _)
+        case InsertIntoHiveTable(relation: MetastoreRelation, _, _, _, _)
           // Inserting into partitioned table is not supported in Parquet data source (yet).
           if !relation.hiveQlTable.isPartitioned &&
             hive.convertMetastoreParquet &&
@@ -567,15 +569,15 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           val alias = r.alias.getOrElse(r.tableName)
           Subquery(alias, parquetRelation)
 
-        case InsertIntoTable(r: MetastoreRelation, partition, child, overwrite)
+        case InsertIntoTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
           if relationMap.contains(r) =>
           val parquetRelation = relationMap(r)
-          InsertIntoTable(parquetRelation, partition, child, overwrite)
+          InsertIntoTable(parquetRelation, partition, child, overwrite, ifNotExists)
 
-        case InsertIntoHiveTable(r: MetastoreRelation, partition, child, overwrite)
+        case InsertIntoHiveTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
           if relationMap.contains(r) =>
           val parquetRelation = relationMap(r)
-          InsertIntoTable(parquetRelation, partition, child, overwrite)
+          InsertIntoTable(parquetRelation, partition, child, overwrite, ifNotExists)
 
         case other => other.transformExpressions {
           case a: Attribute if a.resolved => attributedRewrites.getOrElse(a, a)
@@ -696,7 +698,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
 
-      case p @ InsertIntoTable(table: MetastoreRelation, _, child, _) =>
+      case p @ InsertIntoTable(table: MetastoreRelation, _, child, _, _) =>
         castChildOutput(p, table, child)
     }
 
@@ -713,7 +715,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           .forall { case (left, right) => left.sameType(right) }) {
         // If both types ignoring nullability of ArrayType, MapType, StructType are the same,
         // use InsertIntoHiveTable instead of InsertIntoTable.
-        InsertIntoHiveTable(p.table, p.partition, p.child, p.overwrite)
+        InsertIntoHiveTable(p.table, p.partition, p.child, p.overwrite, p.ifNotExists)
       } else {
         // Only do the casting when child output data types differ from table output data types.
         val castedChildOutput = child.output.zip(table.output).map {
@@ -751,7 +753,8 @@ private[hive] case class InsertIntoHiveTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],
     child: LogicalPlan,
-    overwrite: Boolean)
+    overwrite: Boolean,
+    ifNotExists: Boolean)
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
@@ -868,7 +871,7 @@ private[hive] case class MetastoreRelation
 
 
 private[hive] object HiveMetastoreTypes {
-  def toDataType(metastoreType: String): DataType = DataTypeParser(metastoreType)
+  def toDataType(metastoreType: String): DataType = DataTypeParser.parse(metastoreType)
 
   def toMetastoreType(dt: DataType): String = dt match {
     case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"

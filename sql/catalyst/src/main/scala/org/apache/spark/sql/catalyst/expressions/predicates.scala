@@ -20,13 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.{DataType, BinaryType, BooleanType, NativeType}
+import org.apache.spark.sql.types.{DataType, BinaryType, BooleanType, AtomicType}
 
 object InterpretedPredicate {
-  def apply(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
-    apply(BindReferences.bindReference(expression, inputSchema))
+  def create(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
+    create(BindReferences.bindReference(expression, inputSchema))
 
-  def apply(expression: Expression): (Row => Boolean) = {
+  def create(expression: Expression): (Row => Boolean) = {
     (r: Row) => expression.eval(r).asInstanceOf[Boolean]
   }
 }
@@ -70,15 +70,13 @@ trait PredicateHelper {
     expr.references.subsetOf(plan.outputSet)
 }
 
-abstract class BinaryPredicate extends BinaryExpression with Predicate {
-  self: Product =>
-  override def nullable: Boolean = left.nullable || right.nullable
-}
 
-case class Not(child: Expression) extends UnaryExpression with Predicate {
+case class Not(child: Expression) extends UnaryExpression with Predicate with ExpectsInputTypes {
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
   override def toString: String = s"NOT $child"
+
+  override def expectedChildTypes: Seq[DataType] = Seq(BooleanType)
 
   override def eval(input: Row): Any = {
     child.eval(input) match {
@@ -120,7 +118,11 @@ case class InSet(value: Expression, hset: Set[Any])
   }
 }
 
-case class And(left: Expression, right: Expression) extends BinaryPredicate {
+case class And(left: Expression, right: Expression)
+  extends BinaryExpression with Predicate with ExpectsInputTypes {
+
+  override def expectedChildTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
+
   override def symbol: String = "&&"
 
   override def eval(input: Row): Any = {
@@ -142,7 +144,11 @@ case class And(left: Expression, right: Expression) extends BinaryPredicate {
   }
 }
 
-case class Or(left: Expression, right: Expression) extends BinaryPredicate {
+case class Or(left: Expression, right: Expression)
+  extends BinaryExpression with Predicate with ExpectsInputTypes {
+
+  override def expectedChildTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
+
   override def symbol: String = "||"
 
   override def eval(input: Row): Any = {
@@ -164,7 +170,7 @@ case class Or(left: Expression, right: Expression) extends BinaryPredicate {
   }
 }
 
-abstract class BinaryComparison extends BinaryPredicate {
+abstract class BinaryComparison extends BinaryExpression with Predicate {
   self: Product =>
 }
 
@@ -179,8 +185,7 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
       val r = right.eval(input)
       if (r == null) null
       else if (left.dataType != BinaryType) l == r
-      else BinaryType.ordering.compare(
-        l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]]) == 0
+      else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
     }
   }
 }
@@ -212,7 +217,7 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
         s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
-      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case other => sys.error(s"Type $other does not support ordered operations")
     }
   }
@@ -241,7 +246,7 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
         s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
-      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case other => sys.error(s"Type $other does not support ordered operations")
     }
   }
@@ -270,7 +275,7 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
         s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
-      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case other => sys.error(s"Type $other does not support ordered operations")
     }
   }
@@ -299,7 +304,7 @@ case class GreaterThanOrEqual(left: Expression, right: Expression) extends Binar
         s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
-      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case other => sys.error(s"Type $other does not support ordered operations")
     }
   }

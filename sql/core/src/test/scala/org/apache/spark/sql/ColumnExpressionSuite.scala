@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql
 
+import org.scalatest.Matchers._
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
-
 
 class ColumnExpressionSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
@@ -207,6 +208,20 @@ class ColumnExpressionSuite extends QueryTest {
       testData2.collect().toSeq.filter(r => r.getInt(0) <= r.getInt(1)))
   }
 
+  test("between") {
+    val testData = TestSQLContext.sparkContext.parallelize(
+      (0, 1, 2) ::
+      (1, 2, 3) ::
+      (2, 1, 0) ::
+      (2, 2, 4) ::
+      (3, 1, 6) ::
+      (3, 2, 0) :: Nil).toDF("a", "b", "c")
+    val expectAnswer = testData.collect().toSeq.
+      filter(r => r.getInt(0) >= r.getInt(1) && r.getInt(0) <= r.getInt(2))
+
+    checkAnswer(testData.filter($"a".between($"b", $"c")), expectAnswer)
+  }
+
   val booleanData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
     Row(false, false) ::
       Row(false, true) ::
@@ -310,6 +325,25 @@ class ColumnExpressionSuite extends QueryTest {
     )
   }
 
+  test("monotonicallyIncreasingId") {
+    // Make sure we have 2 partitions, each with 2 records.
+    val df = TestSQLContext.sparkContext.parallelize(1 to 2, 2).mapPartitions { iter =>
+      Iterator(Tuple1(1), Tuple1(2))
+    }.toDF("a")
+    checkAnswer(
+      df.select(monotonicallyIncreasingId()),
+      Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
+    )
+  }
+
+  test("sparkPartitionId") {
+    val df = TestSQLContext.sparkContext.parallelize(1 to 1, 1).map(i => (i, i)).toDF("a", "b")
+    checkAnswer(
+      df.select(sparkPartitionId()),
+      Row(0)
+    )
+  }
+
   test("lift alias out of cast") {
     compareExpressions(
       col("1234").as("name").cast("int").expr,
@@ -330,5 +364,25 @@ class ColumnExpressionSuite extends QueryTest {
       .schema
     assert(schema("value").metadata === Metadata.empty)
     assert(schema("abc").metadata === metadata)
+  }
+
+  test("rand") {
+    val randCol = testData.select('key, rand(5L).as("rand"))
+    randCol.columns.length should be (2)
+    val rows = randCol.collect()
+    rows.foreach { row =>
+      assert(row.getDouble(1) <= 1.0)
+      assert(row.getDouble(1) >= 0.0)
+    }
+  }
+
+  test("randn") {
+    val randCol = testData.select('key, randn(5L).as("rand"))
+    randCol.columns.length should be (2)
+    val rows = randCol.collect()
+    rows.foreach { row =>
+      assert(row.getDouble(1) <= 4.0)
+      assert(row.getDouble(1) >= -4.0)
+    }
   }
 }

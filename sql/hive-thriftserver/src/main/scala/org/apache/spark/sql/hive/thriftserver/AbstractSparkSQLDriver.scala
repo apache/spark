@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import scala.collection.JavaConversions._
 
-import org.apache.commons.lang.exception.ExceptionUtils
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
@@ -61,7 +61,7 @@ private[hive] abstract class AbstractSparkSQLDriver(
     } catch {
       case cause: Throwable =>
         logError(s"Failed in [$command]", cause)
-        new CommandProcessorResponse(1, ExceptionUtils.getFullStackTrace(cause), null)
+        new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(cause), null)
     }
   }
 

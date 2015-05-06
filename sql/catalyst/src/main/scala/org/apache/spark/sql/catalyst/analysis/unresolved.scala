@@ -49,7 +49,12 @@ case class UnresolvedRelation(
 /**
  * Holds the name of an attribute that has yet to be resolved.
  */
-case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNode[Expression] {
+case class UnresolvedAttribute(nameParts: Seq[String])
+  extends Attribute with trees.LeafNode[Expression] {
+
+  def name: String =
+    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+
   override def exprId: ExprId = throw new UnresolvedException(this, "exprId")
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
@@ -59,13 +64,18 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   override def newInstance(): UnresolvedAttribute = this
   override def withNullability(newNullability: Boolean): UnresolvedAttribute = this
   override def withQualifiers(newQualifiers: Seq[String]): UnresolvedAttribute = this
-  override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute(name)
+  override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
 
   // Unresolved attributes are transient at compile time and don't get evaluated during execution.
   override def eval(input: Row = null): EvaluatedType =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def toString: String = s"'$name"
+}
+
+object UnresolvedAttribute {
+  def apply(name: String): UnresolvedAttribute = new UnresolvedAttribute(name.split("\\."))
+  def quoted(name: String): UnresolvedAttribute = new UnresolvedAttribute(Seq(name))
 }
 
 case class UnresolvedFunction(name: String, children: Seq[Expression]) extends Expression {

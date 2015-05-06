@@ -107,7 +107,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     /** Fewer partitions to speed up testing. */
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
-      override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+
+      // TODO as in unit test, conf.clear() probably be called, all of the value will be cleared.
+      // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
+      override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
     }
   }
 
@@ -185,7 +188,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)
       // Proceed with analysis.
-      analyzer(logical)
+      analyzer.execute(logical)
     }
   }
 
@@ -262,12 +265,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |WITH SERDEPROPERTIES ('field.delim'='\\t')
        """.stripMargin.cmd,
       "INSERT OVERWRITE TABLE serdeins SELECT * FROM src".cmd),
-    TestTable("sales",
-      s"""CREATE TABLE IF NOT EXISTS sales (key STRING, value INT)
-         |ROW FORMAT SERDE '${classOf[RegexSerDe].getCanonicalName}'
-         |WITH SERDEPROPERTIES ("input.regex" = "([^ ]*)\t([^ ]*)")
-       """.stripMargin.cmd,
-      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/sales.txt")}' INTO TABLE sales".cmd),
     TestTable("episodes",
       s"""CREATE TABLE episodes (title STRING, air_date STRING, doctor INT)
          |ROW FORMAT SERDE '${classOf[AvroSerDe].getCanonicalName}'

@@ -37,11 +37,26 @@ Important classes of Spark SQL and DataFrames:
     - L{types}
       List of data types available.
 """
+from __future__ import absolute_import
 
-from pyspark.sql.context import SQLContext, HiveContext
+# fix the module name conflict for Python 3+
+import sys
+from . import _types as types
+modname = __name__ + '.types'
+types.__name__ = modname
+# update the __module__ for all objects, make them picklable
+for v in types.__dict__.values():
+    if hasattr(v, "__module__") and v.__module__.endswith('._types'):
+        v.__module__ = modname
+sys.modules[modname] = types
+del modname, sys
+
 from pyspark.sql.types import Row
+from pyspark.sql.context import SQLContext, HiveContext
 from pyspark.sql.dataframe import DataFrame, GroupedData, Column, SchemaRDD, DataFrameNaFunctions
+from pyspark.sql.dataframe import DataFrameStatFunctions
 
 __all__ = [
-    'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row', 'DataFrameNaFunctions'
+    'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row',
+    'DataFrameNaFunctions', 'DataFrameStatFunctions'
 ]

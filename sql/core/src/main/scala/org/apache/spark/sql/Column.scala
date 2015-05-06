@@ -84,14 +84,14 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
   /**
    * Inversion of boolean expression, i.e. NOT.
-   * {{
+   * {{{
    *   // Scala: select rows that are not active (isActive === false)
    *   df.filter( !df("isActive") )
    *
    *   // Java:
    *   import static org.apache.spark.sql.functions.*;
    *   df.filter( not(df.col("isActive")) );
-   * }}
+   * }}}
    *
    * @group expr_ops
    */
@@ -294,6 +294,15 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group java_expr_ops
    */
   def eqNullSafe(other: Any): Column = this <=> other
+
+  /**
+   * True if the current column is between the lower bound and upper bound, inclusive.
+   *
+   * @group java_expr_ops
+   */
+  def between(lowerBound: Any, upperBound: Any): Column = {
+    (this >= lowerBound) && (this <= upperBound)
+  }
 
   /**
    * True if the current expression is null.
@@ -515,14 +524,15 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def rlike(literal: String): Column = RLike(expr, lit(literal).expr)
 
   /**
-   * An expression that gets an item at position `ordinal` out of an array.
+   * An expression that gets an item at position `ordinal` out of an array,
+   * or gets a value by key `key` in a [[MapType]].
    *
    * @group expr_ops
    */
-  def getItem(ordinal: Int): Column = GetItem(expr, Literal(ordinal))
+  def getItem(key: Any): Column = GetItem(expr, Literal(key))
 
   /**
-   * An expression that gets a field by name in a [[StructField]].
+   * An expression that gets a field by name in a [[StructType]].
    *
    * @group expr_ops
    */
@@ -646,7 +656,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group expr_ops
    */
-  def cast(to: String): Column = cast(DataTypeParser(to))
+  def cast(to: String): Column = cast(DataTypeParser.parse(to))
 
   /**
    * Returns an ordering used in sorting.

@@ -22,6 +22,7 @@ examples/src/main/python/mllib/kmeans.py.
 
 This example requires NumPy (http://www.numpy.org/).
 """
+from __future__ import print_function
 
 import sys
 
@@ -47,12 +48,12 @@ def closestPoint(p, centers):
 if __name__ == "__main__":
 
     if len(sys.argv) != 4:
-        print >> sys.stderr, "Usage: kmeans <file> <k> <convergeDist>"
+        print("Usage: kmeans <file> <k> <convergeDist>", file=sys.stderr)
         exit(-1)
 
-    print >> sys.stderr, """WARN: This is a naive implementation of KMeans Clustering and is given
+    print("""WARN: This is a naive implementation of KMeans Clustering and is given
        as an example! Please refer to examples/src/main/python/mllib/kmeans.py for an example on
-       how to use MLlib's KMeans implementation."""
+       how to use MLlib's KMeans implementation.""", file=sys.stderr)
 
     sc = SparkContext(appName="PythonKMeans")
     lines = sc.textFile(sys.argv[1])
@@ -67,15 +68,15 @@ if __name__ == "__main__":
         closest = data.map(
             lambda p: (closestPoint(p, kPoints), (p, 1)))
         pointStats = closest.reduceByKey(
-            lambda (x1, y1), (x2, y2): (x1 + x2, y1 + y2))
+            lambda (p1, c1), (p2, c2): (p1 + p2, c1 + c2))
         newPoints = pointStats.map(
-            lambda (x, (y, z)): (x, y / z)).collect()
+            lambda st: (st[0], st[1][0] / st[1][1])).collect()
 
-        tempDist = sum(np.sum((kPoints[x] - y) ** 2) for (x, y) in newPoints)
+        tempDist = sum(np.sum((kPoints[iK] - p) ** 2) for (iK, p) in newPoints)
 
-        for (x, y) in newPoints:
-            kPoints[x] = y
+        for (iK, p) in newPoints:
+            kPoints[iK] = p
 
-    print "Final centers: " + str(kPoints)
+    print("Final centers: " + str(kPoints))
 
     sc.stop()

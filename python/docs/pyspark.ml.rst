@@ -24,3 +24,19 @@ pyspark.ml.classification module
     :members:
     :undoc-members:
     :inherited-members:
+
+pyspark.ml.tuning module
+--------------------------------
+
+.. automodule:: pyspark.ml.tuning
+    :members:
+    :undoc-members:
+    :inherited-members:
+
+pyspark.ml.evaluation module
+--------------------------------
+
+.. automodule:: pyspark.ml.evaluation
+    :members:
+    :undoc-members:
+    :inherited-members:
