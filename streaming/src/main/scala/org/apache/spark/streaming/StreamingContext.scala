@@ -563,22 +563,17 @@ class StreamingContext private[streaming] (
 
   /**
    * Stop the execution of the streams immediately (does not wait for all received data
-   * to be processed). The underlying SparkContext will also be stopped. Note that this can
-   * be configured using the SparkConf configuration spark.streaming.stopSparkContextByDefault.
-   */
-  def stop(): Unit = synchronized {
-    stop(conf.getBoolean("spark.streaming.stopSparkContextByDefault", true), false)
-  }
-
-  /**
-   * Stop the execution of the streams immediately (does not wait for all received data
-   * to be processed).
+   * to be processed). By default, if `stopSparkContext` is not specified, the underlying
+   * SparkContext will also be stopped. This implicit behavior can be configured using the
+   * SparkConf configuration spark.streaming.stopSparkContextByDefault.
    *
-   * @param stopSparkContext if true, stops the associated SparkContext. The underlying SparkContext
+   * @param stopSparkContext If true, stops the associated SparkContext. The underlying SparkContext
    *                         will be stopped regardless of whether this StreamingContext has been
    *                         started.
    */
-  def stop(stopSparkContext: Boolean): Unit = synchronized {
+  def stop(
+      stopSparkContext: Boolean = conf.getBoolean("spark.streaming.stopSparkContextByDefault", true)
+     ): Unit = synchronized {
     stop(stopSparkContext, false)
   }
 
