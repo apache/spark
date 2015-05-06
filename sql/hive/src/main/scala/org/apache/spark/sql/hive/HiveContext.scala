@@ -229,7 +229,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    *    set in the SQLConf *as well as* in the HiveConf.
    */
 
-  protected[hive] def sessionState = tlSession.get().asInstanceOf[this.SQLSession].sessionState
+  @transient protected[hive] def sessionState = tlSession.get().asInstanceOf[this.SQLSession].sessionState
   /*@transient protected[hive] lazy val sessionState: SessionState = {
     var state = SessionState.get()
     if (state == null) {
