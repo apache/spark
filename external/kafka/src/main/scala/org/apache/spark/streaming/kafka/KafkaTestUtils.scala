@@ -195,7 +195,7 @@ private class KafkaTestUtils extends Logging {
     val props = new Properties()
     props.put("metadata.broker.list", brokerAddress)
     props.put("serializer.class", classOf[StringEncoder].getName)
-    // wait for all in-sync replicas to ack
+    // wait for all in-sync replicas to ack sends
     props.put("request.required.acks", "-1")
     props
   }
