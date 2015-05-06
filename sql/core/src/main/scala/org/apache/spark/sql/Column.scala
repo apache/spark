@@ -298,7 +298,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   /**
    * Case When Otherwise.
    * {{{
-   *   people.select( people("age").when(18, "SELECTED").other("IGNORED") )
+   *   people.select( when(people("age") === 18, "SELECTED").other("IGNORED") )
    * }}}
    *
    * @group expr_ops
@@ -306,10 +306,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def when(whenExpr: Any, thenExpr: Any):Column =  {
     this.expr match {
       case CaseWhen(branches: Seq[Expression]) =>
-        val caseExpr = branches.head.asInstanceOf[EqualNullSafe].left
-        CaseWhen(branches ++ Seq((caseExpr <=> whenExpr).expr, lit(thenExpr).expr))
+        CaseWhen(branches ++ Seq(lit(whenExpr).expr, lit(thenExpr).expr))
       case _ =>
-        CaseWhen(Seq((this <=> whenExpr).expr, lit(thenExpr).expr))
+        CaseWhen(Seq(lit(whenExpr).expr, lit(thenExpr).expr))
     }
   }
 
