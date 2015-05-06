@@ -160,7 +160,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     val remainingNewChildren = newChildren.toBuffer
     val remainingOldChildren = children.toBuffer
     val newArgs = productIterator.map {
-      // This rule is used to handle children is a input argument.
+      // Handle Seq[TreeNode] in TreeNode parameters.
       case s: Seq[_] => s.map {
         case arg: TreeNode[_] if children contains arg =>
           val newChild = remainingNewChildren.remove(0)
