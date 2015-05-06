@@ -57,12 +57,14 @@ private[ml] trait OneVsRestParams extends ClassifierParams {
 }
 
 /**
+ * :: Experimental ::
+ *
  * Model produced by [[OneVsRest]].
  *
  * @param parent
  * @param models the binary classification models for reduction.
  */
-@AlphaComponent
+@Experimental
 class OneVsRestModel(
     override val parent: OneVsRest,
     val models: Array[Model[_]])
