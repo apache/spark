@@ -154,6 +154,11 @@ private[sql] class SparkSqlSerializer2(keySchema: Array[DataType], valueSchema: 
   with Serializable{
 
   def newInstance(): SerializerInstance = new ShuffleSerializerInstance(keySchema, valueSchema)
+
+  override def supportsRelocationOfSerializedObjects: Boolean = {
+    // SparkSqlSerializer2 is stateless and writes no stream headers
+    true
+  }
 }
 
 private[sql] object SparkSqlSerializer2 {
