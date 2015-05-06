@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.dstream
 
+
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.{BlockRDD, RDD}
@@ -24,6 +25,7 @@ import org.apache.spark.storage.BlockId
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.scheduler.InputInfo
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 
 /**
@@ -67,6 +69,10 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
         val receiverTracker = ssc.scheduler.receiverTracker
         val blockInfos = receiverTracker.getBlocksOfBatch(validTime).getOrElse(id, Seq.empty)
         val blockIds = blockInfos.map { _.blockId.asInstanceOf[BlockId] }.toArray
+
+        // Register the input blokcs information into InputInfoTracker
+        val inputInfo = InputInfo(id, blockInfos.map(_.numRecords).sum)
+        ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
         // Are WAL record handles present with all the blocks
         val areWALRecordHandlesPresent = blockInfos.forall { _.walRecordHandleOption.nonEmpty }
