@@ -445,17 +445,16 @@ class IsotonicRegressionModel(Saveable, Loader):
     def load(cls, sc, path):
         java_model = sc._jvm.org.apache.spark.mllib.regression.IsotonicRegressionModel.load(
             sc._jsc.sc(), path)
-        py_boundaries = _java2py(sc, java_model.boundaries())
-        py_predictions = _java2py(sc, java_model.predictions())
-        return IsotonicRegressionModel(np.array(py_boundaries),
-                                       np.array(py_predictions), java_model.isotonic)
+        py_boundaries = _java2py(sc, java_model.boundaryVector()).toArray()
+        py_predictions = _java2py(sc, java_model.predictionVector()).toArray()
+        return IsotonicRegressionModel(py_boundaries, py_predictions, java_model.isotonic)
 
 
 class IsotonicRegression(object):
     """
     Run IsotonicRegression algorithm to obtain isotonic regression model.
 
-    :param data:            RDD of data points
+    :param data:            RDD of (label, feature, weight) tuples.
     :param isotonic:        Whether this is isotonic or antitonic.
     """
     @classmethod
@@ -463,7 +462,7 @@ class IsotonicRegression(object):
         """Train a isotonic regression model on the given data."""
         boundaries, predictions = callMLlibFunc("trainIsotonicRegressionModel",
                                                 data.map(_convert_to_vector), bool(isotonic))
-        return IsotonicRegressionModel(np.array(boundaries), np.array(predictions), isotonic)
+        return IsotonicRegressionModel(boundaries.toArray(), predictions.toArray(), isotonic)
 
 
 def _test():

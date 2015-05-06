@@ -289,10 +289,12 @@ private[python] class PythonMLLibAPI extends Serializable {
       data: JavaRDD[Vector],
       isotonic: Boolean): JList[Object] = {
     val isotonicRegressionAlg = new IsotonicRegression().setIsotonic(isotonic)
+    val input = data.rdd.map { x =>
+      (x(0), x(1), x(2))
+    }.persist(StorageLevel.MEMORY_AND_DISK)
     try {
-      val model = isotonicRegressionAlg.run(data.rdd.map(_.toArray).map {
-        x => (x(0), x(1), x(2)) }.persist(StorageLevel.MEMORY_AND_DISK))
-      List(model.boundaries, model.predictions).map(_.asInstanceOf[Object]).asJava
+      val model = isotonicRegressionAlg.run(input)
+      List[AnyRef](model.boundaryVector, model.predictionVector).asJava
     } finally {
       data.rdd.unpersist(blocking = false)
     }

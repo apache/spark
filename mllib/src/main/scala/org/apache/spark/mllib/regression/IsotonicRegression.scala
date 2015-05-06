@@ -28,12 +28,13 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.SQLContext
 
 /**
  * :: Experimental ::
@@ -139,6 +140,12 @@ class IsotonicRegressionModel (
       predictions(foundIndex)
     }
   }
+
+  /** A convenient method for boundaries called by the Python API. */
+  private[mllib] def boundaryVector: Vector = Vectors.dense(boundaries)
+
+  /** A convenient method for boundaries called by the Python API. */
+  private[mllib] def predictionVector: Vector = Vectors.dense(predictions)
 
   override def save(sc: SparkContext, path: String): Unit = {
     IsotonicRegressionModel.SaveLoadV1_0.save(sc, path, boundaries, predictions, isotonic)
