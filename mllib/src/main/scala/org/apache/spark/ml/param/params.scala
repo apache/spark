@@ -220,7 +220,11 @@ class BooleanParam(parent: Params, name: String, doc: String) // No need for isV
 }
 
 /** Specialized version of [[Param[Array[T]]]] for Java. */
-class ArrayParam[T : ClassTag](parent: Params, name: String, doc: String, isValid: Array[T] => Boolean)
+class ArrayParam[T : ClassTag](
+    parent: Params,
+    name: String,
+    doc: String,
+    isValid: Array[T] => Boolean)
   extends Param[Array[T]](parent, name, doc, isValid) {
 
   def this(parent: Params, name: String, doc: String) =

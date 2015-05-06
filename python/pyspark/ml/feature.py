@@ -21,7 +21,7 @@ from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaTransformer
 from pyspark.mllib.common import inherit_doc
 
-__all__ = ['Tokenizer', 'HashingTF']
+__all__ = ['Tokenizer', 'HashingTF', 'VectorAssembler']
 
 
 @inherit_doc
