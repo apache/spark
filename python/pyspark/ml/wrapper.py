@@ -20,7 +20,7 @@ from abc import ABCMeta
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml.param import Params
-from pyspark.ml.pipeline import Estimator, Transformer
+from pyspark.ml.pipeline import Estimator, Transformer, Evaluator
 from pyspark.mllib.common import inherit_doc
 
 
@@ -147,3 +147,18 @@ class JavaModel(JavaTransformer):
 
     def _java_obj(self):
         return self._java_model
+
+
+@inherit_doc
+class JavaEvaluator(Evaluator, JavaWrapper):
+    """
+    Base class for :py:class:`Evaluator`s that wrap Java/Scala
+    implementations.
+    """
+
+    __metaclass__ = ABCMeta
+
+    def evaluate(self, dataset, params={}):
+        java_obj = self._java_obj()
+        self._transfer_params_to_java(params, java_obj)
+        return java_obj.evaluate(dataset._jdf, self._empty_java_param_map())

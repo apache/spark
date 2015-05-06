@@ -934,10 +934,11 @@ class DataFrame(object):
     def crosstab(self, col1, col2):
         """
         Computes a pair-wise frequency table of the given columns. Also known as a contingency
-        table. The number of distinct values for each column should be less than 1e4. The first
-        column of each row will be the distinct values of `col1` and the column names will be the
-        distinct values of `col2`. The name of the first column will be `$col1_$col2`. Pairs that
-        have no occurrences will have `null` as their counts.
+        table. The number of distinct values for each column should be less than 1e4. At most 1e6
+        non-zero pair frequencies will be returned.
+        The first column of each row will be the distinct values of `col1` and the column names
+        will be the distinct values of `col2`. The name of the first column will be `$col1_$col2`.
+        Pairs that have no occurrences will have `null` as their counts.
         :func:`DataFrame.crosstab` and :func:`DataFrameStatFunctions.crosstab` are aliases.
 
         :param col1: The name of the first column. Distinct items will make the first item of
@@ -1403,6 +1404,13 @@ class Column(object):
         else:
             raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
+
+    @ignore_unicode_prefix
+    def between(self, lowerBound, upperBound):
+        """ A boolean expression that is evaluated to true if the value of this
+        expression is between the given columns.
+        """
+        return (self >= lowerBound) & (self <= upperBound)
 
     def __repr__(self):
         return 'Column<%s>' % self._jc.toString().encode('utf8')

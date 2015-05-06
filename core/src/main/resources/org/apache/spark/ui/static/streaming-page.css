@@ -15,24 +15,44 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rpc.RpcEndpointRef
+.graph {
+  font: 10px sans-serif;
+}
 
-/**
- * :: DeveloperApi ::
- * Class having information about a receiver
- */
-@DeveloperApi
-case class ReceiverInfo(
-    streamId: Int,
-    name: String,
-    private[streaming] val endpoint: RpcEndpointRef,
-    active: Boolean,
-    location: String,
-    lastErrorMessage: String = "",
-    lastError: String = "",
-    lastErrorTime: Long = -1L
-   ) {
+.axis path, .axis line {
+  fill: none;
+  stroke: gray;
+  shape-rendering: crispEdges;
+}
+
+.axis text {
+  fill: gray;
+}
+
+.tooltip-inner {
+  max-width: 500px !important; // Make sure we only have one line tooltip
+}
+
+.line {
+  fill: none;
+  stroke: #0088cc;
+  stroke-width: 1.5px;
+}
+
+.bar rect {
+  fill: #0088cc;
+  shape-rendering: crispEdges;
+}
+
+.bar rect:hover {
+  fill: #00c2ff;
+}
+
+.timeline {
+  width: 500px;
+}
+
+.histogram {
+  width: auto;
 }

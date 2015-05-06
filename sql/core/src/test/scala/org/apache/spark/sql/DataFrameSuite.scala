@@ -24,7 +24,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, TestSQLContext}
 import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
 import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.sql.test.TestSQLContext.sql
 
 
 class DataFrameSuite extends QueryTest {
@@ -116,44 +115,6 @@ class DataFrameSuite extends QueryTest {
       df.explode("words", "word") { word: String => word.split(" ").toSeq }.select('word),
       Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
     )
-  }
-
-  test("join - join using") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-    val df2 = Seq(1, 2, 3).map(i => (i, (i + 1).toString)).toDF("int", "str")
-
-    checkAnswer(
-      df.join(df2, "int"),
-      Row(1, "1", "2") :: Row(2, "2", "3") :: Row(3, "3", "4") :: Nil)
-  }
-
-  test("join - join using self join") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-
-    // self join
-    checkAnswer(
-      df.join(df, "int"),
-      Row(1, "1", "1") :: Row(2, "2", "2") :: Row(3, "3", "3") :: Nil)
-  }
-
-  test("join - self join") {
-    val df1 = testData.select(testData("key")).as('df1)
-    val df2 = testData.select(testData("key")).as('df2)
-
-    checkAnswer(
-      df1.join(df2, $"df1.key" === $"df2.key"),
-      sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key").collect().toSeq)
-  }
-
-  test("join - using aliases after self join") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-    checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
-
-    checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").count(),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
   test("explode") {

@@ -19,7 +19,7 @@ package org.apache.spark.mllib.api.python
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Vectors}
+import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Vectors, SparseMatrix}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.recommendation.Rating
 
@@ -77,6 +77,16 @@ class PythonMLLibAPISuite extends FunSuite {
     val emptyMatrix = Matrices.dense(0, 0, empty)
     val ne = SerDe.loads(SerDe.dumps(emptyMatrix)).asInstanceOf[DenseMatrix]
     assert(emptyMatrix == ne)
+
+    val sm = new SparseMatrix(3, 2, Array(0, 1, 3), Array(1, 0, 2), Array(0.9, 1.2, 3.4))
+    val nsm = SerDe.loads(SerDe.dumps(sm)).asInstanceOf[SparseMatrix]
+    assert(sm.toArray === nsm.toArray)
+
+    val smt = new SparseMatrix(
+      3, 3, Array(0, 2, 3, 5), Array(0, 2, 1, 0, 2), Array(0.9, 1.2, 3.4, 5.7, 8.9),
+      isTransposed=true)
+    val nsmt = SerDe.loads(SerDe.dumps(smt)).asInstanceOf[SparseMatrix]
+    assert(smt.toArray === nsmt.toArray)
   }
 
   test("pickle rating") {

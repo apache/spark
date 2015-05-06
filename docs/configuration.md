@@ -1474,6 +1474,13 @@ Apart from these, the following properties are also available, and may be useful
     the new Kafka direct stream API.
   </td>
 </tr>
+<tr>
+  <td><code>spark.streaming.ui.retainedBatches</code></td>
+  <td>1000</td>
+  <td>
+    How many batches the Spark Streaming UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
 </table>
 
 #### Cluster Managers

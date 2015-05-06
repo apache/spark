@@ -416,9 +416,7 @@ class DataFrame private[sql](
    * }}}
    * @group dfops
    */
-  def join(right: DataFrame, joinExprs: Column): DataFrame = {
-    Join(logicalPlan, right.logicalPlan, joinType = Inner, Some(joinExprs.expr))
-  }
+  def join(right: DataFrame, joinExprs: Column): DataFrame = join(right, joinExprs, "inner")
 
   /**
    * Join with another [[DataFrame]], using the given join expression. The following performs
@@ -440,7 +438,39 @@ class DataFrame private[sql](
    * @group dfops
    */
   def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame = {
-    Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr))
+    // Note that in this function, we introduce a hack in the case of self-join to automatically
+    // resolve ambiguous join conditions into ones that might make sense [SPARK-6231].
+    // Consider this case: df.join(df, df("key") === df("key"))
+    // Since df("key") === df("key") is a trivially true condition, this actually becomes a
+    // cartesian join. However, most likely users expect to perform a self join using "key".
+    // With that assumption, this hack turns the trivially true condition into equality on join
+    // keys that are resolved to both sides.
+
+    // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
+    // After the cloning, left and right side will have distinct expression ids.
+    val plan = Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr))
+      .queryExecution.analyzed.asInstanceOf[Join]
+
+    // If auto self join alias is disabled, return the plan.
+    if (!sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
+      return plan
+    }
+
+    // If left/right have no output set intersection, return the plan.
+    val lanalyzed = this.logicalPlan.queryExecution.analyzed
+    val ranalyzed = right.logicalPlan.queryExecution.analyzed
+    if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
+      return plan
+    }
+
+    // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
+    // By the time we get here, since we have already run analysis, all attributes should've been
+    // resolved and become AttributeReference.
+    val cond = plan.condition.map { _.transform {
+      case EqualTo(a: AttributeReference, b: AttributeReference) if a.sameRef(b) =>
+        EqualTo(plan.left.resolve(a.name), plan.right.resolve(b.name))
+    }}
+    plan.copy(condition = cond)
   }
 
   /**
