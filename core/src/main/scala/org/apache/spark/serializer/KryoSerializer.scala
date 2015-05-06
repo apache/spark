@@ -126,8 +126,8 @@ class KryoSerializer(conf: SparkConf)
     new KryoSerializerInstance(this)
   }
 
-  override def supportsRelocationOfSerializedObjects: Boolean = {
-    // If auto-flush is disabled, then Kryo may store references to duplicate occurrences of objects
+  private[spark] override lazy val supportsRelocationOfSerializedObjects: Boolean = {
+    // If auto-reset is disabled, then Kryo may store references to duplicate occurrences of objects
     // in the stream rather than writing those objects' serialized bytes, breaking relocation. See
     // https://groups.google.com/d/msg/kryo-users/6ZUSyfjjtdo/FhGG1KHDXPgJ for more details.
     newInstance().asInstanceOf[KryoSerializerInstance].getAutoReset()

@@ -26,12 +26,19 @@ import org.scalatest.{Assertions, FunSuite}
 import org.apache.spark.SparkConf
 import org.apache.spark.serializer.KryoTest.RegistratorWithoutAutoReset
 
-
+/**
+ * Tests to ensure that [[Serializer]] implementations obey the API contracts for methods that
+ * describe properties of the serialized stream, such as
+ * [[Serializer.supportsRelocationOfSerializedObjects]].
+ */
 class SerializerPropertiesSuite extends FunSuite {
 
   import SerializerPropertiesSuite._
 
   test("JavaSerializer does not support relocation") {
+    // Per a comment on the SPARK-4550 JIRA ticket, Java serialization appears to write out the
+    // full class name the first time an object is written to an output stream, but subsequent
+    // references to the class write a more compact identifier; this prevents relocation.
     val ser = new JavaSerializer(new SparkConf())
     testSupportsRelocationOfSerializedObjects(ser, generateRandomItem)
   }
@@ -76,7 +83,7 @@ object SerializerPropertiesSuite extends Assertions {
     if (!serializer.supportsRelocationOfSerializedObjects) {
       return
     }
-    val NUM_TRIALS = 10
+    val NUM_TRIALS = 5
     val rand = new Random(42)
     for (_ <- 1 to NUM_TRIALS) {
       val items = {

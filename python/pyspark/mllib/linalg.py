@@ -755,7 +755,7 @@ class SparseMatrix(Matrix):
         return SparseMatrix, (
             self.numRows, self.numCols, self.colPtrs.tostring(),
             self.rowIndices.tostring(), self.values.tostring(),
-            self.isTransposed)
+            int(self.isTransposed))
 
     def __getitem__(self, indices):
         i, j = indices
@@ -801,7 +801,7 @@ class SparseMatrix(Matrix):
 
     # TODO: More efficient implementation:
     def __eq__(self, other):
-        return np.all(self.toArray == other.toArray)
+        return np.all(self.toArray() == other.toArray())
 
 
 class Matrices(object):

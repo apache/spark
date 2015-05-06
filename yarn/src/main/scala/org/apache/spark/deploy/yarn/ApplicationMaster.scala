@@ -75,6 +75,8 @@ private[spark] class ApplicationMaster(
   // Fields used in cluster mode.
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
+  private var delegationTokenRenewerOption: Option[AMDelegationTokenRenewer] = None
+
   final def run(): Int = {
     try {
       val appAttemptId = client.getAttemptId()
@@ -128,6 +130,15 @@ private[spark] class ApplicationMaster(
       // Hadoop UGI. This has to happen before the startUserApplication which does a
       // doAs in order for the credentials to be passed on to the executor containers.
       val securityMgr = new SecurityManager(sparkConf)
+
+      // If the credentials file config is present, we must periodically renew tokens. So create
+      // a new AMDelegationTokenRenewer
+      if (sparkConf.contains("spark.yarn.credentials.file")) {
+        delegationTokenRenewerOption = Some(new AMDelegationTokenRenewer(sparkConf, yarnConf))
+        // If a principal and keytab have been set, use that to create new credentials for executors
+        // periodically
+        delegationTokenRenewerOption.foreach(_.scheduleLoginFromKeytab())
+      }
 
       if (isClusterMode) {
         runDriver(securityMgr)
@@ -193,6 +204,7 @@ private[spark] class ApplicationMaster(
           logDebug("shutting down user thread")
           userClassThread.interrupt()
         }
+        if (!inShutdown) delegationTokenRenewerOption.foreach(_.stop())
       }
     }
   }
@@ -240,12 +252,12 @@ private[spark] class ApplicationMaster(
       host: String,
       port: String,
       isClusterMode: Boolean): Unit = {
-    val driverEndpont = rpcEnv.setupEndpointRef(
+    val driverEndpoint = rpcEnv.setupEndpointRef(
       SparkEnv.driverActorSystemName,
       RpcAddress(host, port.toInt),
       YarnSchedulerBackend.ENDPOINT_NAME)
     amEndpoint =
-      rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverEndpont, isClusterMode))
+      rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverEndpoint, isClusterMode))
   }
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
@@ -273,7 +285,8 @@ private[spark] class ApplicationMaster(
   }
 
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
-    rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, 0, sparkConf, securityMgr)
+    val port = sparkConf.getInt("spark.yarn.am.port", 0)
+    rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, port, sparkConf, securityMgr)
     waitForSparkDriver()
     addAmIpFilter()
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
@@ -499,6 +512,7 @@ private[spark] class ApplicationMaster(
 
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
+
     }
 
     override def receive: PartialFunction[Any, Unit] = {

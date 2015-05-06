@@ -377,7 +377,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
     assertDidNotBypassMergeSort(sorter)
-    sorter.insertAll((0 until 100000).iterator.map(i => (i, i)))
+    sorter.insertAll((0 until 120000).iterator.map(i => (i, i)))
     assert(diskBlockManager.getAllFiles().length > 0)
     sorter.stop()
     assert(diskBlockManager.getAllBlocks().length === 0)
@@ -385,9 +385,9 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     val sorter2 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
     assertDidNotBypassMergeSort(sorter2)
-    sorter2.insertAll((0 until 100000).iterator.map(i => (i, i)))
+    sorter2.insertAll((0 until 120000).iterator.map(i => (i, i)))
     assert(diskBlockManager.getAllFiles().length > 0)
-    assert(sorter2.iterator.toSet === (0 until 100000).map(i => (i, i)).toSet)
+    assert(sorter2.iterator.toSet === (0 until 120000).map(i => (i, i)).toSet)
     sorter2.stop()
     assert(diskBlockManager.getAllBlocks().length === 0)
   }
@@ -428,8 +428,8 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
       None, Some(new HashPartitioner(3)), Some(ord), None)
     assertDidNotBypassMergeSort(sorter)
     intercept[SparkException] {
-      sorter.insertAll((0 until 100000).iterator.map(i => {
-        if (i == 99990) {
+      sorter.insertAll((0 until 120000).iterator.map(i => {
+        if (i == 119990) {
           throw new SparkException("Intentional failure")
         }
         (i, i)
