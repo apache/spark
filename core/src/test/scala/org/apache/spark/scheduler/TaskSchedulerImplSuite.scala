@@ -130,4 +130,23 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
     assert(taskDescriptions.map(_.executorId) === Seq("executor0"))
   }
 
+  test("Scheduler fails fast on multiple active attempts for the same stage") {
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskCpus = 2
+
+    sc.conf.set("spark.task.cpus", taskCpus.toString)
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler.initialize(new FakeSchedulerBackend)
+    val taskSetAttempt1 = FakeTask.createTaskSet(1)
+    taskScheduler.submitTasks(taskSetAttempt1)
+    val taskSetAttempt2 = new TaskSet(
+      tasks = taskSetAttempt1.tasks,
+      stageId = taskSetAttempt1.stageId,
+      attempt = taskSetAttempt1.attempt + 1,
+      priority = taskSetAttempt1.priority,
+      properties = taskSetAttempt1.properties
+    )
+    intercept[SparkIllegalStateException](taskScheduler.submitTasks(taskSetAttempt2))
+  }
+
 }
