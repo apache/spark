@@ -22,30 +22,30 @@ import java.util.{Map => JMap}
 
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
 
-case class HiveDatabase(
+private[hive] case class HiveDatabase(
     name: String,
     location: String)
 
-abstract class TableType { val name: String }
-case object ExternalTable extends TableType { override val name = "EXTERNAL_TABLE" }
-case object IndexTable extends TableType { override val name = "INDEX_TABLE" }
-case object ManagedTable extends TableType { override val name = "MANAGED_TABLE" }
-case object VirtualView extends TableType { override val name = "VIRTUAL_VIEW" }
+private[hive] abstract class TableType { val name: String }
+private[hive] case object ExternalTable extends TableType { override val name = "EXTERNAL_TABLE" }
+private[hive] case object IndexTable extends TableType { override val name = "INDEX_TABLE" }
+private[hive] case object ManagedTable extends TableType { override val name = "MANAGED_TABLE" }
+private[hive] case object VirtualView extends TableType { override val name = "VIRTUAL_VIEW" }
 
 // TODO: Use this for Tables and Partitions
-case class HiveStorageDescriptor(
+private[hive] case class HiveStorageDescriptor(
     location: String,
     inputFormat: String,
     outputFormat: String,
     serde: String,
     serdeProperties: Map[String, String])
 
-case class HivePartition(
+private[hive] case class HivePartition(
     values: Seq[String],
     storage: HiveStorageDescriptor)
 
-case class HiveColumn(name: String, hiveType: String, comment: String)
-case class HiveTable(
+private[hive] case class HiveColumn(name: String, hiveType: String, comment: String)
+private[hive] case class HiveTable(
     specifiedDatabase: Option[String],
     name: String,
     schema: Seq[HiveColumn],
@@ -82,7 +82,7 @@ case class HiveTable(
  * internal and external classloaders for a given version of Hive and thus must expose only
  * shared classes.
  */
-trait ClientInterface {
+private[hive] trait ClientInterface {
   /**
    * Runs a HiveQL command using Hive, returning the results as a list of strings.  Each row will
    * result in one string.

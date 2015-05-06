@@ -23,10 +23,10 @@ import org.apache.spark.util.Utils
 import org.scalatest.FunSuite
 
 /**
- * A simple set of tests that call the methods of a hive ClientInterface, loading different version of hive
- * from maven central.  These tests are simple in that they are mostly just testing to make sure that
- * reflective calls are not throwing NoSuchMethod error, but the actually functionallity is not fully
- * tested.
+ * A simple set of tests that call the methods of a hive ClientInterface, loading different version 
+ * of hive from maven central.  These tests are simple in that they are mostly just testing to make 
+ * sure that reflective calls are not throwing NoSuchMethod error, but the actually functionallity 
+ * is not fully tested.
  */
 class VersionsSuite extends FunSuite with Logging {
   private def buildConf() = {

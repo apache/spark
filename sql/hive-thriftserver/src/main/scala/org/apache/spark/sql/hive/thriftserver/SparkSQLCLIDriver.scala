@@ -151,9 +151,6 @@ private[hive] object SparkSQLCLIDriver {
       case e: UnsupportedEncodingException => System.exit(3)
     }
 
-    // TODO: SET commands seem to be using the wrong session?
-    sessionState.getConf.set("spark.sql.hive.version", HiveShim.version)
-
     if (sessionState.database != null) {
       SparkSQLEnv.hiveContext.runSqlHive(s"USE ${sessionState.database}")
     }

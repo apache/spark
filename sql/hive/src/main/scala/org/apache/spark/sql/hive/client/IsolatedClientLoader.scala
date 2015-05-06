@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveContext
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
-object IsolatedClientLoader {
+private[hive] object IsolatedClientLoader {
   /**
    * Creates isolated Hive client loaders by downloading the requested version from maven.
    */
@@ -100,7 +100,7 @@ object IsolatedClientLoader {
  * @param baseClassLoader The spark classloader that is used to load shared classes.
  *
  */
-class IsolatedClientLoader(
+private[hive] class IsolatedClientLoader(
     val version: HiveVersion,
     val execJars: Seq[URL] = Seq.empty,
     val config: Map[String, String] = Map.empty,

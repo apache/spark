@@ -55,7 +55,7 @@ import org.apache.spark.sql.execution.QueryExecutionException
  * @param config  a collection of configuration options that will be added to the hive conf before
  *                opening the hive client.
  */
-class ClientWrapper(
+private[hive] class ClientWrapper(
     version: HiveVersion,
     config: Map[String, String])
   extends ClientInterface

@@ -539,7 +539,7 @@ abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll wit
     diagnosisBuffer.clear()
 
     // Retries up to 3 times with different port numbers if the server fails to start
-    Seq.empty.foldLeft(Try(startThriftServer(listeningPort, 0))) { case (started, attempt) =>
+    (1 to 3).foldLeft(Try(startThriftServer(listeningPort, 0))) { case (started, attempt) =>
       started.orElse {
         listeningPort += 1
         stopThriftServer()

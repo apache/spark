@@ -242,14 +242,15 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // https://issues.apache.org/jira/browse/HIVE-7673 (in Hive 0.14 and trunk).
     "input46",
 
-    "combine1", // BROKEN
+    // These tests were broken by the hive client isolation PR.
+    "part_inherit_tbl_props",
+    "part_inherit_tbl_props_with_star",
 
-    "part_inherit_tbl_props", // BROKEN
-    "part_inherit_tbl_props_with_star", // BROKEN
+    "nullformatCTAS", // SPARK-7411: need to finish CTAS parser
 
-    "nullformatCTAS", // NEED TO FINISH CTAS parser
-
-    "load_dyn_part14.*" // These work along but fail when run with other tests...
+    // The isolated classloader seemed to make some of our test reset mechanisms less robust.
+    "combine1", // This test changes compression settings in a way that breaks all subsequent tests.
+    "load_dyn_part14.*" // These work alone but fail when run with other tests...
   ) ++ HiveShim.compatibilityBlackList
 
   /**

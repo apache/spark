@@ -109,7 +109,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /**
    * The location of the jars that should be used to instantiate the HiveMetastoreClient.  This
-   * property can be one of three option:
+   * property can be one of three options:
    *  - a colon-separated list of jar files or directories for hive and hadoop.
    *  - builtin - attempt to discover the jars that were used to load Spark SQL and use those. This
    *              option is only valid when using the execution version of Hive.
@@ -361,8 +361,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
     }
-
-    protected[hive] def localSession = executionHive.state
 
     /**
      * SQLConf and HiveConf contracts:
