@@ -84,14 +84,14 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
   /**
    * Inversion of boolean expression, i.e. NOT.
-   * {{
+   * {{{
    *   // Scala: select rows that are not active (isActive === false)
    *   df.filter( !df("isActive") )
    *
    *   // Java:
    *   import static org.apache.spark.sql.functions.*;
    *   df.filter( not(df.col("isActive")) );
-   * }}
+   * }}}
    *
    * @group expr_ops
    */

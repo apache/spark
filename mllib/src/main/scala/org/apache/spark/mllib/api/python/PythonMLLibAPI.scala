@@ -283,6 +283,24 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib IsotonicRegression.run()
+   */
+  def trainIsotonicRegressionModel(
+      data: JavaRDD[Vector],
+      isotonic: Boolean): JList[Object] = {
+    val isotonicRegressionAlg = new IsotonicRegression().setIsotonic(isotonic)
+    val input = data.rdd.map { x =>
+      (x(0), x(1), x(2))
+    }.persist(StorageLevel.MEMORY_AND_DISK)
+    try {
+      val model = isotonicRegressionAlg.run(input)
+      List[AnyRef](model.boundaryVector, model.predictionVector).asJava
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
+
+  /**
    * Java stub for Python mllib KMeans.run()
    */
   def trainKMeansModel(

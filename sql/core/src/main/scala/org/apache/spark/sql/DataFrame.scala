@@ -681,11 +681,11 @@ class DataFrame private[sql](
 
   /**
    * (Scala-specific) Aggregates on the entire [[DataFrame]] without groups.
-   * {{
+   * {{{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg("age" -> "max", "salary" -> "avg")
    *   df.groupBy().agg("age" -> "max", "salary" -> "avg")
-   * }}
+   * }}}
    * @group dfops
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
@@ -694,33 +694,33 @@ class DataFrame private[sql](
 
   /**
    * (Scala-specific) Aggregates on the entire [[DataFrame]] without groups.
-   * {{
+   * {{{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg(Map("age" -> "max", "salary" -> "avg"))
    *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
-   * }}
+   * }}}
    * @group dfops
    */
   def agg(exprs: Map[String, String]): DataFrame = groupBy().agg(exprs)
 
   /**
    * (Java-specific) Aggregates on the entire [[DataFrame]] without groups.
-   * {{
+   * {{{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg(Map("age" -> "max", "salary" -> "avg"))
    *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
-   * }}
+   * }}}
    * @group dfops
    */
   def agg(exprs: java.util.Map[String, String]): DataFrame = groupBy().agg(exprs)
 
   /**
    * Aggregates on the entire [[DataFrame]] without groups.
-   * {{
+   * {{{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg(max($"age"), avg($"salary"))
    *   df.groupBy().agg(max($"age"), avg($"salary"))
-   * }}
+   * }}}
    * @group dfops
    */
   @scala.annotation.varargs

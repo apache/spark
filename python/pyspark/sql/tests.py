@@ -416,7 +416,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_math_functions(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
-        from pyspark.sql import mathfunctions as functions
+        from pyspark.sql import functions
         import math
 
         def get_values(l):
