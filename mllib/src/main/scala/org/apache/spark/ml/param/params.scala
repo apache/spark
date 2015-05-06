@@ -22,6 +22,7 @@ import java.util.NoSuchElementException
 
 import scala.annotation.varargs
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.util.Identifiable
@@ -218,6 +219,18 @@ class BooleanParam(parent: Params, name: String, doc: String) // No need for isV
   override def w(value: Boolean): ParamPair[Boolean] = super.w(value)
 }
 
+/** Specialized version of [[Param[Array[T]]]] for Java. */
+class ArrayParam[T : ClassTag](parent: Params, name: String, doc: String, isValid: Array[T] => Boolean)
+  extends Param[Array[T]](parent, name, doc, isValid) {
+
+  def this(parent: Params, name: String, doc: String) =
+    this(parent, name, doc, ParamValidators.alwaysTrue)
+
+  override def w(value: Array[T]): ParamPair[Array[T]] = super.w(value)
+
+  private[param] def wCast(value: Seq[T]): ParamPair[Array[T]] = w(value.toArray)
+}
+
 /**
  * A param amd its value.
  */
@@ -311,7 +324,11 @@ trait Params extends Identifiable with Serializable {
    */
   protected final def set[T](param: Param[T], value: T): this.type = {
     shouldOwn(param)
-    paramMap.put(param.asInstanceOf[Param[Any]], value)
+    if (param.isInstanceOf[ArrayParam[_]] && value.isInstanceOf[Seq[_]]) {
+      paramMap.put(param.asInstanceOf[ArrayParam[Any]].wCast(value.asInstanceOf[Seq[Any]]))
+    } else {
+      paramMap.put(param.w(value))
+    }
     this
   }
 
