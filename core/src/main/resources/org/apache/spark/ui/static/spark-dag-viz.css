@@ -58,7 +58,6 @@
 
 #dag-viz-graph svg.job g.cluster text {
   fill: #AAAAAA;
-  font-size: 11px;
 }
 
 /* Stage page specific styles */
@@ -80,6 +79,5 @@
 
 #dag-viz-graph svg.stage g.cluster text {
   fill: #444444;
-  font-size: 14px;
   font-weight: bold;
 }

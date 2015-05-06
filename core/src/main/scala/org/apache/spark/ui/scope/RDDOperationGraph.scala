@@ -191,7 +191,8 @@ private[ui] object RDDOperationGraph extends Logging {
       forJob: Boolean,
       indent: String): String = {
     val subgraph = new StringBuilder
-    val paddingTop = if (forJob) 5 else 15
+    // TODO: move specific graph properties like these to spark-dag-viz.js
+    val paddingTop = if (forJob) 10 else 20
     subgraph.append(indent + s"subgraph cluster${cluster.id} {\n")
     subgraph.append(indent + s"""  label="${cluster.name}";\n""")
     // If there are nested clusters, add some padding
