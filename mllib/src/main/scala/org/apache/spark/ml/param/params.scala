@@ -220,19 +220,15 @@ class BooleanParam(parent: Params, name: String, doc: String) // No need for isV
 }
 
 /** Specialized version of [[Param[Array[T]]]] for Java. */
-class ArrayParam[T : ClassTag](
-    parent: Params,
-    name: String,
-    doc: String,
-    isValid: Array[T] => Boolean)
-  extends Param[Array[T]](parent, name, doc, isValid) {
+class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array[String] => Boolean)
+  extends Param[Array[String]](parent, name, doc, isValid) {
 
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
 
-  override def w(value: Array[T]): ParamPair[Array[T]] = super.w(value)
+  override def w(value: Array[String]): ParamPair[Array[String]] = super.w(value)
 
-  private[param] def wCast(value: Seq[T]): ParamPair[Array[T]] = w(value.toArray)
+  private[param] def wCast(value: Seq[String]): ParamPair[Array[String]] = w(value.toArray)
 }
 
 /**
@@ -328,8 +324,8 @@ trait Params extends Identifiable with Serializable {
    */
   protected final def set[T](param: Param[T], value: T): this.type = {
     shouldOwn(param)
-    if (param.isInstanceOf[ArrayParam[_]] && value.isInstanceOf[Seq[_]]) {
-      paramMap.put(param.asInstanceOf[ArrayParam[Any]].wCast(value.asInstanceOf[Seq[Any]]))
+    if (param.isInstanceOf[StringArrayParam] && value.isInstanceOf[Seq[_]]) {
+      paramMap.put(param.asInstanceOf[StringArrayParam].wCast(value.asInstanceOf[Seq[String]]))
     } else {
       paramMap.put(param.w(value))
     }

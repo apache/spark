@@ -178,7 +178,7 @@ private[ml] trait HasInputCols extends Params {
    * Param for input column names.
    * @group param
    */
-  final val inputCols: ArrayParam[String] = new ArrayParam[String](this, "inputCols", "input column names")
+  final val inputCols: StringArrayParam = new StringArrayParam(this, "inputCols", "input column names")
 
   /** @group getParam */
   final def getInputCols: Array[String] = $(inputCols)
