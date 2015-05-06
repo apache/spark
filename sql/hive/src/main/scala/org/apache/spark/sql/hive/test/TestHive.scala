@@ -156,6 +156,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   val describedTable = "DESCRIBE (\\w+)".r
 
+  @transient
   val vs = new VariableSubstitution()
 
   // we should substitute variables in hql to pass the text to parseSql() as a parameter.
@@ -203,6 +204,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * A list of test tables and the DDL required to initialize them.  A test table is loaded on
    * demand when a query are run against it.
    */
+  @transient
   lazy val testTables = new mutable.HashMap[String, TestTable]()
 
   def registerTestTable(testTable: TestTable): Unit = {
@@ -212,6 +214,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   // The test tables that are defined in the Hive QTestUtil.
   // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
   // https://github.com/apache/hive/blob/branch-0.13/data/scripts/q_test_init.sql
+  @transient
   val hiveQTestUtilTables = Seq(
     TestTable("src",
       "CREATE TABLE src (key INT, value STRING)".cmd,
