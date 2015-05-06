@@ -25,7 +25,6 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.status.api.v1.{ApplicationInfo, ApplicationsListResource, JsonRootResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{SignalLogger, Utils}
@@ -46,7 +45,7 @@ class HistoryServer(
     provider: ApplicationHistoryProvider,
     securityManager: SecurityManager,
     port: Int)
-  extends WebUI(securityManager, port, conf) with Logging with UIRoot {
+  extends WebUI(securityManager, port, conf) with Logging {
 
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
@@ -57,7 +56,7 @@ class HistoryServer(
       require(parts.length == 1 || parts.length == 2, s"Invalid app key $key")
       val ui = provider
         .getAppUI(parts(0), if (parts.length > 1) Some(parts(1)) else None)
-        .getOrElse(throw new NoSuchElementException(s"no app with key $key"))
+        .getOrElse(throw new NoSuchElementException())
       attachSparkUI(ui)
       ui
     }
@@ -114,10 +113,6 @@ class HistoryServer(
     }
   }
 
-  def getSparkUI(appKey: String): Option[SparkUI] = {
-    Option(appCache.get(appKey))
-  }
-
   initialize()
 
   /**
@@ -128,9 +123,6 @@ class HistoryServer(
    */
   def initialize() {
     attachPage(new HistoryPage(this))
-
-    attachHandler(JsonRootResource.getJsonServlet(this))
-
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
 
     val contextHandler = new ServletContextHandler
@@ -168,13 +160,7 @@ class HistoryServer(
    *
    * @return List of all known applications.
    */
-  def getApplicationList(): Iterable[ApplicationHistoryInfo] = {
-    provider.getListing()
-  }
-
-  def getApplicationInfoList: Iterator[ApplicationInfo] = {
-    getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
-  }
+  def getApplicationList(): Iterable[ApplicationHistoryInfo] = provider.getListing()
 
   /**
    * Returns the provider configuration to show in the listing page.

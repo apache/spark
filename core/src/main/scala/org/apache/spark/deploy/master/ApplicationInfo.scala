@@ -28,7 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.ApplicationDescription
 import org.apache.spark.util.Utils
 
-private[spark] class ApplicationInfo(
+private[deploy] class ApplicationInfo(
     val startTime: Long,
     val id: String,
     val desc: ApplicationDescription,

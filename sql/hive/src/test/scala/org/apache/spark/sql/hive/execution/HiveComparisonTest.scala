@@ -300,7 +300,7 @@ abstract class HiveComparisonTest
 
             val hiveQueries = queryList.map(new TestHive.HiveQLQueryExecution(_))
             // Make sure we can at least parse everything before attempting hive execution.
-            hiveQueries.foreach(_.analyzed)
+            hiveQueries.foreach(_.logical)
             val computedResults = (queryList.zipWithIndex, hiveQueries, hiveCacheFiles).zipped.map {
               case ((queryString, i), hiveQuery, cachedAnswerFile)=>
                 try {

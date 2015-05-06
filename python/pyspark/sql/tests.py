@@ -416,7 +416,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_math_functions(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
-        from pyspark.sql import mathfunctions as functions
+        from pyspark.sql import functions
         import math
 
         def get_values(l):
@@ -452,6 +452,14 @@ class SQLTests(ReusedPySparkTestCase):
         rndn = df.select('key', functions.randn(5)).collect()
         for row in rndn:
             assert row[1] >= -4.0 and row[1] <= 4.0, "got: %s" % row[1]
+
+    def test_between_function(self):
+        df = self.sc.parallelize([
+            Row(a=1, b=2, c=3),
+            Row(a=2, b=1, c=3),
+            Row(a=4, b=1, c=4)]).toDF()
+        self.assertEqual([Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)],
+                         df.filter(df.a.between(df.b, df.c)).collect())
 
     def test_save_and_load(self):
         df = self.df
