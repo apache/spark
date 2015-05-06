@@ -116,7 +116,7 @@ class ClientWrapper(
   }
 
   /** Returns the configuration for the current session. */
-  def conf = SessionState.get().getConf
+  def conf: HiveConf = SessionState.get().getConf
 
   private val client = Hive.get(conf)
 
@@ -148,7 +148,7 @@ class ClientWrapper(
   def setInfo(stream: PrintStream): Unit = withHiveState {
     state.info = stream
   }
-  
+
   def setError(stream: PrintStream): Unit = withHiveState {
     state.err = stream
   }
