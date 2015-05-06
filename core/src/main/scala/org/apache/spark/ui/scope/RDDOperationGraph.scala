@@ -191,12 +191,13 @@ private[ui] object RDDOperationGraph extends Logging {
       forJob: Boolean,
       indent: String): String = {
     val subgraph = new StringBuilder
+    val paddingTop = if (forJob) 5 else 15
     subgraph.append(indent + s"subgraph cluster${cluster.id} {\n")
     subgraph.append(indent + s"""  label="${cluster.name}";\n""")
     // If there are nested clusters, add some padding
     // Do this for the stage page because we use bigger fonts there
-    if (cluster.childClusters.nonEmpty && !forJob) {
-      subgraph.append(indent + s"""  paddingTop="10";\n""")
+    if (cluster.childClusters.nonEmpty) {
+      subgraph.append(indent + s"""  paddingTop="$paddingTop";\n""")
     }
     cluster.childNodes.foreach { node =>
       subgraph.append(indent + s"  ${makeDotNode(node, forJob)};\n")

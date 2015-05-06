@@ -277,18 +277,10 @@ function renderDot(dot, container) {
 
 /* Style the visualization we just rendered. */
 function styleDagViz(forJob) {
-  graphContainer().selectAll("svg g.cluster rect")
-    .style("fill", "white")
-    .style("stroke", VizConstants.rddOperationColor)
-    .style("stroke-width", "4px")
-    .style("stroke-opacity", "0.5");
-  graphContainer().selectAll("svg path")
+  graphContainer()
+    .selectAll("svg path")
     .style("stroke", VizConstants.edgeColor)
     .style("stroke-width", VizConstants.edgeWidth);
-  stageClusters()
-    .select("rect")
-    .style("stroke", VizConstants.stageColor)
-    .style("strokeWidth", "6px");
 
   // Put an arrow at the end of every edge
   // We need to do this because we manually render some edges ourselves
@@ -313,35 +305,61 @@ function styleDagViz(forJob) {
 
 /* Apply job-page-specific style to the visualization. */
 function styleDagVizForJob() {
-  graphContainer().selectAll("svg g.node circle")
+  graphContainer()
+    .selectAll("svg g.cluster rect")
+    .style("fill", "white")
+    .style("stroke", VizConstants.rddOperationColor)
+    .style("stroke-width", "4px")
+    .style("stroke-opacity", "0.5");
+  stageClusters()
+    .select("rect")
+    .style("stroke", VizConstants.stageColor)
+    .style("strokeWidth", "6px");
+  graphContainer()
+    .selectAll("svg g.node circle")
     .style("fill", VizConstants.rddColor);
   // TODO: add a legend to explain what a highlighted dot means
-  graphContainer().selectAll("svg g.cached circle")
+  graphContainer()
+    .selectAll("svg g.cached circle")
     .style("fill", VizConstants.rddCachedColor);
-  graphContainer().selectAll("svg g#cross-stage-edges path")
+  graphContainer()
+    .selectAll("svg g#cross-stage-edges path")
     .style("fill", "none");
-  graphContainer().selectAll("svg g.cluster text")
+  graphContainer()
+    .selectAll("svg g.cluster text")
     .attr("fill", VizConstants.clusterLabelColor)
     .attr("font-size", "11px");
 }
 
 /* Apply stage-page-specific style to the visualization. */
 function styleDagVizForStage() {
-  graphContainer().selectAll("svg g.node rect")
-    .style("fill", "none")
-    .style("stroke", VizConstants.rddColor)
-    .style("stroke-width", "2px")
+  graphContainer()
+    .selectAll("svg g.cluster rect")
+    .style("fill", "#F0F8FF")
+    .style("stroke", VizConstants.rddOperationColor)
+    .style("stroke-width", "4px")
+    .style("stroke-opacity", "0.5");
+  stageClusters()
+    .select("rect")
+    .style("fill", "white")
+    .style("stroke", VizConstants.stageColor)
+    .style("strokeWidth", "6px");
+  graphContainer()
+    .selectAll("svg g.node rect")
+    .style("fill", "#444444")
     .attr("rx", "5") // round corners
     .attr("ry", "5");
-    // TODO: add a legend to explain what a highlighted RDD means
-  graphContainer().selectAll("svg g.cached rect")
-    .style("stroke", VizConstants.rddCachedColor);
-  graphContainer().selectAll("svg g.node g.label text tspan")
-    .style("fill", VizConstants.rddColor);
-  graphContainer().selectAll("svg g.cluster text")
+  graphContainer()
+    .selectAll("svg g.cached rect")
+    .style("fill", VizConstants.rddCachedColor)
+  graphContainer()
+    .selectAll("svg g.node g.label text tspan")
+    .style("fill", "white");
+  graphContainer()
+    .selectAll("svg g.cluster text")
     .attr("fill", "#444444")
     .attr("font-size", "14px")
-    .attr("font-weight", "bold");
+    .attr("font-weight", "bold")
 }
 
 /*
@@ -429,9 +447,9 @@ function connectRDDs(fromRDDId, toRDDId, container) {
 
 /* Helper d3 accessor to clusters that represent stages. */
 function stageClusters() {
-  return graphContainer().selectAll("g.cluster").filter(function() {
-    return d3.select(this).attr("id").indexOf(VizConstants.stageClusterPrefix) > -1;
-  });
+  return graphContainer()
+    .selectAll("svg g.cluster")
+    .filter("[id*=\"" + VizConstants.stageClusterPrefix + "\"]");
 }
 
 /* Helper method to convert attributes to numeric values. */
