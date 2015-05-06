@@ -99,19 +99,22 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "one stage json" -> "applications/local-1422981780767/stages/1",
     "one stage attempt json" -> "applications/local-1422981780767/stages/1/0",
 
-    "stage task summary" -> "applications/local-1427397477963/stages/20/0/taskSummary",
+    "stage task summary w shuffle write"
+      -> "applications/local-1430917381534/stages/0/0/taskSummary",
+    "stage task summary w shuffle read"
+      -> "applications/local-1430917381534/stages/1/0/taskSummary",
     "stage task summary w/ custom quantiles" ->
-      "applications/local-1427397477963/stages/20/0/taskSummary?quantiles=0.01,0.5,0.99",
+      "applications/local-1430917381534/stages/0/0/taskSummary?quantiles=0.01,0.5,0.99",
 
-    "stage task list" -> "applications/local-1427397477963/stages/20/0/taskList",
+    "stage task list" -> "applications/local-1430917381534/stages/0/0/taskList",
     "stage task list w/ offset & length" ->
-      "applications/local-1427397477963/stages/20/0/taskList?offset=10&length=50",
+      "applications/local-1430917381534/stages/0/0/taskList?offset=10&length=50",
     "stage task list w/ sortBy" ->
-      "applications/local-1427397477963/stages/20/0/taskList?sortBy=DECREASING_RUNTIME",
+      "applications/local-1430917381534/stages/0/0/taskList?sortBy=DECREASING_RUNTIME",
     "stage task list w/ sortBy short names: -runtime" ->
-      "applications/local-1427397477963/stages/20/0/taskList?sortBy=-runtime",
+      "applications/local-1430917381534/stages/0/0/taskList?sortBy=-runtime",
     "stage task list w/ sortBy short names: runtime" ->
-      "applications/local-1427397477963/stages/20/0/taskList?sortBy=runtime",
+      "applications/local-1430917381534/stages/0/0/taskList?sortBy=runtime",
 
     "stage list with accumulable json" -> "applications/local-1426533911241/1/stages",
     "stage with accumulable json" -> "applications/local-1426533911241/1/stages/0/0",
@@ -162,7 +165,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     // will take some mucking w/ jersey to get a better error msg in this case
 
     val badQuantiles = getContentAndCode(
-      "applications/local-1427397477963/stages/20/0/taskSummary?quantiles=foo,0.1")
+      "applications/local-1430917381534/stages/0/0/taskSummary?quantiles=foo,0.1")
     badQuantiles._1 should be (HttpServletResponse.SC_BAD_REQUEST)
     badQuantiles._3 should be (Some("Bad value for parameter \"quantiles\".  Expected a double, " +
       "got \"foo\""))
