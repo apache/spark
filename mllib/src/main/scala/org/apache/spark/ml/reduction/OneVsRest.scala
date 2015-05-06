@@ -20,7 +20,7 @@ package org.apache.spark.ml.reduction
 
 import scala.language.existentials
 
-import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
+import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.classification.{ClassificationModel, Classifier, ClassifierParams}
@@ -117,6 +117,7 @@ class OneVsRestModel(
  * set directly on the OneVsRest and are ignored on the underlying classifier.
  *
  */
+@Experimental
 class OneVsRest extends Estimator[OneVsRestModel]
   with OneVsRestParams {
 
@@ -151,7 +152,7 @@ class OneVsRest extends Estimator[OneVsRestModel]
 
       // generate new label for each binary classifier.
       // generate new label metadata for the binary problem.
-      // TODO use when ... otherwise after SPARK-7321 is merged
+      // TODO: use when ... otherwise after SPARK-7321 is merged
       val labelUDF = callUDF(label, DoubleType, col($(labelCol)))
       val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
       val labelUDFWithNewMeta = labelUDF.as(labelColName, newLabelMeta)
