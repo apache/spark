@@ -67,6 +67,73 @@ class BinaryClassificationMetrics(JavaModelWrapper):
         self.call("unpersist")
 
 
+class RegressionMetrics(JavaModelWrapper):
+    """
+    Evaluator for regression.
+
+    >>> predictionAndObservations = sc.parallelize([
+    ...     (2.5, 3.0), (0.0, -0.5), (2.0, 2.0), (8.0, 7.0)])
+    >>> metrics = RegressionMetrics(predictionAndObservations)
+    >>> metrics.explainedVariance()
+    0.95...
+    >>> metrics.meanAbsoluteError()
+    0.5...
+    >>> metrics.meanSquaredError()
+    0.37...
+    >>> metrics.rootMeanSquaredError()
+    0.61...
+    >>> metrics.r2()
+    0.94...
+    """
+
+    def __init__(self, predictionAndObservations):
+        """
+        :param predictionAndObservations: an RDD of (prediction, observation) pairs.
+        """
+        sc = predictionAndObservations.ctx
+        sql_ctx = SQLContext(sc)
+        df = sql_ctx.createDataFrame(predictionAndObservations, schema=StructType([
+            StructField("prediction", DoubleType(), nullable=False),
+            StructField("observation", DoubleType(), nullable=False)]))
+        java_class = sc._jvm.org.apache.spark.mllib.evaluation.RegressionMetrics
+        java_model = java_class(df._jdf)
+        super(RegressionMetrics, self).__init__(java_model)
+
+    def explainedVariance(self):
+        """
+        Returns the explained variance regression score.
+        explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
+        """
+        return self.call("explainedVariance")
+
+    def meanAbsoluteError(self):
+        """
+        Returns the mean absolute error, which is a risk function corresponding to the
+        expected value of the absolute error loss or l1-norm loss.
+        """
+        return self.call("meanAbsoluteError")
+
+    def meanSquaredError(self):
+        """
+        Returns the mean squared error, which is a risk function corresponding to the
+        expected value of the squared error loss or quadratic loss.
+        """
+        return self.call("meanSquaredError")
+
+    def rootMeanSquaredError(self):
+        """
+        Returns the root mean squared error, which is defined as the square root of
+        the mean squared error.
+        """
+        return self.call("rootMeanSquaredError")
+
+    def r2(self):
+        """
+        Returns R^2^, the coefficient of determination.
+        """
+        return self.call("r2")
+
+
 def _test():
     import doctest
     from pyspark import SparkContext
