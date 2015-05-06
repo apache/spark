@@ -652,7 +652,7 @@ def _python_to_sql_converter(dataType):
 
     if isinstance(dataType, StructType):
         names, types = zip(*[(f.name, f.dataType) for f in dataType.fields])
-        converters = map(_python_to_sql_converter, types)
+        converters = [_python_to_sql_converter(t) for t in types]
 
         def converter(obj):
             if isinstance(obj, dict):

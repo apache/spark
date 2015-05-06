@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.sql.DriverManager
 
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -28,6 +29,7 @@ import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonFactory
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
@@ -174,6 +176,7 @@ class DataFrame private[sql](
    * @param numRows Number of rows to show
    */
   private[sql] def showString(numRows: Int): String = {
+    val sb = new StringBuilder
     val data = take(numRows)
     val numCols = schema.fieldNames.length
 
@@ -193,12 +196,25 @@ class DataFrame private[sql](
       }
     }
 
-    // Pad the cells
-    rows.map { row =>
-      row.zipWithIndex.map { case (cell, i) =>
-        String.format(s"%-${colWidths(i)}s", cell)
-      }.mkString(" ")
-    }.mkString("\n")
+    // Create SeparateLine
+    val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
+
+    // column names
+    rows.head.zipWithIndex.map { case (cell, i) =>
+      StringUtils.leftPad(cell.toString, colWidths(i))
+    }.addString(sb, "|", "|", "|\n")
+
+    sb.append(sep)
+
+    // data
+    rows.tail.map {
+      _.zipWithIndex.map { case (cell, i) =>
+        StringUtils.leftPad(cell.toString, colWidths(i))
+      }.addString(sb, "|", "|", "|\n")
+    }
+
+    sb.append(sep)
+    sb.toString()
   }
 
   override def toString: String = {
@@ -399,9 +415,7 @@ class DataFrame private[sql](
    * }}}
    * @group dfops
    */
-  def join(right: DataFrame, joinExprs: Column): DataFrame = {
-    Join(logicalPlan, right.logicalPlan, joinType = Inner, Some(joinExprs.expr))
-  }
+  def join(right: DataFrame, joinExprs: Column): DataFrame = join(right, joinExprs, "inner")
 
   /**
    * Join with another [[DataFrame]], using the given join expression. The following performs
@@ -423,7 +437,39 @@ class DataFrame private[sql](
    * @group dfops
    */
   def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame = {
-    Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr))
+    // Note that in this function, we introduce a hack in the case of self-join to automatically
+    // resolve ambiguous join conditions into ones that might make sense [SPARK-6231].
+    // Consider this case: df.join(df, df("key") === df("key"))
+    // Since df("key") === df("key") is a trivially true condition, this actually becomes a
+    // cartesian join. However, most likely users expect to perform a self join using "key".
+    // With that assumption, this hack turns the trivially true condition into equality on join
+    // keys that are resolved to both sides.
+
+    // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
+    // After the cloning, left and right side will have distinct expression ids.
+    val plan = Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr))
+      .queryExecution.analyzed.asInstanceOf[Join]
+
+    // If auto self join alias is disabled, return the plan.
+    if (!sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
+      return plan
+    }
+
+    // If left/right have no output set intersection, return the plan.
+    val lanalyzed = this.logicalPlan.queryExecution.analyzed
+    val ranalyzed = right.logicalPlan.queryExecution.analyzed
+    if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
+      return plan
+    }
+
+    // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
+    // By the time we get here, since we have already run analysis, all attributes should've been
+    // resolved and become AttributeReference.
+    val cond = plan.condition.map { _.transform {
+      case EqualTo(a: AttributeReference, b: AttributeReference) if a.sameRef(b) =>
+        EqualTo(plan.left.resolve(a.name), plan.right.resolve(b.name))
+    }}
+    plan.copy(condition = cond)
   }
 
   /**
@@ -634,11 +680,11 @@ class DataFrame private[sql](
 
   /**
    * (Scala-specific) Aggregates on the entire [[DataFrame]] without groups.
-   * {{
+   * {{{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg("age" -> "max", "salary" -> "avg")
    *   df.groupBy().agg("age" -> "max", "salary" -> "avg")
-   * }}
+   * }}}
    * @group dfops
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
@@ -647,33 +693,33 @@ class DataFrame private[sql](
 
   /**
    * (Scala-specific) Aggregates on the entire [[DataFrame]] without groups.
-   * {{
+   * {{{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg(Map("age" -> "max", "salary" -> "avg"))
    *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
-   * }}
+   * }}}
    * @group dfops
    */
   def agg(exprs: Map[String, String]): DataFrame = groupBy().agg(exprs)
 
   /**
    * (Java-specific) Aggregates on the entire [[DataFrame]] without groups.
-   * {{
+   * {{{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg(Map("age" -> "max", "salary" -> "avg"))
    *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
-   * }}
+   * }}}
    * @group dfops
    */
   def agg(exprs: java.util.Map[String, String]): DataFrame = groupBy().agg(exprs)
 
   /**
    * Aggregates on the entire [[DataFrame]] without groups.
-   * {{
+   * {{{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg(max($"age"), avg($"salary"))
    *   df.groupBy().agg(max($"age"), avg($"salary"))
-   * }}
+   * }}}
    * @group dfops
    */
   @scala.annotation.varargs

@@ -27,7 +27,7 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 /** Page showing list of all ongoing and recently finished stages and pools */
 private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
   private val sc = parent.sc
-  private val listener = parent.listener
+  private val listener = parent.progressListener
   private def isFairScheduler = parent.isFairScheduler
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -42,18 +42,18 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
 
       val activeStagesTable =
         new StageTableBase(activeStages.sortBy(_.submissionTime).reverse,
-          parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+          parent.basePath, parent.progressListener, isFairScheduler = parent.isFairScheduler,
           killEnabled = parent.killEnabled)
       val pendingStagesTable =
         new StageTableBase(pendingStages.sortBy(_.submissionTime).reverse,
-          parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+          parent.basePath, parent.progressListener, isFairScheduler = parent.isFairScheduler,
           killEnabled = false)
       val completedStagesTable =
         new StageTableBase(completedStages.sortBy(_.submissionTime).reverse, parent.basePath,
-          parent.listener, isFairScheduler = parent.isFairScheduler, killEnabled = false)
+          parent.progressListener, isFairScheduler = parent.isFairScheduler, killEnabled = false)
       val failedStagesTable =
         new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse, parent.basePath,
-          parent.listener, isFairScheduler = parent.isFairScheduler)
+          parent.progressListener, isFairScheduler = parent.isFairScheduler)
 
       // For now, pool information is only accessible in live UIs
       val pools = sc.map(_.getAllPools).getOrElse(Seq.empty[Schedulable])

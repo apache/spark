@@ -417,6 +417,11 @@
         <version>${commons.math3.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.apache.ivy</groupId>
+        <artifactId>ivy</artifactId>
+        <version>${ivy.version}</version>
+      </dependency>
+      <dependency>
         <groupId>com.google.code.findbugs</groupId>
         <artifactId>jsr305</artifactId>
         <version>1.3.9</version>
@@ -1613,20 +1618,6 @@
     <!-- Hadoop-a.b.c dependencies can be found at
     http://hadoop.apache.org/docs/ra.b.c/hadoop-project-dist/hadoop-common/dependency-analysis.html
     -->
-
-    <profile>
-      <id>hadoop-0.23</id>
-      <!-- SPARK-1121: Adds an explicit dependency on Avro to work around a Hadoop 0.23.X issue -->
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-      <properties>
-        <hadoop.version>0.23.10</hadoop.version>
-      </properties>
-    </profile>
 
     <profile>
       <id>hadoop-2.2</id>

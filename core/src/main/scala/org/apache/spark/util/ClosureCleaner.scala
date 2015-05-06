@@ -179,6 +179,11 @@ private[spark] object ClosureCleaner extends Logging {
       cleanTransitively: Boolean,
       accessedFields: Map[Class[_], Set[String]]): Unit = {
 
+    if (!isClosure(func.getClass)) {
+      logWarning("Expected a closure; got " + func.getClass.getName)
+      return
+    }
+
     // TODO: clean all inner closures first. This requires us to find the inner objects.
     // TODO: cache outerClasses / innerClasses / accessedFields
 
@@ -312,7 +317,9 @@ private[spark] object ClosureCleaner extends Logging {
 
   private def ensureSerializable(func: AnyRef) {
     try {
-      SparkEnv.get.closureSerializer.newInstance().serialize(func)
+      if (SparkEnv.get != null) {
+        SparkEnv.get.closureSerializer.newInstance().serialize(func)
+      }
     } catch {
       case ex: Exception => throw new SparkException("Task not serializable", ex)
     }
@@ -347,6 +354,9 @@ private[spark] object ClosureCleaner extends Logging {
   }
 }
 
+private[spark] class ReturnStatementInClosureException
+  extends SparkException("Return statements aren't allowed in Spark closures")
+
 private class ReturnStatementFinder extends ClassVisitor(ASM4) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
@@ -354,7 +364,7 @@ private class ReturnStatementFinder extends ClassVisitor(ASM4) {
       new MethodVisitor(ASM4) {
         override def visitTypeInsn(op: Int, tp: String) {
           if (op == NEW && tp.contains("scala/runtime/NonLocalReturnControl")) {
-            throw new SparkException("Return statements aren't allowed in Spark closures")
+            throw new ReturnStatementInClosureException
           }
         }
       }

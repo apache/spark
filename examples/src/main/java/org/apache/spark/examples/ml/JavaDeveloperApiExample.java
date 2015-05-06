@@ -28,7 +28,6 @@ import org.apache.spark.ml.classification.Classifier;
 import org.apache.spark.ml.classification.ClassificationModel;
 import org.apache.spark.ml.param.IntParam;
 import org.apache.spark.ml.param.ParamMap;
-import org.apache.spark.ml.param.Params$;
 import org.apache.spark.mllib.linalg.BLAS;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
@@ -129,16 +128,16 @@ class MyJavaLogisticRegression
 
   // This method is used by fit().
   // In Java, we have to make it public since Java does not understand Scala's protected modifier.
-  public MyJavaLogisticRegressionModel train(DataFrame dataset, ParamMap paramMap) {
+  public MyJavaLogisticRegressionModel train(DataFrame dataset) {
     // Extract columns from data using helper method.
-    JavaRDD<LabeledPoint> oldDataset = extractLabeledPoints(dataset, paramMap).toJavaRDD();
+    JavaRDD<LabeledPoint> oldDataset = extractLabeledPoints(dataset).toJavaRDD();
 
     // Do learning to estimate the weight vector.
     int numFeatures = oldDataset.take(1).get(0).features().size();
     Vector weights = Vectors.zeros(numFeatures); // Learning would happen here.
 
     // Create a model, and return it.
-    return new MyJavaLogisticRegressionModel(this, paramMap, weights);
+    return new MyJavaLogisticRegressionModel(this, weights);
   }
 }
 
@@ -155,18 +154,11 @@ class MyJavaLogisticRegressionModel
   private MyJavaLogisticRegression parent_;
   public MyJavaLogisticRegression parent() { return parent_; }
 
-  private ParamMap fittingParamMap_;
-  public ParamMap fittingParamMap() { return fittingParamMap_; }
-
   private Vector weights_;
   public Vector weights() { return weights_; }
 
-  public MyJavaLogisticRegressionModel(
-      MyJavaLogisticRegression parent_,
-      ParamMap fittingParamMap_,
-      Vector weights_) {
+  public MyJavaLogisticRegressionModel(MyJavaLogisticRegression parent_, Vector weights_) {
     this.parent_ = parent_;
-    this.fittingParamMap_ = fittingParamMap_;
     this.weights_ = weights_;
   }
 
@@ -210,10 +202,8 @@ class MyJavaLogisticRegressionModel
    * In Java, we have to make this method public since Java does not understand Scala's protected
    * modifier.
    */
-  public MyJavaLogisticRegressionModel copy() {
-    MyJavaLogisticRegressionModel m =
-        new MyJavaLogisticRegressionModel(parent_, fittingParamMap_, weights_);
-    Params$.MODULE$.inheritValues(this.extractParamMap(), this, m);
-    return m;
+  @Override
+  public MyJavaLogisticRegressionModel copy(ParamMap extra) {
+    return copyValues(new MyJavaLogisticRegressionModel(parent_, weights_), extra);
   }
 }
