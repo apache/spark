@@ -90,7 +90,7 @@ class IDFSuite extends FunSuite with MLlibTestSparkContext {
     val idfModel = new IDF()
       .setInputCol("features")
       .setOutputCol("idfValue")
-      .setMinDocFreq(1)
+      .setMinDocCount(1)
       .fit(df)
 
     idfModel.transform(df).select("idfValue", "expected").collect().foreach {

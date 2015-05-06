@@ -34,19 +34,19 @@ import org.apache.spark.sql.types.StructType
 private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol {
 
   /**
-   * The minimum of documents in which a term should appear.
+   * The minimum number of documents in which a term should appear.
    * @group param
    */
-  final val minDocFreq = new IntParam(
-    this, "minDocFreq", "minimum of documents in which a term should appear for filtering")
+  final val minDocCount = new IntParam(
+    this, "minDocCount", "minimum number of documents in which a term should appear for filtering")
 
-  setDefault(minDocFreq -> 0)
+  setDefault(minDocCount -> 0)
 
   /** @group getParam */
-  def getMinDocFreq: Int = $(minDocFreq)
+  def getMinDocCount: Int = $(minDocCount)
 
   /** @group setParam */
-  def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
+  def setMinDocCount(value: Int): this.type = set(minDocCount, value)
 
   /**
    * Validate and transform the input schema.
@@ -73,7 +73,7 @@ final class IDF extends Estimator[IDFModel] with IDFBase {
   override def fit(dataset: DataFrame): IDFModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
-    val idf = new feature.IDF($(minDocFreq)).fit(input)
+    val idf = new feature.IDF($(minDocCount)).fit(input)
     copyValues(new IDFModel(this, idf))
   }
 
