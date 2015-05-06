@@ -123,14 +123,14 @@ private[attribute] trait AttributeFactory {
   /**
    * Creates an [[Attribute]] from a [[StructField]] instance.
    */
-  def fromStructField(field: StructField): Option[Attribute] = {
+  def fromStructField(field: StructField): Attribute = {
     require(field.dataType == DoubleType)
     val metadata = field.metadata
     val mlAttr = AttributeKeys.ML_ATTR
     if (metadata.contains(mlAttr)) {
-      Some(fromMetadata(metadata.getMetadata(mlAttr)).withName(field.name))
+      fromMetadata(metadata.getMetadata(mlAttr)).withName(field.name)
     } else {
-      None
+      UnresolvedAttribute
     }
   }
 }
@@ -540,4 +540,33 @@ object BinaryAttribute extends AttributeFactory {
       if (metadata.contains(VALUES)) Some(metadata.getStringArray(VALUES)) else None
     new BinaryAttribute(name, index, values)
   }
+}
+
+/**
+ * An unresolved attribute.
+ */
+private [ml] object UnresolvedAttribute extends Attribute {
+
+  override def attrType: AttributeType = AttributeType.Unresolved
+
+  override def withIndex(index: Int): Attribute = this
+
+  override def isNumeric: Boolean = false
+
+  override def withoutIndex: Attribute = this
+
+  override def isNominal: Boolean = false
+
+  override def name: Option[String] = None
+
+  override private[attribute] def toMetadataImpl(withType: Boolean): Metadata = {
+    Metadata.empty
+  }
+
+  override def withoutName: Attribute = this
+
+  override def index: Option[Int] = None
+
+  override def withName(name: String): Attribute = this
+
 }

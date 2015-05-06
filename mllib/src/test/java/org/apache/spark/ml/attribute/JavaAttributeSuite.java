@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.attribute;
 
-import org.apache.spark.sql.types.StructField;
 import org.junit.Test;
 import org.junit.Assert;
 
@@ -37,26 +36,20 @@ public class JavaAttributeSuite {
   public void testNumericAttribute() {
     NumericAttribute attr = NumericAttribute.defaultAttr()
       .withName("age").withIndex(0).withMin(0.0).withMax(1.0).withStd(0.5).withSparsity(0.4);
-    assertToAndFromStructFieldEqualsOrig(attr);
+    Assert.assertEquals(attr.withoutIndex(), Attribute.fromStructField(attr.toStructField()));
   }
 
   @Test
   public void testNominalAttribute() {
     NominalAttribute attr = NominalAttribute.defaultAttr()
       .withName("size").withIndex(1).withValues("small", "medium", "large");
-    assertToAndFromStructFieldEqualsOrig(attr);
+    Assert.assertEquals(attr.withoutIndex(), Attribute.fromStructField(attr.toStructField()));
   }
 
   @Test
   public void testBinaryAttribute() {
     BinaryAttribute attr = BinaryAttribute.defaultAttr()
       .withName("clicked").withIndex(2).withValues("no", "yes");
-    assertToAndFromStructFieldEqualsOrig(attr);
-  }
-
-  private void assertToAndFromStructFieldEqualsOrig(Attribute attr) {
-    Attribute expected = attr.withoutIndex();
-    Attribute actual = Attribute.fromStructField(attr.toStructField()).get();
-    Assert.assertEquals(expected, actual);
+    Assert.assertEquals(attr.withoutIndex(), Attribute.fromStructField(attr.toStructField()));
   }
 }

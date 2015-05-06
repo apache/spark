@@ -67,7 +67,7 @@ class AttributeSuite extends FunSuite {
     val field = attr.toStructField()
     assert(field.dataType === DoubleType)
     assert(!field.nullable)
-    assert(attr.withoutIndex === Attribute.fromStructField(field).get)
+    assert(attr.withoutIndex === Attribute.fromStructField(field))
     val existingMetadata = new MetadataBuilder()
       .putString("name", "test")
       .build()
@@ -140,7 +140,7 @@ class AttributeSuite extends FunSuite {
     assert(attr.toMetadataImpl(withType = false) === metadataWithoutType)
     assert(attr === Attribute.fromMetadata(metadata))
     assert(attr === NominalAttribute.fromMetadata(metadataWithoutType))
-    assert(attr.withoutIndex === Attribute.fromStructField(attr.toStructField()).get)
+    assert(attr.withoutIndex === Attribute.fromStructField(attr.toStructField()))
 
     val attr2 = attr.withoutName.withoutIndex.withValues(attr.values.get :+ "x-large")
     assert(attr2.name.isEmpty)
@@ -201,7 +201,7 @@ class AttributeSuite extends FunSuite {
     assert(attr.toMetadataImpl(withType = false) === metadataWithoutType)
     assert(attr === Attribute.fromMetadata(metadata))
     assert(attr === BinaryAttribute.fromMetadata(metadataWithoutType))
-    assert(attr.withoutIndex === Attribute.fromStructField(attr.toStructField()).get)
+    assert(attr.withoutIndex === Attribute.fromStructField(attr.toStructField()))
   }
 
   test("bad binary attributes") {
@@ -213,10 +213,10 @@ class AttributeSuite extends FunSuite {
   test("attribute from struct field") {
     val metadata = NumericAttribute.defaultAttr.withName("label").toMetadata()
     val fldWithoutMeta = new StructField("x", DoubleType, false, Metadata.empty)
-    assert(Attribute.fromStructField(fldWithoutMeta).isEmpty)
+    assert(Attribute.fromStructField(fldWithoutMeta) == UnresolvedAttribute)
 
     val fldWithMeta = new StructField("x", DoubleType, false, metadata)
-    assert(Attribute.fromStructField(fldWithMeta).exists(_.isNumeric))
+    assert(Attribute.fromStructField(fldWithMeta).isNumeric)
 
   }
 }

@@ -39,10 +39,10 @@ object MetadataUtils {
    */
   def getNumClasses(labelSchema: StructField): Option[Int] = {
     Attribute.fromStructField(labelSchema) match {
-      case Some(numAttr: NumericAttribute) => None
-      case Some(binAttr: BinaryAttribute) => Some(2)
-      case Some(nomAttr: NominalAttribute) => nomAttr.getNumValues
-      case None => None
+      case numAttr: NumericAttribute => None
+      case binAttr: BinaryAttribute => Some(2)
+      case nomAttr: NominalAttribute => nomAttr.getNumValues
+      case _ => None
     }
   }
 

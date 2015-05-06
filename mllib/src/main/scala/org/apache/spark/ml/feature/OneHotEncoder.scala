@@ -68,9 +68,9 @@ class OneHotEncoder extends UnaryTransformer[Double, Vector, OneHotEncoder]
 
     val inputColAttr = Attribute.fromStructField(schema($(inputCol)))
     categories = inputColAttr match {
-      case Some(nominal: NominalAttribute) =>
+      case nominal: NominalAttribute =>
         nominal.values.getOrElse((0 until nominal.numValues.get).map(_.toString).toArray)
-      case Some(binary: BinaryAttribute) => binary.values.getOrElse(Array("0", "1"))
+      case binary: BinaryAttribute => binary.values.getOrElse(Array("0", "1"))
       case _ =>
         throw new SparkException(s"OneHotEncoder input column ${$(inputCol)} is not nominal")
     }
