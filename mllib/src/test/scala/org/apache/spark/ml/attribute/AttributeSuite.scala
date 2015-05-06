@@ -67,7 +67,7 @@ class AttributeSuite extends FunSuite {
     val field = attr.toStructField()
     assert(field.dataType === DoubleType)
     assert(!field.nullable)
-    assert(attr.withoutIndex === Attribute.fromStructField(field))
+    assert(attr.withoutIndex === Attribute.fromStructField(field).get)
     val existingMetadata = new MetadataBuilder()
       .putString("name", "test")
       .build()
@@ -140,7 +140,7 @@ class AttributeSuite extends FunSuite {
     assert(attr.toMetadataImpl(withType = false) === metadataWithoutType)
     assert(attr === Attribute.fromMetadata(metadata))
     assert(attr === NominalAttribute.fromMetadata(metadataWithoutType))
-    assert(attr.withoutIndex === Attribute.fromStructField(attr.toStructField()))
+    assert(attr.withoutIndex === Attribute.fromStructField(attr.toStructField()).get)
 
     val attr2 = attr.withoutName.withoutIndex.withValues(attr.values.get :+ "x-large")
     assert(attr2.name.isEmpty)
@@ -201,7 +201,7 @@ class AttributeSuite extends FunSuite {
     assert(attr.toMetadataImpl(withType = false) === metadataWithoutType)
     assert(attr === Attribute.fromMetadata(metadata))
     assert(attr === BinaryAttribute.fromMetadata(metadataWithoutType))
-    assert(attr.withoutIndex === Attribute.fromStructField(attr.toStructField()))
+    assert(attr.withoutIndex === Attribute.fromStructField(attr.toStructField()).get)
   }
 
   test("bad binary attributes") {

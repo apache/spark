@@ -39,7 +39,7 @@ class StringIndexerSuite extends FunSuite with MLlibTestSparkContext {
       .setOutputCol("labelIndex")
       .fit(df)
     val transformed = indexer.transform(df)
-    val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
+    val attr = Attribute.fromStructField(transformed.schema("labelIndex")).get
       .asInstanceOf[NominalAttribute]
     assert(attr.values.get === Array("a", "c", "b"))
     val output = transformed.select("id", "labelIndex").map { r =>
@@ -58,7 +58,7 @@ class StringIndexerSuite extends FunSuite with MLlibTestSparkContext {
       .setOutputCol("labelIndex")
       .fit(df)
     val transformed = indexer.transform(df)
-    val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
+    val attr = Attribute.fromStructField(transformed.schema("labelIndex")).get
       .asInstanceOf[NominalAttribute]
     assert(attr.values.get === Array("100", "300", "200"))
     val output = transformed.select("id", "labelIndex").map { r =>
