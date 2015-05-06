@@ -165,6 +165,35 @@ class HasPredictionCol(Params):
         return self.getOrDefault(self.predictionCol)
 
 
+class HasRawPredictionCol(Params):
+    """
+    Mixin for param rawPredictionCol: raw prediction column name.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    rawPredictionCol = Param(Params._dummy(), "rawPredictionCol", "raw prediction column name")
+
+    def __init__(self):
+        super(HasRawPredictionCol, self).__init__()
+        #: param for raw prediction column name
+        self.rawPredictionCol = Param(self, "rawPredictionCol", "raw prediction column name")
+        if 'rawPrediction' is not None:
+            self._setDefault(rawPredictionCol='rawPrediction')
+
+    def setRawPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`rawPredictionCol`.
+        """
+        self.paramMap[self.rawPredictionCol] = value
+        return self
+
+    def getRawPredictionCol(self):
+        """
+        Gets the value of rawPredictionCol or its default value.
+        """
+        return self.getOrDefault(self.rawPredictionCol)
+
+
 class HasInputCol(Params):
     """
     Mixin for param inputCol: input column name.

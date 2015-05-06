@@ -72,6 +72,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
+   * Find the first [[TreeNode]] that satisfies the condition specified by `f`.
+   * The condition is recursively applied to this node and all of its children (pre-order).
+   */
+  def find(f: BaseType => Boolean): Option[BaseType] = f(this) match {
+    case true => Some(this)
+    case false => children.foldLeft(None: Option[BaseType]) { (l, r) => l.orElse(r.find(f)) }
+  }
+
+  /**
    * Runs the given function on this node and then recursively on [[children]].
    * @param f the function to be applied to each node in the tree.
    */
@@ -151,6 +160,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     val remainingNewChildren = newChildren.toBuffer
     val remainingOldChildren = children.toBuffer
     val newArgs = productIterator.map {
+      // This rule is used to handle children is a input argument.
+      case s: Seq[_] => s.map {
+        case arg: TreeNode[_] if children contains arg =>
+          val newChild = remainingNewChildren.remove(0)
+          val oldChild = remainingOldChildren.remove(0)
+          if (newChild fastEquals oldChild) {
+            oldChild
+          } else {
+            changed = true
+            newChild
+          }
+        case nonChild: AnyRef => nonChild
+        case null => null
+      }
       case arg: TreeNode[_] if children contains arg =>
         val newChild = remainingNewChildren.remove(0)
         val oldChild = remainingOldChildren.remove(0)

@@ -76,10 +76,7 @@ import org.apache.spark.{Partition, SparkContext}
  */
 private[spark] class DefaultDialect extends Dialect {
   @transient
-  protected val sqlParser = {
-    val catalystSqlParser = new catalyst.SqlParser
-    new SparkSQLParser(catalystSqlParser.parse)
-  }
+  protected val sqlParser = new catalyst.SqlParser
 
   override def parse(sqlText: String): LogicalPlan = {
     sqlParser.parse(sqlText)
@@ -174,7 +171,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
-  protected[sql] val ddlParser = new DDLParser((sql: String) => { getSQLDialect().parse(sql) })
+  protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
+
+  @transient
+  protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect().parse(_))
 
   protected[sql] def getSQLDialect(): Dialect = {
     try {
@@ -484,20 +484,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @DeveloperApi
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
     createDataFrame(rowRDD.rdd, schema)
-  }
-
-  /**
-   * Creates a [[DataFrame]] from an [[JavaRDD]] containing [[Row]]s by applying
-   * a seq of names of columns to this RDD, the data type for each column will
-   * be inferred by the first row.
-   *
-   * @param rowRDD an JavaRDD of Row
-   * @param columns names for each column
-   * @return DataFrame
-   * @group dataframes
-   */
-  def createDataFrame(rowRDD: JavaRDD[Row], columns: java.util.List[String]): DataFrame = {
-    createDataFrame(rowRDD.rdd, columns.toSeq)
   }
 
   /**

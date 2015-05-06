@@ -16,7 +16,9 @@
  */
 package org.apache.spark.streaming.rdd
 
+import java.io.File
 import java.nio.ByteBuffer
+import java.util.UUID
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -31,30 +33,42 @@ import org.apache.spark.streaming.util._
 /**
  * Partition class for [[org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD]].
  * It contains information about the id of the blocks having this partition's data and
- * the segment of the write ahead log that backs the partition.
+ * the corresponding record handle in the write ahead log that backs the partition.
  * @param index index of the partition
  * @param blockId id of the block having the partition data
+ * @param isBlockIdValid Whether the block Ids are valid (i.e., the blocks are present in the Spark
+ *                         executors). If not, then block lookups by the block ids will be skipped.
+ *                         By default, this is an empty array signifying true for all the blocks.
  * @param walRecordHandle Handle of the record in a write ahead log having the partition data
  */
 private[streaming]
 class WriteAheadLogBackedBlockRDDPartition(
     val index: Int,
     val blockId: BlockId,
-    val walRecordHandle: WriteAheadLogRecordHandle)
-  extends Partition
+    val isBlockIdValid: Boolean,
+    val walRecordHandle: WriteAheadLogRecordHandle
+  ) extends Partition
 
 
 /**
  * This class represents a special case of the BlockRDD where the data blocks in
  * the block manager are also backed by data in write ahead logs. For reading
  * the data, this RDD first looks up the blocks by their ids in the block manager.
- * If it does not find them, it looks up the corresponding data in the write ahead log.
+ * If it does not find them, it looks up the WAL using the corresponding record handle.
+ * The lookup of the blocks from the block manager can be skipped by setting the corresponding
+ * element in isBlockIdValid to false. This is a performance optimization which does not affect
+ * correctness, and it can be used in situations where it is known that the block
+ * does not exist in the Spark executors (e.g. after a failed driver is restarted).
+ *
  *
  * @param sc SparkContext
  * @param blockIds Ids of the blocks that contains this RDD's data
  * @param walRecordHandles Record handles in write ahead logs that contain this RDD's data
- * @param storeInBlockManager Whether to store in the block manager after reading
- *                            from the WAL record
+ * @param isBlockIdValid Whether the block Ids are valid (i.e., the blocks are present in the Spark
+ *                         executors). If not, then block lookups by the block ids will be skipped.
+ *                         By default, this is an empty array signifying true for all the blocks.
+ * @param storeInBlockManager Whether to store a block in the block manager
+ *                            after reading it from the WAL
  * @param storageLevel storage level to store when storing in block manager
  *                     (applicable when storeInBlockManager = true)
  */
@@ -63,23 +77,32 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
     @transient sc: SparkContext,
     @transient blockIds: Array[BlockId],
     @transient walRecordHandles: Array[WriteAheadLogRecordHandle],
-    storeInBlockManager: Boolean,
-    storageLevel: StorageLevel)
+    @transient isBlockIdValid: Array[Boolean] = Array.empty,
+    storeInBlockManager: Boolean = false,
+    storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER)
   extends BlockRDD[T](sc, blockIds) {
 
   require(
     blockIds.length == walRecordHandles.length,
-    s"Number of block ids (${blockIds.length}) must be " +
-      s"the same as number of WAL record handles (${walRecordHandles.length}})!")
+    s"Number of block Ids (${blockIds.length}) must be " +
+      s" same as number of WAL record handles (${walRecordHandles.length}})")
+
+  require(
+    isBlockIdValid.isEmpty || isBlockIdValid.length == blockIds.length,
+    s"Number of elements in isBlockIdValid (${isBlockIdValid.length}) must be " +
+      s" same as number of block Ids (${blockIds.length})")
 
   // Hadoop configuration is not serializable, so broadcast it as a serializable.
   @transient private val hadoopConfig = sc.hadoopConfiguration
   private val broadcastedHadoopConf = new SerializableWritable(hadoopConfig)
 
+  override def isValid(): Boolean = true
+
   override def getPartitions: Array[Partition] = {
     assertValid()
-    Array.tabulate(blockIds.size) { i =>
-      new WriteAheadLogBackedBlockRDDPartition(i, blockIds(i), walRecordHandles(i))
+    Array.tabulate(blockIds.length) { i =>
+      val isValid = if (isBlockIdValid.length == 0) true else isBlockIdValid(i)
+      new WriteAheadLogBackedBlockRDDPartition(i, blockIds(i), isValid, walRecordHandles(i))
     }
   }
 
@@ -94,47 +117,57 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
     val blockManager = SparkEnv.get.blockManager
     val partition = split.asInstanceOf[WriteAheadLogBackedBlockRDDPartition]
     val blockId = partition.blockId
-    blockManager.get(blockId) match {
-      case Some(block) => // Data is in Block Manager
-        val iterator = block.data.asInstanceOf[Iterator[T]]
-        logDebug(s"Read partition data of $this from block manager, block $blockId")
-        iterator
-      case None => // Data not found in Block Manager, grab it from write ahead log file
-        var dataRead: ByteBuffer = null
-        var writeAheadLog: WriteAheadLog = null
-        try {
-          // The WriteAheadLogUtils.createLog*** method needs a directory to create a
-          // WriteAheadLog object as the default FileBasedWriteAheadLog needs a directory for
-          // writing log data. However, the directory is not needed if data needs to be read, hence
-          // a dummy path is provided to satisfy the method parameter requirements.
-          // FileBasedWriteAheadLog will not create any file or directory at that path.
-          val dummyDirectory = FileUtils.getTempDirectoryPath()
-          writeAheadLog = WriteAheadLogUtils.createLogForReceiver(
-            SparkEnv.get.conf, dummyDirectory, hadoopConf)
-          dataRead = writeAheadLog.read(partition.walRecordHandle)
-        } catch {
-          case NonFatal(e) =>
-            throw new SparkException(
-              s"Could not read data from write ahead log record ${partition.walRecordHandle}", e)
-        } finally {
-          if (writeAheadLog != null) {
-            writeAheadLog.close()
-            writeAheadLog = null
-          }
-        }
-        if (dataRead == null) {
+
+    def getBlockFromBlockManager(): Option[Iterator[T]] = {
+      blockManager.get(blockId).map(_.data.asInstanceOf[Iterator[T]])
+    }
+
+    def getBlockFromWriteAheadLog(): Iterator[T] = {
+      var dataRead: ByteBuffer = null
+      var writeAheadLog: WriteAheadLog = null
+      try {
+        // The WriteAheadLogUtils.createLog*** method needs a directory to create a
+        // WriteAheadLog object as the default FileBasedWriteAheadLog needs a directory for
+        // writing log data. However, the directory is not needed if data needs to be read, hence
+        // a dummy path is provided to satisfy the method parameter requirements.
+        // FileBasedWriteAheadLog will not create any file or directory at that path.
+        // FileBasedWriteAheadLog will not create any file or directory at that path. Also,
+        // this dummy directory should not already exist otherwise the WAL will try to recover
+        // past events from the directory and throw errors.
+        val nonExistentDirectory = new File(
+          System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString).getAbsolutePath
+        writeAheadLog = WriteAheadLogUtils.createLogForReceiver(
+          SparkEnv.get.conf, nonExistentDirectory, hadoopConf)
+        dataRead = writeAheadLog.read(partition.walRecordHandle)
+      } catch {
+        case NonFatal(e) =>
           throw new SparkException(
-            s"Could not read data from write ahead log record ${partition.walRecordHandle}, " +
-              s"read returned null")
+            s"Could not read data from write ahead log record ${partition.walRecordHandle}", e)
+      } finally {
+        if (writeAheadLog != null) {
+          writeAheadLog.close()
+          writeAheadLog = null
         }
-        logInfo(s"Read partition data of $this from write ahead log, record handle " +
-          partition.walRecordHandle)
-        if (storeInBlockManager) {
-          blockManager.putBytes(blockId, dataRead, storageLevel)
-          logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
-          dataRead.rewind()
-        }
-        blockManager.dataDeserialize(blockId, dataRead).asInstanceOf[Iterator[T]]
+      }
+      if (dataRead == null) {
+        throw new SparkException(
+          s"Could not read data from write ahead log record ${partition.walRecordHandle}, " +
+            s"read returned null")
+      }
+      logInfo(s"Read partition data of $this from write ahead log, record handle " +
+        partition.walRecordHandle)
+      if (storeInBlockManager) {
+        blockManager.putBytes(blockId, dataRead, storageLevel)
+        logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
+        dataRead.rewind()
+      }
+      blockManager.dataDeserialize(blockId, dataRead).asInstanceOf[Iterator[T]]
+    }
+
+    if (partition.isBlockIdValid) {
+      getBlockFromBlockManager().getOrElse { getBlockFromWriteAheadLog() }
+    } else {
+      getBlockFromWriteAheadLog()
     }
   }
 
@@ -145,12 +178,23 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
    */
   override def getPreferredLocations(split: Partition): Seq[String] = {
     val partition = split.asInstanceOf[WriteAheadLogBackedBlockRDDPartition]
-    val blockLocations = getBlockIdLocations().get(partition.blockId)
+    val blockLocations = if (partition.isBlockIdValid) {
+      getBlockIdLocations().get(partition.blockId)
+    } else {
+      None
+    }
+
     blockLocations.getOrElse {
       partition.walRecordHandle match {
         case fileSegment: FileBasedWriteAheadLogSegment =>
-          HdfsUtils.getFileSegmentLocations(
-            fileSegment.path, fileSegment.offset, fileSegment.length, hadoopConfig)
+          try {
+            HdfsUtils.getFileSegmentLocations(
+              fileSegment.path, fileSegment.offset, fileSegment.length, hadoopConfig)
+          } catch {
+            case NonFatal(e) =>
+              logError("Error getting WAL file segment locations", e)
+              Seq.empty
+          }
         case _ =>
           Seq.empty
       }

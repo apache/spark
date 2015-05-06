@@ -641,7 +641,7 @@ test_that("toJSON() returns an RDD of the correct values", {
 
 test_that("showDF()", {
   df <- jsonFile(sqlCtx, jsonPath)
-  expect_output(showDF(df), "age  name   \nnull Michael\n30   Andy   \n19   Justin ")
+  expect_output(showDF(df), "+----+-------+\n| age|   name|\n+----+-------+\n|null|Michael|\n|  30|   Andy|\n|  19| Justin|\n+----+-------+\n")
 })
 
 test_that("isLocal()", {
@@ -703,6 +703,17 @@ test_that("parquetFile works with multiple input paths", {
   parquetDF <- parquetFile(sqlCtx, parquetPath, parquetPath2)
   expect_true(inherits(parquetDF, "DataFrame"))
   expect_true(count(parquetDF) == count(df)*2)
+})
+
+test_that("describe() on a DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  stats <- describe(df, "age")
+  expect_true(collect(stats)[1, "summary"] == "count")
+  expect_true(collect(stats)[2, "age"] == 24.5)
+  expect_true(collect(stats)[3, "age"] == 5.5)
+  stats <- describe(df)
+  expect_true(collect(stats)[4, "name"] == "Andy")
+  expect_true(collect(stats)[5, "age"] == 30.0)
 })
 
 unlink(parquetPath)
