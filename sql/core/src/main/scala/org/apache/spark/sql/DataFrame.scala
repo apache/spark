@@ -899,7 +899,8 @@ class DataFrame private[sql](
    */
   def dropDuplicates(subset: Seq[String]): DataFrame = {
     import org.apache.spark.sql.functions.{first => columnFirst}
-    new GroupedData(this, subset.map(colName => resolve(colName))).agg(columns.map(columnFirst))
+    val columnFirsts = columns.map(columnFirst)
+    groupBy(subset.head, subset.tail : _*).agg(columnFirsts.head, columnFirsts.tail : _*)
   }
 
   /**

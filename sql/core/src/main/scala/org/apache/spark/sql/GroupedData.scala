@@ -161,14 +161,6 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
     DataFrame(df.sqlContext, Aggregate(groupingExprs, aggExprs, df.logicalPlan))
   }
 
-  def agg(exprs: Seq[Column]): DataFrame = {
-    val aggExprs = exprs.map(_.expr).map {
-      case expr: NamedExpression => expr
-      case expr: Expression => Alias(expr, expr.prettyString)()
-    }
-    DataFrame(df.sqlContext, Aggregate(groupingExprs, aggExprs, df.logicalPlan))
-  }
-
   /**
    * Count the number of rows for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
