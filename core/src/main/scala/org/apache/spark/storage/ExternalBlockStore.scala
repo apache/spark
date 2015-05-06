@@ -46,7 +46,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
   }
 
   override def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult = {
-    putIntoExternalBlockStore(blockId, Right(bytes), returnValues = true)
+    putIntoExternalBlockStore(blockId, bytes, returnValues = true)
   }
 
   override def putArray(
@@ -54,7 +54,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
       values: Array[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
-    putIterator(blockId, values.toIterator, level, returnValues)
+    putIntoExternalBlockStore(blockId, values.toIterator, returnValues)
   }
 
   override def putIterator(
@@ -62,42 +62,64 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
       values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
-    putIntoExternalBlockStore(blockId, Left(values), returnValues)
+    putIntoExternalBlockStore(blockId, values, returnValues)
   }
 
   private def putIntoExternalBlockStore(
       blockId: BlockId,
-      data: Either[Iterator[_], ByteBuffer],
+      values: Iterator[_],
       returnValues: Boolean): PutResult = {
     logDebug(s"Attempting to put block $blockId into ExtBlk store")
     // we should never hit here if externalBlockManager is None. Handle it anyway for safety.
     try {
       val startTime = System.currentTimeMillis
       if (externalBlockManager.isDefined) {
-        var size: Long = 0
-        var returnData: Either[Iterator[_], ByteBuffer] = null
-        data match {
-          case Left(values) =>
-            externalBlockManager.get.putValues(blockId, values)
-            size = getSize(blockId)
-            if (returnValues) {
-              returnData = Left(getValues(blockId).get)
-            }
-          case Right(buffer) =>
-            // So that we do not modify the input offsets !
-            // duplicate does not copy buffer, so inexpensive
-            val byteBuffer = buffer.duplicate()
-            byteBuffer.rewind()
-            externalBlockManager.get.putBytes(blockId, byteBuffer)
-            size = buffer.limit()
-            if (returnValues) {
-              returnData = Right(buffer)
-            }
-          }
+        externalBlockManager.get.putValues(blockId, values)
+        val size = getSize(blockId)
+        val data = if (returnValues) {
+          Left(getValues(blockId).get)
+        } else {
+          null
+        }
         val finishTime = System.currentTimeMillis
         logDebug("Block %s stored as %s file in ExternalBlockStore in %d ms".format(
           blockId, Utils.bytesToString(size), finishTime - startTime))
-        PutResult(size, returnData)
+        PutResult(size, data)
+      } else {
+        logError(s"error in putBytes $blockId")
+        PutResult(-1, null, Seq((blockId, BlockStatus.empty)))
+      }
+    } catch {
+      case NonFatal(t) =>
+        logError(s"error in putBytes $blockId", t)
+        PutResult(-1, null, Seq((blockId, BlockStatus.empty)))
+    }
+  }
+
+  private def putIntoExternalBlockStore(
+      blockId: BlockId,
+      bytes: ByteBuffer,
+      returnValues: Boolean): PutResult = {
+    logDebug(s"Attempting to put block $blockId into ExtBlk store")
+    // we should never hit here if externalBlockManager is None. Handle it anyway for safety.
+    try {
+      val startTime = System.currentTimeMillis
+      if (externalBlockManager.isDefined) {
+        // So that we do not modify the input offsets !
+        // duplicate does not copy buffer, so inexpensive
+        val byteBuffer = bytes.duplicate()
+        byteBuffer.rewind()
+        externalBlockManager.get.putBytes(blockId, byteBuffer)
+        val size = bytes.limit()
+        val data = if (returnValues) {
+          Right(bytes)
+        } else {
+          null
+        }
+        val finishTime = System.currentTimeMillis
+        logDebug("Block %s stored as %s file in ExternalBlockStore in %d ms".format(
+          blockId, Utils.bytesToString(size), finishTime - startTime))
+        PutResult(size, data)
       } else {
         logError(s"error in putBytes $blockId")
         PutResult(-1, null, Seq((blockId, BlockStatus.empty)))

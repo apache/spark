@@ -32,6 +32,8 @@ import java.nio.ByteBuffer
  */
 private[spark] abstract class ExternalBlockManager {
 
+  var blockManager: BlockManager = _
+
   override def toString: String = {"External Block Store"}
 
   /**
@@ -41,7 +43,9 @@ private[spark] abstract class ExternalBlockManager {
    *
    * @throws java.io.IOException if there is any file system failure during the initialization.
    */
-  def init(blockManager: BlockManager, executorId: String): Unit
+  def init(blockManager: BlockManager, executorId: String): Unit = {
+    this.blockManager = blockManager
+  }
 
   /**
    * Drop the block from underlying external block store, if it exists..
@@ -73,7 +77,10 @@ private[spark] abstract class ExternalBlockManager {
    */
   def putBytes(blockId: BlockId, bytes: ByteBuffer): Unit
 
-  def putValues(blockId: BlockId, values: Iterator[_]): Unit
+  def putValues(blockId: BlockId, values: Iterator[_]): Unit = {
+    val bytes = blockManager.dataSerialize(blockId, values)
+    putBytes(blockId, bytes)
+  }
 
   /**
    * Retrieve the block bytes.
@@ -91,7 +98,9 @@ private[spark] abstract class ExternalBlockManager {
    *
    * @throws java.io.IOException if there is any file system failure in getting the block.
    */
-  def getValues(blockId: BlockId): Option[Iterator[_]]
+  def getValues(blockId: BlockId): Option[Iterator[_]] = {
+    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
+  }
 
   /**
    * Get the size of the block saved in the underlying external block store,

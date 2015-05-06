@@ -38,7 +38,6 @@ import org.apache.spark.util.Utils
  */
 private[spark] class TachyonBlockManager() extends ExternalBlockManager with Logging {
 
-  var blockManager: BlockManager =_
   var rootDirs: String = _
   var master: String = _
   var client: tachyon.client.TachyonFS = _
@@ -52,7 +51,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
 
 
   override def init(blockManager: BlockManager, executorId: String): Unit = {
-    this.blockManager = blockManager
+    super.init(blockManager, executorId)
     val storeDir = blockManager.conf.get(ExternalBlockStore.BASE_DIR, "/tmp_spark_tachyon")
     val appFolderName = blockManager.conf.get(ExternalBlockStore.FOLD_NAME)
 
