@@ -69,6 +69,7 @@ trait HiveTypeCoercion {
   val typeCoercionRules =
     PropagateTypes ::
     ConvertNaNs ::
+    InConversion ::
     WidenTypes ::
     PromoteStrings ::
     DecimalPrecision ::
@@ -284,6 +285,16 @@ trait HiveTypeCoercion {
         Average(Cast(e, DoubleType))
       case Sqrt(e) if e.dataType == StringType =>
         Sqrt(Cast(e, DoubleType))
+    }
+  }
+
+  /**
+   * Convert all expressions in in() list to the left operator type
+   */
+  object InConversion extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
+        i.makeCopy(Array(a, b.map(Cast(_, a.dataType))))
     }
   }
 
