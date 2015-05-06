@@ -165,5 +165,5 @@ private[spark] abstract class ProbabilisticClassificationModel[
    * This may be overridden to support thresholds which favor particular labels.
    * @return  predicted label
    */
-  protected def probability2prediction(probability: Vector): Double = probability.findMax
+  protected def probability2prediction(probability: Vector): Double = probability.toDense.argmax
 }

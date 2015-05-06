@@ -150,5 +150,5 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * This may be overridden to support thresholds which favor particular labels.
    * @return  predicted label
    */
-  protected def raw2prediction(rawPrediction: Vector): Double = rawPrediction.findMax
+  protected def raw2prediction(rawPrediction: Vector): Double = rawPrediction.toDense.argmax
 }
