@@ -52,7 +52,10 @@ object MimaExcludes {
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.broadcast.TorrentBroadcastFactory.newBroadcast"),
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.scheduler.OutputCommitCoordinator$OutputCommitCoordinatorActor")
+              "org.apache.spark.scheduler.OutputCommitCoordinator$OutputCommitCoordinatorActor"),
+            // SPARK-7385 - Add RDD.foreachPartitionWithIndex
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.foreachPartitionWithIndex")
           ) ++ Seq(
             // SPARK-4655 - Making Stage an Abstract class broke binary compatility even though
             // the stage class is defined as private[spark]
