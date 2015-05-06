@@ -1217,11 +1217,11 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     unaryMathFunctionEvaluation(Tanh, math.tanh)
   }
 
-  test("toDeg") {
+  test("toDegrees") {
     unaryMathFunctionEvaluation(ToDegrees, math.toDegrees)
   }
 
-  test("toRad") {
+  test("toRadians") {
     unaryMathFunctionEvaluation(ToRadians, math.toRadians)
   }
 

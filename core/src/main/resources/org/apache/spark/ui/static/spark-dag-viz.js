@@ -143,9 +143,7 @@ function renderDagViz(forJob) {
   resizeSvg(svg);
 }
 
-/*
- * Render the RDD DAG visualization on the stage page.
- */
+/* Render the RDD DAG visualization on the stage page. */
 function renderDagVizForStage(svgContainer) {
   var metadata = metadataContainer().select(".stage-metadata");
   var dot = metadata.select(".dot-file").text();

@@ -25,13 +25,14 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
   override lazy val resolved: Boolean = {
-    val containsAggregatesOrGenerators = projectList.exists ( _.collect {
+    val hasSpecialExpressions = projectList.exists ( _.collect {
         case agg: AggregateExpression => agg
         case generator: Generator => generator
+        case window: WindowExpression => window
       }.nonEmpty
     )
 
-    !expressions.exists(!_.resolved) && childrenResolved && !containsAggregatesOrGenerators
+    !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 }
 
@@ -170,6 +171,12 @@ case class With(child: LogicalPlan, cteRelations: Map[String, Subquery]) extends
   override def output: Seq[Attribute] = child.output
 }
 
+case class WithWindowDefinition(
+    windowDefinitions: Map[String, WindowSpecDefinition],
+    child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
+
 case class WriteToFile(
     path: String,
     child: LogicalPlan) extends UnaryNode {
@@ -195,7 +202,26 @@ case class Aggregate(
     child: LogicalPlan)
   extends UnaryNode {
 
+  override lazy val resolved: Boolean = {
+    val hasWindowExpressions = aggregateExpressions.exists ( _.collect {
+        case window: WindowExpression => window
+      }.nonEmpty
+    )
+
+    !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
+  }
+
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
+}
+
+case class Window(
+    projectList: Seq[Attribute],
+    windowExpressions: Seq[NamedExpression],
+    windowSpec: WindowSpecDefinition,
+    child: LogicalPlan) extends UnaryNode {
+
+  override def output: Seq[Attribute] =
+    (projectList ++ windowExpressions).map(_.toAttribute)
 }
 
 /**

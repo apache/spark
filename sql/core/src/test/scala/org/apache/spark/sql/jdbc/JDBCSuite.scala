@@ -271,8 +271,11 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(rows(0).getDouble(0) === 1.00000000000000022) // Yes, I meant ==.
     assert(rows(0).getDouble(1) === 1.00000011920928955) // Yes, I meant ==.
     assert(rows(0).getAs[BigDecimal](2)
-        .equals(new BigDecimal("123456789012345.54321543215432100000")))
+      .equals(new BigDecimal("123456789012345.54321543215432100000")))
     assert(rows(0).schema.fields(2).dataType === DecimalType(40, 20))
+    val compareDecimal = sql("SELECT C FROM flttypes where C > C - 1").collect()
+    assert(compareDecimal(0).getAs[BigDecimal](0)
+      .equals(new BigDecimal("123456789012345.54321543215432100000")))
   }
 
   test("SQL query as table name") {
