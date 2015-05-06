@@ -110,10 +110,6 @@ class VectorTests(MLlibTestCase):
         self.assertTrue(array_equal(array([10., 20., 30., 40.]), dv.dot(mat)))
         self.assertEquals(30.0, lst.dot(dv))
         self.assertTrue(array_equal(array([10., 20., 30., 40.]), lst.dot(mat)))
-        self.assertEquals(Vectors.dot(sv, sv), 5.)
-        self.assertEquals(Vectors.dot(sv, dv), 10.)
-        self.assertEquals(Vectors.dot(dv, sv), 10.)
-        self.assertEquals(Vectors.dot(sv, array([2, 5, 7, 8])), 21.0)
 
     def test_squared_distance(self):
         sv = SparseVector(4, {1: 1, 3: 2})
@@ -224,13 +220,13 @@ class VectorTests(MLlibTestCase):
         self.assertTrue(array_equal(sm.colPtrs, [0, 2, 5]))
         self.assertTrue(array_equal(sm.values, [1, 3, 4, 6, 9]))
 
-    def test_parse_matrix(self):
+    def test_parse_vector(self):
         a = DenseVector([3, 4, 6, 7])
-        self.assertTrue(a.toString(), '[3.0,4.0,6.0,7.0]')
-        self.assertTrue(Vectors.parse(a.toString()), a)
+        self.assertTrue(str(a), '[3.0,4.0,6.0,7.0]')
+        self.assertTrue(Vectors.parse(str(a)), a)
         a = SparseVector(4, [0, 2], [3, 4])
-        self.assertTrue(a.toString(), '(4,[0,2],[3.0,4.0])')
-        self.assertTrue(Vectors.parse(a.toString()), a)
+        self.assertTrue(str(a), '(4,[0,2],[3.0,4.0])')
+        self.assertTrue(Vectors.parse(str(a)), a)
 
     def test_norms(self):
         a = DenseVector([0, 2, 3, -1])

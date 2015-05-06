@@ -25,7 +25,6 @@ SciPy is available in their environment.
 
 import sys
 import array
-from math import sqrt
 
 if sys.version >= '3':
     basestring = str
@@ -209,35 +208,24 @@ class DenseVector(Vector):
             ar = ar.astype(np.float64)
         self.array = ar
 
-    def toString(self):
-        """
-        Convert DenseVector to string representation.
-
-        >>> a = DenseVector([0, 1, 2, 3])
-        >>> a.toString()
-        '[0.0,1.0,2.0,3.0]'
-        """
-        return str(self)
-
-    def copy(self):
-        return DenseVector(np.copy(self.array))
-
     @staticmethod
     def parse(vectorString):
         """
         Parse string representation back into the DenseVector.
 
-        >>> DenseVector.parse('[0.0,1.0,2.0,3.0]')
+        >>> DenseVector.parse(' [ 0.0,1.0,2.0,  3.0]')
         DenseVector([0.0, 1.0, 2.0, 3.0])
         """
-        vectorString = vectorString[1:-1]
+        start = vectorString.find('[')
+        end = vectorString.find(']')
+        vectorString = vectorString[start + 1: end]
         return DenseVector([float(val) for val in vectorString.split(',')])
 
     def __reduce__(self):
         return DenseVector, (self.array.tostring(),)
 
     def numNonzeros(self):
-        return np.nonzero(self.array)[0].size
+        return np.count_nonzero(self.array)
 
     def norm(self, p):
         """
@@ -249,14 +237,7 @@ class DenseVector(Vector):
         >>> a.norm(1)
         6.0
         """
-        if p == 1:
-            return np.sum(np.abs(self.array))
-        elif p == 2:
-            return sqrt(np.dot(self.array, self.array))
-        elif p == np.inf:
-            return np.max(np.abs(self.array))
-        else:
-            return pow(np.power(self.array, p), 1.0 / p)
+        return np.linalg.norm(self.array, p)
 
     def dot(self, other):
         """
@@ -434,11 +415,8 @@ class SparseVector(Vector):
                 if self.indices[i] >= self.indices[i + 1]:
                     raise TypeError("indices array must be sorted")
 
-    def copy(self):
-        return SparseVector(self.size, np.copy(self.indices), np.copy(self.values))
-
     def numNonzeros(self):
-        return np.nonzero(self.values)[0].size
+        return np.count_nonzero(self.values)
 
     def norm(self, p):
         """
@@ -450,42 +428,36 @@ class SparseVector(Vector):
         >>> a.norm(2)
         5.0
         """
-        if p == 1:
-            return np.sum(np.abs(self.values))
-        elif p == 2:
-            return sqrt(np.dot(self.values, self.values))
-        elif p == np.inf:
-            return np.max(np.abs(self.values))
-        else:
-            return pow(np.power(self.values, p), 1.0 / p)
+        return np.linalg.norm(self.values, p)
 
     def __reduce__(self):
-        return (SparseVector, (self.size, self.indices.tostring(), self.values.tostring()))
-
-    def toString(self):
-        """
-        Convert SparseVector to string representation.
-
-        >>> a = SparseVector(4, [0, 1], [4, 5])
-        >>> a.toString()
-        '(4,[0,1],[4.0,5.0])'
-        """
-        return str(self)
+        return (
+            SparseVector,
+            (self.size, self.indices.tostring(), self.values.tostring()))
 
     @staticmethod
     def parse(vectorString):
         """
         Parse string representation back into the DenseVector.
 
-        >>> SparseVector.parse('(4,[0,1],[4.0,5.0])')
+        >>> SparseVector.parse(' (4, [0,1 ],[ 4.0,5.0] )')
         SparseVector(4, {0: 4.0, 1: 5.0})
         """
-        size = int(vectorString[1])
+        start = vectorString.find('(')
+        end = vectorString.find(')')
+        vectorString = vectorString[start+1: end].strip()
+        size = int(vectorString[0])
+
+        ind_start = vectorString.find('[')
         ind_end = vectorString.find(']')
-        index_string = vectorString[4: ind_end]
-        indices = [int(ind) for ind in index_string.split(',')]
-        value_string = vectorString[ind_end + 3: -2]
-        values = [float(val) for val in value_string.split(',')]
+        ind_list = vectorString[ind_start + 1: ind_end].split(',')
+        indices = [int(ind) for ind in ind_list]
+        vectorString = vectorString[ind_end + 1:].strip()
+
+        val_start = vectorString.find('[')
+        val_end = vectorString.find(']')
+        val_list = vectorString[val_start + 1: val_end].split(',')
+        values = [float(val) for val in val_list]
         return SparseVector(size, indices, values)
 
     def dot(self, other):
@@ -528,14 +500,11 @@ class SparseVector(Vector):
 
         assert len(self) == _vector_size(other), "dimension mismatch"
 
-        if type(other) in (np.ndarray, array.array):
+        if type(other) in (np.ndarray, array.array, DenseVector):
             result = 0.0
-            for i, ind in enumerate(self.indices):
-                result += self.values[i] * other[ind]
+            for i in xrange(len(self.indices)):
+                result += self.values[i] * other[self.indices[i]]
             return result
-
-        elif isinstance(other, DenseVector):
-            return np.dot(other.toArray()[self.indices], self.values)
 
         elif type(other) is SparseVector:
             result = 0.0
@@ -580,28 +549,19 @@ class SparseVector(Vector):
         AssertionError: dimension mismatch
         """
         assert len(self) == _vector_size(other), "dimension mismatch"
-        if type(other) in (list, array.array, np.array, np.ndarray):
+        if type(other) in (list, array.array, DenseVector, np.array, np.ndarray):
             if type(other) is np.array and other.ndim != 1:
                 raise Exception("Cannot call squared_distance with %d-dimensional array" %
                                 other.ndim)
             result = 0.0
             j = 0   # index into our own array
-            for i, other_ind in enumerate(other):
+            for i in xrange(len(other)):
                 if j < len(self.indices) and self.indices[j] == i:
-                    diff = self.values[j] - other_ind
+                    diff = self.values[j] - other[i]
                     result += diff * diff
                     j += 1
                 else:
-                    result += other_ind * other_ind
-            return result
-
-        elif isinstance(other, DenseVector):
-            bool_ind = np.zeros(len(other), dtype=bool)
-            bool_ind[self.indices] = True
-            dist = other.toArray()[bool_ind] - self.values
-            result = np.dot(dist, dist)
-            other_values = other.toArray()[~bool_ind]
-            result += np.dot(other_values, other_values)
+                    result += other[i] * other[i]
             return result
 
         elif type(other) is SparseVector:
@@ -744,29 +704,10 @@ class Vectors(object):
         return str(vector)
 
     @staticmethod
-    def dot(a, b):
-        """
-        Dot product between two vectors.
-        a and b can be of type, SparseVector, DenseVector, np.ndarray
-        or array.array.
-
-        >>> a = Vectors.sparse(4, [(0, 1), (3, 4)])
-        >>> b = Vectors.dense([23, 41, 9, 1])
-        >>> Vectors.dot(a, b)
-        27.0
-        >>> Vectors.dot(a, a)
-        17.0
-        >>> Vectors.dot(a, np.array([0, 1, 2, 4]))
-        16.0
-        """
-        a, b = _convert_to_vector(a), _convert_to_vector(b)
-        return a.dot(b)
-
-    @staticmethod
     def squared_distance(a, b):
         """
         Squared distance between two vectors.
-        a and b can be of type, SparseVector, DenseVector, np.ndarray
+        a and b can be of type SparseVector, DenseVector, np.ndarray
         or array.array.
 
         >>> a = Vectors.sparse(4, [(0, 1), (3, 4)])
@@ -786,7 +727,7 @@ class Vectors(object):
 
     @staticmethod
     def parse(vectorString):
-        if vectorString[0] == '[':
+        if vectorString.find('(') == -1:
             return DenseVector.parse(vectorString)
         return SparseVector.parse(vectorString)
 
