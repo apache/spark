@@ -123,6 +123,7 @@ class AttributeGroup private (
           nominalMetadata += nominal.toMetadataImpl(withType = false)
         case binary: BinaryAttribute =>
           binaryMetadata += binary.toMetadataImpl(withType = false)
+        case UnresolvedAttribute =>
       }
       val attrBldr = new MetadataBuilder
       if (numericMetadata.nonEmpty) {

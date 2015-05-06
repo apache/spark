@@ -24,6 +24,7 @@ import org.apache.spark.ml.param.{IntParam, ParamValidators, Params}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.callUDF
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -375,6 +376,8 @@ class VectorIndexerModel private[ml] (
           }
         case (origAttr: Attribute, featAttr: NumericAttribute) =>
           origAttr.withIndex(featAttr.index.get)
+        case (origAttr: Attribute, _: UnresolvedAttribute) =>
+          origAttr
       }
     } else {
       partialFeatureAttributes
