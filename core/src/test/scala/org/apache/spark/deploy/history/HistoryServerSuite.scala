@@ -134,7 +134,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
       errOpt should be (None)
       val json = jsonOpt.get
       val exp = IOUtils.toString(new FileInputStream(
-        new File(expRoot, HistoryServerSuite.sanitizePath(path) + "/expectation.json")))
+        new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")))
       // compare the ASTs so formatting differences don't cause failures
       import org.json4s._
       import org.json4s.jackson.JsonMethods._
@@ -202,11 +202,10 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     HistoryServerSuite.getUrl(new URL(s"http://localhost:$port/json/v1/$path"))
   }
 
-  def generateExpectation(path: String): Unit = {
+  def generateExpectation(name: String, path: String): Unit = {
     val json = getUrl(path)
-    val dir = new File(expRoot, HistoryServerSuite.sanitizePath(path))
-    dir.mkdirs()
-    val out = new FileWriter(new File(dir, "expectation.json"))
+    val file = new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")
+    val out = new FileWriter(file)
     out.write(json)
     out.close()
   }
@@ -222,8 +221,8 @@ object HistoryServerSuite {
     suite.expRoot.mkdirs()
     try {
       suite.init()
-      suite.cases.foreach { case (_, path) =>
-        suite.generateExpectation(path)
+      suite.cases.foreach { case (name, path) =>
+        suite.generateExpectation(name, path)
       }
     } finally {
       suite.stop()
@@ -237,17 +236,13 @@ object HistoryServerSuite {
     val code = connection.getResponseCode()
     val inString = try {
       val in = Option(connection.getInputStream())
-      in.map {
-        IOUtils.toString
-      }
+      in.map(IOUtils.toString)
     } catch {
       case io: IOException => None
     }
     val errString = try {
       val err = Option(connection.getErrorStream())
-      err.map {
-        IOUtils.toString
-      }
+      err.map(IOUtils.toString)
     } catch {
       case io: IOException => None
     }
@@ -257,7 +252,7 @@ object HistoryServerSuite {
 
   def sanitizePath(path: String): String = {
     // this doesn't need to be perfect, just good enough to avoid collisions
-    path.replaceAll("""\?""", "__q__").replaceAll("=","__e__")
+    path.replaceAll("\\W", "_")
   }
 
   def getUrl(path: URL): String = {
