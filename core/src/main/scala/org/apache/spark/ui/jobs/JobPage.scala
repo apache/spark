@@ -187,7 +187,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       val jobDataOption = listener.jobIdToData.get(jobId)
       if (jobDataOption.isEmpty) {
         val content =
-          <div id="no-info">
+          <div>
             <p>No information to display for job {jobId}</p>
           </div>
         return UIUtils.headerSparkPage(

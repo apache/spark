@@ -384,6 +384,10 @@ setGeneric("value", function(bcast) { standardGeneric("value") })
 #' @export
 setGeneric("columns", function(x) {standardGeneric("columns") })
 
+#' @rdname describe
+#' @export
+setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
+
 #' @rdname schema
 #' @export
 setGeneric("dtypes", function(x) { standardGeneric("dtypes") })

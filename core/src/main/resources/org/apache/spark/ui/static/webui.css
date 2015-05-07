@@ -196,19 +196,3 @@ span.additional-metric-title {
 .serialization_time, .getting_result_time {
   display: none;
 }
-
-.dag_tooltip {
-  font-size: 11px;
-  padding: 5px;
-  color: #fff;
-  background-color: #444;
-  -moz-box-shadow: inset 0 0 5px #000;
-  -webkit-box-shadow: inset 0 0 5px #000;
-  box-shadow: inset 0 0 10px #000;
-  -moz-border-radius: 5px;
-  -webkit-border-radius: 5px;
-  opacity: 0.8;
-  left: 5px;
-  top: 45px;
-  position: relative;
-}

@@ -363,7 +363,13 @@ private[sql] class JDBCRDD(
             case BooleanConversion    => mutableRow.setBoolean(i, rs.getBoolean(pos))
             case DateConversion       =>
               mutableRow.update(i, DateUtils.fromJavaDate(rs.getDate(pos)))
-            case DecimalConversion    => mutableRow.update(i, rs.getBigDecimal(pos))
+            case DecimalConversion    =>
+              val decimalVal = rs.getBigDecimal(pos)
+              if (decimalVal == null) {
+                mutableRow.update(i, null)
+              } else {
+                mutableRow.update(i, Decimal(decimalVal))
+              }
             case DoubleConversion     => mutableRow.setDouble(i, rs.getDouble(pos))
             case FloatConversion      => mutableRow.setFloat(i, rs.getFloat(pos))
             case IntegerConversion    => mutableRow.setInt(i, rs.getInt(pos))

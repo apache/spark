@@ -94,7 +94,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     batchUIData.get.schedulingDelay should be (batchInfoStarted.schedulingDelay)
     batchUIData.get.processingDelay should be (batchInfoStarted.processingDelay)
     batchUIData.get.totalDelay should be (batchInfoStarted.totalDelay)
-    batchUIData.get.receiverNumRecords should be (Map(0 -> 300L, 1 -> 300L))
+    batchUIData.get.streamIdToNumRecords should be (Map(0 -> 300L, 1 -> 300L))
     batchUIData.get.numRecords should be(600)
     batchUIData.get.outputOpIdSparkJobIdPairs should be
       Seq(OutputOpIdAndSparkJobId(0, 0),
@@ -138,7 +138,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
 
   test("Remove the old completed batches when exceeding the limit") {
     val ssc = setupStreams(input, operation)
-    val limit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 100)
+    val limit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 1000)
     val listener = new StreamingJobProgressListener(ssc)
 
     val streamIdToNumRecords = Map(0 -> 300L, 1 -> 300L)
@@ -155,7 +155,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
 
   test("out-of-order onJobStart and onBatchXXX") {
     val ssc = setupStreams(input, operation)
-    val limit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 100)
+    val limit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 1000)
     val listener = new StreamingJobProgressListener(ssc)
 
     // fulfill completedBatchInfos
@@ -182,7 +182,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     batchUIData.get.schedulingDelay should be (batchInfoSubmitted.schedulingDelay)
     batchUIData.get.processingDelay should be (batchInfoSubmitted.processingDelay)
     batchUIData.get.totalDelay should be (batchInfoSubmitted.totalDelay)
-    batchUIData.get.receiverNumRecords should be (Map.empty)
+    batchUIData.get.streamIdToNumRecords should be (Map.empty)
     batchUIData.get.numRecords should be (0)
     batchUIData.get.outputOpIdSparkJobIdPairs should be (Seq(OutputOpIdAndSparkJobId(0, 0)))
 
@@ -203,4 +203,48 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
       (listener.waitingBatches.size + listener.runningBatches.size +
         listener.retainedCompletedBatches.size + 10)
   }
+
+  test("detect memory leak") {
+    val ssc = setupStreams(input, operation)
+    val listener = new StreamingJobProgressListener(ssc)
+
+    val limit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 1000)
+
+    for (_ <- 0 until 2 * limit) {
+      val streamIdToNumRecords = Map(0 -> 300L, 1 -> 300L)
+
+      // onBatchSubmitted
+      val batchInfoSubmitted = BatchInfo(Time(1000), streamIdToNumRecords, 1000, None, None)
+      listener.onBatchSubmitted(StreamingListenerBatchSubmitted(batchInfoSubmitted))
+
+      // onBatchStarted
+      val batchInfoStarted = BatchInfo(Time(1000), streamIdToNumRecords, 1000, Some(2000), None)
+      listener.onBatchStarted(StreamingListenerBatchStarted(batchInfoStarted))
+
+      // onJobStart
+      val jobStart1 = createJobStart(Time(1000), outputOpId = 0, jobId = 0)
+      listener.onJobStart(jobStart1)
+
+      val jobStart2 = createJobStart(Time(1000), outputOpId = 0, jobId = 1)
+      listener.onJobStart(jobStart2)
+
+      val jobStart3 = createJobStart(Time(1000), outputOpId = 1, jobId = 0)
+      listener.onJobStart(jobStart3)
+
+      val jobStart4 = createJobStart(Time(1000), outputOpId = 1, jobId = 1)
+      listener.onJobStart(jobStart4)
+
+      // onBatchCompleted
+      val batchInfoCompleted = BatchInfo(Time(1000), streamIdToNumRecords, 1000, Some(2000), None)
+      listener.onBatchCompleted(StreamingListenerBatchCompleted(batchInfoCompleted))
+    }
+
+    listener.waitingBatches.size should be (0)
+    listener.runningBatches.size should be (0)
+    listener.retainedCompletedBatches.size should be (limit)
+    listener.batchTimeToOutputOpIdSparkJobIdPair.size() should be <=
+      (listener.waitingBatches.size + listener.runningBatches.size +
+        listener.retainedCompletedBatches.size + 10)
+  }
+
 }
