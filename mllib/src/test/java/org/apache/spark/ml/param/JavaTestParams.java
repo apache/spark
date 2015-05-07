@@ -21,10 +21,29 @@ import java.util.List;
 
 import com.google.common.collect.Lists;
 
+import org.apache.spark.ml.util.Identifiable$;
+
 /**
  * A subclass of Params for testing.
  */
 public class JavaTestParams extends JavaParams {
+
+  public JavaTestParams() {
+    this._uid = Identifiable$.MODULE$.randomUID("javaTestParams");
+    _init();
+  }
+
+  public JavaTestParams(String uid) {
+    this._uid = uid;
+    _init();
+  }
+
+  private String _uid;
+
+  @Override
+  public String uid() {
+    return _uid;
+  }
 
   public IntParam myIntParam;
 
@@ -50,7 +69,7 @@ public class JavaTestParams extends JavaParams {
     set(myStringParam, value); return this;
   }
 
-  public JavaTestParams() {
+  private void _init() {
     myIntParam = new IntParam(this, "myIntParam", "this is an int param", ParamValidators.gt(0));
     myDoubleParam = new DoubleParam(this, "myDoubleParam", "this is a double param",
       ParamValidators.inRange(0.0, 1.0));

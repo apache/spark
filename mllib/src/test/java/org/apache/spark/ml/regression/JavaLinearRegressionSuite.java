@@ -77,14 +77,14 @@ public class JavaLinearRegressionSuite implements Serializable {
         .setMaxIter(10)
         .setRegParam(1.0);
     LinearRegressionModel model = lr.fit(dataset);
-    LinearRegression parent = model.parent();
+    LinearRegression parent = (LinearRegression) model.parent();
     assertEquals(10, parent.getMaxIter());
     assertEquals(1.0, parent.getRegParam(), 0.0);
 
     // Call fit() with new params, and check as many params as we can.
     LinearRegressionModel model2 =
         lr.fit(dataset, lr.maxIter().w(5), lr.regParam().w(0.1), lr.predictionCol().w("thePred"));
-    LinearRegression parent2 = model2.parent();
+    LinearRegression parent2 = (LinearRegression) model2.parent();
     assertEquals(5, parent2.getMaxIter());
     assertEquals(0.1, parent2.getRegParam(), 0.0);
     assertEquals("thePred", model2.getPredictionCol());

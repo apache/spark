@@ -74,7 +74,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
       .setThreshold(0.6)
       .setProbabilityCol("myProbability")
     val model = lr.fit(dataset)
-    val parent = model.parent
+    val parent = model.parent.asInstanceOf[LogisticRegression]
     assert(parent.getMaxIter === 10)
     assert(parent.getRegParam === 1.0)
     assert(parent.getThreshold === 0.6)
@@ -100,7 +100,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     // Call fit() with new params, and check as many params as we can.
     val model2 = lr.fit(dataset, lr.maxIter -> 5, lr.regParam -> 0.1, lr.threshold -> 0.4,
       lr.probabilityCol -> "theProb")
-    val parent2 = model2.parent
+    val parent2 = model2.parent.asInstanceOf[LogisticRegression]
     assert(parent2.getMaxIter === 5)
     assert(parent2.getRegParam === 0.1)
     assert(parent2.getThreshold === 0.4)

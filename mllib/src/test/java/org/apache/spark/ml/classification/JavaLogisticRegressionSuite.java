@@ -84,7 +84,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
       .setThreshold(0.6)
       .setProbabilityCol("myProbability");
     LogisticRegressionModel model = lr.fit(dataset);
-    LogisticRegression parent = model.parent();
+    LogisticRegression parent = (LogisticRegression) model.parent();
     assert(parent.getMaxIter() == 10);
     assert(parent.getRegParam() == 1.0);
     assert(parent.getThreshold() == 0.6);
@@ -110,7 +110,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
     // Call fit() with new params, and check as many params as we can.
     LogisticRegressionModel model2 = lr.fit(dataset, lr.maxIter().w(5), lr.regParam().w(0.1),
         lr.threshold().w(0.4), lr.probabilityCol().w("theProb"));
-    LogisticRegression parent2 = model2.parent();
+    LogisticRegression parent2 = (LogisticRegression) model2.parent();
     assert(parent2.getMaxIter() == 5);
     assert(parent2.getRegParam() == 0.1);
     assert(parent2.getThreshold() == 0.4);

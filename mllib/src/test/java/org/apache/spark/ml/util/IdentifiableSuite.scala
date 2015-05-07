@@ -21,30 +21,20 @@ import org.scalatest.FunSuite
 
 class IdentifiableSuite extends FunSuite {
 
-  import IdentifiableSuite._
+  import IdentifiableSuite.Test
 
   test("Identifiable") {
-    val test0 = new Test0
-    assert(test0.uid.startsWith(classOf[Test0].getSimpleName + "_"))
+    val test0 = new Test("test_0")
+    assert(test0.uid === "test_0")
 
-    val test1 = new Test1
-    assert(test1.uid.startsWith("test_"),
-      "simpleClassName should be the first part of the generated UID.")
-    val copied = test1.copy
-    assert(copied.uid === test1.uid, "Copied objects should be able to use the same UID.")
+    val test1 = new Test
+    assert(test1.uid.startsWith("test_"))
   }
 }
 
 object IdentifiableSuite {
 
-  class Test0 extends Identifiable
-
-  class Test1 extends Identifiable {
-
-    override def simpleClassName: String = "test"
-
-    def copy: Test1 = {
-      new Test1().setUID(uid)
-    }
+  class Test(override val uid: String) extends Identifiable {
+    def this() = this(Identifiable.randomUID("test"))
   }
 }

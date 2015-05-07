@@ -160,7 +160,7 @@ private object RandomForestClassifierSuite {
     val newModel = rf.fit(newData)
     // Use parent, fittingParamMap from newTree since these are not checked anyways.
     val oldModelAsNew = RandomForestClassificationModel.fromOld(
-      oldModel, newModel.parent, categoricalFeatures)
+      oldModel, newModel.parent.asInstanceOf[RandomForestClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
   }
 }
