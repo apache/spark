@@ -31,7 +31,7 @@ import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
-class OneVsRestClassifierSuite extends FunSuite with MLlibTestSparkContext {
+class OneVsAllSuite extends FunSuite with MLlibTestSparkContext {
 
   @transient var sqlContext: SQLContext = _
   @transient var dataset: DataFrame = _
@@ -59,8 +59,7 @@ class OneVsRestClassifierSuite extends FunSuite with MLlibTestSparkContext {
 
   test("one-vs-rest: default params") {
     val numClasses = 3
-    val ova = new OneVsRest().
-      setClassifier(new LogisticRegression)
+    val ova = new OneVsAll(new LogisticRegression)
 
     assert(ova.getLabelCol == "label")
     assert(ova.getPredictionCol == "prediction")
@@ -84,9 +83,7 @@ class OneVsRestClassifierSuite extends FunSuite with MLlibTestSparkContext {
 
   test("one-vs-rest: test read label metadata") {
     val numClasses = 8
-    val ova = new OneVsRest().
-      setClassifier(new LogisticRegression)
-
+    val ova = new OneVsAll(new LogisticRegression)
     val labelMetadata = NominalAttribute.defaultAttr.withName("label").withNumValues(8)
     val labelWithMetadata = dataset("label").as("label", labelMetadata.toMetadata())
     val features = dataset("features").as("features")
@@ -98,8 +95,7 @@ class OneVsRestClassifierSuite extends FunSuite with MLlibTestSparkContext {
 
   test("one-vs-rest: pass label metadata correctly during train") {
     val numClasses = 3
-    val ova = new OneVsRest().
-      setClassifier(new MockLogisticRegression)
+    val ova = new OneVsAll(new MockLogisticRegression)
 
     val labelMetadata = NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses)
     val labelWithMetadata = dataset("label").as("label", labelMetadata.toMetadata())

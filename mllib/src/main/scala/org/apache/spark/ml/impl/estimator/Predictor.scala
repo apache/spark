@@ -127,7 +127,7 @@ private[spark] abstract class Predictor[
    * The default value is VectorUDT, but it may be overridden if FeaturesType is not Vector.
    */
   @DeveloperApi
-  protected def featuresDataType: DataType = new VectorUDT
+  private[ml] def featuresDataType: DataType = new VectorUDT
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, featuresDataType)
