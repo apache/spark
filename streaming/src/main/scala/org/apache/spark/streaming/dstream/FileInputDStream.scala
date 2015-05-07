@@ -89,6 +89,12 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
   private val minRememberDurationS =
     Seconds(ssc.conf.getTimeAsSeconds("spark.streaming.minRememberDuration", "60s"))
 
+  /**
+   * Maximum number of files to be processed in a micro-batch, default is 0, meaning
+   * as many as there is already in the batch.
+   */
+  private val microBatchSize = ssc.conf.getInt("spark.streaming.microbatch.size", 0)
+
   // This is a def so that it works during checkpoint recovery:
   private def clock = ssc.scheduler.clock
 
@@ -183,7 +189,11 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
       val filter = new PathFilter {
         def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
       }
-      val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
+      val newFiles = if ( microBatchSize > 0) {
+        fs.listStatus(directoryPath, filter).map(_.getPath.toString).take(microBatchSize)
+      } else {
+        fs.listStatus(directoryPath, filter).map(_.getPath.toString)
+      }
       val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
       logDebug("# cached file times = " + fileToModTime.size)
