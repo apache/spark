@@ -107,12 +107,12 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         // The relation in l is not an InsertableRelation.
         failAnalysis(s"$l does not allow insertion.")
 
-      case CreateTableUsingAsSelect(tableName, _, _, SaveMode.Overwrite, _, query) =>
+      case CreateTableUsingAsSelect(tableIdentifier, _, _, SaveMode.Overwrite, _, query) =>
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
-        if (catalog.tableExists(Seq(tableName))) {
+        if (catalog.tableExists(tableIdentifier)) {
           // Need to remove SubQuery operator.
-          EliminateSubQueries(catalog.lookupRelation(Seq(tableName))) match {
+          EliminateSubQueries(catalog.lookupRelation(tableIdentifier)) match {
             // Only do the check if the table is a data source table
             // (the relation is a BaseRelation).
             case l @ LogicalRelation(dest: BaseRelation) =>
@@ -122,7 +122,8 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
               }
               if (srcRelations.contains(dest)) {
                 failAnalysis(
-                  s"Cannot overwrite table $tableName that is also being read from.")
+                  s"Cannot overwrite table ${tableIdentifier.mkString(".")}" +
+                    s" that is also being read from.")
               } else {
                 // OK
               }

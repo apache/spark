@@ -83,10 +83,9 @@ private[sql] class DDLParser(
    * AS SELECT ...
    */
   protected lazy val createTable: Parser[LogicalPlan] =
-    // TODO: Support database.table.
-    (CREATE ~> TEMPORARY.? <~ TABLE) ~ (IF ~> NOT <~ EXISTS).? ~ ident ~
-      tableCols.? ~ (USING ~> className) ~ (OPTIONS ~> options).? ~ (AS ~> restInput).? ^^ {
-      case temp ~ allowExisting ~ tableName ~ columns ~ provider ~ opts ~ query =>
+    (CREATE ~> TEMPORARY.? <~ TABLE) ~ (IF ~> NOT <~ EXISTS).? ~ rep1sep(ident, ".") ~
+      (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options).? ~ (AS ~> restInput).? ^^ {
+      case temp ~ allowExisting ~ tableIdentifier ~ columns ~ provider ~ opts ~ query =>
         if (temp.isDefined && allowExisting.isDefined) {
           throw new DDLException(
             "a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause.")
@@ -108,7 +107,7 @@ private[sql] class DDLParser(
           }
 
           val queryPlan = parseQuery(query.get)
-          CreateTableUsingAsSelect(tableName,
+          CreateTableUsingAsSelect(tableIdentifier,
             provider,
             temp.isDefined,
             mode,
@@ -117,7 +116,7 @@ private[sql] class DDLParser(
         } else {
           val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
           CreateTableUsing(
-            tableName,
+            tableIdentifier,
             userSpecifiedSchema,
             provider,
             temp.isDefined,
@@ -286,7 +285,7 @@ private[sql] case class DescribeCommand(
   *                      If it is false, an exception will be thrown
   */
 private[sql] case class CreateTableUsing(
-    tableName: String,
+    tableIdentifier: Seq[String],
     userSpecifiedSchema: Option[StructType],
     provider: String,
     temporary: Boolean,
@@ -301,7 +300,7 @@ private[sql] case class CreateTableUsing(
  * So, [[PreWriteCheck]] can detect cases that are not allowed.
  */
 private[sql] case class CreateTableUsingAsSelect(
-    tableName: String,
+    tableIdentifier: Seq[String],
     provider: String,
     temporary: Boolean,
     mode: SaveMode,
@@ -312,8 +311,8 @@ private[sql] case class CreateTableUsingAsSelect(
   // override lazy val resolved = databaseName != None && childrenResolved
 }
 
-private[sql] case class CreateTempTableUsing(
-    tableName: String,
+private [sql] case class CreateTempTableUsing(
+    tableIdentifier: Seq[String],
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
@@ -321,13 +320,13 @@ private[sql] case class CreateTempTableUsing(
   def run(sqlContext: SQLContext): Seq[Row] = {
     val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
     sqlContext.registerDataFrameAsTable(
-      DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
+      DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableIdentifier.mkString("."))
     Seq.empty
   }
 }
 
-private[sql] case class CreateTempTableUsingAsSelect(
-    tableName: String,
+private [sql] case class CreateTempTableUsingAsSelect(
+    tableIdentifier: Seq[String],
     provider: String,
     mode: SaveMode,
     options: Map[String, String],
@@ -337,7 +336,7 @@ private[sql] case class CreateTempTableUsingAsSelect(
     val df = DataFrame(sqlContext, query)
     val resolved = ResolvedDataSource(sqlContext, provider, mode, options, df)
     sqlContext.registerDataFrameAsTable(
-      DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
+      DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableIdentifier.mkString("."))
 
     Seq.empty
   }

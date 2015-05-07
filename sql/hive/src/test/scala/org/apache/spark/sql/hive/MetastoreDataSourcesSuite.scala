@@ -65,6 +65,88 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       jsonFile(filePath).collect().toSeq)
   }
 
+  test ("support db.table") {
+    // create a new database for test
+    sql("create database db1")
+
+    // table name: A.B
+    sql(
+      s"""
+        |CREATE TABLE db1.jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${filePath}'
+        |)
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT * FROM db1.jsonTable"),
+      jsonFile(filePath).collect().toSeq)
+
+    sql("DROP TABLE db1.jsonTable")
+
+    // default database name is `default`
+    sql(
+      s"""
+        |CREATE TABLE jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${filePath}'
+        |)
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT * FROM default.jsonTable"),
+      jsonFile(filePath).collect().toSeq)
+
+    sql("DROP TABLE default.jsonTable")
+
+    // table name: A.B.C...
+    sql(
+      s"""
+        |CREATE TABLE x.y.db1.jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${filePath}'
+        |)
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT * FROM `x.y.db1.jsonTable`"),
+      jsonFile(filePath).collect().toSeq)
+
+    sql("DROP TABLE db1.jsonTable")
+
+    // the specified database not exists, throw HiveException
+    intercept[org.apache.hadoop.hive.ql.metadata.HiveException] {
+      sql(
+        s"""
+        |CREATE TABLE db2.jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${filePath}'
+        |)
+      """.stripMargin)
+    }
+
+    // df save table name: A.B
+    val originalDefaultSource = conf.defaultDataSourceName
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    val df = jsonRDD(rdd)
+
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
+    // Save the df as a managed table (by not specifying the path).
+    df.saveAsTable("db1.savedJsonTable")
+
+    checkAnswer(
+      sql("SELECT * FROM db1.savedJsonTable"),
+      df.collect())
+
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
+    sql("DROP TABLE db1.savedJsonTable")
+    sql("DROP DATABASE db1")
+  }
+
   test ("persistent JSON table with a user specified schema") {
     sql(
       s"""
@@ -671,7 +753,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       s"spark.sql.sources.schemaStringLengthThreshold needs to be less than ${schema.json.size}")
     // Manually create a metastore data source table.
     catalog.createDataSourceTable(
-      tableName = "wide_schema",
+      tableIdentifier = Seq("wide_schema"),
       userSpecifiedSchema = Some(schema),
       provider = "json",
       options = Map("path" -> "just a dummy path"),

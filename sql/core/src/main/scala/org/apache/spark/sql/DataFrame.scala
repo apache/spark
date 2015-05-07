@@ -1213,7 +1213,7 @@ class DataFrame private[sql](
    */
   @Experimental
   def saveAsTable(tableName: String, mode: SaveMode): Unit = {
-    if (sqlContext.catalog.tableExists(Seq(tableName)) && mode == SaveMode.Append) {
+    if (sqlContext.catalog.tableExists(tableName.split("\\.")) && mode == SaveMode.Append) {
       // If table already exists and the save mode is Append,
       // we will just call insertInto to append the contents of this DataFrame.
       insertInto(tableName, overwrite = false)
@@ -1296,7 +1296,7 @@ class DataFrame private[sql](
       options: Map[String, String]): Unit = {
     val cmd =
       CreateTableUsingAsSelect(
-        tableName,
+        tableName.split("\\."),
         source,
         temporary = false,
         mode,
