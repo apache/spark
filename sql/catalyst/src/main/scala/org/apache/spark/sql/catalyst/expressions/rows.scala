@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.{UTF8String, DataType, StructType, AtomicType}
+import java.sql.{Date, Timestamp}
+
+import org.apache.spark.sql.types.{UTF8String, DataType, StructType, AtomicType, DateUtils}
 
 /**
  * An extended interface to [[Row]] that allows the values for each column to be updated.  Setting
@@ -36,7 +38,9 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
-  // TODO(davies): add setDate() and setDecimal()
+  def setDate(ordinal: Int, value: java.sql.Date)
+  def setTimestamp(ordinal: Int, value: java.sql.Timestamp)
+  // TODO(davies): add setDecimal()
 }
 
 /**
@@ -55,6 +59,8 @@ object EmptyRow extends Row {
   override def getShort(i: Int): Short = throw new UnsupportedOperationException
   override def getByte(i: Int): Byte = throw new UnsupportedOperationException
   override def getString(i: Int): String = throw new UnsupportedOperationException
+  override def getDate(i: Int): java.sql.Date = throw new UnsupportedOperationException
+  override def getTimestamp(i: Int): java.sql.Timestamp = throw new UnsupportedOperationException
   override def getAs[T](i: Int): T = throw new UnsupportedOperationException
   override def copy(): Row = this
 }
@@ -121,7 +127,21 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
     }
   }
 
-  // TODO(davies): add getDate and getDecimal
+  override def getDate(i: Int): java.sql.Date = {
+    values(i) match {
+      case null => null
+      case d: Int => DateUtils.toJavaDate(d)
+    }
+  }
+
+  override def getTimestamp(i: Int): java.sql.Timestamp = {
+    values(i) match {
+      case null => null
+      case t: java.sql.Timestamp => t
+    }
+  }
+
+  // TODO(davies): add getDecimal
 
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {
@@ -197,7 +217,16 @@ class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
   override def setFloat(ordinal: Int, value: Float): Unit = { values(ordinal) = value }
   override def setInt(ordinal: Int, value: Int): Unit = { values(ordinal) = value }
   override def setLong(ordinal: Int, value: Long): Unit = { values(ordinal) = value }
-  override def setString(ordinal: Int, value: String) { values(ordinal) = UTF8String(value)}
+  override def setString(ordinal: Int, value: String): Unit = { values(ordinal) = UTF8String(value) }
+
+  override def setDate(ordinal: Int, value: java.sql.Date): Unit = {
+    values(ordinal) = DateUtils.fromJavaDate(value)
+  }
+
+  override def setTimestamp(ordinal: Int, value: java.sql.Timestamp): Unit = {
+    values(ordinal) = value 
+  }
+
   override def setNullAt(i: Int): Unit = { values(i) = null }
 
   override def setShort(ordinal: Int, value: Short): Unit = { values(ordinal) = value }

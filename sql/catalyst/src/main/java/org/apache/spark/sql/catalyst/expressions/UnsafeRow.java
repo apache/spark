@@ -24,10 +24,12 @@ import scala.collection.mutable.ArraySeq;
 import javax.annotation.Nullable;
 import java.math.BigDecimal;
 import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.*;
 
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.DateUtils;
 import static org.apache.spark.sql.types.DataTypes.*;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.UTF8String;
@@ -107,7 +109,9 @@ public final class UnsafeRow implements MutableRow {
     // We support get() on a superset of the types for which we support set():
     final Set<DataType> _readableFieldTypes = new HashSet<DataType>(
       Arrays.asList(new DataType[]{
-        StringType
+        StringType,
+        DateType,
+        TimestampType
       }));
     _readableFieldTypes.addAll(settableFieldTypes);
     readableFieldTypes = Collections.unmodifiableSet(_readableFieldTypes);
@@ -219,6 +223,16 @@ public final class UnsafeRow implements MutableRow {
 
   @Override
   public void setString(int ordinal, String value) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public void setDate(int ordinal, Date value) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public void setTimestamp(int ordinal, Timestamp value) {
     throw new UnsupportedOperationException();
   }
 
@@ -346,7 +360,21 @@ public final class UnsafeRow implements MutableRow {
 
   @Override
   public Date getDate(int i) {
-    throw new UnsupportedOperationException();
+    final int daysSinceEpoch = getInt(i);
+    return DateUtils.toJavaDate(daysSinceEpoch);
+  }
+
+  @Override
+  public Timestamp getTimestamp(int i) {
+    assertIndexIsValid(i);
+    final long offsetToTimestampSize = getLong(i);
+    final long time =
+      PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offsetToTimestampSize);
+    final int nanos =
+      PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + offsetToTimestampSize + 8);
+    final Timestamp timestamp = new Timestamp(time);
+    timestamp.setNanos(nanos);
+    return timestamp;
   }
 
   @Override

@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql
 
+import java.sql.{Date, Timestamp}
+
 import scala.util.hashing.MurmurHash3
 
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DateUtils, StructType}
 
 object Row {
   /**
@@ -257,8 +259,14 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  // TODO(davies): This is not the right default implementation, we use Int as Date internally
-  def getDate(i: Int): java.sql.Date = apply(i).asInstanceOf[java.sql.Date]
+  def getDate(i: Int): java.sql.Date = DateUtils.toJavaDate(getInt(i))
+
+  /**
+   * Returns the value at position i of date type as java.sql.Timestamp.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getTimestamp(i: Int): java.sql.Timestamp = apply(i).asInstanceOf[java.sql.Timestamp]
 
   /**
    * Returns the value at position i of array type as a Scala Seq.

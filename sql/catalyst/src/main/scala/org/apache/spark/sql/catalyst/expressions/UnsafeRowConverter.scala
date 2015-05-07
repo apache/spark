@@ -119,6 +119,8 @@ private object UnsafeColumnWriter {
       case FloatType => FloatUnsafeColumnWriter
       case DoubleType => DoubleUnsafeColumnWriter
       case StringType => StringUnsafeColumnWriter
+      case DateType => DateUnsafeColumnWriter
+      case TimestampType => TimestampUnsafeColumnWriter
       case t =>
         throw new UnsupportedOperationException(s"Do not know how to write columns of type $t")
     }
@@ -136,6 +138,8 @@ private object LongUnsafeColumnWriter extends LongUnsafeColumnWriter
 private object FloatUnsafeColumnWriter extends FloatUnsafeColumnWriter
 private object DoubleUnsafeColumnWriter extends DoubleUnsafeColumnWriter
 private object StringUnsafeColumnWriter extends StringUnsafeColumnWriter
+private object DateUnsafeColumnWriter extends DateUnsafeColumnWriter
+private object TimestampUnsafeColumnWriter extends TimestampUnsafeColumnWriter
 
 private abstract class PrimitiveUnsafeColumnWriter extends UnsafeColumnWriter {
   // Primitives don't write to the variable-length region:
@@ -219,5 +223,38 @@ private class StringUnsafeColumnWriter private() extends UnsafeColumnWriter {
     )
     target.setLong(column, appendCursor)
     8 + ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
+  }
+}
+
+private class DateUnsafeColumnWriter private() extends UnsafeColumnWriter {
+  def getSize(source: Row, column: Int): Int = {
+    0
+  }
+
+  override def write(source: Row, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+    target.setInt(column, DateUtils.fromJavaDate(source.getDate(column)))
+    0
+  }
+}
+
+private class TimestampUnsafeColumnWriter private() extends UnsafeColumnWriter {
+  def getSize(source: Row, column: Int): Int = {
+    // Although Timestamp is fixed length, it needs 12-byte that is more than 8-byte word per field.
+    // So we need to store it at the variable-length section.
+    16
+  }
+ 
+  override def write(source: Row, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+    val value = source.get(column).asInstanceOf[java.sql.Timestamp]
+    val time = value.getTime()
+    val nanos = value.getNanos()
+
+    val baseObject = target.getBaseObject
+    val baseOffset = target.getBaseOffset
+
+    PlatformDependent.UNSAFE.putLong(baseObject, baseOffset + appendCursor, time)
+    PlatformDependent.UNSAFE.putInt(baseObject, baseOffset + appendCursor + 8, nanos)
+    target.setLong(column, appendCursor)
+    16
   }
 }
