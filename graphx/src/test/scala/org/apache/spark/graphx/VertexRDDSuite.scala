@@ -189,8 +189,12 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
           buf.asInstanceOf[ArrayBuffer[Int]] :+ v
         })
         .collect.map { case (vid, arr) =>
-          (vid, if (arr.isInstanceOf[ArrayBuffer[Int]])
-            arr.asInstanceOf[ArrayBuffer[Int]].reduce(_ + _) else 1)
+          (vid,
+            if (arr.isInstanceOf[ArrayBuffer[Int]]) {
+              arr.asInstanceOf[ArrayBuffer[Int]].reduce(_ + _)
+            } else {
+              1
+            })
         }.toSet ===
         (0 to n).map(x => (x.toLong, if (x % 2 == 0) 2 else 1)).toSet)
     }
