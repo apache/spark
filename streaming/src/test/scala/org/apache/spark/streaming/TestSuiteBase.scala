@@ -387,7 +387,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
 
       // Wait until expected number of output items have been generated
       val startTime = System.currentTimeMillis()
-      whileSt (output.size < numExpectedOutput &&
+      while (output.size < numExpectedOutput &&
         System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
         logInfo("output.size = " + output.size + ", numExpectedOutput = " + numExpectedOutput)
         ssc.awaitTerminationOrTimeout(50)
