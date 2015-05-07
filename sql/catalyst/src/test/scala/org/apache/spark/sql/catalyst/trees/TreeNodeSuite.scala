@@ -172,4 +172,49 @@ class TreeNodeSuite extends FunSuite {
     expected = None
     assert(expected === actual)
   }
+
+  test("collectFirst") {
+    val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
+    // Find the top node.
+    {
+      val actual = expression.collectFirst {
+        case add: Add => add
+      }
+      val expected =
+        Some(Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4)))))
+      assert(expected === actual)
+    }
+
+
+    // Find the first children.
+    actual = expression.collectFirst {
+      case l @ Literal(1, IntegerType) => l
+    }
+    expected = Some(Literal(1))
+    assert(expected === actual)
+
+    // Find an internal node (Subtract).
+    actual = expression.find {
+      case sub: Subtract => true
+      case other => false
+    }
+    expected = Some(Subtract(Literal(3), Literal(4)))
+    assert(expected === actual)
+
+    // Find a leaf node.
+    actual = expression.find {
+      case Literal(3, IntegerType) => true
+      case other => false
+    }
+    expected = Some(Literal(3))
+    assert(expected === actual)
+
+    // Find nothing.
+    actual = expression.find {
+      case Literal(100, IntegerType) => true
+      case other => false
+    }
+    expected = None
+    assert(expected === actual)
+  }
 }
