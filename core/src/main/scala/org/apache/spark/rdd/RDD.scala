@@ -717,7 +717,7 @@ abstract class RDD[T: ClassTag](
   def mapPartitionsWithContext[U: ClassTag](
       f: (TaskContext, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false): RDD[U] = withScope {
-    val cleanedF = sc.clean(f)
+    val cleanF = sc.clean(f)
     val func = (context: TaskContext, index: Int, iter: Iterator[T]) => cleanF(context, iter)
     new MapPartitionsRDD(this, sc.clean(func), preservesPartitioning)
   }
