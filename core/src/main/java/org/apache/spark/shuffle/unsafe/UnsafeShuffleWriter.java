@@ -182,15 +182,15 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     for (int partition = 0; partition < numPartitions; partition++) {
       for (int i = 0; i < spills.length; i++) {
         final long partitionLengthInSpill = spills[i].partitionLengths[partition];
-        long bytesRemainingToBeTransferred = partitionLengthInSpill;
+        long bytesToTransfer = partitionLengthInSpill;
         final FileChannel spillInputChannel = spillInputChannels[i];
-        while (bytesRemainingToBeTransferred > 0) {
+        while (bytesToTransfer > 0) {
           final long actualBytesTransferred = spillInputChannel.transferTo(
               spillInputChannelPositions[i],
-              bytesRemainingToBeTransferred,
+              bytesToTransfer,
               mergedFileOutputChannel);
           spillInputChannelPositions[i] += actualBytesTransferred;
-          bytesRemainingToBeTransferred -= actualBytesTransferred;
+          bytesToTransfer -= actualBytesTransferred;
         }
         partitionLengths[partition] += partitionLengthInSpill;
       }

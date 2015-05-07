@@ -19,7 +19,6 @@ package org.apache.spark.shuffle.unsafe;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.LinkedList;
 
 import org.apache.spark.storage.*;
