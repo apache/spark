@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
-import org.apache.spark.sql.{AnalysisException, SparkSQLParser}
+import org.apache.spark.sql.AnalysisException
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -140,10 +140,7 @@ private[hive] object HiveQl {
     "TOK_TRUNCATETABLE"     // truncate table" is a NativeCommand, does not need to explain.
   ) ++ nativeCommands
 
-  protected val hqlParser = {
-    val fallback = new ExtendedHiveQlParser
-    new SparkSQLParser(fallback.parse(_))
-  }
+  protected val hqlParser = new ExtendedHiveQlParser
 
   /**
    * A set of implicit transformations that allow Hive ASTNodes to be rewritten by transformations
