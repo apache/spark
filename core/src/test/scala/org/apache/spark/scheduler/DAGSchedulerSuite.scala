@@ -804,10 +804,12 @@ class DAGSchedulerSuite
         // second attempt
         if (TaskContext.get().asInstanceOf[TaskContextImpl].stageAttemptId == 0) {
           if (idx == 0) {
-            throw new FetchFailedException(aBm, 0, 0, idx, cause = new RuntimeException("simulated fetch failure"))
+            throw new FetchFailedException(aBm, 0, 0, idx,
+              cause = new RuntimeException("simulated fetch failure"))
           } else if (idx > 0 && math.random < 0.1) {
             Thread.sleep(10000)
-            throw new FetchFailedException(aBm, 0, 0, idx, cause = new RuntimeException("simulated fetch failure"))
+            throw new FetchFailedException(aBm, 0, 0, idx,
+              cause = new RuntimeException("simulated fetch failure"))
           }
         } else {
           Thread.sleep(10000)
