@@ -121,12 +121,12 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol):
     >>> df = sc.parallelize([Row(a=1, b=0, c=3)]).toDF()
     >>> vecAssembler = VectorAssembler(inputCols=["a", "b", "c"], outputCol="features")
     >>> vecAssembler.transform(df).head().features
-    SparseVector(3, {0: 1.0, 2: 3.0})
+    DenseVector([1.0, 0.0, 3.0])
     >>> vecAssembler.setParams(outputCol="freqs").transform(df).head().freqs
-    SparseVector(3, {0: 1.0, 2: 3.0})
+    DenseVector([1.0, 0.0, 3.0])
     >>> params = {vecAssembler.inputCols: ["b", "a"], vecAssembler.outputCol: "vector"}
     >>> vecAssembler.transform(df, params).head().vector
-    SparseVector(2, {1: 1.0})
+    DenseVector([0.0, 1.0])
     """
 
     _java_class = "org.apache.spark.ml.feature.VectorAssembler"
