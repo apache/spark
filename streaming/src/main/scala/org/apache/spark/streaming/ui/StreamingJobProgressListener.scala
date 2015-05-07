@@ -192,8 +192,8 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     val latestReceiverNumRecords = latestBatchInfos.map(_.receiverNumRecords)
     val streamIds = ssc.graph.getInputStreams().map(_.id)
     streamIds.map { id =>
-     val recordsOfParticularReceiver =
-       latestReceiverNumRecords.map(v => v.getOrElse(id, 0L).toDouble * 1000 / batchDuration)
+      val recordsOfParticularReceiver =
+        latestReceiverNumRecords.map(v => v.getOrElse(id, 0L).toDouble * 1000 / batchDuration)
       val distribution = Distribution(recordsOfParticularReceiver)
       (id, distribution)
     }.toMap

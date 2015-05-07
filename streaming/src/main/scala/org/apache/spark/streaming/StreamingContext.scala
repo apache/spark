@@ -531,6 +531,7 @@ class StreamingContext private[streaming] (
     ACTIVATION_LOCK.synchronized {
       assertNoOtherContextIsActive()
       scheduler.start()
+      uiTab.foreach(_.attach())
       state = Started
       setActiveContext(this)
     }
@@ -619,8 +620,7 @@ object StreamingContext extends Logging {
    */
   private val ACTIVATION_LOCK = new Object()
 
-  private var activeContext: AtomicReference[StreamingContext] =
-    new AtomicReference[StreamingContext](null)
+  private val activeContext = new AtomicReference[StreamingContext](null)
 
   private def assertNoOtherContextIsActive(): Unit = {
     ACTIVATION_LOCK.synchronized {

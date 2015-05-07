@@ -351,9 +351,9 @@ public final class BytesToBytesMap {
      * As an example usage, here's the proper way to store a new key:
      * <p>
      * <pre>
-     *   Location loc = map.lookup(keyBaseOffset, keyBaseObject, keyLengthInBytes);
+     *   Location loc = map.lookup(keyBaseObject, keyBaseOffset, keyLengthInBytes);
      *   if (!loc.isDefined()) {
-     *     loc.putNewKey(keyBaseOffset, keyBaseObject, keyLengthInBytes, ...)
+     *     loc.putNewKey(keyBaseObject, keyBaseOffset, keyLengthInBytes, ...)
      *   }
      * </pre>
      * <p>
