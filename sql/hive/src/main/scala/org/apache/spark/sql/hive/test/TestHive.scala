@@ -63,6 +63,8 @@ object TestHive
 class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   self =>
 
+  import HiveContext._
+
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
@@ -71,16 +73,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   hiveconf.set("hive.plan.serialization.format", "javaXML")
 
   lazy val warehousePath = Utils.createTempDir()
-  lazy val metastorePath = {
-    val temp = Utils.createTempDir()
-    temp.delete()
-    temp
-  }
 
   /** Sets up the system initially or after a RESET command */
-  protected override def configure(): Map[String, String] = Map(
-      "javax.jdo.option.ConnectionURL" -> s"jdbc:derby:;databaseName=$metastorePath;create=true",
-      "hive.metastore.warehouse.dir" -> warehousePath.toString)
+  protected override def configure(): Map[String, String] =
+   newTemporaryConfiguation() ++ Map("hive.metastore.warehouse.dir" -> warehousePath.toString)
 
   val testTempDir = Utils.createTempDir()
 

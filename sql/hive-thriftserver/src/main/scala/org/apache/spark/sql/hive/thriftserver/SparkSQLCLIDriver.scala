@@ -81,8 +81,9 @@ private[hive] object SparkSQLCLIDriver {
     }
     val cliConf = new HiveConf(classOf[SessionState])
     // Override the location of the metastore since this is only used for local execution.
-    cliConf.set(
-      "javax.jdo.option.ConnectionURL", s"jdbc:derby:;databaseName=$localMetastore;create=true")
+    HiveContext.newTemporaryConfiguation().foreach {
+      case (key, value) => cliConf.set(key, value)
+    }
     val sessionState = new CliSessionState(cliConf)
 
     sessionState.in = System.in
@@ -103,7 +104,7 @@ private[hive] object SparkSQLCLIDriver {
     sessionState.cmdProperties.entrySet().foreach { item =>
       val key = item.getKey.asInstanceOf[String]
       val value = item.getValue.asInstanceOf[String]
-      // We do not propogate metastore options to the execution copy of hive.
+      // We do not propagate metastore options to the execution copy of hive.
       if (key != "javax.jdo.option.ConnectionURL") {
         conf.set(key, value)
         sessionState.getOverriddenConfigurations.put(key, value)

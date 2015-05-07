@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{BufferedReader, InputStreamReader, PrintStream}
+import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.sql.Timestamp
 import java.util.{ArrayList => JArrayList}
 
@@ -36,8 +36,9 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateSubQueries, OverrideCatalog, OverrideFunctionRegistry}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -105,12 +106,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * Spark SQL for execution.
    */
   protected[hive] def hiveMetastoreVersion: String =
-    getConf(HIVE_METASTORE_VERSION, "0.13.1")
+    getConf(HIVE_METASTORE_VERSION, hiveExecutionVersion)
 
   /**
    * The location of the jars that should be used to instantiate the HiveMetastoreClient.  This
    * property can be one of three options:
-   *  - a colon-separated list of jar files or directories for hive and hadoop.
+   *  - a classpath in the standard format for both hive and hadoop.
    *  - builtin - attempt to discover the jars that were used to load Spark SQL and use those. This
    *              option is only valid when using the execution version of Hive.
    *  - maven - download the correct version of hive on demand from maven.
@@ -120,22 +121,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
-
-
-  /** A local instance of hive that is only used for execution. */
-  protected[hive] lazy val localMetastore = {
-    val temp = Utils.createTempDir()
-    temp.delete()
-    temp
-  }
-
-  @transient
-  protected[hive] lazy val executionConf = new HiveConf()
-  executionConf.set(
-    "javax.jdo.option.ConnectionURL", s"jdbc:derby:;databaseName=$localMetastore;create=true")
-
-  /** The version of hive used internally by Spark SQL. */
-  lazy val hiveExecutionVersion: String = "0.13.1"
 
   /**
    * The copy of the hive client that is used for execution.  Currently this must always be
@@ -149,9 +134,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     logInfo(s"Initilizing execution hive, version $hiveExecutionVersion")
     new ClientWrapper(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
-      config = Map(
-        "javax.jdo.option.ConnectionURL" ->
-        s"jdbc:derby:;databaseName=$localMetastore;create=true"))
+      config = newTemporaryConfiguation())
   }
   SessionState.setCurrentSessionState(executionHive.state)
 
@@ -203,11 +186,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       // Convert to files and expand any directories.
       val jars =
         hiveMetastoreJars
-          .split(":")
-          .map(new java.io.File(_))
+          .split(File.pathSeparator)
           .flatMap {
-            case f if f.isDirectory => f.listFiles()
-            case f => f :: Nil
+            case path if path.endsWith("*") =>
+              val directory = new File(path.dropRight(1))
+              directory.listFiles.filter(_.getName.endsWith("jar"))
+            case path =>
+              new File(path) :: Nil
           }
           .map(_.toURI.toURL)
 
@@ -471,8 +456,19 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
 
 private[hive] object HiveContext {
+  /** The version of hive used internally by Spark SQL. */
+  val hiveExecutionVersion: String = "0.13.1"
+
   val HIVE_METASTORE_VERSION: String = "spark.sql.hive.metastore.version"
   val HIVE_METASTORE_JARS: String = "spark.sql.hive.metastore.jars"
+
+  /** Constructs a configuration for hive, where the metastore is located in a temp directory. */
+  def newTemporaryConfiguation(): Map[String, String] = {
+    val tempDir = Utils.createTempDir()
+    val localMetastore = new File(tempDir, "metastore")
+    Map(
+      "javax.jdo.option.ConnectionURL" -> s"jdbc:derby:;databaseName=$localMetastore;create=true")
+  }
 
   protected val primitiveTypes =
     Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,

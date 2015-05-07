@@ -60,12 +60,12 @@ case class CreateTableAsSelect(
           schema =
             query.output.map(c =>
               HiveColumn(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), null)),
-            inputFormat =
-              tableDesc.inputFormat.orElse(Some(classOf[TextInputFormat].getName)),
-            outputFormat =
-              tableDesc.outputFormat
-                .orElse(Some(classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]].getName)),
-            serde = tableDesc.serde.orElse(Some(classOf[LazySimpleSerDe].getName())))
+          inputFormat =
+            tableDesc.inputFormat.orElse(Some(classOf[TextInputFormat].getName)),
+          outputFormat =
+            tableDesc.outputFormat
+              .orElse(Some(classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]].getName)),
+          serde = tableDesc.serde.orElse(Some(classOf[LazySimpleSerDe].getName())))
       hiveContext.catalog.client.createTable(withSchema)
 
       // Get the Metastore Relation
