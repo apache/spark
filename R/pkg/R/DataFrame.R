@@ -792,6 +792,7 @@ setMethod("$", signature(x = "DataFrame"),
             getColumn(x, name)
           })
 
+#' @rdname select
 setMethod("$<-", signature(x = "DataFrame"),
           function(x, name, value) {
             stopifnot(class(value) == "Column" || is.null(value))
