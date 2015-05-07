@@ -73,9 +73,11 @@ class TestInputStream[T: ClassTag](ssc_ : StreamingContext, input: Seq[Seq[T]], 
  *
  * The buffer contains a sequence of RDD's, each containing a sequence of items
  */
-class TestOutputStream[T: ClassTag](parent: DStream[T],
-    val output: SynchronizedBuffer[Seq[T]] = new ArrayBuffer[Seq[T]] with SynchronizedBuffer[Seq[T]])
-  extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
+class TestOutputStream[T: ClassTag](
+    parent: DStream[T],
+    val output: SynchronizedBuffer[Seq[T]] =
+      new ArrayBuffer[Seq[T]] with SynchronizedBuffer[Seq[T]]
+  ) extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.collect()
     output += collected
   }) {
