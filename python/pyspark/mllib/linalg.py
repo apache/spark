@@ -218,16 +218,16 @@ class DenseVector(Vector):
         """
         start = s.find('[')
         if start == -1:
-            raise ValueError("Array should start with '['")
+            raise ValueError("Array should start with '['.")
         end = s.find(']')
         if end == -1:
-            raise ValueError("Array should end with  ']")
+            raise ValueError("Array should end with ']'.")
         s = s[start + 1: end]
 
         try:
             values = [float(val) for val in s.split(',')]
         except ValueError:
-            raise ValueError("Unable to parse values.")
+            raise ValueError("Unable to parse values from %s" % s)
         return DenseVector(values)
 
     def __reduce__(self):
@@ -468,28 +468,29 @@ class SparseVector(Vector):
 
         ind_start = s.find('[')
         if ind_start == -1:
-            raise ValueError("Indices array should start with '('.")
+            raise ValueError("Indices array should start with '['.")
         ind_end = s.find(']')
         if ind_end == -1:
-            raise ValueError("Indices array should end with ')'")
-        ind_list = s[ind_start + 1: ind_end].split(',')
+            raise ValueError("Indices array should end with ']'")
+        new_s = s[ind_start + 1: ind_end]
+        ind_list = new_s.split(',')
         try:
             indices = [int(ind) for ind in ind_list]
         except ValueError:
-            raise ValueError("Unabel to parse indices.")
+            raise ValueError("Unable to parse indices from %s." % new_s)
         s = s[ind_end + 1:].strip()
 
         val_start = s.find('[')
         if val_start == -1:
-            raise ValueError("Values array should start with '('.")
+            raise ValueError("Values array should start with '['.")
         val_end = s.find(']')
         if val_end == -1:
-            raise ValueError("Values array should end with ')'.")
+            raise ValueError("Values array should end with ']'.")
         val_list = s[val_start + 1: val_end].split(',')
         try:
             values = [float(val) for val in val_list]
         except ValueError:
-            raise ValueError("Unable to parse values.")
+            raise ValueError("Unable to parse values from %s." % s)
         return SparseVector(size, indices, values)
 
     def dot(self, other):
