@@ -638,9 +638,9 @@ class Analyzer(
     def addWindow(windowExpressions: Seq[NamedExpression], child: LogicalPlan): LogicalPlan = {
       // First, we group window expressions based on their Window Spec.
       val groupedWindowExpression = windowExpressions.groupBy { expr =>
-        val windowSpec = expr.collect {
+        val windowSpec = expr.collectFirst {
           case window: WindowExpression => window.windowSpec
-        }.headOption
+        }
         windowSpec.getOrElse(
           failAnalysis(s"$windowExpressions does not have any WindowExpression."))
       }.toSeq
