@@ -423,12 +423,21 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
     logInfo("--------------------------------")
 
     // Match the output with the expected output
-    assert(output.size === expectedOutput.size, "Number of outputs do not match")
     for (i <- 0 until output.size) {
       if (useSet) {
-        assert(output(i).toSet === expectedOutput(i).toSet)
+        assert(
+          output(i).toSet === expectedOutput(i).toSet,
+          s"Set comparison failed\n" +
+            s"Expected output (${expectedOutput.size} items):\n${expectedOutput.mkString("\n")}\n" +
+            s"Generated output (${output.size} items): ${output.mkString("\n")}"
+        )
       } else {
-        assert(output(i).toList === expectedOutput(i).toList)
+        assert(
+          output(i).toList === expectedOutput(i).toList,
+          s"Ordered list comparison failed\n" +
+            s"Expected output (${expectedOutput.size} items):\n${expectedOutput.mkString("\n")}\n" +
+            s"Generated output (${output.size} items): ${output.mkString("\n")}"
+        )
       }
     }
     logInfo("Output verified successfully")
