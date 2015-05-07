@@ -27,9 +27,10 @@ private[ui] abstract class BatchTableBase(tableId: String) {
     <th>Batch Time</th>
       <th>Input Size</th>
       <th>Scheduling Delay
-        {SparkUIUtils.tooltip("Time taken by Streaming to schedule a batch", "top")}</th>
+        {SparkUIUtils.tooltip("Time taken by Streaming scheduler to submit jobs of a batch", "top")}
+      </th>
       <th>Processing Time
-        {SparkUIUtils.tooltip("Time taken by Streaming to process a batch", "top")}</th>
+        {SparkUIUtils.tooltip("Time taken to process all jobs of a batch", "top")}</th>
   }
 
   protected def baseRow(batch: BatchUIData): Seq[Node] = {
@@ -103,7 +104,7 @@ private[ui] class CompletedBatchTable(batches: Seq[BatchUIData])
 
   override protected def columns: Seq[Node] = super.columns ++
     <th>Total Delay
-      {SparkUIUtils.tooltip("Total time taken by Streaming to handle a batch", "top")}</th>
+      {SparkUIUtils.tooltip("Total time taken to handle a batch", "top")}</th>
 
   override protected def renderRows: Seq[Node] = {
     batches.flatMap(batch => <tr>{completedBatchRow(batch)}</tr>)
