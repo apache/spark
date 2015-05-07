@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.attribute.{NominalAttribute, BinaryAttribute}
+import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util.SchemaUtils
@@ -29,18 +29,17 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
 
 /**
  * :: AlphaComponent ::
- * Binarize a column of continuous features given a threshold.
+ * `Bucketizer` maps a column of continuous features to a column of feature buckets.
  */
 @AlphaComponent
 final class Bucketizer extends Transformer with HasInputCol with HasOutputCol {
 
   /**
-   * Param for threshold used to binarize continuous features.
-   * The features greater than the threshold, will be binarized to 1.0.
-   * The features equal to or less than the threshold, will be binarized to 0.0.
+   * Parameter for mapping continuous features into buckets.
    * @group param
    */
-  val buckets: Param[Array[Double]] = new Param[Array[Double]](this, "buckets", "")
+  val buckets: Param[Array[Double]] = new Param[Array[Double]](this, "buckets",
+    "Map continuous features into buckets.")
 
   /** @group getParam */
   def getBuckets: Array[Double] = $(buckets)
@@ -64,7 +63,7 @@ final class Bucketizer extends Transformer with HasInputCol with HasOutputCol {
   }
 
   /**
-   * Binary searching in several bins to place each data point.
+   * Binary searching in several buckets to place each data point.
    */
   private def binarySearchForBins(splits: Array[Double], feature: Double): Double = {
     val wrappedSplits = Array(Double.MinValue) ++ splits ++ Array(Double.MaxValue)
