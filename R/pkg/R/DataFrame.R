@@ -272,7 +272,7 @@ setMethod("names",
 setMethod("registerTempTable",
           signature(x = "DataFrame", tableName = "character"),
           function(x, tableName) {
-              callJMethod(x@sdf, "registerTempTable", tableName)
+              invisible(callJMethod(x@sdf, "registerTempTable", tableName))
           })
 
 #' insertInto
