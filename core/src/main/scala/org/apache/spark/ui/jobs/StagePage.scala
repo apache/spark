@@ -172,7 +172,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         </div>
 
       val dagViz = UIUtils.showDagVizForStage(
-        stageId, operationGraphListener.getOperationGraphForStage(stageId))
+        operationGraphListener.getOperationGraphForStage(stageId))
 
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
       def accumulableRow(acc: AccumulableInfo): Elem =

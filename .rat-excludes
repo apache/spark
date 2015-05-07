@@ -33,6 +33,7 @@ jquery-1.11.1.min.js
 d3.min.js
 dagre-d3.min.js
 graphlib-dot.min.js
+tooltipsy.min.js
 sorttable.js
 vis.min.js
 vis.min.css

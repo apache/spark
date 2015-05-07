@@ -175,6 +175,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/d3.min.js")}></script>
     <script src={prependBaseUri("/static/dagre-d3.min.js")}></script>
     <script src={prependBaseUri("/static/graphlib-dot.min.js")}></script>
+    <script src={prependBaseUri("/static/tooltipsy.min.js")}></script>
     <script src={prependBaseUri("/static/spark-dag-viz.js")}></script>
   }
 
@@ -330,12 +331,12 @@ private[spark] object UIUtils extends Logging {
   }
 
   /** Return a "DAG visualization" DOM element that expands into a visualization for a stage. */
-  def showDagVizForStage(stageId: Int, graph: Option[RDDOperationGraph]): Seq[Node] = {
+  def showDagVizForStage(graph: Option[RDDOperationGraph]): Seq[Node] = {
     showDagViz(graph.toSeq, forJob = false)
   }
 
   /** Return a "DAG visualization" DOM element that expands into a visualization for a job. */
-  def showDagVizForJob(jobId: Int, graphs: Seq[RDDOperationGraph]): Seq[Node] = {
+  def showDagVizForJob(graphs: Seq[RDDOperationGraph]): Seq[Node] = {
     showDagViz(graphs, forJob = true)
   }
 

@@ -60,6 +60,22 @@
   fill: #AAAAAA;
 }
 
+.dag-viz-rdd-tooltip {
+  font-size: 11px;
+  padding: 5px;
+  color: #fff;
+  background-color: #444;
+  -moz-box-shadow: inset 0 0 5px #000;
+  -webkit-box-shadow: inset 0 0 5px #000;
+  box-shadow: inset 0 0 10px #000;
+  -moz-border-radius: 5px;
+  -webkit-border-radius: 5px;
+  opacity: 0.8;
+  left: 5px;
+  top: 50px;
+  position: relative;
+}
+
 /* Stage page specific styles */
 
 #dag-viz-graph svg.stage g.cluster rect {
