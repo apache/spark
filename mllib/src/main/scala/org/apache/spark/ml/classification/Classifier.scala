@@ -17,8 +17,8 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
-import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor, PredictorParams}
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.ml.{PredictionModel, PredictorParams, Predictor}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
@@ -26,15 +26,12 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
+
 /**
- * :: DeveloperApi ::
- * Params for classification.
- *
- * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
+ * (private[spark]) Params for classification.
  */
-@DeveloperApi
-private[spark] trait ClassifierParams extends PredictorParams
-  with HasRawPredictionCol {
+private[spark] trait ClassifierParams
+  extends PredictorParams with HasRawPredictionCol {
 
   override protected def validateAndTransformSchema(
       schema: StructType,
@@ -46,23 +43,21 @@ private[spark] trait ClassifierParams extends PredictorParams
 }
 
 /**
- * :: AlphaComponent ::
+ * :: DeveloperApi ::
+ *
  * Single-label binary or multiclass classification.
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
  * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
  * @tparam E  Concrete Estimator type
  * @tparam M  Concrete Model type
- *
- * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
-@AlphaComponent
-private[spark] abstract class Classifier[
+@DeveloperApi
+abstract class Classifier[
     FeaturesType,
     E <: Classifier[FeaturesType, E, M],
     M <: ClassificationModel[FeaturesType, M]]
-  extends Predictor[FeaturesType, E, M]
-  with ClassifierParams {
+  extends Predictor[FeaturesType, E, M] with ClassifierParams {
 
   /** @group setParam */
   def setRawPredictionCol(value: String): E = set(rawPredictionCol, value).asInstanceOf[E]
@@ -71,17 +66,15 @@ private[spark] abstract class Classifier[
 }
 
 /**
- * :: AlphaComponent ::
+ * :: DeveloperApi ::
+ *
  * Model produced by a [[Classifier]].
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
  * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
  * @tparam M  Concrete Model type
- *
- * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
-@AlphaComponent
-private[spark]
+@DeveloperApi
 abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[FeaturesType, M]]
   extends PredictionModel[FeaturesType, M] with ClassifierParams {
 
@@ -101,13 +94,27 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * @return transformed dataset
    */
   override def transform(dataset: DataFrame): DataFrame = {
-    // This default implementation should be overridden as needed.
-
-    // Check schema
     transformSchema(dataset.schema, logging = true)
 
-    val (numColsOutput, outputData) =
-      ClassificationModel.transformColumnsImpl[FeaturesType](dataset, this)
+    // Output selected columns only.
+    // This is a bit complicated since it tries to avoid repeated computation.
+    var outputData = dataset
+    var numColsOutput = 0
+    if (getRawPredictionCol != "") {
+      outputData = outputData.withColumn(getRawPredictionCol,
+        callUDF(predictRaw _, new VectorUDT, col(getFeaturesCol)))
+      numColsOutput += 1
+    }
+    if (getPredictionCol != "") {
+      val predUDF = if (getRawPredictionCol != "") {
+        callUDF(raw2prediction _, DoubleType, col(getRawPredictionCol))
+      } else {
+        callUDF(predict _, DoubleType, col(getFeaturesCol))
+      }
+      outputData = outputData.withColumn(getPredictionCol, predUDF)
+      numColsOutput += 1
+    }
+
     if (numColsOutput == 0) {
       logWarning(s"$uid: ClassificationModel.transform() was called as NOOP" +
         " since no output columns were set.")
@@ -116,22 +123,17 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
   }
 
   /**
-   * :: DeveloperApi ::
-   *
    * Predict label for the given features.
    * This internal method is used to implement [[transform()]] and output [[predictionCol]].
    *
    * This default implementation for classification predicts the index of the maximum value
    * from [[predictRaw()]].
    */
-  @DeveloperApi
   override protected def predict(features: FeaturesType): Double = {
-    predictRaw(features).toArray.zipWithIndex.maxBy(_._1)._2
+    raw2prediction(predictRaw(features))
   }
 
   /**
-   * :: DeveloperApi ::
-   *
    * Raw prediction for each possible label.
    * The meaning of a "raw" prediction may vary between algorithms, but it intuitively gives
    * a measure of confidence in each possible label (where larger = more confident).
@@ -141,48 +143,12 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    *          This raw prediction may be any real number, where a larger value indicates greater
    *          confidence for that label.
    */
-  @DeveloperApi
   protected def predictRaw(features: FeaturesType): Vector
-}
-
-private[ml] object ClassificationModel {
 
   /**
-   * Added prediction column(s).  This is separated from [[ClassificationModel.transform()]]
-   * since it is used by [[org.apache.spark.ml.classification.ProbabilisticClassificationModel]].
-   * @param dataset  Input dataset
-   * @return (number of columns added, transformed dataset)
+   * Given a vector of raw predictions, select the predicted label.
+   * This may be overridden to support thresholds which favor particular labels.
+   * @return  predicted label
    */
-  def transformColumnsImpl[FeaturesType](
-      dataset: DataFrame,
-      model: ClassificationModel[FeaturesType, _]): (Int, DataFrame) = {
-
-    // Output selected columns only.
-    // This is a bit complicated since it tries to avoid repeated computation.
-    var tmpData = dataset
-    var numColsOutput = 0
-    if (model.getRawPredictionCol != "") {
-      // output raw prediction
-      val features2raw: FeaturesType => Vector = model.predictRaw
-      tmpData = tmpData.withColumn(model.getRawPredictionCol,
-        callUDF(features2raw, new VectorUDT, col(model.getFeaturesCol)))
-      numColsOutput += 1
-      if (model.getPredictionCol != "") {
-        val raw2pred: Vector => Double = (rawPred) => {
-          rawPred.toArray.zipWithIndex.maxBy(_._1)._2
-        }
-        tmpData = tmpData.withColumn(model.getPredictionCol,
-          callUDF(raw2pred, DoubleType, col(model.getRawPredictionCol)))
-        numColsOutput += 1
-      }
-    } else if (model.getPredictionCol != "") {
-      // output prediction
-      val features2pred: FeaturesType => Double = model.predict
-      tmpData = tmpData.withColumn(model.getPredictionCol,
-        callUDF(features2pred, DoubleType, col(model.getFeaturesCol)))
-      numColsOutput += 1
-    }
-    (numColsOutput, tmpData)
-  }
-
+  protected def raw2prediction(rawPrediction: Vector): Double = rawPrediction.toDense.argmax
 }
