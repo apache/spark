@@ -21,12 +21,14 @@ package org.apache.spark.sql.hive.thriftserver
 
 import scala.util.Random
 
+import com.gargoylesoftware.htmlunit.DefaultCssErrorHandler
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest.{Matchers, BeforeAndAfterAll}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
+import org.w3c.css.sac.CSSParseException
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.spark.sql.hive.HiveContext
@@ -43,7 +45,33 @@ class UISeleniumSuite
   override def mode: ServerMode.Value = ServerMode.binary
 
   override def beforeAll(): Unit = {
-    webDriver = new HtmlUnitDriver
+    webDriver = new HtmlUnitDriver {
+
+      getWebClient.setCssErrorHandler(new DefaultCssErrorHandler {
+
+        private val cssWhiteList = List("bootstrap.min.css", "vis.min.css")
+
+        private def isInWhileList(uri: String): Boolean = cssWhiteList.exists(uri.endsWith)
+
+        override def warning(e: CSSParseException): Unit = {
+          if (!isInWhileList(e.getURI)) {
+            super.warning(e)
+          }
+        }
+
+        override def fatalError(e: CSSParseException): Unit = {
+          if (!isInWhileList(e.getURI)) {
+            super.fatalError(e)
+          }
+        }
+
+        override def error(e: CSSParseException): Unit = {
+          if (!isInWhileList(e.getURI)) {
+            super.error(e)
+          }
+        }
+      })
+    }
     super.beforeAll()
   }
 
