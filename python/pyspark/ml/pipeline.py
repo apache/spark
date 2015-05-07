@@ -179,7 +179,7 @@ class PipelineModel(Model):
         return dataset
 
 
-class Evaluator(object):
+class Evaluator(Params):
     """
     Base class for evaluators that compute metrics from predictions.
     """
