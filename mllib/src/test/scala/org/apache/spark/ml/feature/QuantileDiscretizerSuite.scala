@@ -25,9 +25,9 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Row, SQLContext}
 
-class FeatureDiscretizerSuite extends FunSuite with MLlibTestSparkContext {
+class QuantileDiscretizerSuite extends FunSuite with MLlibTestSparkContext {
 
-  test("Test feature discretizer") {
+  test("Test quantile discretizer") {
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
@@ -37,12 +37,13 @@ class FeatureDiscretizerSuite extends FunSuite with MLlibTestSparkContext {
 
     val df = sc.parallelize(data.zip(result)).toDF("data", "expected")
 
-    val discretizer = new FeatureDiscretizer()
+    val discretizer = new QuantileDiscretizer()
       .setInputCol("data")
       .setOutputCol("result")
-      .setNumBins(3)
+      .setNumBuckets(3)
 
-    val res = discretizer.transform(df)
+    val bucketizer = discretizer.fit(df)
+    val res = bucketizer.transform(df)
     res.select("expected", "result").collect().foreach {
       case Row(expected: Double, result: Double) => assert(expected == result)
     }
