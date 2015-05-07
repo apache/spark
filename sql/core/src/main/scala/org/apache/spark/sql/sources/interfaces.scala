@@ -20,7 +20,6 @@ package org.apache.spark.sql.sources
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -294,7 +293,7 @@ abstract class OutputWriter {
  * filter using selected predicates before producing an RDD containing all matching tuples as
  * [[Row]] objects. In addition, when reading from Hive style partitioned tables stored in file
  * systems, it's able to discover partitioning information from the paths of input directories, and
- * perform partition pruning before start reading the data.Subclasses of [[FSBasedRelation()]] must
+ * perform partition pruning before start reading the data. Subclasses of [[FSBasedRelation()]] must
  * override one of the three `buildScan` methods to implement the read path.
  *
  * For the write path, it provides the ability to write to both non-partitioned and partitioned
@@ -329,39 +328,45 @@ abstract class FSBasedRelation private[sql](
   /**
    * Constructs an [[FSBasedRelation]].
    *
-   * @param paths Base paths of this relation.  For partitioned relations, it should be either root
+   * @param paths Base paths of this relation.  For partitioned relations, it should be root
    *        directories of all partition directories.
    */
   def this(paths: Array[String]) = this(paths, None)
 
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
-  private var _partitionSpec: PartitionSpec = _
-  refreshPartitions()
+  private var _partitionSpec: PartitionSpec = maybePartitionSpec.map { spec =>
+    spec.copy(partitionColumns = spec.partitionColumns.asNullable)
+  }.getOrElse {
+    discoverPartitions()
+  }
 
   private[sql] def partitionSpec: PartitionSpec = _partitionSpec
 
+  /**
+   * Partition columns. Note that they are always nullable.
+   */
+  def partitionColumns: StructType = partitionSpec.partitionColumns
+
   private[sql] def refresh(): Unit = {
-    refreshPartitions()
+    _partitionSpec = discoverPartitions()
   }
 
-  private def refreshPartitions(): Unit = {
-    _partitionSpec = maybePartitionSpec.getOrElse {
-      val basePaths = paths.map(new Path(_))
-      val leafDirs = basePaths.flatMap { path =>
-        val fs = path.getFileSystem(hadoopConf)
-        if (fs.exists(path)) {
-          SparkHadoopUtil.get.listLeafDirStatuses(fs, fs.makeQualified(path))
-        } else {
-          Seq.empty[FileStatus]
-        }
-      }.map(_.getPath)
-
-      if (leafDirs.nonEmpty) {
-        PartitioningUtils.parsePartitions(leafDirs, "__HIVE_DEFAULT_PARTITION__")
+  private def discoverPartitions(): PartitionSpec = {
+    val basePaths = paths.map(new Path(_))
+    val leafDirs = basePaths.flatMap { path =>
+      val fs = path.getFileSystem(hadoopConf)
+      if (fs.exists(path)) {
+        SparkHadoopUtil.get.listLeafDirStatuses(fs, fs.makeQualified(path))
       } else {
-        PartitionSpec(StructType(Array.empty[StructField]), Array.empty[Partition])
+        Seq.empty[FileStatus]
       }
+    }.map(_.getPath)
+
+    if (leafDirs.nonEmpty) {
+      PartitioningUtils.parsePartitions(leafDirs, "__HIVE_DEFAULT_PARTITION__")
+    } else {
+      PartitionSpec(StructType(Array.empty[StructField]), Array.empty[Partition])
     }
   }
 

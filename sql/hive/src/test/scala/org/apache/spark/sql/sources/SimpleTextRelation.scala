@@ -92,10 +92,10 @@ class SimpleTextOutputWriter extends OutputWriter {
 class SimpleTextRelation(
     paths: Array[String],
     val maybeDataSchema: Option[StructType],
-    val partitionColumns: StructType,
+    partitionsSchema: StructType,
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
-  extends FSBasedRelation(paths, partitionColumns) {
+  extends FSBasedRelation(paths, partitionsSchema) {
 
   import sqlContext.sparkContext
 
@@ -106,7 +106,8 @@ class SimpleTextRelation(
     case that: SimpleTextRelation =>
       this.paths.sameElements(that.paths) &&
         this.maybeDataSchema == that.maybeDataSchema &&
-        this.dataSchema == that.dataSchema
+        this.dataSchema == that.dataSchema &&
+        this.partitionColumns == that.partitionColumns
 
     case _ => false
   }

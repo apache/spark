@@ -269,34 +269,6 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
     }
   }
 
-  ignore("save()/load() - partitioned table - Append - mismatched partition columns") {
-    withTempPath { file =>
-      partitionedTestDF1.save(
-        source = classOf[SimpleTextSource].getCanonicalName,
-        mode = SaveMode.Overwrite,
-        options = Map("path" -> file.getCanonicalPath),
-        partitionColumns = Seq("p1", "p2"))
-
-      // Using only a subset of all partition columns
-      intercept[IllegalArgumentException] {
-        partitionedTestDF2.save(
-          source = classOf[SimpleTextSource].getCanonicalName,
-          mode = SaveMode.Append,
-          options = Map("path" -> file.getCanonicalPath),
-          partitionColumns = Seq("p1"))
-      }
-
-      // Using different order of partition columns
-      intercept[IllegalArgumentException] {
-        partitionedTestDF2.save(
-          source = classOf[SimpleTextSource].getCanonicalName,
-          mode = SaveMode.Append,
-          options = Map("path" -> file.getCanonicalPath),
-          partitionColumns = Seq("p2", "p1"))
-      }
-    }
-  }
-
   test("save()/load() - partitioned table - ErrorIfExists") {
     withTempDir { file =>
       intercept[RuntimeException] {
@@ -452,7 +424,7 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
     }
   }
 
-  ignore("saveAsTable()/load() - partitioned table - Append - mismatched partition columns") {
+  test("saveAsTable()/load() - partitioned table - Append - mismatched partition columns") {
     partitionedTestDF1.saveAsTable(
       tableName = "t",
       source = classOf[SimpleTextSource].getCanonicalName,
@@ -461,21 +433,21 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
       partitionColumns = Seq("p1", "p2"))
 
     // Using only a subset of all partition columns
-    intercept[IllegalArgumentException] {
+    intercept[Throwable] {
       partitionedTestDF2.saveAsTable(
         tableName = "t",
         source = classOf[SimpleTextSource].getCanonicalName,
-        mode = SaveMode.Overwrite,
+        mode = SaveMode.Append,
         options = Map("dataSchema" -> dataSchema.json),
         partitionColumns = Seq("p1"))
     }
 
     // Using different order of partition columns
-    intercept[IllegalArgumentException] {
+    intercept[Throwable] {
       partitionedTestDF2.saveAsTable(
         tableName = "t",
         source = classOf[SimpleTextSource].getCanonicalName,
-        mode = SaveMode.Overwrite,
+        mode = SaveMode.Append,
         options = Map("dataSchema" -> dataSchema.json),
         partitionColumns = Seq("p2", "p1"))
     }

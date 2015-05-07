@@ -224,10 +224,16 @@ private[sql] object ResolvedDataSource {
         case dataSource: SchemaRelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
         case dataSource: FSBasedRelationProvider =>
+          val maybePartitionsSchema = if (partitionColumns.isEmpty) {
+            None
+          } else {
+            Some(partitionColumnsSchema(schema, partitionColumns))
+          }
+
           dataSource.createRelation(
             sqlContext,
             Some(schema),
-            Some(partitionColumnsSchema(schema, partitionColumns)),
+            maybePartitionsSchema,
             new CaseInsensitiveMap(options))
         case dataSource: org.apache.spark.sql.sources.RelationProvider =>
           throw new AnalysisException(s"$className does not allow user-specified schemas.")
