@@ -89,6 +89,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val simpleRdd = sc.makeRDD(uniformDistro, 10)
     assert(error(simpleRdd.countApproxDistinct(8, 0), size) < 0.2)
     assert(error(simpleRdd.countApproxDistinct(12, 0), size) < 0.1)
+    assert(error(simpleRdd.countApproxDistinct(0.02), size) < 0.1)
+    assert(error(simpleRdd.countApproxDistinct(0.5), size) < 0.22)
   }
 
   test("SparkContext.union") {
