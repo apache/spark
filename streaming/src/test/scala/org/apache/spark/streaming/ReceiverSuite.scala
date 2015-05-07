@@ -155,61 +155,45 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     assert(recordedData.toSet === generatedData.toSet)
   }
 
-  ignore("block generator throttling") {
+  test("block generator throttling") {
     val blockGeneratorListener = new FakeBlockGeneratorListener
     val blockIntervalMs = 100
-    val maxRate = 1001
-    val conf = new SparkConf().set("spark.streaming.blockInterval", s"${blockIntervalMs}ms").
-      set("spark.streaming.receiver.maxRate", maxRate.toString)
-    val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
+    val maxRate = 100
+    val maxBlockSize = 10
+    val conf = new SparkConf()
+      .set("spark.streaming.blockInterval", s"${blockIntervalMs}ms")
+      .set("spark.streaming.receiver.maxRate", maxRate.toString)
+      .set("spark.streaming.maxBlockSize", maxBlockSize.toString)
     val expectedBlocks = 20
     val waitTime = expectedBlocks * blockIntervalMs
     val expectedMessages = maxRate * waitTime / 1000
-    val expectedMessagesPerBlock = maxRate * blockIntervalMs / 1000
-    val generatedData = new ArrayBuffer[Int]
+    val generatedData = 0 until expectedMessages
 
     // Generate blocks
     val startTime = System.currentTimeMillis()
+    val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
     blockGenerator.start()
-    var count = 0
-    while(System.currentTimeMillis - startTime < waitTime) {
-      blockGenerator.addData(count)
-      generatedData += count
-      count += 1
+
+    generatedData.foreach(blockGenerator.addData(_))
+    val endTime = System.currentTimeMillis()
+
+    // should have been rate limited
+    assert(endTime - startTime >= waitTime-10, "Should have taken longer than the theoretical minimum time")
+
+    // once all the blocks have arrived
+    eventually {
+      // we get the same data back
+      val recordedBlocks = blockGeneratorListener.arrayBuffers
+      val recordedData = recordedBlocks.flatten
+      assert(recordedData.toSet === generatedData.toSet, s"Received data not the same")
+      assert(recordedBlocks.size >= expectedBlocks, "We should have created at least the expected number of blocks")
+
+      // the block sizes are limited by maxBlockSize
+      val receivedBlockSizes = recordedBlocks.map { _.size }
+      assert(receivedBlockSizes.forall(_ <= maxBlockSize),
+        s"# records in received blocks = [$receivedBlockSizes], not bounded above by $maxBlockSize")
     }
     blockGenerator.stop()
-
-    val recordedBlocks = blockGeneratorListener.arrayBuffers
-    val recordedData = recordedBlocks.flatten
-    assert(blockGeneratorListener.arrayBuffers.size > 0, "No blocks received")
-    assert(recordedData.toSet === generatedData.toSet, "Received data not same")
-
-    // recordedData size should be close to the expected rate; use an error margin proportional to
-    // the value, so that rate changes don't cause a brittle test
-    val minExpectedMessages = expectedMessages - 0.05 * expectedMessages
-    val maxExpectedMessages = expectedMessages + 0.05 * expectedMessages
-    val numMessages = recordedData.size
-    assert(
-      numMessages >= minExpectedMessages && numMessages <= maxExpectedMessages,
-      s"#records received = $numMessages, not between $minExpectedMessages and $maxExpectedMessages"
-    )
-
-    // XXX Checking every block would require an even distribution of messages across blocks,
-    // which throttling code does not control. Therefore, test against the average.
-    val minExpectedMessagesPerBlock = expectedMessagesPerBlock - 0.05 * expectedMessagesPerBlock
-    val maxExpectedMessagesPerBlock = expectedMessagesPerBlock + 0.05 * expectedMessagesPerBlock
-    val receivedBlockSizes = recordedBlocks.map { _.size }.mkString(",")
-
-    // the first and last block may be incomplete, so we slice them out
-    val validBlocks = recordedBlocks.drop(1).dropRight(1)
-    val averageBlockSize = validBlocks.map(block => block.size).sum / validBlocks.size
-
-    assert(
-      averageBlockSize >= minExpectedMessagesPerBlock &&
-        averageBlockSize <= maxExpectedMessagesPerBlock,
-      s"# records in received blocks = [$receivedBlockSizes], not between " +
-        s"$minExpectedMessagesPerBlock and $maxExpectedMessagesPerBlock, on average"
-    )
   }
 
   /**
