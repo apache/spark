@@ -65,7 +65,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
    * Generate a row for a Spark Job. Because duplicated output op infos needs to be collapsed into
    * one cell, we use "rowspan" for the first row of a output op.
    */
-  def generateNormalJobRow(
+  private def generateNormalJobRow(
       outputOpId: OutputOpId,
       outputOpDescription: Seq[Node],
       formattedOutputOpDuration: String,
