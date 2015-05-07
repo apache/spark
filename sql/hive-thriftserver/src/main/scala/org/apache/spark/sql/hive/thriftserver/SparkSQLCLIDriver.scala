@@ -37,7 +37,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.hive.{HiveContext, HiveShim}
 import org.apache.spark.util.Utils
 
 private[hive] object SparkSQLCLIDriver {
@@ -81,7 +81,7 @@ private[hive] object SparkSQLCLIDriver {
     }
     val cliConf = new HiveConf(classOf[SessionState])
     // Override the location of the metastore since this is only used for local execution.
-    HiveContext.newTemporaryConfiguation().foreach {
+    HiveContext.newTemporaryConfiguration().foreach {
       case (key, value) => cliConf.set(key, value)
     }
     val sessionState = new CliSessionState(cliConf)

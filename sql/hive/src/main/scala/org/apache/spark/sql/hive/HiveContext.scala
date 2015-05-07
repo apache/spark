@@ -134,7 +134,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     logInfo(s"Initilizing execution hive, version $hiveExecutionVersion")
     new ClientWrapper(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
-      config = newTemporaryConfiguation())
+      config = newTemporaryConfiguration())
   }
   SessionState.setCurrentSessionState(executionHive.state)
 
@@ -463,7 +463,7 @@ private[hive] object HiveContext {
   val HIVE_METASTORE_JARS: String = "spark.sql.hive.metastore.jars"
 
   /** Constructs a configuration for hive, where the metastore is located in a temp directory. */
-  def newTemporaryConfiguation(): Map[String, String] = {
+  def newTemporaryConfiguration(): Map[String, String] = {
     val tempDir = Utils.createTempDir()
     val localMetastore = new File(tempDir, "metastore")
     Map(
