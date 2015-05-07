@@ -17,18 +17,22 @@
 
 package org.apache.spark.ml.feature
 
+import scala.util.Random
+
 import org.scalatest.FunSuite
 
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
 
   test("Bucket continuous features with setter") {
     val sqlContext = new SQLContext(sc)
-    val data = Array(0.1, -0.5, 0.2, -0.3, 0.8, 0.7, -0.1, -0.4)
+    val data = Array(0.1, -0.5, 0.2, -0.3, 0.8, 0.7, -0.1, -0.4, -0.9)
     val buckets = Array(-0.5, 0.0, 0.5)
-    val bucketizedData = Array(2.0, 0.0, 2.0, 1.0, 3.0, 3.0, 1.0, 1.0)
+    val bucketizedData = Array(2.0, 1.0, 2.0, 1.0, 3.0, 3.0, 1.0, 1.0, 0.0)
     val dataFrame: DataFrame = sqlContext.createDataFrame(
         data.zip(bucketizedData)).toDF("feature", "expected")
 
@@ -44,6 +48,23 @@ class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("Binary search for finding buckets") {
+    val data = Array.fill[Double](100)(Random.nextDouble())
+    val splits = Array.fill[Double](10)(Random.nextDouble()).sorted
+    val wrappedSplits = Array(Double.MinValue) ++ splits ++ Array(Double.MaxValue)
+    val bsResult = Vectors.dense(
+      data.map(x => Bucketizer.binarySearchForBuckets(wrappedSplits, x, true, true)))
+    val lsResult = Vectors.dense(data.map(x => BucketizerSuite.linearSearchForBuckets(splits, x)))
+    assert(bsResult ~== lsResult absTol 1e-5)
+  }
+}
 
+object BucketizerSuite {
+  private def linearSearchForBuckets(splits: Array[Double], feature: Double): Double = {
+    var i = 0
+    while (i < splits.size) {
+      if (feature < splits(i)) return i
+      i += 1
+    }
+    i
   }
 }

@@ -39,12 +39,12 @@ private[ml] final class Bucketizer(override val parent: Estimator[Bucketizer])
 
   /**
    * Parameter for mapping continuous features into buckets. With n splits, there are n+1 buckets.
-   * A bucket defined by splits x,y holds values in the range (x,y].
+   * A bucket defined by splits x,y holds values in the range [x,y).
    * @group param
    */
   val splits: Param[Array[Double]] = new Param[Array[Double]](this, "splits",
     "Split points for mapping continuous features into buckets. With n splits, there are n+1" +
-      " buckets. A bucket defined by splits x,y holds values in the range (x,y].",
+      " buckets. A bucket defined by splits x,y holds values in the range [x,y).",
     Bucketizer.checkSplits)
 
   /** @group getParam */
@@ -85,7 +85,8 @@ private[ml] final class Bucketizer(override val parent: Estimator[Bucketizer])
     transformSchema(dataset.schema)
     val wrappedSplits = Array(Double.MinValue) ++ $(splits) ++ Array(Double.MaxValue)
     val bucketizer = udf { feature: Double =>
-      Bucketizer.binarySearchForBuckets(wrappedSplits, feature) }
+      Bucketizer
+        .binarySearchForBuckets(wrappedSplits, feature, $(lowerInclusive), $(upperInclusive)) }
     val newCol = bucketizer(dataset($(inputCol)))
     val newField = prepOutputField(dataset.schema)
     dataset.withColumn($(outputCol), newCol.as($(outputCol), newField.metadata))
@@ -95,7 +96,6 @@ private[ml] final class Bucketizer(override val parent: Estimator[Bucketizer])
     val attr = new NominalAttribute(
       name = Some($(outputCol)),
       isOrdinal = Some(true),
-      numValues = Some($(splits).size),
       values = Some($(splits).map(_.toString)))
 
     attr.toStructField()
@@ -131,20 +131,27 @@ object Bucketizer {
   /**
    * Binary searching in several buckets to place each data point.
    */
-  private[feature] def binarySearchForBuckets(splits: Array[Double], feature: Double): Double = {
+  private[feature] def binarySearchForBuckets(
+      splits: Array[Double],
+      feature: Double,
+      lowerInclusive: Boolean,
+      upperInclusive: Boolean): Double = {
+    if ((feature < splits.head && !lowerInclusive) || (feature > splits.last && !upperInclusive))
+      throw new Exception(s"Feature $feature out of bound, check your features or loose the" +
+        s" lower/upper bound constraint.")
     var left = 0
     var right = splits.length - 2
     while (left <= right) {
       val mid = left + (right - left) / 2
       val split = splits(mid)
-      if ((feature > split) && (feature <= splits(mid + 1))) {
+      if ((feature >= split) && (feature < splits(mid + 1))) {
         return mid
-      } else if (feature <= split) {
+      } else if (feature < split) {
         right = mid - 1
       } else {
         left = mid + 1
       }
     }
-    throw new Exception("Failed to find a bucket.")
+    throw new Exception(s"Failed to find a bucket for feature $feature.")
   }
 }
