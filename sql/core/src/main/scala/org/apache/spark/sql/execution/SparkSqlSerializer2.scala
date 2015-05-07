@@ -49,7 +49,7 @@ private[sql] class Serializer2SerializationStream(
     out: OutputStream)
   extends SerializationStream with Logging {
 
-  val rowOut = new DataOutputStream(out)
+  val rowOut = new DataOutputStream(new BufferedOutputStream(out))
   val writeKeyFunc = SparkSqlSerializer2.createSerializationFunction(keySchema, rowOut)
   val writeValueFunc = SparkSqlSerializer2.createSerializationFunction(valueSchema, rowOut)
 
