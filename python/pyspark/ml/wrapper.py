@@ -68,9 +68,8 @@ class JavaWrapper(Params):
         for param in self.params:
             if param in paramMap:
                 value = paramMap[param]
-                if isinstance(value, list):
-                    value = _jvm().PythonUtils.toSeq(value)
-                java_obj.set(param.name, value)
+                java_param = java_obj.getParam(param.name)
+                java_obj.set(java_param.w(value))
 
     def _empty_java_param_map(self):
         """
@@ -82,7 +81,8 @@ class JavaWrapper(Params):
         paramMap = self._empty_java_param_map()
         for param, value in params.items():
             if param.parent is self:
-                paramMap.put(java_obj.getParam(param.name), value)
+                java_param = java_obj.getParam(param.name)
+                paramMap.put(java_param.w(value))
         return paramMap
 
 
