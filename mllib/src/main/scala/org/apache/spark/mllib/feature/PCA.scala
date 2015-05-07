@@ -77,7 +77,8 @@ class PCAModel private[mllib] (val k: Int, val pc: DenseMatrix) extends VectorTr
   /**
    * Transform a vector by computed Principal Components.
    *
-   * @param vector vector to be transformed. Vector must be the same length as the source vectors given to PCA.fit().
+   * @param vector vector to be transformed.
+   *               Vector must be the same length as the source vectors given to PCA.fit().
    * @return transformed vector. Vector will be of length k.
    */
   override def transform(vector: Vector): Vector =
