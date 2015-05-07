@@ -188,9 +188,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         hiveMetastoreJars
           .split(File.pathSeparator)
           .flatMap {
-            case path if path.endsWith("*") =>
-              val directory = new File(path.dropRight(1))
-              directory.listFiles.filter(_.getName.endsWith("jar"))
+            case path if new File(path).getName() == "*" =>
+              val files = new File(path).getParentFile().listFiles()
+              if (files == null) {
+                logWarning(s"Hive jar path '$path' does not exist.")
+                Nil
+              } else {
+                files.filter(_.getName().toLowerCase().endsWith(".jar"))
+              }
             case path =>
               new File(path) :: Nil
           }
