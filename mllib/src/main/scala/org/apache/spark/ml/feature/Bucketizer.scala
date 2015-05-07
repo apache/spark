@@ -18,11 +18,11 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructType}
@@ -32,7 +32,8 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  * `Bucketizer` maps a column of continuous features to a column of feature buckets.
  */
 @AlphaComponent
-final class Bucketizer extends Transformer with HasInputCol with HasOutputCol {
+final class Bucketizer(override val parent: Estimator[Bucketizer] = null)
+  extends Model[Bucketizer] with HasInputCol with HasOutputCol {
 
   /**
    * The given buckets should match 1) its size is larger than zero; 2) it is ordered in a non-DESC
