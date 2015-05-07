@@ -200,14 +200,13 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   private def generateOutputOpDescription(sparkJobs: Seq[SparkJobIdWithUIData]): Seq[Node] = {
     val lastStageInfo =
       sparkJobs.flatMap(_.jobUIData).headOption. // Get the first JobUIData
-        // Get the latest Stage info
-        flatMap { sparkJob =>
-        if (sparkJob.stageIds.isEmpty) {
-          None
-        } else {
-          sparkListener.stageIdToInfo.get(sparkJob.stageIds.max)
+        flatMap { sparkJob => // For the first job, get the latest Stage info
+          if (sparkJob.stageIds.isEmpty) {
+            None
+          } else {
+            sparkListener.stageIdToInfo.get(sparkJob.stageIds.max)
+          }
         }
-      }
     val lastStageData = lastStageInfo.flatMap { s =>
       sparkListener.stageIdToData.get((s.stageId, s.attemptId))
     }
