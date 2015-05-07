@@ -70,9 +70,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     val cacheLoader = new CacheLoader[QualifiedTableName, LogicalPlan]() {
       override def load(in: QualifiedTableName): LogicalPlan = {
         logDebug(s"Creating new cached data source for $in")
-        val table = HiveMetastoreCatalog.this.synchronized {
-          client.getTable(in.database, in.name)
-        }
+        val table = client.getTable(in.database, in.name)
 
         def schemaStringFromParts: Option[String] = {
           table.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
@@ -179,14 +177,14 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         serdeProperties = options))
   }
 
-  def hiveDefaultTableFilePath(tableName: String): String = synchronized {
+  def hiveDefaultTableFilePath(tableName: String): String = {
     // Code based on: hiveWarehouse.getTablePath(currentDatabase, tableName)
     new Path(
       new Path(client.getDatabase(client.currentDatabase).location),
       tableName.toLowerCase).toString
   }
 
-  def tableExists(tableIdentifier: Seq[String]): Boolean = synchronized {
+  def tableExists(tableIdentifier: Seq[String]): Boolean = {
     val tableIdent = processTableIdentifier(tableIdentifier)
     val databaseName =
       tableIdent
@@ -312,7 +310,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     result.newInstance()
   }
 
-  override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = synchronized {
+  override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
     val db = databaseName.getOrElse(client.currentDatabase)
 
     client.listTables(db).map(tableName => (tableName, false))

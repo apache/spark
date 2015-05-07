@@ -1149,8 +1149,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   }
 
   protected val escapedIdentifier = "`([^`]+)`".r
-  protected val singleQuotedString = "\"([^\"]+)\"".r
-  protected val doubleQuotedString = "'([^']+)'".r
+  protected val doubleQuotedString = "\"([^\"]+)\"".r
+  protected val singleQuotedString = "'([^']+)'".r
 
   protected def unquoteString(str: String) = str match {
     case singleQuotedString(s) => s
