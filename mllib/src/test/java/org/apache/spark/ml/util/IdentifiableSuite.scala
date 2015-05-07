@@ -17,33 +17,34 @@
 
 package org.apache.spark.ml.util
 
-import java.util.UUID
+import org.scalatest.FunSuite
 
+class IdentifiableSuite extends FunSuite {
 
-/**
- * Object with a unique ID that identifies itself and its derivatives.
- */
-private[ml] trait Identifiable extends Serializable {
+  import IdentifiableSuite._
 
-  /**
-   * A unique ID for the object and its derivatives. The default implementation concatenates
-   * [[simpleClassName]], "_", and 8 random hex chars.
-   */
-  final def uid: String = _uid
+  test("Identifiable") {
+    val test0 = new Test0
+    assert(test0.uid.startsWith(classOf[Test0].getSimpleName + "_"))
 
-  /**
-   * A simple name of the class, which is used as the first part of the generated UID. The default
-   * implementation uses [[java.lang.Class#getSimpleName()]].
-   */
-  protected def simpleClassName: String = this.getClass.getSimpleName
-
-  /**
-   * Sets the UID of the instance.
-   */
-  protected final def setUID(uid: String): this.type = {
-    this._uid = uid
-    this
+    val test1 = new Test1
+    assert(test1.uid.startsWith("test_"),
+      "simpleClassName should be the first part of the generated UID.")
+    val copied = test1.copy
+    assert(copied.uid === test1.uid, "Copied objects should be able to use the same UID.")
   }
+}
 
-  private var _uid = simpleClassName + "_" + UUID.randomUUID().toString.take(8)
+object IdentifiableSuite {
+
+  class Test0 extends Identifiable
+
+  class Test1 extends Identifiable {
+
+    override def simpleClassName: String = "test"
+
+    def copy: Test1 = {
+      new Test1().setUID(uid)
+    }
+  }
 }
