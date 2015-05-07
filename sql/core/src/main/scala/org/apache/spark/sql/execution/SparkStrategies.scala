@@ -136,10 +136,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             partial = false,
             namedGroupingAttributes,
             rewrittenAggregateExpressions,
+            unsafeEnabled,
             execution.GeneratedAggregate(
               partial = true,
               groupingExpressions,
               partialComputation,
+              unsafeEnabled,
               planLater(child))) :: Nil
 
       // Cases where some aggregate can not be codegened
@@ -301,8 +303,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Expand(projections, output, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
         execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
-      case logical.Sample(fraction, withReplacement, seed, child) =>
-        execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
+      case logical.Window(projectList, windowExpressions, spec, child) =>
+        execution.Window(projectList, windowExpressions, spec, planLater(child)) :: Nil
+      case logical.Sample(lb, ub, withReplacement, seed, child) =>
+        execution.Sample(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         LocalTableScan(output, data) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>

@@ -797,7 +797,7 @@ setMethod("first",
 #' @aliases distinct,RDD-method
 setMethod("distinct",
           signature(x = "RDD"),
-          function(x, numPartitions = SparkR::numPartitions(x)) {
+          function(x, numPartitions = SparkR:::numPartitions(x)) {
             identical.mapped <- lapply(x, function(x) { list(x, NULL) })
             reduced <- reduceByKey(identical.mapped,
                                    function(x, y) { x },
@@ -993,7 +993,7 @@ setMethod("coalesce",
            signature(x = "RDD", numPartitions = "numeric"),
            function(x, numPartitions, shuffle = FALSE) {
              numPartitions <- numToInt(numPartitions)
-             if (shuffle || numPartitions > SparkR::numPartitions(x)) {
+             if (shuffle || numPartitions > SparkR:::numPartitions(x)) {
                func <- function(partIndex, part) {
                  set.seed(partIndex)  # partIndex as seed
                  start <- as.integer(sample(numPartitions, 1) - 1)
@@ -1078,7 +1078,7 @@ setMethod("saveAsTextFile",
 #' @aliases sortBy,RDD,RDD-method
 setMethod("sortBy",
           signature(x = "RDD", func = "function"),
-          function(x, func, ascending = TRUE, numPartitions = SparkR::numPartitions(x)) {          
+          function(x, func, ascending = TRUE, numPartitions = SparkR:::numPartitions(x)) {
             values(sortByKey(keyBy(x, func), ascending, numPartitions))
           })
 
@@ -1552,7 +1552,7 @@ setMethod("cartesian",
 #' @aliases subtract,RDD
 setMethod("subtract",
           signature(x = "RDD", other = "RDD"),
-          function(x, other, numPartitions = SparkR::numPartitions(x)) {
+          function(x, other, numPartitions = SparkR:::numPartitions(x)) {
             mapFunction <- function(e) { list(e, NA) }
             rdd1 <- map(x, mapFunction)
             rdd2 <- map(other, mapFunction)
@@ -1583,7 +1583,7 @@ setMethod("subtract",
 #' @aliases intersection,RDD
 setMethod("intersection",
           signature(x = "RDD", other = "RDD"),
-          function(x, other, numPartitions = SparkR::numPartitions(x)) {
+          function(x, other, numPartitions = SparkR:::numPartitions(x)) {
             rdd1 <- map(x, function(v) { list(v, NA) })
             rdd2 <- map(other, function(v) { list(v, NA) })
 

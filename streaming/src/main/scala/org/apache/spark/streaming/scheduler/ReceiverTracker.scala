@@ -20,6 +20,7 @@ package org.apache.spark.streaming.scheduler
 import scala.collection.mutable.{HashMap, SynchronizedMap}
 import scala.language.existentials
 
+import org.apache.spark.streaming.util.WriteAheadLogUtils
 import org.apache.spark.{Logging, SerializableWritable, SparkEnv, SparkException}
 import org.apache.spark.rpc._
 import org.apache.spark.streaming.{StreamingContext, Time}
@@ -61,6 +62,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     ssc.sparkContext.hadoopConfiguration,
     receiverInputStreamIds,
     ssc.scheduler.clock,
+    ssc.isCheckpointPresent,
     Option(ssc.checkpointDir)
   )
   private val listenerBus = ssc.scheduler.listenerBus
@@ -125,7 +127,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     receivedBlockTracker.cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
 
     // Signal the receivers to delete old block data
-    if (ssc.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)) {
+    if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
       logInfo(s"Cleanup old received batch data: $cleanupThreshTime")
       receiverInfo.values.flatMap { info => Option(info.endpoint) }
         .foreach { _.send(CleanupOldBlocks(cleanupThreshTime)) }
@@ -153,10 +155,16 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   private def deregisterReceiver(streamId: Int, message: String, error: String) {
     val newReceiverInfo = receiverInfo.get(streamId) match {
       case Some(oldInfo) =>
-        oldInfo.copy(endpoint = null, active = false, lastErrorMessage = message, lastError = error)
+        val lastErrorTime =
+          if (error == null || error == "") -1 else ssc.scheduler.clock.getTimeMillis()
+        oldInfo.copy(endpoint = null, active = false, lastErrorMessage = message,
+          lastError = error, lastErrorTime = lastErrorTime)
       case None =>
         logWarning("No prior receiver info")
-        ReceiverInfo(streamId, "", null, false, "", lastErrorMessage = message, lastError = error)
+        val lastErrorTime =
+          if (error == null || error == "") -1 else ssc.scheduler.clock.getTimeMillis()
+        ReceiverInfo(streamId, "", null, false, "", lastErrorMessage = message,
+          lastError = error, lastErrorTime = lastErrorTime)
     }
     receiverInfo -= streamId
     listenerBus.post(StreamingListenerReceiverStopped(newReceiverInfo))
@@ -180,7 +188,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         oldInfo.copy(lastErrorMessage = message, lastError = error)
       case None =>
         logWarning("No prior receiver info")
-        ReceiverInfo(streamId, "", null, false, "", lastErrorMessage = message, lastError = error)
+        ReceiverInfo(streamId, "", null, false, "", lastErrorMessage = message,
+          lastError = error, lastErrorTime = ssc.scheduler.clock.getTimeMillis())
     }
     receiverInfo(streamId) = newReceiverInfo
     listenerBus.post(StreamingListenerReceiverError(receiverInfo(streamId)))

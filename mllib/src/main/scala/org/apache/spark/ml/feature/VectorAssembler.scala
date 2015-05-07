@@ -22,12 +22,9 @@ import scala.collection.mutable.ArrayBuilder
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
-import org.apache.spark.sql.{Column, DataFrame, Row}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CreateStruct}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -44,28 +41,25 @@ class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    val map = extractParamMap(paramMap)
+  override def transform(dataset: DataFrame): DataFrame = {
     val assembleFunc = udf { r: Row =>
       VectorAssembler.assemble(r.toSeq: _*)
     }
     val schema = dataset.schema
-    val inputColNames = map(inputCols)
+    val inputColNames = $(inputCols)
     val args = inputColNames.map { c =>
       schema(c).dataType match {
-        case DoubleType => UnresolvedAttribute(c)
-        case t if t.isInstanceOf[VectorUDT] => UnresolvedAttribute(c)
-        case _: NumericType | BooleanType =>
-          Alias(Cast(UnresolvedAttribute(c), DoubleType), s"${c}_double_$uid")()
+        case DoubleType => dataset(c)
+        case _: VectorUDT => dataset(c)
+        case _: NumericType | BooleanType => dataset(c).cast(DoubleType).as(s"${c}_double_$uid")
       }
     }
-    dataset.select(col("*"), assembleFunc(new Column(CreateStruct(args))).as(map(outputCol)))
+    dataset.select(col("*"), assembleFunc(struct(args : _*)).as($(outputCol)))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
-    val inputColNames = map(inputCols)
-    val outputColName = map(outputCol)
+  override def transformSchema(schema: StructType): StructType = {
+    val inputColNames = $(inputCols)
+    val outputColName = $(outputCol)
     val inputDataTypes = inputColNames.map(name => schema(name).dataType)
     inputDataTypes.foreach {
       case _: NumericType | BooleanType =>

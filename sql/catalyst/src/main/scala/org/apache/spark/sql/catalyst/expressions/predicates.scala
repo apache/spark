@@ -70,15 +70,13 @@ trait PredicateHelper {
     expr.references.subsetOf(plan.outputSet)
 }
 
-abstract class BinaryPredicate extends BinaryExpression with Predicate {
-  self: Product =>
-  override def nullable: Boolean = left.nullable || right.nullable
-}
 
-case class Not(child: Expression) extends UnaryExpression with Predicate {
+case class Not(child: Expression) extends UnaryExpression with Predicate with ExpectsInputTypes {
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
   override def toString: String = s"NOT $child"
+
+  override def expectedChildTypes: Seq[DataType] = Seq(BooleanType)
 
   override def eval(input: Row): Any = {
     child.eval(input) match {
@@ -120,7 +118,11 @@ case class InSet(value: Expression, hset: Set[Any])
   }
 }
 
-case class And(left: Expression, right: Expression) extends BinaryPredicate {
+case class And(left: Expression, right: Expression)
+  extends BinaryExpression with Predicate with ExpectsInputTypes {
+
+  override def expectedChildTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
+
   override def symbol: String = "&&"
 
   override def eval(input: Row): Any = {
@@ -142,7 +144,11 @@ case class And(left: Expression, right: Expression) extends BinaryPredicate {
   }
 }
 
-case class Or(left: Expression, right: Expression) extends BinaryPredicate {
+case class Or(left: Expression, right: Expression)
+  extends BinaryExpression with Predicate with ExpectsInputTypes {
+
+  override def expectedChildTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
+
   override def symbol: String = "||"
 
   override def eval(input: Row): Any = {
@@ -164,7 +170,7 @@ case class Or(left: Expression, right: Expression) extends BinaryPredicate {
   }
 }
 
-abstract class BinaryComparison extends BinaryPredicate {
+abstract class BinaryComparison extends BinaryExpression with Predicate {
   self: Product =>
 }
 

@@ -57,7 +57,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
    */
   // TODO: this currently doesn't work on P other than Tuple2!
   def sortByKey(ascending: Boolean = true, numPartitions: Int = self.partitions.length)
-      : RDD[(K, V)] =
+      : RDD[(K, V)] = self.withScope
   {
     val part = new RangePartitioner(numPartitions, self, ascending)
     new ShuffledRDD[K, V, V](self, part)
@@ -71,7 +71,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
    * This is more efficient than calling `repartition` and then sorting within each partition
    * because it can push the sorting down into the shuffle machinery.
    */
-  def repartitionAndSortWithinPartitions(partitioner: Partitioner): RDD[(K, V)] = {
+  def repartitionAndSortWithinPartitions(partitioner: Partitioner): RDD[(K, V)] = self.withScope {
     new ShuffledRDD[K, V, V](self, partitioner).setKeyOrdering(ordering)
   }
 
@@ -81,7 +81,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
    * performed efficiently by only scanning the partitions that might contain matching elements.
    * Otherwise, a standard `filter` is applied to all partitions.
    */
-  def filterByRange(lower: K, upper: K): RDD[P] = {
+  def filterByRange(lower: K, upper: K): RDD[P] = self.withScope {
 
     def inRange(k: K): Boolean = ordering.gteq(k, lower) && ordering.lteq(k, upper)
 

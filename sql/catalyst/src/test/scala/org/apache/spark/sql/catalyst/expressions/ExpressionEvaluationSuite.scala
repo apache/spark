@@ -1217,11 +1217,11 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     unaryMathFunctionEvaluation(Tanh, math.tanh)
   }
 
-  test("toDeg") {
+  test("toDegrees") {
     unaryMathFunctionEvaluation(ToDegrees, math.toDegrees)
   }
 
-  test("toRad") {
+  test("toRadians") {
     unaryMathFunctionEvaluation(ToRadians, math.toRadians)
   }
 
@@ -1251,18 +1251,6 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
 
   test("signum") {
     unaryMathFunctionEvaluation[Double](Signum, math.signum)
-  }
-
-  test("isignum") {
-    unaryMathFunctionEvaluation[Int](ISignum, math.signum, (-5 to 5))
-  }
-
-  test("fsignum") {
-    unaryMathFunctionEvaluation[Float](FSignum, math.signum, (-5 to 5).map(_.toFloat))
-  }
-
-  test("lsignum") {
-    unaryMathFunctionEvaluation[Long](LSignum, math.signum, (5 to 5).map(_.toLong))
   }
 
   test("log") {

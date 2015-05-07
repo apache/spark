@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{StringType, NullType}
+import org.apache.spark.sql.types.{IntegerType, StringType, NullType}
 
 case class Dummy(optKey: Option[Expression]) extends Expression {
   def children: Seq[Expression] = optKey.toSeq
@@ -129,5 +129,47 @@ class TreeNodeSuite extends FunSuite {
     assert(expected === actual)
   }
 
+  test("find") {
+    val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
+    // Find the top node.
+    var actual: Option[Expression] = expression.find {
+      case add: Add => true
+      case other => false
+    }
+    var expected: Option[Expression] =
+      Some(Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4)))))
+    assert(expected === actual)
 
+    // Find the first children.
+    actual = expression.find {
+      case Literal(1, IntegerType) => true
+      case other => false
+    }
+    expected = Some(Literal(1))
+    assert(expected === actual)
+
+    // Find an internal node (Subtract).
+    actual = expression.find {
+      case sub: Subtract => true
+      case other => false
+    }
+    expected = Some(Subtract(Literal(3), Literal(4)))
+    assert(expected === actual)
+
+    // Find a leaf node.
+    actual = expression.find {
+      case Literal(3, IntegerType) => true
+      case other => false
+    }
+    expected = Some(Literal(3))
+    assert(expected === actual)
+
+    // Find nothing.
+    actual = expression.find {
+      case Literal(100, IntegerType) => true
+      case other => false
+    }
+    expected = None
+    assert(expected === actual)
+  }
 }
