@@ -39,6 +39,7 @@ object KinesisUtils {
    * @param ssc    StreamingContext object
    * @param streamName   Kinesis stream name
    * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
+   * @param regionName   Region name to indicate the location of the Amazon Kinesis service
    * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
    *                            See the Kinesis Spark Streaming documentation for more
    *                            details on the different types of checkpoints.
@@ -50,18 +51,19 @@ object KinesisUtils {
    *                                 the tip of the stream (InitialPositionInStream.LATEST).
    * @param storageLevel Storage level to use for storing the received objects
    *
-   * @return ReceiverInputDStream[Array[Byte]]
+   * @return ReceiverInputDStream[ Array[Byte] ]
    */
   @Experimental
   def createStream(
       ssc: StreamingContext,
       streamName: String,
       endpointUrl: String,
+      regionName: String,
       checkpointInterval: Duration,
       initialPositionInStream: InitialPositionInStream,
       storageLevel: StorageLevel): ReceiverInputDStream[Array[Byte]] = {
     ssc.receiverStream(new KinesisReceiver(ssc.sc.appName, streamName, endpointUrl,
-        checkpointInterval, initialPositionInStream, storageLevel))
+        regionName, checkpointInterval, initialPositionInStream, storageLevel))
   }
 
   /**
@@ -70,6 +72,7 @@ object KinesisUtils {
    * @param jssc Java StreamingContext object
    * @param streamName   Kinesis stream name
    * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
+   * @param regionName   Region name to indicate the location of the Amazon Kinesis service
    * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
    *                            See the Kinesis Spark Streaming documentation for more
    *                            details on the different types of checkpoints.
@@ -81,17 +84,19 @@ object KinesisUtils {
    *                                 the tip of the stream (InitialPositionInStream.LATEST).
    * @param storageLevel Storage level to use for storing the received objects
    *
-   * @return JavaReceiverInputDStream[Array[Byte]]
+   * @return JavaReceiverInputDStream[ Array[Byte] ]
    */
   @Experimental
   def createStream(
-      jssc: JavaStreamingContext, 
-      streamName: String, 
-      endpointUrl: String, 
+      jssc: JavaStreamingContext,
+      streamName: String,
+      endpointUrl: String,
+      regionName: String,
       checkpointInterval: Duration,
       initialPositionInStream: InitialPositionInStream,
       storageLevel: StorageLevel): JavaReceiverInputDStream[Array[Byte]] = {
     jssc.receiverStream(new KinesisReceiver(jssc.ssc.sc.appName, streamName,
-        endpointUrl, checkpointInterval, initialPositionInStream, storageLevel))
+        endpointUrl, regionName, checkpointInterval, initialPositionInStream,
+        storageLevel))
   }
 }
