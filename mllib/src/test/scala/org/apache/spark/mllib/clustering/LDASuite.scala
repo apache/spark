@@ -138,12 +138,12 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     val lda = new LDA().setK(2)
     val corpus = sc.parallelize(tinyCorpus, 2)
     val op = new OnlineLDAOptimizer().initialize(corpus, lda)
-    op.setKappa(0.9876).setMiniBatchFraction(0.123).setTau_0(567)
+    op.setKappa(0.9876).setMiniBatchFraction(0.123).setTau0(567)
     assert(op.getAlpha == 0.5) // default 1.0 / k
     assert(op.getEta == 0.5)   // default 1.0 / k
     assert(op.getKappa == 0.9876)
     assert(op.getMiniBatchFraction == 0.123)
-    assert(op.getTau_0 == 567)
+    assert(op.getTau0 == 567)
   }
 
   test("OnlineLDAOptimizer one iteration") {
@@ -159,7 +159,7 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     val corpus = sc.parallelize(docs, 2)
 
     // Set GammaShape large to avoid the stochastic impact.
-    val op = new OnlineLDAOptimizer().setTau_0(1024).setKappa(0.51).setGammaShape(1e40)
+    val op = new OnlineLDAOptimizer().setTau0(1024).setKappa(0.51).setGammaShape(1e40)
       .setMiniBatchFraction(1)
     val lda = new LDA().setK(k).setMaxIterations(1).setOptimizer(op).setSeed(12345)
 
@@ -192,7 +192,7 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
 
     val docs = sc.parallelize(toydata)
-    val op = new OnlineLDAOptimizer().setMiniBatchFraction(1).setTau_0(1024).setKappa(0.51)
+    val op = new OnlineLDAOptimizer().setMiniBatchFraction(1).setTau0(1024).setKappa(0.51)
       .setGammaShape(1e10)
     val lda = new LDA().setK(2)
       .setDocConcentration(0.01)
