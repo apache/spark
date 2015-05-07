@@ -142,7 +142,9 @@ class HiveQlSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("Test CTAS #4") {
-    val s4 = """CREATE TABLE page_view STORED BY 'storage.handler.class.name' AS SELECT * FROM src"""
+    val s4 =
+      """CREATE TABLE page_view
+        |STORED BY 'storage.handler.class.name' AS SELECT * FROM src""".stripMargin
     intercept[AnalysisException] {
       extractTableDesc(s4)
     }
