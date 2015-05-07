@@ -104,6 +104,8 @@ _functions = {
     'toRadians': 'Converts an angle measured in degrees to an approximately equivalent angle ' +
              'measured in radians.',
 
+    'bitwiseNOT': 'Computes bitwise not.',
+
     'max': 'Aggregate function: returns the maximum value of the expression in a group.',
     'min': 'Aggregate function: returns the minimum value of the expression in a group.',
     'first': 'Aggregate function: returns the first value in a group.',
