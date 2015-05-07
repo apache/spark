@@ -111,8 +111,9 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     val specificAccessorFunctions = nativeTypes.map { dataType =>
       val ifStatements = expressions.zipWithIndex.flatMap {
-        // getString() is not used by expressions
-        case (e, i) if e.dataType == dataType && dataType != StringType =>
+        // getString(), getDate() and getTimestamp() are not used by expressions
+        case (e, i) if e.dataType == dataType && dataType != StringType && dataType != DateType
+            && dataType != TimestampType =>
           val elementName = newTermName(s"c$i")
           // TODO: The string of ifs gets pretty inefficient as the row grows in size.
           // TODO: Optional null checks?
@@ -126,6 +127,16 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           override def getString(i: Int): String = {
             $accessorFailure
           }"""
+        case DateType =>
+          q"""
+          override def getDate(i: Int): java.sql.Date = {
+            $accessorFailure
+          }"""
+        case TimestampType =>
+          q"""
+          override def getTimestamp(i: Int): java.sql.Timestamp = {
+            $accessorFailure
+          }"""
         case other =>
           q"""
           override def ${accessorForType(dataType)}(i: Int): ${termForType(dataType)} = {
@@ -137,8 +148,9 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     val specificMutatorFunctions = nativeTypes.map { dataType =>
       val ifStatements = expressions.zipWithIndex.flatMap {
-        // setString() is not used by expressions
-        case (e, i) if e.dataType == dataType && dataType != StringType =>
+        // setString(), setDate() and setTimestamp() are not used by expressions
+        case (e, i) if e.dataType == dataType && dataType != StringType && dataType != DateType
+            && dataType != TimestampType =>
           val elementName = newTermName(s"c$i")
           // TODO: The string of ifs gets pretty inefficient as the row grows in size.
           // TODO: Optional null checks?
@@ -150,6 +162,16 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           // MutableRow() need this interface to compile
           q"""
           override def setString(i: Int, value: String) {
+            $accessorFailure
+          }"""
+        case DateType =>
+          q"""
+          override def setDate(i: Int, value: java.sql.Date) {
+            $accessorFailure
+          }"""
+        case TimestampType =>
+          q"""
+          override def setTimestamp(i: Int, value: java.sql.Timestamp) = {
             $accessorFailure
           }"""
         case other =>

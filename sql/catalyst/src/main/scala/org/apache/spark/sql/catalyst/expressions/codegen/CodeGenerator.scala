@@ -685,7 +685,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * List of data types that have special accessors and setters in [[Row]].
    */
   protected val nativeTypes =
-    Seq(IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
+    Seq(IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType,
+      DateType, TimestampType)
 
   /**
    * Returns true if the data type has a special accessor and setter in [[Row]].
