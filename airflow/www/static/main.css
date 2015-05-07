@@ -148,6 +148,9 @@ div.square {
     margin-top: 2px;
     border:1px solid black;
 }
+.btn:active, .btn.active {
+  box-shadow: inset 0 6px 6px rgba(0, 0, 0, 0.4);
+}
 
 .hll { background-color: #ffffcc }
 .c { color: #408080; font-style: italic } /* Comment */
