@@ -178,10 +178,11 @@ private[ui] object RDDOperationGraph extends Logging {
    * On the stage page, it is displayed as a box with an embedded label.
    */
   private def makeDotNode(node: RDDOperationNode, forJob: Boolean): String = {
+    val label = s"${node.name} (${node.id})"
     if (forJob) {
-      s"""${node.id} [label=" " shape="circle" padding="5" labelStyle="font-size: 0"]"""
+      s"""${node.id} [label="$label" shape="circle" padding="5" labelStyle="font-size: 0"]"""
     } else {
-      s"""${node.id} [label="${node.name} (${node.id})" padding="5" labelStyle="font-size: 10"]"""
+      s"""${node.id} [label="$label" padding="5" labelStyle="font-size: 10"]"""
     }
   }
 
