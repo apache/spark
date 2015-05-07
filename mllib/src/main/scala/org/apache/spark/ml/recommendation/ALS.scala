@@ -35,6 +35,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -56,7 +57,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: 10
    * @group param
    */
-  val rank = new IntParam(this, "rank", "rank of the factorization", ParamValidators.gtEq(1))
+  val rank = new IntParam(uid, "rank", "rank of the factorization", ParamValidators.gtEq(1))
 
   /** @group getParam */
   def getRank: Int = $(rank)
@@ -66,7 +67,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: 10
    * @group param
    */
-  val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks",
+  val numUserBlocks = new IntParam(uid, "numUserBlocks", "number of user blocks",
     ParamValidators.gtEq(1))
 
   /** @group getParam */
@@ -77,7 +78,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: 10
    * @group param
    */
-  val numItemBlocks = new IntParam(this, "numItemBlocks", "number of item blocks",
+  val numItemBlocks = new IntParam(uid, "numItemBlocks", "number of item blocks",
       ParamValidators.gtEq(1))
 
   /** @group getParam */
@@ -88,7 +89,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: false
    * @group param
    */
-  val implicitPrefs = new BooleanParam(this, "implicitPrefs", "whether to use implicit preference")
+  val implicitPrefs = new BooleanParam(uid, "implicitPrefs", "whether to use implicit preference")
 
   /** @group getParam */
   def getImplicitPrefs: Boolean = $(implicitPrefs)
@@ -98,7 +99,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: 1.0
    * @group param
    */
-  val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference",
+  val alpha = new DoubleParam(uid, "alpha", "alpha for implicit preference",
     ParamValidators.gtEq(0))
 
   /** @group getParam */
@@ -109,7 +110,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: "user"
    * @group param
    */
-  val userCol = new Param[String](this, "userCol", "column name for user ids")
+  val userCol = new Param[String](uid, "userCol", "column name for user ids")
 
   /** @group getParam */
   def getUserCol: String = $(userCol)
@@ -119,7 +120,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: "item"
    * @group param
    */
-  val itemCol = new Param[String](this, "itemCol", "column name for item ids")
+  val itemCol = new Param[String](uid, "itemCol", "column name for item ids")
 
   /** @group getParam */
   def getItemCol: String = $(itemCol)
@@ -129,7 +130,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: "rating"
    * @group param
    */
-  val ratingCol = new Param[String](this, "ratingCol", "column name for ratings")
+  val ratingCol = new Param[String](uid, "ratingCol", "column name for ratings")
 
   /** @group getParam */
   def getRatingCol: String = $(ratingCol)
@@ -140,7 +141,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * @group param
    */
   val nonnegative = new BooleanParam(
-    this, "nonnegative", "whether to use nonnegative constraint for least squares")
+    uid, "nonnegative", "whether to use nonnegative constraint for least squares")
 
   /** @group getParam */
   def getNonnegative: Boolean = $(nonnegative)
@@ -171,7 +172,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
  * Model fitted by ALS.
  */
 class ALSModel private[ml] (
-    override val parent: ALS,
+    override val uid: String,
     k: Int,
     userFactors: RDD[(Int, Array[Float])],
     itemFactors: RDD[(Int, Array[Float])])
@@ -235,9 +236,11 @@ class ALSModel private[ml] (
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
-class ALS extends Estimator[ALSModel] with ALSParams {
+class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
 
   import org.apache.spark.ml.recommendation.ALS.Rating
+
+  def this() = this(Identifiable.randomUID("als"))
 
   /** @group setParam */
   def setRank(value: Int): this.type = set(rank, value)
@@ -299,7 +302,9 @@ class ALS extends Estimator[ALSModel] with ALSParams {
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
       alpha = $(alpha), nonnegative = $(nonnegative),
       checkpointInterval = $(checkpointInterval))
-    copyValues(new ALSModel(this, $(rank), userFactors, itemFactors))
+    val model = new ALSModel(uid, $(rank), userFactors, itemFactors)
+      .setParent(this)
+    copyValues(model)
   }
 
   override def transformSchema(schema: StructType): StructType = {

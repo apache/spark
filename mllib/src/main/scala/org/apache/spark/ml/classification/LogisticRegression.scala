@@ -20,6 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.DataFrame
@@ -41,9 +42,11 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
  * Currently, this class only supports binary classification.
  */
 @AlphaComponent
-class LogisticRegression
+class LogisticRegression(override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams {
+
+  def this() = this(Identifiable.randomUID("logreg"))
 
   /** @group setParam */
   def setRegParam(value: Double): this.type = set(regParam, value)
@@ -72,7 +75,7 @@ class LogisticRegression
       .setRegParam($(regParam))
       .setNumIterations($(maxIter))
     val oldModel = lr.run(oldDataset)
-    val lrm = new LogisticRegressionModel(this, oldModel.weights, oldModel.intercept)
+    val lrm = new LogisticRegressionModel(uid, oldModel.weights, oldModel.intercept)
 
     if (handlePersistence) {
       oldDataset.unpersist()
@@ -89,7 +92,7 @@ class LogisticRegression
  */
 @AlphaComponent
 class LogisticRegressionModel private[ml] (
-    override val parent: LogisticRegression,
+    override val uid: String,
     val weights: Vector,
     val intercept: Double)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
@@ -140,7 +143,7 @@ class LogisticRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LogisticRegressionModel = {
-    copyValues(new LogisticRegressionModel(parent, weights, intercept), extra)
+    copyValues(new LogisticRegressionModel(uid, weights, intercept), extra)
   }
 
   override protected def raw2prediction(rawPrediction: Vector): Double = {

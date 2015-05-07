@@ -24,7 +24,7 @@ import org.apache.spark.ml.attribute.{Attribute, BinaryAttribute, NominalAttribu
 import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 /**
@@ -37,8 +37,10 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  * linearly dependent because they sum up to one.
  */
 @AlphaComponent
-class OneHotEncoder extends UnaryTransformer[Double, Vector, OneHotEncoder]
-  with HasInputCol with HasOutputCol {
+class OneHotEncoder(override val uid: String)
+  extends UnaryTransformer[Double, Vector, OneHotEncoder] with HasInputCol with HasOutputCol {
+
+  def this() = this(Identifiable.randomUID("oneHot"))
 
   /**
    * Whether to include a component in the encoded vectors for the first category, defaults to true.

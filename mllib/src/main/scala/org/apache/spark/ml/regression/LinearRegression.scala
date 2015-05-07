@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import org.apache.spark.ml.util.Identifiable
+
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV, norm => brzNorm}
@@ -59,8 +61,11 @@ private[regression] trait LinearRegressionParams extends PredictorParams
  *  - L2 + L1 (elastic net)
  */
 @AlphaComponent
-class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegressionModel]
+class LinearRegression(override val uid: String)
+  extends Regressor[Vector, LinearRegression, LinearRegressionModel]
   with LinearRegressionParams with Logging {
+
+  def this() = this(Identifiable.randomUID("linReg"))
 
   /**
    * Set the regularization parameter.
@@ -126,7 +131,7 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
       logWarning(s"The standard deviation of the label is zero, so the weights will be zeros " +
         s"and the intercept will be the mean of the label; as a result, training is not needed.")
       if (handlePersistence) instances.unpersist()
-      return new LinearRegressionModel(this, Vectors.sparse(numFeatures, Seq()), yMean)
+      return new LinearRegressionModel(uid, Vectors.sparse(numFeatures, Seq()), yMean)
     }
 
     val featuresMean = summarizer.mean.toArray
@@ -179,7 +184,7 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     if (handlePersistence) instances.unpersist()
 
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
-    new LinearRegressionModel(this, weights.compressed, intercept)
+    copyValues(new LinearRegressionModel(uid, weights.compressed, intercept))
   }
 }
 
@@ -190,7 +195,7 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
  */
 @AlphaComponent
 class LinearRegressionModel private[ml] (
-    override val parent: LinearRegression,
+    override val uid: String,
     val weights: Vector,
     val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
@@ -201,7 +206,7 @@ class LinearRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LinearRegressionModel = {
-    copyValues(new LinearRegressionModel(parent, weights, intercept), extra)
+    copyValues(new LinearRegressionModel(uid, weights, intercept), extra)
   }
 }
 

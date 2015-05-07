@@ -21,29 +21,22 @@ import java.util.UUID
 
 
 /**
- * Object with a unique ID that identifies itself and its derivatives.
+ * Trait for an object with an immutable unique ID that identifies itself and its derivatives.
  */
-private[ml] trait Identifiable extends Serializable {
+trait Identifiable {
 
   /**
-   * A unique ID for the object and its derivatives. The default implementation concatenates
-   * [[simpleClassName]], "_", and 8 random hex chars.
+   * An immutable unique ID for the object and its derivatives.
    */
-  final def uid: String = _uid
+  val uid: String
+}
+
+object Identifiable {
 
   /**
-   * A simple name of the class, which is used as the first part of the generated UID. The default
-   * implementation uses [[java.lang.Class#getSimpleName()]].
+   * Returns a random UID that concatenates the given prefix, "_", and 12 random hex chars.
    */
-  protected def simpleClassName: String = this.getClass.getSimpleName
-
-  /**
-   * Sets the UID of the instance.
-   */
-  protected final def setUID(uid: String): this.type = {
-    this._uid = uid
-    this
+  def randomUID(prefix: String): String = {
+    prefix + "_" + UUID.randomUUID().toString.takeRight(12)
   }
-
-  private var _uid = simpleClassName + "_" + UUID.randomUUID().toString.take(8)
 }

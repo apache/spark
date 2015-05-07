@@ -139,7 +139,7 @@ private[shared] object SharedParamsCodeGen {
       |   * Param for $doc.
       |   * @group param
       |   */
-      |  final val $name: $Param = new $Param(this, "$name", "$doc"$isValid)
+      |  final val $name: $Param = new $Param(uid, "$name", "$doc"$isValid)
       |$setDefault
       |  /** @group getParam */
       |  final def get$Name: $T = $$($name)

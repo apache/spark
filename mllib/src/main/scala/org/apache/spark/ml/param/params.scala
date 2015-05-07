@@ -39,11 +39,16 @@ import org.apache.spark.ml.util.Identifiable
  * @tparam T param value type
  */
 @AlphaComponent
-class Param[T] (val parent: String, val name: String, val doc: String, val isValid: T => Boolean)
+class Param[T](val parent: String, val name: String, val doc: String, val isValid: T => Boolean)
   extends Serializable {
+
+  def this(parent: Identifiable, name: String, doc: String, isValid: T => Boolean) =
+    this(parent.uid, name, doc, isValid)
 
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue[T])
+
+  def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
   /**
    * Assert that the given value is valid for this parameter.
@@ -173,6 +178,11 @@ class DoubleParam(parent: String, name: String, doc: String, isValid: Double => 
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
 
+  def this(parent: Identifiable, name: String, doc: String, isValid: Double => Boolean) =
+    this(parent.uid, name, doc, isValid)
+
+  def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
+
   override def w(value: Double): ParamPair[Double] = super.w(value)
 }
 
@@ -182,6 +192,11 @@ class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolea
 
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
+
+  def this(parent: Identifiable, name: String, doc: String, isValid: Int => Boolean) =
+    this(parent.uid, name, doc, isValid)
+
+  def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
   override def w(value: Int): ParamPair[Int] = super.w(value)
 }
@@ -193,6 +208,11 @@ class FloatParam(parent: String, name: String, doc: String, isValid: Float => Bo
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
 
+  def this(parent: Identifiable, name: String, doc: String, isValid: Float => Boolean) =
+    this(parent.uid, name, doc, isValid)
+
+  def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
+
   override def w(value: Float): ParamPair[Float] = super.w(value)
 }
 
@@ -203,12 +223,19 @@ class LongParam(parent: String, name: String, doc: String, isValid: Long => Bool
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
 
+  def this(parent: Identifiable, name: String, doc: String, isValid: Long => Boolean) =
+    this(parent.uid, name, doc, isValid)
+
+  def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
+
   override def w(value: Long): ParamPair[Long] = super.w(value)
 }
 
 /** Specialized version of [[Param[Boolean]]] for Java. */
 class BooleanParam(parent: String, name: String, doc: String) // No need for isValid
   extends Param[Boolean](parent, name, doc) {
+
+  def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
   override def w(value: Boolean): ParamPair[Boolean] = super.w(value)
 }
@@ -413,13 +440,13 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
-   * Creates a copy of this instance with a randomly generated uid and some extra params.
-   * The default implementation calls the default constructor to create a new instance, then
-   * copies the embedded and extra parameters over and returns the new instance.
+   * Creates a copy of this instance with the same UID and some extra params.
+   * The default implementation tries to create a new instance with the same UID.
+   * Then it copies the embedded and extra parameters over and returns the new instance.
    * Subclasses should override this method if the default approach is not sufficient.
    */
   def copy(extra: ParamMap): Params = {
-    val that = this.getClass.newInstance()
+    val that = this.getClass.getConstructor(classOf[String]).newInstance(uid)
     copyValues(that, extra)
     that
   }

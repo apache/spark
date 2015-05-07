@@ -21,6 +21,7 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
@@ -55,7 +56,10 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
  * statistics on the samples in the training set.
  */
 @AlphaComponent
-class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerParams {
+class StandardScaler(override val uid: String) extends Estimator[StandardScalerModel]
+  with StandardScalerParams {
+
+  def this() = this(Identifiable.randomUID("stdScal"))
 
   setDefault(withMean -> false, withStd -> true)
 
@@ -76,7 +80,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
     val scaler = new feature.StandardScaler(withMean = $(withMean), withStd = $(withStd))
     val scalerModel = scaler.fit(input)
-    copyValues(new StandardScalerModel(this, scalerModel))
+    copyValues(new StandardScalerModel(uid, scalerModel).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -96,7 +100,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
  */
 @AlphaComponent
 class StandardScalerModel private[ml] (
-    override val parent: StandardScaler,
+    override val uid: String,
     scaler: feature.StandardScalerModel)
   extends Model[StandardScalerModel] with StandardScalerParams {
 
