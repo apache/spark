@@ -17,16 +17,17 @@
 
 package org.apache.spark.mllib.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg._
 
 /**
- * :: AlphaComponent ::
- * Outputs the Hadamard product (i.e., the element-wise product) of each input vector with a provided
- * "weight" vector. In other words, it scales each column of the dataset by a scalar multiplier.
+ * :: Experimental ::
+ * Outputs the Hadamard product (i.e., the element-wise product) of each input vector with a
+ * provided "weight" vector. In other words, it scales each column of the dataset by a scalar
+ * multiplier.
  * @param scalingVector The values used to scale the reference vector's individual components.
  */
-@AlphaComponent
+@Experimental
 class ElementwiseProduct(val scalingVector: Vector) extends VectorTransformer {
 
   /**
@@ -37,7 +38,7 @@ class ElementwiseProduct(val scalingVector: Vector) extends VectorTransformer {
    */
   override def transform(vector: Vector): Vector = {
     require(vector.size == scalingVector.size,
-      s"vector sizes do not match: ${scalingVector.size} ${vector.size}")
+      s"vector sizes do not match: Expected ${scalingVector.size} but found ${vector.size}")
     vector match {
       case dv: DenseVector =>
         val values: Array[Double] = dv.values.clone()
@@ -50,7 +51,7 @@ class ElementwiseProduct(val scalingVector: Vector) extends VectorTransformer {
         Vectors.dense(values)
       case SparseVector(size, indices, vs) =>
         val values = vs.clone()
-        val dim = values.size
+        val dim = values.length
         var i = 0
         while (i < dim) {
           values(i) *= scalingVector(indices(i))
