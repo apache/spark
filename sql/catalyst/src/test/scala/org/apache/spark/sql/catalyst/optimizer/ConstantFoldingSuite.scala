@@ -255,7 +255,7 @@ class ConstantFoldingSuite extends PlanTest {
         .select('a)
         .where(In(Literal(1), Seq(Literal(1), Literal(2))))
 
-    var optimized = Optimize(originalQuery.analyze)
+    var optimized = Optimize.execute(originalQuery.analyze)
 
     var correctAnswer =
       testRelation
@@ -270,7 +270,7 @@ class ConstantFoldingSuite extends PlanTest {
         .select('a)
         .where(In(Literal(1), Seq(Literal(1), 'a.attr)))
 
-    optimized = Optimize(originalQuery.analyze)
+    optimized = Optimize.execute(originalQuery.analyze)
 
     correctAnswer =
       testRelation
