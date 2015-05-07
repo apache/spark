@@ -92,7 +92,10 @@ class ClosureCleanerSuite extends FunSuite {
       expectCorrectException { TestUserClosuresActuallyCleaned.testKeyBy(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitions(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitionsWithIndex(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitionsWithContext(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testFlatMapWith(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testFilterWith(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testForEachWith(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapWith(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions2(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions3(rdd) }
@@ -263,19 +266,19 @@ private object TestUserClosuresActuallyCleaned {
     rdd.mapPartitionsWithIndex { (_, it) => return; it }.count()
   }
   def testFlatMapWith(rdd: RDD[Int]): Unit = {
-    import java.util.Random
-    val randoms = rdd.flatMapWith(
-      (index: Int) => new Random(index + 42))
-      {(t: Int, prng: Random) =>
-        val random = prng.nextDouble()
-        Seq(random * t, random * t * 10)}.
-      count()
+    rdd.flatMapWith { (_, it) => return; it }.count()
   }
   def testMapWith(rdd: RDD[Int]): Unit = {
-    import java.util.Random
-    val randoms = rdd.mapWith(
-      (index: Int) => new Random(index + 42))
-      {(t: Int, prng: Random) => prng.nextDouble * t}.count()
+    rdd.mapWith { (_, it) => return; it }.count()
+  }
+  def testFilterWith(rdd: RDD[Int]): Unit = {
+    rdd.filterWith { (_, it) => return; it }.count()
+  }
+  def testForEachWith(rdd: RDD[Int]): Unit = {
+    rdd.foreachWith { (_, it) => return; it }.count()
+  }
+  def testMapPartitionsWithContext(rdd: RDD[Int]): Unit = {
+    rdd.mapPartitionsWithContext { (_, it) => return; it }.count()
   }
   def testZipPartitions2(rdd: RDD[Int]): Unit = {
     rdd.zipPartitions(rdd) { case (it1, it2) => return; it1 }.count()

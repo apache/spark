@@ -717,7 +717,8 @@ abstract class RDD[T: ClassTag](
   def mapPartitionsWithContext[U: ClassTag](
       f: (TaskContext, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false): RDD[U] = withScope {
-    val func = (context: TaskContext, index: Int, iter: Iterator[T]) => f(context, iter)
+    val cleanedF = sc.clean(f)
+    val func = (context: TaskContext, index: Int, iter: Iterator[T]) => cleanF(context, iter)
     new MapPartitionsRDD(this, sc.clean(func), preservesPartitioning)
   }
 
@@ -789,8 +790,10 @@ abstract class RDD[T: ClassTag](
   @deprecated("use mapPartitionsWithIndex and filter", "1.0.0")
   def filterWith[A](constructA: Int => A)(p: (T, A) => Boolean): RDD[T] = withScope {
     mapPartitionsWithIndex((index, iter) => {
-      val a = constructA(index)
-      iter.filter(t => p(t, a))
+      val cleanP = sc.clean(p)
+      val cleanA = sc.clean(constructA)
+      val a = cleanA(index)
+      iter.filter(t => cleanP(t, a))
     }, preservesPartitioning = true)
   }
 
