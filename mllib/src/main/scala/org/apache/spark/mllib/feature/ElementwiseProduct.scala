@@ -22,8 +22,8 @@ import org.apache.spark.mllib.linalg._
 
 /**
  * :: AlphaComponent ::
- * Outputs the Hadamard product (i.e., the element-wise product) of each input vector with a provided "weight" vector.  In other words, it scales each column of the dataset by a scalar multiplier.
- *
+ * Outputs the Hadamard product (i.e., the element-wise product) of each input vector with a provided
+ * "weight" vector. In other words, it scales each column of the dataset by a scalar multiplier.
  * @param scalingVector The values used to scale the reference vector's individual components.
  */
 @AlphaComponent

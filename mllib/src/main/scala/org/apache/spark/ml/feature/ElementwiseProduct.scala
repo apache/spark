@@ -26,7 +26,8 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * :: AlphaComponent ::
- * Outputs the Hadamard product (i.e., the element-wise product) of each input vector with a provided "weight" vector.  In other words, it scales each column of the dataset by a scalar multiplier.
+ * Outputs the Hadamard product (i.e., the element-wise product) of each input vector with a
+ * provided "weight" vector.  In other words, it scales each column of the dataset by a scalar multiplier.
  */
 @AlphaComponent
 class ElementwiseProduct extends UnaryTransformer[Vector, Vector, ElementwiseProduct] {
