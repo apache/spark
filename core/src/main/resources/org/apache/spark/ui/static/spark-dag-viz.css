@@ -1,0 +1,83 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#dag-viz-graph svg path {
+  stroke: #444444;
+  stroke-width: 1.5px;
+}
+
+#dag-viz-graph svg g.cluster rect {
+  stroke-width: 4px;
+  stroke-opacity: 0.5;
+}
+
+#dag-viz-graph svg g.node circle,
+#dag-viz-graph svg g.node rect {
+  fill: #444444;
+}
+
+#dag-viz-graph svg g.node.cached circle,
+#dag-viz-graph svg g.node.cached rect {
+  fill: #FF0000;
+}
+
+/* Job page specific styles */
+
+#dag-viz-graph svg.job marker#marker-arrow path {
+  fill: #444444;
+  stroke-width: 0px;
+}
+
+#dag-viz-graph svg.job g.cluster rect {
+  fill: #FFFFFF;
+  stroke: #AADFFF;
+}
+
+#dag-viz-graph svg.job g.cluster[id*="stage"] rect {
+  stroke: #FFDDEE;
+  stroke-width: 6px;
+}
+
+#dag-viz-graph svg.job g#cross-stage-edges path {
+  fill: none;
+}
+
+#dag-viz-graph svg.job g.cluster text {
+  fill: #AAAAAA;
+}
+
+/* Stage page specific styles */
+
+#dag-viz-graph svg.stage g.cluster rect {
+  fill: #F0F8FF;
+  stroke: #AADFFF;
+}
+
+#dag-viz-graph svg.stage g.cluster[id*="stage"] rect {
+  fill: #FFFFFF;
+  stroke: #FFDDEE;
+  stroke-width: 6px;
+}
+
+#dag-viz-graph svg.stage g.node g.label text tspan {
+  fill: #FFFFFF;
+}
+
+#dag-viz-graph svg.stage g.cluster text {
+  fill: #444444;
+  font-weight: bold;
+}

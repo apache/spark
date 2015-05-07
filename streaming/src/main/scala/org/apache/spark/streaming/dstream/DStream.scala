@@ -553,7 +553,8 @@ abstract class DStream[T: ClassTag] (
     // because the DStream is reachable from the outer object here, and because 
     // DStreams can't be serialized with closures, we can't proactively check 
     // it for serializability and so we pass the optional false to SparkContext.clean
-    transform((r: RDD[T], t: Time) => context.sparkContext.clean(transformFunc(r), false))
+    val cleanedF = context.sparkContext.clean(transformFunc, false)
+    transform((r: RDD[T], t: Time) => cleanedF(r))
   }
 
   /**
@@ -626,7 +627,7 @@ abstract class DStream[T: ClassTag] (
         println("Time: " + time)
         println("-------------------------------------------")
         firstNum.take(num).foreach(println)
-        if (firstNum.size > num) println("...")
+        if (firstNum.length > num) println("...")
         println()
       }
     }

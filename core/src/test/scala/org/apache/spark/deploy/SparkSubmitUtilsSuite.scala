@@ -104,7 +104,7 @@ class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
     assert(jarPath.indexOf(ivyPath) >= 0, "should use non-default ivy path")
   }
 
-  test("search for artifact at other repositories") {
+  ignore("search for artifact at other repositories") {
     val path = SparkSubmitUtils.resolveMavenCoordinates("com.agimatec:agimatec-validation:0.9.3",
       Option("https://oss.sonatype.org/content/repositories/agimatec/"), None, true)
     assert(path.indexOf("agimatec-validation") >= 0, "should find package. If it doesn't, check" +
@@ -117,7 +117,7 @@ class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
     }
   }
 
-  test("neglects Spark and Spark's dependencies") {
+  ignore("neglects Spark and Spark's dependencies") {
     val components = Seq("bagel_", "catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
       "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
 

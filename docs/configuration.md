@@ -1,4 +1,4 @@
----
+--
 layout: global
 displayTitle: Spark Configuration
 title: Configuration
@@ -843,19 +843,27 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.tachyonStore.baseDir</code></td>
+  <td><code>spark.externalBlockStore.blockManager</code></td>
+  <td>org.apache.spark.storage.TachyonBlockManager</td>
+  <td>
+    Implementation of external block manager (file system) that store RDDs. The file system's URL is set by
+    <code>spark.externalBlockStore.url</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.externalBlockStore.baseDir</code></td>
   <td>System.getProperty("java.io.tmpdir")</td>
   <td>
-    Directories of the Tachyon File System that store RDDs. The Tachyon file system's URL is set by
-    <code>spark.tachyonStore.url</code>. It can also be a comma-separated list of multiple
+    Directories of the external block store that store RDDs. The file system's URL is set by
+   <code>spark.externalBlockStore.url</code> It can also be a comma-separated list of multiple
     directories on Tachyon file system.
   </td>
 </tr>
 <tr>
-  <td><code>spark.tachyonStore.url</code></td>
-  <td>tachyon://localhost:19998</td>
+  <td><code>spark.externalBlockStore.url</code></td>
+  <td>tachyon://localhost:19998 for Tachyon</td>
   <td>
-    The URL of the underlying Tachyon file system in the TachyonStore.
+    The URL of the underlying external blocker file system in the external block store.
   </td>
 </tr>
 </table>
@@ -1454,6 +1462,23 @@ Apart from these, the following properties are also available, and may be useful
     partition when using the new Kafka direct stream API. See the
     <a href="streaming-kafka-integration.html">Kafka Integration guide</a>
     for more details.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.kafka.maxRetries</code></td>
+  <td>1</td>
+  <td>
+    Maximum number of consecutive retries the driver will make in order to find
+    the latest offsets on the leader of each partition (a default value of 1
+    means that the driver will make a maximum of 2 attempts). Only applies to
+    the new Kafka direct stream API.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.ui.retainedBatches</code></td>
+  <td>1000</td>
+  <td>
+    How many batches the Spark Streaming UI and status APIs remember before garbage collecting.
   </td>
 </tr>
 </table>
