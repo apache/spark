@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.types.{UTF8String, StringType}
+import org.apache.spark.sql.types.{StructType, UTF8String, StringType}
 import org.apache.spark.sql.{Row, Strategy, execution, sources}
 
 /**
@@ -120,7 +120,7 @@ private[sql] object DataSourceStrategy extends Strategy {
       output: Seq[Attribute],
       rdd: RDD[Row]): SparkPlan = {
     val converted = if (relation.needConversion) {
-      execution.RDDConversions.rowToRowRdd(rdd, relation.schema)
+      execution.RDDConversions.rowToRowRdd(rdd, StructType.fromAttributes(output))
     } else {
       rdd
     }
