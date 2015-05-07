@@ -30,6 +30,7 @@ private[spark] class TaskContextImpl(
     override val attemptNumber: Int,
     override val taskMemoryManager: TaskMemoryManager,
     val runningLocally: Boolean = false,
+    val stageAttemptId: Int = 0,  // for testing
     val taskMetrics: TaskMetrics = TaskMetrics.empty)
   extends TaskContext
   with Logging {
