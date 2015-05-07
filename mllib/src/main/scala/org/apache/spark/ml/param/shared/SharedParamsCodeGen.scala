@@ -58,8 +58,7 @@ private[shared] object SharedParamsCodeGen {
         " For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.",
         isValid = "ParamValidators.inRange(0, 1)"),
       ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms"),
-      ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization."),
-      ParamDesc[Double]("p", "the p norm value.", isValid = "ParamValidators.gtEq(1)"))
+      ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization."))
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
