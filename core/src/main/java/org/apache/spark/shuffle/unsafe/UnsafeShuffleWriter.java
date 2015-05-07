@@ -118,7 +118,7 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
 
   private SpillInfo[] insertRecordsIntoSorter(
       scala.collection.Iterator<? extends Product2<K, V>> records) throws Exception {
-    final UnsafeShuffleSpillWriter sorter = new UnsafeShuffleSpillWriter(
+    final UnsafeShuffleExternalSorter sorter = new UnsafeShuffleExternalSorter(
       memoryManager,
       shuffleMemoryManager,
       blockManager,

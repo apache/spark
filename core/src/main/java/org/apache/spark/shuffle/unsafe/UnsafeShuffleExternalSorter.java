@@ -53,9 +53,9 @@ import org.apache.spark.unsafe.memory.TaskMemoryManager;
  * spill files. Instead, this merging is performed in {@link UnsafeShuffleWriter}, which uses a
  * specialized merge procedure that avoids extra serialization/deserialization.
  */
-public final class UnsafeShuffleSpillWriter {
+public final class UnsafeShuffleExternalSorter {
 
-  private final Logger logger = LoggerFactory.getLogger(UnsafeShuffleSpillWriter.class);
+  private final Logger logger = LoggerFactory.getLogger(UnsafeShuffleExternalSorter.class);
 
   private static final int SER_BUFFER_SIZE = 1024 * 1024;  // TODO: tune this / don't duplicate
   private static final int PAGE_SIZE = 1024 * 1024;  // TODO: tune this
@@ -86,14 +86,14 @@ public final class UnsafeShuffleSpillWriter {
   private MemoryBlock currentPage = null;
   private long currentPagePosition = -1;
 
-  public UnsafeShuffleSpillWriter(
-      TaskMemoryManager memoryManager,
-      ShuffleMemoryManager shuffleMemoryManager,
-      BlockManager blockManager,
-      TaskContext taskContext,
-      int initialSize,
-      int numPartitions,
-      SparkConf conf) throws IOException {
+  public UnsafeShuffleExternalSorter(
+    TaskMemoryManager memoryManager,
+    ShuffleMemoryManager shuffleMemoryManager,
+    BlockManager blockManager,
+    TaskContext taskContext,
+    int initialSize,
+    int numPartitions,
+    SparkConf conf) throws IOException {
     this.memoryManager = memoryManager;
     this.shuffleMemoryManager = shuffleMemoryManager;
     this.blockManager = blockManager;

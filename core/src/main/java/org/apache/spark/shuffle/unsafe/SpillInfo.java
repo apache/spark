@@ -22,7 +22,7 @@ import org.apache.spark.storage.BlockId;
 import java.io.File;
 
 /**
- * Metadata for a block of data written by {@link UnsafeShuffleSpillWriter}.
+ * Metadata for a block of data written by {@link UnsafeShuffleExternalSorter}.
  */
 final class SpillInfo {
   final long[] partitionLengths;
