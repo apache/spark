@@ -40,6 +40,7 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
+import org.apache.spark.util.CallSite
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -202,6 +203,8 @@ class StreamingContext private[streaming] (
 
   import StreamingContextState._
   private[streaming] var state = Initialized
+
+  private val startSite = new AtomicReference[CallSite](null)
 
   /**
    * Return the associated Spark context
@@ -527,7 +530,8 @@ class StreamingContext private[streaming] (
       throw new SparkException("StreamingContext has already been stopped")
     }
     validate()
-    sparkContext.setCallSite(DStream.getCreationSite())
+    startSite.set(DStream.getCreationSite())
+    sparkContext.setCallSite(startSite.get)
     ACTIVATION_LOCK.synchronized {
       assertNoOtherContextIsActive()
       scheduler.start()
@@ -625,7 +629,10 @@ object StreamingContext extends Logging {
   private def assertNoOtherContextIsActive(): Unit = {
     ACTIVATION_LOCK.synchronized {
       if (activeContext.get() != null) {
-        throw new SparkException("Only one StreamingContext may be started in this JVM")
+        throw new SparkException(
+          "Only one StreamingContext may be started in this JVM. " +
+            "Currently running StreamingContext was started at" +
+            activeContext.get.startSite.get.longForm)
       }
     }
   }
