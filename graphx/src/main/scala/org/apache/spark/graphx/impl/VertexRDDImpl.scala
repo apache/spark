@@ -220,14 +220,14 @@ class VertexRDDImpl[VD] private[graphx] (
     this.withPartitionsRDD[VD2](parts)
   }
 
-  override def aggregateWithFold[VD: ClassTag, VD2: ClassTag]
-      (messages: RDD[(VertexId, VD)], acc: VD2, foldFunc: (VD2, VD) => VD2)
-    : VertexRDD[VD2] = {
+  override def aggregateWithFold[VD2: ClassTag, VD3: ClassTag]
+      (messages: RDD[(VertexId, VD2)], initVal: () => VD3, foldFunc: (VD3, VD2) => VD3)
+    : VertexRDD[VD3] = {
     val shuffled = messages.partitionBy(this.partitioner.get)
     val parts = partitionsRDD.zipPartitions(shuffled, true) { (thisIter, msgIter) =>
-      thisIter.map(_.aggregateWithFold(msgIter, acc, foldFunc))
+      thisIter.map(_.aggregateWithFold(msgIter, initVal, foldFunc))
     }
-    this.withPartitionsRDD[VD2](parts)
+    this.withPartitionsRDD[VD3](parts)
   }
 
   override def reverseRoutingTables(): VertexRDD[VD] =

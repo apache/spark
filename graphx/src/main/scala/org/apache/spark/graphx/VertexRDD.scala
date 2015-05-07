@@ -248,9 +248,9 @@ abstract class VertexRDD[VD](
    * For those vertices, their values are the result of applying `reduceFunc` to all received
    * messages.
    */
-  def aggregateWithFold[VD: ClassTag, VD2: ClassTag]
-      (messages: RDD[(VertexId, VD)], acc: VD2, foldFunc: (VD2, VD) => VD2)
-    : VertexRDD[VD2]
+  def aggregateWithFold[VD2: ClassTag, VD3: ClassTag]
+      (messages: RDD[(VertexId, VD2)], initVal: () => VD3, foldFunc: (VD3, VD2) => VD3)
+    : VertexRDD[VD3]
 
   /**
    * Returns a new `VertexRDD` reflecting a reversal of all edge directions in the corresponding

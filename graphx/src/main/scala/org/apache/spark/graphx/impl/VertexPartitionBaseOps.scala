@@ -17,9 +17,11 @@
 
 package org.apache.spark.graphx.impl
 
+import scala.collection.mutable.ArrayBuffer
 import scala.language.higherKinds
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.Logging
 import org.apache.spark.util.collection.BitSet
@@ -235,11 +237,11 @@ private[graphx] abstract class VertexPartitionBaseOps
     this.withValues(newValues).withMask(newMask)
   }
 
-  def aggregateWithFold[VD: ClassTag, VD2: ClassTag]
-      (iter: Iterator[Product2[VertexId, VD]], acc: VD2,
-      foldFunc: (VD2, VD) => VD2): Self[VD2] = {
+  def aggregateWithFold[VD2: ClassTag, VD3: ClassTag]
+      (iter: Iterator[Product2[VertexId, VD2]], initVal: () => VD3,
+      foldFunc: (VD3, VD2) => VD3): Self[VD3] = {
     val newMask = new BitSet(self.capacity)
-    val newValues = new Array[VD2](self.capacity)
+    val newValues = new Array[VD3](self.capacity)
     iter.foreach { case (vid, vdata) =>
       val pos = self.index.getPos(vid)
       if (pos >= 0) {
@@ -247,7 +249,7 @@ private[graphx] abstract class VertexPartitionBaseOps
           newValues(pos) = foldFunc(newValues(pos), vdata)
         } else { // otherwise just store the new value
           newMask.set(pos)
-          newValues(pos) = acc
+          newValues(pos) = foldFunc(initVal(), vdata)
         }
       }
     }
