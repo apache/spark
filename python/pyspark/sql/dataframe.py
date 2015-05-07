@@ -1277,6 +1277,11 @@ class Column(object):
     __contains__ = _bin_op("contains")
     __getitem__ = _bin_op("getItem")
 
+    # bitwise operators
+    bitwiseOR = _bin_op("bitwiseOR")
+    bitwiseAND = _bin_op("bitwiseAND")
+    bitwiseXOR = _bin_op("bitwiseXOR")
+
     def getItem(self, key):
         """An expression that gets an item at position `ordinal` out of a list,
          or gets an item by key out of a dict.
