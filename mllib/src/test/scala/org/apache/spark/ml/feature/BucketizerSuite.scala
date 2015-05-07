@@ -17,9 +17,10 @@
 
 package org.apache.spark.ml.feature
 
+import org.scalatest.FunSuite
+
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
-import org.scalatest.FunSuite
 
 class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
 
@@ -34,11 +35,15 @@ class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
     val bucketizer: Bucketizer = new Bucketizer()
       .setInputCol("feature")
       .setOutputCol("result")
-      .setBuckets(buckets)
+      .setSplits(buckets)
 
     bucketizer.transform(dataFrame).select("result", "expected").collect().foreach {
       case Row(x: Double, y: Double) =>
         assert(x === y, "The feature value is not correct after bucketing.")
     }
+  }
+
+  test("Binary search for finding buckets") {
+
   }
 }
