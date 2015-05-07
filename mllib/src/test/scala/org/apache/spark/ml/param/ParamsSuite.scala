@@ -27,7 +27,7 @@ class ParamsSuite extends FunSuite {
 
     assert(maxIter.name === "maxIter")
     assert(maxIter.doc === "max number of iterations (>= 0)")
-    assert(maxIter.parent.eq(solver))
+    assert(maxIter.parent === solver.uid)
     assert(maxIter.toString === "maxIter: max number of iterations (>= 0) (default: 10)")
     assert(!maxIter.isValid(-1))
     assert(maxIter.isValid(0))

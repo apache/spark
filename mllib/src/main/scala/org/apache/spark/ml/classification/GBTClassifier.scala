@@ -212,6 +212,7 @@ private[ml] object GBTClassificationModel {
       // parent, fittingParamMap for each tree is null since there are no good ways to set these.
       DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
+    val uid = if (parent != null) parent.uid else Identifiable.randomUID("gbtc")
     new GBTClassificationModel(parent.uid, newTrees, oldModel.treeWeights)
   }
 }

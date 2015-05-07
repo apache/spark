@@ -130,6 +130,7 @@ private[ml] object DecisionTreeRegressionModel {
       s"Cannot convert non-regression DecisionTreeModel (old API) to" +
         s" DecisionTreeRegressionModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
-    new DecisionTreeRegressionModel(parent.uid, rootNode)
+    val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtr")
+    new DecisionTreeRegressionModel(uid, rootNode)
   }
 }

@@ -140,6 +140,7 @@ private[ml] object DecisionTreeClassificationModel {
       s"Cannot convert non-classification DecisionTreeModel (old API) to" +
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
+    val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtc")
     new DecisionTreeClassificationModel(parent.uid, rootNode)
   }
 }
