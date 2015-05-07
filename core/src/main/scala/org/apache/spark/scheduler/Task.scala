@@ -43,7 +43,10 @@ import org.apache.spark.util.Utils
  * @param stageId id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
  */
-private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) extends Serializable {
+private[spark] abstract class Task[T](
+    val stageId: Int,
+    val stageAttemptId: Int,
+    var partitionId: Int) extends Serializable {
 
   /**
    * Called by [[Executor]] to run this task.
@@ -55,6 +58,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
   final def run(taskAttemptId: Long, attemptNumber: Int): T = {
     context = new TaskContextImpl(
       stageId = stageId,
+      stageAttemptId = stageAttemptId,
       partitionId = partitionId,
       taskAttemptId = taskAttemptId,
       attemptNumber = attemptNumber,
