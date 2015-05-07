@@ -267,7 +267,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
 
     protected[hive] lazy val hiveconf: HiveConf = {
-      setConf(sessionState.getConf.getAllProperties)
+      setConf(sessionState.getConf.getAllProperties, false)
       sessionState.getConf
     }
 

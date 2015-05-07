@@ -114,7 +114,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group config
    */
-  def setConf(props: Properties): Unit = conf.setConf(props)
+  def setConf(props: Properties, overwrite: Boolean = true): Unit = conf.setConf(props, overwrite)
 
   /**
    * Set the given Spark SQL configuration property.
