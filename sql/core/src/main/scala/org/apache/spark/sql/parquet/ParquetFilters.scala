@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
+import java.io.Serializable
 import java.nio.ByteBuffer
 
 import com.google.common.io.BaseEncoding
@@ -24,7 +25,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.compat.FilterCompat._
 import org.apache.parquet.filter2.predicate.FilterApi._
-import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
+import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Statistics} 
+import org.apache.parquet.filter2.predicate.UserDefinedPredicate
 import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.SparkEnv
@@ -39,6 +41,25 @@ private[sql] object ParquetFilters {
     filterExpressions.flatMap { filter =>
       createFilter(filter)
     }.reduceOption(FilterApi.and).map(FilterCompat.get)
+  }
+    
+  case class SetInFilter[T <: Comparable[T]](
+    hSet: Set[T]) extends UserDefinedPredicate[T] with Serializable {
+
+    override def keep(value: T): Boolean = {
+      if (value == null) {
+        return false
+      }
+      return hSet.contains(value)
+    }
+
+    override def canDrop(statistics: Statistics[T]): Boolean = {
+      return false
+    }
+
+    override def inverseCanDrop(statistics: Statistics[T]): Boolean = {
+      return false
+    }
   }
 
   private val makeEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -151,6 +172,29 @@ private[sql] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gtEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
+  }
+
+  private val makeInSet: PartialFunction[DataType, (String, Set[Any]) => FilterPredicate] = {
+    case IntegerType =>
+      (n: String, v: Set[Any]) =>
+        FilterApi.userDefined(intColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Integer]]))
+    case LongType =>
+      (n: String, v: Set[Any]) =>
+        FilterApi.userDefined(longColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Long]]))
+    case FloatType =>
+      (n: String, v: Set[Any]) =>
+        FilterApi.userDefined(floatColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Float]]))
+    case DoubleType =>
+      (n: String, v: Set[Any]) =>
+        FilterApi.userDefined(doubleColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Double]]))
+    case StringType =>
+      (n: String, v: Set[Any]) =>
+        FilterApi.userDefined(binaryColumn(n),
+          SetInFilter(v.map(e => Binary.fromByteArray(e.asInstanceOf[UTF8String].getBytes))))
+    case BinaryType =>
+      (n: String, v: Set[Any]) =>
+        FilterApi.userDefined(binaryColumn(n),
+          SetInFilter(v.map(e => Binary.fromByteArray(e.asInstanceOf[Array[Byte]]))))
   }
 
   /**
@@ -283,6 +327,9 @@ private[sql] object ParquetFilters {
 
       case Not(pred) =>
         createFilter(pred).map(FilterApi.not)
+
+      case InSet(NamedExpression(name, dataType), hSet) =>
+        makeInSet.lift(dataType).map(_(name, hSet))
 
       case _ => None
     }
