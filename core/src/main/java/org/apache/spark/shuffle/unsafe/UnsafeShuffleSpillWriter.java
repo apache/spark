@@ -67,7 +67,6 @@ public final class UnsafeShuffleSpillWriter {
   private final BlockManager blockManager;
   private final TaskContext taskContext;
   private final boolean spillingEnabled;
-  private ShuffleWriteMetrics writeMetrics;
 
   /** The buffer size to use when writing spills using DiskBlockObjectWriter */
   private final int fileBufferSize;
@@ -107,15 +106,11 @@ public final class UnsafeShuffleSpillWriter {
     openSorter();
   }
 
-  // TODO: metrics tracking + integration with shuffle write metrics
-
   /**
    * Allocates a new sorter. Called when opening the spill writer for the first time and after
    * each spill.
    */
   private void openSorter() throws IOException {
-    this.writeMetrics = new ShuffleWriteMetrics();
-    // TODO: connect write metrics to task metrics?
     // TODO: move this sizing calculation logic into a static method of sorter:
     final long memoryRequested = initialSize * 8L;
     if (spillingEnabled) {
@@ -130,8 +125,8 @@ public final class UnsafeShuffleSpillWriter {
   }
 
   /**
-   * Sorts the in-memory records, writes the sorted records to a spill file, and frees the in-memory
-   * data structures associated with this sort. New data structures are not automatically allocated.
+   * Sorts the in-memory records and writes the sorted records to a spill file.
+   * This method does not free the sort data structures.
    */
   private SpillInfo writeSpillFile() throws IOException {
     // This call performs the actual sort.
@@ -161,7 +156,17 @@ public final class UnsafeShuffleSpillWriter {
     // OutputStream methods), but DiskBlockObjectWriter still calls some methods on it. To work
     // around this, we pass a dummy no-op serializer.
     final SerializerInstance ser = new DummySerializerInstance();
-    writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, writeMetrics);
+    // TODO: audit the metrics-related code and ensure proper metrics integration:
+    // It's not clear how we should handle shuffle write metrics for spill files; currently, Spark
+    // doesn't report IO time spent writing spill files (see SPARK-7413). This method,
+    // writeSpillFile(), is called both when writing spill files and when writing the single output
+    // file in cases where we didn't spill. As a result, we don't necessarily know whether this
+    // should be reported as bytes spilled or as shuffle bytes written. We could defer the updating
+    // of these metrics until the end of the shuffle write, but that would mean that that users
+    // wouldn't get useful metrics updates in the UI from long-running tasks. Given this complexity,
+    // I'm deferring these decisions to a separate follow-up commit or patch.
+    writer =
+      blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, new ShuffleWriteMetrics());
 
     int currentPartition = -1;
     while (sortedRecords.hasNext()) {
@@ -175,7 +180,8 @@ public final class UnsafeShuffleSpillWriter {
           spillInfo.partitionLengths[currentPartition] = writer.fileSegment().length();
         }
         currentPartition = partition;
-        writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, writeMetrics);
+        writer =
+          blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, new ShuffleWriteMetrics());
       }
 
       final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
@@ -295,7 +301,6 @@ public final class UnsafeShuffleSpillWriter {
       currentPage = memoryManager.allocatePage(PAGE_SIZE);
       currentPagePosition = currentPage.getBaseOffset();
       allocatedPages.add(currentPage);
-      logger.info("Acquired new page! " + allocatedPages.size() * PAGE_SIZE);
     }
   }
 

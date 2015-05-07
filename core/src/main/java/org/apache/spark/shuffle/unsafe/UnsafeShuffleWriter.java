@@ -125,8 +125,7 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
       taskContext,
       4096, // Initial size (TODO: tune this!)
       partitioner.numPartitions(),
-      sparkConf
-    );
+      sparkConf);
 
     final byte[] serArray = new byte[SER_BUFFER_SIZE];
     final ByteBuffer serByteBuffer = ByteBuffer.wrap(serArray);
@@ -182,10 +181,7 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
 
     for (int partition = 0; partition < numPartitions; partition++) {
       for (int i = 0; i < spills.length; i++) {
-        System.out.println("In partition " + partition + " and spill " + i );
         final long partitionLengthInSpill = spills[i].partitionLengths[partition];
-        System.out.println("Partition length in spill is " + partitionLengthInSpill);
-        System.out.println("input channel position is " + spillInputChannels[i].position());
         long bytesRemainingToBeTransferred = partitionLengthInSpill;
         final FileChannel spillInputChannel = spillInputChannels[i];
         while (bytesRemainingToBeTransferred > 0) {
@@ -228,7 +224,6 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
       }
     } finally {
       freeMemory();
-      // TODO: increment the shuffle write time metrics
     }
   }
 }
