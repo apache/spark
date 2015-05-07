@@ -39,10 +39,10 @@ import org.apache.spark.ml.util.Identifiable
  * @tparam T param value type
  */
 @AlphaComponent
-class Param[T] (val parent: Params, val name: String, val doc: String, val isValid: T => Boolean)
+class Param[T] (val parent: String, val name: String, val doc: String, val isValid: T => Boolean)
   extends Serializable {
 
-  def this(parent: Params, name: String, doc: String) =
+  def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue[T])
 
   /**
@@ -59,8 +59,7 @@ class Param[T] (val parent: Params, val name: String, val doc: String, val isVal
    */
   private[param] def validate(value: T): Unit = {
     if (!isValid(value)) {
-      throw new IllegalArgumentException(s"$parent parameter $name given invalid value $value." +
-        s" Parameter description: $toString")
+      throw new IllegalArgumentException(s"$parent parameter $name given invalid value $value.")
     }
   }
 
@@ -74,19 +73,15 @@ class Param[T] (val parent: Params, val name: String, val doc: String, val isVal
    */
   def ->(value: T): ParamPair[T] = ParamPair(this, value)
 
-  /**
-   * Converts this param's name, doc, and optionally its default value and the user-supplied
-   * value in its parent to string.
-   */
-  override def toString: String = {
-    val valueStr = if (parent.isDefined(this)) {
-      val defaultValueStr = parent.getDefault(this).map("default: " + _)
-      val currentValueStr = parent.get(this).map("current: " + _)
-      (defaultValueStr ++ currentValueStr).mkString("(", ", ", ")")
-    } else {
-      "(undefined)"
+  override final def toString: String = "${parent}__$name"
+
+  override final def hashCode: Int = toString.##
+
+  override final def equals(obj: Any): Boolean = {
+    obj match {
+      case p: Param[_] => (p.parent == parent) && (p.name == name)
+      case _ => false
     }
-    s"$name: $doc $valueStr"
   }
 }
 
@@ -172,47 +167,47 @@ object ParamValidators {
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
 
 /** Specialized version of [[Param[Double]]] for Java. */
-class DoubleParam(parent: Params, name: String, doc: String, isValid: Double => Boolean)
+class DoubleParam(parent: String, name: String, doc: String, isValid: Double => Boolean)
   extends Param[Double](parent, name, doc, isValid) {
 
-  def this(parent: Params, name: String, doc: String) =
+  def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
 
   override def w(value: Double): ParamPair[Double] = super.w(value)
 }
 
 /** Specialized version of [[Param[Int]]] for Java. */
-class IntParam(parent: Params, name: String, doc: String, isValid: Int => Boolean)
+class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolean)
   extends Param[Int](parent, name, doc, isValid) {
 
-  def this(parent: Params, name: String, doc: String) =
+  def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
 
   override def w(value: Int): ParamPair[Int] = super.w(value)
 }
 
 /** Specialized version of [[Param[Float]]] for Java. */
-class FloatParam(parent: Params, name: String, doc: String, isValid: Float => Boolean)
+class FloatParam(parent: String, name: String, doc: String, isValid: Float => Boolean)
   extends Param[Float](parent, name, doc, isValid) {
 
-  def this(parent: Params, name: String, doc: String) =
+  def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
 
   override def w(value: Float): ParamPair[Float] = super.w(value)
 }
 
 /** Specialized version of [[Param[Long]]] for Java. */
-class LongParam(parent: Params, name: String, doc: String, isValid: Long => Boolean)
+class LongParam(parent: String, name: String, doc: String, isValid: Long => Boolean)
   extends Param[Long](parent, name, doc, isValid) {
 
-  def this(parent: Params, name: String, doc: String) =
+  def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
 
   override def w(value: Long): ParamPair[Long] = super.w(value)
 }
 
 /** Specialized version of [[Param[Boolean]]] for Java. */
-class BooleanParam(parent: Params, name: String, doc: String) // No need for isValid
+class BooleanParam(parent: String, name: String, doc: String) // No need for isValid
   extends Param[Boolean](parent, name, doc) {
 
   override def w(value: Boolean): ParamPair[Boolean] = super.w(value)
@@ -278,9 +273,30 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
-   * Returns the documentation of all params.
+   * Explains a param.
+   * @param param input param, must belong to this instance.
+   * @return a string that contains the input param name, doc, and optionally its default value and
+   *         the user-supplied value
    */
-  def explainParams(): String = params.mkString("\n")
+  def explainParam(param: Param[_]): String = {
+    shouldOwn(param)
+    val valueStr = if (isDefined(param)) {
+      val defaultValueStr = getDefault(param).map("default: " + _)
+      val currentValueStr = get(param).map("current: " + _)
+      (defaultValueStr ++ currentValueStr).mkString("(", ", ", ")")
+    } else {
+      "(undefined)"
+    }
+    s"${param.name}: ${param.doc} $valueStr"
+  }
+
+  /**
+   * Explains all params of this instance.
+   * @see [[explainParam()]]
+   */
+  def explainParams(): String = {
+    params.map(explainParam).mkString("\n")
+  }
 
   /** Checks whether a param is explicitly set. */
   final def isSet(param: Param[_]): Boolean = {
@@ -432,7 +448,7 @@ trait Params extends Identifiable with Serializable {
 
   /** Validates that the input param belongs to this instance. */
   private def shouldOwn(param: Param[_]): Unit = {
-    require(param.parent.eq(this), s"Param $param does not belong to $this.")
+    require(param.parent == uid, s"Param $param does not belong to $this.")
   }
 
   /**
@@ -548,7 +564,7 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
 
   override def toString: String = {
     map.toSeq.sortBy(_._1.name).map { case (param, value) =>
-      s"\t${param.parent.uid}-${param.name}: $value"
+      s"\t${param.parent}-${param.name}: $value"
     }.mkString("{\n", ",\n", "\n}")
   }
 
