@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
 import org.apache.spark.sql.jdbc.JDBCWriteDetails
-import org.apache.spark.sql.json.JsonRDD
+import org.apache.spark.sql.json.{JacksonGenerator, JsonRDD}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
 import org.apache.spark.util.Utils
@@ -681,11 +681,11 @@ class DataFrame private[sql](
 
   /**
    * (Scala-specific) Aggregates on the entire [[DataFrame]] without groups.
-   * {{
+   * {{{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg("age" -> "max", "salary" -> "avg")
    *   df.groupBy().agg("age" -> "max", "salary" -> "avg")
-   * }}
+   * }}}
    * @group dfops
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
@@ -694,33 +694,33 @@ class DataFrame private[sql](
 
   /**
    * (Scala-specific) Aggregates on the entire [[DataFrame]] without groups.
-   * {{
+   * {{{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg(Map("age" -> "max", "salary" -> "avg"))
    *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
-   * }}
+   * }}}
    * @group dfops
    */
   def agg(exprs: Map[String, String]): DataFrame = groupBy().agg(exprs)
 
   /**
    * (Java-specific) Aggregates on the entire [[DataFrame]] without groups.
-   * {{
+   * {{{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg(Map("age" -> "max", "salary" -> "avg"))
    *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
-   * }}
+   * }}}
    * @group dfops
    */
   def agg(exprs: java.util.Map[String, String]): DataFrame = groupBy().agg(exprs)
 
   /**
    * Aggregates on the entire [[DataFrame]] without groups.
-   * {{
+   * {{{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg(max($"age"), avg($"salary"))
    *   df.groupBy().agg(max($"age"), avg($"salary"))
-   * }}
+   * }}}
    * @group dfops
    */
   @scala.annotation.varargs
@@ -1415,7 +1415,7 @@ class DataFrame private[sql](
       new Iterator[String] {
         override def hasNext: Boolean = iter.hasNext
         override def next(): String = {
-          JsonRDD.rowToJSON(rowSchema, gen)(iter.next())
+          JacksonGenerator(rowSchema, gen)(iter.next())
           gen.flush()
 
           val json = writer.toString

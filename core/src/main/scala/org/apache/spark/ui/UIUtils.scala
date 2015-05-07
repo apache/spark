@@ -156,13 +156,10 @@ private[spark] object UIUtils extends Logging {
 
   def commonHeaderNodes: Seq[Node] = {
     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-    <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
-          type="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
-          type="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")}
-          typ="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")}></link>
+    <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css" />
+    <link rel="stylesheet" href={prependBaseUri("/static/webui.css")} type="text/css" />
+    <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")} type="text/css" />
+    <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")} type="text/css" />
     <script src={prependBaseUri("/static/sorttable.js")} ></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
     <script src={prependBaseUri("/static/vis.min.js")}></script>
@@ -174,6 +171,7 @@ private[spark] object UIUtils extends Logging {
   }
 
   def vizHeaderNodes: Seq[Node] = {
+    <link rel="stylesheet" href={prependBaseUri("/static/spark-dag-viz.css")} type="text/css" />
     <script src={prependBaseUri("/static/d3.min.js")}></script>
     <script src={prependBaseUri("/static/dagre-d3.min.js")}></script>
     <script src={prependBaseUri("/static/graphlib-dot.min.js")}></script>
@@ -358,7 +356,7 @@ private[spark] object UIUtils extends Logging {
       <div id="dag-viz-metadata">
         {
           graphs.map { g =>
-            <div class="stage-metadata" stageId={g.rootCluster.id} style="display:none">
+            <div class="stage-metadata" stage-id={g.rootCluster.id} style="display:none">
               <div class="dot-file">{RDDOperationGraph.makeDotFile(g, forJob)}</div>
               { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
               { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }
