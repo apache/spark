@@ -44,6 +44,10 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val parameterAttempt = request.getParameter("attempt")
       require(parameterAttempt != null && parameterAttempt.nonEmpty, "Missing attempt parameter")
 
+      // If this is set, expand the dag visualization by default
+      val expandDagVizParam = request.getParameter("expandDagViz")
+      val expandDagViz = expandDagVizParam != null && expandDagVizParam.toBoolean
+
       val stageId = parameterId.toInt
       val stageAttemptId = parameterAttempt.toInt
       val stageDataOption = progressListener.stageIdToData.get((stageId, stageAttemptId))
@@ -173,6 +177,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val dagViz = UIUtils.showDagVizForStage(
         stageId, operationGraphListener.getOperationGraphForStage(stageId))
+
+      val maybeExpandDagViz: Seq[Node] =
+        if (expandDagViz) {
+          UIUtils.expandDagVizOnLoad(forJob = false)
+        } else {
+          Seq.empty
+        }
 
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
       def accumulableRow(acc: AccumulableInfo): Elem =
@@ -440,6 +451,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         summary ++
         showAdditionalMetrics ++
         dagViz ++
+        maybeExpandDagViz ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++

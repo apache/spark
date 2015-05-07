@@ -95,6 +95,7 @@ if __name__ == "__main__":
         ("predictionCol", "prediction column name", "'prediction'"),
         ("rawPredictionCol", "raw prediction column name", "'rawPrediction'"),
         ("inputCol", "input column name", None),
+        ("inputCols", "input column names", None),
         ("outputCol", "output column name", None),
         ("numFeatures", "number of features", None)]
     code = []
