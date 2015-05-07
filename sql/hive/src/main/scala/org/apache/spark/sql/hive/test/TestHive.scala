@@ -39,6 +39,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 import scala.collection.mutable
 import scala.language.implicitConversions
+import org.apache.hadoop.hive.conf.HiveConf
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -72,21 +73,24 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   lazy val warehousePath = Utils.createTempDir()
   lazy val metastorePath = Utils.createTempDir()
 
-  /** Sets up the system initially or after a RESET command */
-  protected def configure(): Unit = {
-    warehousePath.delete()
-    metastorePath.delete()
-    setConf("javax.jdo.option.ConnectionURL",
-      s"jdbc:derby:;databaseName=$metastorePath;create=true")
-    setConf("hive.metastore.warehouse.dir", warehousePath.toString)
+  /** Overrides metastore and warehouse paths */
+  override protected def overrideHiveConf(conf: HiveConf): HiveConf = {
+    val metastorePathStr = metastorePath.getCanonicalFile
+    conf.set(
+      "javax.jdo.option.ConnectionURL",
+      s"jdbc:derby:;databaseName=$metastorePathStr;create=true")
+
+    conf.set(
+      "hive.metastore.warehouse.dir",
+      warehousePath.getCanonicalPath)
+
+    conf
   }
 
   val testTempDir = Utils.createTempDir()
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
-
-  configure() // Must be called before initializing the catalog below.
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
@@ -384,9 +388,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    */
   protected val originalUdfs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
-  // Database default may not exist in 0.13.1, create it if not exist
-  HiveShim.createDefaultDBIfNeeded(this)
-
   /**
    * Resets the test instance by deleting any tables that have been created.
    * TODO: also clear out UDFs, views, etc.
@@ -437,7 +438,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
       runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
-      configure()
 
       runSqlHive("USE default")
 
