@@ -22,7 +22,7 @@ import java.util.NoSuchElementException
 
 import scala.annotation.varargs
 import scala.collection.mutable
-import scala.reflect.ClassTag
+import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.util.Identifiable
@@ -228,7 +228,8 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
 
   override def w(value: Array[String]): ParamPair[Array[String]] = super.w(value)
 
-  private[param] def wCast(value: Seq[String]): ParamPair[Array[String]] = w(value.toArray)
+  /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
+  def w(value: java.util.List[String]): ParamPair[Array[String]] = w(value.asScala.toArray)
 }
 
 /**
@@ -323,13 +324,7 @@ trait Params extends Identifiable with Serializable {
    * Sets a parameter in the embedded param map.
    */
   protected final def set[T](param: Param[T], value: T): this.type = {
-    shouldOwn(param)
-    if (param.isInstanceOf[StringArrayParam] && value.isInstanceOf[Seq[_]]) {
-      paramMap.put(param.asInstanceOf[StringArrayParam].wCast(value.asInstanceOf[Seq[String]]))
-    } else {
-      paramMap.put(param.w(value))
-    }
-    this
+    set(param -> value)
   }
 
   /**
@@ -337,6 +332,15 @@ trait Params extends Identifiable with Serializable {
    */
   protected final def set(param: String, value: Any): this.type = {
     set(getParam(param), value)
+  }
+
+  /**
+   * Sets a parameter in the embedded param map.
+   */
+  protected final def set(paramPair: ParamPair[_]): this.type = {
+    shouldOwn(paramPair.param)
+    paramMap.put(paramPair)
+    this
   }
 
   /**
