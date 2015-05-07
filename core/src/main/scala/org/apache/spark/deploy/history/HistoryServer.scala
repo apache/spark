@@ -83,7 +83,7 @@ class HistoryServer(
       }
 
       val appId = parts(1)
-      val attemptId = if (parts.length > 3) Some(parts(2)) else None
+      val attemptId = if (parts.length >= 3) Some(parts(2)) else None
 
       // Since we may have applications with multiple attempts mixed with applications with a
       // single attempt, we need to try both. Try the single-attempt route first, and if an
