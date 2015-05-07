@@ -61,7 +61,6 @@ class ElementwiseProductSuite extends FunSuite with MLlibTestSparkContext {
     }, "The vector type should be preserved after hadamard product")
 
     assert((data2, data2RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
-    assert(data2(0) ~== Vectors.sparse(3, Seq((0, -2.0), (1, 0.0))) absTol 1E-5)
-    assert(data2(1) ~== Vectors.sparse(3, Seq((1, 0.0), (2, -1.5))) absTol 1E-5)
+    assert(data2(0) ~== Vectors.sparse(3, Seq((1, 0.0), (2, -1.5))) absTol 1E-5)
   }
 }
