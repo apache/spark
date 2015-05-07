@@ -659,13 +659,17 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
-    val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
-    val appliedSchema =
-      Option(schema).getOrElse(
-        JsonRDD.nullTypeToStringType(
-          JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
-    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    createDataFrame(rowRDD, appliedSchema, needsConversion = false)
+    if (conf.useJacksonStreamingAPI) {
+      baseRelationToDataFrame(new JSONRelation(() => json, None, 1.0, Some(schema))(this))
+    } else {
+      val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
+      val appliedSchema =
+        Option(schema).getOrElse(
+          JsonRDD.nullTypeToStringType(
+            JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
+      val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
+      createDataFrame(rowRDD, appliedSchema, needsConversion = false)
+    }
   }
 
   /**
@@ -689,12 +693,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
-    val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
-    val appliedSchema =
-      JsonRDD.nullTypeToStringType(
-        JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
-    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    createDataFrame(rowRDD, appliedSchema, needsConversion = false)
+    if (conf.useJacksonStreamingAPI) {
+      baseRelationToDataFrame(new JSONRelation(() => json, None, samplingRatio, None)(this))
+    } else {
+      val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
+      val appliedSchema =
+        JsonRDD.nullTypeToStringType(
+          JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
+      val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
+      createDataFrame(rowRDD, appliedSchema, needsConversion = false)
+    }
   }
 
   /**
