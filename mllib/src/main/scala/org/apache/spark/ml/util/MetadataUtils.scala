@@ -40,7 +40,7 @@ object MetadataUtils {
     Attribute.fromStructField(labelSchema) match {
       case binAttr: BinaryAttribute => Some(2)
       case nomAttr: NominalAttribute => nomAttr.getNumValues
-      case _:NumericAttribute | UnresolvedAttribute => None
+      case _: NumericAttribute | UnresolvedAttribute => None
     }
   }
 

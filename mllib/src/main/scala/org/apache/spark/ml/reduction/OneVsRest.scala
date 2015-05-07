@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.classification.{ClassificationModel, Classifier, ClassifierParams}
-import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
+import org.apache.spark.ml.impl.estimator.{PredictorParams, PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
 import org.apache.spark.mllib.linalg.Vector
@@ -34,20 +34,20 @@ import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
 /**
- * Model produced by [[OneVsAll]].
+ * Model produced by [[OneVsRest]].
  *
  * @param parent
  * @param models the binary classification models for reduction.
  */
 @AlphaComponent
-class OneVsAllModel[
+class OneVsRestModel[
     FeaturesType,
     E <: Classifier[FeaturesType, E, M],
     M <: ClassificationModel[FeaturesType, M]](
-      override val parent: OneVsAll[FeaturesType, E, M],
-      val models: Array[M])
-  extends PredictionModel[FeaturesType, OneVsAllModel[FeaturesType, E, M]]
-  with ClassifierParams {
+      override val parent: OneVsRest[FeaturesType, E, M],
+      val models: Array[_ <: ClassificationModel[FeaturesType, M]])
+  extends PredictionModel[FeaturesType, OneVsRestModel[FeaturesType, E, M]]
+  with PredictorParams {
 
   override protected def featuresDataType: DataType = parent.featuresDataType
 
@@ -60,12 +60,12 @@ class OneVsAllModel[
     val parentSchema = dataset.schema
     transformSchema(parentSchema, logging = true)
     val sqlCtx = dataset.sqlContext
-
+    val rawPredictionCol = parent.classifier.getRawPredictionCol
     // score each model on every data point and pick the model with highest score
     // TODO: Use DataFrame expressions to leverage performance here
     val predictions = models.zipWithIndex.par.map { case (model, index) =>
       val output = model.transform(dataset)
-      output.select($(rawPredictionCol)).map { case Row(p: Vector) => List((index, p(1))) }
+      output.select(rawPredictionCol).map { case Row(p: Vector) => List((index, p(1))) }
     }.reduce[RDD[List[(Int, Double)]]] { case (x, y) =>
       x.zip(y).map { case ((a, b)) =>
         a ++ b
@@ -82,7 +82,7 @@ class OneVsAllModel[
     sqlCtx.createDataFrame(results, outputSchema)
   }
 
-  def predict(features: FeaturesType): Double = {
+  override protected def predict(features: FeaturesType): Double = {
     throw new UnsupportedOperationException("Ensemble Classifier does not support predict," +
       " use transform instead")
   }
@@ -97,19 +97,16 @@ class OneVsAllModel[
  * Each example is scored against all k models and the model with highest score
  * is picked to label the example.
  *
- * Classifier parameters like featuresCol, predictionCol and rawPredictionCol are
- * set directly on the OneVsRest and are ignored on the underlying classifier.
- *
  */
 @Experimental
-class OneVsAll[
+class OneVsRest[
     FeaturesType,
     E <: Classifier[FeaturesType, E, M],
     M <: ClassificationModel[FeaturesType, M]]
   (val classifier: Classifier[FeaturesType, E, M])
-  (implicit m: ClassTag[M])
-  extends Predictor[FeaturesType, OneVsAll[FeaturesType, E, M], OneVsAllModel[FeaturesType, E, M]]
-  with ClassifierParams {
+  extends Predictor[FeaturesType, OneVsRest[FeaturesType, E, M],
+    OneVsRestModel[FeaturesType, E, M]]
+  with PredictorParams {
 
   override private[ml] def featuresDataType: DataType = classifier.featuresDataType
 
@@ -117,11 +114,13 @@ class OneVsAll[
     validateAndTransformSchema(schema, fitting = true, featuresDataType)
   }
 
-  override protected def train(dataset: DataFrame): OneVsAllModel[FeaturesType, E, M] = {
+  override protected def train(dataset: DataFrame): OneVsRestModel[FeaturesType, E, M] = {
     // determine number of classes either from metadata if provided, or via computation.
     val labelSchema = dataset.schema($(labelCol))
     val computeNumClasses: () => Int = () => {
-      dataset.select($(labelCol)).distinct.count().toInt
+      val Row(maxLabelIndex: Double) = dataset.agg(max($(labelCol))).head()
+      // classes are assumed to be numbered from 0,...,maxLabelIndex
+      maxLabelIndex.toInt + 1
     }
     val numClasses = MetadataUtils.getNumClasses(labelSchema).fold(computeNumClasses())(identity)
 
@@ -140,7 +139,6 @@ class OneVsAll[
         if (label.toInt == index) 1.0 else 0.0
       }
 
-      // generate new label for each binary classifier.
       // generate new label metadata for the binary problem.
       // TODO: use when ... otherwise after SPARK-7321 is merged
       val labelUDF = callUDF(label, DoubleType, col($(labelCol)))
@@ -149,17 +147,13 @@ class OneVsAll[
       val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDFWithNewMeta)
       val map = new ParamMap()
       map.put(classifier.labelCol -> labelColName)
-      map.put(classifier.featuresCol -> $(featuresCol))
-      map.put(classifier.predictionCol -> $(predictionCol))
-      map.put(classifier.rawPredictionCol -> $(rawPredictionCol))
       classifier.fit(trainingDataset, map)
-    }.toArray[M]
+    }.toArray[ClassificationModel[FeaturesType, M]]
 
     if (handlePersistence) {
       multiclassLabeled.unpersist()
     }
 
-    new OneVsAllModel[FeaturesType, E, M](this, models)
+    new OneVsRestModel[FeaturesType, E, M](this, models)
   }
 }
-

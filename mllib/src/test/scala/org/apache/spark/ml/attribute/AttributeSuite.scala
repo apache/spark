@@ -214,9 +214,7 @@ class AttributeSuite extends FunSuite {
     val metadata = NumericAttribute.defaultAttr.withName("label").toMetadata()
     val fldWithoutMeta = new StructField("x", DoubleType, false, Metadata.empty)
     assert(Attribute.fromStructField(fldWithoutMeta) == UnresolvedAttribute)
-
     val fldWithMeta = new StructField("x", DoubleType, false, metadata)
     assert(Attribute.fromStructField(fldWithMeta).isNumeric)
-
   }
 }
