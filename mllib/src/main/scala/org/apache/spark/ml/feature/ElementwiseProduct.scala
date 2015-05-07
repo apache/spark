@@ -25,18 +25,26 @@ import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.types.DataType
 
 /**
- * :: AlphaComponent
- * Maps a vector to the hadamard product of it and a reference vector.
+ * :: AlphaComponent ::
+ * Outputs the Hadamard product (i.e., the element-wise product) of each input vector with a provided "weight" vector.  In other words, it scales each column of the dataset by a scalar multiplier.
  */
 @AlphaComponent
 class ElementwiseProduct extends UnaryTransformer[Vector, Vector, ElementwiseProduct] {
 
-  /** the vector to multiply with input vectors */
-  val scalingVec : Param[Vector] = new Param(this, "scalingVector", "vector for hadamard product")
+  /**
+    * the vector to multiply with input vectors
+    * @group param
+    */
+  val scalingVec: Param[Vector] = new Param(this, "scalingVector", "vector for hadamard product")
+
+  /** @group setParam */
   def setScalingVec(value: Vector): this.type = set(scalingVec, value)
+
+  /** @group getParam */
   def getScalingVec: Vector = getOrDefault(scalingVec)
 
   override protected def createTransformFunc(paramMap: ParamMap): Vector => Vector = {
+    require(paramMap.contains(scalingVec), s"transformation requires a weight vector: $scalingVec")
     val elemScaler = new feature.ElementwiseProduct(paramMap(scalingVec))
     elemScaler.transform
   }

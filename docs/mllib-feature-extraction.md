@@ -479,7 +479,7 @@ sc.stop();
 
 ## ElementwiseProduct
 
-ElementwiseProduct multiplies individual vector samples by a provided weighting vector component-wise.  This represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29) between the input vector, `v` and transforming vector, `w`, to yield a result vector.
+ElementwiseProduct multiplies each input vector by a provided "weight" vector, using element-wise multiplication. In other words, it scales each column of the dataset by a scalar multiplier.  This represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29) between the input vector, `v` and transforming vector, `w`, to yield a result vector.
 
 `\[ \begin{pmatrix}
 v_1 \\
@@ -499,7 +499,7 @@ v_N
 
 [`ElementwiseProduct`](api/scala/index.html#org.apache.spark.mllib.feature.ElementwiseProduct) has the following parameter in the constructor:
 
-* `w` Vector, the transforming vector.
+* `w`: the transforming vector.
 
 `ElementwiseProduct` implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer) which can apply the weighting on a `Vector` to produce a transformed `Vector` or on an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
 
@@ -515,35 +515,16 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.feature.ElementwiseProduct
 import org.apache.spark.mllib.linalg.Vectors
 
-//load and parse the data
+// Load and parse the data:
 val data = sc.textFile("data/mllib/kmeans_data.txt")
 val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble)))
 
 val transformingVector = Vectors.dense(0.0, 1.0, 2.0)
 val transformer = new ElementwiseProduct(transformingVector)
 
-//same results:
+// Batch transform and per-row transform give the same results:
 val transformedData = transformer.transform(parsedData)
 val transformedData2 = parsedData.map(x => transformer.transform(x))
-
-{% endhighlight %}
-</div>
-
-<div data-lang="python">
-{% highlight python %}
-from pyspark.mllib.linalg import Vectors
-from pyspark.mllib.feature import ElementwiseProduct
-
-# Load and parse the data
-data = sc.textFile("data/mllib/kmeans_data.txt")
-parsedData = data.map(lambda line: array([float(x) for x in line.split(' ')]))
-
-transformingVector = Vectors.dense(0.0, 1.0, 2.0)
-transformer = ElementwiseProduct(transformingVector)
-
-# Same results:
-transformedData = transformer.transform(parsedData)
-transformedData2 = parsedData.map(lambda x: transformer.transform(x))
 
 {% endhighlight %}
 </div>

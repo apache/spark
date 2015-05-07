@@ -17,55 +17,40 @@
 
 package org.apache.spark.mllib.feature
 
-import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, Vectors}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.scalatest.FunSuite
+
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class ElementwiseProductSuite extends FunSuite with MLlibTestSparkContext{
+class ElementwiseProductSuite extends FunSuite with MLlibTestSparkContext {
 
-  val denseData =  Array(
-    Vectors.dense(1.0, 1.0, 0.0, 0.0),
-    Vectors.dense(1.0, 2.0, -3.0, 0.0),
-    Vectors.dense(1.0, 3.0, 0.0, 0.0),
-    Vectors.dense(1.0, 4.0, 1.9, -9.0),
-    Vectors.dense(1.0, 5.0, 0.0, 0.0)
+  val denseData = Array(
+    Vectors.dense(1.0, 4.0, 1.9, -9.0)
   )
 
   val sparseData = Array(
-    Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
-    Vectors.sparse(3, Seq((1, -1.0), (2, -3.0))),
-    Vectors.sparse(3, Seq((1, -5.1))),
-    Vectors.sparse(3, Seq((0, 3.8), (2, 1.9))),
-    Vectors.sparse(3, Seq((0, 1.7), (1, -0.6))),
-    Vectors.sparse(3, Seq((1, 1.9)))
+    Vectors.sparse(3, Seq((1, -1.0), (2, -3.0)))
   )
 
   val scalingVector = Vectors.dense(2.0, 0.5, 0.0, 0.25)
 
   test("elementwise (hadamard) product should properly apply vector to dense data set") {
-
     val transformer = new ElementwiseProduct(scalingVector)
     val transformedData = transformer.transform(sc.makeRDD(denseData))
-
     val transformedVecs = transformedData.collect()
+    val transformedVec = transformedVecs(0).toArray
 
-    val fourthVec = transformedVecs.apply(3).toArray
-
-    assert(fourthVec.apply(0) === 2.0, "product by 2.0 should have been applied")
-    assert(fourthVec.apply(1) === 2.0, "product by 0.5 should have been applied")
-    assert(fourthVec.apply(2) === 0.0, "product by 0.0 should have been applied")
-    assert(fourthVec.apply(3) === -2.25, "product by 0.25 should have been applied")
+    assert(transformedVec(0) === 2.0, "product by 2.0 should have been applied")
+    assert(transformedVec(1) === 2.0, "product by 0.5 should have been applied")
+    assert(transformedVec(2) === 0.0, "product by 0.0 should have been applied")
+    assert(transformedVec(3) === -2.25, "product by 0.25 should have been applied")
   }
 
   test("elementwise (hadamard) product should properly apply vector to sparse data set") {
-
     val dataRDD = sc.parallelize(sparseData, 3)
-
     val scalingVec = Vectors.dense(1.0, 0.0, 0.5)
-
     val transformer = new ElementwiseProduct(scalingVec)
-
     val data2 = sparseData.map(transformer.transform)
     val data2RDD = transformer.transform(dataRDD)
 
@@ -76,7 +61,6 @@ class ElementwiseProductSuite extends FunSuite with MLlibTestSparkContext{
     }, "The vector type should be preserved after hadamard product")
 
     assert((data2, data2RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
-
     assert(data2(0) ~== Vectors.sparse(3, Seq((0, -2.0), (1, 0.0))) absTol 1E-5)
     assert(data2(1) ~== Vectors.sparse(3, Seq((1, 0.0), (2, -1.5))) absTol 1E-5)
   }
