@@ -218,6 +218,7 @@ function renderDagVizForJob(svgContainer) {
     });
   });
 
+  addTooltipsForRDDs(svgContainer);
   drawCrossStageEdges(crossStageEdges, svgContainer);
 }
 
@@ -422,6 +423,21 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
 
   var line = d3.svg.line().interpolate("basis");
   edgesContainer.append("path").datum(points).attr("d", line);
+}
+
+/* (Job page only) Helper function to add tooltips for RDDs. */
+function addTooltipsForRDDs(svgContainer) {
+  svgContainer.selectAll("g.node").each(function() {
+    var node = d3.select(this);
+    var tooltipText = node.attr("name");
+    if (tooltipText) {
+      node.select("circle")
+        .attr("data-toggle", "tooltip")
+        .attr("data-placement", "right")
+        .attr("title", tooltipText)
+    }
+  });
+  $("[data-toggle=tooltip]").tooltip({container: "body"});
 }
 
 /* Helper function to convert attributes to numeric values. */
