@@ -92,6 +92,7 @@ class ClosureCleanerSuite extends FunSuite {
       expectCorrectException { TestUserClosuresActuallyCleaned.testKeyBy(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitions(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitionsWithIndex(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testFlatMapWith(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions2(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions3(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions4(rdd) }
@@ -258,6 +259,16 @@ private object TestUserClosuresActuallyCleaned {
   def testGroupBy(rdd: RDD[Int]): Unit = { rdd.groupBy { _ => return; 1 }.count() }
   def testMapPartitions(rdd: RDD[Int]): Unit = { rdd.mapPartitions { it => return; it }.count() }
   def testMapPartitionsWithIndex(rdd: RDD[Int]): Unit = {
+    rdd.mapPartitionsWithIndex { (_, it) => return; it }.count()
+  }
+  def testFlatMapWith(rdd: RDD[Int]): Unit = {
+    import java.util.Random
+    val randoms = rdd.flatMapWith(
+      (index: Int) => new Random(index + 42))
+      {(t: Int, prng: Random) =>
+        val random = prng.nextDouble()
+        Seq(random * t, random * t * 10)}.
+      count()
     rdd.mapPartitionsWithIndex { (_, it) => return; it }.count()
   }
   def testZipPartitions2(rdd: RDD[Int]): Unit = {

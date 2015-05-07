@@ -742,8 +742,9 @@ abstract class RDD[T: ClassTag](
       (constructA: Int => A, preservesPartitioning: Boolean = false)
       (f: (T, A) => U): RDD[U] = withScope {
     val cleanF = sc.clean(f)
+    val cleanA = sc.clean(constructA)
     mapPartitionsWithIndex((index, iter) => {
-      val a = constructA(index)
+      val a = cleanA(index)
       iter.map(t => cleanF(t, a))
     }, preservesPartitioning)
   }
@@ -758,8 +759,9 @@ abstract class RDD[T: ClassTag](
       (constructA: Int => A, preservesPartitioning: Boolean = false)
       (f: (T, A) => Seq[U]): RDD[U] = withScope {
     val cleanF = sc.clean(f)
+    val cleanA = sc.clean(constructA)
     mapPartitionsWithIndex((index, iter) => {
-      val a = constructA(index)
+      val a = cleanA(index)
       iter.flatMap(t => cleanF(t, a))
     }, preservesPartitioning)
   }
@@ -772,8 +774,9 @@ abstract class RDD[T: ClassTag](
   @deprecated("use mapPartitionsWithIndex and foreach", "1.0.0")
   def foreachWith[A](constructA: Int => A)(f: (T, A) => Unit): Unit = withScope {
     val cleanF = sc.clean(f)
+    val cleanA = sc.clean(constructA)
     mapPartitionsWithIndex { (index, iter) =>
-      val a = constructA(index)
+      val a = cleanA(index)
       iter.map(t => {cleanF(t, a); t})
     }
   }
