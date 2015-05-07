@@ -74,11 +74,6 @@ private[hive] object SparkSQLCLIDriver {
       System.exit(1)
     }
 
-    val localMetastore = {
-      val temp = Utils.createTempDir()
-      temp.delete()
-      temp
-    }
     val cliConf = new HiveConf(classOf[SessionState])
     // Override the location of the metastore since this is only used for local execution.
     HiveContext.newTemporaryConfiguration().foreach {

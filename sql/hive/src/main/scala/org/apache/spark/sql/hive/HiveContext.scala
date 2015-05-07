@@ -465,7 +465,7 @@ private[hive] object HiveContext {
   /** Constructs a configuration for hive, where the metastore is located in a temp directory. */
   def newTemporaryConfiguration(): Map[String, String] = {
     val tempDir = Utils.createTempDir()
-    val localMetastore = new File(tempDir, "metastore")
+    val localMetastore = new File(tempDir, "metastore").getAbsolutePath
     Map(
       "javax.jdo.option.ConnectionURL" -> s"jdbc:derby:;databaseName=$localMetastore;create=true")
   }
