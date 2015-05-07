@@ -1103,9 +1103,14 @@ class DAGScheduler(
         // multiple tasks running concurrently on different executors). In that case, it is possible
         // the fetch failure has already been handled by the scheduler.
         if (runningStages.contains(failedStage)) {
-          logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
-            s"due to a fetch failure from $mapStage (${mapStage.name})")
-          markStageAsFinished(failedStage, Some(failureMessage))
+          if (failedStage.attemptId - 1 > task.stageAttemptId) {
+            logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
+              s" ${task.stageAttemptId}, which has already failed")
+          } else {
+            logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
+              s"due to a fetch failure from $mapStage (${mapStage.name})")
+            markStageAsFinished(failedStage, Some(failureMessage))
+          }
         }
 
         if (disallowStageRetryForTest) {
