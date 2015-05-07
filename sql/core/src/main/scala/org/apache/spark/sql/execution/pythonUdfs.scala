@@ -229,7 +229,6 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
   def children: Seq[SparkPlan] = child :: Nil
 
   def execute(): RDD[Row] = {
-    // TODO: Clean up after ourselves?
     val childResults = child.execute().map(_.copy())
 
     val parent = childResults.mapPartitions { iter =>
