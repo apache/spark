@@ -155,7 +155,7 @@ public final class UnsafeShuffleExternalSorter {
     // Our write path doesn't actually use this serializer (since we end up calling the `write()`
     // OutputStream methods), but DiskBlockObjectWriter still calls some methods on it. To work
     // around this, we pass a dummy no-op serializer.
-    final SerializerInstance ser = new DummySerializerInstance();
+    final SerializerInstance ser = DummySerializerInstance.INSTANCE;
     // TODO: audit the metrics-related code and ensure proper metrics integration:
     // It's not clear how we should handle shuffle write metrics for spill files; currently, Spark
     // doesn't report IO time spent writing spill files (see SPARK-7413). This method,
@@ -238,13 +238,12 @@ public final class UnsafeShuffleExternalSorter {
 
   private long freeMemory() {
     long memoryFreed = 0;
-    final Iterator<MemoryBlock> iter = allocatedPages.iterator();
-    while (iter.hasNext()) {
-      memoryManager.freePage(iter.next());
-      shuffleMemoryManager.release(PAGE_SIZE);
-      memoryFreed += PAGE_SIZE;
-      iter.remove();
+    for (MemoryBlock block : allocatedPages) {
+      memoryManager.freePage(block);
+      shuffleMemoryManager.release(block.size());
+      memoryFreed += block.size();
     }
+    allocatedPages.clear();
     currentPage = null;
     currentPagePosition = -1;
     return memoryFreed;

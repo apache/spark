@@ -24,7 +24,13 @@ import org.apache.spark.util.collection.Sorter;
 public final class UnsafeShuffleSorter {
 
   private final Sorter<PackedRecordPointer, long[]> sorter;
-  private final Comparator<PackedRecordPointer> sortComparator;
+  private static final class SortComparator implements Comparator<PackedRecordPointer> {
+    @Override
+    public int compare(PackedRecordPointer left, PackedRecordPointer right) {
+      return left.getPartitionId() - right.getPartitionId();
+    }
+  }
+  private static final SortComparator SORT_COMPARATOR = new SortComparator();
 
   private long[] sortBuffer;
 
@@ -36,14 +42,7 @@ public final class UnsafeShuffleSorter {
   public UnsafeShuffleSorter(int initialSize) {
     assert (initialSize > 0);
     this.sortBuffer = new long[initialSize];
-    this.sorter =
-      new Sorter<PackedRecordPointer, long[]>(UnsafeShuffleSortDataFormat.INSTANCE);
-    this.sortComparator = new Comparator<PackedRecordPointer>() {
-      @Override
-      public int compare(PackedRecordPointer left, PackedRecordPointer right) {
-        return left.getPartitionId() - right.getPartitionId();
-      }
-    };
+    this.sorter = new Sorter<PackedRecordPointer, long[]>(UnsafeShuffleSortDataFormat.INSTANCE);
   }
 
   public void expandSortBuffer() {
@@ -81,11 +80,10 @@ public final class UnsafeShuffleSorter {
   }
 
   /**
-   * Return an iterator over record pointers in sorted order. For efficiency, all calls to
-   * {@code next()} will return the same mutable object.
+   * Return an iterator over record pointers in sorted order.
    */
   public UnsafeShuffleSorterIterator getSortedIterator() {
-    sorter.sort(sortBuffer, 0, sortBufferInsertPosition, sortComparator);
+    sorter.sort(sortBuffer, 0, sortBufferInsertPosition, SORT_COMPARATOR);
     return new UnsafeShuffleSorterIterator() {
 
       private int position = 0;

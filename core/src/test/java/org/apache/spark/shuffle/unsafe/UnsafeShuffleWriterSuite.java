@@ -118,6 +118,7 @@ public class UnsafeShuffleWriterSuite {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void basicShuffleWriting() throws Exception {
 
     final ShuffleDependency<Object, Object, Object> dep = mock(ShuffleDependency.class);

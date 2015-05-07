@@ -61,7 +61,6 @@ final class UnsafeShuffleSortDataFormat extends SortDataFormat<PackedRecordPoint
 
   @Override
   public long[] allocate(int length) {
-    assert (length < Integer.MAX_VALUE) : "Length " + length + " is too large";
     return new long[length];
   }
 
