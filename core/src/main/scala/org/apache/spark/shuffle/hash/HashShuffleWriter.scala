@@ -49,7 +49,7 @@ private[spark] class HashShuffleWriter[K, V](
     writeMetrics)
 
   /** Write a bunch of records to this task's output */
-  override def write(records: Iterator[_ <: Product2[K, V]]): Unit = {
+  override def write(records: Iterator[Product2[K, V]]): Unit = {
     val iter = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
         dep.aggregator.get.combineValuesByKey(records, context)

@@ -47,8 +47,7 @@ import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
-// IntelliJ gets confused and claims that this class should be abstract, but this actually compiles
-public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
+public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private static final int SER_BUFFER_SIZE = 1024 * 1024;  // TODO: tune this
   private static final ClassTag<Object> OBJECT_CLASS_TAG = ClassTag$.MODULE$.Object();
@@ -102,6 +101,7 @@ public class UnsafeShuffleWriter<K, V> implements ShuffleWriter<K, V> {
     write(JavaConversions.asScalaIterator(records));
   }
 
+  @Override
   public void write(scala.collection.Iterator<Product2<K, V>> records) {
     try {
       final long[] partitionLengths = mergeSpills(insertRecordsIntoSorter(records));
