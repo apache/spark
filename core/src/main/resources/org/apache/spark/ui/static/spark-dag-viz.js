@@ -433,7 +433,7 @@ function addRDDTooltips(svgContainer) {
   // Here we cheat a little and use jQuery because it's much easier to use tooltips there
   // Note that we can't just use $(...).tooltip() because we're inside an SVG
   $(rdds[0]).tooltipsy({
-    className: "rdd_tooltip",
+    className: "dag-viz-rdd-tooltip",
     delay: 0,
     show: function (_, e) { e.fadeIn(50); },
     hide: function (_, e) { e.fadeOut(50); }
