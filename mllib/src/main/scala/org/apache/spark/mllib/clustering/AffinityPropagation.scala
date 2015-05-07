@@ -25,6 +25,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: Experimental ::
@@ -232,7 +233,7 @@ class AffinityPropagation private[clustering] (
   private def getMedian(similarities: RDD[(Long, Long, Double)]): Double = {
     val sorted: RDD[(Long, Double)] = similarities.sortBy(_._3).zipWithIndex().map {
       case (v, idx) => (idx, v._3)
-    }.persist()
+    }.persist(StorageLevel.MEMORY_AND_DISK)
 
     val count = sorted.count()
 

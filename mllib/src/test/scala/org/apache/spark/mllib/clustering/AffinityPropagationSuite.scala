@@ -70,7 +70,7 @@ class AffinityPropagationSuite extends FunSuite with MLlibTestSparkContext {
     val similaritiesWithPreferneces =
       ap.determinePreferences(sc.parallelize(similarities, 2))
 
-    def median(s: Seq[Double]) = {
+    def median(s: Seq[Double]): Double = {
       val (lower, upper) = s.sortWith(_<_).splitAt(s.size / 2)
       if (s.size % 2 == 0) (lower.last + upper.head) / 2.0 else upper.head
     }
