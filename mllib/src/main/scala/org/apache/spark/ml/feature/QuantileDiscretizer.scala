@@ -23,16 +23,15 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.param.{IntParam, ParamMap, _}
+import org.apache.spark.ml.param.{IntParam, _}
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
- * Params for [[QuantileDiscretizer]] and [[Bucketizer]].
+ * Params for [[QuantileDiscretizer]].
  */
 private[feature] trait QuantileDiscretizerBase extends Params with HasInputCol with HasOutputCol {
 
@@ -41,26 +40,12 @@ private[feature] trait QuantileDiscretizerBase extends Params with HasInputCol w
    * @group param
    */
   val numBuckets = new IntParam(this, "numBuckets",
-    "Number of buckets to collect data points, which should be a positive integer.")
-  setDefault(numBuckets -> 1)
+    "Number of buckets to collect data points, which should be a positive integer.",
+    ParamValidators.gtEq(2))
+  setDefault(numBuckets -> 2)
 
   /** @group getParam */
   def getNumBuckets: Int = getOrDefault(numBuckets)
-
-  /**
-   * Validate and transform the input schema.
-   */
-  protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
-    SchemaUtils.checkColumnType(schema, map(inputCol), DoubleType)
-    val inputFields = schema.fields
-    val outputColName = map(outputCol)
-    require(inputFields.forall(_.name != outputColName),
-      s"Output column $outputColName already exists.")
-    val attr = NominalAttribute.defaultAttr.withName(outputColName)
-    val outputFields = inputFields :+ attr.toStructField()
-    StructType(outputFields)
-  }
 }
 
 /**
@@ -80,21 +65,22 @@ final class QuantileDiscretizer extends Estimator[Bucketizer] with QuantileDiscr
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
-    assert(map(numBuckets) >= 1, "Number of bins should be a positive integer.")
-    validateAndTransformSchema(schema, paramMap)
+  override def transformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
+    val inputFields = schema.fields
+    require(inputFields.forall(_.name != $(outputCol)),
+      s"Output column ${$(outputCol)} already exists.")
+    val attr = NominalAttribute.defaultAttr.withName($(outputCol))
+    val outputFields = inputFields :+ attr.toStructField()
+    StructType(outputFields)
   }
 
-  override def fit(dataset: DataFrame, paramMap: ParamMap): Bucketizer = {
-    transformSchema(dataset.schema, paramMap)
-    val map = extractParamMap(paramMap)
-    val input = dataset.select(map(inputCol)).map { case Row(feature: Double) => feature }
-    val samples = getSampledInput(input, map(numBuckets))
-    val splits = findSplits(samples, map(numBuckets) - 1)
-    val bucketizer = new Bucketizer(this, map, splits)
-    Params.inheritValues(map, this, bucketizer)
-    bucketizer
+  override def fit(dataset: DataFrame): Bucketizer = {
+    val input = dataset.select($(inputCol)).map { case Row(feature: Double) => feature }
+    val samples = getSampledInput(input, $(numBuckets))
+    val splits = findSplits(samples, $(numBuckets) - 1)
+    val bucketizer = new Bucketizer(this).setBuckets(splits)
+    copyValues(bucketizer)
   }
 
   /**
@@ -146,60 +132,6 @@ final class QuantileDiscretizer extends Estimator[Bucketizer] with QuantileDiscr
       }
       splitsBuilder.result()
     }
-  }
-}
-
-/**
- * :: AlphaComponent ::
- * Model fitted by [[QuantileDiscretizer]].
- */
-@AlphaComponent
-class Bucketizer private[ml] (
-    override val parent: QuantileDiscretizer,
-    override val fittingParamMap: ParamMap,
-    splits: Array[Double])
-  extends Model[Bucketizer] with QuantileDiscretizerBase {
-
-  /** @group setParam */
-  def setInputCol(value: String): this.type = set(inputCol, value)
-
-  /** @group setParam */
-  def setOutputCol(value: String): this.type = set(outputCol, value)
-
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
-    val discretizer = udf { feature: Double => binarySearchForBins(splits, feature) }
-    val outputColName = map(outputCol)
-    val metadata = NominalAttribute.defaultAttr
-      .withName(outputColName).withValues(splits.map(_.toString)).toMetadata()
-    dataset.select(col("*"),
-      discretizer(dataset(map(inputCol))).as(outputColName, metadata))
-  }
-
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap)
-  }
-
-  /**
-   * Binary searching in several bins to place each data point.
-   */
-  private def binarySearchForBins(splits: Array[Double], feature: Double): Double = {
-    val wrappedSplits = Array(Double.MinValue) ++ splits ++ Array(Double.MaxValue)
-    var left = 0
-    var right = wrappedSplits.length - 2
-    while (left <= right) {
-      val mid = left + (right - left) / 2
-      val split = wrappedSplits(mid)
-      if ((feature > split) && (feature <= wrappedSplits(mid + 1))) {
-        return mid
-      } else if (feature <= split) {
-        right = mid - 1
-      } else {
-        left = mid + 1
-      }
-    }
-    -1
   }
 }
 
