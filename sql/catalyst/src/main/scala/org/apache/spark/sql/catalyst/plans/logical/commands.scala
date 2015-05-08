@@ -27,3 +27,11 @@ abstract class Command extends LeafNode {
   self: Product =>
   def output: Seq[Attribute] = Seq.empty
 }
+
+/**
+ * An UnaryNode that represents a non-query command to be executed by the system.
+ */
+abstract class UnaryCommand extends UnaryNode {
+  self: Product =>
+  def output: Seq[Attribute] = Seq.empty
+}

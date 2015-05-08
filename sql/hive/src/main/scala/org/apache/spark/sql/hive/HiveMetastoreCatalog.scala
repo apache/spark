@@ -25,6 +25,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition => TPartition, Table => TTable}
 import org.apache.hadoop.hive.metastore.{TableType, Warehouse}
 import org.apache.hadoop.hive.ql.metadata._
+import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -600,7 +601,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
       // TODO extra is in type of ASTNode which means the logical plan is not resolved
       // Need to think about how to implement the CreateTableAsSelect.resolved
-      case CreateTableAsSelect(db, tableName, child, allowExisting, Some(extra: ASTNode)) =>
+      case CreateHiveTableAsSelect(db, tableName, child, allowExisting, extra) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
@@ -619,7 +620,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
             }
           }
 
-          sa.analyze(extra, new Context(hive.hiveconf))
+          sa.analyze(extra.asInstanceOf[ASTNode], new Context(hive.hiveconf))
           Some(sa.getQB().getTableDesc)
         }
 
@@ -658,34 +659,6 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         }
 
       case p: LogicalPlan if p.resolved => p
-
-      case p @ CreateTableAsSelect(db, tableName, child, allowExisting, None) =>
-        val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
-        if (hive.convertCTAS) {
-          if (dbName.isDefined) {
-            throw new AnalysisException(
-              "Cannot specify database name in a CTAS statement " +
-              "when spark.sql.hive.convertCTAS is set to true.")
-          }
-
-          val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
-          CreateTableUsingAsSelect(
-            tblName,
-            hive.conf.defaultDataSourceName,
-            temporary = false,
-            mode,
-            options = Map.empty[String, String],
-            child
-          )
-        } else {
-          val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
-          execution.CreateTableAsSelect(
-            databaseName,
-            tableName,
-            child,
-            allowExisting,
-            None)
-        }
     }
   }
 
@@ -763,6 +736,14 @@ private[hive] case class InsertIntoHiveTable(
   override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
     case (childAttr, tableAttr) => childAttr.dataType.sameType(tableAttr.dataType)
   }
+}
+
+private[hive] case class CreateHiveTableAsSelect(
+    databaseName: Option[String],
+    tableName: String,
+    child: LogicalPlan,
+    allowExisting: Boolean,
+    desc: Node) extends CreateTableAsSelect {
 }
 
 private[hive] case class MetastoreRelation
