@@ -66,6 +66,11 @@ setMethod("initialize", "RDD", function(.Object, jrdd, serializedMode,
   .Object
 })
 
+setMethod("show", "RDD",
+          function(.Object) {
+              cat(paste(callJMethod(.Object@jrdd, "toString"), "\n", sep=""))
+          })
+
 setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) {
   .Object@env <- new.env()
   .Object@env$isCached <- FALSE
@@ -792,7 +797,7 @@ setMethod("first",
 #' @aliases distinct,RDD-method
 setMethod("distinct",
           signature(x = "RDD"),
-          function(x, numPartitions = SparkR::numPartitions(x)) {
+          function(x, numPartitions = SparkR:::numPartitions(x)) {
             identical.mapped <- lapply(x, function(x) { list(x, NULL) })
             reduced <- reduceByKey(identical.mapped,
                                    function(x, y) { x },
@@ -988,7 +993,7 @@ setMethod("coalesce",
            signature(x = "RDD", numPartitions = "numeric"),
            function(x, numPartitions, shuffle = FALSE) {
              numPartitions <- numToInt(numPartitions)
-             if (shuffle || numPartitions > SparkR::numPartitions(x)) {
+             if (shuffle || numPartitions > SparkR:::numPartitions(x)) {
                func <- function(partIndex, part) {
                  set.seed(partIndex)  # partIndex as seed
                  start <- as.integer(sample(numPartitions, 1) - 1)
@@ -1073,7 +1078,7 @@ setMethod("saveAsTextFile",
 #' @aliases sortBy,RDD,RDD-method
 setMethod("sortBy",
           signature(x = "RDD", func = "function"),
-          function(x, func, ascending = TRUE, numPartitions = SparkR::numPartitions(x)) {          
+          function(x, func, ascending = TRUE, numPartitions = SparkR:::numPartitions(x)) {
             values(sortByKey(keyBy(x, func), ascending, numPartitions))
           })
 
@@ -1547,7 +1552,7 @@ setMethod("cartesian",
 #' @aliases subtract,RDD
 setMethod("subtract",
           signature(x = "RDD", other = "RDD"),
-          function(x, other, numPartitions = SparkR::numPartitions(x)) {
+          function(x, other, numPartitions = SparkR:::numPartitions(x)) {
             mapFunction <- function(e) { list(e, NA) }
             rdd1 <- map(x, mapFunction)
             rdd2 <- map(other, mapFunction)
@@ -1578,7 +1583,7 @@ setMethod("subtract",
 #' @aliases intersection,RDD
 setMethod("intersection",
           signature(x = "RDD", other = "RDD"),
-          function(x, other, numPartitions = SparkR::numPartitions(x)) {
+          function(x, other, numPartitions = SparkR:::numPartitions(x)) {
             rdd1 <- map(x, function(v) { list(v, NA) })
             rdd2 <- map(other, function(v) { list(v, NA) })
 
@@ -1589,4 +1594,50 @@ setMethod("intersection",
             }
 
             keys(filterRDD(cogroup(rdd1, rdd2, numPartitions = numPartitions), filterFunction))
+          })
+
+#' Zips an RDD's partitions with one (or more) RDD(s).
+#' Same as zipPartitions in Spark.
+#' 
+#' @param ... RDDs to be zipped.
+#' @param func A function to transform zipped partitions.
+#' @return A new RDD by applying a function to the zipped partitions. 
+#'         Assumes that all the RDDs have the *same number of partitions*, but 
+#'         does *not* require them to have the same number of elements in each partition.
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd1 <- parallelize(sc, 1:2, 2L)  # 1, 2
+#' rdd2 <- parallelize(sc, 1:4, 2L)  # 1:2, 3:4
+#' rdd3 <- parallelize(sc, 1:6, 2L)  # 1:3, 4:6
+#' collect(zipPartitions(rdd1, rdd2, rdd3, 
+#'                       func = function(x, y, z) { list(list(x, y, z))} ))
+#' # list(list(1, c(1,2), c(1,2,3)), list(2, c(3,4), c(4,5,6)))
+#'}
+#' @rdname zipRDD
+#' @aliases zipPartitions,RDD
+setMethod("zipPartitions",
+          "RDD",
+          function(..., func) {
+            rrdds <- list(...)
+            if (length(rrdds) == 1) {
+              return(rrdds[[1]])
+            }
+            nPart <- sapply(rrdds, numPartitions)
+            if (length(unique(nPart)) != 1) {
+              stop("Can only zipPartitions RDDs which have the same number of partitions.")
+            }
+            
+            rrdds <- lapply(rrdds, function(rdd) {
+              mapPartitionsWithIndex(rdd, function(partIndex, part) {
+                print(length(part))
+                list(list(partIndex, part))
+              })
+            })
+            union.rdd <- Reduce(unionRDD, rrdds)
+            zipped.rdd <- values(groupByKey(union.rdd, numPartitions = nPart[1]))
+            res <- mapPartitions(zipped.rdd, function(plist) {
+              do.call(func, plist[[1]])
+            })
+            res
           })

@@ -99,7 +99,7 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
  */
 @DeveloperApi
 class HadoopRDD[K, V](
-    sc: SparkContext,
+    @transient sc: SparkContext,
     broadcastedConf: Broadcast[SerializableWritable[Configuration]],
     initLocalJobConfFuncOpt: Option[JobConf => Unit],
     inputFormatClass: Class[_ <: InputFormat[K, V]],
@@ -107,6 +107,10 @@ class HadoopRDD[K, V](
     valueClass: Class[V],
     minPartitions: Int)
   extends RDD[(K, V)](sc, Nil) with Logging {
+
+  if (initLocalJobConfFuncOpt.isDefined) {
+    sc.clean(initLocalJobConfFuncOpt.get)
+  }
 
   def this(
       sc: SparkContext,

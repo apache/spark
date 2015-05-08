@@ -165,6 +165,35 @@ class HasPredictionCol(Params):
         return self.getOrDefault(self.predictionCol)
 
 
+class HasRawPredictionCol(Params):
+    """
+    Mixin for param rawPredictionCol: raw prediction column name.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    rawPredictionCol = Param(Params._dummy(), "rawPredictionCol", "raw prediction column name")
+
+    def __init__(self):
+        super(HasRawPredictionCol, self).__init__()
+        #: param for raw prediction column name
+        self.rawPredictionCol = Param(self, "rawPredictionCol", "raw prediction column name")
+        if 'rawPrediction' is not None:
+            self._setDefault(rawPredictionCol='rawPrediction')
+
+    def setRawPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`rawPredictionCol`.
+        """
+        self.paramMap[self.rawPredictionCol] = value
+        return self
+
+    def getRawPredictionCol(self):
+        """
+        Gets the value of rawPredictionCol or its default value.
+        """
+        return self.getOrDefault(self.rawPredictionCol)
+
+
 class HasInputCol(Params):
     """
     Mixin for param inputCol: input column name.
@@ -192,6 +221,35 @@ class HasInputCol(Params):
         Gets the value of inputCol or its default value.
         """
         return self.getOrDefault(self.inputCol)
+
+
+class HasInputCols(Params):
+    """
+    Mixin for param inputCols: input column names.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    inputCols = Param(Params._dummy(), "inputCols", "input column names")
+
+    def __init__(self):
+        super(HasInputCols, self).__init__()
+        #: param for input column names
+        self.inputCols = Param(self, "inputCols", "input column names")
+        if None is not None:
+            self._setDefault(inputCols=None)
+
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        self.paramMap[self.inputCols] = value
+        return self
+
+    def getInputCols(self):
+        """
+        Gets the value of inputCols or its default value.
+        """
+        return self.getOrDefault(self.inputCols)
 
 
 class HasOutputCol(Params):

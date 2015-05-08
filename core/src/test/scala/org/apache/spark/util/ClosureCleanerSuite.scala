@@ -17,10 +17,14 @@
 
 package org.apache.spark.util
 
+import java.io.NotSerializableException
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.LocalSparkContext._
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{TaskContext, SparkContext, SparkException}
+import org.apache.spark.partial.CountEvaluator
+import org.apache.spark.rdd.RDD
 
 class ClosureCleanerSuite extends FunSuite {
   test("closures inside an object") {
@@ -50,24 +54,80 @@ class ClosureCleanerSuite extends FunSuite {
     val obj = new TestClassWithNesting(1)
     assert(obj.run() === 96) // 4 * (1+2+3+4) + 4 * (1+2+3+4) + 16 * 1
   }
-  
+
   test("toplevel return statements in closures are identified at cleaning time") {
-    val ex = intercept[SparkException] {
+    intercept[ReturnStatementInClosureException] {
       TestObjectWithBogusReturns.run()
     }
-    
-    assert(ex.getMessage.contains("Return statements aren't allowed in Spark closures"))
   }
 
   test("return statements from named functions nested in closures don't raise exceptions") {
     val result = TestObjectWithNestedReturns.run()
-    assert(result == 1)
+    assert(result === 1)
+  }
+
+  test("user provided closures are actually cleaned") {
+
+    // We use return statements as an indication that a closure is actually being cleaned
+    // We expect closure cleaner to find the return statements in the user provided closures
+    def expectCorrectException(body: => Unit): Unit = {
+      try {
+        body
+      } catch {
+        case rse: ReturnStatementInClosureException => // Success!
+        case e @ (_: NotSerializableException | _: SparkException) =>
+          fail(s"Expected ReturnStatementInClosureException, but got $e.\n" +
+            "This means the closure provided by user is not actually cleaned.")
+      }
+    }
+
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val rdd = sc.parallelize(1 to 10)
+      val pairRdd = rdd.map { i => (i, i) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testMap(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testFlatMap(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testFilter(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testSortBy(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testGroupBy(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testKeyBy(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitions(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitionsWithIndex(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions2(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions3(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions4(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testForeach(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testForeachPartition(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testReduce(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testTreeReduce(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testFold(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testAggregate(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testTreeAggregate(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testCombineByKey(pairRdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testAggregateByKey(pairRdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testFoldByKey(pairRdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testReduceByKey(pairRdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testMapValues(pairRdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testFlatMapValues(pairRdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testForeachAsync(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testForeachPartitionAsync(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testRunJob1(sc) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testRunJob2(sc) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testRunApproximateJob(sc) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testSubmitJob(sc) }
+    }
   }
 }
 
 // A non-serializable class we create in closures to make sure that we aren't
 // keeping references to unneeded variables from our outer closures.
-class NonSerializable {}
+class NonSerializable(val id: Int = -1) {
+  override def equals(other: Any): Boolean = {
+    other match {
+      case o: NonSerializable => id == o.id
+      case _ => false
+    }
+  }
+}
 
 object TestObject {
   def run(): Int = {
@@ -178,5 +238,92 @@ class TestClassWithNesting(val y: Int) extends Serializable {
       }
       answer
     }
+  }
+}
+
+/**
+ * Test whether closures passed in through public APIs are actually cleaned.
+ *
+ * We put a return statement in each of these closures as a mechanism to detect whether the
+ * ClosureCleaner actually cleaned our closure. If it did, then it would throw an appropriate
+ * exception explicitly complaining about the return statement. Otherwise, we know the
+ * ClosureCleaner did not actually clean our closure, in which case we should fail the test.
+ */
+private object TestUserClosuresActuallyCleaned {
+  def testMap(rdd: RDD[Int]): Unit = { rdd.map { _ => return; 0 }.count() }
+  def testFlatMap(rdd: RDD[Int]): Unit = { rdd.flatMap { _ => return; Seq() }.count() }
+  def testFilter(rdd: RDD[Int]): Unit = { rdd.filter { _ => return; true }.count() }
+  def testSortBy(rdd: RDD[Int]): Unit = { rdd.sortBy { _ => return; 1 }.count() }
+  def testKeyBy(rdd: RDD[Int]): Unit = { rdd.keyBy { _ => return; 1 }.count() }
+  def testGroupBy(rdd: RDD[Int]): Unit = { rdd.groupBy { _ => return; 1 }.count() }
+  def testMapPartitions(rdd: RDD[Int]): Unit = { rdd.mapPartitions { it => return; it }.count() }
+  def testMapPartitionsWithIndex(rdd: RDD[Int]): Unit = {
+    rdd.mapPartitionsWithIndex { (_, it) => return; it }.count()
+  }
+  def testZipPartitions2(rdd: RDD[Int]): Unit = {
+    rdd.zipPartitions(rdd) { case (it1, it2) => return; it1 }.count()
+  }
+  def testZipPartitions3(rdd: RDD[Int]): Unit = {
+    rdd.zipPartitions(rdd, rdd) { case (it1, it2, it3) => return; it1 }.count()
+  }
+  def testZipPartitions4(rdd: RDD[Int]): Unit = {
+    rdd.zipPartitions(rdd, rdd, rdd) { case (it1, it2, it3, it4) => return; it1 }.count()
+  }
+  def testForeach(rdd: RDD[Int]): Unit = { rdd.foreach { _ => return } }
+  def testForeachPartition(rdd: RDD[Int]): Unit = { rdd.foreachPartition { _ => return } }
+  def testReduce(rdd: RDD[Int]): Unit = { rdd.reduce { case (_, _) => return; 1 } }
+  def testTreeReduce(rdd: RDD[Int]): Unit = { rdd.treeReduce { case (_, _) => return; 1 } }
+  def testFold(rdd: RDD[Int]): Unit = { rdd.fold(0) { case (_, _) => return; 1 } }
+  def testAggregate(rdd: RDD[Int]): Unit = {
+    rdd.aggregate(0)({ case (_, _) => return; 1 }, { case (_, _) => return; 1 })
+  }
+  def testTreeAggregate(rdd: RDD[Int]): Unit = {
+    rdd.treeAggregate(0)({ case (_, _) => return; 1 }, { case (_, _) => return; 1 })
+  }
+
+  // Test pair RDD functions
+  def testCombineByKey(rdd: RDD[(Int, Int)]): Unit = {
+    rdd.combineByKey(
+      { _ => return; 1 }: Int => Int,
+      { case (_, _) => return; 1 }: (Int, Int) => Int,
+      { case (_, _) => return; 1 }: (Int, Int) => Int
+    ).count()
+  }
+  def testAggregateByKey(rdd: RDD[(Int, Int)]): Unit = {
+    rdd.aggregateByKey(0)({ case (_, _) => return; 1 }, { case (_, _) => return; 1 }).count()
+  }
+  def testFoldByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.foldByKey(0) { case (_, _) => return; 1 } }
+  def testReduceByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.reduceByKey { case (_, _) => return; 1 } }
+  def testMapValues(rdd: RDD[(Int, Int)]): Unit = { rdd.mapValues { _ => return; 1 } }
+  def testFlatMapValues(rdd: RDD[(Int, Int)]): Unit = { rdd.flatMapValues { _ => return; Seq() } }
+
+  // Test async RDD actions
+  def testForeachAsync(rdd: RDD[Int]): Unit = { rdd.foreachAsync { _ => return } }
+  def testForeachPartitionAsync(rdd: RDD[Int]): Unit = { rdd.foreachPartitionAsync { _ => return } }
+
+  // Test SparkContext runJob
+  def testRunJob1(sc: SparkContext): Unit = {
+    val rdd = sc.parallelize(1 to 10, 10)
+    sc.runJob(rdd, { (ctx: TaskContext, iter: Iterator[Int]) => return; 1 } )
+  }
+  def testRunJob2(sc: SparkContext): Unit = {
+    val rdd = sc.parallelize(1 to 10, 10)
+    sc.runJob(rdd, { iter: Iterator[Int] => return; 1 } )
+  }
+  def testRunApproximateJob(sc: SparkContext): Unit = {
+    val rdd = sc.parallelize(1 to 10, 10)
+    val evaluator = new CountEvaluator(1, 0.5)
+    sc.runApproximateJob(
+      rdd, { (ctx: TaskContext, iter: Iterator[Int]) => return; 1L }, evaluator, 1000)
+  }
+  def testSubmitJob(sc: SparkContext): Unit = {
+    val rdd = sc.parallelize(1 to 10, 10)
+    sc.submitJob(
+      rdd,
+      { _ => return; 1 }: Iterator[Int] => Int,
+      Seq.empty,
+      { case (_, _) => return }: (Int, Int) => Unit,
+      { return }
+    )
   }
 }

@@ -88,10 +88,7 @@ case class Aggregator[K, V, C] (
       combiners.iterator
     } else {
       val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
-      while (iter.hasNext) {
-        val pair = iter.next()
-        combiners.insert(pair._1, pair._2)
-      }
+      combiners.insertAll(iter)
       // Update task metrics if context is not null
       // TODO: Make context non-optional in a future release
       Option(context).foreach { c =>
