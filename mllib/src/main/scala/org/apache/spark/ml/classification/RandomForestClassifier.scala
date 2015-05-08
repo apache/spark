@@ -174,6 +174,7 @@ private[ml] object RandomForestClassificationModel {
       // parent, fittingParamMap for each tree is null since there are no good ways to set these.
       DecisionTreeClassificationModel.fromOld(tree, null, categoricalFeatures)
     }
-    new RandomForestClassificationModel(parent.uid, newTrees)
+    val uid = if (parent != null) parent.uid else Identifiable.randomUID("rfc")
+    new RandomForestClassificationModel(uid, newTrees)
   }
 }
