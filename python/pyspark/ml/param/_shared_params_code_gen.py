@@ -98,8 +98,9 @@ if __name__ == "__main__":
         ("inputCols", "input column names", None),
         ("outputCol", "output column name", None),
         ("numFeatures", "number of features", None),
-        ("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
-         "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", None)]
+        ("seed", "random seed", None),
+        ("tol", "the convergence tolerance for iterative algorithms", None),
+        ("stepSize", "Step size to be used for each iteration of optimization.", None)]
     code = []
     for name, doc, defaultValueStr in shared:
         code.append(_gen_param_code(name, doc, defaultValueStr))

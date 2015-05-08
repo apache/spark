@@ -449,7 +449,7 @@ class DataFrameSuite extends QueryTest {
       testData.collect().map { case Row(key: Int, value: String) =>
         Row(key, value, key + 1)
       }.toSeq)
-    assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
+    assert(df.schema.map(_.name) === Seq("key", "value", "newCol"))
   }
 
   test("replace column using withColumn") {
@@ -484,7 +484,7 @@ class DataFrameSuite extends QueryTest {
       testData.collect().map { case Row(key: Int, value: String) =>
         Row(key, value, key + 1)
       }.toSeq)
-    assert(df.schema.map(_.name).toSeq === Seq("key", "valueRenamed", "newCol"))
+    assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
   }
 
   test("randomSplit") {
@@ -592,5 +592,11 @@ class DataFrameSuite extends QueryTest {
       decimalData.agg(avg('a)),
       Row(new java.math.BigDecimal(2.0)))
     TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+  }
+
+  test("SPARK-7133: Implement struct, array, and map field accessor") {
+    assert(complexData.filter(complexData("a")(0) === 2).count() == 1)
+    assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
+    assert(complexData.filter(complexData("s")("key") === 1).count() == 1)
   }
 }
