@@ -247,6 +247,22 @@ object functions {
   def last(columnName: String): Column = last(Column(columnName))
 
   /**
+   * Aggregate function: returns the average of the values in a group.
+   * Alias for avg.
+   *
+   * @group agg_funcs
+   */
+  def mean(e: Column): Column = avg(e)
+
+  /**
+   * Aggregate function: returns the average of the values in a group.
+   * Alias for avg.
+   *
+   * @group agg_funcs
+   */
+  def mean(columnName: String): Column = avg(columnName)
+
+  /**
    * Aggregate function: returns the minimum value of the expression in a group.
    *
    * @group agg_funcs
