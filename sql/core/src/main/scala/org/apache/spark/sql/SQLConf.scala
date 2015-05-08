@@ -67,7 +67,13 @@ private[spark] object SQLConf {
   // Set to false when debugging requires the ability to look at invalid query plans.
   val DATAFRAME_EAGER_ANALYSIS = "spark.sql.eagerAnalysis"
 
+  // Whether to automatically resolve ambiguity in join conditions for self-joins.
+  // See SPARK-6231.
+  val DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY = "spark.sql.selfJoinAutoResolveAmbiguity"
+
   val USE_SQL_SERIALIZER2 = "spark.sql.useSerializer2"
+
+  val USE_JACKSON_STREAMING_API = "spark.sql.json.useJacksonStreamingAPI"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -163,6 +169,12 @@ private[sql] class SQLConf extends Serializable {
   private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2, "true").toBoolean
 
   /**
+   * Selects between the new (true) and old (false) JSON handlers, to be removed in Spark 1.5.0
+   */
+  private[spark] def useJacksonStreamingAPI: Boolean =
+    getConf(USE_JACKSON_STREAMING_API, "true").toBoolean
+
+  /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
    * a broadcast value during the physical executions of join operations.  Setting this to -1
    * effectively disables auto conversion.
@@ -219,6 +231,9 @@ private[sql] class SQLConf extends Serializable {
   private[spark] def dataFrameEagerAnalysis: Boolean =
     getConf(DATAFRAME_EAGER_ANALYSIS, "true").toBoolean
 
+  private[spark] def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
+    getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY, "true").toBoolean
+  
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

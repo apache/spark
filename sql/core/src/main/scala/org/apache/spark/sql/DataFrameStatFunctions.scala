@@ -37,7 +37,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
     StatFunctions.calculateCov(df, Seq(col1, col2))
   }
 
-  /*
+  /**
    * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
    * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in 
    * MLlib's Statistics.
@@ -75,7 +75,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *             each row.
    * @param col2 The name of the second column. Distinct items will make the column names
    *             of the DataFrame.
-   * @return A Local DataFrame containing the table
+   * @return A DataFrame containing for the contingency table.
    */
   def crosstab(col1: String, col2: String): DataFrame = {
     StatFunctions.crossTabulate(df, col1, col2)
@@ -110,14 +110,25 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Python friendly implementation for `freqItems`
+   * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
+   * frequent element count algorithm described in
+   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   *
+   * @param cols the names of the columns to search frequent items in.
+   * @return A Local DataFrame with the Array of frequent items for each column.
    */
   def freqItems(cols: Seq[String], support: Double): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, support)
   }
 
   /**
-   * Python friendly implementation for `freqItems` with a default `support` of 1%.
+   * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
+   * frequent element count algorithm described in
+   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * Uses a `default` support of 1%.
+   *
+   * @param cols the names of the columns to search frequent items in.
+   * @return A Local DataFrame with the Array of frequent items for each column.
    */
   def freqItems(cols: Seq[String]): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, 0.01)

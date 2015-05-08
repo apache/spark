@@ -587,6 +587,28 @@ class DenseVector(val values: Array[Double]) extends Vector {
     }
     new SparseVector(size, ii, vv)
   }
+
+  /**
+   * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
+   * Returns -1 if vector has length 0.
+   */
+  private[spark] def argmax: Int = {
+    if (size == 0) {
+      -1
+    } else {
+      var maxIdx = 0
+      var maxValue = values(0)
+      var i = 1
+      while (i < size) {
+        if (values(i) > maxValue) {
+          maxIdx = i
+          maxValue = values(i)
+        }
+        i += 1
+      }
+      maxIdx
+    }
+  }
 }
 
 object DenseVector {

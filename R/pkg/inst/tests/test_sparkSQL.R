@@ -705,5 +705,16 @@ test_that("parquetFile works with multiple input paths", {
   expect_true(count(parquetDF) == count(df)*2)
 })
 
+test_that("describe() on a DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  stats <- describe(df, "age")
+  expect_true(collect(stats)[1, "summary"] == "count")
+  expect_true(collect(stats)[2, "age"] == 24.5)
+  expect_true(collect(stats)[3, "age"] == 5.5)
+  stats <- describe(df)
+  expect_true(collect(stats)[4, "name"] == "Andy")
+  expect_true(collect(stats)[5, "age"] == 30.0)
+})
+
 unlink(parquetPath)
 unlink(jsonPath)
