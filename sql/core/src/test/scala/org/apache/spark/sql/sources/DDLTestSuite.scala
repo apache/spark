@@ -64,7 +64,7 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
 }
 
 class DDLTestSuite extends DataSourceTest {
-  import caseInsensitiveContext._
+  import caseInsensisitiveContext._
 
   before {
       sql(

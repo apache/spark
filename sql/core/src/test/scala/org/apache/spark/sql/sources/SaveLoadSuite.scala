@@ -27,7 +27,7 @@ import org.apache.spark.util.Utils
 
 class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
 
-  import caseInsensitiveContext._
+  import caseInsensisitiveContext._
 
   var originalDefaultSource: String = null
 

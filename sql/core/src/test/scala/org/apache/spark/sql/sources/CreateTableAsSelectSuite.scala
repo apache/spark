@@ -26,7 +26,7 @@ import org.apache.spark.util.Utils
 
 class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
 
-  import caseInsensitiveContext._
+  import caseInsensisitiveContext._
 
   var path: File = null
 
