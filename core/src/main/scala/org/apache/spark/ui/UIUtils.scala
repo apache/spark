@@ -156,14 +156,10 @@ private[spark] object UIUtils extends Logging {
 
   def commonHeaderNodes: Seq[Node] = {
     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-    <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
-          type="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")}
-          type="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
-          type="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")}
-          type="text/css"></link>
+    <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/webui.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri("/static/sorttable.js")} ></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
     <script src={prependBaseUri("/static/vis.min.js")}></script>
