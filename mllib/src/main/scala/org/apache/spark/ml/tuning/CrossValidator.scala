@@ -152,7 +152,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
 class CrossValidatorModel private[ml] (
     override val parent: CrossValidator,
     val bestModel: Model[_],
-    val crossValidationMetrics: Array[Double])
+    val avgMetrics: Array[Double])
   extends Model[CrossValidatorModel] with CrossValidatorParams {
 
   override def validateParams(paramMap: ParamMap): Unit = {
