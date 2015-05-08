@@ -101,7 +101,7 @@ private[ui] object RDDOperationGraph extends Logging {
       val node = nodes.getOrElseUpdate(
         rdd.id, RDDOperationNode(rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE))
 
-      if (rdd.scope == null) {
+      if (rdd.scope.isEmpty) {
         // This RDD has no encompassing scope, so we put it directly in the root cluster
         // This should happen only if an RDD is instantiated outside of a public RDD API
         rootCluster.attachChildNode(node)
