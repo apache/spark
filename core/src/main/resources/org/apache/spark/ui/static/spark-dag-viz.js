@@ -54,7 +54,7 @@
 var VizConstants = {
   svgMarginX: 16,
   svgMarginY: 16,
-  stageSep: 50,
+  stageSep: 40,
   graphPrefix: "graph_",
   nodePrefix: "node_",
   stagePrefix: "stage_",
@@ -64,12 +64,14 @@ var VizConstants = {
 
 var JobPageVizConstants = {
   clusterLabelSize: 12,
-  stageClusterLabelSize: 14
+  stageClusterLabelSize: 14,
+  rankSep: 40
 };
 
 var StagePageVizConstants = {
   clusterLabelSize: 14,
-  stageClusterLabelSize: 14
+  stageClusterLabelSize: 14,
+  rankSep: 40
 };
 
 /*
@@ -149,7 +151,7 @@ function renderDagVizForStage(svgContainer) {
   var dot = metadata.select(".dot-file").text();
   var containerId = VizConstants.graphPrefix + metadata.attr("stage-id");
   var container = svgContainer.append("g").attr("id", containerId);
-  renderDot(dot, container);
+  renderDot(dot, container, StagePageVizConstants.rankSep);
 
   // Round corners on rectangles
   svgContainer
@@ -207,7 +209,7 @@ function renderDagVizForJob(svgContainer) {
     }
 
     // Actually render the stage
-    renderDot(dot, container);
+    renderDot(dot, container, JobPageVizConstants.rankSep);
 
     // Round corners on rectangles
     container
@@ -229,12 +231,13 @@ function renderDagVizForJob(svgContainer) {
 }
 
 /* Render the dot file as an SVG in the given container. */
-function renderDot(dot, container) {
+function renderDot(dot, container, rankSep) {
   var escaped_dot = dot
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, "\"");
   var g = graphlibDot.read(escaped_dot);
+  g.graph().rankSep = rankSep;
   var renderer = new dagreD3.render();
   renderer(container, g);
 }
