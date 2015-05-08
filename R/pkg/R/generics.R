@@ -372,8 +372,8 @@ setGeneric("subtractByKey",
 
 ################### Broadcast Variable Methods #################
 
-#' @rdname broadcast
-#' @export
+# @rdname broadcast
+# @export
 setGeneric("value", function(bcast) { standardGeneric("value") })
 
 
