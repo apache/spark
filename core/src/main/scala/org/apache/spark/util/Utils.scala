@@ -1659,16 +1659,6 @@ private[spark] object Utils extends Logging {
   val windowsDrive = "([a-zA-Z])".r
 
   /**
-   * Format a path such that it can be safely passed to a URI.
-   */
-  def formatPath(path: String, windows: Boolean): String = {
-    val formatted = path.replace(" ", "%20")
-
-    // In Windows, the file separator is a backslash, but this is inconsistent with the URI format
-    if (windows) formatted.replace("\\", "/") else formatted
-  }
-
-  /**
    * Indicates whether Spark is currently running unit tests.
    */
   def isTesting: Boolean = {
