@@ -18,12 +18,11 @@
 package org.apache.spark.ml.reduction
 
 import scala.language.existentials
-import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
+import org.apache.spark.ml.{PredictorParams, PredictionModel, Predictor}
 import org.apache.spark.ml.attribute.BinaryAttribute
-import org.apache.spark.ml.classification.{ClassificationModel, Classifier, ClassifierParams}
-import org.apache.spark.ml.impl.estimator.{PredictorParams, PredictionModel, Predictor}
+import org.apache.spark.ml.classification.{ClassificationModel, Classifier}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
 import org.apache.spark.mllib.linalg.Vector

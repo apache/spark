@@ -19,12 +19,11 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, BinaryAttribute, NominalAttribute, NumericAttribute}
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.{IntParam, ParamValidators, Params}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.callUDF
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -376,7 +375,7 @@ class VectorIndexerModel private[ml] (
           }
         case (origAttr: Attribute, featAttr: NumericAttribute) =>
           origAttr.withIndex(featAttr.index.get)
-        case (origAttr: Attribute, _: UnresolvedAttribute) =>
+        case (origAttr: Attribute, _) =>
           origAttr
       }
     } else {
