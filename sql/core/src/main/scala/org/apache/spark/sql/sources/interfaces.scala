@@ -301,7 +301,7 @@ abstract class OutputWriter {
  *
  * @constructor This constructor is for internal uses only. The [[PartitionSpec]] argument is for
  *              implementing metastore table conversion.
- * @param paths Base paths of this relation.  For partitioned relations, it should be either root
+ * @param paths Base paths of this relation.  For partitioned relations, it should be the root
  *        directories of all partition directories.
  * @param maybePartitionSpec An [[FSBasedRelation]] can be created with an optional
  *        [[PartitionSpec]], so that partition discovery can be skipped.
@@ -371,8 +371,8 @@ abstract class FSBasedRelation private[sql](
   }
 
   /**
-   * Schema of this relation.  It consists of [[dataSchema]] and all partition columns not appeared
-   * in [[dataSchema]].
+   * Schema of this relation.  It consists of columns appearing in [[dataSchema]] and all partition
+   * columns not appearing in [[dataSchema]].
    */
   override lazy val schema: StructType = {
     val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet

@@ -71,7 +71,7 @@ private[sql] case class InsertIntoFSBasedRelation(
     val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
     val outputPath = new Path(relation.paths.head)
     val fs = outputPath.getFileSystem(hadoopConf)
-    val qualifiedOutputPath = fs.makeQualified(outputPath)
+    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
     val doInsertion = (mode, fs.exists(qualifiedOutputPath)) match {
       case (SaveMode.ErrorIfExists, true) =>

@@ -90,7 +90,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: FSBasedRelation)) =>
       val inputPaths = t.paths.map(new Path(_)).flatMap { path =>
         val fs = path.getFileSystem(t.sqlContext.sparkContext.hadoopConfiguration)
-        val qualifiedPath = fs.makeQualified(path)
+        val qualifiedPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
         SparkHadoopUtil.get.listLeafStatuses(fs, qualifiedPath).map(_.getPath).filterNot { path =>
           val name = path.getName
           name.startsWith("_") || name.startsWith(".")
