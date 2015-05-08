@@ -25,13 +25,13 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class PCASuite extends FunSuite with MLlibTestSparkContext {
 
-  val data = Array(
+  private val data = Array(
     Vectors.sparse(5, Seq((1, 1.0), (3, 7.0))),
     Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
     Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
   )
 
-  lazy val dataRDD = sc.parallelize(data, 2)
+  private lazy val dataRDD = sc.parallelize(data, 2)
 
   test("Correct computing use a PCA wrapper") {
     val k = dataRDD.count().toInt
@@ -43,6 +43,6 @@ class PCASuite extends FunSuite with MLlibTestSparkContext {
     val pca_transform = pca.transform(dataRDD).collect()
     val mat_multiply = mat.multiply(pc).rows.collect()
 
-    assert(pca_transform.deep === mat_multiply.deep)
+    assert(pca_transform.toSet === mat_multiply.toSet)
   }
 }
