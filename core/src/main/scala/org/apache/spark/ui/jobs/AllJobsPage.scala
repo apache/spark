@@ -271,6 +271,12 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val shouldShowCompletedJobs = completedJobs.nonEmpty
       val shouldShowFailedJobs = failedJobs.nonEmpty
 
+      val completedJobNumStr = if (completedJobs.size == listener.numCompletedJobs) {
+        s"${completedJobs.size}"
+      } else {
+        s"${listener.numCompletedJobs}, only showing ${completedJobs.size}"
+      }
+
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
@@ -295,9 +301,9 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
             }
             {
               if (shouldShowCompletedJobs) {
-                <li>
+                <li id="completed-summary">
                   <a href="#completed"><strong>Completed Jobs:</strong></a>
-                  {completedJobs.size}
+                  {completedJobNumStr}
                 </li>
               }
             }
@@ -305,7 +311,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
               if (shouldShowFailedJobs) {
                 <li>
                   <a href="#failed"><strong>Failed Jobs:</strong></a>
-                  {failedJobs.size}
+                  {listener.numFailedJobs}
                 </li>
               }
             }
@@ -322,7 +328,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           activeJobsTable
       }
       if (shouldShowCompletedJobs) {
-        content ++= <h4 id="completed">Completed Jobs ({completedJobs.size})</h4> ++
+        content ++= <h4 id="completed">Completed Jobs ({completedJobNumStr})</h4> ++
           completedJobsTable
       }
       if (shouldShowFailedJobs) {
