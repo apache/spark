@@ -136,9 +136,10 @@ object Bucketizer {
       feature: Double,
       lowerInclusive: Boolean,
       upperInclusive: Boolean): Double = {
-    if ((feature < splits.head && !lowerInclusive) || (feature > splits.last && !upperInclusive))
+    if ((feature < splits.head && !lowerInclusive) || (feature > splits.last && !upperInclusive)) {
       throw new Exception(s"Feature $feature out of bound, check your features or loose the" +
         s" lower/upper bound constraint.")
+    }
     var left = 0
     var right = splits.length - 2
     while (left <= right) {
