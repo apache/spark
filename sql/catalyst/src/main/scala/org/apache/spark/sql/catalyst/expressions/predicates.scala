@@ -110,6 +110,7 @@ case class InSet(value: Expression, hset: Set[Any])
 
   override def children: Seq[Expression] = value :: Nil
 
+  override def foldable: Boolean = true
   override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
   override def toString: String = s"$value INSET ${hset.mkString("(", ",", ")")}"
 
