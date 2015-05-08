@@ -911,13 +911,36 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
-   * url named table.
+   * url named table and connection properties.
    *
    * @group specificdata
    */
   @Experimental
-  def jdbc(url: String, table: String): DataFrame = {
-    jdbc(url, table, JDBCRelation.columnPartition(null))
+  def jdbc(url: String, table: String, properties: Properties = new Properties()): DataFrame = {
+    jdbc(url, table, JDBCRelation.columnPartition(null), properties)
+  }
+  /**
+   * :: Experimental ::
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table.  Partitions of the table will be retrieved in parallel based on the parameters
+   * passed to this function.
+   *
+   * @param columnName the name of a column of integral type that will be used for partitioning.
+   * @param lowerBound the minimum value of `columnName` used to decide partition stride
+   * @param upperBound the maximum value of `columnName` used to decide partition stride
+   * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
+   *                      evenly into this many partitions
+   * @group specificdata
+   */
+  @Experimental
+  def jdbc(
+      url: String,
+      table: String,  
+      columnName: String,
+      lowerBound: Long,
+      upperBound: Long,
+      numPartitions: Int): DataFrame = {
+    jdbc(url, table, columnName, lowerBound, upperBound, numPartitions, new Properties())
   }
 
   /**
@@ -931,7 +954,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @param upperBound the maximum value of `columnName` used to decide partition stride
    * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
    *                      evenly into this many partitions
-   *
+   * @param properties connection properties
    * @group specificdata
    */
   @Experimental
@@ -941,16 +964,17 @@ class SQLContext(@transient val sparkContext: SparkContext)
       columnName: String,
       lowerBound: Long,
       upperBound: Long,
-      numPartitions: Int): DataFrame = {
+      numPartitions: Int,
+      properties: Properties): DataFrame = {
     val partitioning = JDBCPartitioningInfo(columnName, lowerBound, upperBound, numPartitions)
     val parts = JDBCRelation.columnPartition(partitioning)
-    jdbc(url, table, parts)
+    jdbc(url, table, parts, properties)
   }
-
+  
   /**
    * :: Experimental ::
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
-   * url named table.  The theParts parameter gives a list expressions
+   * url named table. The theParts parameter gives a list expressions
    * suitable for inclusion in WHERE clauses; each one defines one partition
    * of the [[DataFrame]].
    *
@@ -958,14 +982,30 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jdbc(url: String, table: String, theParts: Array[String]): DataFrame = {
+    jdbc(url, table, theParts, new Properties())
+  }
+
+    /**
+   * :: Experimental ::
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table and connection properties. The theParts parameter gives a list expressions
+   * suitable for inclusion in WHERE clauses; each one defines one partition
+   * of the [[DataFrame]].
+   *
+   * @group specificdata
+   */
+  @Experimental
+  def jdbc(url: String, table: String,
+      theParts: Array[String], properties: Properties): DataFrame = {
     val parts: Array[Partition] = theParts.zipWithIndex.map { case (part, i) =>
       JDBCPartition(part, i) : Partition
     }
-    jdbc(url, table, parts)
+    jdbc(url, table, parts, properties)
   }
-
-  private def jdbc(url: String, table: String, parts: Array[Partition]): DataFrame = {
-    val relation = JDBCRelation(url, table, parts)(this)
+  
+  private def jdbc(url: String, table: String,
+      parts: Array[Partition], properties: Properties): DataFrame = {
+    val relation = JDBCRelation(url, table, parts, properties)(this)
     baseRelationToDataFrame(relation)
   }
 
