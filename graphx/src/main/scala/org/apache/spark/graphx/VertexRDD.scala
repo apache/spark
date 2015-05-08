@@ -364,12 +364,11 @@ object VertexRDD {
    * @param vertices the collection of vertex-attribute pairs
    */
   def createWithFold[VD: ClassTag, VD2: ClassTag]
-      (vertices: RDD[(VertexId, VD)], acc: VD2)
-      (foldFunc: (VD2, VD) => VD2)
+      (vertices: RDD[(VertexId, VD)], initVal: () => VD2, foldFunc: (VD2, VD) => VD2)
     : VertexRDD[VD2] = {
     val folded: RDD[(VertexId, VD2)] =
       vertices.groupByKey.map { case (vid, vdata) =>
-        var thisAcc: VD2 = acc
+        var thisAcc: VD2 = initVal()
         vdata.foreach(v => thisAcc = foldFunc(thisAcc, v))
         (vid, thisAcc)
       }
