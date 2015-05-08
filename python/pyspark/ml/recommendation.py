@@ -80,11 +80,11 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
 
     @keyword_only
     def __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=42L,
+                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=0,
                  ratingCol="rating", nonnegative=False, checkpointInterval=10):
         """
         __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                 implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=42L,
+                 implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=0,
                  ratingCol="rating", nonnegative=false, checkpointInterval=10)
         """
         super(ALS, self).__init__()
@@ -99,18 +99,18 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         self.nonnegative = Param(self, "nonnegative",
                                  "whether to use nonnegative constraint for least squares")
         self._setDefault(rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                         implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=42,
+                         implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=0,
                          ratingCol="rating", nonnegative=False, checkpointInterval=10)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=42,
+                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=0,
                   ratingCol="rating", nonnegative=False, checkpointInterval=10):
         """
         setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=42,
+                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=0,
                  ratingCol="rating", nonnegative=False, checkpointInterval=10)
         Sets params for ALS.
         """
@@ -165,7 +165,6 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         self.paramMap[self.numUserBlocks] = value
         self.paramMap[self.numItemBlocks] = value
-
 
     def setImplicitPrefs(self, value):
         """
@@ -264,7 +263,7 @@ if __name__ == "__main__":
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
     globs['df'] = sqlContext.createDataFrame([(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0),
-        (2, 1, 1.0), (2, 2, 5.0)], ["user", "item", "rating"])
+                                              (2, 1, 1.0), (2, 2, 5.0)], ["user", "item", "rating"])
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     sc.stop()
     if failure_count:
