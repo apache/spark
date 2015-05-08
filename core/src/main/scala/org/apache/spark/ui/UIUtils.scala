@@ -20,7 +20,7 @@ package org.apache.spark.ui
 import java.text.SimpleDateFormat
 import java.util.{Locale, Date}
 
-import scala.xml.{Node, Text}
+import scala.xml.{Node, Text, Unparsed}
 
 import org.apache.spark.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
@@ -371,4 +371,12 @@ private[spark] object UIUtils extends Logging {
       </div>
     </div>
   }
+
+  /** Return a script element that automatically expands the DAG visualization on page load. */
+  def expandDagVizOnLoad(forJob: Boolean): Seq[Node] = {
+    <script type="text/javascript">
+      {Unparsed("$(document).ready(function() { toggleDagViz(" + forJob + ") });")}
+    </script>
+  }
+
 }
