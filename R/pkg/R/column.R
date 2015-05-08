@@ -130,9 +130,9 @@ createMethods()
 
 #' alias
 #'
-#' @rdname column
-#'
 #' Set a new name for a column
+
+#' @rdname column
 setMethod("alias",
           signature(object = "Column"),
           function(object, data) {
@@ -143,6 +143,8 @@ setMethod("alias",
             }
           })
 
+#' substr
+#'
 #' An expression that returns a substring.
 #'
 #' @rdname column
@@ -181,8 +183,7 @@ setMethod("cast",
 #' Approx Count Distinct
 #'
 #' @rdname column
-#'
-#' Returns the approximate number of distinct items in a group.
+#' @return the approximate number of distinct items in a group.
 setMethod("approxCountDistinct",
           signature(x = "Column"),
           function(x, rsd = 0.95) {
@@ -193,8 +194,7 @@ setMethod("approxCountDistinct",
 #' Count Distinct
 #'
 #' @rdname column
-#'
-#' returns the number of distinct items in a group.
+#' @return the number of distinct items in a group.
 setMethod("countDistinct",
           signature(x = "Column"),
           function(x, ...) {
@@ -207,7 +207,7 @@ setMethod("countDistinct",
           })
 
 #' @rdname column
-#' @alias countDistinct
+#' @aliases countDistinct
 setMethod("n_distinct",
           signature(x = "Column"),
           function(x, ...) {
@@ -215,7 +215,7 @@ setMethod("n_distinct",
           })
 
 #' @rdname column
-#' @alias count
+#' @aliases count
 setMethod("n",
           signature(x = "Column"),
           function(x) {

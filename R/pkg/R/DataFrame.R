@@ -480,7 +480,7 @@ setMethod("distinct",
 #' @param withReplacement Sampling with replacement or not
 #' @param fraction The (rough) sample target fraction
 #' @rdname sampleDF
-#' @alias sample_frac
+#' @aliases sample_frac
 #' @export
 #' @examples
 #'\dontrun{
@@ -503,7 +503,7 @@ setMethod("sampleDF",
           })
 
 #' @rdname sampleDF
-#' @alias sampleDF
+#' @aliases sampleDF
 setMethod("sample_frac",
           signature(x = "DataFrame", withReplacement = "logical",
                     fraction = "numeric"),
@@ -692,7 +692,7 @@ setMethod("toRDD",
 #' @param x a DataFrame
 #' @return a GroupedData
 #' @seealso GroupedData
-#' @alias group_by
+#' @aliases group_by
 #' @rdname groupBy
 #' @export
 #' @examples
@@ -730,7 +730,7 @@ setMethod("group_by",
 #'
 #' @param x a DataFrame
 #' @rdname DataFrame
-#' @alias summarize
+#' @aliases summarize
 #' @export
 setMethod("agg",
           signature(x = "DataFrame"),
@@ -739,7 +739,7 @@ setMethod("agg",
           })
 
 #' @rdname DataFrame
-#' @alias agg
+#' @aliases agg
 setMethod("summarize",
           signature(x = "DataFrame"),
           function(x, ...) {
@@ -982,7 +982,7 @@ setMethod("withColumn",
 #' @param col a named argument of the form name = col
 #' @return A new DataFrame with the new columns added.
 #' @rdname withColumn
-#' @alias withColumn
+#' @aliases withColumn
 #' @export
 #' @examples
 #'\dontrun{
@@ -1049,7 +1049,7 @@ setMethod("withColumnRenamed",
 #' @param newCol A named pair of the form new_column_name = existing_column
 #' @return A DataFrame with the column name changed.
 #' @rdname withColumnRenamed
-#' @alias withColumnRenamed
+#' @aliases withColumnRenamed
 #' @export
 #' @examples
 #'\dontrun{

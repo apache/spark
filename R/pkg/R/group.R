@@ -112,7 +112,7 @@ setMethod("agg",
           })
 
 #' @rdname agg
-#' @alias agg
+#' @aliases agg
 setMethod("summarize",
           signature(x = "GroupedData"),
           function(x, ...) {

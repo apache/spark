@@ -436,7 +436,7 @@ setGeneric("isLocal", function(x) { standardGeneric("isLocal") })
 #' @export
 setGeneric("limit", function(x, num) {standardGeneric("limit") })
 
-#' @rdname mutate
+#' @rdname withColumn
 #' @export
 setGeneric("mutate", function(x, ...) {standardGeneric("mutate") })
 
@@ -500,7 +500,7 @@ setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") 
 #' @export
 setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
 
-#' @rdname summarize
+#' @rdname agg
 #' @export
 setGeneric("summarize", function(x,...) { standardGeneric("summarize") })
 
