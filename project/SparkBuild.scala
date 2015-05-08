@@ -193,6 +193,7 @@ object SparkBuild extends PomBuild {
    * Usage: `build/sbt sparkShell`
    */
   val sparkShell = taskKey[Unit]("start a spark-shell.")
+  val sparkSql = taskKey[Unit]("starts the spark sql CLI.")
 
   enable(Seq(
     connectInput in run := true,
@@ -203,6 +204,12 @@ object SparkBuild extends PomBuild {
 
     sparkShell := {
       (runMain in Compile).toTask(" org.apache.spark.repl.Main -usejavacp").value
+    },
+
+    javaOptions in Compile += "-Dspark.master=local",
+
+    sparkSql := {
+      (runMain in Compile).toTask(" org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver").value
     }
   ))(assembly)
 
@@ -497,7 +504,7 @@ object TestSettings {
     // Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
     // launched by the tests have access to the correct test-time classpath.
     envVars in Test ++= Map(
-      "SPARK_DIST_CLASSPATH" -> 
+      "SPARK_DIST_CLASSPATH" ->
         (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
       "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home"))),
     javaOptions in Test += "-Dspark.test.home=" + sparkHome,

@@ -103,10 +103,10 @@ class CrossValidator(Estimator):
     >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1, 5]).build()
     >>> evaluator = BinaryClassificationEvaluator()
     >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
-    >>> cvModel = cv.fit(dataset)
-    >>> expected = lr.fit(dataset, {lr.maxIter: 5}).transform(dataset)
-    >>> cvModel.transform(dataset).collect() == expected.collect()
-    True
+    >>> # SPARK-7432: The following test is flaky.
+    >>> # cvModel = cv.fit(dataset)
+    >>> # expected = lr.fit(dataset, {lr.maxIter: 5}).transform(dataset)
+    >>> # cvModel.transform(dataset).collect() == expected.collect()
     """
 
     # a placeholder to make it appear in the generated doc

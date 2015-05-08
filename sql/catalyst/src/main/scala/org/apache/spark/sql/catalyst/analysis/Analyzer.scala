@@ -647,11 +647,10 @@ class Analyzer(
     def addWindow(windowExpressions: Seq[NamedExpression], child: LogicalPlan): LogicalPlan = {
       // First, we group window expressions based on their Window Spec.
       val groupedWindowExpression = windowExpressions.groupBy { expr =>
-        val windowExpression = expr.find {
-          case window: WindowExpression => true
-          case other => false
-        }.map(_.asInstanceOf[WindowExpression].windowSpec)
-        windowExpression.getOrElse(
+        val windowSpec = expr.collectFirst {
+          case window: WindowExpression => window.windowSpec
+        }
+        windowSpec.getOrElse(
           failAnalysis(s"$windowExpressions does not have any WindowExpression."))
       }.toSeq
 
@@ -694,7 +693,7 @@ class Analyzer(
       case f @ Filter(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
         if child.resolved &&
            hasWindowFunction(aggregateExprs) &&
-           !a.expressions.exists(!_.resolved) =>
+           a.expressions.forall(_.resolved) =>
         val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
@@ -711,7 +710,7 @@ class Analyzer(
       // Aggregate without Having clause.
       case a @ Aggregate(groupingExprs, aggregateExprs, child)
         if hasWindowFunction(aggregateExprs) &&
-           !a.expressions.exists(!_.resolved) =>
+           a.expressions.forall(_.resolved) =>
         val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)

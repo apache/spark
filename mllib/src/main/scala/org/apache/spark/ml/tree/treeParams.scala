@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.impl.tree
+package org.apache.spark.ml.tree
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ml.impl.estimator.PredictorParams
+import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}

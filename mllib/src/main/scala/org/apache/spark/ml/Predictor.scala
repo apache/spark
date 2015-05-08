@@ -15,29 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.impl.estimator
+package org.apache.spark.ml
 
-import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
-import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.sql.{DataFrame, Row}
 
 /**
- * :: DeveloperApi ::
- *
- * Trait for parameters for prediction (regression and classification).
- *
- * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
+ * (private[ml])  Trait for parameters for prediction (regression and classification).
  */
-@DeveloperApi
-private[spark] trait PredictorParams extends Params
+private[ml] trait PredictorParams extends Params
   with HasLabelCol with HasFeaturesCol with HasPredictionCol {
 
   /**
@@ -63,7 +57,7 @@ private[spark] trait PredictorParams extends Params
 }
 
 /**
- * :: AlphaComponent ::
+ * :: DeveloperApi ::
  *
  * Abstraction for prediction problems (regression and classification).
  *
@@ -73,11 +67,9 @@ private[spark] trait PredictorParams extends Params
  *                  parameter to specify the concrete type.
  * @tparam M  Specialization of [[PredictionModel]].  If you subclass this type, use this type
  *            parameter to specify the concrete type for the corresponding model.
- *
- * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
-@AlphaComponent
-private[spark] abstract class Predictor[
+@DeveloperApi
+abstract class Predictor[
     FeaturesType,
     Learner <: Predictor[FeaturesType, Learner, M],
     M <: PredictionModel[FeaturesType, M]]
@@ -104,8 +96,6 @@ private[spark] abstract class Predictor[
   }
 
   /**
-   * :: DeveloperApi ::
-   *
    * Train a model using the given dataset and parameters.
    * Developers can implement this instead of [[fit()]] to avoid dealing with schema validation
    * and copying parameters into the model.
@@ -113,12 +103,9 @@ private[spark] abstract class Predictor[
    * @param dataset  Training dataset
    * @return  Fitted model
    */
-  @DeveloperApi
   protected def train(dataset: DataFrame): M
 
   /**
-   * :: DeveloperApi ::
-   *
    * Returns the SQL DataType corresponding to the FeaturesType type parameter.
    *
    * This is used by [[validateAndTransformSchema()]].
@@ -126,7 +113,6 @@ private[spark] abstract class Predictor[
    *
    * The default value is VectorUDT, but it may be overridden if FeaturesType is not Vector.
    */
-  @DeveloperApi
   protected def featuresDataType: DataType = new VectorUDT
 
   override def transformSchema(schema: StructType): StructType = {
@@ -146,7 +132,7 @@ private[spark] abstract class Predictor[
 }
 
 /**
- * :: AlphaComponent ::
+ * :: DeveloperApi ::
  *
  * Abstraction for a model for prediction tasks (regression and classification).
  *
@@ -154,11 +140,9 @@ private[spark] abstract class Predictor[
  *                       E.g., [[org.apache.spark.mllib.linalg.VectorUDT]] for vector features.
  * @tparam M  Specialization of [[PredictionModel]].  If you subclass this type, use this type
  *            parameter to specify the concrete type for the corresponding model.
- *
- * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
-@AlphaComponent
-private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, M]]
+@DeveloperApi
+abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, M]]
   extends Model[M] with PredictorParams {
 
   /** @group setParam */
@@ -168,8 +152,6 @@ private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel
   def setPredictionCol(value: String): M = set(predictionCol, value).asInstanceOf[M]
 
   /**
-   * :: DeveloperApi ::
-   *
    * Returns the SQL DataType corresponding to the FeaturesType type parameter.
    *
    * This is used by [[validateAndTransformSchema()]].
@@ -177,7 +159,6 @@ private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel
    *
    * The default value is VectorUDT, but it may be overridden if FeaturesType is not Vector.
    */
-  @DeveloperApi
   protected def featuresDataType: DataType = new VectorUDT
 
   override def transformSchema(schema: StructType): StructType = {
@@ -192,12 +173,8 @@ private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel
    * @return transformed dataset with [[predictionCol]] of type [[Double]]
    */
   override def transform(dataset: DataFrame): DataFrame = {
-    // This default implementation should be overridden as needed.
-
-    // Check schema
     transformSchema(dataset.schema, logging = true)
-
-    if ($(predictionCol) != "") {
+    if ($(predictionCol).nonEmpty) {
       dataset.withColumn($(predictionCol), callUDF(predict _, DoubleType, col($(featuresCol))))
     } else {
       this.logWarning(s"$uid: Predictor.transform() was called as NOOP" +
@@ -207,11 +184,8 @@ private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel
   }
 
   /**
-   * :: DeveloperApi ::
-   *
    * Predict label for the given features.
    * This internal method is used to implement [[transform()]] and output [[predictionCol]].
    */
-  @DeveloperApi
   protected def predict(features: FeaturesType): Double
 }
