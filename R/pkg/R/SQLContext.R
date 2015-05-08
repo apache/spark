@@ -421,7 +421,7 @@ clearCache <- function(sqlCtx) {
 #' \dontrun{
 #' sc <- sparkR.init()
 #' sqlCtx <- sparkRSQL.init(sc)
-#' df <- loadDF(sqlCtx, path, "parquet")
+#' df <- load(sqlCtx, path, "parquet")
 #' registerTempTable(df, "table")
 #' dropTempTable(sqlCtx, "table")
 #' }
@@ -453,7 +453,7 @@ dropTempTable <- function(sqlCtx, tableName) {
 #' df <- load(sqlCtx, "path/to/file.json", source = "json")
 #' }
 
-loadDF <- function(sqlCtx, path = NULL, source = NULL, ...) {
+load <- function(sqlCtx, path = NULL, source = NULL, ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
     options[['path']] <- path

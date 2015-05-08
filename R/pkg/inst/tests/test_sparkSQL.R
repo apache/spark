@@ -209,18 +209,18 @@ test_that("registerTempTable() results in a queryable table and sql() results in
 })
 
 test_that("insertInto() on a registered table", {
-  df <- loadDF(sqlCtx, jsonPath, "json")
-  saveDF(df, parquetPath, "parquet", "overwrite")
-  dfParquet <- loadDF(sqlCtx, parquetPath, "parquet")
+  df <- load(sqlCtx, jsonPath, "json")
+  save(df, parquetPath, "parquet", "overwrite")
+  dfParquet <- load(sqlCtx, parquetPath, "parquet")
 
   lines <- c("{\"name\":\"Bob\", \"age\":24}",
              "{\"name\":\"James\", \"age\":35}")
   jsonPath2 <- tempfile(pattern="jsonPath2", fileext=".tmp")
   parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
   writeLines(lines, jsonPath2)
-  df2 <- loadDF(sqlCtx, jsonPath2, "json")
-  saveDF(df2, parquetPath2, "parquet", "overwrite")
-  dfParquet2 <- loadDF(sqlCtx, parquetPath2, "parquet")
+  df2 <- load(sqlCtx, jsonPath2, "json")
+  save(df2, parquetPath2, "parquet", "overwrite")
+  dfParquet2 <- load(sqlCtx, parquetPath2, "parquet")
 
   registerTempTable(dfParquet, "table1")
   insertInto(dfParquet2, "table1")
@@ -421,12 +421,12 @@ test_that("distinct() on DataFrames", {
   expect_true(count(uniques) == 3)
 })
 
-test_that("sampleDF on a DataFrame", {
+test_that("sample on a DataFrame", {
   df <- jsonFile(sqlCtx, jsonPath)
-  sampled <- sampleDF(df, FALSE, 1.0)
+  sampled <- sample(df, FALSE, 1.0)
   expect_equal(nrow(collect(sampled)), count(df))
   expect_true(inherits(sampled, "DataFrame"))
-  sampled2 <- sampleDF(df, FALSE, 0.1)
+  sampled2 <- sample(df, FALSE, 0.1)
   expect_true(count(sampled2) < 3)
 
   # Also test sample_frac
@@ -492,15 +492,15 @@ test_that("column calculation", {
 })
 
 test_that("load() from json file", {
-  df <- loadDF(sqlCtx, jsonPath, "json")
+  df <- load(sqlCtx, jsonPath, "json")
   expect_true(inherits(df, "DataFrame"))
   expect_true(count(df) == 3)
 })
 
 test_that("save() as parquet file", {
-  df <- loadDF(sqlCtx, jsonPath, "json")
-  saveDF(df, parquetPath, "parquet", mode="overwrite")
-  df2 <- loadDF(sqlCtx, parquetPath, "parquet")
+  df <- load(sqlCtx, jsonPath, "json")
+  save(df, parquetPath, "parquet", mode="overwrite")
+  df2 <- load(sqlCtx, parquetPath, "parquet")
   expect_true(inherits(df2, "DataFrame"))
   expect_true(count(df2) == 3)
 })
@@ -670,7 +670,7 @@ test_that("unionAll(), except(), and intersect() on a DataFrame", {
              "{\"name\":\"James\", \"age\":35}")
   jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
   writeLines(lines, jsonPath2)
-  df2 <- loadDF(sqlCtx, jsonPath2, "json")
+  df2 <- load(sqlCtx, jsonPath2, "json")
 
   unioned <- arrange(unionAll(df, df2), df$age)
   expect_true(inherits(unioned, "DataFrame"))
@@ -712,9 +712,9 @@ test_that("mutate() and rename()", {
   expect_true(columns(newDF2)[1] == "newerAge")
 })
 
-test_that("saveDF() on DataFrame and works with parquetFile", {
+test_that("save() on DataFrame and works with parquetFile", {
   df <- jsonFile(sqlCtx, jsonPath)
-  saveDF(df, parquetPath, "parquet", mode="overwrite")
+  save(df, parquetPath, "parquet", mode="overwrite")
   parquetDF <- parquetFile(sqlCtx, parquetPath)
   expect_true(inherits(parquetDF, "DataFrame"))
   expect_equal(count(df), count(parquetDF))
@@ -722,9 +722,9 @@ test_that("saveDF() on DataFrame and works with parquetFile", {
 
 test_that("parquetFile works with multiple input paths", {
   df <- jsonFile(sqlCtx, jsonPath)
-  saveDF(df, parquetPath, "parquet", mode="overwrite")
+  save(df, parquetPath, "parquet", mode="overwrite")
   parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
-  saveDF(df, parquetPath2, "parquet", mode="overwrite")
+  save(df, parquetPath2, "parquet", mode="overwrite")
   parquetDF <- parquetFile(sqlCtx, parquetPath, parquetPath2)
   expect_true(inherits(parquetDF, "DataFrame"))
   expect_true(count(parquetDF) == count(df)*2)
