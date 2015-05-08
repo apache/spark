@@ -17,18 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
-import scala.collection.immutable
-
-private[spark] object CatalystConf{
-  val CASE_SENSITIVE = "spark.sql.caseSensitive"
-}
-
 private[spark] trait CatalystConf {
   def caseSensitiveAnalysis: Boolean
-  def setConf(key: String, value: String) : Unit
-  def getConf(key: String) : String
-  def getConf(key: String, defaultValue: String) : String
-  def getAllConfs: immutable.Map[String, String]
 }
 
 /**
@@ -39,20 +29,7 @@ object EmptyConf extends CatalystConf {
   override def caseSensitiveAnalysis: Boolean = {
     throw new UnsupportedOperationException
   }
-
-  override def setConf(key: String, value: String) : Unit = {
-    throw new UnsupportedOperationException
-  }
-
-  override def getConf(key: String) : String = {
-    throw new UnsupportedOperationException
-  }
-
-  override def getConf(key: String, defaultValue: String) : String = {
-    throw new UnsupportedOperationException
-  }
-
-  override def getAllConfs: immutable.Map[String, String] = {
-    throw new UnsupportedOperationException
-  }
 }
+
+/** A CatalystConf that can be used for local testing. */
+case class SimpleCatalystConf(caseSensitiveAnalysis: Boolean) extends CatalystConf

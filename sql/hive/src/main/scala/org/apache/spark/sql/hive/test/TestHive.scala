@@ -108,7 +108,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
       override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
       override def caseSensitiveAnalysis: Boolean =
-        getConf(CatalystConf.CASE_SENSITIVE, "false").toBoolean
+        getConf(SQLConf.CASE_SENSITIVE, "false").toBoolean
     }
   }
 

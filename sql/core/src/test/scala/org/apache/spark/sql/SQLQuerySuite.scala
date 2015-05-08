@@ -1279,12 +1279,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-4699 case sensitivity SQL query") {
-    setConf(CatalystConf.CASE_SENSITIVE, "false")
+    setConf(SQLConf.CASE_SENSITIVE, "false")
     val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
     val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
     rdd.toDF().registerTempTable("testTable1")
     checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
-    setConf(CatalystConf.CASE_SENSITIVE, "true")
+    setConf(SQLConf.CASE_SENSITIVE, "true")
   }
 
   test("SPARK-6145: ORDER BY test for nested fields") {
