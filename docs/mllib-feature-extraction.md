@@ -544,7 +544,7 @@ ElementwiseProduct transformer = new ElementwiseProduct(transformingVector);
 
 // Batch transform and per-row transform give the same results:
 JavaRDD<Vector> transformedData = transformer.transform(data);
-JavaRDD<Vector> transformedData2 = data.map(transformer::transform);
+JavaRDD<Vector> transformedData2 = data.map(v -> transformer.transform(v));
 
 {% endhighlight %}
 </div>
