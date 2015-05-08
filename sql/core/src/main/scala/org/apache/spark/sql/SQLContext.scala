@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.beans.Introspector
 import java.util.Properties
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConversions._
 import scala.collection.immutable
@@ -45,7 +46,7 @@ import org.apache.spark.sql.json._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-import org.apache.spark.{Partition, SparkContext}
+import org.apache.spark.{SparkConf, Partition, SparkContext}
 
 /**
  * Currently we support the default dialect named "sql", associated with the class
@@ -1272,6 +1273,56 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
   }
 
+  SQLContext.setLastInstantiatedContext(self)
+}
+
+/**
+ * This SQLContext object contains utility functions to create a singleton SQLContext instance,
+ * or to get the last created SQLContext instance.
+ */
+object SQLContext {
+
+  private val INSTANTIATION_LOCK = new Object()
+
+  /**
+   * Reference to the last created SQLContext.
+   */
+  @transient private val lastInstantiatedContext = new AtomicReference[SQLContext]()
+
+  /**
+   * Get the singleton SQLContext if it exists or create a new one using the given configuration.
+   * This function can be used to create a singleton SQLContext object that can be shared across
+   * the JVM.
+   */
+  def getOrCreate(config: SparkConf): SQLContext = {
+    getOrCreate(SparkContext.getOrCreate(config))
+  }
+
+  /**
+   * Get the singleton SQLContext if it exists or create a new one using the given configuration.
+   * This function can be used to create a singleton SQLContext object that can be shared across
+   * the JVM.
+   */
+  def getOrCreate(sparkContext: SparkContext): SQLContext = {
+    INSTANTIATION_LOCK.synchronized {
+      if (lastInstantiatedContext.get() == null) {
+        new SQLContext(sparkContext)
+      }
+    }
+    lastInstantiatedContext.get()
+  }
+
+  private[sql] def clearLastInstantiatedContext(): Unit = {
+    INSTANTIATION_LOCK.synchronized {
+      lastInstantiatedContext.set(null)
+    }
+  }
+
+  private def setLastInstantiatedContext(sqlContext: SQLContext): Unit = {
+    INSTANTIATION_LOCK.synchronized {
+      lastInstantiatedContext.set(sqlContext)
+    }
+  }
 }
 
 
