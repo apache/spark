@@ -243,9 +243,10 @@ abstract class VertexRDD[VD](
    *
    * @param messages an RDD containing messages to aggregate, where each message is a pair of its
    * target vertex ID and the message data
-   * @param foldFunc the associative aggregation function for merging messages to the same vertex
+   * @param initVal a factory function to provide initial values
+   * @param foldFunc the fold-style aggregation function for merging messages to the same vertex
    * @return a VertexRDD co-indexed with `this`, containing only vertices that received messages.
-   * For those vertices, their values are the result of applying `reduceFunc` to all received
+   * For those vertices, their values are the result of applying `foldFunc` to all received
    * messages.
    */
   def aggregateWithFold[VD2: ClassTag, VD3: ClassTag]
@@ -362,6 +363,8 @@ object VertexRDD {
    * @tparam VD2 the new vertex attribute type after fold operations
    *
    * @param vertices the collection of vertex-attribute pairs
+   * @param initVal a factory function to provide initial values
+   * @param foldFunc fold function to execute over each value for a given VertexId
    */
   def createWithFold[VD: ClassTag, VD2: ClassTag]
       (vertices: RDD[(VertexId, VD)], initVal: () => VD2, foldFunc: (VD2, VD) => VD2)
