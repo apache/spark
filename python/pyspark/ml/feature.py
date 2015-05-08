@@ -22,9 +22,9 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer
 from pyspark.mllib.common import inherit_doc
 
 __all__ = ['Binarizer', 'HashingTF', 'IDF', 'IDFModel', 'Normalizer', 'OneHotEncoder',
-           'PolynomialExpansion', 'StandardScaler', 'StandardScalerModel', 'StringIndexer',
-           'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'Word2Vec',
-           'Word2VecModel']
+           'PolynomialExpansion', 'RegexTokenizer', 'StandardScaler', 'StandardScalerModel',
+           'StringIndexer', 'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer',
+           'Word2Vec', 'Word2VecModel']
 
 
 @inherit_doc
