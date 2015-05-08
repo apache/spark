@@ -223,6 +223,35 @@ class HasInputCol(Params):
         return self.getOrDefault(self.inputCol)
 
 
+class HasInputCols(Params):
+    """
+    Mixin for param inputCols: input column names.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    inputCols = Param(Params._dummy(), "inputCols", "input column names")
+
+    def __init__(self):
+        super(HasInputCols, self).__init__()
+        #: param for input column names
+        self.inputCols = Param(self, "inputCols", "input column names")
+        if None is not None:
+            self._setDefault(inputCols=None)
+
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        self.paramMap[self.inputCols] = value
+        return self
+
+    def getInputCols(self):
+        """
+        Gets the value of inputCols or its default value.
+        """
+        return self.getOrDefault(self.inputCols)
+
+
 class HasOutputCol(Params):
     """
     Mixin for param outputCol: output column name.

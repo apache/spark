@@ -37,7 +37,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.hive.{HiveContext, HiveShim}
 import org.apache.spark.util.Utils
 
 private[hive] object SparkSQLCLIDriver {
@@ -74,7 +74,12 @@ private[hive] object SparkSQLCLIDriver {
       System.exit(1)
     }
 
-    val sessionState = new CliSessionState(new HiveConf(classOf[SessionState]))
+    val cliConf = new HiveConf(classOf[SessionState])
+    // Override the location of the metastore since this is only used for local execution.
+    HiveContext.newTemporaryConfiguration().foreach {
+      case (key, value) => cliConf.set(key, value)
+    }
+    val sessionState = new CliSessionState(cliConf)
 
     sessionState.in = System.in
     try {
@@ -91,10 +96,14 @@ private[hive] object SparkSQLCLIDriver {
 
     // Set all properties specified via command line.
     val conf: HiveConf = sessionState.getConf
-    sessionState.cmdProperties.entrySet().foreach { item: java.util.Map.Entry[Object, Object] =>
-      conf.set(item.getKey.asInstanceOf[String], item.getValue.asInstanceOf[String])
-      sessionState.getOverriddenConfigurations.put(
-        item.getKey.asInstanceOf[String], item.getValue.asInstanceOf[String])
+    sessionState.cmdProperties.entrySet().foreach { item =>
+      val key = item.getKey.asInstanceOf[String]
+      val value = item.getValue.asInstanceOf[String]
+      // We do not propagate metastore options to the execution copy of hive.
+      if (key != "javax.jdo.option.ConnectionURL") {
+        conf.set(key, value)
+        sessionState.getOverriddenConfigurations.put(key, value)
+      }
     }
 
     SessionState.start(sessionState)
@@ -138,8 +147,9 @@ private[hive] object SparkSQLCLIDriver {
       case e: UnsupportedEncodingException => System.exit(3)
     }
 
-    // use the specified database if specified
-    cli.processSelectDatabase(sessionState);
+    if (sessionState.database != null) {
+      SparkSQLEnv.hiveContext.runSqlHive(s"USE ${sessionState.database}")
+    }
 
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(sessionState)

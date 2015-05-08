@@ -111,7 +111,7 @@ private[spark] object RDDOperationScope {
   private[spark] def withScope[T](
       sc: SparkContext,
       name: String,
-      allowNesting: Boolean = false)(body: => T): T = {
+      allowNesting: Boolean)(body: => T): T = {
     // Save the old scope to restore it later
     val scopeKey = SparkContext.RDD_SCOPE_KEY
     val noOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY

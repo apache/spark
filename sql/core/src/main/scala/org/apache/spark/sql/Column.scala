@@ -698,6 +698,37 @@ class Column(protected[sql] val expr: Expression) extends Logging {
       println(expr.prettyString)
     }
   }
+
+  /**
+   * Compute bitwise OR of this expression with another expression.
+   * {{{
+   *   df.select($"colA".bitwiseOR($"colB"))
+   * }}}
+   *
+   * @group expr_ops
+   */
+  def bitwiseOR(other: Any): Column = BitwiseOr(expr, lit(other).expr)
+
+  /**
+   * Compute bitwise AND of this expression with another expression.
+   * {{{
+   *   df.select($"colA".bitwiseAND($"colB"))
+   * }}}
+   *
+   * @group expr_ops
+   */
+  def bitwiseAND(other: Any): Column = BitwiseAnd(expr, lit(other).expr)
+
+  /**
+   * Compute bitwise XOR of this expression with another expression.
+   * {{{
+   *   df.select($"colA".bitwiseXOR($"colB"))
+   * }}}
+   *
+   * @group expr_ops
+   */
+  def bitwiseXOR(other: Any): Column = BitwiseXor(expr, lit(other).expr)
+
 }
 
 
