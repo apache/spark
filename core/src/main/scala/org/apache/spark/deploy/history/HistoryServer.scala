@@ -203,8 +203,8 @@ object HistoryServer extends Logging {
 
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
-    initSecurity()
     new HistoryServerArguments(conf, argStrings)
+    initSecurity()
     val securityManager = new SecurityManager(conf)
 
     val providerName = conf.getOption("spark.history.provider")
