@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
+import org.apache.spark.ml.attribute.{AttributeGroup, _}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
@@ -27,7 +28,7 @@ import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DoubleType, StructType}
+import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /**
  * Params for [[ChiSqSelector]] and [[ChiSqSelectorModel]].
@@ -104,13 +105,31 @@ class ChiSqSelectorModel private[ml] (
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema)
-    val idf =
+    val newField = prepOutputField(dataset.schema)
+    val newCol =
       callUDF(chiSqSelector.transform: Vector => Vector, new VectorUDT, dataset($(featuresCol)))
-    dataset.withColumn($(outputCol), idf)
+    dataset.withColumn($(outputCol), newCol.as($(outputCol), newField.metadata))
   }
 
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
-    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
+    val newField = prepOutputField(schema)
+    val outputFields = schema.fields :+ newField
+    StructType(outputFields)
+  }
+
+  /**
+   * Prepare the output column field, including per-feature metadata.
+   */
+  private def prepOutputField(schema: StructType): StructField = {
+    val selector = chiSqSelector.selectedFeatures.toSet
+    val origAttrGroup = AttributeGroup.fromStructField(schema($(featuresCol)))
+    val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
+      origAttrGroup.attributes.get.zipWithIndex.filter(x => selector.contains(x._2)).map(_._1)
+    } else {
+      Array.fill[Attribute](selector.size)(NumericAttribute.defaultAttr)
+    }
+    val newAttributeGroup = new AttributeGroup($(outputCol), featureAttributes)
+    newAttributeGroup.toStructField()
   }
 }
