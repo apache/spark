@@ -45,6 +45,9 @@ setMethod("initialize", "DataFrame", function(.Object, sdf, isCached) {
 
 #' @rdname DataFrame
 #' @export
+#'
+#' @param sdf A Java object reference to the backing Scala DataFrame
+#' @param isCached TRUE if the dataFrame is cached
 dataFrame <- function(sdf, isCached = FALSE) {
   new("DataFrame", sdf, isCached)
 }
@@ -244,7 +247,7 @@ setMethod("columns",
           })
 
 #' @rdname columns
-#' @export
+#' @aliases names,DataFrame,function-method
 setMethod("names",
           signature(x = "DataFrame"),
           function(x) {
@@ -399,23 +402,23 @@ setMethod("repartition",
             dataFrame(sdf)     
           })
 
-#' toJSON
-#'
-#' Convert the rows of a DataFrame into JSON objects and return an RDD where
-#' each element contains a JSON string.
-#'
-#' @param x A SparkSQL DataFrame
-#' @return A StringRRDD of JSON objects
-#' @rdname tojson
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
-#' path <- "path/to/file.json"
-#' df <- jsonFile(sqlCtx, path)
-#' newRDD <- toJSON(df)
-#'}
+# toJSON
+#
+# Convert the rows of a DataFrame into JSON objects and return an RDD where
+# each element contains a JSON string.
+#
+#@param x A SparkSQL DataFrame
+# @return A StringRRDD of JSON objects
+# @rdname tojson
+# @export
+# @examples
+#\dontrun{
+# sc <- sparkR.init()
+# sqlCtx <- sparkRSQL.init(sc)
+# path <- "path/to/file.json"
+# df <- jsonFile(sqlCtx, path)
+# newRDD <- toJSON(df)
+#}
 setMethod("toJSON",
           signature(x = "DataFrame"),
           function(x) {
@@ -578,8 +581,8 @@ setMethod("limit",
             dataFrame(res)
           })
 
-# Take the first NUM rows of a DataFrame and return a the results as a data.frame
-
+#' Take the first NUM rows of a DataFrame and return a the results as a data.frame
+#' 
 #' @rdname take
 #' @export
 #' @examples
@@ -644,22 +647,22 @@ setMethod("first",
             take(x, 1)
           })
 
-#' toRDD()
-#' 
-#' Converts a Spark DataFrame to an RDD while preserving column names.
-#' 
-#' @param x A Spark DataFrame
-#' 
-#' @rdname DataFrame
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
-#' path <- "path/to/file.json"
-#' df <- jsonFile(sqlCtx, path)
-#' rdd <- toRDD(df)
-#' }
+# toRDD()
+# 
+# Converts a Spark DataFrame to an RDD while preserving column names.
+# 
+# @param x A Spark DataFrame
+# 
+# @rdname DataFrame
+# @export
+# @examples
+#\dontrun{
+# sc <- sparkR.init()
+# sqlCtx <- sparkRSQL.init(sc)
+# path <- "path/to/file.json"
+# df <- jsonFile(sqlCtx, path)
+# rdd <- toRDD(df)
+# }
 setMethod("toRDD",
           signature(x = "DataFrame"),
           function(x) {
@@ -706,6 +709,7 @@ setMethod("groupBy",
 #'
 #' Compute aggregates by specifying a list of columns
 #'
+#' @param x a DataFrame
 #' @rdname DataFrame
 #' @export
 setMethod("agg",
@@ -721,7 +725,7 @@ setMethod("agg",
 # the requested map function.                                                     #
 ###################################################################################
 
-#' @rdname lapply
+# @rdname lapply
 setMethod("lapply",
           signature(X = "DataFrame", FUN = "function"),
           function(X, FUN) {
@@ -729,14 +733,14 @@ setMethod("lapply",
             lapply(rdd, FUN)
           })
 
-#' @rdname lapply
+# @rdname lapply
 setMethod("map",
           signature(X = "DataFrame", FUN = "function"),
           function(X, FUN) {
             lapply(X, FUN)
           })
 
-#' @rdname flatMap
+# @rdname flatMap
 setMethod("flatMap",
           signature(X = "DataFrame", FUN = "function"),
           function(X, FUN) {
@@ -744,7 +748,7 @@ setMethod("flatMap",
             flatMap(rdd, FUN)
           })
 
-#' @rdname lapplyPartition
+# @rdname lapplyPartition
 setMethod("lapplyPartition",
           signature(X = "DataFrame", FUN = "function"),
           function(X, FUN) {
@@ -752,14 +756,14 @@ setMethod("lapplyPartition",
             lapplyPartition(rdd, FUN)
           })
 
-#' @rdname lapplyPartition
+# @rdname lapplyPartition
 setMethod("mapPartitions",
           signature(X = "DataFrame", FUN = "function"),
           function(X, FUN) {
             lapplyPartition(X, FUN)
           })
 
-#' @rdname foreach
+# @rdname foreach
 setMethod("foreach",
           signature(x = "DataFrame", func = "function"),
           function(x, func) {
@@ -767,7 +771,7 @@ setMethod("foreach",
             foreach(rdd, func)
           })
 
-#' @rdname foreach
+# @rdname foreach
 setMethod("foreachPartition",
           signature(x = "DataFrame", func = "function"),
           function(x, func) {
@@ -788,6 +792,7 @@ setMethod("$", signature(x = "DataFrame"),
             getColumn(x, name)
           })
 
+#' @rdname select
 setMethod("$<-", signature(x = "DataFrame"),
           function(x, name, value) {
             stopifnot(class(value) == "Column" || is.null(value))
@@ -1009,7 +1014,7 @@ setMethod("sortDF",
           })
 
 #' @rdname sortDF
-#' @export
+#' @aliases orderBy,DataFrame,function-method
 setMethod("orderBy",
           signature(x = "DataFrame", col = "characterOrColumn"),
           function(x, col) {
@@ -1046,7 +1051,7 @@ setMethod("filter",
           })
 
 #' @rdname filter
-#' @export
+#' @aliases where,DataFrame,function-method
 setMethod("where",
           signature(x = "DataFrame", condition = "characterOrColumn"),
           function(x, condition) {
