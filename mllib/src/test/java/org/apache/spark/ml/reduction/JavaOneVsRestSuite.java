@@ -1,23 +1,3 @@
-package org.apache.spark.ml.reduction;
-
-import static scala.collection.JavaConversions.seqAsJavaList;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateMultinomialLogisticInput;
-
-import org.apache.spark.ml.classification.LogisticRegression;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-
-import java.io.Serializable;
-import java.util.List;
-
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -34,13 +14,33 @@ import static org.apache.spark.mllib.classification.LogisticRegressionSuite.gene
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+package org.apache.spark.ml.reduction;
+
+import java.io.Serializable;
+import java.util.List;
+
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import static scala.collection.JavaConversions.seqAsJavaList;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+
+import org.apache.spark.ml.classification.LogisticRegression;
+import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateMultinomialLogisticInput;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.SQLContext;
+
 public class JavaOneVsRestSuite implements Serializable {
 
     private transient JavaSparkContext jsc;
     private transient SQLContext jsql;
     private transient DataFrame dataset;
     private transient JavaRDD<LabeledPoint> datasetRDD;
-
 
     @Before
     public void setUp() {
