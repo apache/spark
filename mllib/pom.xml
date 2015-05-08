@@ -141,16 +141,5 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-    <resources>
-      <resource>
-        <directory>../python</directory>
-        <includes>
-          <include>pyspark/mllib/*.py</include>
-          <include>pyspark/mllib/stat/*.py</include>
-          <include>pyspark/ml/*.py</include>
-          <include>pyspark/ml/param/*.py</include>
-        </includes>
-      </resource>
-    </resources>
   </build>
 </project>
