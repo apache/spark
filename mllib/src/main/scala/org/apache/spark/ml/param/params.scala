@@ -434,7 +434,7 @@ trait Params extends Identifiable with Serializable {
    *                    respectively. Make sure that the params are initialized before this method
    *                    gets called.
    */
-  @varargs
+  // @varargs
   protected final def setDefault(paramPairs: ParamPair[_]*): this.type = {
     paramPairs.foreach { p =>
       setDefault(p.param.asInstanceOf[Param[Any]], p.value)
