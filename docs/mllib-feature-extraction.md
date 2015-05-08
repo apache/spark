@@ -477,3 +477,57 @@ sc.stop();
 </div>
 </div>
 
+## ElementwiseProduct
+
+ElementwiseProduct multiplies each input vector by a provided "weight" vector, using element-wise multiplication. In other words, it scales each column of the dataset by a scalar multiplier.  This represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29) between the input vector, `v` and transforming vector, `w`, to yield a result vector.
+
+`\[ \begin{pmatrix}
+v_1 \\
+\vdots \\
+v_N
+\end{pmatrix} \circ \begin{pmatrix}
+                    w_1 \\
+                    \vdots \\
+                    w_N
+                    \end{pmatrix}
+= \begin{pmatrix}
+  v_1 w_1 \\
+  \vdots \\
+  v_N w_N
+  \end{pmatrix}
+\]`
+
+[`ElementwiseProduct`](api/scala/index.html#org.apache.spark.mllib.feature.ElementwiseProduct) has the following parameter in the constructor:
+
+* `w`: the transforming vector.
+
+`ElementwiseProduct` implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer) which can apply the weighting on a `Vector` to produce a transformed `Vector` or on an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
+
+### Example
+
+This example below demonstrates how to load a simple vectors file, extract a set of vectors, then transform those vectors using a transforming vector value.
+
+
+<div class="codetabs">
+<div data-lang="scala">
+{% highlight scala %}
+import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.feature.ElementwiseProduct
+import org.apache.spark.mllib.linalg.Vectors
+
+// Load and parse the data:
+val data = sc.textFile("data/mllib/kmeans_data.txt")
+val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble)))
+
+val transformingVector = Vectors.dense(0.0, 1.0, 2.0)
+val transformer = new ElementwiseProduct(transformingVector)
+
+// Batch transform and per-row transform give the same results:
+val transformedData = transformer.transform(parsedData)
+val transformedData2 = parsedData.map(x => transformer.transform(x))
+
+{% endhighlight %}
+</div>
+</div>
+
+

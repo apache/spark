@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedGetField, EliminateSubQueries}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedExtractValue, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -180,10 +180,10 @@ class ConstantFoldingSuite extends PlanTest {
       IsNull(Literal(null)) as 'c1,
       IsNotNull(Literal(null)) as 'c2,
 
-      GetItem(Literal.create(null, ArrayType(IntegerType)), 1) as 'c3,
-      GetItem(
+      UnresolvedExtractValue(Literal.create(null, ArrayType(IntegerType)), 1) as 'c3,
+      UnresolvedExtractValue(
         Literal.create(Seq(1), ArrayType(IntegerType)), Literal.create(null, IntegerType)) as 'c4,
-      UnresolvedGetField(
+      UnresolvedExtractValue(
         Literal.create(null, StructType(Seq(StructField("a", IntegerType, true)))),
         "a") as 'c5,
 
