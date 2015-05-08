@@ -97,7 +97,10 @@ if __name__ == "__main__":
         ("inputCol", "input column name", None),
         ("inputCols", "input column names", None),
         ("outputCol", "output column name", None),
-        ("checkpointInterval", "checkpoint interval (>= 1)", None)]
+        ("checkpointInterval", "checkpoint interval (>= 1)", None),
+        ("seed", "random seed", None),
+        ("tol", "the convergence tolerance for iterative algorithms", None),
+        ("stepSize", "Step size to be used for each iteration of optimization.", None)]
     code = []
     for name, doc, defaultValueStr in shared:
         code.append(_gen_param_code(name, doc, defaultValueStr))
