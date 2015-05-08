@@ -185,13 +185,16 @@ case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star {
 }
 
 /**
- * Get field of an expression
+ * Extracts a value or values from an Expression
  *
- * @param child The expression to get field of, can be Map, Array, Struct or array of Struct.
- * @param fieldExpr The expression to describe the field,
- *                  can be key of Map, index of Array, field name of Struct.
+ * @param child The expression to extract value from,
+ *              can be Map, Array, Struct or array of Structs.
+ * @param extraction The expression to describe the extraction,
+ *                   can be key of Map, index of Array, field name of Struct.
  */
-case class UnresolvedGetField(child: Expression, fieldExpr: Expression) extends UnaryExpression {
+case class UnresolvedExtractValue(child: Expression, extraction: Expression)
+  extends UnaryExpression {
+
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
@@ -200,5 +203,5 @@ case class UnresolvedGetField(child: Expression, fieldExpr: Expression) extends 
   override def eval(input: Row = null): EvaluatedType =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
-  override def toString: String = s"$child[$fieldExpr]"
+  override def toString: String = s"$child[$extraction]"
 }

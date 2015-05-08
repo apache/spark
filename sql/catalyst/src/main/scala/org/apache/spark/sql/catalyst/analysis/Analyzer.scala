@@ -311,8 +311,8 @@ class Analyzer(
               withPosition(u) { q.resolveChildren(nameParts, resolver).getOrElse(u) }
             logDebug(s"Resolving $u to $result")
             result
-          case UnresolvedGetField(child, fieldExpr) if child.resolved =>
-            GetField(child, fieldExpr, resolver)
+          case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
+            ExtractValue(child, fieldExpr, resolver)
         }
     }
 

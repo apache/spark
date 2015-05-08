@@ -26,7 +26,7 @@ import org.scalatest.FunSuite
 import org.scalatest.Matchers._
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
+import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.mathfuncs._
 import org.apache.spark.sql.types._
@@ -891,57 +891,55 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     val typeMap = MapType(StringType, StringType)
     val typeArray = ArrayType(StringType)
 
-    checkEvaluation(MapOrdinalGetField(BoundReference(3, typeMap, true),
+    checkEvaluation(GetMapValue(BoundReference(3, typeMap, true),
       Literal("aa")), "bb", row)
-    checkEvaluation(MapOrdinalGetField(Literal.create(null, typeMap), Literal("aa")), null, row)
+    checkEvaluation(GetMapValue(Literal.create(null, typeMap), Literal("aa")), null, row)
     checkEvaluation(
-      MapOrdinalGetField(Literal.create(null, typeMap),
-        Literal.create(null, StringType)), null, row)
-    checkEvaluation(MapOrdinalGetField(BoundReference(3, typeMap, true),
+      GetMapValue(Literal.create(null, typeMap), Literal.create(null, StringType)), null, row)
+    checkEvaluation(GetMapValue(BoundReference(3, typeMap, true),
       Literal.create(null, StringType)), null, row)
 
-    checkEvaluation(ArrayOrdinalGetField(BoundReference(4, typeArray, true),
+    checkEvaluation(GetArrayItem(BoundReference(4, typeArray, true),
       Literal(1)), "bb", row)
-    checkEvaluation(ArrayOrdinalGetField(Literal.create(null, typeArray), Literal(1)), null, row)
+    checkEvaluation(GetArrayItem(Literal.create(null, typeArray), Literal(1)), null, row)
     checkEvaluation(
-      ArrayOrdinalGetField(Literal.create(null, typeArray),
-        Literal.create(null, IntegerType)), null, row)
-    checkEvaluation(ArrayOrdinalGetField(BoundReference(4, typeArray, true),
+      GetArrayItem(Literal.create(null, typeArray), Literal.create(null, IntegerType)), null, row)
+    checkEvaluation(GetArrayItem(BoundReference(4, typeArray, true),
       Literal.create(null, IntegerType)), null, row)
 
-    def quickBuildGetField(expr: Expression, fieldName: String): GetField = {
+    def getStructField(expr: Expression, fieldName: String): ExtractValue = {
       expr.dataType match {
         case StructType(fields) =>
           val field = fields.find(_.name == fieldName).get
-          SimpleStructGetField(expr, field, fields.indexOf(field))
+          GetStructField(expr, field, fields.indexOf(field))
       }
     }
 
-    def resolveGetField(u: UnresolvedGetField): GetField = {
-      GetField(u.child, u.fieldExpr, _ == _)
+    def quickResolve(u: UnresolvedExtractValue): ExtractValue = {
+      ExtractValue(u.child, u.extraction, _ == _)
     }
 
-    checkEvaluation(quickBuildGetField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
-    checkEvaluation(quickBuildGetField(Literal.create(null, typeS), "a"), null, row)
+    checkEvaluation(getStructField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
+    checkEvaluation(getStructField(Literal.create(null, typeS), "a"), null, row)
 
     val typeS_notNullable = StructType(
       StructField("a", StringType, nullable = false)
         :: StructField("b", StringType, nullable = false) :: Nil
     )
 
-    assert(quickBuildGetField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
-    assert(quickBuildGetField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable
+    assert(getStructField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
+    assert(getStructField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable
       === false)
 
-    assert(quickBuildGetField(Literal.create(null, typeS), "a").nullable === true)
-    assert(quickBuildGetField(Literal.create(null, typeS_notNullable), "a").nullable === true)
+    assert(getStructField(Literal.create(null, typeS), "a").nullable === true)
+    assert(getStructField(Literal.create(null, typeS_notNullable), "a").nullable === true)
 
-    checkEvaluation(resolveGetField('c.map(typeMap).at(3).getItem("aa")), "bb", row)
-    checkEvaluation(resolveGetField('c.array(typeArray.elementType).at(4).getItem(1)), "bb", row)
-    checkEvaluation(resolveGetField('c.struct(typeS).at(2).getField("a")), "aa", row)
+    checkEvaluation(quickResolve('c.map(typeMap).at(3).getItem("aa")), "bb", row)
+    checkEvaluation(quickResolve('c.array(typeArray.elementType).at(4).getItem(1)), "bb", row)
+    checkEvaluation(quickResolve('c.struct(typeS).at(2).getField("a")), "aa", row)
   }
 
-  test("error message of GetField") {
+  test("error message of ExtractValue") {
     val structType = StructType(StructField("a", StringType, true) :: Nil)
     val arrayStructType = ArrayType(structType)
     val arrayType = ArrayType(StringType)
@@ -952,7 +950,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
         fieldDataType: DataType,
         errorMesage: String): Unit = {
       val e = intercept[org.apache.spark.sql.AnalysisException] {
-        GetField(
+        ExtractValue(
           Literal.create(null, childDataType),
           Literal.create(null, fieldDataType),
           _ == _)
@@ -963,7 +961,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkErrorMessage(structType, IntegerType, "Field name should be String Literal")
     checkErrorMessage(arrayStructType, BooleanType, "Field name should be String Literal")
     checkErrorMessage(arrayType, StringType, "Array index should be integral type")
-    checkErrorMessage(otherType, StringType, "Can't get field on")
+    checkErrorMessage(otherType, StringType, "Can't extract value from")
   }
 
   test("arithmetic") {

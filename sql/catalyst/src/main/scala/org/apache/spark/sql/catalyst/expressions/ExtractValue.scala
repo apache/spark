@@ -23,50 +23,50 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.types._
 
-object GetField {
+object ExtractValue {
   /**
-   * Returns the resolved `GetField`. It will return one kind of concrete `GetField`,
-   * depend on the type of `child` and `fieldExpr`.
+   * Returns the resolved `ExtractValue`. It will return one kind of concrete `ExtractValue`,
+   * depend on the type of `child` and `extraction`.
    *
-   *   `child`      |     `fieldExpr`    |    concrete `GetField`
-   * -------------------------------------------------------------
-   *    Struct      |   Literal String   |   SimpleStructGetField
-   * Array[Struct]  |   Literal String   |   ArrayStructGetField
-   *    Array       |   Integral type    |   ArrayOrdinalGetField
-   *     Map        |      Any type      |   MapOrdinalGetField
+   *   `child`      |    `extraction`    |    concrete `ExtractValue`
+   * ----------------------------------------------------------------
+   *    Struct      |   Literal String   |        GetStructField
+   * Array[Struct]  |   Literal String   |     GetArrayStructFields
+   *    Array       |   Integral type    |         GetArrayItem
+   *     Map        |      Any type      |         GetMapValue
    */
   def apply(
       child: Expression,
-      fieldExpr: Expression,
-      resolver: Resolver): GetField = {
+      extraction: Expression,
+      resolver: Resolver): ExtractValue = {
 
-    (child.dataType, fieldExpr) match {
+    (child.dataType, extraction) match {
       case (StructType(fields), Literal(fieldName, StringType)) =>
         val ordinal = findField(fields, fieldName.toString, resolver)
-        SimpleStructGetField(child, fields(ordinal), ordinal)
+        GetStructField(child, fields(ordinal), ordinal)
       case (ArrayType(StructType(fields), containsNull), Literal(fieldName, StringType)) =>
         val ordinal = findField(fields, fieldName.toString, resolver)
-        ArrayStructGetField(child, fields(ordinal), ordinal, containsNull)
-      case (_: ArrayType, _) if fieldExpr.dataType.isInstanceOf[IntegralType]  =>
-        ArrayOrdinalGetField(child, fieldExpr)
+        GetArrayStructFields(child, fields(ordinal), ordinal, containsNull)
+      case (_: ArrayType, _) if extraction.dataType.isInstanceOf[IntegralType]  =>
+        GetArrayItem(child, extraction)
       case (_: MapType, _) =>
-        MapOrdinalGetField(child, fieldExpr)
+        GetMapValue(child, extraction)
       case (otherType, _) =>
         val errorMsg = otherType match {
           case StructType(_) | ArrayType(StructType(_), _) =>
-            s"Field name should be String Literal, but it's $fieldExpr"
+            s"Field name should be String Literal, but it's $extraction"
           case _: ArrayType =>
-            s"Array index should be integral type, but it's ${fieldExpr.dataType}"
+            s"Array index should be integral type, but it's ${extraction.dataType}"
           case other =>
-            s"Can't get field on $child"
+            s"Can't extract value from $child"
         }
         throw new AnalysisException(errorMsg)
     }
   }
 
-  def unapply(g: GetField): Option[(Expression, Expression)] = {
+  def unapply(g: ExtractValue): Option[(Expression, Expression)] = {
     g match {
-      case o: OrdinalGetField => Some((o.child, o.ordinal))
+      case o: ExtractValueWithOrdinal => Some((o.child, o.ordinal))
       case _ => Some((g.child, null))
     }
   }
@@ -90,7 +90,7 @@ object GetField {
   }
 }
 
-trait GetField extends UnaryExpression {
+trait ExtractValue extends UnaryExpression {
   self: Product =>
 
   type EvaluatedType = Any
@@ -99,8 +99,8 @@ trait GetField extends UnaryExpression {
 /**
  * Returns the value of fields in the Struct `child`.
  */
-case class SimpleStructGetField(child: Expression, field: StructField, ordinal: Int)
-  extends GetField {
+case class GetStructField(child: Expression, field: StructField, ordinal: Int)
+  extends ExtractValue {
 
   override def dataType: DataType = field.dataType
   override def nullable: Boolean = child.nullable || field.nullable
@@ -116,11 +116,11 @@ case class SimpleStructGetField(child: Expression, field: StructField, ordinal: 
 /**
  * Returns the array of value of fields in the Array of Struct `child`.
  */
-case class ArrayStructGetField(
+case class GetArrayStructFields(
     child: Expression,
     field: StructField,
     ordinal: Int,
-    containsNull: Boolean) extends GetField {
+    containsNull: Boolean) extends ExtractValue {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def nullable: Boolean = child.nullable
@@ -137,7 +137,7 @@ case class ArrayStructGetField(
   }
 }
 
-abstract class OrdinalGetField extends GetField {
+abstract class ExtractValueWithOrdinal extends ExtractValue {
   self: Product =>
 
   def ordinal: Expression
@@ -168,8 +168,8 @@ abstract class OrdinalGetField extends GetField {
 /**
  * Returns the field at `ordinal` in the Array `child`
  */
-case class ArrayOrdinalGetField(child: Expression, ordinal: Expression)
-  extends OrdinalGetField {
+case class GetArrayItem(child: Expression, ordinal: Expression)
+  extends ExtractValueWithOrdinal {
 
   override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType
 
@@ -192,8 +192,8 @@ case class ArrayOrdinalGetField(child: Expression, ordinal: Expression)
 /**
  * Returns the value of key `ordinal` in Map `child`
  */
-case class MapOrdinalGetField(child: Expression, ordinal: Expression)
-  extends OrdinalGetField {
+case class GetMapValue(child: Expression, ordinal: Expression)
+  extends ExtractValueWithOrdinal {
 
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
 

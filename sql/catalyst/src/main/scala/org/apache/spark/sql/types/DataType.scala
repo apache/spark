@@ -43,7 +43,7 @@ abstract class DataType {
   /**
    * Enables matching against DataType for expressions:
    * {{{
-   *   case Cast(child @ DataType(), StringType) =>
+   *   case Cast(child @ BinaryType(), StringType) =>
    *     ...
    * }}}
    */
