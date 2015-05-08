@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.io.PrintStream
+
 import scala.collection.JavaConversions._
 
 import org.apache.spark.scheduler.StatsReportListener
@@ -39,7 +41,6 @@ private[hive] object SparkSQLEnv extends Logging {
 
       sparkConf
         .setAppName(s"SparkSQL::${Utils.localHostName()}")
-        .set("spark.sql.hive.version", HiveShim.version)
         .set(
           "spark.serializer",
           maybeSerializer.getOrElse("org.apache.spark.serializer.KryoSerializer"))
@@ -50,6 +51,12 @@ private[hive] object SparkSQLEnv extends Logging {
       sparkContext = new SparkContext(sparkConf)
       sparkContext.addSparkListener(new StatsReportListener())
       hiveContext = new HiveContext(sparkContext)
+
+      hiveContext.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
+      hiveContext.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
+      hiveContext.metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
+
+      hiveContext.setConf("spark.sql.hive.version", HiveShim.version)
 
       if (log.isDebugEnabled) {
         hiveContext.hiveconf.getAllProperties.toSeq.sorted.foreach { case (k, v) =>

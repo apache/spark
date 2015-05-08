@@ -24,8 +24,8 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.hive.MetastoreRelation
+import org.apache.spark.sql.hive.client.{HiveTable, HiveColumn}
+import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation, HiveMetastoreTypes}
 
 /**
  * Create table and insert the query result into it.
@@ -39,17 +39,34 @@ import org.apache.spark.sql.hive.MetastoreRelation
  */
 private[hive]
 case class CreateTableAsSelect(
-    database: String,
-    tableName: String,
+    tableDesc: HiveTable,
     query: LogicalPlan,
-    allowExisting: Boolean,
-    desc: Option[CreateTableDesc]) extends RunnableCommand {
+    allowExisting: Boolean)
+  extends RunnableCommand {
+
+  def database: String = tableDesc.database
+  def tableName: String = tableDesc.name
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     lazy val metastoreRelation: MetastoreRelation = {
-      // Create Hive Table
-      hiveContext.catalog.createTable(database, tableName, query.output, allowExisting, desc)
+      import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+      import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+      import org.apache.hadoop.io.Text
+      import org.apache.hadoop.mapred.TextInputFormat
+
+      val withSchema =
+        tableDesc.copy(
+          schema =
+            query.output.map(c =>
+              HiveColumn(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), null)),
+          inputFormat =
+            tableDesc.inputFormat.orElse(Some(classOf[TextInputFormat].getName)),
+          outputFormat =
+            tableDesc.outputFormat
+              .orElse(Some(classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]].getName)),
+          serde = tableDesc.serde.orElse(Some(classOf[LazySimpleSerDe].getName())))
+      hiveContext.catalog.client.createTable(withSchema)
 
       // Get the Metastore Relation
       hiveContext.catalog.lookupRelation(Seq(database, tableName), None) match {

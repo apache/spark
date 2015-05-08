@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 
 /**
  * :: AlphaComponent ::
- * A feature transformer than merge multiple columns into a vector column.
+ * A feature transformer that merges multiple columns into a vector column.
  */
 @AlphaComponent
 class VectorAssembler(override val uid: String)
@@ -106,6 +106,6 @@ object VectorAssembler {
       case o =>
         throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
     }
-    Vectors.sparse(cur, indices.result(), values.result())
+    Vectors.sparse(cur, indices.result(), values.result()).compressed
   }
 }

@@ -45,7 +45,7 @@ class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[S
 
 /**
  * :: AlphaComponent ::
- * A regex based tokenizer that extracts tokens either by repeatedly matching the regex(default) 
+ * A regex based tokenizer that extracts tokens either by repeatedly matching the regex(default)
  * or using it to split the text (set matching to false). Optional parameters also allow filtering
  * tokens using a minimal length.
  * It returns an array of strings that can be empty.

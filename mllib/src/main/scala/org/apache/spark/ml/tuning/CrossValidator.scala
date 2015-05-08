@@ -109,7 +109,7 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
 
   override def fit(dataset: DataFrame): CrossValidatorModel = {
     val schema = dataset.schema
-    transformSchema(dataset.schema, logging = true)
+    transformSchema(schema, logging = true)
     val sqlCtx = dataset.sqlContext
     val est = $(estimator)
     val eval = $(evaluator)
@@ -163,6 +163,7 @@ class CrossValidatorModel private[ml] (
   }
 
   override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)
   }
 
