@@ -158,7 +158,15 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
       case expr: NamedExpression => expr
       case expr: Expression => Alias(expr, expr.prettyString)()
     }
-    DataFrame(df.sqlContext, Aggregate(groupingExprs, aggExprs, df.logicalPlan))
+    if (df.sqlContext.conf.dataFrameRetainGroupColumns) {
+      val retainedExprs = groupingExprs.map {
+        case expr: NamedExpression => expr
+        case expr: Expression => Alias(expr, expr.prettyString)()
+      }
+      DataFrame(df.sqlContext, Aggregate(groupingExprs, retainedExprs ++ aggExprs, df.logicalPlan))
+    } else {
+      DataFrame(df.sqlContext, Aggregate(groupingExprs, aggExprs, df.logicalPlan))
+    }
   }
 
   /**
