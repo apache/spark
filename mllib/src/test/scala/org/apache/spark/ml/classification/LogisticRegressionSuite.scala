@@ -296,8 +296,8 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.intercept ~== interceptR relTol 1E-2)
     assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
     assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
-    assert(model.weights(2) ~== weightsR(2) relTol 1E-3)
-    assert(model.weights(3) ~== weightsR(3) relTol 1E-2)
+    assert(model.weights(2) ~== weightsR(2) relTol 1E-2)
+    assert(model.weights(3) ~== weightsR(3) relTol 2E-2)
   }
 
   test("binary logistic regression without intercept with L1 regularization") {
@@ -423,10 +423,10 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     val interceptR = 0.57734851
     val weightsR = Array(-0.05310287, 0.0, -0.08849250, -0.15458796)
 
-    assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
+    assert(model.intercept ~== interceptR relTol 1E-2)
+    assert(model.weights(0) ~== weightsR(0) relTol 1E-2)
     assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
-    assert(model.weights(2) ~== weightsR(2) relTol 1E-3)
+    assert(model.weights(2) ~== weightsR(2) relTol 1E-2)
     assert(model.weights(3) ~== weightsR(3) relTol 1E-3)
   }
 
@@ -461,5 +461,67 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.weights(1) ~== weightsR(1) absTol 1E-2)
     assert(model.weights(2) ~== weightsR(2) relTol 1E-3)
     assert(model.weights(3) ~== weightsR(3) relTol 1E-2)
+  }
+
+  test("binary logistic regression with intercept with strong L1 regularization") {
+    val trainer = (new LogisticRegression).setFitIntercept(true)
+      .setElasticNetParam(1.0).setRegParam(6.0)
+    val model = trainer.fit(binaryDataset)
+
+    val histogram = binaryDataset.map { case Row(label: Double, features: Vector) => label }
+      .treeAggregate(new MultiClassSummarizer)(
+        seqOp = (c, v) => (c, v) match {
+          case (classSummarizer: MultiClassSummarizer, label: Double) => classSummarizer.add(label)
+        },
+        combOp = (c1, c2) => (c1, c2) match {
+          case (classSummarizer1: MultiClassSummarizer, classSummarizer2: MultiClassSummarizer) =>
+            classSummarizer1.merge(classSummarizer2)
+        }).histogram
+
+    /**
+     * For binary logistic regression with strong L1 regularization, all the weights will be zeros.
+     * As a result,
+     * {{{
+     * P(0) = 1 / (1 + \exp(b)), and
+     * P(1) = \exp(b) / (1 + \exp(b))
+     * }}}, hence
+     * {{{
+     * b = \log{P(1) / P(0)} = \log{count_1 / count_0}
+     * }}}
+     */
+    val interceptTheory = Math.log(histogram(1).toDouble / histogram(0).toDouble)
+    val weightsTheory = Array(0.0, 0.0, 0.0, 0.0)
+
+    assert(model.intercept ~== interceptTheory relTol 1E-3)
+    assert(model.weights(0) ~== weightsTheory(0) absTol 1E-6)
+    assert(model.weights(1) ~== weightsTheory(1) absTol 1E-6)
+    assert(model.weights(2) ~== weightsTheory(2) absTol 1E-6)
+    assert(model.weights(3) ~== weightsTheory(3) absTol 1E-6)
+
+    /**
+     * Using the following R code to load the data and train the model using glmnet package.
+     *
+     * > library("glmnet")
+     * > data <- read.csv("path", header=FALSE)
+     * > label = factor(data$V1)
+     * > features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
+     * > weights = coef(glmnet(features,label, family="binomial", alpha = 1.0, lambda = 6.0))
+     * > weights
+     * 5 x 1 sparse Matrix of class "dgCMatrix"
+     *                      s0
+     * (Intercept) -0.2480643
+     * data.V2      0.0000000
+     * data.V3       .
+     * data.V4       .
+     * data.V5       .
+     */
+    val interceptR = -0.248065
+    val weightsR = Array(0.0, 0.0, 0.0, 0.0)
+
+    assert(model.intercept ~== interceptR relTol 1E-3)
+    assert(model.weights(0) ~== weightsR(0) absTol 1E-6)
+    assert(model.weights(1) ~== weightsR(1) absTol 1E-6)
+    assert(model.weights(2) ~== weightsR(2) absTol 1E-6)
+    assert(model.weights(3) ~== weightsR(3) absTol 1E-6)
   }
 }
