@@ -109,7 +109,7 @@ case class Exchange(
     serializer
   }
 
-  override def execute(): RDD[Row] = attachTree(this , "execute") {
+  protected override def doExecute(): RDD[Row] = attachTree(this , "execute") {
     newPartitioning match {
       case HashPartitioning(expressions, numPartitions) =>
         // TODO: Eliminate redundant expressions in grouping key and value.
