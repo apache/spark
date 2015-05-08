@@ -26,7 +26,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.types.{StructField, StructType}
-import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
+import org.apache.spark.sql._
 
 /**
  * ::DeveloperApi::
@@ -338,8 +338,15 @@ abstract class FSBasedRelation private[sql](
   private var _partitionSpec: PartitionSpec = maybePartitionSpec.map { spec =>
     spec.copy(partitionColumns = spec.partitionColumns.asNullable)
   }.getOrElse {
-    discoverPartitions()
+    if (partitionDiscoverEnabled()) {
+      discoverPartitions()
+    } else {
+      PartitionSpec(StructType(Nil), Array.empty[Partition])
+    }
   }
+
+  private def partitionDiscoverEnabled() =
+    sqlContext.conf.getConf(SQLConf.PARTITION_DISCOVERY_ENABLED, "true").toBoolean
 
   private[sql] def partitionSpec: PartitionSpec = _partitionSpec
 
@@ -349,7 +356,9 @@ abstract class FSBasedRelation private[sql](
   def partitionColumns: StructType = partitionSpec.partitionColumns
 
   private[sql] def refresh(): Unit = {
-    _partitionSpec = discoverPartitions()
+    if (partitionDiscoverEnabled()) {
+      _partitionSpec = discoverPartitions()
+    }
   }
 
   private def discoverPartitions(): PartitionSpec = {
