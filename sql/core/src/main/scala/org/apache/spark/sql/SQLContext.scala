@@ -148,7 +148,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   // TODO how to handle the temp table per user session?
   @transient
-  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(true)
+  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
 
   // TODO how to handle the temp function per user session?
   @transient
@@ -156,7 +156,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = true) {
+    new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         ExtractPythonUdfs ::
         sources.PreInsertCastAndRename ::
