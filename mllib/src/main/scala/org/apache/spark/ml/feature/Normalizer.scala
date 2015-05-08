@@ -39,7 +39,7 @@ class Normalizer(override val uid: String) extends UnaryTransformer[Vector, Vect
    * (default: p = 2)
    * @group param
    */
-  val p = new DoubleParam(uid, "p", "the p norm value", ParamValidators.gtEq(1))
+  val p = new DoubleParam(this, "p", "the p norm value", ParamValidators.gtEq(1))
 
   setDefault(p -> 2.0)
 

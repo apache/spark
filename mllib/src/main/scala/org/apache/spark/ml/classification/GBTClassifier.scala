@@ -101,7 +101,7 @@ final class GBTClassifier(override val uid: String)
    * (default = logistic)
    * @group param
    */
-  val lossType: Param[String] = new Param[String](uid, "lossType", "Loss function which GBT" +
+  val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
     " tries to minimize (case-insensitive). Supported options:" +
     s" ${GBTClassifier.supportedLossTypes.mkString(", ")}",
     (value: String) => GBTClassifier.supportedLossTypes.contains(value.toLowerCase))

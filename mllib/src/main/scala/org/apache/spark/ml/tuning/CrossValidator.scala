@@ -37,7 +37,7 @@ private[ml] trait CrossValidatorParams extends Params {
    * param for the estimator to be cross-validated
    * @group param
    */
-  val estimator: Param[Estimator[_]] = new Param(uid, "estimator", "estimator for selection")
+  val estimator: Param[Estimator[_]] = new Param(this, "estimator", "estimator for selection")
 
   /** @group getParam */
   def getEstimator: Estimator[_] = $(estimator)
@@ -47,7 +47,7 @@ private[ml] trait CrossValidatorParams extends Params {
    * @group param
    */
   val estimatorParamMaps: Param[Array[ParamMap]] =
-    new Param(uid, "estimatorParamMaps", "param maps for the estimator")
+    new Param(this, "estimatorParamMaps", "param maps for the estimator")
 
   /** @group getParam */
   def getEstimatorParamMaps: Array[ParamMap] = $(estimatorParamMaps)
@@ -57,7 +57,7 @@ private[ml] trait CrossValidatorParams extends Params {
    * metric
    * @group param
    */
-  val evaluator: Param[Evaluator] = new Param(uid, "evaluator",
+  val evaluator: Param[Evaluator] = new Param(this, "evaluator",
     "evaluator used to select hyper-parameters that maximize the cross-validated metric")
 
   /** @group getParam */
@@ -68,7 +68,7 @@ private[ml] trait CrossValidatorParams extends Params {
    * Default: 3
    * @group param
    */
-  val numFolds: IntParam = new IntParam(uid, "numFolds",
+  val numFolds: IntParam = new IntParam(this, "numFolds",
     "number of folds for cross validation (>= 2)", ParamValidators.gtEq(2))
 
   /** @group getParam */

@@ -42,7 +42,7 @@ class BinaryClassificationEvaluator(override val uid: String)
    * param for metric name in evaluation
    * @group param
    */
-  val metricName: Param[String] = new Param(uid, "metricName",
+  val metricName: Param[String] = new Param(this, "metricName",
     "metric name in evaluation (areaUnderROC|areaUnderPR)")
 
   /** @group getParam */

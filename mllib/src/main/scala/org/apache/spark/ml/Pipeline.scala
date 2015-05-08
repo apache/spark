@@ -89,7 +89,7 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] {
    * param for pipeline stages
    * @group param
    */
-  val stages: Param[Array[PipelineStage]] = new Param(uid, "stages", "stages of the pipeline")
+  val stages: Param[Array[PipelineStage]] = new Param(this, "stages", "stages of the pipeline")
 
   /** @group setParam */
   def setStages(value: Array[PipelineStage]): this.type = { set(stages, value); this }

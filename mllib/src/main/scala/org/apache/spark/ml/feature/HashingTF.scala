@@ -39,7 +39,7 @@ class HashingTF(override val uid: String) extends UnaryTransformer[Iterable[_], 
    * (default = 2^18^)
    * @group param
    */
-  val numFeatures = new IntParam(uid, "numFeatures", "number of features (> 0)",
+  val numFeatures = new IntParam(this, "numFeatures", "number of features (> 0)",
     ParamValidators.gt(0))
 
   setDefault(numFeatures -> (1 << 18))

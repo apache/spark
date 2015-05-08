@@ -57,7 +57,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: 10
    * @group param
    */
-  val rank = new IntParam(uid, "rank", "rank of the factorization", ParamValidators.gtEq(1))
+  val rank = new IntParam(this, "rank", "rank of the factorization", ParamValidators.gtEq(1))
 
   /** @group getParam */
   def getRank: Int = $(rank)
@@ -67,7 +67,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: 10
    * @group param
    */
-  val numUserBlocks = new IntParam(uid, "numUserBlocks", "number of user blocks",
+  val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks",
     ParamValidators.gtEq(1))
 
   /** @group getParam */
@@ -78,7 +78,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: 10
    * @group param
    */
-  val numItemBlocks = new IntParam(uid, "numItemBlocks", "number of item blocks",
+  val numItemBlocks = new IntParam(this, "numItemBlocks", "number of item blocks",
       ParamValidators.gtEq(1))
 
   /** @group getParam */
@@ -89,7 +89,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: false
    * @group param
    */
-  val implicitPrefs = new BooleanParam(uid, "implicitPrefs", "whether to use implicit preference")
+  val implicitPrefs = new BooleanParam(this, "implicitPrefs", "whether to use implicit preference")
 
   /** @group getParam */
   def getImplicitPrefs: Boolean = $(implicitPrefs)
@@ -99,7 +99,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: 1.0
    * @group param
    */
-  val alpha = new DoubleParam(uid, "alpha", "alpha for implicit preference",
+  val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference",
     ParamValidators.gtEq(0))
 
   /** @group getParam */
@@ -110,7 +110,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: "user"
    * @group param
    */
-  val userCol = new Param[String](uid, "userCol", "column name for user ids")
+  val userCol = new Param[String](this, "userCol", "column name for user ids")
 
   /** @group getParam */
   def getUserCol: String = $(userCol)
@@ -120,7 +120,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: "item"
    * @group param
    */
-  val itemCol = new Param[String](uid, "itemCol", "column name for item ids")
+  val itemCol = new Param[String](this, "itemCol", "column name for item ids")
 
   /** @group getParam */
   def getItemCol: String = $(itemCol)
@@ -130,7 +130,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Default: "rating"
    * @group param
    */
-  val ratingCol = new Param[String](uid, "ratingCol", "column name for ratings")
+  val ratingCol = new Param[String](this, "ratingCol", "column name for ratings")
 
   /** @group getParam */
   def getRatingCol: String = $(ratingCol)
@@ -141,7 +141,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * @group param
    */
   val nonnegative = new BooleanParam(
-    uid, "nonnegative", "whether to use nonnegative constraint for least squares")
+    this, "nonnegative", "whether to use nonnegative constraint for least squares")
 
   /** @group getParam */
   def getNonnegative: Boolean = $(nonnegative)

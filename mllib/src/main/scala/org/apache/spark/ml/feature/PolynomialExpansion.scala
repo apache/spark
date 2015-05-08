@@ -45,7 +45,7 @@ class PolynomialExpansion(override val uid: String)
    * Default: 2
    * @group param
    */
-  val degree = new IntParam(uid, "degree", "the polynomial degree to expand (>= 1)",
+  val degree = new IntParam(this, "degree", "the polynomial degree to expand (>= 1)",
     ParamValidators.gt(1))
 
   setDefault(degree -> 2)
