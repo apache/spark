@@ -165,7 +165,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("MultilabelSummarizer") {
+  test("MultiClassSummarizer") {
     val summarizer1 = (new MultiClassSummarizer)
       .add(0.0).add(3.0).add(4.0).add(3.0).add(6.0)
     assert(summarizer1.histogram.zip(Array[Long](1, 0, 0, 2, 1, 0, 1)).forall(x => x._1 === x._2))
@@ -312,8 +312,8 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
      * > data <- read.csv("path", header=FALSE)
      * > label = factor(data$V1)
      * > features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-     * > weights =
-     *     coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12, intercept=FALSE))
+     * > weights = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
+     *     intercept=FALSE))
      * > weights
      * 5 x 1 sparse Matrix of class "dgCMatrix"
      *                      s0
@@ -377,8 +377,8 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
      * > data <- read.csv("path", header=FALSE)
      * > label = factor(data$V1)
      * > features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-     * > weights =
-     *     coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37, intercept=FALSE))
+     * > weights = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
+     *     intercept=FALSE))
      * > weights
      * 5 x 1 sparse Matrix of class "dgCMatrix"
      *                      s0
@@ -442,8 +442,8 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
      * > data <- read.csv("path", header=FALSE)
      * > label = factor(data$V1)
      * > features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-     * > weights =
-     *     coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21, intercept=FALSE))
+     * > weights = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
+     *     intercept=FALSE))
      * > weights
      * 5 x 1 sparse Matrix of class "dgCMatrix"
      *                      s0
