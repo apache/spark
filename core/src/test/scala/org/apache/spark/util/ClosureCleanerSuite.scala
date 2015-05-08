@@ -266,16 +266,16 @@ private object TestUserClosuresActuallyCleaned {
     rdd.mapPartitionsWithIndex { (_, it) => return; it }.count()
   }
   def testFlatMapWith(rdd: RDD[Int]): Unit = {
-    rdd.flatMapWith { (_, it) => return; it }.count()
+    rdd.flatMapWith { (it) => return; it }.count()
   }
   def testMapWith(rdd: RDD[Int]): Unit = {
-    rdd.mapWith { (_, it) => return; it }.count()
+    rdd.mapWith { (it) => return; it }.count()
   }
   def testFilterWith(rdd: RDD[Int]): Unit = {
-    rdd.filterWith { (_, it) => return; it }.count()
+    rdd.filterWith { (it) => return; it }.count()
   }
   def testForEachWith(rdd: RDD[Int]): Unit = {
-    rdd.foreachWith { (_, it) => return; it }.count()
+    rdd.foreachWith { (it) => return; it }.count()
   }
   def testMapPartitionsWithContext(rdd: RDD[Int]): Unit = {
     rdd.mapPartitionsWithContext { (_, it) => return; it }.count()
