@@ -467,8 +467,8 @@ class DataFrame private[sql](
     // By the time we get here, since we have already run analysis, all attributes should've been
     // resolved and become AttributeReference.
     val cond = plan.condition.map { _.transform {
-      case EqualTo(a: AttributeReference, b: AttributeReference) if a.sameRef(b) =>
-        EqualTo(plan.left.resolve(a.name), plan.right.resolve(b.name))
+      case expressions.EqualTo(a: AttributeReference, b: AttributeReference) if a.sameRef(b) =>
+        expressions.EqualTo(plan.left.resolve(a.name), plan.right.resolve(b.name))
     }}
     plan.copy(condition = cond)
   }
