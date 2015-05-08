@@ -528,7 +528,9 @@ private class LogisticCostFun(
         })
 
     // regVal is the sum of weight squares for L2 regularization
-    val norm = if (fitIntercept) {
+    val norm = if (regParamL2 == 0.0) {
+      0.0
+    } else if (fitIntercept) {
       brzNorm(Vectors.dense(weights.toArray.slice(0, weights.size -1)).toBreeze, 2.0)
     } else {
       brzNorm(weights, 2.0)
@@ -539,11 +541,11 @@ private class LogisticCostFun(
     val gradient = logisticAggregator.gradient
 
     if (fitIntercept) {
-      axpy(regParamL2, w, gradient)
-    } else {
       val wArray = w.toArray.clone()
       wArray(wArray.length - 1) = 0.0
       axpy(regParamL2, Vectors.dense(wArray), gradient)
+    } else {
+      axpy(regParamL2, w, gradient)
     }
 
     (loss, gradient.toBreeze.asInstanceOf[BDV[Double]])

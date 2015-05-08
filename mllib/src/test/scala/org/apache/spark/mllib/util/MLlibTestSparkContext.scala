@@ -30,6 +30,7 @@ trait MLlibTestSparkContext extends BeforeAndAfterAll { self: Suite =>
     val conf = new SparkConf()
       .setMaster("local[2]")
       .setAppName("MLlibUnitTest")
+
     sc = new SparkContext(conf)
   }
 
