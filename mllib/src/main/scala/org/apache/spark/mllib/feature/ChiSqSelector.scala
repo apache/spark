@@ -105,6 +105,8 @@ class ChiSqSelectorModel (val selectedFeatures: Array[Int]) extends VectorTransf
  * Creates a ChiSquared feature selector.
  * @param numTopFeatures number of features that selector will select
  *                       (ordered by statistic value descending)
+ *                       Note that if the number of features is < numTopFeatures, then this will
+ *                       select all features.
  */
 @Experimental
 class ChiSqSelector (val numTopFeatures: Int) {

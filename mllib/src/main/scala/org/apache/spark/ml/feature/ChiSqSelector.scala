@@ -32,22 +32,22 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
 /**
  * Params for [[ChiSqSelector]] and [[ChiSqSelectorModel]].
  */
-private[feature] trait ChiSqSelectorBase extends Params
-  with HasInputCol with HasOutputCol with HasLabelCol {
+private[feature] trait ChiSqSelectorParams extends Params
+  with HasFeaturesCol with HasOutputCol with HasLabelCol {
 
   /**
-   * Number of features that selector will select (ordered by statistic value descending).
+   * Number of features that selector will select (ordered by statistic value descending). If the
+   * number of features is < numTopFeatures, then this will select all features.
    * @group param
    */
   final val numTopFeatures = new IntParam(this, "numTopFeatures",
-    "Number of features that selector will select, ordered by statistics value descending.")
-  setDefault(numTopFeatures -> 1)
+    "Number of features that selector will select, ordered by statistics value descending. If the" +
+      " number of features is < numTopFeatures, then this will select all features.",
+    ParamValidators.gtEq(1))
+  setDefault(numTopFeatures -> 50)
 
   /** @group getParam */
-  def getNumTopFeatures: Int = getOrDefault(numTopFeatures)
-
-  /** @group setParam */
-  def setNumTopFeatures(value: Int): this.type = set(numTopFeatures, value)
+  def getNumTopFeatures: Int = $(numTopFeatures)
 }
 
 /**
@@ -55,10 +55,13 @@ private[feature] trait ChiSqSelectorBase extends Params
  * Compute the Chi-Square selector model given an `RDD` of `LabeledPoint` data.
  */
 @AlphaComponent
-final class ChiSqSelector extends Estimator[ChiSqSelectorModel] with ChiSqSelectorBase {
+final class ChiSqSelector extends Estimator[ChiSqSelectorModel] with ChiSqSelectorParams {
 
   /** @group setParam */
-  def setInputCol(value: String): this.type = set(inputCol, value)
+  def setNumTopFeatures(value: Int): this.type = set(numTopFeatures, value)
+
+  /** @group setParam */
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
@@ -66,24 +69,20 @@ final class ChiSqSelector extends Estimator[ChiSqSelectorModel] with ChiSqSelect
   /** @group setParam */
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
-  override def fit(dataset: DataFrame, paramMap: ParamMap): ChiSqSelectorModel = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
-    val input = dataset.select(map(labelCol), map(inputCol)).map {
+  override def fit(dataset: DataFrame): ChiSqSelectorModel = {
+    transformSchema(dataset.schema)
+    val input = dataset.select($(labelCol), $(featuresCol)).map {
       case Row(label: Double, features: Vector) =>
         LabeledPoint(label, features)
     }
-    val chiSqSelector = new feature.ChiSqSelector(map(numTopFeatures)).fit(input)
-    val model = new ChiSqSelectorModel(this, paramMap, chiSqSelector)
-    Params.inheritValues(map, this, model)
-    model
+    val chiSqSelector = new feature.ChiSqSelector($(numTopFeatures)).fit(input)
+    copyValues(new ChiSqSelectorModel(this, chiSqSelector))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
-    SchemaUtils.checkColumnType(schema, map(inputCol), new VectorUDT)
-    SchemaUtils.checkColumnType(schema, map(labelCol), DoubleType)
-    SchemaUtils.appendColumn(schema, map(outputCol), new VectorUDT)
+  override def transformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
 }
 
@@ -94,26 +93,24 @@ final class ChiSqSelector extends Estimator[ChiSqSelectorModel] with ChiSqSelect
 @AlphaComponent
 class ChiSqSelectorModel private[ml] (
     override val parent: ChiSqSelector,
-    override val fittingParamMap: ParamMap,
-    chiSqSelector: feature.ChiSqSelectorModel)
-  extends Model[ChiSqSelectorModel] with ChiSqSelectorBase {
+    private val chiSqSelector: feature.ChiSqSelectorModel)
+  extends Model[ChiSqSelectorModel] with ChiSqSelectorParams {
 
   /** @group setParam */
-  def setInputCol(value: String): this.type = set(inputCol, value)
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
-    val idf = udf { vec: Vector => chiSqSelector.transform(vec) }
-    dataset.withColumn(map(outputCol), idf(col(map(inputCol))))
+  override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema)
+    val idf =
+      callUDF(chiSqSelector.transform: Vector => Vector, new VectorUDT, dataset($(featuresCol)))
+    dataset.withColumn($(outputCol), idf)
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
-    SchemaUtils.checkColumnType(schema, map(inputCol), new VectorUDT)
-    SchemaUtils.appendColumn(schema, map(outputCol), new VectorUDT)
+  override def transformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
 }

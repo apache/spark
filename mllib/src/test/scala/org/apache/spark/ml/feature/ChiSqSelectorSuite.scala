@@ -38,19 +38,19 @@ class ChiSqSelectorSuite extends FunSuite with MLlibTestSparkContext {
     )
 
     val preFilteredData = Seq(
-      Vectors.dense(Array(0.0)),
-      Vectors.dense(Array(6.0)),
-      Vectors.dense(Array(8.0)),
-      Vectors.dense(Array(5.0))
+      Vectors.dense(0.0),
+      Vectors.dense(6.0),
+      Vectors.dense(8.0),
+      Vectors.dense(5.0)
     )
 
-    val df = sc.parallelize(data.map(x => (x.label, x.features)).zip(preFilteredData)
-      .map(x => Tuple3(x._1._1, x._1._2, x._2)))
+    val df = sc.parallelize(data.zip(preFilteredData))
+      .map(x => Tuple3(x._1.label, x._1.features, x._2))
       .toDF("label", "data", "preFilteredData")
 
     val model = new ChiSqSelector()
       .setNumTopFeatures(1)
-      .setInputCol("data")
+      .setFeaturesCol("data")
       .setLabelCol("label")
       .setOutputCol("expected")
 
