@@ -77,8 +77,8 @@ class DataFrameJoinSuite extends QueryTest {
       df.join(df, df("key") === df("key") && df("value") === 1),
       Row(1, "1", 1, "1") :: Nil)
 
-    val left = df.groupBy("key").agg($"key", count("*"))
-    val right = df.groupBy("key").agg($"key", sum("key"))
+    val left = df.groupBy("key").agg(count("*"))
+    val right = df.groupBy("key").agg(sum("key"))
     checkAnswer(
       left.join(right, left("key") === right("key")),
       Row(1, 1, 1, 1) :: Row(2, 1, 2, 2) :: Nil)
