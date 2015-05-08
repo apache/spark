@@ -1765,7 +1765,7 @@ private[spark] object Utils extends Logging {
    * If the supplied path does not contain a scheme, or is a relative path, it will be
    * converted into an absolute path with a file:// scheme.
    */
-  def resolveURI(path: String, testWindows: Boolean = false): URI = {
+  def resolveURI(path: String): URI = {
     try {
       val uri = new URI(path)
       if (uri.getScheme() != null) {
@@ -1778,11 +1778,11 @@ private[spark] object Utils extends Logging {
   }
 
   /** Resolve a comma-separated list of paths. */
-  def resolveURIs(paths: String, testWindows: Boolean = false): String = {
+  def resolveURIs(paths: String): String = {
     if (paths == null || paths.trim.isEmpty) {
       ""
     } else {
-      paths.split(",").map { p => Utils.resolveURI(p, testWindows) }.mkString(",")
+      paths.split(",").map { p => Utils.resolveURI(p) }.mkString(",")
     }
   }
 
@@ -1793,7 +1793,7 @@ private[spark] object Utils extends Logging {
       Array.empty
     } else {
       paths.split(",").filter { p =>
-        val uri = resolveURI(p, windows)
+        val uri = resolveURI(p)
         Option(uri.getScheme).getOrElse("file") match {
           case windowsDrive(d) if windows => false
           case "local" | "file" => false

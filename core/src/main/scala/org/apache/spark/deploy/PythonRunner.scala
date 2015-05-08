@@ -18,6 +18,8 @@
 package org.apache.spark.deploy
 
 import java.net.URI
+import java.io.File
+import scala.util.Try
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
@@ -81,16 +83,13 @@ object PythonRunner {
       throw new IllegalArgumentException("Launching Python applications through " +
         s"spark-submit is currently only supported for local files: $path")
     }
-    val windows = Utils.isWindows || testWindows
-    var formattedPath = Utils.formatPath(path, windows)
-
-    // Strip the URI scheme from the path
-    formattedPath =
-      new URI(formattedPath).getScheme match {
-        case null => formattedPath
-        case Utils.windowsDrive(d) if windows => formattedPath
-        case _ => new URI(formattedPath).getPath
-      }
+    // get path when scheme is file.
+    val uri = Try(new URI(path)).getOrElse(new File(path).toURI)
+    var formattedPath = uri.getScheme match {
+      case null => path
+      case "file" | "local" => uri.getPath
+      case _ => null
+    }
 
     // Guard against malformed paths potentially throwing NPE
     if (formattedPath == null) {
@@ -99,7 +98,9 @@ object PythonRunner {
 
     // In Windows, the drive should not be prefixed with "/"
     // For instance, python does not understand "/C:/path/to/sheep.py"
-    formattedPath = if (windows) formattedPath.stripPrefix("/") else formattedPath
+    if (formattedPath.matches("/[a-zA-Z]:/.*")) {
+      formattedPath = formattedPath.stripPrefix("/")
+    }
     formattedPath
   }
 
