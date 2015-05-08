@@ -28,7 +28,6 @@ import static scala.collection.JavaConversions.seqAsJavaList;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-
 import org.apache.spark.ml.classification.LogisticRegression;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateMultinomialLogisticInput;
 import org.apache.spark.mllib.regression.LabeledPoint;
