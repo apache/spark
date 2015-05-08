@@ -59,14 +59,6 @@ case class Exchange(
 
   override def output: Seq[Attribute] = child.output
 
-  private val sortBasedShuffleOn = SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]
-
-  private val bypassMergeThreshold =
-    child.sqlContext.sparkContext.conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
-
-  private val serializeMapOutputs =
-    child.sqlContext.sparkContext.conf.getBoolean("spark.shuffle.sort.serializeMapOutputs", true)
-
   /**
    * Determines whether records must be defensively copied before being sent to the shuffle.
    * Several of Spark's shuffle components will buffer deserialized Java objects in memory. The
@@ -91,7 +83,11 @@ case class Exchange(
     // Note: even though we only use the partitioner's `numPartitions` field, we require it to be
     // passed instead of directly passing the number of partitions in order to guard against
     // corner-cases where a partitioner constructed with `numPartitions` partitions may output
-    // fewer partitions (like RangeParittioner, for example).
+    // fewer partitions (like RangePartitioner, for example).
+    val conf = child.sqlContext.sparkContext.conf
+    val sortBasedShuffleOn = SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]
+    val bypassMergeThreshold = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
+    val serializeMapOutputs = conf.getBoolean("spark.shuffle.sort.serializeMapOutputs", true)
     if (newOrdering.nonEmpty) {
       // If a new ordering is required, then records will be sorted with Spark's `ExternalSorter`,
       // which requires a defensive copy.
