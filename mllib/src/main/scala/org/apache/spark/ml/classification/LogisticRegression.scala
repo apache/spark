@@ -322,7 +322,7 @@ class LogisticRegressionModel private[ml] (
  * Two MultilabelSummarizer can be merged together to have a statistical summary of the
  * corresponding joint dataset.
  */
-class MultiClassSummarizer private[ml] extends Serializable {
+private[classification] class MultiClassSummarizer extends Serializable {
   private val distinctMap = new mutable.HashMap[Int, Long]
   private var totalInvalidCnt: Long = 0L
 
