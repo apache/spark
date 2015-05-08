@@ -47,14 +47,44 @@ class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("Binary search for finding buckets") {
-    val data = Array.fill[Double](100)(Random.nextDouble())
-    val splits = Array.fill[Double](10)(Random.nextDouble()).sorted
+  test("Binary search correctness in contrast with linear search") {
+    val data = Array.fill(100)(Random.nextDouble())
+    val splits = Array.fill(10)(Random.nextDouble()).sorted
     val wrappedSplits = Array(Double.MinValue) ++ splits ++ Array(Double.MaxValue)
     val bsResult = Vectors.dense(
       data.map(x => Bucketizer.binarySearchForBuckets(wrappedSplits, x, true, true)))
     val lsResult = Vectors.dense(data.map(x => BucketizerSuite.linearSearchForBuckets(splits, x)))
     assert(bsResult ~== lsResult absTol 1e-5)
+  }
+
+  test("Binary search of features at splits") {
+    val splits = Array.fill(10)(Random.nextDouble()).sorted
+    val data = splits
+    val expected = Vectors.dense(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0)
+    val wrappedSplits = Array(Double.MinValue) ++ splits ++ Array(Double.MaxValue)
+    val result = Vectors.dense(
+      data.map(x => Bucketizer.binarySearchForBuckets(wrappedSplits, x, true, true)))
+    assert(result ~== expected absTol 1e-5)
+  }
+
+  test("Binary search of features between splits") {
+    val data = Array.fill(10)(Random.nextDouble())
+    val splits = Array(-0.1, 1.1)
+    val expected = Vectors.dense(Array.fill(10)(1.0))
+    val wrappedSplits = Array(Double.MinValue) ++ splits ++ Array(Double.MaxValue)
+    val result = Vectors.dense(
+      data.map(x => Bucketizer.binarySearchForBuckets(wrappedSplits, x, true, true)))
+    assert(result ~== expected absTol 1e-5)
+  }
+
+  test("Binary search of features outside splits") {
+    val data = Array.fill(5)(Random.nextDouble() + 1.1) ++ Array.fill(5)(Random.nextDouble() - 1.1)
+    val splits = Array(0.0, 1.1)
+    val expected = Vectors.dense(Array.fill(5)(2.0) ++ Array.fill(5)(0.0))
+    val wrappedSplits = Array(Double.MinValue) ++ splits ++ Array(Double.MaxValue)
+    val result = Vectors.dense(
+      data.map(x => Bucketizer.binarySearchForBuckets(wrappedSplits, x, true, true)))
+    assert(result ~== expected absTol 1e-5)
   }
 }
 
