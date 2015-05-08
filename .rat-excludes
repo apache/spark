@@ -36,7 +36,6 @@ graphlib-dot.min.js
 sorttable.js
 vis.min.js
 vis.min.css
-vis.map
 .*avsc
 .*txt
 .*json
