@@ -162,7 +162,7 @@ private[spark] class Master(
         (fsFactory.createPersistenceEngine(), fsFactory.createLeaderElectionAgent(this))
       case "CUSTOM" =>
         val clazz = Class.forName(conf.get("spark.deploy.recoveryMode.factory"))
-        val factory = clazz.getConstructor(conf.getClass, Serialization.getClass)
+        val factory = clazz.getConstructor(classOf[SparkConf], classOf[Serialization])
           .newInstance(conf, SerializationExtension(context.system))
           .asInstanceOf[StandaloneRecoveryModeFactory]
         (factory.createPersistenceEngine(), factory.createLeaderElectionAgent(this))
