@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
@@ -65,7 +64,7 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns true if  all the children of this expression have been resolved to a specific schema
    * and false if any still contains any unresolved placeholders.
    */
-  def childrenResolved: Boolean = !children.exists(!_.resolved)
+  def childrenResolved: Boolean = children.forall(_.resolved)
 
   /**
    * Returns a string representation of this expression that does not have developer centric
@@ -85,6 +84,8 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
   def symbol: String
 
   override def foldable: Boolean = left.foldable && right.foldable
+
+  override def nullable: Boolean = left.nullable || right.nullable
 
   override def toString: String = s"($left $symbol $right)"
 }
@@ -108,4 +109,14 @@ case class GroupExpression(children: Seq[Expression]) extends Expression {
   override def nullable: Boolean = false
   override def foldable: Boolean = false
   override def dataType: DataType = throw new UnsupportedOperationException
+}
+
+/**
+ * Expressions that require a specific `DataType` as input should implement this trait
+ * so that the proper type conversions can be performed in the analyzer.
+ */
+trait ExpectsInputTypes {
+
+  def expectedChildTypes: Seq[DataType]
+
 }

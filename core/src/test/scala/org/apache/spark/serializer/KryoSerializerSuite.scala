@@ -269,7 +269,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("serialization buffer overflow reporting") {
     import org.apache.spark.SparkException
-    val kryoBufferMaxProperty = "spark.kryoserializer.buffer.max.mb"
+    val kryoBufferMaxProperty = "spark.kryoserializer.buffer.max"
 
     val largeObject = (1 to 1000000).toArray
 
@@ -279,6 +279,15 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     val ser = new KryoSerializer(conf).newInstance()
     val thrown = intercept[SparkException](ser.serialize(largeObject))
     assert(thrown.getMessage.contains(kryoBufferMaxProperty))
+  }
+
+  test("getAutoReset") {
+    val ser = new KryoSerializer(new SparkConf).newInstance().asInstanceOf[KryoSerializerInstance]
+    assert(ser.getAutoReset)
+    val conf = new SparkConf().set("spark.kryo.registrator",
+      classOf[RegistratorWithoutAutoReset].getName)
+    val ser2 = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
+    assert(!ser2.getAutoReset)
   }
 }
 
@@ -311,6 +320,12 @@ object KryoTest {
       k.register(classOf[ClassWithNoArgConstructor])
       k.register(classOf[ClassWithoutNoArgConstructor])
       k.register(classOf[java.util.HashMap[_, _]])
+    }
+  }
+
+  class RegistratorWithoutAutoReset extends KryoRegistrator {
+    override def registerClasses(k: Kryo) {
+      k.setAutoReset(false)
     }
   }
 }

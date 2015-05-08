@@ -21,11 +21,9 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
-import org.apache.spark.mllib.linalg.{VectorUDT, BLAS, Vector, Vectors}
+import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
-
 
 /**
  * Params for logistic regression.
@@ -59,9 +57,9 @@ class LogisticRegression
   /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
 
-  override protected def train(dataset: DataFrame, paramMap: ParamMap): LogisticRegressionModel = {
+  override protected def train(dataset: DataFrame): LogisticRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
-    val oldDataset = extractLabeledPoints(dataset, paramMap)
+    val oldDataset = extractLabeledPoints(dataset)
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) {
       oldDataset.persist(StorageLevel.MEMORY_AND_DISK)
@@ -69,17 +67,17 @@ class LogisticRegression
 
     // Train model
     val lr = new LogisticRegressionWithLBFGS()
-      .setIntercept(paramMap(fitIntercept))
+      .setIntercept($(fitIntercept))
     lr.optimizer
-      .setRegParam(paramMap(regParam))
-      .setNumIterations(paramMap(maxIter))
+      .setRegParam($(regParam))
+      .setNumIterations($(maxIter))
     val oldModel = lr.run(oldDataset)
-    val lrm = new LogisticRegressionModel(this, paramMap, oldModel.weights, oldModel.intercept)
+    val lrm = new LogisticRegressionModel(this, oldModel.weights, oldModel.intercept)
 
     if (handlePersistence) {
       oldDataset.unpersist()
     }
-    lrm
+    copyValues(lrm)
   }
 }
 
@@ -92,7 +90,6 @@ class LogisticRegression
 @AlphaComponent
 class LogisticRegressionModel private[ml] (
     override val parent: LogisticRegression,
-    override val fittingParamMap: ParamMap,
     val weights: Vector,
     val intercept: Double)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
@@ -101,76 +98,15 @@ class LogisticRegressionModel private[ml] (
   /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
 
+  /** Margin (rawPrediction) for class label 1.  For binary classification only. */
   private val margin: Vector => Double = (features) => {
     BLAS.dot(features, weights) + intercept
   }
 
+  /** Score (probability) for class label 1.  For binary classification only. */
   private val score: Vector => Double = (features) => {
     val m = margin(features)
     1.0 / (1.0 + math.exp(-m))
-  }
-
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    // This is overridden (a) to be more efficient (avoiding re-computing values when creating
-    // multiple output columns) and (b) to handle threshold, which the abstractions do not use.
-    // TODO: We should abstract away the steps defined by UDFs below so that the abstractions
-    // can call whichever UDFs are needed to create the output columns.
-
-    // Check schema
-    transformSchema(dataset.schema, paramMap, logging = true)
-
-    val map = extractParamMap(paramMap)
-
-    // Output selected columns only.
-    // This is a bit complicated since it tries to avoid repeated computation.
-    //   rawPrediction (-margin, margin)
-    //   probability (1.0-score, score)
-    //   prediction (max margin)
-    var tmpData = dataset
-    var numColsOutput = 0
-    if (map(rawPredictionCol) != "") {
-      val features2raw: Vector => Vector = (features) => predictRaw(features)
-      tmpData = tmpData.withColumn(map(rawPredictionCol),
-        callUDF(features2raw, new VectorUDT, col(map(featuresCol))))
-      numColsOutput += 1
-    }
-    if (map(probabilityCol) != "") {
-      if (map(rawPredictionCol) != "") {
-        val raw2prob = udf { (rawPreds: Vector) =>
-          val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
-          Vectors.dense(1.0 - prob1, prob1): Vector
-        }
-        tmpData = tmpData.withColumn(map(probabilityCol), raw2prob(col(map(rawPredictionCol))))
-      } else {
-        val features2prob = udf { (features: Vector) => predictProbabilities(features) : Vector }
-        tmpData = tmpData.withColumn(map(probabilityCol), features2prob(col(map(featuresCol))))
-      }
-      numColsOutput += 1
-    }
-    if (map(predictionCol) != "") {
-      val t = map(threshold)
-      if (map(probabilityCol) != "") {
-        val predict = udf { probs: Vector =>
-          if (probs(1) > t) 1.0 else 0.0
-        }
-        tmpData = tmpData.withColumn(map(predictionCol), predict(col(map(probabilityCol))))
-      } else if (map(rawPredictionCol) != "") {
-        val predict = udf { rawPreds: Vector =>
-          val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
-          if (prob1 > t) 1.0 else 0.0
-        }
-        tmpData = tmpData.withColumn(map(predictionCol), predict(col(map(rawPredictionCol))))
-      } else {
-        val predict = udf { features: Vector => this.predict(features) }
-        tmpData = tmpData.withColumn(map(predictionCol), predict(col(map(featuresCol))))
-      }
-      numColsOutput += 1
-    }
-    if (numColsOutput == 0) {
-      this.logWarning(s"$uid: LogisticRegressionModel.transform() was called as NOOP" +
-        " since no output columns were set.")
-    }
-    tmpData
   }
 
   override val numClasses: Int = 2
@@ -183,19 +119,43 @@ class LogisticRegressionModel private[ml] (
     if (score(features) > getThreshold) 1 else 0
   }
 
-  override protected def predictProbabilities(features: Vector): Vector = {
-    val s = score(features)
-    Vectors.dense(1.0 - s, s)
+  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+    rawPrediction match {
+      case dv: DenseVector =>
+        var i = 0
+        while (i < dv.size) {
+          dv.values(i) = 1.0 / (1.0 + math.exp(-dv.values(i)))
+          i += 1
+        }
+        dv
+      case sv: SparseVector =>
+        throw new RuntimeException("Unexpected error in LogisticRegressionModel:" +
+          " raw2probabilitiesInPlace encountered SparseVector")
+    }
   }
 
   override protected def predictRaw(features: Vector): Vector = {
     val m = margin(features)
-    Vectors.dense(0.0, m)
+    Vectors.dense(-m, m)
   }
 
-  override protected def copy(): LogisticRegressionModel = {
-    val m = new LogisticRegressionModel(parent, fittingParamMap, weights, intercept)
-    Params.inheritValues(this.extractParamMap(), this, m)
-    m
+  override def copy(extra: ParamMap): LogisticRegressionModel = {
+    copyValues(new LogisticRegressionModel(parent, weights, intercept), extra)
+  }
+
+  override protected def raw2prediction(rawPrediction: Vector): Double = {
+    val t = getThreshold
+    val rawThreshold = if (t == 0.0) {
+      Double.NegativeInfinity
+    } else if (t == 1.0) {
+      Double.PositiveInfinity
+    } else {
+      Math.log(t / (1.0 - t))
+    }
+    if (rawPrediction(1) > rawThreshold) 1 else 0
+  }
+
+  override protected def probability2prediction(probability: Vector): Double = {
+    if (probability(1) > getThreshold) 1 else 0
   }
 }

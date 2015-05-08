@@ -18,16 +18,14 @@
 package org.apache.spark.sql.execution.expressions
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.catalyst.expressions.{Row, Expression}
-import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.expressions.{LeafExpression, Row}
 import org.apache.spark.sql.types.{IntegerType, DataType}
 
 
 /**
  * Expression that returns the current partition id of the Spark task.
  */
-case object SparkPartitionID extends Expression with trees.LeafNode[Expression] {
-  self: Product =>
+private[sql] case object SparkPartitionID extends LeafExpression {
 
   override type EvaluatedType = Int
 
