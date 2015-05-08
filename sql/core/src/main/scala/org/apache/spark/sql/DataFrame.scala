@@ -933,6 +933,22 @@ class DataFrame private[sql](
   }
 
   /**
+   * Returns a new [[DataFrame]] without duplicates.
+   * @group dfops
+   */
+  def dropDuplicates(): DataFrame = dropDuplicates(this.columns)
+
+  /**
+   * Returns a new [[DataFrame]] without duplicates under the given columns.
+   * @group dfops
+   */
+  def dropDuplicates(subset: Seq[String]): DataFrame = {
+    import org.apache.spark.sql.functions.{first => columnFirst}
+    val columnFirsts = columns.map(columnFirst)
+    groupBy(subset.head, subset.tail : _*).agg(columnFirsts.head, columnFirsts.tail : _*)
+  }
+
+  /**
    * Computes statistics for numeric columns, including count, mean, stddev, min, and max.
    * If no columns are given, this function computes statistics for all numerical columns.
    *
