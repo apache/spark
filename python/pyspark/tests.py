@@ -644,7 +644,6 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertTrue(18 < rdd.map(lambda x: (x, -x)).countApproxDistinct() < 22)
 
         self.assertRaises(ValueError, lambda: rdd.countApproxDistinct(0.00000001))
-        self.assertRaises(ValueError, lambda: rdd.countApproxDistinct(0.5))
 
     def test_histogram(self):
         # empty
