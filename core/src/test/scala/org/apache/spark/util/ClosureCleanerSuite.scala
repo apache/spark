@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import java.io.NotSerializableException
+import java.util.Random
 
 import org.scalatest.FunSuite
 
@@ -266,19 +267,15 @@ private object TestUserClosuresActuallyCleaned {
     rdd.mapPartitionsWithIndex { (_, it) => return; it }.count()
   }
   def testFlatMapWith(rdd: RDD[Int]): Unit = {
-    import java.util.Random
     rdd.flatMapWith ((index: Int) => new Random(index + 42)){ (_, it) => return; Seq() }.count()
   }
   def testMapWith(rdd: RDD[Int]): Unit = {
-    import java.util.Random
     rdd.mapWith ((index: Int) => new Random(index + 42)){ (_, it) => return; 0 }.count()
   }
   def testFilterWith(rdd: RDD[Int]): Unit = {
-    import java.util.Random
     rdd.filterWith ((index: Int) => new Random(index + 42)){ (_, it) => return; true }.count()
   }
   def testForEachWith(rdd: RDD[Int]): Unit = {
-    import java.util.Random
     rdd.foreachWith ((index: Int) => new Random(index + 42)){ (_, it) => return }
   }
   def testMapPartitionsWithContext(rdd: RDD[Int]): Unit = {
