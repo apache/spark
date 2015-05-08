@@ -46,6 +46,8 @@ import scala.collection.JavaConversions._
 private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: HiveContext)
   extends Catalog with Logging {
 
+  val conf = hive.conf
+
   /** Usages should lock on `this`. */
   protected[hive] lazy val hiveWarehouse = new Warehouse(hive.hiveconf)
 
@@ -138,7 +140,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     val tableProperties = new scala.collection.mutable.HashMap[String, String]
     tableProperties.put("spark.sql.sources.provider", provider)
     if (userSpecifiedSchema.isDefined) {
-      val threshold = hive.conf.schemaStringLengthThreshold
+      val threshold = conf.schemaStringLengthThreshold
       val schemaJsonString = userSpecifiedSchema.get.json
       // Split the JSON string.
       val parts = schemaJsonString.grouped(threshold).toSeq
@@ -345,7 +347,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
             // Inserting into partitioned table is not supported in Parquet data source (yet).
             if !relation.hiveQlTable.isPartitioned &&
               hive.convertMetastoreParquet &&
-              hive.conf.parquetUseDataSourceApi &&
+              conf.parquetUseDataSourceApi &&
               relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
           val parquetRelation = convertToParquetRelation(relation)
           val attributedRewrites = relation.output.zip(parquetRelation.output)
@@ -356,7 +358,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           // Inserting into partitioned table is not supported in Parquet data source (yet).
           if !relation.hiveQlTable.isPartitioned &&
             hive.convertMetastoreParquet &&
-            hive.conf.parquetUseDataSourceApi &&
+            conf.parquetUseDataSourceApi &&
             relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
           val parquetRelation = convertToParquetRelation(relation)
           val attributedRewrites = relation.output.zip(parquetRelation.output)
@@ -365,7 +367,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         // Read path
         case p @ PhysicalOperation(_, _, relation: MetastoreRelation)
             if hive.convertMetastoreParquet &&
-              hive.conf.parquetUseDataSourceApi &&
+              conf.parquetUseDataSourceApi &&
               relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
           val parquetRelation = convertToParquetRelation(relation)
           val attributedRewrites = relation.output.zip(parquetRelation.output)
@@ -425,7 +427,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
           CreateTableUsingAsSelect(
             desc.name,
-            hive.conf.defaultDataSourceName,
+            conf.defaultDataSourceName,
             temporary = false,
             mode,
             options = Map.empty[String, String],
@@ -454,7 +456,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
           CreateTableUsingAsSelect(
             tblName,
-            hive.conf.defaultDataSourceName,
+            conf.defaultDataSourceName,
             temporary = false,
             mode,
             options = Map.empty[String, String],
