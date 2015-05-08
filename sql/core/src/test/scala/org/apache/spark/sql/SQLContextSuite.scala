@@ -68,7 +68,7 @@ class SQLContextSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("getOrCreate gets last explicitly instantiated SQLContext") {
-    sparkContext = new SparkContext
+    sparkContext = new SparkContext(sparkConf)
     sqlContext = new SQLContext(sparkContext)
     assert(SQLContext.getOrCreate(sparkConf) != null,
       "Explicitly instantiated SQLContext was not saved, null returned")
