@@ -30,6 +30,7 @@ import parquet.hadoop.util.ContextUtil
 import org.apache.spark._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
@@ -123,9 +124,17 @@ private[sql] case class InsertIntoFSBasedRelation(
       writerContainer.executorSideSetup(taskContext)
 
       try {
-        while (iterator.hasNext) {
-          val row = iterator.next()
-          writerContainer.outputWriterForRow(row).write(row)
+        if (relation.needConversion) {
+          val converter = CatalystTypeConverters.createToScalaConverter(relation.dataSchema)
+          while (iterator.hasNext) {
+            val row = converter(iterator.next()).asInstanceOf[Row]
+            writerContainer.outputWriterForRow(row).write(row)
+          }
+        } else {
+          while (iterator.hasNext) {
+            val row = iterator.next()
+            writerContainer.outputWriterForRow(row).write(row)
+          }
         }
         writerContainer.commitTask()
       } catch { case cause: Throwable =>
