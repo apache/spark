@@ -278,6 +278,9 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   /** @group setParam */
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
+  /** @group setParam */
+  def setSeed(value: Long): this.type = set(seed, value)
+
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.
    * @group setParam
