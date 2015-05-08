@@ -20,6 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.types.DataType
@@ -31,7 +32,10 @@ import org.apache.spark.sql.types.DataType
  * multiplier.
  */
 @AlphaComponent
-class ElementwiseProduct extends UnaryTransformer[Vector, Vector, ElementwiseProduct] {
+class ElementwiseProduct(override val uid: String)
+  extends UnaryTransformer[Vector, Vector, ElementwiseProduct] {
+
+  def this() = this(Identifiable.randomUID("elemProd"))
 
   /**
     * the vector to multiply with input vectors

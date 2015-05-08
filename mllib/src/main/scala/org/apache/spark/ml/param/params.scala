@@ -79,7 +79,7 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
    */
   def ->(value: T): ParamPair[T] = ParamPair(this, value)
 
-  override final def toString: String = "${parent}__$name"
+  override final def toString: String = s"${parent}__$name"
 
   override final def hashCode: Int = toString.##
 
