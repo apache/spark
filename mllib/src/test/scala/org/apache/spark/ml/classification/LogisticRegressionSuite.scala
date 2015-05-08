@@ -423,10 +423,10 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     val interceptR = 0.57734851
     val weightsR = Array(-0.05310287, 0.0, -0.08849250, -0.15458796)
 
-    assert(model.intercept ~== interceptR relTol 1E-2)
-    assert(model.weights(0) ~== weightsR(0) relTol 1E-2)
+    assert(model.intercept ~== interceptR relTol 6E-3)
+    assert(model.weights(0) ~== weightsR(0) relTol 5E-3)
     assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
-    assert(model.weights(2) ~== weightsR(2) relTol 1E-2)
+    assert(model.weights(2) ~== weightsR(2) relTol 5E-3)
     assert(model.weights(3) ~== weightsR(3) relTol 1E-3)
   }
 
@@ -492,7 +492,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     val interceptTheory = Math.log(histogram(1).toDouble / histogram(0).toDouble)
     val weightsTheory = Array(0.0, 0.0, 0.0, 0.0)
 
-    assert(model.intercept ~== interceptTheory relTol 1E-3)
+    assert(model.intercept ~== interceptTheory relTol 1E-5)
     assert(model.weights(0) ~== weightsTheory(0) absTol 1E-6)
     assert(model.weights(1) ~== weightsTheory(1) absTol 1E-6)
     assert(model.weights(2) ~== weightsTheory(2) absTol 1E-6)
@@ -518,7 +518,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     val interceptR = -0.248065
     val weightsR = Array(0.0, 0.0, 0.0, 0.0)
 
-    assert(model.intercept ~== interceptR relTol 1E-3)
+    assert(model.intercept ~== interceptR relTol 1E-5)
     assert(model.weights(0) ~== weightsR(0) absTol 1E-6)
     assert(model.weights(1) ~== weightsR(1) absTol 1E-6)
     assert(model.weights(2) ~== weightsR(2) absTol 1E-6)
