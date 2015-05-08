@@ -43,7 +43,7 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
   setDefault(minDocFreq -> 0)
 
   /** @group getParam */
-  def getMinDocFreq: Int = getOrDefault(minDocFreq)
+  def getMinDocFreq: Int = $(minDocFreq)
 
   /** @group setParam */
   def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
@@ -51,10 +51,9 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
   /**
    * Validate and transform the input schema.
    */
-  protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
-    SchemaUtils.checkColumnType(schema, map(inputCol), new VectorUDT)
-    SchemaUtils.appendColumn(schema, map(outputCol), new VectorUDT)
+  protected def validateAndTransformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
 }
 
@@ -71,18 +70,15 @@ final class IDF extends Estimator[IDFModel] with IDFBase {
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def fit(dataset: DataFrame, paramMap: ParamMap): IDFModel = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
-    val input = dataset.select(map(inputCol)).map { case Row(v: Vector) => v }
-    val idf = new feature.IDF(map(minDocFreq)).fit(input)
-    val model = new IDFModel(this, map, idf)
-    Params.inheritValues(map, this, model)
-    model
+  override def fit(dataset: DataFrame): IDFModel = {
+    transformSchema(dataset.schema, logging = true)
+    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
+    val idf = new feature.IDF($(minDocFreq)).fit(input)
+    copyValues(new IDFModel(this, idf))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap)
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema)
   }
 }
 
@@ -93,7 +89,6 @@ final class IDF extends Estimator[IDFModel] with IDFBase {
 @AlphaComponent
 class IDFModel private[ml] (
     override val parent: IDF,
-    override val fittingParamMap: ParamMap,
     idfModel: feature.IDFModel)
   extends Model[IDFModel] with IDFBase {
 
@@ -103,14 +98,13 @@ class IDFModel private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
+  override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val idf = udf { vec: Vector => idfModel.transform(vec) }
-    dataset.withColumn(map(outputCol), idf(col(map(inputCol))))
+    dataset.withColumn($(outputCol), idf(col($(inputCol))))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap)
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema)
   }
 }

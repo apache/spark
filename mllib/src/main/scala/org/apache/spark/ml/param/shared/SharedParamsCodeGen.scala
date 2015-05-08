@@ -31,24 +31,34 @@ private[shared] object SharedParamsCodeGen {
 
   def main(args: Array[String]): Unit = {
     val params = Seq(
-      ParamDesc[Double]("regParam", "regularization parameter"),
-      ParamDesc[Int]("maxIter", "max number of iterations"),
+      ParamDesc[Double]("regParam", "regularization parameter (>= 0)",
+        isValid = "ParamValidators.gtEq(0)"),
+      ParamDesc[Int]("maxIter", "max number of iterations (>= 0)",
+        isValid = "ParamValidators.gtEq(0)"),
       ParamDesc[String]("featuresCol", "features column name", Some("\"features\"")),
       ParamDesc[String]("labelCol", "label column name", Some("\"label\"")),
       ParamDesc[String]("predictionCol", "prediction column name", Some("\"prediction\"")),
       ParamDesc[String]("rawPredictionCol", "raw prediction (a.k.a. confidence) column name",
         Some("\"rawPrediction\"")),
-      ParamDesc[String]("probabilityCol",
-        "column name for predicted class conditional probabilities", Some("\"probability\"")),
-      ParamDesc[Double]("threshold", "threshold in binary classification prediction"),
+      ParamDesc[String]("probabilityCol", "Column name for predicted class conditional" +
+        " probabilities. Note: Not all models output well-calibrated probability estimates!" +
+        " These probabilities should be treated as confidences, not precise probabilities.",
+        Some("\"probability\"")),
+      ParamDesc[Double]("threshold",
+        "threshold in binary classification prediction, in range [0, 1]",
+        isValid = "ParamValidators.inRange(0, 1)"),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name"),
-      ParamDesc[Int]("checkpointInterval", "checkpoint interval"),
+      ParamDesc[Int]("checkpointInterval", "checkpoint interval (>= 1)",
+        isValid = "ParamValidators.gtEq(1)"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
       ParamDesc[Long]("seed", "random seed", Some("Utils.random.nextLong()")),
-      ParamDesc[Double]("elasticNetParam", "the ElasticNet mixing parameter"),
-      ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms"))
+      ParamDesc[Double]("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]." +
+        " For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.",
+        isValid = "ParamValidators.inRange(0, 1)"),
+      ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms"),
+      ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization."))
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
@@ -61,7 +71,8 @@ private[shared] object SharedParamsCodeGen {
   private case class ParamDesc[T: ClassTag](
       name: String,
       doc: String,
-      defaultValueStr: Option[String] = None) {
+      defaultValueStr: Option[String] = None,
+      isValid: String = "") {
 
     require(name.matches("[a-z][a-zA-Z0-9]*"), s"Param name $name is invalid.")
     require(doc.nonEmpty) // TODO: more rigorous on doc
@@ -74,6 +85,7 @@ private[shared] object SharedParamsCodeGen {
         case _ if c == classOf[Float] => "FloatParam"
         case _ if c == classOf[Double] => "DoubleParam"
         case _ if c == classOf[Boolean] => "BooleanParam"
+        case _ if c.isArray && c.getComponentType == classOf[String] => s"StringArrayParam"
         case _ => s"Param[${getTypeString(c)}]"
       }
     }
@@ -112,23 +124,26 @@ private[shared] object SharedParamsCodeGen {
          |  setDefault($name, $v)
          |""".stripMargin
     }.getOrElse("")
+    val isValid = if (param.isValid != "") {
+      ", " + param.isValid
+    } else {
+      ""
+    }
 
     s"""
       |/**
-      | * :: DeveloperApi ::
-      | * Trait for shared param $name$defaultValueDoc.
+      | * (private[ml]) Trait for shared param $name$defaultValueDoc.
       | */
-      |@DeveloperApi
-      |trait Has$Name extends Params {
+      |private[ml] trait Has$Name extends Params {
       |
       |  /**
       |   * Param for $doc.
       |   * @group param
       |   */
-      |  final val $name: $Param = new $Param(this, "$name", "$doc")
+      |  final val $name: $Param = new $Param(this, "$name", "$doc"$isValid)
       |$setDefault
       |  /** @group getParam */
-      |  final def get$Name: $T = getOrDefault($name)
+      |  final def get$Name: $T = $$($name)
       |}
       |""".stripMargin
   }
@@ -155,7 +170,6 @@ private[shared] object SharedParamsCodeGen {
         |
         |package org.apache.spark.ml.param.shared
         |
-        |import org.apache.spark.annotation.DeveloperApi
         |import org.apache.spark.ml.param._
         |import org.apache.spark.util.Utils
         |

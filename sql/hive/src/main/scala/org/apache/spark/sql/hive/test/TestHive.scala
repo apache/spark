@@ -94,7 +94,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   lazy val hiveDevHome = envVarToFile("HIVE_DEV_HOME")
 
   // Override so we can intercept relative paths and rewrite them to point at hive.
-  override def runSqlHive(sql: String): Seq[String] = super.runSqlHive(rewritePaths(sql))
+  override def runSqlHive(sql: String): Seq[String] =
+    super.runSqlHive(rewritePaths(substitutor.substitute(this.hiveconf, sql)))
 
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
@@ -107,7 +108,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     /** Fewer partitions to speed up testing. */
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
-      override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+
+      // TODO as in unit test, conf.clear() probably be called, all of the value will be cleared.
+      // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
+      override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
     }
   }
 
@@ -154,22 +158,12 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   val describedTable = "DESCRIBE (\\w+)".r
 
-  val vs = new VariableSubstitution()
-
-  // we should substitute variables in hql to pass the text to parseSql() as a parameter.
-  // Hive parser need substituted text. HiveContext.sql() does this but return a DataFrame,
-  // while we need a logicalPlan so we cannot reuse that.
-  protected[hive] class HiveQLQueryExecution(hql: String)
-    extends this.QueryExecution(HiveQl.parseSql(vs.substitute(hiveconf, hql))) {
-    def hiveExec(): Seq[String] = runSqlHive(hql)
-    override def toString: String = hql + "\n" + super.toString
-  }
-
   /**
    * Override QueryExecution with special debug workflow.
    */
   class QueryExecution(logicalPlan: LogicalPlan)
     extends super.QueryExecution(logicalPlan) {
+    def this(sql: String) = this(parseSql(sql))
     override lazy val analyzed = {
       val describedTables = logical match {
         case HiveNativeCommand(describedTable(tbl)) => tbl :: Nil
@@ -193,7 +187,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
-      () => new HiveQLQueryExecution(sql).stringResult(): Unit
+      () => new QueryExecution(sql).stringResult(): Unit
     }
   }
 

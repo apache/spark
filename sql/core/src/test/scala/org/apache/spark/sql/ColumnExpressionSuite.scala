@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.scalatest.Matchers._
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
@@ -24,8 +26,6 @@ import org.apache.spark.sql.types._
 
 class ColumnExpressionSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
-
-  // TODO: Add test cases for bitwise operations.
 
   test("collect on column produced by a binary operator") {
     val df = Seq((1, 2, 3)).toDF("a", "b", "c")
@@ -206,6 +206,20 @@ class ColumnExpressionSuite extends QueryTest {
       testData2.collect().toSeq.filter(r => r.getInt(0) <= r.getInt(1)))
   }
 
+  test("between") {
+    val testData = TestSQLContext.sparkContext.parallelize(
+      (0, 1, 2) ::
+      (1, 2, 3) ::
+      (2, 1, 0) ::
+      (2, 2, 4) ::
+      (3, 1, 6) ::
+      (3, 2, 0) :: Nil).toDF("a", "b", "c")
+    val expectAnswer = testData.collect().toSeq.
+      filter(r => r.getInt(0) >= r.getInt(1) && r.getInt(0) <= r.getInt(2))
+
+    checkAnswer(testData.filter($"a".between($"b", $"c")), expectAnswer)
+  }
+
   val booleanData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
     Row(false, false) ::
       Row(false, true) ::
@@ -349,4 +363,55 @@ class ColumnExpressionSuite extends QueryTest {
     assert(schema("value").metadata === Metadata.empty)
     assert(schema("abc").metadata === metadata)
   }
+
+  test("rand") {
+    val randCol = testData.select('key, rand(5L).as("rand"))
+    randCol.columns.length should be (2)
+    val rows = randCol.collect()
+    rows.foreach { row =>
+      assert(row.getDouble(1) <= 1.0)
+      assert(row.getDouble(1) >= 0.0)
+    }
+  }
+
+  test("randn") {
+    val randCol = testData.select('key, randn(5L).as("rand"))
+    randCol.columns.length should be (2)
+    val rows = randCol.collect()
+    rows.foreach { row =>
+      assert(row.getDouble(1) <= 4.0)
+      assert(row.getDouble(1) >= -4.0)
+    }
+  }
+
+  test("bitwiseAND") {
+    checkAnswer(
+      testData2.select($"a".bitwiseAND(75)),
+      testData2.collect().toSeq.map(r => Row(r.getInt(0) & 75)))
+
+    checkAnswer(
+      testData2.select($"a".bitwiseAND($"b").bitwiseAND(22)),
+      testData2.collect().toSeq.map(r => Row(r.getInt(0) & r.getInt(1) & 22)))
+  }
+
+  test("bitwiseOR") {
+    checkAnswer(
+      testData2.select($"a".bitwiseOR(170)),
+      testData2.collect().toSeq.map(r => Row(r.getInt(0) | 170)))
+
+    checkAnswer(
+      testData2.select($"a".bitwiseOR($"b").bitwiseOR(42)),
+      testData2.collect().toSeq.map(r => Row(r.getInt(0) | r.getInt(1) | 42)))
+  }
+
+  test("bitwiseXOR") {
+    checkAnswer(
+      testData2.select($"a".bitwiseXOR(112)),
+      testData2.collect().toSeq.map(r => Row(r.getInt(0) ^ 112)))
+
+    checkAnswer(
+      testData2.select($"a".bitwiseXOR($"b").bitwiseXOR(39)),
+      testData2.collect().toSeq.map(r => Row(r.getInt(0) ^ r.getInt(1) ^ 39)))
+  }
+
 }
