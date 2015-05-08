@@ -32,15 +32,14 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
     Binarize a column of continuous features given a threshold.
 
-    >>> from pyspark.sql import Row
-    >>> df = sc.parallelize([Row(values=0.5)]).toDF()
-    >>> Binarizer = Binarizer(threshold=1.0, inputCol="values", outputCol="features")
-    >>> Binarizer.transform(df).head().features
+    >>> df = sqlContext.createDataFrame([(0.5,)], ["values"])
+    >>> binarizer = Binarizer(threshold=1.0, inputCol="values", outputCol="features")
+    >>> binarizer.transform(df).head().features
     0.0
-    >>> Binarizer.setParams(outputCol="freqs").transform(df).head().freqs
+    >>> binarizer.setParams(outputCol="freqs").transform(df).head().freqs
     0.0
-    >>> params = {Binarizer.threshold: -0.5, Binarizer.outputCol: "vector"}
-    >>> Binarizer.transform(df, params).head().vector
+    >>> params = {binarizer.threshold: -0.5, binarizer.outputCol: "vector"}
+    >>> binarizer.transform(df, params).head().vector
     1.0
     """
 
@@ -90,8 +89,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
     Maps a sequence of terms to their term frequencies using the
     hashing trick.
 
-    >>> from pyspark.sql import Row
-    >>> df = sc.parallelize([Row(words=["a", "b", "c"])]).toDF()
+    >>> df = sqlContext.createDataFrame([(["a", "b", "c"],)], ["words"])
     >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
     >>> hashingTF.transform(df).head().features
     SparseVector(10, {7: 1.0, 8: 1.0, 9: 1.0})
@@ -129,10 +127,9 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
     """
     Compute the Inverse Document Frequency (IDF) given a collection of documents.
 
-    >>> from pyspark.sql import Row
     >>> from pyspark.mllib.linalg import DenseVector
-    >>> df = sc.parallelize([Row(tf=DenseVector([1.0, 2.0])),
-    ...     Row(tf=DenseVector([0.0, 1.0])), Row(tf=DenseVector([3.0, 0.2]))]).toDF()
+    >>> df = sqlContext.createDataFrame([(DenseVector([1.0, 2.0]),),
+    ...     (DenseVector([0.0, 1.0]),), (DenseVector([3.0, 0.2]),)], ["tf"])
     >>> idf = IDF(minDocFreq=3, inputCol="tf", outputCol="idf")
     >>> idf.fit(df).transform(df).head().idf
     DenseVector([0.0, 0.0])
@@ -196,16 +193,15 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
      Normalize a vector to have unit norm using the given p-norm.
 
     >>> from pyspark.mllib.linalg import Vectors
-    >>> from pyspark.sql import Row
     >>> svec = Vectors.sparse(4, {1: 4.0, 3: 3.0})
-    >>> df = sc.parallelize([Row(dense=Vectors.dense([3.0, -4.0]), sparse=svec)]).toDF()
-    >>> Normalizer = Normalizer(p=2.0, inputCol="dense", outputCol="features")
-    >>> Normalizer.transform(df).head().features
+    >>> df = sqlContext.createDataFrame([(Vectors.dense([3.0, -4.0]), svec)], ["dense", "sparse"])
+    >>> normalizer = Normalizer(p=2.0, inputCol="dense", outputCol="features")
+    >>> normalizer.transform(df).head().features
     DenseVector([0.6, -0.8])
-    >>> Normalizer.setParams(inputCol="sparse", outputCol="freqs").transform(df).head().freqs
+    >>> normalizer.setParams(inputCol="sparse", outputCol="freqs").transform(df).head().freqs
     SparseVector(4, {1: 0.8, 3: 0.6})
-    >>> params = {Normalizer.p: 1.0, Normalizer.inputCol: "dense", Normalizer.outputCol: "vector"}
-    >>> Normalizer.transform(df, params).head().vector
+    >>> params = {normalizer.p: 1.0, normalizer.inputCol: "dense", normalizer.outputCol: "vector"}
+    >>> normalizer.transform(df, params).head().vector
     DenseVector([0.4286, -0.5714])
     """
 
@@ -261,8 +257,8 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
 
     TODO: This method requires the use of StringIndexer first. Decouple them.
 
-    >>> StringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
-    >>> model = StringIndexer.fit(stringIndDf)
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
+    >>> model = stringIndexer.fit(stringIndDf)
     >>> td = model.transform(stringIndDf)
     >>> encoder = OneHotEncoder(includeFirst=False, inputCol="indexed", outputCol="features")
     >>> encoder.transform(td).head().features
@@ -323,8 +319,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
     `(x, y)`, if we want to expand it with degree 2, then we get `(x, x * x, y, x * y, y * y)`.
 
     >>> from pyspark.mllib.linalg import Vectors
-    >>> from pyspark.sql import Row
-    >>> df = sc.parallelize([Row(dense=Vectors.dense([0.5, 2.0]))]).toDF()
+    >>> df = sqlContext.createDataFrame([(Vectors.dense([0.5, 2.0]),)], ["dense"])
     >>> px = PolynomialExpansion(degree=2, inputCol="dense", outputCol="expanded")
     >>> px.transform(df).head().expanded
     DenseVector([0.5, 0.25, 2.0, 1.0, 4.0])
@@ -372,16 +367,115 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
+@ignore_unicode_prefix
+class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
+    """
+    A regex based tokenizer that extracts tokens either by repeatedly matching the regex(default)
+    or using it to split the text (set matching to false). Optional parameters also allow filtering
+    tokens using a minimal length.
+    It returns an array of strings that can be empty.
+
+    >>> df = sqlContext.createDataFrame([("a b c",)], ["text"])
+    >>> reTokenizer = RegexTokenizer(inputCol="text", outputCol="words")
+    >>> reTokenizer.transform(df).head()
+    Row(text=u'a b c', words=[u'a', u'b', u'c'])
+    >>> # Change a parameter.
+    >>> reTokenizer.setParams(outputCol="tokens").transform(df).head()
+    Row(text=u'a b c', tokens=[u'a', u'b', u'c'])
+    >>> # Temporarily modify a parameter.
+    >>> reTokenizer.transform(df, {reTokenizer.outputCol: "words"}).head()
+    Row(text=u'a b c', words=[u'a', u'b', u'c'])
+    >>> reTokenizer.transform(df).head()
+    Row(text=u'a b c', tokens=[u'a', u'b', u'c'])
+    >>> # Must use keyword arguments to specify params.
+    >>> reTokenizer.setParams("text")
+    Traceback (most recent call last):
+        ...
+    TypeError: Method setParams forces keyword arguments.
+    """
+
+    _java_class = "org.apache.spark.ml.feature.RegexTokenizer"
+    # a placeholder to make it appear in the generated doc
+    minTokenLength = Param(Params._dummy(), "minTokenLength", "minimum token length (>= 0)")
+    gaps = Param(Params._dummy(), "gaps", "Set regex to match gaps or tokens")
+    pattern = Param(Params._dummy(), "pattern", "regex pattern used for tokenizing")
+
+    @keyword_only
+    def __init__(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+",
+                 inputCol=None, outputCol=None):
+        """
+        __init__(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+",
+                 inputCol=None, outputCol=None)
+        """
+        super(RegexTokenizer, self).__init__()
+        self.minTokenLength = Param(self, "minLength", "minimum token length (>= 0)")
+        self.gaps = Param(self, "gaps", "Set regex to match gaps or tokens")
+        self.pattern = Param(self, "pattern", "regex pattern used for tokenizing")
+        self._setDefault(minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+",
+                  inputCol=None, outputCol=None):
+        """
+        setParams(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+",
+                  inputCol="input", outputCol="output")
+        Sets params for this RegexTokenizer.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setMinTokenLength(self, value):
+        """
+        Sets the value of :py:attr:`minTokenLength`.
+        """
+        self.paramMap[self.minTokenLength] = value
+        return self
+
+    def getMinTokenLength(self):
+        """
+        Gets the value of minTokenLength or its default value.
+        """
+        return self.getOrDefault(self.minTokenLength)
+
+    def setGaps(self, value):
+        """
+        Sets the value of :py:attr:`gaps`.
+        """
+        self.paramMap[self.gaps] = value
+        return self
+
+    def getGaps(self):
+        """
+        Gets the value of gaps or its default value.
+        """
+        return self.getOrDefault(self.gaps)
+
+    def setPattern(self, value):
+        """
+        Sets the value of :py:attr:`pattern`.
+        """
+        self.paramMap[self.pattern] = value
+        return self
+
+    def getPattern(self):
+        """
+        Gets the value of pattern or its default value.
+        """
+        return self.getOrDefault(self.pattern)
+
+
+@inherit_doc
 class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
     """
     Standardizes features by removing the mean and scaling to unit variance using column summary
     statistics on the samples in the training set.
 
     >>> from pyspark.mllib.linalg import Vectors
-    >>> from pyspark.sql import Row
-    >>> df = sc.parallelize([Row(a=Vectors.dense([0.0])), Row(a=Vectors.dense([2.0]))]).toDF()
-    >>> StandardScaler = StandardScaler(inputCol="a", outputCol="scaled")
-    >>> model = StandardScaler.fit(df)
+    >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
+    >>> standardScaler = StandardScaler(inputCol="a", outputCol="scaled")
+    >>> model = standardScaler.fit(df)
     >>> model.transform(df).collect()[1].scaled
     DenseVector([1.4142])
     """
@@ -454,8 +548,8 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     The indices are in [0, numLabels), ordered by label frequencies.
     So the most frequent label gets index 0.
 
-    >>> StringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
-    >>> model = StringIndexer.fit(stringIndDf)
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
+    >>> model = stringIndexer.fit(stringIndDf)
     >>> td = model.transform(stringIndDf)
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
@@ -496,8 +590,7 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     A tokenizer that converts the input string to lowercase and then
     splits it by white spaces.
 
-    >>> from pyspark.sql import Row
-    >>> df = sc.parallelize([Row(text="a b c")]).toDF()
+    >>> df = sqlContext.createDataFrame([("a b c",)], ["text"])
     >>> tokenizer = Tokenizer(inputCol="text", outputCol="words")
     >>> tokenizer.transform(df).head()
     Row(text=u'a b c', words=[u'a', u'b', u'c'])
@@ -542,8 +635,7 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol):
     """
     A feature transformer that merges multiple columns into a vector column.
 
-    >>> from pyspark.sql import Row
-    >>> df = sc.parallelize([Row(a=1, b=0, c=3)]).toDF()
+    >>> df = sqlContext.createDataFrame([(1, 0, 3)], ["a", "b", "c"])
     >>> vecAssembler = VectorAssembler(inputCols=["a", "b", "c"], outputCol="features")
     >>> vecAssembler.transform(df).head().features
     SparseVector(3, {0: 1.0, 2: 3.0})
@@ -614,9 +706,8 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
       - Add option for allowing unknown categories.
 
     >>> from pyspark.mllib.linalg import Vectors
-    >>> from pyspark.sql import Row
-    >>> df = sc.parallelize([Row(a=Vectors.dense([-1.0, 0.0])),
-    ...     Row(a=Vectors.dense([0.0, 1.0])), Row(a=Vectors.dense([0.0, 2.0]))]).toDF()
+    >>> df = sqlContext.createDataFrame([(Vectors.dense([-1.0, 0.0]),),
+    ...     (Vectors.dense([0.0, 1.0]),), (Vectors.dense([0.0, 2.0]),)], ["a"])
     >>> indexer = VectorIndexer(maxCategories=2, inputCol="a", outputCol="indexed")
     >>> model = indexer.fit(df)
     >>> model.transform(df).head().indexed
