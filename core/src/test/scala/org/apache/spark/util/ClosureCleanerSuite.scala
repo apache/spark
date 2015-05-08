@@ -266,16 +266,20 @@ private object TestUserClosuresActuallyCleaned {
     rdd.mapPartitionsWithIndex { (_, it) => return; it }.count()
   }
   def testFlatMapWith(rdd: RDD[Int]): Unit = {
-    rdd.flatMapWith { _ => return; Seq() }.count()
+    import java.util.Random
+    rdd.flatMapWith ((index: Int) => new Random(index + 42)){ _ => return; Seq() }.count()
   }
   def testMapWith(rdd: RDD[Int]): Unit = {
-    rdd.mapWith { _ => return; 0 }.count()
+    import java.util.Random
+    rdd.mapWith ((index: Int) => new Random(index + 42)){ _ => return; 0 }.count()
   }
   def testFilterWith(rdd: RDD[Int]): Unit = {
-    rdd.filterWith { _ => return; true }.count()
+    import java.util.Random
+    rdd.filterWith ((index: Int) => new Random(index + 42)){ _ => return; true }.count()
   }
   def testForEachWith(rdd: RDD[Int]): Unit = {
-    rdd.foreachWith { _ => return }
+    import java.util.Random
+    rdd.foreachWith ((index: Int) => new Random(index + 42)){ _ => return }
   }
   def testMapPartitionsWithContext(rdd: RDD[Int]): Unit = {
     rdd.mapPartitionsWithContext { (_, it) => return; it }.count()
