@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
 import org.apache.spark.sql.jdbc.JDBCWriteDetails
-import org.apache.spark.sql.json.JsonRDD
+import org.apache.spark.sql.json.{JacksonGenerator, JsonRDD}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
 import org.apache.spark.util.Utils
@@ -143,7 +143,6 @@ class DataFrame private[sql](
     // happen right away to let these side effects take place eagerly.
     case _: Command |
          _: InsertIntoTable |
-         _: CreateTableAsSelect[_] |
          _: CreateTableUsingAsSelect |
          _: WriteToFile =>
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
@@ -1415,7 +1414,7 @@ class DataFrame private[sql](
       new Iterator[String] {
         override def hasNext: Boolean = iter.hasNext
         override def next(): String = {
-          JsonRDD.rowToJSON(rowSchema, gen)(iter.next())
+          JacksonGenerator(rowSchema, gen)(iter.next())
           gen.flush()
 
           val json = writer.toString

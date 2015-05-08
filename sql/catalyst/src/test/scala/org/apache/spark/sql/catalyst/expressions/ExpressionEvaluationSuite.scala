@@ -850,6 +850,32 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     assert(CaseWhen(Seq(c2, c4_notNull, c3, c5)).nullable === true)
   }
 
+  test("case key when") {
+    val row = create_row(null, 1, 2, "a", "b", "c")
+    val c1 = 'a.int.at(0)
+    val c2 = 'a.int.at(1)
+    val c3 = 'a.int.at(2)
+    val c4 = 'a.string.at(3)
+    val c5 = 'a.string.at(4)
+    val c6 = 'a.string.at(5)
+
+    val literalNull = Literal.create(null, BooleanType)
+    val literalInt = Literal(1)
+    val literalString = Literal("a")
+
+    checkEvaluation(CaseKeyWhen(c1, Seq(c2, c4, c5)), "b", row)
+    checkEvaluation(CaseKeyWhen(c1, Seq(c2, c4, literalNull, c5, c6)), "b", row)
+    checkEvaluation(CaseKeyWhen(c2, Seq(literalInt, c4, c5)), "a", row)
+    checkEvaluation(CaseKeyWhen(c2, Seq(c1, c4, c5)), "b", row)
+    checkEvaluation(CaseKeyWhen(c4, Seq(literalString, c2, c3)), 1, row)
+    checkEvaluation(CaseKeyWhen(c4, Seq(c1, c3, c5, c2, Literal(3))), 3, row)
+
+    checkEvaluation(CaseKeyWhen(literalInt, Seq(c2, c4, c5)), "a", row)
+    checkEvaluation(CaseKeyWhen(literalString, Seq(c5, c2, c4, c3)), 2, row)
+    checkEvaluation(CaseKeyWhen(literalInt, Seq(c5, c2, c4, c3)), null, row)
+    checkEvaluation(CaseKeyWhen(literalNull, Seq(c5, c2, c1, c3)), 2, row)
+  }
+
   test("complex type") {
     val row = create_row(
       "^Ba*n",                                // 0

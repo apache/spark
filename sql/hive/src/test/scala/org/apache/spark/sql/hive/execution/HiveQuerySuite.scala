@@ -900,7 +900,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |DROP TABLE IF EXISTS dynamic_part_table;
     """.stripMargin)
 
-  test("Dynamic partition folder layout") {
+  ignore("Dynamic partition folder layout") {
     sql("DROP TABLE IF EXISTS dynamic_part_table")
     sql("CREATE TABLE dynamic_part_table(intcol INT) PARTITIONED BY (partcol1 INT, partcol2 INT)")
     sql("SET hive.exec.dynamic.partition.mode=nonstrict")
