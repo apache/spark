@@ -281,6 +281,35 @@ class HasOutputCol(Params):
         return self.getOrDefault(self.outputCol)
 
 
+class HasNumFeatures(Params):
+    """
+    Mixin for param numFeatures: number of features.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    numFeatures = Param(Params._dummy(), "numFeatures", "number of features")
+
+    def __init__(self):
+        super(HasNumFeatures, self).__init__()
+        #: param for number of features
+        self.numFeatures = Param(self, "numFeatures", "number of features")
+        if None is not None:
+            self._setDefault(numFeatures=None)
+
+    def setNumFeatures(self, value):
+        """
+        Sets the value of :py:attr:`numFeatures`.
+        """
+        self.paramMap[self.numFeatures] = value
+        return self
+
+    def getNumFeatures(self):
+        """
+        Gets the value of numFeatures or its default value.
+        """
+        return self.getOrDefault(self.numFeatures)
+
+
 class HasCheckpointInterval(Params):
     """
     Mixin for param checkpointInterval: checkpoint interval (>= 1).
