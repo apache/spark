@@ -79,7 +79,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   /**
-   * Runs this query returning the result as an RDD.
+   * Returns the result of this query as an RDD[Row] by delegating to doExecute
+   * after adding query plan information to created RDDs for visualization.
+   * Concrete implementations of SparkPlan should override doExecute instead.
    */
   final def execute(): RDD[Row] = {
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
@@ -88,7 +90,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Runs this query returning the result as an RDD.
+   * Overridden by concrete implementations of SparkPlan.
+   * Produces the result of the query as an RDD[Row]
    */
   protected def doExecute(): RDD[Row]
 
