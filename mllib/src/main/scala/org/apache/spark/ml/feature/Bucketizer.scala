@@ -107,9 +107,16 @@ final class Bucketizer private[ml] (override val parent: Estimator[Bucketizer])
   }
 
   private def prepOutputField(schema: StructType): StructField = {
-    val attr = new NominalAttribute(name = Some($(outputCol)), isOrdinal = Some(true),
-      values = Some($(splits).map(_.toString)))
-
+    val innerRanges = $(splits).sliding(2).map(bucket => bucket.mkString(", ")).toArray
+    val values = ($(lowerInclusive), $(upperInclusive)) match {
+      case (true, true) =>
+        Array(s"-inf, ${$(splits).head}") ++ innerRanges ++ Array(s"${$(splits).last}, inf")
+      case (true, false) => Array(s"-inf, ${$(splits).head}") ++ innerRanges
+      case (false, true) => innerRanges ++ Array(s"${$(splits).last}, inf")
+      case _ => innerRanges
+    }
+    val attr =
+      new NominalAttribute(name = Some($(outputCol)), isOrdinal = Some(true), values = Some(values))
     attr.toStructField()
   }
 
