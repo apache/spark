@@ -559,6 +559,14 @@ class Airflow(BaseView):
             sql=sql,
             label=chart.label)
 
+    @expose('/local_dags')
+    @login_required
+    def local_dags(self):
+        dags = dagbag.dags.values()
+        dags = [dag for dag in dags if not dag.parent_dag]
+        dags = sorted(dags, key=lambda dag: dag.dag_id)
+        return self.render('airflow/local_dags.html', dags=dags)
+
     @expose('/dag_stats')
     @login_required
     def dag_stats(self):
