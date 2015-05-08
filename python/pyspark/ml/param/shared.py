@@ -281,30 +281,136 @@ class HasOutputCol(Params):
         return self.getOrDefault(self.outputCol)
 
 
-class HasNumFeatures(Params):
+
+class HasNumItemBlocks(Params):
     """
-    Mixin for param numFeatures: number of features.
+    Mixin for param numItemBlocks: number of item blocks.
     """
 
     # a placeholder to make it appear in the generated doc
-    numFeatures = Param(Params._dummy(), "numFeatures", "number of features")
+
 
     def __init__(self):
-        super(HasNumFeatures, self).__init__()
-        #: param for number of features
-        self.numFeatures = Param(self, "numFeatures", "number of features")
-        if None is not None:
-            self._setDefault(numFeatures=None)
+        super(HasNumItemBlocks, self).__init__()
+        #: param for number of item blocks
 
-    def setNumFeatures(self, value):
+        if None is not None:
+            self._setDefault(numItemBlocks=None)
+
+
+
+class HasImplicitPrefs(Params):
+    """
+    Mixin for param implicitPrefs: whether to use implicit preference.
+    """
+
+    # a placeholder to make it appear in the generated doc
+
+
+    def __init__(self):
+        super(HasImplicitPrefs, self).__init__()
+        #: param for whether to use implicit preference
+
+        if None is not None:
+            self._setDefault(implicitPrefs=None)
+
+
+
+
+class HasAlpha(Params):
+    """
+    Mixin for param alpha: alpha for implicit preference.
+    """
+
+    # a placeholder to make it appear in the generated doc
+
+
+    def __init__(self):
+        super(HasAlpha, self).__init__()
+        #: param for alpha for implicit preference
+
+        if None is not None:
+            self._setDefault(alpha=None)
+
+
+
+
+class HasUserCol(Params):
+    """
+    Mixin for param userCol: column name for user ids.
+    """
+
+    # a placeholder to make it appear in the generated doc
+
+
+    def __init__(self):
+        super(HasUserCol, self).__init__()
+        #: param for column name for user ids
+
+        if None is not None:
+            self._setDefault(userCol=None)
+
+
+
+
+class HasItemCol(Params):
+    """
+    Mixin for param itemCol: column name for item ids.
+    """
+
+    # a placeholder to make it appear in the generated doc
+
+
+    def __init__(self):
+        super(HasItemCol, self).__init__()
+        #: param for column name for item ids
+
+        if None is not None:
+            self._setDefault(itemCol=None)
+
+
+
+
+class HasRatingCol(Params):
+    """
+    Mixin for param ratingCol: column name for ratings.
+    """
+
+    # a placeholder to make it appear in the generated doc
+
+
+    def __init__(self):
+        super(HasRatingCol, self).__init__()
+        #: param for column name for ratings
+
+        if None is not None:
+            self._setDefault(ratingCol=None)
+
+
+class HasCheckpointInterval(Params):
+    """
+    Mixin for param checkpointInterval: checkpoint interval (>= 1).
+    """
+
+    # a placeholder to make it appear in the generated doc
+    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "checkpoint interval (>= 1)")
+
+    def __init__(self):
+        super(HasCheckpointInterval, self).__init__()
+        #: param for checkpoint interval (>= 1)
+        self.checkpointInterval = Param(self, "checkpointInterval", "checkpoint interval (>= 1)")
+        if None is not None:
+            self._setDefault(checkpointInterval=None)
+
+    def setCheckpointInterval(self, value):
         """
-        Sets the value of :py:attr:`numFeatures`.
+        Sets the value of :py:attr:`checkpointInterval`.
         """
-        self.paramMap[self.numFeatures] = value
+        self.paramMap[self.checkpointInterval] = value
         return self
 
-    def getNumFeatures(self):
+    def getCheckpointInterval(self):
         """
-        Gets the value of numFeatures or its default value.
+        Gets the value of checkpointInterval or its default value.
         """
-        return self.getOrDefault(self.numFeatures)
+        return self.getOrDefault(self.checkpointInterval)
