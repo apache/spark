@@ -83,6 +83,10 @@ div#application-timeline, div#job-timeline {
   stroke: #36F572;
 }
 
+.vis.timeline .foreground {
+  cursor: move;
+}
+
 .vis.timeline .item.job {
   cursor: pointer;
 }

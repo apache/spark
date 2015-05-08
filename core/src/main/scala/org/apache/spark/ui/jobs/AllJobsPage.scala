@@ -23,7 +23,7 @@ import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.ui.jobs.UIData.{ExecutorUIData, JobUIData}
 import org.apache.spark.JobExecutionStatus
 
@@ -183,7 +183,9 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
     <span class="expand-application-timeline">
       <span class="expand-application-timeline-arrow arrow-closed"></span>
-      <a>Event Timeline</a>
+      <a data-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-placement="right">
+        Event Timeline
+      </a>
     </span> ++
     <div id="application-timeline" class="collapsed">
       <div class="control-panel">
@@ -334,7 +336,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           failedJobsTable
       }
 
-      val helpText = """A job is triggered by an action, like "count()" or "saveAsTextFile()".""" +
+      val helpText = """A job is triggered by an action, like count() or saveAsTextFile().""" +
         " Click on a job to see information about the stages of tasks inside it."
 
       UIUtils.headerSparkPage("Spark Jobs", content, parent, helpText = Some(helpText))

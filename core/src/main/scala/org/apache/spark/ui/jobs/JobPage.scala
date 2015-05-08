@@ -26,7 +26,7 @@ import javax.servlet.http.HttpServletRequest
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.scheduler.StageInfo
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.ui.jobs.UIData.ExecutorUIData
 
 /** Page showing statistics and stage list for a given job */
@@ -164,7 +164,9 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
 
     <span class="expand-job-timeline">
       <span class="expand-job-timeline-arrow arrow-closed"></span>
-      <a>Event Timeline</a>
+      <a data-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-placement="right">
+        Event Timeline
+      </a>
     </span> ++
     <div id="job-timeline" class="collapsed">
       <div class="control-panel">
