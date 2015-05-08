@@ -789,11 +789,11 @@ abstract class RDD[T: ClassTag](
    */
   @deprecated("use mapPartitionsWithIndex and filter", "1.0.0")
   def filterWith[A](constructA: Int => A)(p: (T, A) => Boolean): RDD[T] = withScope {
+    val cleanP = sc.clean(p)
+    val cleanA = sc.clean(constructA)
     mapPartitionsWithIndex((index, iter) => {
-      /* val cleanP = sc.clean(p)
-      val cleanA = sc.clean(constructA) */
-      val a = constructA(index)
-      iter.filter(t => p(t, a))
+      val a = cleanA(index)
+      iter.filter(t => cleanP(t, a))
     }, preservesPartitioning = true)
   }
 
