@@ -147,34 +147,12 @@ setMethod("isLocal",
             callJMethod(x@sdf, "isLocal")
           })
 
-#' show
+#' showDF
 #'
 #' Print the first numRows rows of a DataFrame
 #'
 #' @param x A SparkSQL DataFrame
 #' @param numRows The number of rows to print. Defaults to 20.
-#'
-#' @rdname show
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
-#' path <- "path/to/file.json"
-#' df <- jsonFile(sqlCtx, path)
-#' show(df)
-#'}
-setMethod("show",
-          signature(x = "DataFrame"),
-          function(x, numRows = 20) {
-            callJMethod(x@sdf, "showString", numToInt(numRows))
-          })
-
-#' showDF
-#'
-#' Print the DataFrame column names and types
-#'
-#' @param x A SparkSQL DataFrame
 #'
 #' @rdname showDF
 #' @export
@@ -184,9 +162,32 @@ setMethod("show",
 #' sqlCtx <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlCtx, path)
-#' showDF
+#' showDF(df)
 #'}
-setMethod("showDF", "DataFrame",
+setMethod("showDF",
+          signature(x = "DataFrame"),
+          function(x, numRows = 20) {
+            s <- callJMethod(x@sdf, "showString", numToInt(numRows))
+            cat(s)
+          })
+
+#' show
+#'
+#' Print the DataFrame column names and types
+#'
+#' @param x A SparkSQL DataFrame
+#'
+#' @rdname show
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' show
+#'}
+setMethod("show", "DataFrame",
           function(object) {
             cols <- lapply(dtypes(object), function(l) {
               paste(l, collapse = ":")
