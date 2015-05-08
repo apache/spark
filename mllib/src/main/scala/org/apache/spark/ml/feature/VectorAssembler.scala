@@ -102,6 +102,6 @@ object VectorAssembler {
       case o =>
         throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
     }
-    Vectors.sparse(cur, indices.result(), values.result())
+    Vectors.sparse(cur, indices.result(), values.result()).compressed
   }
 }

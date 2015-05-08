@@ -28,7 +28,6 @@ exportMethods("arrange",
               "intersect",
               "isLocal",
               "join",
-              "length",
               "limit",
               "orderBy",
               "mutate",
@@ -107,9 +106,6 @@ export("cacheTable",
        "tableNames",
        "tables",
        "uncacheTable")
-
-export("sparkRSQL.init",
-       "sparkRHive.init")
 
 export("structField",
        "structField.jobj",

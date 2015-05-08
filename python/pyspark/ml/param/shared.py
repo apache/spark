@@ -308,3 +308,92 @@ class HasNumFeatures(Params):
         Gets the value of numFeatures or its default value.
         """
         return self.getOrDefault(self.numFeatures)
+
+
+class HasSeed(Params):
+    """
+    Mixin for param seed: random seed.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    seed = Param(Params._dummy(), "seed", "random seed")
+
+    def __init__(self):
+        super(HasSeed, self).__init__()
+        #: param for random seed
+        self.seed = Param(self, "seed", "random seed")
+        if None is not None:
+            self._setDefault(seed=None)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        self.paramMap[self.seed] = value
+        return self
+
+    def getSeed(self):
+        """
+        Gets the value of seed or its default value.
+        """
+        return self.getOrDefault(self.seed)
+
+
+class HasTol(Params):
+    """
+    Mixin for param tol: the convergence tolerance for iterative algorithms.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    tol = Param(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms")
+
+    def __init__(self):
+        super(HasTol, self).__init__()
+        #: param for the convergence tolerance for iterative algorithms
+        self.tol = Param(self, "tol", "the convergence tolerance for iterative algorithms")
+        if None is not None:
+            self._setDefault(tol=None)
+
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        self.paramMap[self.tol] = value
+        return self
+
+    def getTol(self):
+        """
+        Gets the value of tol or its default value.
+        """
+        return self.getOrDefault(self.tol)
+
+
+class HasStepSize(Params):
+    """
+    Mixin for param stepSize: Step size to be used for each iteration of optimization..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    stepSize = Param(Params._dummy(), "stepSize",
+                     "Step size to be used for each iteration of optimization.")
+
+    def __init__(self):
+        super(HasStepSize, self).__init__()
+        #: param for Step size to be used for each iteration of optimization.
+        self.stepSize = Param(self, "stepSize",
+                              "Step size to be used for each iteration of optimization.")
+        if None is not None:
+            self._setDefault(stepSize=None)
+
+    def setStepSize(self, value):
+        """
+        Sets the value of :py:attr:`stepSize`.
+        """
+        self.paramMap[self.stepSize] = value
+        return self
+
+    def getStepSize(self):
+        """
+        Gets the value of stepSize or its default value.
+        """
+        return self.getOrDefault(self.stepSize)

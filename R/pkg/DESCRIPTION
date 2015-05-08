@@ -15,11 +15,11 @@ Suggests:
 Description: R frontend for Spark
 License: Apache License (== 2.0)
 Collate:
+    'schema.R'
     'generics.R'
     'jobj.R'
     'RDD.R'
     'pairRDD.R'
-    'schema.R'
     'column.R'
     'group.R'
     'DataFrame.R'
