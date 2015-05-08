@@ -84,18 +84,8 @@ case class Exchange(
   def serializer(
       keySchema: Array[DataType],
       valueSchema: Array[DataType],
+      hasKeyOrdering: Boolean,
       numPartitions: Int): Serializer = {
-    // In ExternalSorter's spillToMergeableFile function, key-value pairs are written out
-    // through write(key) and then write(value) instead of write((key, value)). Because
-    // SparkSqlSerializer2 assumes that objects passed in are Product2, we cannot safely use
-    // it when spillToMergeableFile in ExternalSorter will be used.
-    // So, we will not use SparkSqlSerializer2 when
-    //  - Sort-based shuffle is enabled and the number of reducers (numPartitions) is greater
-    //     then the bypassMergeThreshold; or
-    //  - newOrdering is defined.
-    val cannotUseSqlSerializer2 =
-      (sortBasedShuffleOn && numPartitions > bypassMergeThreshold) || newOrdering.nonEmpty
-
     // It is true when there is no field that needs to be write out.
     // For now, we will not use SparkSqlSerializer2 when noField is true.
     val noField =
@@ -104,14 +94,13 @@ case class Exchange(
 
     val useSqlSerializer2 =
         child.sqlContext.conf.useSqlSerializer2 &&   // SparkSqlSerializer2 is enabled.
-        !cannotUseSqlSerializer2 &&                  // Safe to use Serializer2.
         SparkSqlSerializer2.support(keySchema) &&    // The schema of key is supported.
         SparkSqlSerializer2.support(valueSchema) &&  // The schema of value is supported.
         !noField
 
     val serializer = if (useSqlSerializer2) {
       logInfo("Using SparkSqlSerializer2.")
-      new SparkSqlSerializer2(keySchema, valueSchema)
+      new SparkSqlSerializer2(keySchema, valueSchema, hasKeyOrdering)
     } else {
       logInfo("Using SparkSqlSerializer.")
       new SparkSqlSerializer(sparkConf)
@@ -154,7 +143,8 @@ case class Exchange(
           }
         val keySchema = expressions.map(_.dataType).toArray
         val valueSchema = child.output.map(_.dataType).toArray
-        shuffled.setSerializer(serializer(keySchema, valueSchema, numPartitions))
+        shuffled.setSerializer(
+          serializer(keySchema, valueSchema, newOrdering.nonEmpty, numPartitions))
 
         shuffled.map(_._2)
 
@@ -179,7 +169,8 @@ case class Exchange(
             new ShuffledRDD[Row, Null, Null](rdd, part)
           }
         val keySchema = child.output.map(_.dataType).toArray
-        shuffled.setSerializer(serializer(keySchema, null, numPartitions))
+        shuffled.setSerializer(
+          serializer(keySchema, null, newOrdering.nonEmpty, numPartitions))
 
         shuffled.map(_._1)
 
@@ -199,7 +190,7 @@ case class Exchange(
         val partitioner = new HashPartitioner(1)
         val shuffled = new ShuffledRDD[Null, Row, Row](rdd, partitioner)
         val valueSchema = child.output.map(_.dataType).toArray
-        shuffled.setSerializer(serializer(null, valueSchema, 1))
+        shuffled.setSerializer(serializer(null, valueSchema, false, 1))
         shuffled.map(_._2)
 
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
