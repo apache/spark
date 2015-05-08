@@ -1069,7 +1069,7 @@ class GroupedData(object):
 
         >>> from pyspark.sql import functions as F
         >>> gdf.agg(F.min(df.age)).collect()
-        [Row(MIN(age)=2), Row(MIN(age)=5)]
+        [Row(name=u'Alice', MIN(age)=2), Row(name=u'Bob', MIN(age)=5)]
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):

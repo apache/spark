@@ -62,7 +62,7 @@ class DataFrameSuite extends QueryTest {
     val df = Seq((1,(1,1))).toDF()
 
     checkAnswer(
-      df.groupBy("_1").agg(col("_1"), sum("_2._1")).toDF("key", "total"),
+      df.groupBy("_1").agg(sum("_2._1")).toDF("key", "total"),
       Row(1, 1) :: Nil)
   }
 
@@ -127,7 +127,7 @@ class DataFrameSuite extends QueryTest {
       df2
         .select('_1 as 'letter, 'number)
         .groupBy('letter)
-        .agg('letter, countDistinct('number)),
+        .agg(countDistinct('number)),
       Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
     )
   }

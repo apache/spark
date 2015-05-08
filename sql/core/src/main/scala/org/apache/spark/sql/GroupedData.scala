@@ -135,8 +135,9 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
   }
 
   /**
-   * Compute aggregates by specifying a series of aggregate columns. Unlike other methods in this
-   * class, the resulting [[DataFrame]] won't automatically include the grouping columns.
+   * Compute aggregates by specifying a series of aggregate columns. Note that this function by
+   * default retains the grouping columns in its output. To not retain grouping columns, set
+   * `spark.sql.retainGroupColumns` to false.
    *
    * The available aggregate methods are defined in [[org.apache.spark.sql.functions]].
    *
