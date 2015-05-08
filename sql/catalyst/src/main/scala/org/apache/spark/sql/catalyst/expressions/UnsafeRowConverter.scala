@@ -232,7 +232,7 @@ private class DateUnsafeColumnWriter private() extends UnsafeColumnWriter {
   }
 
   override def write(source: Row, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
-    target.setInt(column, DateUtils.fromJavaDate(source.getDate(column)))
+    target.setDate(column, source.getDate(column))
     0
   }
 }

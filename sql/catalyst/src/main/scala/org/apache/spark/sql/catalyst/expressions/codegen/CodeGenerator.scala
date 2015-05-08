@@ -660,6 +660,10 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case FloatType => "Float"
     case BooleanType => "Boolean"
     case StringType => "org.apache.spark.sql.types.UTF8String"
+    case DateType => "Int"
+    case TimestampType => "Timestamp"
+    case unsupportedType =>
+      sys.error(s"Code generation not support the primitive for type $unsupportedType")
   }
 
   protected def defaultPrimitive(dt: DataType) = dt match {

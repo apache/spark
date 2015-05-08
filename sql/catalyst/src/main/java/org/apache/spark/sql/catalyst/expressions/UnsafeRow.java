@@ -103,14 +103,14 @@ public final class UnsafeRow implements MutableRow {
           IntegerType,
           LongType,
           FloatType,
-          DoubleType
+          DoubleType,
+          DateType
     })));
 
     // We support get() on a superset of the types for which we support set():
     final Set<DataType> _readableFieldTypes = new HashSet<DataType>(
       Arrays.asList(new DataType[]{
         StringType,
-        DateType,
         TimestampType
       }));
     _readableFieldTypes.addAll(settableFieldTypes);
@@ -228,7 +228,7 @@ public final class UnsafeRow implements MutableRow {
 
   @Override
   public void setDate(int ordinal, Date value) {
-    throw new UnsupportedOperationException();
+    setInt(ordinal, DateUtils.fromJavaDate(value));
   }
 
   @Override
