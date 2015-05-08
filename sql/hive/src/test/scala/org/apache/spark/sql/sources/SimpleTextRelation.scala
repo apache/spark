@@ -61,7 +61,6 @@ class AppendingTextOutputFormat(outputFile: Path) extends TextOutputFormat[NullW
 }
 
 class SimpleTextOutputWriter extends OutputWriter {
-  private var converter: Any => Any = _
   private var recordWriter: RecordWriter[NullWritable, Text] = _
   private var taskAttemptContext: TaskAttemptContext = _
 
@@ -69,15 +68,12 @@ class SimpleTextOutputWriter extends OutputWriter {
       path: String,
       dataSchema: StructType,
       context: TaskAttemptContext): Unit = {
-    converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
     recordWriter = new AppendingTextOutputFormat(new Path(path)).getRecordWriter(context)
     taskAttemptContext = context
   }
 
   override def write(row: Row): Unit = {
-    // Serializes values in `row` into a comma separated string
-    val convertedRow = converter(row).asInstanceOf[Row]
-    val serialized = convertedRow.toSeq.map(_.toString).mkString(",")
+    val serialized = row.toSeq.map(_.toString).mkString(",")
     recordWriter.write(null, new Text(serialized))
   }
 
