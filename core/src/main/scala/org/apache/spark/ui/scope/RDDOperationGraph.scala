@@ -182,7 +182,7 @@ private[ui] object RDDOperationGraph extends Logging {
     if (forJob) {
       s"""${node.id} [label="$label" shape="circle" padding="5" labelStyle="font-size: 0"]"""
     } else {
-      s"""${node.id} [label="$label" padding="5" labelStyle="font-size: 10"]"""
+      s"""${node.id} [label="$label" padding="5" labelStyle="font-size: 12px"]"""
     }
   }
 
