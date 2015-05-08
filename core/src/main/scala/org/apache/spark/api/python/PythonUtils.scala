@@ -53,4 +53,11 @@ private[spark] object PythonUtils {
   def toSeq[T](cols: JList[T]): Seq[T] = {
     cols.toList.toSeq
   }
+
+  /**
+   * Convert java map of K, V into Map of K, V (for calling API with varargs)
+   */
+  def toMap[K, V](jm: java.util.Map[K, V]): Map[K, V] = {
+    jm.toMap
+  }
 }
