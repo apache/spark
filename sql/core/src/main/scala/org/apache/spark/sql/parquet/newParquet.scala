@@ -235,10 +235,6 @@ private[sql] case class ParquetRelation2(
     // column, and paths of each partition.
     var partitionSpec: PartitionSpec = _
 
-    // Schema of the actual Parquet files, without partition columns discovered from partition
-    // directory paths.
-    var parquetSchema: StructType = _
-
     // Schema of the whole table, including partition columns.
     var schema: StructType = _
 
@@ -319,11 +315,16 @@ private[sql] case class ParquetRelation2(
       // (through readSchema). If data does not exist, we will try to get the schema defined in
       // maybeMetastoreSchema (defined in the options of the data source).
       // Finally, if we still could not get the schema. We throw an error.
-      parquetSchema =
-        maybeSchema
-          .orElse(readSchema())
-          .orElse(maybeMetastoreSchema)
-          .getOrElse(sys.error("Failed to get the schema."))
+
+      // If we already get the schema, don't need to re-compute it since the schema merging is
+      // time-consuming.
+      if (parquetSchema == null) {
+        parquetSchema =
+          maybeSchema
+            .orElse(readSchema())
+            .orElse(maybeMetastoreSchema)
+            .getOrElse(sys.error("Failed to get the schema."))
+      }
 
       partitionKeysIncludedInParquetSchema =
         isPartitioned &&
@@ -387,6 +388,10 @@ private[sql] case class ParquetRelation2(
   }
 
   @transient private val metadataCache = new MetadataCache
+
+  // Schema of the actual Parquet files, without partition columns discovered from partition
+  // directory paths.
+  private var parquetSchema: StructType = null
   metadataCache.refresh()
 
   def partitionSpec: PartitionSpec = metadataCache.partitionSpec
@@ -398,8 +403,6 @@ private[sql] case class ParquetRelation2(
   def isPartitioned: Boolean = partitionColumns.nonEmpty
 
   private def partitionKeysIncludedInDataSchema = metadataCache.partitionKeysIncludedInParquetSchema
-
-  private def parquetSchema = metadataCache.parquetSchema
 
   override def schema: StructType = metadataCache.schema
 
