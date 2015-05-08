@@ -32,19 +32,21 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
  * `Bucketizer` maps a column of continuous features to a column of feature buckets.
  */
 @AlphaComponent
-private[ml] final class Bucketizer(override val parent: Estimator[Bucketizer])
+final class Bucketizer private[ml] (override val parent: Estimator[Bucketizer])
   extends Model[Bucketizer] with HasInputCol with HasOutputCol {
 
   def this() = this(null)
 
   /**
    * Parameter for mapping continuous features into buckets. With n splits, there are n+1 buckets.
-   * A bucket defined by splits x,y holds values in the range [x,y).
+   * A bucket defined by splits x,y holds values in the range [x,y). Note that the splits should be
+   * strictly increasing.
    * @group param
    */
   val splits: Param[Array[Double]] = new Param[Array[Double]](this, "splits",
-    "Split points for mapping continuous features into buckets. With n splits, there are n+1" +
-      " buckets. A bucket defined by splits x,y holds values in the range [x,y).",
+    "Split points for mapping continuous features into buckets. With n splits, there are n+1 " +
+      "buckets. A bucket defined by splits x,y holds values in the range [x,y). The splits " +
+      "should be strictly increasing.",
     Bucketizer.checkSplits)
 
   /** @group getParam */
@@ -53,9 +55,15 @@ private[ml] final class Bucketizer(override val parent: Estimator[Bucketizer])
   /** @group setParam */
   def setSplits(value: Array[Double]): this.type = set(splits, value)
 
-  /** @group Param */
+  /**
+   * An indicator of the inclusiveness of negative infinite. If true, then use implicit bin
+   * (-inf, getSplits.head). If false, then throw exception if values < getSplits.head are
+   * encountered.
+   * @group Param */
   val lowerInclusive: BooleanParam = new BooleanParam(this, "lowerInclusive",
-    "An indicator of the inclusiveness of negative infinite.")
+    "An indicator of the inclusiveness of negative infinite. If true, then use implicit bin " +
+      "(-inf, getSplits.head).  If false, then throw exception if values < getSplits.head are " +
+      "encountered.")
   setDefault(lowerInclusive -> true)
 
   /** @group getParam */
@@ -64,9 +72,15 @@ private[ml] final class Bucketizer(override val parent: Estimator[Bucketizer])
   /** @group setParam */
   def setLowerInclusive(value: Boolean): this.type = set(lowerInclusive, value)
 
-  /** @group Param */
+  /**
+   * An indicator of the inclusiveness of positive infinite. If true, then use implicit bin
+   * [getSplits.last, inf). If false, then throw exception if values > getSplits.last are
+   * encountered.
+   * @group Param */
   val upperInclusive: BooleanParam = new BooleanParam(this, "upperInclusive",
-    "An indicator of the inclusiveness of positive infinite.")
+    "An indicator of the inclusiveness of positive infinite. If true, then use implicit bin " +
+      "[getSplits.last, inf).  If false, then throw exception if values > getSplits.last are " +
+      "encountered.")
   setDefault(upperInclusive -> true)
 
   /** @group getParam */
@@ -93,9 +107,7 @@ private[ml] final class Bucketizer(override val parent: Estimator[Bucketizer])
   }
 
   private def prepOutputField(schema: StructType): StructField = {
-    val attr = new NominalAttribute(
-      name = Some($(outputCol)),
-      isOrdinal = Some(true),
+    val attr = new NominalAttribute(name = Some($(outputCol)), isOrdinal = Some(true),
       values = Some($(splits).map(_.toString)))
 
     attr.toStructField()
@@ -109,7 +121,7 @@ private[ml] final class Bucketizer(override val parent: Estimator[Bucketizer])
   }
 }
 
-object Bucketizer {
+private[feature] object Bucketizer {
   /**
    * The given splits should match 1) its size is larger than zero; 2) it is ordered in a strictly
    * increasing way.
@@ -137,8 +149,8 @@ object Bucketizer {
       lowerInclusive: Boolean,
       upperInclusive: Boolean): Double = {
     if ((feature < splits.head && !lowerInclusive) || (feature > splits.last && !upperInclusive)) {
-      throw new Exception(s"Feature $feature out of bound, check your features or loose the" +
-        s" lower/upper bound constraint.")
+      throw new RuntimeException(s"Feature $feature out of bound, check your features or loosen " +
+        s"the lower/upper bound constraint.")
     }
     var left = 0
     var right = splits.length - 2
@@ -153,6 +165,6 @@ object Bucketizer {
         left = mid + 1
       }
     }
-    throw new Exception(s"Failed to find a bucket for feature $feature.")
+    throw new RuntimeException(s"Unexpected error: failed to find a bucket for feature $feature.")
   }
 }

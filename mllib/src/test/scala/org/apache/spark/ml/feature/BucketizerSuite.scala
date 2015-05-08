@@ -31,7 +31,7 @@ class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
   test("Bucket continuous features with setter") {
     val sqlContext = new SQLContext(sc)
     val data = Array(0.1, -0.5, 0.2, -0.3, 0.8, 0.7, -0.1, -0.4, -0.9)
-    val buckets = Array(-0.5, 0.0, 0.5)
+    val splits = Array(-0.5, 0.0, 0.5)
     val bucketizedData = Array(2.0, 1.0, 2.0, 1.0, 3.0, 3.0, 1.0, 1.0, 0.0)
     val dataFrame: DataFrame = sqlContext.createDataFrame(
         data.zip(bucketizedData)).toDF("feature", "expected")
@@ -39,7 +39,7 @@ class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
     val bucketizer: Bucketizer = new Bucketizer()
       .setInputCol("feature")
       .setOutputCol("result")
-      .setSplits(buckets)
+      .setSplits(splits)
 
     bucketizer.transform(dataFrame).select("result", "expected").collect().foreach {
       case Row(x: Double, y: Double) =>
@@ -58,7 +58,7 @@ class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-object BucketizerSuite {
+private object BucketizerSuite {
   private def linearSearchForBuckets(splits: Array[Double], feature: Double): Double = {
     var i = 0
     while (i < splits.size) {
