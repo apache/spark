@@ -21,9 +21,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
 
-import org.apache.spark.storage.*;
 import scala.Tuple2;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +32,7 @@ import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
+import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
@@ -215,7 +216,8 @@ public final class UnsafeShuffleExternalSorter {
   /**
    * Sort and spill the current records in response to memory pressure.
    */
-  private void spill() throws IOException {
+  @VisibleForTesting
+  void spill() throws IOException {
     final long threadId = Thread.currentThread().getId();
     logger.info("Thread " + threadId + " spilling sort data of " +
       org.apache.spark.util.Utils.bytesToString(getMemoryUsage()) + " to disk (" +

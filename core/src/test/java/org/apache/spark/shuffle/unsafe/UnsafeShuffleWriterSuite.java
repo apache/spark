@@ -193,13 +193,13 @@ public class UnsafeShuffleWriterSuite {
   @Test
   public void writeWithoutSpilling() throws Exception {
     // In this example, each partition should have exactly one record:
-    final ArrayList<Product2<Object, Object>> datatToWrite =
+    final ArrayList<Product2<Object, Object>> dataToWrite =
       new ArrayList<Product2<Object, Object>>();
     for (int i = 0; i < NUM_PARTITITONS; i++) {
-      datatToWrite.add(new Tuple2<Object, Object>(i, i));
+      dataToWrite.add(new Tuple2<Object, Object>(i, i));
     }
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    writer.write(datatToWrite.iterator());
+    writer.write(dataToWrite.iterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
     Assert.assertTrue(mapStatus.isDefined());
     Assert.assertTrue(mergedOutputFile.exists());
@@ -215,7 +215,42 @@ public class UnsafeShuffleWriterSuite {
     assertSpillFilesWereCleanedUp();
   }
 
+  private void testMergingSpills(boolean transferToEnabled) throws IOException {
+    final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
+    writer.insertRecordIntoSorter(new Tuple2<Object, Object>(1, 1));
+    writer.insertRecordIntoSorter(new Tuple2<Object, Object>(2, 2));
+    writer.insertRecordIntoSorter(new Tuple2<Object, Object>(3, 3));
+    writer.insertRecordIntoSorter(new Tuple2<Object, Object>(4, 4));
+    writer.forceSorterToSpill();
+    writer.insertRecordIntoSorter(new Tuple2<Object, Object>(4, 4));
+    writer.insertRecordIntoSorter(new Tuple2<Object, Object>(2, 2));
+    writer.closeAndWriteOutput();
+    final Option<MapStatus> mapStatus = writer.stop(true);
+    Assert.assertTrue(mapStatus.isDefined());
+    Assert.assertTrue(mergedOutputFile.exists());
+    Assert.assertEquals(2, spillFilesCreated.size());
+
+    long sumOfPartitionSizes = 0;
+    for (long size: partitionSizesInMergedFile) {
+      sumOfPartitionSizes += size;
+    }
+    Assert.assertEquals(mergedOutputFile.length(), sumOfPartitionSizes);
+
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void mergeSpillsWithTransferTo() throws Exception {
+    testMergingSpills(true);
+  }
+
+  @Test
+  public void mergeSpillsWithFileStream() throws Exception {
+    testMergingSpills(false);
+  }
+
   // TODO: actually try to read the shuffle output?
   // TODO: add a test that manually triggers spills in order to exercise the merging.
+//  }
 
 }

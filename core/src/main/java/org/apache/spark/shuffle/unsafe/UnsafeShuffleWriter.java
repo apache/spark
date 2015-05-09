@@ -32,6 +32,7 @@ import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
 
 import com.esotericsoftware.kryo.io.ByteBufferOutputStream;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
 import org.slf4j.Logger;
@@ -73,6 +74,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final boolean transferToEnabled;
 
   private MapStatus mapStatus = null;
+  private UnsafeShuffleExternalSorter sorter = null;
+  private byte[] serArray = null;
+  private ByteBuffer serByteBuffer;
+  // TODO: we should not depend on this class from Kryo; copy its source or find an alternative
+  private SerializationStream serOutputStream;
 
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
@@ -113,25 +119,18 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Override
   public void write(scala.collection.Iterator<Product2<K, V>> records) {
     try {
-      final long[] partitionLengths = mergeSpills(insertRecordsIntoSorter(records));
-      shuffleBlockManager.writeIndexFile(shuffleId, mapId, partitionLengths);
-      mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+      while (records.hasNext()) {
+        insertRecordIntoSorter(records.next());
+      }
+      closeAndWriteOutput();
     } catch (Exception e) {
       PlatformDependent.throwException(e);
     }
   }
 
-  private void freeMemory() {
-    // TODO
-  }
-
-  private void deleteSpills() {
-    // TODO
-  }
-
-  private SpillInfo[] insertRecordsIntoSorter(
-      scala.collection.Iterator<? extends Product2<K, V>> records) throws Exception {
-    final UnsafeShuffleExternalSorter sorter = new UnsafeShuffleExternalSorter(
+  private void open() throws IOException {
+    assert (sorter == null);
+    sorter = new UnsafeShuffleExternalSorter(
       memoryManager,
       shuffleMemoryManager,
       blockManager,
@@ -139,30 +138,53 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       4096, // Initial size (TODO: tune this!)
       partitioner.numPartitions(),
       sparkConf);
-
-    final byte[] serArray = new byte[SER_BUFFER_SIZE];
-    final ByteBuffer serByteBuffer = ByteBuffer.wrap(serArray);
+    serArray = new byte[SER_BUFFER_SIZE];
+    serByteBuffer = ByteBuffer.wrap(serArray);
     // TODO: we should not depend on this class from Kryo; copy its source or find an alternative
-    final SerializationStream serOutputStream =
-      serializer.serializeStream(new ByteBufferOutputStream(serByteBuffer));
+    serOutputStream = serializer.serializeStream(new ByteBufferOutputStream(serByteBuffer));
+  }
 
-    while (records.hasNext()) {
-      final Product2<K, V> record = records.next();
-      final K key = record._1();
-      final int partitionId = partitioner.getPartition(key);
-      serByteBuffer.position(0);
-      serOutputStream.writeKey(key, OBJECT_CLASS_TAG);
-      serOutputStream.writeValue(record._2(), OBJECT_CLASS_TAG);
-      serOutputStream.flush();
-
-      final int serializedRecordSize = serByteBuffer.position();
-      assert (serializedRecordSize > 0);
-
-      sorter.insertRecord(
-        serArray, PlatformDependent.BYTE_ARRAY_OFFSET, serializedRecordSize, partitionId);
+  @VisibleForTesting
+  void closeAndWriteOutput() throws IOException {
+    if (sorter == null) {
+      open();
     }
+    serArray = null;
+    serByteBuffer = null;
+    serOutputStream = null;
+    final long[] partitionLengths = mergeSpills(sorter.closeAndGetSpills());
+    sorter = null;
+    shuffleBlockManager.writeIndexFile(shuffleId, mapId, partitionLengths);
+    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+  }
 
-    return sorter.closeAndGetSpills();
+  private void freeMemory() {
+    // TODO
+  }
+
+  @VisibleForTesting
+  void insertRecordIntoSorter(Product2<K, V> record) throws IOException{
+    if (sorter == null) {
+      open();
+    }
+    final K key = record._1();
+    final int partitionId = partitioner.getPartition(key);
+    serByteBuffer.position(0);
+    serOutputStream.writeKey(key, OBJECT_CLASS_TAG);
+    serOutputStream.writeValue(record._2(), OBJECT_CLASS_TAG);
+    serOutputStream.flush();
+
+    final int serializedRecordSize = serByteBuffer.position();
+    assert (serializedRecordSize > 0);
+
+    sorter.insertRecord(
+      serArray, PlatformDependent.BYTE_ARRAY_OFFSET, serializedRecordSize, partitionId);
+  }
+
+  @VisibleForTesting
+  void forceSorterToSpill() throws IOException {
+    assert (sorter != null);
+    sorter.spill();
   }
 
   private long[] mergeSpills(SpillInfo[] spills) throws IOException {
@@ -222,6 +244,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       for (int i = 0; i < spills.length; i++) {
         if (spillInputStreams[i] != null) {
           spillInputStreams[i].close();
+          if (!spills[i].file.delete()) {
+            logger.error("Error while deleting spill file {}", spills[i]);
+          }
         }
       }
       if (mergedFileOutputStream != null) {
@@ -282,6 +307,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         assert(spillInputChannelPositions[i] == spills[i].file.length());
         if (spillInputChannels[i] != null) {
           spillInputChannels[i].close();
+          if (!spills[i].file.delete()) {
+            logger.error("Error while deleting spill file {}", spills[i]);
+          }
         }
       }
       if (mergedFileOutputChannel != null) {
