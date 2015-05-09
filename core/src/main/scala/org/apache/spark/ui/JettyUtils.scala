@@ -79,7 +79,7 @@ private[spark] object JettyUtils extends Logging {
           case e: IllegalArgumentException =>
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage)
           case e: Exception =>
-            logWarn(s"GET ${request.getRequestURI} failed: $e", e)
+            logWarning(s"GET ${request.getRequestURI} failed: $e", e)
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
             response.setContentType("text/plain;charset=utf-8")
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
