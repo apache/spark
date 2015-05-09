@@ -104,6 +104,8 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         ).executeUpdate()
     conn.prepareStatement("insert into test.timetypes values ('12:34:56', "
       + "'1996-01-01', '2002-02-20 11:22:33.543543543')").executeUpdate()
+    conn.prepareStatement("insert into test.timetypes values ('12:34:56', "
+      + "null, '2002-02-20 11:22:33.543543543')").executeUpdate()
     conn.commit()
     sql(
       s"""
@@ -125,6 +127,23 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         |CREATE TEMPORARY TABLE flttypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.FLTTYPES', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
+    conn.prepareStatement(
+      s"""
+        |create table test.nulltypes (a INT, b BOOLEAN, c TINYINT, d BINARY(20), e VARCHAR(20),
+        |f VARCHAR_IGNORECASE(20), g CHAR(20), h BLOB, i CLOB, j TIME, k DATE, l TIMESTAMP,
+        |m DOUBLE, n REAL, o DECIMAL(40, 20))
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.prepareStatement("insert into test.nulltypes values ("
+      + "null, null, null, null, null, null, null, null, null, "
+      + "null, null, null, null, null, null)").executeUpdate()
+    conn.commit()
+    sql(
+      s"""
+         |CREATE TEMPORARY TABLE nulltypes
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', dbtable 'TEST.NULLTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
@@ -254,6 +273,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     val rows = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.TIMETYPES").collect()
     val cachedRows = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.TIMETYPES").cache().collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+    assert(rows(1).getAs[java.sql.Date](1) === null)
     assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
   }
 
@@ -264,6 +284,11 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     val cachedRows = sql("select * from mycached_date").collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+  }
+
+  test("test types for null value") {
+    val rows = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.NULLTYPES").collect()
+    assert((0 to 14).forall(i => rows(0).isNullAt(i)))
   }
 
   test("H2 floating-point types") {

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.File
-import java.net.URLClassLoader
+import java.net.{URL, URLClassLoader}
 import java.util
 
 import scala.language.reflectiveCalls
@@ -30,9 +30,10 @@ import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkSubmitUtils
 
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.hive.HiveContext
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
-object IsolatedClientLoader {
+private[hive] object IsolatedClientLoader {
   /**
    * Creates isolated Hive client loaders by downloading the requested version from maven.
    */
@@ -49,7 +50,7 @@ object IsolatedClientLoader {
     case "13" | "0.13" | "0.13.0" | "0.13.1" => hive.v13
   }
 
-  private def downloadVersion(version: HiveVersion): Seq[File] = {
+  private def downloadVersion(version: HiveVersion): Seq[URL] = {
     val hiveArtifacts =
       (Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde") ++
         (if (version.hasBuiltinsJar) "hive-builtins" :: Nil else Nil))
@@ -72,10 +73,10 @@ object IsolatedClientLoader {
     tempDir.mkdir()
 
     allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
-    tempDir.listFiles()
+    tempDir.listFiles().map(_.toURL)
   }
 
-  private def resolvedVersions = new scala.collection.mutable.HashMap[HiveVersion, Seq[File]]
+  private def resolvedVersions = new scala.collection.mutable.HashMap[HiveVersion, Seq[URL]]
 }
 
 /**
@@ -99,9 +100,9 @@ object IsolatedClientLoader {
  * @param baseClassLoader The spark classloader that is used to load shared classes.
  *
  */
-class IsolatedClientLoader(
+private[hive] class IsolatedClientLoader(
     val version: HiveVersion,
-    val execJars: Seq[File] = Seq.empty,
+    val execJars: Seq[URL] = Seq.empty,
     val config: Map[String, String] = Map.empty,
     val isolationOn: Boolean = true,
     val rootClassLoader: ClassLoader = ClassLoader.getSystemClassLoader.getParent.getParent,
@@ -112,7 +113,7 @@ class IsolatedClientLoader(
   assert(Try(baseClassLoader.loadClass("org.apache.hive.HiveConf")).isFailure)
 
   /** All jars used by the hive specific classloader. */
-  protected def allJars = execJars.map(_.toURI.toURL).toArray
+  protected def allJars = execJars.toArray
 
   protected def isSharedClass(name: String): Boolean =
     name.contains("slf4j") ||
@@ -166,6 +167,12 @@ class IsolatedClientLoader(
       .getConstructors.head
       .newInstance(version, config)
       .asInstanceOf[ClientInterface]
+  } catch {
+    case ReflectionException(cnf: NoClassDefFoundError) =>
+      throw new ClassNotFoundException(
+        s"$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n" +
+         "Please make sure that jars for your version of hive and hadoop are included in the " +
+        s"paths passed to ${HiveContext.HIVE_METASTORE_JARS}.")
   } finally {
     Thread.currentThread.setContextClassLoader(baseClassLoader)
   }
