@@ -72,10 +72,11 @@ public class JavaOneVsRestSuite implements Serializable {
 
     @Test
     public void oneVsRestDefaultParams() {
-        OneVsRest ova = new OneVsRest(new LogisticRegression());
+        OneVsRest ova = new OneVsRest();
+        ova.setClassifier(new LogisticRegression());
         assert(ova.getLabelCol() == "label");
         assert(ova.getPredictionCol() == "prediction");
-        OneVsRestModel ovaModel = ova.train(dataset);
+        OneVsRestModel ovaModel = ova.fit(dataset);
         ovaModel.transform(dataset).registerTempTable("prediction");
         DataFrame predictions = jsql.sql("SELECT label, prediction FROM prediction");
         predictions.collectAsList();

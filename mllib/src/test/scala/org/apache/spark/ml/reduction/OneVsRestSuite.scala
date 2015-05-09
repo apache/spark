@@ -59,8 +59,8 @@ class OneVsRestSuite extends FunSuite with MLlibTestSparkContext {
 
   test("one-vs-rest: default params") {
     val numClasses = 3
-    val ova = new OneVsRest(new LogisticRegression)
-
+    val ova = new OneVsRest()
+    ova.setClassifier(new LogisticRegression)
     assert(ova.getLabelCol == "label")
     assert(ova.getPredictionCol == "prediction")
     val ovaModel = ova.fit(dataset)
@@ -83,7 +83,8 @@ class OneVsRestSuite extends FunSuite with MLlibTestSparkContext {
 
   test("one-vs-rest: test read label metadata") {
     val numClasses = 8
-    val ova = new OneVsRest(new LogisticRegression)
+    val ova = new OneVsRest()
+    ova.setClassifier(new LogisticRegression)
     val labelMetadata = NominalAttribute.defaultAttr.withName("label").withNumValues(8)
     val labelWithMetadata = dataset("label").as("label", labelMetadata.toMetadata())
     val features = dataset("features").as("features")
@@ -95,7 +96,8 @@ class OneVsRestSuite extends FunSuite with MLlibTestSparkContext {
 
   test("one-vs-rest: pass label metadata correctly during train") {
     val numClasses = 3
-    val ova = new OneVsRest(new MockLogisticRegression)
+    val ova = new OneVsRest()
+    ova.setClassifier(new MockLogisticRegression)
 
     val labelMetadata = NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses)
     val labelWithMetadata = dataset("label").as("label", labelMetadata.toMetadata())

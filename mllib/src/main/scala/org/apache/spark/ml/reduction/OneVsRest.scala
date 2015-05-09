@@ -20,17 +20,39 @@ package org.apache.spark.ml.reduction
 import scala.language.existentials
 
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
-import org.apache.spark.ml.{PredictorParams, PredictionModel, Predictor}
+import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.classification.{ClassificationModel, Classifier}
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+
+/**
+ * Params for [[OneVsRest]].
+ */
+private[ml] trait OneVsRestParams extends PredictorParams {
+
+  type ClassifierType = Classifier[F, E, M] forSome {
+    type F ;
+    type M <: ClassificationModel[F,M];
+    type E <:  Classifier[F, E,M]
+  }
+
+  /**
+   * param for the base classifier that we reduce multiclass classification into.
+   * @group param
+   */
+  val classifier: Param[ClassifierType]  =
+    new Param(this, "classifier", "base binary classifier ")
+
+  /** @group getParam */
+  def getClassifier: ClassifierType = $(classifier)
+
+}
 
 /**
  * Model produced by [[OneVsRest]].
@@ -39,19 +61,13 @@ import org.apache.spark.storage.StorageLevel
  * @param models the binary classification models for reduction.
  */
 @AlphaComponent
-class OneVsRestModel[
-    FeaturesType,
-    E <: Classifier[FeaturesType, E, M],
-    M <: ClassificationModel[FeaturesType, M]](
-      override val parent: OneVsRest[FeaturesType, E, M],
-      val models: Array[_ <: ClassificationModel[FeaturesType, M]])
-  extends PredictionModel[FeaturesType, OneVsRestModel[FeaturesType, E, M]]
-  with PredictorParams {
-
-  override protected def featuresDataType: DataType = parent.featuresDataType
+class OneVsRestModel(
+      override val parent: OneVsRest,
+      val models: Array[_ <: ClassificationModel[_,_]])
+  extends Model[OneVsRestModel] with OneVsRestParams {
 
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema, fitting = false, featuresDataType)
+    validateAndTransformSchema(schema, fitting = false, getClassifier.featuresDataType)
   }
 
   override def transform(dataset: DataFrame): DataFrame = {
@@ -59,31 +75,49 @@ class OneVsRestModel[
     val parentSchema = dataset.schema
     transformSchema(parentSchema, logging = true)
     val sqlCtx = dataset.sqlContext
-    val rawPredictionCol = parent.classifier.getRawPredictionCol
-    // score each model on every data point and pick the model with highest score
-    // TODO: Use DataFrame expressions to leverage performance here
-    val predictions = models.zipWithIndex.par.map { case (model, index) =>
-      val output = model.transform(dataset)
-      output.select(rawPredictionCol).map { case Row(p: Vector) => List((index, p(1))) }
-    }.reduce[RDD[List[(Int, Double)]]] { case (x, y) =>
-      x.zip(y).map { case ((a, b)) =>
-        a ++ b
-      }
-    }.map(_.maxBy(_._2))
 
-    // ensure that we pass through columns that are part of the original dataset.
-    val results = dataset.select(col("*")).rdd.zip(predictions).map { case (row, (label, _)) =>
-      Row.fromSeq(row.toSeq ++ List(label.toDouble))
+    // determine the output fields added by the model
+    val origColNames = dataset.schema.map(_.name).toSet
+    val newColNames = models.head.transformSchema(dataset.schema).map(_.name).toSet
+    val additionalColNames = newColNames.diff(origColNames)
+
+    // each classifier is a transformer of
+    // the input dataset. Apply the sequence of transformations
+    // and collect the resulting dataset.
+    // since each classifier adds columns to the dataset we need
+    // to ensure the column names are unique
+    var scoredDataset = dataset
+    val predictionCols = models.zipWithIndex.map { case (model, index) =>
+      val map = copyWithOffset(model, index.toString, additionalColNames)
+      scoredDataset = model.transform(scoredDataset, map)
+      map(model.rawPredictionCol)
+    }.toSeq
+
+    // TODO: Is there a way to refactor this code to use a UDF + withColumn instead?
+    val numClasses = models.size
+    val results = scoredDataset.select("*", predictionCols: _*).map { row =>
+      val s = row.toSeq
+      val star = s.dropRight(numClasses)
+      val scores = s.takeRight(numClasses).map(_.asInstanceOf[Vector])
+      val prediction = scores.zipWithIndex.maxBy(_._1(1))._2.toDouble
+      Row.fromSeq(star ++ List(prediction))
     }
-
-    // the output schema should retain all input fields and add prediction column.
-    val outputSchema = SchemaUtils.appendColumn(parentSchema, $(predictionCol), DoubleType)
+    val scoredDatasetSchema = scoredDataset.schema
+    val outputSchema = SchemaUtils.appendColumn(scoredDatasetSchema, $(predictionCol), DoubleType)
     sqlCtx.createDataFrame(results, outputSchema)
   }
 
-  override protected def predict(features: FeaturesType): Double = {
-    throw new UnsupportedOperationException("Ensemble Classifier does not support predict," +
-      " use transform instead")
+  private def copyWithOffset[T <: Params](from: T, offset: String, names: Set[String]) = {
+    val map = from.extractParamMap()
+    val to = new ParamMap()
+    map.toSeq.foreach { paramPair =>
+      val param = paramPair.param
+      val v = paramPair.value
+      if (names.contains(v.toString)) {
+        to.put(param.asInstanceOf[Param[Any]], v.toString + offset)
+      }
+    }
+    to
   }
 }
 
@@ -98,22 +132,17 @@ class OneVsRestModel[
  *
  */
 @Experimental
-class OneVsRest[
-    FeaturesType,
-    E <: Classifier[FeaturesType, E, M],
-    M <: ClassificationModel[FeaturesType, M]]
-  (val classifier: Classifier[FeaturesType, E, M])
-  extends Predictor[FeaturesType, OneVsRest[FeaturesType, E, M],
-    OneVsRestModel[FeaturesType, E, M]]
-  with PredictorParams {
+class OneVsRest extends Estimator[OneVsRestModel] with OneVsRestParams {
 
-  override private[ml] def featuresDataType: DataType = classifier.featuresDataType
+  /** @group setParam */
+  // TODO: Find a better way to do this. Existential Types dont work with Java API so cast needed.
+  def setClassifier(value: Classifier[_,_,_]): this.type = set(classifier, value.asInstanceOf[ClassifierType])
 
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema, fitting = true, featuresDataType)
+    validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
   }
 
-  override protected def train(dataset: DataFrame): OneVsRestModel[FeaturesType, E, M] = {
+  override def fit(dataset: DataFrame): OneVsRestModel = {
     // determine number of classes either from metadata if provided, or via computation.
     val labelSchema = dataset.schema($(labelCol))
     val computeNumClasses: () => Int = () => {
@@ -133,7 +162,7 @@ class OneVsRest[
 
     // create k columns, one for each binary classifier.
     val models = Range(0, numClasses).par.map { index =>
-      val labelColName = "mc2b$" + index
+
       val label: Double => Double = (label: Double) => {
         if (label.toInt == index) 1.0 else 0.0
       }
@@ -142,17 +171,19 @@ class OneVsRest[
       // TODO: use when ... otherwise after SPARK-7321 is merged
       val labelUDF = callUDF(label, DoubleType, col($(labelCol)))
       val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
+      val skipFeatures: Any => Boolean = (name: Any) => name.toString.equals(featuresCol.name)
+      val labelColName = "mc2b$" + index
       val labelUDFWithNewMeta = labelUDF.as(labelColName, newLabelMeta)
       val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDFWithNewMeta)
-      val map = new ParamMap()
-      map.put(classifier.labelCol -> labelColName)
-      classifier.fit(trainingDataset, map)
-    }.toArray[ClassificationModel[FeaturesType, M]]
+      val classifier = getClassifier
+      classifier.fit(trainingDataset, classifier.labelCol -> labelColName)
+    }.toArray[ClassificationModel[_,_]]
 
     if (handlePersistence) {
       multiclassLabeled.unpersist()
     }
 
-    new OneVsRestModel[FeaturesType, E, M](this, models)
+    copyValues(new OneVsRestModel(this, models))
   }
+
 }
