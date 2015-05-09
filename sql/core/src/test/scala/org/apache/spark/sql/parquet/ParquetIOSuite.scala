@@ -288,6 +288,48 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     }
   }
 
+  test("wildcard read raw Parquet file") {
+    def makeRawParquetFile(path: Path): Unit = {
+      val schema = MessageTypeParser.parseMessageType(
+        """
+          |message root {
+          |  required boolean _1;
+          |  required int32   _2;
+          |  required int64   _3;
+          |  required float   _4;
+          |  required double  _5;
+          |}
+        """.stripMargin)
+
+      val writeSupport = new TestGroupWriteSupport(schema)
+      val writer = new ParquetWriter[Group](path, writeSupport)
+
+      (0 until 10).foreach { i =>
+        val record = new SimpleGroup(schema)
+        record.add(0, i % 2 == 0)
+        record.add(1, i)
+        record.add(2, i.toLong)
+        record.add(3, i.toFloat)
+        record.add(4, i.toDouble)
+        writer.write(record)
+      }
+
+      writer.close()
+    }
+
+    withTempDir { dir =>
+      val path = new Path(dir.toURI.toString, "part-r-0.parquet")
+      makeRawParquetFile(path)
+      val globPath = dir.toURI.toString
+      val globPatterns = Array(globPath + "/*", globPath + "/*.parquet", globPath + "/?art-?-0.*")
+      globPatterns.foreach { path =>
+        checkAnswer(parquetFile(path.toString), (0 until 10).map { i =>
+          Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
+        })
+      }
+    }
+  }
+
   test("write metadata") {
     withTempPath { file =>
       val path = new Path(file.toURI.toString)
