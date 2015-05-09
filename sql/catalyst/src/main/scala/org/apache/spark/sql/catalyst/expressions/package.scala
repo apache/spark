@@ -101,9 +101,5 @@ package object expressions  {
         // We don't care about the name of AttributeReference in its semantic equality check
         new AttributeReference(null, n.dataType, n.nullable, n.metadata)(n.exprId, n.qualifiers)
     }
-
-    def semanticEquals(l: Expression, r: Expression): Boolean = {
-      normalize(l) == normalize(r)
-    }
   }
 }
