@@ -25,11 +25,11 @@ import scala.xml.{Elem, Node, Unparsed}
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
 import org.apache.spark.ui.jobs.UIData._
 import org.apache.spark.ui.scope.RDDOperationGraph
 import org.apache.spark.util.{Utils, Distribution}
-import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
@@ -52,14 +52,22 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val stageAttemptId = parameterAttempt.toInt
       val stageDataOption = progressListener.stageIdToData.get((stageId, stageAttemptId))
 
-      if (stageDataOption.isEmpty || stageDataOption.get.taskData.isEmpty) {
+      val stageHeader = s"Details for Stage $stageId (Attempt $stageAttemptId)"
+      if (stageDataOption.isEmpty) {
+        val content =
+          <div id="no-info">
+            <p>No information to display for Stage {stageId} (Attempt {stageAttemptId})</p>
+          </div>
+        return UIUtils.headerSparkPage(stageHeader, content, parent)
+
+      }
+      if (stageDataOption.get.taskData.isEmpty) {
         val content =
           <div>
             <h4>Summary Metrics</h4> No tasks have started yet
             <h4>Tasks</h4> No tasks have started yet
           </div>
-        return UIUtils.headerSparkPage(
-          s"Details for Stage $stageId (Attempt $stageAttemptId)", content, parent)
+        return UIUtils.headerSparkPage(stageHeader, content, parent)
       }
 
       val stageData = stageDataOption.get
@@ -73,7 +81,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         <div>
           <ul class="unstyled">
             <li>
-              <strong>Total task time across all tasks: </strong>
+              <strong>Total Time Across All Tasks: </strong>
               {UIUtils.formatDuration(stageData.executorRunTime)}
             </li>
             {if (stageData.hasInput) {
@@ -90,25 +98,25 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             }}
             {if (stageData.hasShuffleRead) {
               <li>
-                <strong>Shuffle read: </strong>
+                <strong>Shuffle Read: </strong>
                 {s"${Utils.bytesToString(stageData.shuffleReadTotalBytes)} / " +
                  s"${stageData.shuffleReadRecords}"}
               </li>
             }}
             {if (stageData.hasShuffleWrite) {
               <li>
-                <strong>Shuffle write: </strong>
+                <strong>Shuffle Write: </strong>
                  {s"${Utils.bytesToString(stageData.shuffleWriteBytes)} / " +
                  s"${stageData.shuffleWriteRecords}"}
               </li>
             }}
             {if (stageData.hasBytesSpilled) {
               <li>
-                <strong>Shuffle spill (memory): </strong>
+                <strong>Shuffle Spill (Memory): </strong>
                 {Utils.bytesToString(stageData.memoryBytesSpilled)}
               </li>
               <li>
-                <strong>Shuffle spill (disk): </strong>
+                <strong>Shuffle Spill (Disk): </strong>
                 {Utils.bytesToString(stageData.diskBytesSpilled)}
               </li>
             }}
@@ -119,10 +127,10 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         <div>
           <span class="expand-additional-metrics">
             <span class="expand-additional-metrics-arrow arrow-closed"></span>
-            <strong>Show additional metrics</strong>
+            <a>Show Additional Metrics</a>
           </span>
           <div class="additional-metrics collapsed">
-            <ul style="list-style-type:none">
+            <ul>
               <li>
                   <input type="checkbox" id="select-all-metrics"/>
                   <span class="additional-metric-title"><em>(De)select All</em></span>
@@ -449,17 +457,16 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val content =
         summary ++
-        showAdditionalMetrics ++
         dagViz ++
         maybeExpandDagViz ++
+        showAdditionalMetrics ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         maybeAccumulableTable ++
         <h4>Tasks</h4> ++ taskTable
 
-      UIUtils.headerSparkPage(
-        "Details for Stage %d".format(stageId), content, parent, showVisualization = true)
+      UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
     }
   }
 

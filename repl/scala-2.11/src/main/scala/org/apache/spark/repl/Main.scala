@@ -88,7 +88,7 @@ object Main extends Logging {
       logInfo("Created sql context (with Hive support)..")
     }
     catch {
-      case cnf: java.lang.ClassNotFoundException =>
+      case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
         sqlContext = new SQLContext(sparkContext)
         logInfo("Created sql context..")
     }

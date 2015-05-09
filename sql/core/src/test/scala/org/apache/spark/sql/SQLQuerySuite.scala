@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
@@ -1275,6 +1276,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
     rdd.toDF().registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
+  }
+
+  test("SPARK-4699 case sensitivity SQL query") {
+    setConf(SQLConf.CASE_SENSITIVE, "false")
+    val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
+    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
+    rdd.toDF().registerTempTable("testTable1")
+    checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
+    setConf(SQLConf.CASE_SENSITIVE, "true")
   }
 
   test("SPARK-6145: ORDER BY test for nested fields") {
