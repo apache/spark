@@ -131,6 +131,8 @@ createMethods()
 #' alias
 #'
 #' Set a new name for a column
+
+#' @rdname column
 setMethod("alias",
           signature(object = "Column"),
           function(object, data) {
@@ -141,7 +143,11 @@ setMethod("alias",
             }
           })
 
+#' substr
+#'
 #' An expression that returns a substring.
+#'
+#' @rdname column
 #'
 #' @param start starting position
 #' @param stop ending position
@@ -152,6 +158,9 @@ setMethod("substr", signature(x = "Column"),
           })
 
 #' Casts the column to a different data type.
+#'
+#' @rdname column
+#'
 #' @examples
 #' \dontrun{
 #'   cast(df$age, "string")
@@ -173,8 +182,8 @@ setMethod("cast",
 
 #' Approx Count Distinct
 #'
-#' Returns the approximate number of distinct items in a group.
-#'
+#' @rdname column
+#' @return the approximate number of distinct items in a group.
 setMethod("approxCountDistinct",
           signature(x = "Column"),
           function(x, rsd = 0.95) {
@@ -184,8 +193,8 @@ setMethod("approxCountDistinct",
 
 #' Count Distinct
 #'
-#' returns the number of distinct items in a group.
-#'
+#' @rdname column
+#' @return the number of distinct items in a group.
 setMethod("countDistinct",
           signature(x = "Column"),
           function(x, ...) {
@@ -197,3 +206,18 @@ setMethod("countDistinct",
             column(jc)
           })
 
+#' @rdname column
+#' @aliases countDistinct
+setMethod("n_distinct",
+          signature(x = "Column"),
+          function(x, ...) {
+            countDistinct(x, ...)
+          })
+
+#' @rdname column
+#' @aliases count
+setMethod("n",
+          signature(x = "Column"),
+          function(x) {
+            count(x)
+          })

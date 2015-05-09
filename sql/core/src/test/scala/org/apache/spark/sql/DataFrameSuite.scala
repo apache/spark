@@ -308,6 +308,11 @@ class DataFrameSuite extends QueryTest {
       testData2.agg(avg('a)),
       Row(2.0))
 
+    // Also check mean
+    checkAnswer(
+      testData2.agg(mean('a)),
+      Row(2.0))
+
     checkAnswer(
       testData2.agg(avg('a), sumDistinct('a)), // non-partial
       Row(2.0, 6.0) :: Nil)
