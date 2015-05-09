@@ -265,17 +265,20 @@ private[sql] case class ParquetRelation2(
     def refresh(): Unit = {
       // Support either reading a collection of raw Parquet part-files, or a collection of folders
       // containing Parquet files (e.g. partitioned Parquet table).
-      val baseStatuses = paths.distinct.map { p =>
+      val baseStatuses = paths.distinct.flatMap { p =>
         val fs = FileSystem.get(URI.create(p), sparkContext.hadoopConfiguration)
         val path = new Path(p)
         val qualified = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
-
-        if (!fs.exists(qualified) && maybeSchema.isDefined) {
-          fs.mkdirs(qualified)
-          prepareMetadata(qualified, maybeSchema.get, sparkContext.hadoopConfiguration)
+        val matchStatuses = fs.globStatus(qualified)
+        if(matchStatuses != null && matchStatuses.size > 0) {
+          matchStatuses
+        } else {
+          if (!fs.exists(qualified) && maybeSchema.isDefined) {
+            fs.mkdirs(qualified)
+            prepareMetadata(qualified, maybeSchema.get, sparkContext.hadoopConfiguration)
+          }
+          List(fs.getFileStatus(qualified))
         }
-
-        fs.getFileStatus(qualified)
       }.toArray
       assert(baseStatuses.forall(!_.isDir) || baseStatuses.forall(_.isDir))
 
