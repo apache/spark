@@ -149,11 +149,11 @@ class MulticlassMetrics(JavaModelWrapper):
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)])
     >>> metrics = MulticlassMetrics(predictionAndLabels)
     >>> metrics.falsePositiveRate(0.0)
-    0.2
+    0.2...
     >>> metrics.precision(1.0)
-    0.75
+    0.75...
     >>> metrics.recall(2.0)
-    1.0
+    1.0...
     >>> metrics.fMeasure(0.0, 2.0)
     0.52...
     >>> metrics.precision()
