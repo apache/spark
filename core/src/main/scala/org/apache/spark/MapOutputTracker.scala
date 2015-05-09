@@ -367,11 +367,7 @@ private[spark] object MapOutputTracker extends Logging {
   // Opposite of serializeMapStatuses.
   def deserializeMapStatuses(bytes: Array[Byte]): Array[MapStatus] = {
     val objIn = new ObjectInputStream(new GZIPInputStream(new ByteArrayInputStream(bytes)))
-    Utils.tryWithSafeFinally {
-      objIn.readObject().asInstanceOf[Array[MapStatus]]
-    } {
-      objIn.close()
-    }
+    objIn.readObject().asInstanceOf[Array[MapStatus]]
   }
 
   // Convert an array of MapStatuses to locations and sizes for a given reduce ID. If
