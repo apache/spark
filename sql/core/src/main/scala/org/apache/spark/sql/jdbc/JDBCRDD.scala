@@ -362,7 +362,13 @@ private[sql] class JDBCRDD(
           conversions(i) match {
             case BooleanConversion    => mutableRow.setBoolean(i, rs.getBoolean(pos))
             case DateConversion       =>
-              mutableRow.update(i, DateUtils.fromJavaDate(rs.getDate(pos)))
+              // DateUtils.fromJavaDate does not handle null value, so we need to check it.
+              val dateVal = rs.getDate(pos)
+              if (dateVal != null) {
+                mutableRow.update(i, DateUtils.fromJavaDate(dateVal))
+              } else {
+                mutableRow.update(i, null)
+              }
             case DecimalConversion    =>
               val decimalVal = rs.getBigDecimal(pos)
               if (decimalVal == null) {

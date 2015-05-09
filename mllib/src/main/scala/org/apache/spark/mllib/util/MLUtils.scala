@@ -331,7 +331,7 @@ object MLUtils {
    * @param x a floating-point value as input.
    * @return the result of `math.log(1 + math.exp(x))`.
    */
-  private[mllib] def log1pExp(x: Double): Double = {
+  private[spark] def log1pExp(x: Double): Double = {
     if (x > 0) {
       x + math.log1p(math.exp(-x))
     } else {
