@@ -54,7 +54,7 @@ case class ScriptTransformation(
 
   override def otherCopyArgs: Seq[HiveContext] = sc :: Nil
 
-  def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[Row] = {
     child.execute().mapPartitions { iter =>
       val cmd = List("/bin/bash", "-c", script)
       val builder = new ProcessBuilder(cmd)
