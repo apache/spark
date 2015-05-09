@@ -253,6 +253,22 @@ public final class UnsafeShuffleExternalSorter {
   }
 
   /**
+   * Force all memory and spill files to be deleted; called by shuffle error-handling code.
+   */
+  public void cleanupAfterError() {
+    freeMemory();
+    for (SpillInfo spill : spills) {
+      if (spill.file.exists() && !spill.file.delete()) {
+        logger.error("Unable to delete spill file {}", spill.file.getPath());
+      }
+    }
+    if (spillingEnabled && sorter != null) {
+      shuffleMemoryManager.release(sorter.getMemoryUsage());
+      sorter = null;
+    }
+  }
+
+  /**
    * Checks whether there is enough space to insert a new record into the sorter.
    *
    * @param requiredSpace the required space in the data page, in bytes, including space for storing
@@ -362,11 +378,16 @@ public final class UnsafeShuffleExternalSorter {
    * @throws IOException
    */
   public SpillInfo[] closeAndGetSpills() throws IOException {
-    if (sorter != null) {
-      writeSpillFile();
-      freeMemory();
+    try {
+      if (sorter != null) {
+        writeSpillFile();
+        freeMemory();
+      }
+      return spills.toArray(new SpillInfo[spills.size()]);
+    } catch (IOException e) {
+      cleanupAfterError();
+      throw e;
     }
-    return spills.toArray(new SpillInfo[0]);
   }
 
 }

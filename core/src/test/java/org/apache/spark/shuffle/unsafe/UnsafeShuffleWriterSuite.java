@@ -57,7 +57,7 @@ import org.apache.spark.scheduler.MapStatus;
 public class UnsafeShuffleWriterSuite {
 
   static final int NUM_PARTITITONS = 4;
-  final TaskMemoryManager memoryManager =
+  final TaskMemoryManager taskMemoryManager =
     new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP));
   final HashPartitioner hashPartitioner = new HashPartitioner(NUM_PARTITITONS);
   File mergedOutputFile;
@@ -82,6 +82,10 @@ public class UnsafeShuffleWriterSuite {
   @After
   public void tearDown() {
     Utils.deleteRecursively(tempDir);
+    final long leakedMemory = taskMemoryManager.cleanUpAllAllocatedMemory();
+    if (leakedMemory != 0) {
+      Assert.fail("Test leaked " + leakedMemory + " bytes of managed memory");
+    }
   }
 
   @Before
@@ -154,7 +158,7 @@ public class UnsafeShuffleWriterSuite {
     return new UnsafeShuffleWriter<Object, Object>(
       blockManager,
       shuffleBlockManager,
-      memoryManager,
+      taskMemoryManager,
       shuffleMemoryManager,
       new UnsafeShuffleHandle<Object, Object>(0, 1, shuffleDep),
       0, // map id
@@ -216,7 +220,7 @@ public class UnsafeShuffleWriterSuite {
   }
 
   private void testMergingSpills(boolean transferToEnabled) throws IOException {
-    final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
+    final UnsafeShuffleWriter<Object, Object> writer = createWriter(transferToEnabled);
     writer.insertRecordIntoSorter(new Tuple2<Object, Object>(1, 1));
     writer.insertRecordIntoSorter(new Tuple2<Object, Object>(2, 2));
     writer.insertRecordIntoSorter(new Tuple2<Object, Object>(3, 3));
@@ -249,8 +253,17 @@ public class UnsafeShuffleWriterSuite {
     testMergingSpills(false);
   }
 
+  @Test
+  public void spillFilesAreDeletedWhenStoppingAfterError() throws IOException {
+    final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
+    writer.insertRecordIntoSorter(new Tuple2<Object, Object>(1, 1));
+    writer.insertRecordIntoSorter(new Tuple2<Object, Object>(2, 2));
+    writer.forceSorterToSpill();
+    writer.insertRecordIntoSorter(new Tuple2<Object, Object>(2, 2));
+    writer.stop(false);
+    assertSpillFilesWereCleanedUp();
+  }
+
   // TODO: actually try to read the shuffle output?
-  // TODO: add a test that manually triggers spills in order to exercise the merging.
-//  }
 
 }

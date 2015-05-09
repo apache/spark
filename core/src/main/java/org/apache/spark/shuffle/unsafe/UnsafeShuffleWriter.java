@@ -17,10 +17,7 @@
 
 package org.apache.spark.shuffle.unsafe;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
@@ -34,6 +31,7 @@ import scala.reflect.ClassTag$;
 import com.esotericsoftware.kryo.io.ByteBufferOutputStream;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.ByteStreams;
+import com.google.common.io.Closeables;
 import com.google.common.io.Files;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -152,14 +150,20 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     serArray = null;
     serByteBuffer = null;
     serOutputStream = null;
-    final long[] partitionLengths = mergeSpills(sorter.closeAndGetSpills());
+    final SpillInfo[] spills = sorter.closeAndGetSpills();
     sorter = null;
+    final long[] partitionLengths;
+    try {
+      partitionLengths = mergeSpills(spills);
+    } finally {
+      for (SpillInfo spill : spills) {
+        if (spill.file.exists() && ! spill.file.delete()) {
+          logger.error("Error while deleting spill file {}", spill.file.getPath());
+        }
+      }
+    }
     shuffleBlockManager.writeIndexFile(shuffleId, mapId, partitionLengths);
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
-  }
-
-  private void freeMemory() {
-    // TODO
   }
 
   @VisibleForTesting
@@ -241,17 +245,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
     } finally {
-      for (int i = 0; i < spills.length; i++) {
-        if (spillInputStreams[i] != null) {
-          spillInputStreams[i].close();
-          if (!spills[i].file.delete()) {
-            logger.error("Error while deleting spill file {}", spills[i]);
-          }
-        }
+      for (InputStream stream : spillInputStreams) {
+        Closeables.close(stream, false);
       }
-      if (mergedFileOutputStream != null) {
-        mergedFileOutputStream.close();
-      }
+      Closeables.close(mergedFileOutputStream, false);
     }
     return partitionLengths;
   }
@@ -305,16 +302,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     } finally {
       for (int i = 0; i < spills.length; i++) {
         assert(spillInputChannelPositions[i] == spills[i].file.length());
-        if (spillInputChannels[i] != null) {
-          spillInputChannels[i].close();
-          if (!spills[i].file.delete()) {
-            logger.error("Error while deleting spill file {}", spills[i]);
-          }
-        }
+        Closeables.close(spillInputChannels[i], false);
       }
-      if (mergedFileOutputChannel != null) {
-        mergedFileOutputChannel.close();
-      }
+      Closeables.close(mergedFileOutputChannel, false);
     }
     return partitionLengths;
   }
@@ -326,7 +316,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         return Option.apply(null);
       } else {
         stopping = true;
-        freeMemory();
         if (success) {
           if (mapStatus == null) {
             throw new IllegalStateException("Cannot call stop(true) without having called write()");
@@ -339,7 +328,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
     } finally {
-      freeMemory();
+      if (sorter != null) {
+        // If sorter is non-null, then this implies that we called stop() in response to an error,
+        // so we need to clean up memory and spill files created by the sorter
+        sorter.cleanupAfterError();
+      }
     }
   }
 }
