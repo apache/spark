@@ -17,14 +17,16 @@
 
 package org.apache.spark.ml.reduction
 
+import java.util.UUID
+
 import scala.language.existentials
 
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.classification.{ClassificationModel, Classifier}
-import org.apache.spark.ml.param.{Param, ParamMap, Params}
-import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
+import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
@@ -72,52 +74,54 @@ class OneVsRestModel(
 
   override def transform(dataset: DataFrame): DataFrame = {
     // Check schema
-    val parentSchema = dataset.schema
-    transformSchema(parentSchema, logging = true)
-    val sqlCtx = dataset.sqlContext
+    transformSchema(dataset.schema, logging = true)
 
-    // determine the output fields added by the model
-    val origColNames = dataset.schema.map(_.name).toSet
-    val newColNames = models.head.transformSchema(dataset.schema).map(_.name).toSet
-    val additionalColNames = newColNames.diff(origColNames)
+    // determine the input columns: these need to be passed through
+    val origCols = dataset.schema.map(f => col(f.name))
 
-    // each classifier is a transformer of
-    // the input dataset. Apply the sequence of transformations
-    // and collect the resulting dataset.
-    // since each classifier adds columns to the dataset we need
-    // to ensure the column names are unique
-    var scoredDataset = dataset
-    val predictionCols = models.zipWithIndex.map { case (model, index) =>
-      val map = copyWithOffset(model, index.toString, additionalColNames)
-      scoredDataset = model.transform(scoredDataset, map)
-      map(model.rawPredictionCol)
-    }.toSeq
+    // add an accumulator column to store predictions of all the models
+    val accColName = "mbc$tmp" + UUID.randomUUID().toString
+    val init: () => Map[Int, Double] = () => {Map()}
+    val mapType = MapType(IntegerType, DoubleType, false)
+    val newDataset = dataset.withColumn(accColName,callUDF(init, mapType))
 
-    // TODO: Is there a way to refactor this code to use a UDF + withColumn instead?
-    val numClasses = models.size
-    val results = scoredDataset.select("*", predictionCols: _*).map { row =>
-      val s = row.toSeq
-      val star = s.dropRight(numClasses)
-      val scores = s.takeRight(numClasses).map(_.asInstanceOf[Vector])
-      val prediction = scores.zipWithIndex.maxBy(_._1(1))._2.toDouble
-      Row.fromSeq(star ++ List(prediction))
+    // persist if underlying dataset is not persistent.
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    if (handlePersistence) {
+      newDataset.persist(StorageLevel.MEMORY_AND_DISK)
     }
-    val scoredDatasetSchema = scoredDataset.schema
-    val outputSchema = SchemaUtils.appendColumn(scoredDatasetSchema, $(predictionCol), DoubleType)
-    sqlCtx.createDataFrame(results, outputSchema)
-  }
 
-  private def copyWithOffset[T <: Params](from: T, offset: String, names: Set[String]) = {
-    val map = from.extractParamMap()
-    val to = new ParamMap()
-    map.toSeq.foreach { paramPair =>
-      val param = paramPair.param
-      val v = paramPair.value
-      if (names.contains(v.toString)) {
-        to.put(param.asInstanceOf[Param[Any]], v.toString + offset)
+    // update the accumulator column with the result of prediction of models
+    val aggregatedDataset = models.zipWithIndex.foldLeft[DataFrame](newDataset) {
+      case (df, (model, index)) => {
+        val rawPredictionCol = model.getRawPredictionCol
+        val columns = origCols ++ List(col(rawPredictionCol), col(accColName))
+
+        // add temporary column to store intermediate scores and update
+        val tmpColName = "mbc$tmp_" + UUID.randomUUID().toString
+        val update: (Map[Int, Double], Vector) => Map[Int, Double]  =
+          (predictions: Map[Int, Double], prediction: Vector) => {
+          predictions.+((index, prediction(1)))
+        }
+        val updateUdf = callUDF(update, mapType, col(accColName), col(rawPredictionCol))
+        val transformedDataset = model.transform(df).select(columns:_*)
+        val updatedDataset = transformedDataset.withColumn(tmpColName, updateUdf)
+        val newColumns = origCols ++ List(col(tmpColName))
+
+        // switch out the intermediate column with the accumulator column
+        updatedDataset.select(newColumns:_*).withColumnRenamed(tmpColName, accColName)
       }
     }
-    to
+
+    if (handlePersistence) {
+      newDataset.unpersist()
+    }
+
+    // output the index of the classifier with highest confidence as prediction
+    val label: Map[Int, Double] => Double = (predictions: Map[Int, Double]) => {
+      predictions.maxBy(_._2)._1.toDouble
+    }
+    aggregatedDataset.withColumn($(predictionCol), callUDF(label, DoubleType, col(accColName)))
   }
 }
 
@@ -135,7 +139,7 @@ class OneVsRestModel(
 class OneVsRest extends Estimator[OneVsRestModel] with OneVsRestParams {
 
   /** @group setParam */
-  // TODO: Find a better way to do this. Existential Types dont work with Java API so cast needed.
+  // TODO: Find a better way to do this. Existential Types don't work with Java API so cast needed.
   def setClassifier(value: Classifier[_,_,_]): this.type = set(classifier, value.asInstanceOf[ClassifierType])
 
   override def transformSchema(schema: StructType): StructType = {
@@ -185,5 +189,4 @@ class OneVsRest extends Estimator[OneVsRestModel] with OneVsRestParams {
 
     copyValues(new OneVsRestModel(this, models))
   }
-
 }

@@ -45,7 +45,7 @@ public class JavaOneVsRestSuite implements Serializable {
     public void setUp() {
         jsc = new JavaSparkContext("local", "JavaLOneVsRestSuite");
         jsql = new SQLContext(jsc);
-        int nPoints = 1000;
+        int nPoints = 3;
 
         /**
          * The following weights and xMean/xVariance are computed from iris dataset with lambda = 0.2.
