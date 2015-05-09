@@ -324,5 +324,4 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
   override def getAs[T](i: Int): T = {
     values(i).boxed.asInstanceOf[T]
   }
-
 }
