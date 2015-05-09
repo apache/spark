@@ -117,7 +117,7 @@ abstract class DStream[T: ClassTag] (
    * Instead, every time we call `compute` we instantiate a new scope using the same name as this
    * one. Otherwise, all RDDs ever created by this DStream will be in the same scope.
    */
-  @transient private val scope: Option[RDDOperationScope] = {
+  private val scope: Option[RDDOperationScope] = {
     Option(ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY)).map(RDDOperationScope.fromJson)
   }
 

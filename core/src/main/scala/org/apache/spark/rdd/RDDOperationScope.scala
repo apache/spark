@@ -43,7 +43,7 @@ import org.apache.spark.SparkContext
 @JsonPropertyOrder(Array("id", "name", "parent"))
 private[spark] class RDDOperationScope(
     val name: String,
-    val parent: Option[RDDOperationScope] = None) {
+    val parent: Option[RDDOperationScope] = None) extends Serializable {
 
   val id: Int = RDDOperationScope.nextScopeId()
 
