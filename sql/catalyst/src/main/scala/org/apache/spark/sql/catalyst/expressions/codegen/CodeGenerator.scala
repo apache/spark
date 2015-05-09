@@ -660,6 +660,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case FloatType => "Float"
     case BooleanType => "Boolean"
     case StringType => "org.apache.spark.sql.types.UTF8String"
+    case DateType => "Int"
   }
 
   protected def defaultPrimitive(dt: DataType) = dt match {

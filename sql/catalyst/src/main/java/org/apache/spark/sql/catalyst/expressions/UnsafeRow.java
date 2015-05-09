@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import org.apache.spark.sql.types.DateUtils;
 import scala.collection.Map;
 import scala.collection.Seq;
 import scala.collection.mutable.ArraySeq;
@@ -215,6 +216,12 @@ public final class UnsafeRow implements MutableRow {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
     PlatformDependent.UNSAFE.putFloat(baseObject, getFieldOffset(ordinal), value);
+  }
+
+
+  @Override
+  public void setDate(int ordinal, Date value) {
+    setInt(ordinal, DateUtils.fromJavaDate(value));
   }
 
   @Override

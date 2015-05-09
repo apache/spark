@@ -313,7 +313,16 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     values(i).asInstanceOf[MutableByte].value
   }
 
+  override def setDate(ordinal: Int, value: java.sql.Date): Unit = {
+    setInt(ordinal, DateUtils.fromJavaDate(value))
+  }
+
+  override def getDate(i: Int): java.sql.Date = {
+    DateUtils.toJavaDate(values(i).asInstanceOf[MutableInt].value)
+  }
+
   override def getAs[T](i: Int): T = {
     values(i).boxed.asInstanceOf[T]
   }
+
 }

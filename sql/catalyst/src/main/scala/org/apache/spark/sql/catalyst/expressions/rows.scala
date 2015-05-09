@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.{UTF8String, DataType, StructType, AtomicType}
+import org.apache.spark.sql.types._
 
 /**
  * An extended interface to [[Row]] that allows the values for each column to be updated.  Setting
@@ -36,7 +36,8 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
-  // TODO(davies): add setDate() and setDecimal()
+  def setDate(ordinal:Int, value: java.sql.Date)
+  // TODO(davies): add setDecimal()
 }
 
 /**
@@ -121,7 +122,7 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
     }
   }
 
-  // TODO(davies): add getDate and getDecimal
+  // TODO(davies): add getDecimal
 
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {
@@ -199,6 +200,9 @@ class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
   override def setLong(ordinal: Int, value: Long): Unit = { values(ordinal) = value }
   override def setString(ordinal: Int, value: String) { values(ordinal) = UTF8String(value)}
   override def setNullAt(i: Int): Unit = { values(i) = null }
+  override def setDate(ordinal:Int, value: java.sql.Date): Unit = {
+    values(ordinal) = DateUtils.fromJavaDate(value)
+  }
 
   override def setShort(ordinal: Int, value: Short): Unit = { values(ordinal) = value }
 
