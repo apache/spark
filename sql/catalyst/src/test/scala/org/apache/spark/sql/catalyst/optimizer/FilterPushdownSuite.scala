@@ -542,9 +542,10 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery)
   }
 
-  test("push down project") {
+  test("push down project past sort") {
     val x = testRelation.subquery('x)
 
+    // push down valid
     val originalQuery = {
       x.select('a, 'b)
        .sortBy(SortOrder('a, Ascending))
@@ -557,5 +558,21 @@ class FilterPushdownSuite extends PlanTest {
        .sortBy(SortOrder('a, Ascending)).analyze
 
     comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
+
+    // push down invalid
+    val originalQuery1 = {
+      x.select('a, 'b)
+        .sortBy(SortOrder('a, Ascending))
+        .select('b)
+    }
+
+    val optimized1 = Optimize.execute(originalQuery1.analyze)
+    val correctAnswer1 =
+      x.select('a, 'b)
+        .sortBy(SortOrder('a, Ascending))
+        .select('b).analyze
+
+    comparePlans(optimized1, analysis.EliminateSubQueries(correctAnswer1))
+
   }
 }
