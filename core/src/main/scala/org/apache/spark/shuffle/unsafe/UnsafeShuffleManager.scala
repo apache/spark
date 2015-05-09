@@ -92,7 +92,7 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
         // TODO: do we need to do anything to register the shuffle here?
         new UnsafeShuffleWriter(
           env.blockManager,
-          shuffleBlockResolver.asInstanceOf[IndexShuffleBlockManager],
+          shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver],
           context.taskMemoryManager(),
           env.shuffleMemoryManager,
           unsafeShuffleHandle,

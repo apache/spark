@@ -41,7 +41,7 @@ import static org.mockito.Mockito.*;
 
 import org.apache.spark.*;
 import org.apache.spark.serializer.Serializer;
-import org.apache.spark.shuffle.IndexShuffleBlockManager;
+import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.serializer.SerializerInstance;
@@ -67,7 +67,7 @@ public class UnsafeShuffleWriterSuite {
 
   @Mock(answer = RETURNS_SMART_NULLS) ShuffleMemoryManager shuffleMemoryManager;
   @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
-  @Mock(answer = RETURNS_SMART_NULLS) IndexShuffleBlockManager shuffleBlockManager;
+  @Mock(answer = RETURNS_SMART_NULLS) IndexShuffleBlockResolver shuffleBlockResolver;
   @Mock(answer = RETURNS_SMART_NULLS) DiskBlockManager diskBlockManager;
   @Mock(answer = RETURNS_SMART_NULLS) TaskContext taskContext;
   @Mock(answer = RETURNS_SMART_NULLS) ShuffleDependency<Object, Object, Object> shuffleDep;
@@ -124,14 +124,14 @@ public class UnsafeShuffleWriterSuite {
     when(blockManager.wrapForCompression(any(BlockId.class), any(InputStream.class)))
       .then(returnsSecondArg());
 
-    when(shuffleBlockManager.getDataFile(anyInt(), anyInt())).thenReturn(mergedOutputFile);
+    when(shuffleBlockResolver.getDataFile(anyInt(), anyInt())).thenReturn(mergedOutputFile);
     doAnswer(new Answer<Void>() {
       @Override
       public Void answer(InvocationOnMock invocationOnMock) throws Throwable {
         partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
         return null;
       }
-    }).when(shuffleBlockManager).writeIndexFile(anyInt(), anyInt(), any(long[].class));
+    }).when(shuffleBlockResolver).writeIndexFile(anyInt(), anyInt(), any(long[].class));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(
       new Answer<Tuple2<TempLocalBlockId, File>>() {
@@ -157,7 +157,7 @@ public class UnsafeShuffleWriterSuite {
     conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
     return new UnsafeShuffleWriter<Object, Object>(
       blockManager,
-      shuffleBlockManager,
+      shuffleBlockResolver,
       taskMemoryManager,
       shuffleMemoryManager,
       new UnsafeShuffleHandle<Object, Object>(0, 1, shuffleDep),

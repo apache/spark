@@ -44,7 +44,7 @@ import org.apache.spark.scheduler.MapStatus$;
 import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
-import org.apache.spark.shuffle.IndexShuffleBlockManager;
+import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.BlockManager;
@@ -59,7 +59,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private static final ClassTag<Object> OBJECT_CLASS_TAG = ClassTag$.MODULE$.Object();
 
   private final BlockManager blockManager;
-  private final IndexShuffleBlockManager shuffleBlockManager;
+  private final IndexShuffleBlockResolver shuffleBlockResolver;
   private final TaskMemoryManager memoryManager;
   private final ShuffleMemoryManager shuffleMemoryManager;
   private final SerializerInstance serializer;
@@ -87,7 +87,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   public UnsafeShuffleWriter(
       BlockManager blockManager,
-      IndexShuffleBlockManager shuffleBlockManager,
+      IndexShuffleBlockResolver shuffleBlockResolver,
       TaskMemoryManager memoryManager,
       ShuffleMemoryManager shuffleMemoryManager,
       UnsafeShuffleHandle<K, V> handle,
@@ -95,7 +95,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       TaskContext taskContext,
       SparkConf sparkConf) {
     this.blockManager = blockManager;
-    this.shuffleBlockManager = shuffleBlockManager;
+    this.shuffleBlockResolver = shuffleBlockResolver;
     this.memoryManager = memoryManager;
     this.shuffleMemoryManager = shuffleMemoryManager;
     this.mapId = mapId;
@@ -162,7 +162,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
     }
-    shuffleBlockManager.writeIndexFile(shuffleId, mapId, partitionLengths);
+    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
   }
 
@@ -192,7 +192,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   }
 
   private long[] mergeSpills(SpillInfo[] spills) throws IOException {
-    final File outputFile = shuffleBlockManager.getDataFile(shuffleId, mapId);
+    final File outputFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
     try {
       if (spills.length == 0) {
         new FileOutputStream(outputFile).close(); // Create an empty file
@@ -323,7 +323,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           return Option.apply(mapStatus);
         } else {
           // The map task failed, so delete our output data.
-          shuffleBlockManager.removeDataByMap(shuffleId, mapId);
+          shuffleBlockResolver.removeDataByMap(shuffleId, mapId);
           return Option.apply(null);
         }
       }
