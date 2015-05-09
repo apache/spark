@@ -577,7 +577,7 @@ object ApplicationMaster extends Logging {
       throw new SparkException(
         "ApplicationMaster is not initialized! This might indicate that " +
         "SparkContext is running in yarn-cluster mode, but has not been deployed " +
-        "properly. Deployment is currently supported using spark-submit.sh.")
+        "properly. Deployment is currently supported using spark-submit.")
     }
     master.sparkContextInitialized(sc)
   }
