@@ -269,8 +269,10 @@ private[sql] case class ResolvedDataSource(provider: Class[_], relation: BaseRel
  */
 private[sql] case class DescribeCommand(
     table: LogicalPlan,
-    isExtended: Boolean) extends Command {
-  override val output = Seq(
+    isExtended: Boolean) extends LogicalPlan with Command {
+
+  override def children: Seq[LogicalPlan] = Seq.empty
+  override val output: Seq[Attribute] = Seq(
     // Column names are based on Hive.
     AttributeReference("col_name", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "name of the column").build())(),
@@ -292,7 +294,11 @@ private[sql] case class CreateTableUsing(
     temporary: Boolean,
     options: Map[String, String],
     allowExisting: Boolean,
-    managedIfNoPath: Boolean) extends Command
+    managedIfNoPath: Boolean) extends LogicalPlan with Command {
+
+  override def output: Seq[Attribute] = Seq.empty
+  override def children: Seq[LogicalPlan] = Seq.empty
+}
 
 /**
  * A node used to support CTAS statements and saveAsTable for the data source API.
@@ -318,7 +324,7 @@ private[sql] case class CreateTempTableUsing(
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
-  def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
     sqlContext.registerDataFrameAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
@@ -333,7 +339,7 @@ private[sql] case class CreateTempTableUsingAsSelect(
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
-  def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val df = DataFrame(sqlContext, query)
     val resolved = ResolvedDataSource(sqlContext, provider, mode, options, df)
     sqlContext.registerDataFrameAsTable(

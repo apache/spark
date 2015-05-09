@@ -300,6 +300,8 @@ abstract class HiveComparisonTest
 
             val hiveQueries = queryList.map(new TestHive.QueryExecution(_))
             // Make sure we can at least parse everything before attempting hive execution.
+            // Note this must only look at the logical plan as we might not be able to analyze if
+            // other DDL has not been executed yet.
             hiveQueries.foreach(_.logical)
             val computedResults = (queryList.zipWithIndex, hiveQueries, hiveCacheFiles).zipped.map {
               case ((queryString, i), hiveQuery, cachedAnswerFile)=>

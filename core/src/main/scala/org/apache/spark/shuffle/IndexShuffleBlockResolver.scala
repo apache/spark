@@ -18,7 +18,6 @@
 package org.apache.spark.shuffle
 
 import java.io._
-import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
 
@@ -28,7 +27,7 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
-import IndexShuffleBlockManager.NOOP_REDUCE_ID
+import IndexShuffleBlockResolver.NOOP_REDUCE_ID
 
 /**
  * Create and maintain the shuffle blocks' mapping between logic block and physical file location.
@@ -40,9 +39,8 @@ import IndexShuffleBlockManager.NOOP_REDUCE_ID
  *
  */
 // Note: Changes to the format in this file should be kept in sync with
-// org.apache.spark.network.shuffle.StandaloneShuffleBlockManager#getSortBasedShuffleBlockData().
-private[spark]
-class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockResolver {
+// org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getSortBasedShuffleBlockData().
+private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver {
 
   private lazy val blockManager = SparkEnv.get.blockManager
 
@@ -115,7 +113,7 @@ class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockResolver {
   override def stop(): Unit = {}
 }
 
-private[spark] object IndexShuffleBlockManager {
+private[spark] object IndexShuffleBlockResolver {
   // No-op reduce ID used in interactions with disk store and BlockObjectWriter.
   // The disk store currently expects puts to relate to a (map, reduce) pair, but in the sort
   // shuffle outputs for several reduces are glommed into a single file.

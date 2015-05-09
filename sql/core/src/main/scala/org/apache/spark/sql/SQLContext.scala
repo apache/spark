@@ -70,7 +70,7 @@ import org.apache.spark.{Partition, SparkContext}
  *   spark-sql> SELECT * FROM src LIMIT 1;
  *
  *-- Exception will be thrown and switch to dialect
- *-- "sql" (for SQLContext) or 
+ *-- "sql" (for SQLContext) or
  *-- "hiveql" (for HiveContext)
  * }}}
  */
@@ -107,7 +107,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * @return Spark SQL configuration
    */
-  protected[sql] def conf = tlSession.get().conf
+  protected[sql] def conf = currentSession().conf
 
   /**
    * Set Spark SQL configuration properties.
@@ -148,7 +148,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   // TODO how to handle the temp table per user session?
   @transient
-  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(true)
+  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
 
   // TODO how to handle the temp function per user session?
   @transient
@@ -156,7 +156,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = true) {
+    new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         ExtractPythonUdfs ::
         sources.PreInsertCastAndRename ::
@@ -1197,13 +1197,17 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |${stringOrError(executedPlan)}
       """.stripMargin.trim
 
-    override def toString: String =
+    override def toString: String = {
+      def output =
+        analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
+
       // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
       // however, the `toRdd` will cause the real execution, which is not what we want.
       // We need to think about how to avoid the side effect.
       s"""== Parsed Logical Plan ==
          |${stringOrError(logical)}
          |== Analyzed Logical Plan ==
+         |${stringOrError(output)}
          |${stringOrError(analyzed)}
          |== Optimized Logical Plan ==
          |${stringOrError(optimizedPlan)}
@@ -1212,6 +1216,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
          |== RDD ==
       """.stripMargin.trim
+    }
   }
 
   /**
