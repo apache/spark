@@ -19,13 +19,15 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.{SparkEnv, HashPartitioner, RangePartitioner, SparkConf}
+import org.apache.spark.{SparkEnv, HashPartitioner, RangePartitioner}
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.MutablePair
 
 object Exchange {
@@ -77,9 +79,37 @@ case class Exchange(
     }
   }
 
-  override def execute(): RDD[Row] = attachTree(this , "execute") {
-    lazy val sparkConf = child.sqlContext.sparkContext.getConf
+  @transient private lazy val sparkConf = child.sqlContext.sparkContext.getConf
 
+  def serializer(
+      keySchema: Array[DataType],
+      valueSchema: Array[DataType],
+      hasKeyOrdering: Boolean,
+      numPartitions: Int): Serializer = {
+    // It is true when there is no field that needs to be write out.
+    // For now, we will not use SparkSqlSerializer2 when noField is true.
+    val noField =
+      (keySchema == null || keySchema.length == 0) &&
+      (valueSchema == null || valueSchema.length == 0)
+
+    val useSqlSerializer2 =
+        child.sqlContext.conf.useSqlSerializer2 &&   // SparkSqlSerializer2 is enabled.
+        SparkSqlSerializer2.support(keySchema) &&    // The schema of key is supported.
+        SparkSqlSerializer2.support(valueSchema) &&  // The schema of value is supported.
+        !noField
+
+    val serializer = if (useSqlSerializer2) {
+      logInfo("Using SparkSqlSerializer2.")
+      new SparkSqlSerializer2(keySchema, valueSchema, hasKeyOrdering)
+    } else {
+      logInfo("Using SparkSqlSerializer.")
+      new SparkSqlSerializer(sparkConf)
+    }
+
+    serializer
+  }
+
+  protected override def doExecute(): RDD[Row] = attachTree(this , "execute") {
     newPartitioning match {
       case HashPartitioning(expressions, numPartitions) =>
         // TODO: Eliminate redundant expressions in grouping key and value.
@@ -111,7 +141,11 @@ case class Exchange(
           } else {
             new ShuffledRDD[Row, Row, Row](rdd, part)
           }
-        shuffled.setSerializer(new SparkSqlSerializer(sparkConf))
+        val keySchema = expressions.map(_.dataType).toArray
+        val valueSchema = child.output.map(_.dataType).toArray
+        shuffled.setSerializer(
+          serializer(keySchema, valueSchema, newOrdering.nonEmpty, numPartitions))
+
         shuffled.map(_._2)
 
       case RangePartitioning(sortingExpressions, numPartitions) =>
@@ -134,7 +168,10 @@ case class Exchange(
           } else {
             new ShuffledRDD[Row, Null, Null](rdd, part)
           }
-        shuffled.setSerializer(new SparkSqlSerializer(sparkConf))
+        val keySchema = child.output.map(_.dataType).toArray
+        shuffled.setSerializer(
+          serializer(keySchema, null, newOrdering.nonEmpty, numPartitions))
+
         shuffled.map(_._1)
 
       case SinglePartition =>
@@ -152,7 +189,8 @@ case class Exchange(
         }
         val partitioner = new HashPartitioner(1)
         val shuffled = new ShuffledRDD[Null, Row, Row](rdd, partitioner)
-        shuffled.setSerializer(new SparkSqlSerializer(sparkConf))
+        val valueSchema = child.output.map(_.dataType).toArray
+        shuffled.setSerializer(serializer(null, valueSchema, false, 1))
         shuffled.map(_._2)
 
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")

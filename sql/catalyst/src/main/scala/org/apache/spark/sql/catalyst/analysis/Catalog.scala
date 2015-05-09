@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.sql.catalyst.EmptyConf
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
 /**
@@ -27,12 +29,14 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
  */
 class NoSuchTableException extends Exception
 
+class NoSuchDatabaseException extends Exception
+
 /**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
  */
 trait Catalog {
 
-  def caseSensitive: Boolean
+  val conf: CatalystConf
 
   def tableExists(tableIdentifier: Seq[String]): Boolean
 
@@ -55,10 +59,10 @@ trait Catalog {
   def unregisterAllTables(): Unit
 
   protected def processTableIdentifier(tableIdentifier: Seq[String]): Seq[String] = {
-    if (!caseSensitive) {
-      tableIdentifier.map(_.toLowerCase)
-    } else {
+    if (conf.caseSensitiveAnalysis) {
       tableIdentifier
+    } else {
+      tableIdentifier.map(_.toLowerCase)
     }
   }
 
@@ -76,7 +80,7 @@ trait Catalog {
   }
 }
 
-class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
+class SimpleCatalog(val conf: CatalystConf) extends Catalog {
   val tables = new mutable.HashMap[String, LogicalPlan]()
 
   override def registerTable(
@@ -162,10 +166,10 @@ trait OverrideCatalog extends Catalog {
   }
 
   abstract override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
-    val dbName = if (!caseSensitive) {
-      if (databaseName.isDefined) Some(databaseName.get.toLowerCase) else None
-    } else {
+    val dbName = if (conf.caseSensitiveAnalysis) {
       databaseName
+    } else {
+      if (databaseName.isDefined) Some(databaseName.get.toLowerCase) else None
     }
 
     val temporaryTables = overrides.filter {
@@ -205,7 +209,7 @@ trait OverrideCatalog extends Catalog {
  */
 object EmptyCatalog extends Catalog {
 
-  override val caseSensitive: Boolean = true
+  override val conf: CatalystConf = EmptyConf
 
   override def tableExists(tableIdentifier: Seq[String]): Boolean = {
     throw new UnsupportedOperationException

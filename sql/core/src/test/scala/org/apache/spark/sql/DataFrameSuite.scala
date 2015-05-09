@@ -24,7 +24,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, TestSQLContext}
 import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
 import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.sql.test.TestSQLContext.sql
 
 
 class DataFrameSuite extends QueryTest {
@@ -109,15 +108,6 @@ class DataFrameSuite extends QueryTest {
     assert(testData.head(2).head.schema === testData.schema)
   }
 
-  test("self join") {
-    val df1 = testData.select(testData("key")).as('df1)
-    val df2 = testData.select(testData("key")).as('df2)
-
-    checkAnswer(
-      df1.join(df2, $"df1.key" === $"df2.key"),
-      sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key").collect().toSeq)
-  }
-
   test("simple explode") {
     val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
 
@@ -125,17 +115,6 @@ class DataFrameSuite extends QueryTest {
       df.explode("words", "word") { word: String => word.split(" ").toSeq }.select('word),
       Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
     )
-  }
-
-  test("self join with aliases") {
-    val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
-    checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
-
-    checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").count(),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
   test("explode") {
@@ -470,7 +449,31 @@ class DataFrameSuite extends QueryTest {
       testData.collect().map { case Row(key: Int, value: String) =>
         Row(key, value, key + 1)
       }.toSeq)
-    assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
+    assert(df.schema.map(_.name) === Seq("key", "value", "newCol"))
+  }
+
+  test("replace column using withColumn") {
+    val df2 = TestSQLContext.sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df3 = df2.withColumn("x", df2("x") + 1)
+    checkAnswer(
+      df3.select("x"),
+      Row(2) :: Row(3) :: Row(4) :: Nil)
+  }
+
+  test("drop column using drop") {
+    val df = testData.drop("key")
+    checkAnswer(
+      df,
+      testData.collect().map(x => Row(x.getString(1))).toSeq)
+    assert(df.schema.map(_.name) === Seq("value"))
+  }
+
+  test("drop unknown column (no-op)") {
+    val df = testData.drop("random")
+    checkAnswer(
+      df,
+      testData.collect().toSeq)
+    assert(df.schema.map(_.name) === Seq("key","value"))
   }
 
   test("withColumnRenamed") {
@@ -481,7 +484,24 @@ class DataFrameSuite extends QueryTest {
       testData.collect().map { case Row(key: Int, value: String) =>
         Row(key, value, key + 1)
       }.toSeq)
-    assert(df.schema.map(_.name).toSeq === Seq("key", "valueRenamed", "newCol"))
+    assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
+  }
+
+  test("randomSplit") {
+    val n = 600
+    val data = TestSQLContext.sparkContext.parallelize(1 to n, 2).toDF("id")
+    for (seed <- 1 to 5) {
+      val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
+      assert(splits.length == 3, "wrong number of splits")
+
+      assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList ==
+        data.collect().toList, "incomplete or wrong split")
+
+      val s = splits.map(_.count())
+      assert(math.abs(s(0) - 100) < 50) // std =  9.13
+      assert(math.abs(s(1) - 200) < 50) // std = 11.55
+      assert(math.abs(s(2) - 300) < 50) // std = 12.25
+    }
   }
 
   test("describe") {
@@ -539,6 +559,25 @@ class DataFrameSuite extends QueryTest {
     testData.select($"*").show(1000)
   }
 
+  test("SPARK-7319 showString") {
+    val expectedAnswer = """+---+-----+
+                           ||key|value|
+                           |+---+-----+
+                           ||  1|    1|
+                           |+---+-----+
+                           |""".stripMargin
+    assert(testData.select($"*").showString(1) === expectedAnswer)
+  }
+
+  test("SPARK-7327 show with empty dataFrame") {
+    val expectedAnswer = """+---+-----+
+                           ||key|value|
+                           |+---+-----+
+                           |+---+-----+
+                           |""".stripMargin
+    assert(testData.select($"*").filter($"key" < 0).showString(1) === expectedAnswer)
+  }
+
   test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
     val rowRDD = TestSQLContext.sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
     val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
@@ -553,5 +592,11 @@ class DataFrameSuite extends QueryTest {
       decimalData.agg(avg('a)),
       Row(new java.math.BigDecimal(2.0)))
     TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+  }
+
+  test("SPARK-7133: Implement struct, array, and map field accessor") {
+    assert(complexData.filter(complexData("a")(0) === 2).count() == 1)
+    assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
+    assert(complexData.filter(complexData("s")("key") === 1).count() == 1)
   }
 }

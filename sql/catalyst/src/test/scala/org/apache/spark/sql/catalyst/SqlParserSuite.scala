@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.Command
 import org.scalatest.FunSuite
 
-private[sql] case class TestCommand(cmd: String) extends Command
+private[sql] case class TestCommand(cmd: String) extends LogicalPlan with Command {
+  override def output: Seq[Attribute] = Seq.empty
+  override def children: Seq[LogicalPlan] = Seq.empty
+}
 
 private[sql] class SuperLongKeywordTestParser extends AbstractSparkSQLParser {
   protected val EXECUTE   = Keyword("THISISASUPERLONGKEYWORDTEST")
@@ -49,13 +53,14 @@ class SqlParserSuite extends FunSuite {
 
   test("test long keyword") {
     val parser = new SuperLongKeywordTestParser
-    assert(TestCommand("NotRealCommand") === parser("ThisIsASuperLongKeyWordTest NotRealCommand"))
+    assert(TestCommand("NotRealCommand") ===
+      parser.parse("ThisIsASuperLongKeyWordTest NotRealCommand"))
   }
 
   test("test case insensitive") {
     val parser = new CaseInsensitiveTestParser
-    assert(TestCommand("NotRealCommand") === parser("EXECUTE NotRealCommand"))
-    assert(TestCommand("NotRealCommand") === parser("execute NotRealCommand"))
-    assert(TestCommand("NotRealCommand") === parser("exEcute NotRealCommand"))
+    assert(TestCommand("NotRealCommand") === parser.parse("EXECUTE NotRealCommand"))
+    assert(TestCommand("NotRealCommand") === parser.parse("execute NotRealCommand"))
+    assert(TestCommand("NotRealCommand") === parser.parse("exEcute NotRealCommand"))
   }
 }

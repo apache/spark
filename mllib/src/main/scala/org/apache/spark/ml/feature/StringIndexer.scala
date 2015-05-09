@@ -23,10 +23,9 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{NumericType, StringType, StructType}
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
@@ -35,14 +34,17 @@ import org.apache.spark.util.collection.OpenHashMap
 private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol {
 
   /** Validates and transforms the input schema. */
-  protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
-    SchemaUtils.checkColumnType(schema, map(inputCol), StringType)
+  protected def validateAndTransformSchema(schema: StructType): StructType = {
+    val inputColName = $(inputCol)
+    val inputDataType = schema(inputColName).dataType
+    require(inputDataType == StringType || inputDataType.isInstanceOf[NumericType],
+      s"The input column $inputColName must be either string type or numeric type, " +
+        s"but got $inputDataType.")
     val inputFields = schema.fields
-    val outputColName = map(outputCol)
+    val outputColName = $(outputCol)
     require(inputFields.forall(_.name != outputColName),
       s"Output column $outputColName already exists.")
-    val attr = NominalAttribute.defaultAttr.withName(map(outputCol))
+    val attr = NominalAttribute.defaultAttr.withName($(outputCol))
     val outputFields = inputFields :+ attr.toStructField()
     StructType(outputFields)
   }
@@ -51,6 +53,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
 /**
  * :: AlphaComponent ::
  * A label indexer that maps a string column of labels to an ML column of label indices.
+ * If the input column is numeric, we cast it to string and index the string values.
  * The indices are in [0, numLabels), ordered by label frequencies.
  * So the most frequent label gets index 0.
  */
@@ -65,17 +68,16 @@ class StringIndexer extends Estimator[StringIndexerModel] with StringIndexerBase
 
   // TODO: handle unseen labels
 
-  override def fit(dataset: DataFrame, paramMap: ParamMap): StringIndexerModel = {
-    val map = extractParamMap(paramMap)
-    val counts = dataset.select(map(inputCol)).map(_.getString(0)).countByValue()
+  override def fit(dataset: DataFrame): StringIndexerModel = {
+    val counts = dataset.select(col($(inputCol)).cast(StringType))
+      .map(_.getString(0))
+      .countByValue()
     val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
-    val model = new StringIndexerModel(this, map, labels)
-    Params.inheritValues(map, this, model)
-    model
+    copyValues(new StringIndexerModel(this, labels))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap)
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema)
   }
 }
 
@@ -86,7 +88,6 @@ class StringIndexer extends Estimator[StringIndexerModel] with StringIndexerBase
 @AlphaComponent
 class StringIndexerModel private[ml] (
     override val parent: StringIndexer,
-    override val fittingParamMap: ParamMap,
     labels: Array[String]) extends Model[StringIndexerModel] with StringIndexerBase {
 
   private val labelToIndex: OpenHashMap[String, Double] = {
@@ -106,8 +107,7 @@ class StringIndexerModel private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    val map = extractParamMap(paramMap)
+  override def transform(dataset: DataFrame): DataFrame = {
     val indexer = udf { label: String =>
       if (labelToIndex.contains(label)) {
         labelToIndex(label)
@@ -116,13 +116,14 @@ class StringIndexerModel private[ml] (
         throw new SparkException(s"Unseen label: $label.")
       }
     }
-    val outputColName = map(outputCol)
+    val outputColName = $(outputCol)
     val metadata = NominalAttribute.defaultAttr
       .withName(outputColName).withValues(labels).toMetadata()
-    dataset.select(col("*"), indexer(dataset(map(inputCol))).as(outputColName, metadata))
+    dataset.select(col("*"),
+      indexer(dataset($(inputCol)).cast(StringType)).as(outputColName, metadata))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap)
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema)
   }
 }

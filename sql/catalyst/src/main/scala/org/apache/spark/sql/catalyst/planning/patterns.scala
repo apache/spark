@@ -92,7 +92,7 @@ object PhysicalOperation extends PredicateHelper {
     }
 
   def collectAliases(fields: Seq[Expression]): Map[Attribute, Expression] = fields.collect {
-    case a @ Alias(child, _) => a.toAttribute.asInstanceOf[Attribute] -> child
+    case a @ Alias(child, _) => a.toAttribute -> child
   }.toMap
 
   def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
@@ -160,7 +160,7 @@ object PartialAggregation {
             // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
             // (Should we just turn `GetField` into a `NamedExpression`?)
             namedGroupingExpressions
-              .get(e.transform { case Alias(g: GetField, _) => g })
+              .get(e.transform { case Alias(g: ExtractValue, _) => g })
               .map(_.toAttribute)
               .getOrElse(e)
         }).asInstanceOf[Seq[NamedExpression]]

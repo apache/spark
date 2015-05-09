@@ -36,7 +36,7 @@ import io.netty.util.{Timeout, TimerTask, HashedWheelTimer}
 
 import org.apache.spark._
 import org.apache.spark.network.sasl.{SparkSaslClient, SparkSaslServer}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -79,7 +79,7 @@ private[nio] class ConnectionManager(
 
   private val selector = SelectorProvider.provider.openSelector()
   private val ackTimeoutMonitor =
-    new HashedWheelTimer(Utils.namedThreadFactory("AckTimeoutMonitor"))
+    new HashedWheelTimer(ThreadUtils.namedThreadFactory("AckTimeoutMonitor"))
 
   private val ackTimeout =
     conf.getTimeAsSeconds("spark.core.connection.ack.wait.timeout",
@@ -102,7 +102,7 @@ private[nio] class ConnectionManager(
     handlerThreadCount,
     conf.getInt("spark.core.connection.handler.threads.keepalive", 60), TimeUnit.SECONDS,
     new LinkedBlockingDeque[Runnable](),
-    Utils.namedThreadFactory("handle-message-executor")) {
+    ThreadUtils.namedThreadFactory("handle-message-executor")) {
 
     override def afterExecute(r: Runnable, t: Throwable): Unit = {
       super.afterExecute(r, t)
@@ -117,7 +117,7 @@ private[nio] class ConnectionManager(
     ioThreadCount,
     conf.getInt("spark.core.connection.io.threads.keepalive", 60), TimeUnit.SECONDS,
     new LinkedBlockingDeque[Runnable](),
-    Utils.namedThreadFactory("handle-read-write-executor")) {
+    ThreadUtils.namedThreadFactory("handle-read-write-executor")) {
 
     override def afterExecute(r: Runnable, t: Throwable): Unit = {
       super.afterExecute(r, t)
@@ -134,7 +134,7 @@ private[nio] class ConnectionManager(
     connectThreadCount,
     conf.getInt("spark.core.connection.connect.threads.keepalive", 60), TimeUnit.SECONDS,
     new LinkedBlockingDeque[Runnable](),
-    Utils.namedThreadFactory("handle-connect-executor")) {
+    ThreadUtils.namedThreadFactory("handle-connect-executor")) {
 
     override def afterExecute(r: Runnable, t: Throwable): Unit = {
       super.afterExecute(r, t)
@@ -160,7 +160,7 @@ private[nio] class ConnectionManager(
   private val registerRequests = new SynchronizedQueue[SendingConnection]
 
   implicit val futureExecContext = ExecutionContext.fromExecutor(
-    Utils.newDaemonCachedThreadPool("Connection manager future execution context"))
+    ThreadUtils.newDaemonCachedThreadPool("Connection manager future execution context"))
 
   @volatile
   private var onReceiveCallback: (BufferMessage, ConnectionManagerId) => Option[Message] = null
@@ -656,7 +656,7 @@ private[nio] class ConnectionManager(
         connection.synchronized {
           if (connection.sparkSaslServer == null) {
             logDebug("Creating sasl Server")
-            connection.sparkSaslServer = new SparkSaslServer(conf.getAppId, securityManager)
+            connection.sparkSaslServer = new SparkSaslServer(conf.getAppId, securityManager, false)
           }
         }
         replyToken = connection.sparkSaslServer.response(securityMsg.getToken)
@@ -800,7 +800,7 @@ private[nio] class ConnectionManager(
     if (!conn.isSaslComplete()) {
       conn.synchronized {
         if (conn.sparkSaslClient == null) {
-          conn.sparkSaslClient = new SparkSaslClient(conf.getAppId, securityManager)
+          conn.sparkSaslClient = new SparkSaslClient(conf.getAppId, securityManager, false)
           var firstResponse: Array[Byte] = null
           try {
             firstResponse = conn.sparkSaslClient.firstToken()

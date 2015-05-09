@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import scala.collection.JavaConversions.mapAsJavaMap
 import scala.concurrent.Await
-import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.duration.FiniteDuration
 
 import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
 import akka.pattern.ask
@@ -125,16 +125,6 @@ private[spark] object AkkaUtils extends Logging {
     (actorSystem, boundPort)
   }
 
-  /** Returns the default Spark timeout to use for Akka ask operations. */
-  def askTimeout(conf: SparkConf): FiniteDuration = {
-    Duration.create(conf.getLong("spark.akka.askTimeout", 30), "seconds")
-  }
-
-  /** Returns the default Spark timeout to use for Akka remote actor lookup. */
-  def lookupTimeout(conf: SparkConf): FiniteDuration = {
-    Duration.create(conf.getLong("spark.akka.lookupTimeout", 30), "seconds")
-  }
-
   private val AKKA_MAX_FRAME_SIZE_IN_MB = Int.MaxValue / 1024 / 1024
 
   /** Returns the configured max frame size for Akka messages in bytes. */
@@ -149,16 +139,6 @@ private[spark] object AkkaUtils extends Logging {
 
   /** Space reserved for extra data in an Akka message besides serialized task or task result. */
   val reservedSizeBytes = 200 * 1024
-
-  /** Returns the configured number of times to retry connecting */
-  def numRetries(conf: SparkConf): Int = {
-    conf.getInt("spark.akka.num.retries", 3)
-  }
-
-  /** Returns the configured number of milliseconds to wait on each retry */
-  def retryWaitMs(conf: SparkConf): Int = {
-    conf.getInt("spark.akka.retry.wait", 3000)
-  }
 
   /**
    * Send a message to the given actor and get its result within a default timeout, or
@@ -203,7 +183,9 @@ private[spark] object AkkaUtils extends Logging {
           lastException = e
           logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
       }
-      Thread.sleep(retryInterval)
+      if (attempts < maxAttempts) {
+        Thread.sleep(retryInterval)
+      }
     }
 
     throw new SparkException(
@@ -216,7 +198,7 @@ private[spark] object AkkaUtils extends Logging {
     val driverPort: Int = conf.getInt("spark.driver.port", 7077)
     Utils.checkHost(driverHost, "Expected hostname")
     val url = address(protocol(actorSystem), driverActorSystemName, driverHost, driverPort, name)
-    val timeout = AkkaUtils.lookupTimeout(conf)
+    val timeout = RpcUtils.lookupTimeout(conf)
     logInfo(s"Connecting to $name: $url")
     Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
   }
@@ -230,7 +212,7 @@ private[spark] object AkkaUtils extends Logging {
     val executorActorSystemName = SparkEnv.executorActorSystemName
     Utils.checkHost(host, "Expected hostname")
     val url = address(protocol(actorSystem), executorActorSystemName, host, port, name)
-    val timeout = AkkaUtils.lookupTimeout(conf)
+    val timeout = RpcUtils.lookupTimeout(conf)
     logInfo(s"Connecting to $name: $url")
     Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
   }
