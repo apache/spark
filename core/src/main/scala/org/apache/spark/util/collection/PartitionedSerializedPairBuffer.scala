@@ -71,10 +71,10 @@ private[spark] class PartitionedSerializedPairBuffer[K, V](
     if (keyStart < 0) {
       throw new Exception(s"Can't grow buffer beyond ${1 << 31} bytes")
     }
-    kvSerializationStream.writeObject[Any](key)
+    kvSerializationStream.writeKey[Any](key)
     kvSerializationStream.flush()
     val valueStart = kvBuffer.size
-    kvSerializationStream.writeObject[Any](value)
+    kvSerializationStream.writeValue[Any](value)
     kvSerializationStream.flush()
     val valueEnd = kvBuffer.size
 

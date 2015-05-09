@@ -223,6 +223,35 @@ class HasInputCol(Params):
         return self.getOrDefault(self.inputCol)
 
 
+class HasInputCols(Params):
+    """
+    Mixin for param inputCols: input column names.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    inputCols = Param(Params._dummy(), "inputCols", "input column names")
+
+    def __init__(self):
+        super(HasInputCols, self).__init__()
+        #: param for input column names
+        self.inputCols = Param(self, "inputCols", "input column names")
+        if None is not None:
+            self._setDefault(inputCols=None)
+
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        self.paramMap[self.inputCols] = value
+        return self
+
+    def getInputCols(self):
+        """
+        Gets the value of inputCols or its default value.
+        """
+        return self.getOrDefault(self.inputCols)
+
+
 class HasOutputCol(Params):
     """
     Mixin for param outputCol: output column name.
@@ -279,3 +308,121 @@ class HasNumFeatures(Params):
         Gets the value of numFeatures or its default value.
         """
         return self.getOrDefault(self.numFeatures)
+
+
+class HasCheckpointInterval(Params):
+    """
+    Mixin for param checkpointInterval: checkpoint interval (>= 1).
+    """
+
+    # a placeholder to make it appear in the generated doc
+    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "checkpoint interval (>= 1)")
+
+    def __init__(self):
+        super(HasCheckpointInterval, self).__init__()
+        #: param for checkpoint interval (>= 1)
+        self.checkpointInterval = Param(self, "checkpointInterval", "checkpoint interval (>= 1)")
+        if None is not None:
+            self._setDefault(checkpointInterval=None)
+
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        self.paramMap[self.checkpointInterval] = value
+        return self
+
+    def getCheckpointInterval(self):
+        """
+        Gets the value of checkpointInterval or its default value.
+        """
+        return self.getOrDefault(self.checkpointInterval)
+
+
+class HasSeed(Params):
+    """
+    Mixin for param seed: random seed.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    seed = Param(Params._dummy(), "seed", "random seed")
+
+    def __init__(self):
+        super(HasSeed, self).__init__()
+        #: param for random seed
+        self.seed = Param(self, "seed", "random seed")
+        if None is not None:
+            self._setDefault(seed=None)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        self.paramMap[self.seed] = value
+        return self
+
+    def getSeed(self):
+        """
+        Gets the value of seed or its default value.
+        """
+        return self.getOrDefault(self.seed)
+
+
+class HasTol(Params):
+    """
+    Mixin for param tol: the convergence tolerance for iterative algorithms.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    tol = Param(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms")
+
+    def __init__(self):
+        super(HasTol, self).__init__()
+        #: param for the convergence tolerance for iterative algorithms
+        self.tol = Param(self, "tol", "the convergence tolerance for iterative algorithms")
+        if None is not None:
+            self._setDefault(tol=None)
+
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        self.paramMap[self.tol] = value
+        return self
+
+    def getTol(self):
+        """
+        Gets the value of tol or its default value.
+        """
+        return self.getOrDefault(self.tol)
+
+
+class HasStepSize(Params):
+    """
+    Mixin for param stepSize: Step size to be used for each iteration of optimization..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    stepSize = Param(Params._dummy(), "stepSize",
+                     "Step size to be used for each iteration of optimization.")
+
+    def __init__(self):
+        super(HasStepSize, self).__init__()
+        #: param for Step size to be used for each iteration of optimization.
+        self.stepSize = Param(self, "stepSize",
+                              "Step size to be used for each iteration of optimization.")
+        if None is not None:
+            self._setDefault(stepSize=None)
+
+    def setStepSize(self, value):
+        """
+        Sets the value of :py:attr:`stepSize`.
+        """
+        self.paramMap[self.stepSize] = value
+        return self
+
+    def getStepSize(self):
+        """
+        Gets the value of stepSize or its default value.
+        """
+        return self.getOrDefault(self.stepSize)

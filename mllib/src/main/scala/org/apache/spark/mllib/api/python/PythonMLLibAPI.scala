@@ -283,6 +283,24 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib IsotonicRegression.run()
+   */
+  def trainIsotonicRegressionModel(
+      data: JavaRDD[Vector],
+      isotonic: Boolean): JList[Object] = {
+    val isotonicRegressionAlg = new IsotonicRegression().setIsotonic(isotonic)
+    val input = data.rdd.map { x =>
+      (x(0), x(1), x(2))
+    }.persist(StorageLevel.MEMORY_AND_DISK)
+    try {
+      val model = isotonicRegressionAlg.run(input)
+      List[AnyRef](model.boundaryVector, model.predictionVector).asJava
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
+
+  /**
    * Java stub for Python mllib KMeans.run()
    */
   def trainKMeansModel(
@@ -474,6 +492,16 @@ private[python] class PythonMLLibAPI extends Serializable {
       withStd: Boolean,
       data: JavaRDD[Vector]): StandardScalerModel = {
     new StandardScaler(withMean, withStd).fit(data.rdd)
+  }
+
+  /**
+   * Java stub for ChiSqSelector.fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitChiSqSelector(numTopFeatures: Int, data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
+    new ChiSqSelector(numTopFeatures).fit(data.rdd)
   }
 
   /**
