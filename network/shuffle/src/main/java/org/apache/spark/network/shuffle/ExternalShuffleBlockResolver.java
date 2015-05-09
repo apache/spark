@@ -44,13 +44,13 @@ import org.apache.spark.network.util.TransportConf;
  * Manages converting shuffle BlockIds into physical segments of local files, from a process outside
  * of Executors. Each Executor must register its own configuration about where it stores its files
  * (local dirs) and how (shuffle manager). The logic for retrieval of individual files is replicated
- * from Spark's FileShuffleBlockManager and IndexShuffleBlockManager.
+ * from Spark's FileShuffleBlockResolver and IndexShuffleBlockResolver.
  *
  * Executors with shuffle file consolidation are not currently supported, as the index is stored in
- * the Executor's memory, unlike the IndexShuffleBlockManager.
+ * the Executor's memory, unlike the IndexShuffleBlockResolver.
  */
-public class ExternalShuffleBlockManager {
-  private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockManager.class);
+public class ExternalShuffleBlockResolver {
+  private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockResolver.class);
 
   // Map containing all registered executors' metadata.
   private final ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors;
@@ -60,7 +60,7 @@ public class ExternalShuffleBlockManager {
 
   private final TransportConf conf;
 
-  public ExternalShuffleBlockManager(TransportConf conf) {
+  public ExternalShuffleBlockResolver(TransportConf conf) {
     this(conf, Executors.newSingleThreadExecutor(
         // Add `spark` prefix because it will run in NM in Yarn mode.
         NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
@@ -68,7 +68,7 @@ public class ExternalShuffleBlockManager {
 
   // Allows tests to have more control over when directories are cleaned up.
   @VisibleForTesting
-  ExternalShuffleBlockManager(TransportConf conf, Executor directoryCleaner) {
+  ExternalShuffleBlockResolver(TransportConf conf, Executor directoryCleaner) {
     this.conf = conf;
     this.executors = Maps.newConcurrentMap();
     this.directoryCleaner = directoryCleaner;
@@ -168,7 +168,7 @@ public class ExternalShuffleBlockManager {
 
   /**
    * Hash-based shuffle data is simply stored as one file per block.
-   * This logic is from FileShuffleBlockManager.
+   * This logic is from FileShuffleBlockResolver.
    */
   // TODO: Support consolidated hash shuffle files
   private ManagedBuffer getHashBasedShuffleBlockData(ExecutorShuffleInfo executor, String blockId) {
@@ -178,7 +178,7 @@ public class ExternalShuffleBlockManager {
 
   /**
    * Sort-based shuffle data uses an index called "shuffle_ShuffleId_MapId_0.index" into a data file
-   * called "shuffle_ShuffleId_MapId_0.data". This logic is from IndexShuffleBlockManager,
+   * called "shuffle_ShuffleId_MapId_0.data". This logic is from IndexShuffleBlockResolver,
    * and the block id format is from ShuffleDataBlockId and ShuffleIndexBlockId.
    */
   private ManagedBuffer getSortBasedShuffleBlockData(

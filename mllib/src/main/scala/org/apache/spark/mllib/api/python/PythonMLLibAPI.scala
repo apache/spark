@@ -495,6 +495,16 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for ChiSqSelector.fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitChiSqSelector(numTopFeatures: Int, data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
+    new ChiSqSelector(numTopFeatures).fit(data.rdd)
+  }
+
+  /**
    * Java stub for IDF.fit(). This stub returns a
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on

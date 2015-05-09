@@ -15,28 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.joins
+package org.apache.spark.sql.catalyst
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{Attribute, JoinedRow}
-import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+private[spark] trait CatalystConf {
+  def caseSensitiveAnalysis: Boolean
+}
 
 /**
- * :: DeveloperApi ::
+ * A trivial conf that is empty.  Used for testing when all
+ * relations are already filled in and the analyser needs only to resolve attribute references.
  */
-@DeveloperApi
-case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNode {
-  override def output: Seq[Attribute] = left.output ++ right.output
-
-  protected override def doExecute(): RDD[Row] = {
-    val leftResults = left.execute().map(_.copy())
-    val rightResults = right.execute().map(_.copy())
-
-    leftResults.cartesian(rightResults).mapPartitions { iter =>
-      val joinedRow = new JoinedRow
-      iter.map(r => joinedRow(r._1, r._2))
-    }
+object EmptyConf extends CatalystConf {
+  override def caseSensitiveAnalysis: Boolean = {
+    throw new UnsupportedOperationException
   }
 }
+
+/** A CatalystConf that can be used for local testing. */
+case class SimpleCatalystConf(caseSensitiveAnalysis: Boolean) extends CatalystConf

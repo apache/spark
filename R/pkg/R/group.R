@@ -56,6 +56,7 @@ setMethod("show", "GroupedData",
 #'
 #' @param x a GroupedData
 #' @return a DataFrame
+#' @rdname agg
 #' @export
 #' @examples
 #' \dontrun{
@@ -83,8 +84,6 @@ setMethod("count",
 #'  df2 <- agg(df, age = "sum")  # new column name will be created as 'SUM(age#0)'
 #'  df2 <- agg(df, ageSum = sum(df$age)) # Creates a new column named ageSum
 #' }
-setGeneric("agg", function (x, ...) { standardGeneric("agg") })
-
 setMethod("agg",
           signature(x = "GroupedData"),
           function(x, ...) {
@@ -112,6 +111,13 @@ setMethod("agg",
             dataFrame(sdf)
           })
 
+#' @rdname agg
+#' @aliases agg
+setMethod("summarize",
+          signature(x = "GroupedData"),
+          function(x, ...) {
+            agg(x, ...)
+          })
 
 # sum/mean/avg/min/max
 methods <- c("sum", "mean", "avg", "min", "max")
