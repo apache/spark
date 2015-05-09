@@ -106,14 +106,16 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (summarizer, statCounter) = instances.treeAggregate(
-      (new MultivariateOnlineSummarizer, new StatCounter))( {
-        case ((summarizer: MultivariateOnlineSummarizer, statCounter: StatCounter),
-        (label: Double, features: Vector)) =>
-          (summarizer.add(features), statCounter.merge(label))
-      }, {
-        case ((summarizer1: MultivariateOnlineSummarizer, statCounter1: StatCounter),
-        (summarizer2: MultivariateOnlineSummarizer, statCounter2: StatCounter)) =>
-          (summarizer1.merge(summarizer2), statCounter1.merge(statCounter2))
+      (new MultivariateOnlineSummarizer, new StatCounter))(
+        seqOp = (c, v) => (c, v) match {
+          case ((summarizer: MultivariateOnlineSummarizer, statCounter: StatCounter),
+          (label: Double, features: Vector)) =>
+            (summarizer.add(features), statCounter.merge(label))
+      },
+        combOp = (c1, c2) => (c1, c2) match {
+          case ((summarizer1: MultivariateOnlineSummarizer, statCounter1: StatCounter),
+          (summarizer2: MultivariateOnlineSummarizer, statCounter2: StatCounter)) =>
+            (summarizer1.merge(summarizer2), statCounter1.merge(statCounter2))
       })
 
     val numFeatures = summarizer.mean.size
