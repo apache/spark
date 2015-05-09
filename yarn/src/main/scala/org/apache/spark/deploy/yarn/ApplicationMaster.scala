@@ -573,10 +573,16 @@ object ApplicationMaster extends Logging {
   }
 
   private[spark] def sparkContextInitialized(sc: SparkContext): Unit = {
+    if(master == null)
+      throw new SparkException("ApplicationMaster is not initialized! This might indicate that " +
+                               "SparkContext is running in yarn-cluster mode, but has not been deployed " +
+                               "properly. Deployment is currently supported using spark-submit.sh.")
     master.sparkContextInitialized(sc)
   }
 
   private[spark] def sparkContextStopped(sc: SparkContext): Boolean = {
+    if(master == null)
+      throw new SparkException("ApplicationMaster is not initialized!")
     master.sparkContextStopped(sc)
   }
 
