@@ -20,13 +20,13 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 
 import scala.collection.mutable.{Buffer, HashMap, ListBuffer}
-import scala.xml.{NodeSeq, Node, Unparsed}
+import scala.xml.{NodeSeq, Node, Unparsed, Utility}
 
 import javax.servlet.http.HttpServletRequest
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.scheduler.StageInfo
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.ui.jobs.UIData.ExecutorUIData
 
 /** Page showing statistics and stage list for a given job */
@@ -64,6 +64,9 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       val submissionTime = stage.submissionTime.get
       val completionTime = stage.completionTime.getOrElse(System.currentTimeMillis())
 
+      // The timeline library treats contents as HTML, so we have to escape them; for the
+      // data-title attribute string we have to escape them twice since that's in a string.
+      val escapedName = Utility.escape(name)
       s"""
          |{
          |  'className': 'stage job-timeline-object ${status}',
@@ -72,17 +75,17 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
          |  'end': new Date(${completionTime}),
          |  'content': '<div class="job-timeline-content" data-toggle="tooltip"' +
          |   'data-placement="top" data-html="true"' +
-         |   'data-title="${name} (Stage ${stageId}.${attemptId})<br>' +
+         |   'data-title="${Utility.escape(escapedName)} (Stage ${stageId}.${attemptId})<br>' +
          |   'Status: ${status.toUpperCase}<br>' +
-         |   'Submission Time: ${UIUtils.formatDate(new Date(submissionTime))}' +
+         |   'Submitted: ${UIUtils.formatDate(new Date(submissionTime))}' +
          |   '${
                  if (status != "running") {
-                   s"""<br>Completion Time: ${UIUtils.formatDate(new Date(completionTime))}"""
+                   s"""<br>Completed: ${UIUtils.formatDate(new Date(completionTime))}"""
                  } else {
                    ""
                  }
               }">' +
-         |    '${name} (Stage ${stageId}.${attemptId})</div>',
+         |    '${escapedName} (Stage ${stageId}.${attemptId})</div>',
          |}
        """.stripMargin
     }
@@ -161,13 +164,15 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
 
     <span class="expand-job-timeline">
       <span class="expand-job-timeline-arrow arrow-closed"></span>
-      <strong>Event timeline</strong>
+      <a data-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-placement="right">
+        Event Timeline
+      </a>
     </span> ++
     <div id="job-timeline" class="collapsed">
       <div class="control-panel">
         <div id="job-timeline-zoom-lock">
-          <input type="checkbox" checked="checked"></input>
-          <span>Zoom Lock</span>
+          <input type="checkbox"></input>
+          <span>Enable zooming</span>
         </div>
       </div>
     </div> ++
@@ -187,7 +192,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       val jobDataOption = listener.jobIdToData.get(jobId)
       if (jobDataOption.isEmpty) {
         val content =
-          <div>
+          <div id="no-info">
             <p>No information to display for job {jobId}</p>
           </div>
         return UIUtils.headerSparkPage(

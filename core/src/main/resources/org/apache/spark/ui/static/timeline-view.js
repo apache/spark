@@ -156,9 +156,9 @@ function setupExecutorEventAction() {
 function setupZoomable(id, timeline) {
   $(id + '>input[type="checkbox"]').click(function() {
     if (this.checked) {
-      timeline.setOptions({zoomable: false});
-    } else {
       timeline.setOptions({zoomable: true});
+    } else {
+      timeline.setOptions({zoomable: false});
     }
   });
 

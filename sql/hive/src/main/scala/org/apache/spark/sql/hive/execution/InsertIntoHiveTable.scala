@@ -258,5 +258,7 @@ case class InsertIntoHiveTable(
 
   override def executeCollect(): Array[Row] = sideEffectResult.toArray
 
-  override def execute(): RDD[Row] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  protected override def doExecute(): RDD[Row] = {
+    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  }
 }
