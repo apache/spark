@@ -80,7 +80,7 @@ object LDAExample {
         s"  default: ${defaultParams.stopwordFile}")
         .action((x, c) => c.copy(stopwordFile = x))
       opt[String]("algorithm")
-        .text(s"concrete inference algorithm to use. em and online are supported." +
+        .text(s"inference algorithm to use. em and online are supported." +
         s" default: ${defaultParams.algorithm}")
         .action((x, c) => c.copy(algorithm = x))
       opt[String]("checkpointDir")
@@ -134,8 +134,9 @@ object LDAExample {
     // Run LDA.
     val lda = new LDA()
 
-    val optimizer = params.algorithm match {
+    val optimizer = params.algorithm.toLowerCase match {
       case "em" => new EMLDAOptimizer
+      // add (1.0 / actualCorpusSize) to MiniBatchFraction be more robust on tiny datasets.
       case "online" => new OnlineLDAOptimizer().setMiniBatchFraction(0.05 + 1.0 / actualCorpusSize)
       case _ => throw new IllegalArgumentException(
         s"Only em, online are supported but got ${params.algorithm}.")
@@ -157,7 +158,7 @@ object LDAExample {
     println(s"Finished training LDA model.  Summary:")
     println(s"\t Training time: $elapsed sec")
 
-    if(ldaModel.isInstanceOf[DistributedLDAModel]) {
+    if (ldaModel.isInstanceOf[DistributedLDAModel]) {
       val distLDAModel = ldaModel.asInstanceOf[DistributedLDAModel]
       val avgLogLikelihood = distLDAModel.logLikelihood / actualCorpusSize.toDouble
       println(s"\t Training data average log likelihood: $avgLogLikelihood")
