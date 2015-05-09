@@ -310,6 +310,35 @@ class HasNumFeatures(Params):
         return self.getOrDefault(self.numFeatures)
 
 
+class HasCheckpointInterval(Params):
+    """
+    Mixin for param checkpointInterval: checkpoint interval (>= 1).
+    """
+
+    # a placeholder to make it appear in the generated doc
+    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "checkpoint interval (>= 1)")
+
+    def __init__(self):
+        super(HasCheckpointInterval, self).__init__()
+        #: param for checkpoint interval (>= 1)
+        self.checkpointInterval = Param(self, "checkpointInterval", "checkpoint interval (>= 1)")
+        if None is not None:
+            self._setDefault(checkpointInterval=None)
+
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        self.paramMap[self.checkpointInterval] = value
+        return self
+
+    def getCheckpointInterval(self):
+        """
+        Gets the value of checkpointInterval or its default value.
+        """
+        return self.getOrDefault(self.checkpointInterval)
+
+
 class HasSeed(Params):
     """
     Mixin for param seed: random seed.
