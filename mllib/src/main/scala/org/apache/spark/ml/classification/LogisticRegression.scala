@@ -216,7 +216,7 @@ class LogisticRegression(override val uid: String)
       (weightsWithIntercept, 0.0)
     }
 
-    new LogisticRegressionModel(this, weights.compressed, intercept)
+    new LogisticRegressionModel(uid, weights.compressed, intercept)
   }
 }
 
