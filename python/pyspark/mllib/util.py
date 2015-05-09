@@ -171,10 +171,18 @@ class MLUtils(object):
 
     @staticmethod
     def appendBias(data):
-        return callMLlibFunc("appendBias", _convert_to_vector(data))
+        """
+        Returns a new vector with `1.0` (bias) appended to the input vector.
+        """
+        vec = _convert_to_vector(data)
+        return np.append(vec, 1.0)
 
     @staticmethod
     def loadVectors(sc, path):
+        """
+        Loads vectors saved using `RDD[Vector].saveAsTextFile`
+        with the default number of partitions.
+        """
         return callMLlibFunc("loadVectors", sc, path)
 
 

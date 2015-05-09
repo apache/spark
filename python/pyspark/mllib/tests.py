@@ -821,7 +821,7 @@ class StandardScalerTests(MLlibTestCase):
 
 class MLUtilsTests(MLlibTestCase):
     def test_append_bias(self):
-        data = [1.0, 2.0, 3.0]
+        data = [2.0, 2.0, 2.0]
         ret = MLUtils.appendBias(data)
         self.assertEqual(ret[3], 1.0)
 
@@ -832,14 +832,17 @@ class MLUtilsTests(MLlibTestCase):
             [1.0, 2.0, 3.0]
         ]
         try:
-            self.sc.parallelize(data).saveAsTextFile("test_load_vectors")
-            ret_rdd = MLUtils.loadVectors(self.sc, "test_load_vectors")
+            temp_dir = tempfile.mkdtemp()
+            load_vectors_path = os.path.join(temp_dir, "test_load_vectors")
+            self.sc.parallelize(data).saveAsTextFile(load_vectors_path)
+            ret_rdd = MLUtils.loadVectors(self.sc, load_vectors_path)
             ret = ret_rdd.collect()
+            ret.sort()
             self.assertEqual(len(ret), 2)
             self.assertEqual(ret[0], DenseVector([1.0, 2.0, 3.0]))
             self.assertEqual(ret[1], DenseVector([1.0, 2.0, 3.0]))
         finally:
-            shutil.rmtree("test_load_vectors")
+            shutil.rmtree(load_vectors_path)
 
 
 if __name__ == "__main__":
