@@ -285,16 +285,6 @@ abstract class RDD[T: ClassTag](
    */
   private[spark] def withScope[U](body: => U): U = RDDOperationScope.withScope[U](sc)(body)
 
-  /**
-   * Execute a block of code in a scope such that all new RDDs created in this body will
-   * be part of the same scope. For more detail, see {{org.apache.spark.rdd.RDDOperationScope}}.
-   *
-   * Note: Return statements are NOT allowed in the given body.
-   */
-  private[spark] def withNamedScope[U](scopeName: String)(body: => U): U = {
-    RDDOperationScope.withScope[U](sc)(body)
-  }
-
   // Transformations (return a new RDD)
 
   /**
@@ -1532,13 +1522,15 @@ abstract class RDD[T: ClassTag](
    * has completed (therefore the RDD has been materialized and potentially stored in memory).
    * doCheckpoint() is called recursively on the parent RDDs.
    */
-  private[spark] def doCheckpoint(): Unit = withNamedScope("checkpoint") {
-    if (!doCheckpointCalled) {
-      doCheckpointCalled = true
-      if (checkpointData.isDefined) {
-        checkpointData.get.doCheckpoint()
-      } else {
-        dependencies.foreach(_.rdd.doCheckpoint())
+  private[spark] def doCheckpoint(): Unit = {
+    RDDOperationScope.withScope(sc, "checkpoint", false, true) {
+      if (!doCheckpointCalled) {
+        doCheckpointCalled = true
+        if (checkpointData.isDefined) {
+          checkpointData.get.doCheckpoint()
+        } else {
+          dependencies.foreach(_.rdd.doCheckpoint())
+        }
       }
     }
   }
