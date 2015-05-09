@@ -56,6 +56,7 @@ object EmptyRow extends Row {
   override def getShort(i: Int): Short = throw new UnsupportedOperationException
   override def getByte(i: Int): Byte = throw new UnsupportedOperationException
   override def getString(i: Int): String = throw new UnsupportedOperationException
+  override def getDate(i: Int): java.sql.Date = throw new UnsupportedOperationException
   override def getAs[T](i: Int): T = throw new UnsupportedOperationException
   override def copy(): Row = this
 }

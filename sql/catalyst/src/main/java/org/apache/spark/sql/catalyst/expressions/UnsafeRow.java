@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.sql.types.DateUtils;
 import scala.collection.Map;
 import scala.collection.Seq;
 import scala.collection.mutable.ArraySeq;
@@ -29,6 +28,7 @@ import java.util.*;
 
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.DateUtils;
 import static org.apache.spark.sql.types.DataTypes.*;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.UTF8String;
