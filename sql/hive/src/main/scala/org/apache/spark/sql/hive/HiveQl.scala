@@ -27,9 +27,10 @@ import org.apache.hadoop.hive.ql.{ErrorMsg, Context}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
+import org.apache.hadoop.hive.ql.plan.PlanUtils
 import org.apache.hadoop.hive.ql.session.SessionState
 
-import org.apache.spark.sql.{AnalysisException, SparkSQLParser}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -611,8 +612,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT))) {
           tableDesc.copy(
             inputFormat = Option("org.apache.hadoop.mapred.SequenceFileInputFormat"),
-            outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat"),
-            serde = Option("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+            outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat"))
         } else if ("RCFile".equalsIgnoreCase(
         hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT))) {
           tableDesc.copy(
