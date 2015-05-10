@@ -424,18 +424,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
         val desc = table.copy(schema = schema)
 
-        // This is a hack, we only take the RC, ORC and Parquet as specific storage
-        // otherwise, we will convert it into Parquet2 when hive.convertCTAS specified
-        val specificStorage = (table.inputFormat.map(format => {
-          // org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat => Parquet
-          // org.apache.hadoop.hive.ql.io.orc.OrcInputFormat               => Orc
-          // org.apache.hadoop.hive.ql.io.RCFileInputFormat                => RCFile
-          // parquet.hive.DeprecatedParquetInputFormat                     => Parquet
-          // TODO configurable?
-          format.contains("Orc") || format.contains("Parquet") || format.contains("RCFile")
-        }).getOrElse(false))
-
-        if (hive.convertCTAS && !specificStorage) {
+        if (hive.convertCTAS && table.serde.isEmpty) {
           // Do the conversion when spark.sql.hive.convertCTAS is true and the query
           // does not specify any storage format (file format and storage handler).
           if (table.specifiedDatabase.isDefined) {
@@ -454,9 +443,18 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
             child
           )
         } else {
+          val desc = if (table.serde.isEmpty) {
+            // add default serde
+            table.copy(
+              serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+          } else {
+            table
+          }
+
           val (dbName, tblName) =
             processDatabaseAndTableName(
-              table.specifiedDatabase.getOrElse(client.currentDatabase), table.name)
+              desc.specifiedDatabase.getOrElse(client.currentDatabase), desc.name)
+
           execution.CreateTableAsSelect(
             desc.copy(
               specifiedDatabase = Some(dbName),

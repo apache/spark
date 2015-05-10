@@ -64,7 +64,11 @@ case class CreateTableAsSelect(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
   override lazy val resolved: Boolean =
-    tableDesc.specifiedDatabase.isDefined && tableDesc.schema.size > 0 && childrenResolved
+    // TODO add more condition?
+    tableDesc.specifiedDatabase.isDefined &&
+    tableDesc.schema.size > 0 &&
+    tableDesc.serde.isDefined &&
+    childrenResolved
 }
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
@@ -607,26 +611,24 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         serde = None,
         viewText = None)
 
-      // default serde & input/output format
-      tableDesc = if ("SequenceFile".equalsIgnoreCase(
-        hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT))) {
+      // default storage type abbriviation (e.g. RCFile, ORC, PARQUET etc.)
+      val defaultStorageType = hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT)
+      // handle the default format for the storage type abbriviation
+      tableDesc = if ("SequenceFile".equalsIgnoreCase(defaultStorageType)) {
           tableDesc.copy(
             inputFormat = Option("org.apache.hadoop.mapred.SequenceFileInputFormat"),
             outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat"))
-        } else if ("RCFile".equalsIgnoreCase(
-        hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT))) {
+        } else if ("RCFile".equalsIgnoreCase(defaultStorageType)) {
           tableDesc.copy(
             inputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"),
             outputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"),
             serde = Option(hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTRCFILESERDE)))
-        } else if ("ORC".equalsIgnoreCase(
-        hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT))) {
+        } else if ("ORC".equalsIgnoreCase(defaultStorageType)) {
           tableDesc.copy(
             inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"),
             outputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"),
             serde = Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
-        } else if ("PARQUET".equalsIgnoreCase(
-        hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT))) {
+        } else if ("PARQUET".equalsIgnoreCase(defaultStorageType)) {
           tableDesc.copy(
             inputFormat =
               Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
@@ -764,12 +766,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         case Token("TOK_STORAGEHANDLER", _) =>
           throw new AnalysisException(ErrorMsg.CREATE_NON_NATIVE_AS.getMsg())
         case _ => // Unsupport features
-      }
-
-      if (tableDesc.serde.isEmpty) {
-        // add default serde
-        tableDesc = tableDesc.copy(
-          serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
       }
 
       CreateTableAsSelect(tableDesc, nodeToPlan(query), allowExisting != None)

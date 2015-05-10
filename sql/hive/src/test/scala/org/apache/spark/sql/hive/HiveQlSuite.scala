@@ -137,7 +137,7 @@ class HiveQlSuite extends FunSuite with BeforeAndAfterAll {
     assert(desc.serdeProperties == Map())
     assert(desc.inputFormat == Option("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.outputFormat == Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
-    assert(desc.serde == Option("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+    assert(desc.serde.isEmpty)
     assert(desc.properties == Map())
   }
 
