@@ -188,7 +188,9 @@ public class UnsafeShuffleWriterSuite {
           new LimitedInputStream(in, partitionSize));
         Iterator<Tuple2<Object, Object>> records = recordsStream.asKeyValueIterator();
         while (records.hasNext()) {
-          recordsList.add(records.next());
+          Tuple2<Object, Object> record = records.next();
+          Assert.assertEquals(i, hashPartitioner.getPartition(record._1()));
+          recordsList.add(record);
         }
         recordsStream.close();
         startOffset += partitionSize;
