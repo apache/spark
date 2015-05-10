@@ -207,16 +207,7 @@ class HdfsSensor(BaseSensorOperator):
             *args, **kwargs):
         super(HdfsSensor, self).__init__(*args, **kwargs)
         self.filepath = filepath
-        session = settings.Session()
-        db = session.query(DB).filter(DB.conn_id == hdfs_conn_id).first()
-        if not db:
-            raise Exception("conn_id doesn't exist in the repository")
-        self.host = db.host
-        self.port = db.port
-        NAMENODES = [Namenode(self.host, self.port)]
-        self.sb = HAClient(NAMENODES)
-        session.commit()
-        session.close()
+        self.sb = HDFSHook(hdfs_conn_id).get_conn()
 
     def poke(self):
         logging.getLogger("snakebite").setLevel(logging.WARNING)

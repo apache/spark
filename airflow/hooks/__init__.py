@@ -10,9 +10,10 @@ _hooks = {
         'HiveMetastoreHook',
         'HiveServer2Hook',
     ],
-    'presto_hook': ['PrestoHook'],
+    'hdfs_hook': ['HDFSHook'],
     'mysql_hook': ['MySqlHook'],
     'postgres_hook': ['PostgresHook'],
+    'presto_hook': ['PrestoHook'],
     'samba_hook': ['SambaHook'],
     'S3_hook': ['S3Hook'],
 }
