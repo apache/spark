@@ -107,7 +107,7 @@ private[sql] object JDBCRDD extends Logging {
         val fields = new Array[StructField](ncols)
         var i = 0
         while (i < ncols) {
-          val columnName = rsmd.getColumnName(i + 1)
+          val columnName = rsmd.getColumnLabel(i + 1)
           val dataType = rsmd.getColumnType(i + 1)
           val typeName = rsmd.getColumnTypeName(i + 1)
           val fieldSize = rsmd.getPrecision(i + 1)
