@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.managedmemory;
 
-import org.apache.spark.sql.catalyst.expressions.MutableRow;
 import scala.collection.Map;
 import scala.collection.Seq;
 import scala.collection.mutable.ArraySeq;
@@ -27,13 +26,14 @@ import java.math.BigDecimal;
 import java.sql.Date;
 import java.util.*;
 
+import org.apache.spark.managedmemory.PlatformDependent;
+import org.apache.spark.managedmemory.bitset.BitSetMethods;
+import org.apache.spark.sql.catalyst.expressions.MutableRow;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.types.DataType;
 import static org.apache.spark.sql.types.DataTypes.*;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.UTF8String;
-import org.apache.spark.managedmemory.PlatformDependent;
-import org.apache.spark.managedmemory.bitset.BitSetMethods;
 
 /**
  * An Unsafe implementation of Row which is backed by raw memory instead of Java objects.

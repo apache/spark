@@ -21,8 +21,6 @@ import java.util.Arrays
 
 import org.scalatest.{FunSuite, Matchers}
 
-import org.apache.spark.managedmemory.PlatformDependent
-import org.apache.spark.managedmemory.array.ByteArrayMethods
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 

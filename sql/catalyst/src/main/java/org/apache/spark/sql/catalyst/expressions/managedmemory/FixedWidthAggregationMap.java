@@ -21,7 +21,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.expressions.ManagedMemoryRowConverter;
+import org.apache.spark.sql.catalyst.expressions.managedmemory.ManagedMemoryRowConverter;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.managedmemory.PlatformDependent;

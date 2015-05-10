@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.catalyst.expressions.managedmemory
 
-import org.apache.spark.sql.catalyst.expressions.managedmemory.ManagedMemoryRow
-import org.apache.spark.sql.types._
 import org.apache.spark.managedmemory.PlatformDependent
 import org.apache.spark.managedmemory.array.ByteArrayMethods
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types._
 
 /**
  * Converts Rows into ManagedMemoryRow format. This class is NOT thread-safe.
