@@ -34,6 +34,14 @@ case class ExecutorCacheTaskLocation(override val host: String, executorId: Stri
   extends TaskLocation
 
 /**
+ * A location that started with a  prefix to support executor level partition scheduler
+ */
+private [spark]
+case class ExecutorPrefixTaskLocation(override val host: String, val executorId: String)
+  extends TaskLocation {
+}
+
+/**
  * A location on a host.
  */
 private [spark] case class HostTaskLocation(override val host: String) extends TaskLocation {
@@ -52,6 +60,7 @@ private[spark] object TaskLocation {
   // underscores, which are not legal characters in hostnames, there should be no potential for
   // confusion.  See  RFC 952 and RFC 1123 for information about the format of hostnames.
   val inMemoryLocationTag = "hdfs_cache_"
+  val executorLocationTag = "Executor_"
 
   def apply(host: String, executorId: String): TaskLocation = {
     new ExecutorCacheTaskLocation(host, executorId)
@@ -59,15 +68,20 @@ private[spark] object TaskLocation {
 
   /**
    * Create a TaskLocation from a string returned by getPreferredLocations.
-   * These strings have the form [hostname] or hdfs_cache_[hostname], depending on whether the
-   * location is cached.
+   * These strings have the form Executor_[hostname]_[executorID] or [hostname]
+   * or hdfs_cache_[hostname], depending on whether the location is cached.
    */
   def apply(str: String): TaskLocation = {
-    val hstr = str.stripPrefix(inMemoryLocationTag)
-    if (hstr.equals(str)) {
-      new HostTaskLocation(str)
+    if (str.startsWith(executorLocationTag)) {
+      val elems = str.split("_")
+      new ExecutorPrefixTaskLocation(elems(1), elems(2))
     } else {
-      new HostTaskLocation(hstr)
+      val hstr = str.stripPrefix(inMemoryLocationTag)
+      if (hstr.equals(str)) {
+        new HostTaskLocation(str)
+      } else {
+        new HostTaskLocation(hstr)
+      }
     }
   }
 }

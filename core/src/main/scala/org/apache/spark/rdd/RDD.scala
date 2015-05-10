@@ -382,7 +382,11 @@ abstract class RDD[T: ClassTag](
         new HashPartitioner(numPartitions)),
         numPartitions).values
     } else {
-      new CoalescedRDD(this, numPartitions)
+      if (conf.getBoolean("spark.rdd.coalesce.process", false)) {
+        new ProcessCoalesceRDD[T](this)
+      } else {
+        new CoalescedRDD(this, numPartitions)
+      }
     }
   }
 
