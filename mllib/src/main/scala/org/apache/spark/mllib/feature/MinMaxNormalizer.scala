@@ -26,14 +26,15 @@ import org.apache.spark.rdd.RDD
 /**
  * :: Experimental ::
  * Performs a linear transformation on the original data values using column summary
- * statistics, to scale each feature to a given range.
+ * statistics, to scale each feature to a given range, which is commonly known as min-max
+ * normalization or Rescaling.
  *
  *  Normalized(x) = (x - min) / (max - min) * scale + newBase
  *
  * With default parameters (newBase = 0 and scale = 1), MinMaxScaler is handy to normalize input
  * to range [0, 1].
- * @param newBase minimum value after transformation
- * @param scale parameter for vector scaling
+ * @param newBase minimum value after transformation, shared by all features
+ * @param scale parameter for vector scaling, shared by all features
  */
 
 @Experimental
@@ -51,11 +52,8 @@ class MinMaxScaler(newBase: Double, scale: Double) extends Logging {
     val summary = data.treeAggregate(new MultivariateOnlineSummarizer)(
       (aggregator, data) => aggregator.add(data),
       (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
-    new MinMaxScalerModel(
-      summary.min,
-      summary.max,
-      newBase,
-      scale)
+
+    new MinMaxScalerModel(summary.min, summary.max, newBase, scale)
   }
 }
 
@@ -63,10 +61,10 @@ class MinMaxScaler(newBase: Double, scale: Double) extends Logging {
  * :: Experimental ::
  * Represents a MinMaxScaler model that can transform vectors.
  *
- * @param min column standard deviation values
- * @param max column mean values
- * @param newBase whether to scale the data to have unit standard deviation
- * @param scale whether to center the data before scaling
+ * @param min column min values
+ * @param max column max values
+ * @param newBase new minimum value after transformation, shared by all features
+ * @param scale controls the range after transformation, shared by all features
  */
 @Experimental
 class MinMaxScalerModel (
@@ -76,9 +74,9 @@ class MinMaxScalerModel (
     var scale: Double) extends VectorTransformer {
 
   def this(min: Vector, max: Vector) {
-    this(min, max, 0, 1.0)
+    this(min, max, newBase = 0, scale = 1.0)
     require(min.size == max.size,
-        "mean and std vectors must have equal size if both are provided")
+        "min and max vectors must have equal size if both are provided")
   }
 
   @DeveloperApi
@@ -96,9 +94,8 @@ class MinMaxScalerModel (
   /**
    * Applies MinMax normalization transformation on a vector.
    *
-   * @param vector Vector to be standardized.
-   * @return Standardized vector. If the max of a column equals its min value, it will return
-   *         0.5 * scale + base
+   * @param vector Vector to be Rescaled (normalized).
+   * @return Rescaled vector. If min == max for a feature, it will return 0.5 * scale + base
    */
   override def transform(vector: Vector): Vector = {
 
