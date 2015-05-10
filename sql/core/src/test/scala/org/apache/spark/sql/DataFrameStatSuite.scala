@@ -64,6 +64,27 @@ class DataFrameStatSuite extends FunSuite  {
     assert(math.abs(decimalRes) < 1e-12)
   }
 
+  test("approximate quantile") {
+    val df = Seq.tabulate(1000)(i => (i, 2.0 * i)).toDF("singles", "doubles")
+
+    val expected_1 = 500.0
+    val expected_2 = 1600.0
+
+    val epsilons = List(0.1, 0.05, 0.001)
+
+    for (i <- 0 to 2) {
+      val epsilon = epsilons(i)
+      val result1 = df.stat.approxQuantile("singles", 0.5, epsilon)
+      val result2 = df.stat.approxQuantile("doubles", 0.8, epsilon)
+
+      val error_1 = 2 * 1000 * epsilon
+      val error_2 = 2 * 2000 * epsilon
+        
+      assert(math.abs(result1 - expected_1) < error_1)  
+      assert(math.abs(result2 - expected_2) < error_2)  
+    }
+  }
+
   test("crosstab") {
     val df = Seq((0, 0), (2, 1), (1, 0), (2, 0), (0, 0), (2, 0)).toDF("a", "b")
     val crosstab = df.stat.crosstab("a", "b")

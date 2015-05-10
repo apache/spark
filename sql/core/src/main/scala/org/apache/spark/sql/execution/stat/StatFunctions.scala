@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.stat
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.{Column, DataFrame}
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Cast}
@@ -25,7 +27,132 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 private[sql] object StatFunctions extends Logging {
-  
+
+  /** Calculate the approximate quantile for the given column */
+  private[sql] def approxQuantile(
+      df: DataFrame,
+      col: String,
+      quantile: Double,
+      epsilon: Double = 0.05): Double = {
+    require(quantile > 0.0 && quantile < 1.0, "Quantile must be in the range of (0.0, 1.0).")
+    val summeries = collectQuantileSummaries(df, col, epsilon)
+    summeries.query(quantile) 
+  }
+
+  private def collectQuantileSummaries(
+      df: DataFrame,
+      col: String,
+      epsilon: Double): QuantileSummaries = {
+    val data = df.schema.fields.find(_.name == col)
+    require(data.nonEmpty, s"Couldn't find column with name $col")
+    require(data.get.dataType.isInstanceOf[NumericType], "Quantile calculation for column " +
+        s"with dataType ${data.get.dataType} not supported.")
+
+    val column = Column(Cast(Column(col).expr, DoubleType))
+    df.select(column).rdd.aggregate(new QuantileSummaries(epsilon = epsilon))(
+      seqOp = (summeries, row) => {
+        summeries.insert(row.getDouble(0))
+      },
+      combOp = (baseSummeries, other) => {
+        baseSummeries.merge(other)
+    })
+  }
+
+  /**
+   * Helper class to compute approximate quantile summary.
+   * This implementation is based on the algorithm proposed in the paper:
+   * "Space-efficient Online Computation of Quantile Summaries" by Greenwald, Michael
+   * and Khanna, Sanjeev. (http://dl.acm.org/citation.cfm?id=375670)
+   * 
+   */
+  private class QuantileSummaries(
+      compress_threshold: Int = 1000,
+      epsilon: Double = 0.05) extends Serializable {
+    var sampled = new ArrayBuffer[(Double, Int, Int)]() // sampled examples
+    var count = 0L // count of observed examples
+
+    def getConstant(): Double = 2 * epsilon * count
+
+    def insert(x: Double): this.type = {
+      var idx = sampled.indexWhere(_._1 > x)
+      if (idx == -1) {
+        idx = sampled.size
+      } 
+      val delta = if (idx == 0 || idx == sampled.size) {
+        0
+      } else {
+        math.floor(getConstant()).toInt
+      } 
+      val tuple = (x, 1, delta)
+      sampled.insert(idx, tuple)
+      count += 1
+
+      if (sampled.size > compress_threshold) {
+        compress()
+      }
+      this
+    }
+
+    def compress(): Unit = {
+      var i = 0
+      while (i < sampled.size - 1) {
+        val sample1 = sampled(i)
+        val sample2 = sampled(i + 1)
+        if (sample1._2 + sample2._2 + sample2._3 < math.floor(getConstant())) {
+          sampled.update(i + 1, (sample2._1, sample1._2 + sample2._2, sample2._3))
+          sampled.remove(i)
+        }
+        i += 1
+      }
+    }
+
+    def merge(other: QuantileSummaries): QuantileSummaries = {
+      if (other.count > 0 && count > 0) {
+        other.sampled.foreach { sample =>
+          val idx = sampled.indexWhere(s => s._1 > sample._1)
+          if (idx == 0) {
+            val new_sampled = (sampled(0)._1, sampled(0)._2, sampled(1)._3 / 2)
+            sampled.update(0, new_sampled)
+            val new_sample = (sample._1, sample._2, 0)
+            sampled.insert(0, new_sample)
+          } else if (idx == -1) {
+            val new_sampled = (sampled(sampled.size - 1)._1, sampled(sampled.size - 1)._2,
+              (sampled(sampled.size - 2)._3 * 2 * epsilon).toInt)
+            sampled.update(sampled.size - 1, new_sampled)
+            val new_sample = (sample._1, sample._2, 0)
+            sampled.insert(sampled.size, new_sample)
+          } else {
+            val new_sample = (sample._1, sample._2, (sampled(idx - 1)._3 + sampled(idx)._3) / 2)
+            sampled.insert(idx, new_sample)
+          }
+        }
+        count += other.count
+        compress()
+        this
+      } else if (other.count > 0) {
+        other
+      } else {
+        this
+      }
+    }
+
+    def query(quantile: Double): Double = {
+      val rank = (quantile * count).toInt
+      var minRank = 0
+      var i = 1
+      while (i < sampled.size) {
+        val curSample = sampled(i)
+        val prevSample = sampled(i - 1)
+        minRank += prevSample._2
+        if (minRank + curSample._2 + curSample._3 > rank + getConstant()) {
+          return prevSample._1
+        }
+        i += 1
+      }
+      return sampled.last._1
+    }
+  }
+
   /** Calculate the Pearson Correlation Coefficient for the given columns */
   private[sql] def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
     val counts = collectStatisticalData(df, cols)
