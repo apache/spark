@@ -34,7 +34,7 @@ from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 from pyspark.sql import DataFrame
 from pyspark.ml.param import Param
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol
-from pyspark.ml.pipeline import Transformer, Estimator, Pipeline
+from pyspark.ml.pipeline import Estimator, Model, Pipeline, Transformer
 
 
 class MockDataset(DataFrame):
@@ -77,7 +77,7 @@ class MockEstimator(Estimator):
         return model
 
 
-class MockModel(MockTransformer, Transformer):
+class MockModel(MockTransformer, Model):
 
     def __init__(self):
         super(MockModel, self).__init__()
