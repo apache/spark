@@ -231,6 +231,13 @@ class SparkHadoopUtil extends Logging {
     recurse(baseStatus)
   }
 
+  def globPath(pattern: Path): Seq[Path] = {
+    val fs = pattern.getFileSystem(conf)
+    Option(fs.globStatus(pattern)).map { statuses =>
+      statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toSeq
+    }.getOrElse(Seq.empty[Path])
+  }
+
   /**
    * Lists all the files in a directory with the specified prefix, and does not end with the
    * given suffix. The returned {{FileStatus}} instances are sorted by the modification times of

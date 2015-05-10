@@ -37,12 +37,12 @@ import org.apache.spark.sql.{Row, SQLContext}
 class SimpleTextSource extends FSBasedRelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
+      paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): FSBasedRelation = {
-    new SimpleTextRelation(
-      Array(parameters("path")), schema,
-      partitionColumns.getOrElse(StructType(Array.empty[StructField])), parameters)(sqlContext)
+    val partitionsSchema = partitionColumns.getOrElse(StructType(Array.empty[StructField]))
+    new SimpleTextRelation(paths, schema, partitionsSchema, parameters)(sqlContext)
   }
 }
 

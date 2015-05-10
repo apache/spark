@@ -114,6 +114,7 @@ trait FSBasedRelationProvider {
    */
   def createRelation(
       sqlContext: SQLContext,
+      paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): FSBasedRelation

@@ -20,7 +20,10 @@ package org.apache.spark.sql.sources
 import scala.language.{existentials, implicitConversions}
 import scala.util.matching.Regex
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.Logging
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
@@ -157,7 +160,7 @@ private[sql] class DDLParser(
   protected lazy val className: Parser[String] = repsep(ident, ".") ^^ { case s => s.mkString(".")}
 
   override implicit def regexToParser(regex: Regex): Parser[String] = acceptMatch(
-    s"identifier matching regex ${regex}", {
+    s"identifier matching regex $regex", {
       case lexical.Identifier(str) if regex.unapplySeq(str).isDefined => str
       case lexical.Keyword(str) if regex.unapplySeq(str).isDefined => str
     }
@@ -230,11 +233,18 @@ private[sql] object ResolvedDataSource {
             Some(partitionColumnsSchema(schema, partitionColumns))
           }
 
+          val caseInsensitiveOptions= new CaseInsensitiveMap(options)
+          val paths = {
+            val patternPath = new Path(caseInsensitiveOptions("path"))
+            SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray
+          }
+
           dataSource.createRelation(
             sqlContext,
+            paths,
             Some(schema),
             maybePartitionsSchema,
-            new CaseInsensitiveMap(options))
+            caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.RelationProvider =>
           throw new AnalysisException(s"$className does not allow user-specified schemas.")
         case _ =>
@@ -245,7 +255,12 @@ private[sql] object ResolvedDataSource {
         case dataSource: RelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
         case dataSource: FSBasedRelationProvider =>
-          dataSource.createRelation(sqlContext, None, None, new CaseInsensitiveMap(options))
+          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+          val paths = {
+            val patternPath = new Path(caseInsensitiveOptions("path"))
+            SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray
+          }
+          dataSource.createRelation(sqlContext, paths, None, None, caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
           throw new AnalysisException(
             s"A schema needs to be specified when using $className.")
@@ -280,11 +295,22 @@ private[sql] object ResolvedDataSource {
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(sqlContext, mode, options, data)
       case dataSource: FSBasedRelationProvider =>
+        // Don't glob path for the write path.  The contracts here are:
+        //  1. Only one output path can be specified on the write path;
+        //  2. Output path must be a legal HDFS style file system path;
+        //  3. It's OK that the output path doesn't exist yet;
+        val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+        val outputPath = {
+          val path = new Path(caseInsensitiveOptions("path"))
+          val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+          path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+        }
         val r = dataSource.createRelation(
           sqlContext,
+          Array(outputPath.toString),
           Some(data.schema),
           Some(partitionColumnsSchema(data.schema, partitionColumns)),
-          options)
+          caseInsensitiveOptions)
         sqlContext.executePlan(
           InsertIntoFSBasedRelation(
             r,
