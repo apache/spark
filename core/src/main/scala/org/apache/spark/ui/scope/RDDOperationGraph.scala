@@ -101,7 +101,7 @@ private[ui] object RDDOperationGraph extends Logging {
       val node = nodes.getOrElseUpdate(
         rdd.id, RDDOperationNode(rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE))
 
-      if (rdd.scope == null) {
+      if (rdd.scope.isEmpty) {
         // This RDD has no encompassing scope, so we put it directly in the root cluster
         // This should happen only if an RDD is instantiated outside of a public RDD API
         rootCluster.attachChildNode(node)
@@ -178,25 +178,33 @@ private[ui] object RDDOperationGraph extends Logging {
    * On the stage page, it is displayed as a box with an embedded label.
    */
   private def makeDotNode(node: RDDOperationNode, forJob: Boolean): String = {
+    val label = s"${node.name} (${node.id})"
     if (forJob) {
-      s"""${node.id} [label=" " shape="circle" padding="5" labelStyle="font-size: 0"]"""
+      s"""${node.id} [label="$label" shape="circle" padding="5" labelStyle="font-size: 0"]"""
     } else {
-      s"""${node.id} [label="${node.name} (${node.id})"]"""
+      s"""${node.id} [label="$label" padding="5" labelStyle="font-size: 12px"]"""
     }
   }
 
   /** Return the dot representation of a subgraph in an RDDOperationGraph. */
   private def makeDotSubgraph(
-      scope: RDDOperationCluster,
+      cluster: RDDOperationCluster,
       forJob: Boolean,
       indent: String): String = {
     val subgraph = new StringBuilder
-    subgraph.append(indent + s"subgraph cluster${scope.id} {\n")
-    subgraph.append(indent + s"""  label="${scope.name}";\n""")
-    scope.childNodes.foreach { node =>
+    // TODO: move specific graph properties like these to spark-dag-viz.js
+    val paddingTop = if (forJob) 10 else 20
+    subgraph.append(indent + s"subgraph cluster${cluster.id} {\n")
+    subgraph.append(indent + s"""  label="${cluster.name}";\n""")
+    // If there are nested clusters, add some padding
+    // Do this for the stage page because we use bigger fonts there
+    if (cluster.childClusters.nonEmpty) {
+      subgraph.append(indent + s"""  paddingTop="$paddingTop";\n""")
+    }
+    cluster.childNodes.foreach { node =>
       subgraph.append(indent + s"  ${makeDotNode(node, forJob)};\n")
     }
-    scope.childClusters.foreach { cscope =>
+    cluster.childClusters.foreach { cscope =>
       subgraph.append(makeDotSubgraph(cscope, forJob, indent + "  "))
     }
     subgraph.append(indent + "}\n")

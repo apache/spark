@@ -416,7 +416,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_math_functions(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
-        from pyspark.sql import mathfunctions as functions
+        from pyspark.sql import functions
         import math
 
         def get_values(l):
@@ -452,6 +452,14 @@ class SQLTests(ReusedPySparkTestCase):
         rndn = df.select('key', functions.randn(5)).collect()
         for row in rndn:
             assert row[1] >= -4.0 and row[1] <= 4.0, "got: %s" % row[1]
+
+    def test_between_function(self):
+        df = self.sc.parallelize([
+            Row(a=1, b=2, c=3),
+            Row(a=2, b=1, c=3),
+            Row(a=4, b=1, c=4)]).toDF()
+        self.assertEqual([Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)],
+                         df.filter(df.a.between(df.b, df.c)).collect())
 
     def test_save_and_load(self):
         df = self.df
@@ -510,6 +518,13 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual("b", df.select(df.r.getField("b")).first()[0])
         self.assertEqual("v", df.select(df.d["k"]).first()[0])
         self.assertEqual("v", df.select(df.d.getItem("k")).first()[0])
+
+    def test_field_accessor(self):
+        df = self.sc.parallelize([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})]).toDF()
+        self.assertEqual(1, df.select(df.l[0]).first()[0])
+        self.assertEqual(1, df.select(df.r["a"]).first()[0])
+        self.assertEqual("b", df.select(df.r["b"]).first()[0])
+        self.assertEqual("v", df.select(df.d["k"]).first()[0])
 
     def test_infer_long_type(self):
         longrow = [Row(f1='a', f2=100000000000000)]
@@ -636,6 +651,19 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(row.name, "haha")
         self.assertEqual(row.age, None)
         self.assertEqual(row.height, None)
+
+    def test_bitwise_operations(self):
+        from pyspark.sql import functions
+        row = Row(a=170, b=75)
+        df = self.sqlCtx.createDataFrame([row])
+        result = df.select(df.a.bitwiseAND(df.b)).collect()[0].asDict()
+        self.assertEqual(170 & 75, result['(a & b)'])
+        result = df.select(df.a.bitwiseOR(df.b)).collect()[0].asDict()
+        self.assertEqual(170 | 75, result['(a | b)'])
+        result = df.select(df.a.bitwiseXOR(df.b)).collect()[0].asDict()
+        self.assertEqual(170 ^ 75, result['(a ^ b)'])
+        result = df.select(functions.bitwiseNOT(df.b)).collect()[0].asDict()
+        self.assertEqual(~75, result['~b'])
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):

@@ -468,6 +468,17 @@ private[spark] class Client(
       env("SPARK_YARN_USER_ENV") = userEnvs
     }
 
+    // if spark.submit.pyArchives is in sparkConf, append pyArchives to PYTHONPATH
+    // that can be passed on to the ApplicationMaster and the executors.
+    if (sparkConf.contains("spark.submit.pyArchives")) {
+      var pythonPath = sparkConf.get("spark.submit.pyArchives")
+      if (env.contains("PYTHONPATH")) {
+        pythonPath = Seq(env.get("PYTHONPATH"), pythonPath).mkString(File.pathSeparator)
+      }
+      env("PYTHONPATH") = pythonPath
+      sparkConf.setExecutorEnv("PYTHONPATH", pythonPath)
+    }
+
     // In cluster mode, if the deprecated SPARK_JAVA_OPTS is set, we need to propagate it to
     // executors. But we can't just set spark.executor.extraJavaOptions, because the driver's
     // SparkContext will not let that set spark* system properties, which is expected behavior for
@@ -1074,7 +1085,7 @@ object Client extends Logging {
         val hiveConf = hiveClass.getMethod("getConf").invoke(hive)
         val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
 
-        val hiveConfGet = (param:String) => Option(hiveConfClass
+        val hiveConfGet = (param: String) => Option(hiveConfClass
           .getMethod("get", classOf[java.lang.String])
           .invoke(hiveConf, param))
 
@@ -1096,7 +1107,7 @@ object Client extends Logging {
 
             val hive2Token = new Token[DelegationTokenIdentifier]()
             hive2Token.decodeFromUrlString(tokenStr)
-            credentials.addToken(new Text("hive.server2.delegation.token"),hive2Token)
+            credentials.addToken(new Text("hive.server2.delegation.token"), hive2Token)
             logDebug("Added hive.Server2.delegation.token to conf.")
             hiveClass.getMethod("closeCurrent").invoke(null)
           } else {
@@ -1141,13 +1152,13 @@ object Client extends Logging {
 
         logInfo("Added HBase security token to credentials.")
       } catch {
-        case e:java.lang.NoSuchMethodException =>
+        case e: java.lang.NoSuchMethodException =>
           logInfo("HBase Method not found: " + e)
-        case e:java.lang.ClassNotFoundException =>
+        case e: java.lang.ClassNotFoundException =>
           logDebug("HBase Class not found: " + e)
-        case e:java.lang.NoClassDefFoundError =>
+        case e: java.lang.NoClassDefFoundError =>
           logDebug("HBase Class not found: " + e)
-        case e:Exception =>
+        case e: Exception =>
           logError("Exception when obtaining HBase security token: " + e)
       }
     }

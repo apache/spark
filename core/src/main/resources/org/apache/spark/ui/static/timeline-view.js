@@ -39,23 +39,24 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
 
   function setupJobEventAction() {
     $(".item.range.job.application-timeline-object").each(function() {
-      var getJobId = function(baseElem) {
+      var getSelectorForJobEntry = function(baseElem) {
         var jobIdText = $($(baseElem).find(".application-timeline-content")[0]).text();
         var jobId = jobIdText.match("\\(Job (\\d+)\\)")[1];
-       return jobId;
+       return "#job-" + jobId;
       };
 
       $(this).click(function() {
-        window.location.href = "job/?id=" + getJobId(this);
+        var jobPagePath = $(getSelectorForJobEntry(this)).find("a").attr("href")
+          window.location.href = jobPagePath
       });
 
       $(this).hover(
         function() {
-          $("#job-" + getJobId(this)).addClass("corresponding-item-hover");
+          $(getSelectorForJobEntry(this)).addClass("corresponding-item-hover");
           $($(this).find("div.application-timeline-content")[0]).tooltip("show");
         },
         function() {
-          $("#job-" + getJobId(this)).removeClass("corresponding-item-hover");
+          $(getSelectorForJobEntry(this)).removeClass("corresponding-item-hover");
           $($(this).find("div.application-timeline-content")[0]).tooltip("hide");
         }
       );
@@ -97,32 +98,24 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
 
   function setupStageEventAction() {
     $(".item.range.stage.job-timeline-object").each(function() {
-      var getStageIdAndAttempt = function(baseElem) {
+      var getSelectorForStageEntry = function(baseElem) {
         var stageIdText = $($(baseElem).find(".job-timeline-content")[0]).text();
         var stageIdAndAttempt = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)")[1].split(".");
-        return stageIdAndAttempt;
+        return "#stage-" + stageIdAndAttempt[0] + "-" + stageIdAndAttempt[1];
       };
 
       $(this).click(function() {
-        var idAndAttempt = getStageIdAndAttempt(this);
-        var id = idAndAttempt[0];
-        var attempt = idAndAttempt[1];
-        window.location.href = "../../stages/stage/?id=" + id + "&attempt=" + attempt;
+        var stagePagePath = $(getSelectorForStageEntry(this)).find("a").attr("href")
+        window.location.href = stagePagePath
       });
 
       $(this).hover(
         function() {
-          var idAndAttempt = getStageIdAndAttempt(this);
-          var id = idAndAttempt[0];
-          var attempt = idAndAttempt[1];
-          $("#stage-" + id + "-" + attempt).addClass("corresponding-item-hover");
+          $(getSelectorForStageEntry(this)).addClass("corresponding-item-hover");
           $($(this).find("div.job-timeline-content")[0]).tooltip("show");
         },
         function() {
-          var idAndAttempt = getStageIdAndAttempt(this);
-          var id = idAndAttempt[0];
-          var attempt = idAndAttempt[1];
-          $("#stage-" + id + "-" + attempt).removeClass("corresponding-item-hover");
+          $(getSelectorForStageEntry(this)).removeClass("corresponding-item-hover");
           $($(this).find("div.job-timeline-content")[0]).tooltip("hide");
         }
       );
@@ -156,9 +149,9 @@ function setupExecutorEventAction() {
 function setupZoomable(id, timeline) {
   $(id + '>input[type="checkbox"]').click(function() {
     if (this.checked) {
-      timeline.setOptions({zoomable: false});
-    } else {
       timeline.setOptions({zoomable: true});
+    } else {
+      timeline.setOptions({zoomable: false});
     }
   });
 

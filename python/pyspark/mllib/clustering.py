@@ -40,11 +40,16 @@ class KMeansModel(Saveable, Loader):
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
     >>> model = KMeans.train(
-    ...     sc.parallelize(data), 2, maxIterations=10, runs=30, initializationMode="random")
+    ...     sc.parallelize(data), 2, maxIterations=10, runs=30, initializationMode="random",
+    ...                    seed=50, initializationSteps=5, epsilon=1e-4)
     >>> model.predict(array([0.0, 0.0])) == model.predict(array([1.0, 1.0]))
     True
     >>> model.predict(array([8.0, 9.0])) == model.predict(array([9.0, 8.0]))
     True
+    >>> model.k
+    2
+    >>> model.computeCost(sc.parallelize(data))
+    2.0000000000000004
     >>> model = KMeans.train(sc.parallelize(data), 2)
     >>> sparse_data = [
     ...     SparseVector(3, {1: 1.0}),
@@ -52,7 +57,8 @@ class KMeansModel(Saveable, Loader):
     ...     SparseVector(3, {2: 1.0}),
     ...     SparseVector(3, {2: 1.1})
     ... ]
-    >>> model = KMeans.train(sc.parallelize(sparse_data), 2, initializationMode="k-means||")
+    >>> model = KMeans.train(sc.parallelize(sparse_data), 2, initializationMode="k-means||",
+    ...                                     seed=50, initializationSteps=5, epsilon=1e-4)
     >>> model.predict(array([0., 1., 0.])) == model.predict(array([0, 1.1, 0.]))
     True
     >>> model.predict(array([0., 0., 1.])) == model.predict(array([0, 0, 1.1]))
@@ -83,6 +89,11 @@ class KMeansModel(Saveable, Loader):
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return self.centers
 
+    @property
+    def k(self):
+        """Total number of clusters."""
+        return len(self.centers)
+
     def predict(self, x):
         """Find the cluster to which x belongs in this model."""
         best = 0
@@ -94,6 +105,15 @@ class KMeansModel(Saveable, Loader):
                 best = i
                 best_distance = distance
         return best
+
+    def computeCost(self, rdd):
+        """
+        Return the K-means cost (sum of squared distances of points to
+        their nearest center) for this model on the given data.
+        """
+        cost = callMLlibFunc("computeCostKmeansModel", rdd.map(_convert_to_vector),
+                             [_convert_to_vector(c) for c in self.centers])
+        return cost
 
     def save(self, sc, path):
         java_centers = _py2java(sc, [_convert_to_vector(c) for c in self.centers])
@@ -109,10 +129,11 @@ class KMeansModel(Saveable, Loader):
 class KMeans(object):
 
     @classmethod
-    def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||", seed=None):
+    def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||",
+              seed=None, initializationSteps=5, epsilon=1e-4):
         """Train a k-means clustering model."""
         model = callMLlibFunc("trainKMeansModel", rdd.map(_convert_to_vector), k, maxIterations,
-                              runs, initializationMode, seed)
+                              runs, initializationMode, seed, initializationSteps, epsilon)
         centers = callJavaFunc(rdd.context, model.clusterCenters)
         return KMeansModel([c.toArray() for c in centers])
 
