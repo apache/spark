@@ -742,6 +742,9 @@ private[spark] class Client(
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
             return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
+          case e: Exception =>
+            logError("Exception while monitoring application", e)
+            return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
         }
       val state = report.getYarnApplicationState
 
