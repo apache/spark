@@ -40,6 +40,8 @@ object ExpressionSet {
  */
 sealed class ExpressionSet extends Serializable {
   private val baseSet: java.util.Set[Expression] = new java.util.HashSet[Expression]()
-  def contains(expr: Expression): Boolean = contains(ExpressionEquals.normalize(expr))
+  def contains(expr: Expression): Boolean = {
+    baseSet.contains(ExpressionEquals.normalize(expr))
+  }
   def add(expr: Expression): Unit = baseSet.add(ExpressionEquals.normalize(expr))
 }
