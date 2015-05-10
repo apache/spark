@@ -38,7 +38,7 @@ final class UnsafeShuffleSortDataFormat extends SortDataFormat<PackedRecordPoint
 
   @Override
   public PackedRecordPointer getKey(long[] data, int pos, PackedRecordPointer reuse) {
-    reuse.packedRecordPointer = data[pos];
+    reuse.set(data[pos]);
     return reuse;
   }
 

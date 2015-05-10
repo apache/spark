@@ -19,8 +19,23 @@ package org.apache.spark.shuffle.unsafe;
 
 /**
  * Wrapper around an 8-byte word that holds a 24-bit partition number and 40-bit record pointer.
+ * <p>
+ * Within the long, the data is laid out as follows:
+ * <pre>
+ *   [24 bit partition number][13 bit memory page number][27 bit offset in page]
+ * </pre>
+ * This implies that the maximum addressable page size is 2^27 bits = 128 megabytes, assuming that
+ * our offsets in pages are not 8-byte-word-aligned. Since we have 2^13 pages (based off the
+ * 13-bit page numbers assigned by {@link org.apache.spark.unsafe.memory.TaskMemoryManager}), this
+ * implies that we can address 2^13 * 128 megabytes = 1 terabyte of RAM per task.
+ * <p>
+ * Assuming word-alignment would allow for a 1 gigabyte maximum page size, but we leave this
+ * optimization to future work as it will require more careful design to ensure that addresses are
+ * properly aligned (e.g. by padding records).
  */
 final class PackedRecordPointer {
+
+  static final int MAXIMUM_PAGE_SIZE_BYTES = 1 << 27;  // 128 megabytes
 
   /** Bit mask for the lower 40 bits of a long. */
   private static final long MASK_LONG_LOWER_40_BITS = 0xFFFFFFFFFFL;
@@ -55,7 +70,11 @@ final class PackedRecordPointer {
     return (((long) partitionId) << 40) | compressedAddress;
   }
 
-  public long packedRecordPointer;
+  private long packedRecordPointer;
+
+  public void set(long packedRecordPointer) {
+    this.packedRecordPointer = packedRecordPointer;
+  }
 
   public int getPartitionId() {
     return (int) ((packedRecordPointer & MASK_LONG_UPPER_24_BITS) >>> 40);
@@ -68,7 +87,4 @@ final class PackedRecordPointer {
     return pageNumber | offsetInPage;
   }
 
-  public int getRecordLength() {
-    return -1; // TODO
-  }
 }

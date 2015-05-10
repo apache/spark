@@ -34,10 +34,10 @@ public class PackedRecordPointerSuite {
     final MemoryBlock page0 = memoryManager.allocatePage(100);
     final MemoryBlock page1 = memoryManager.allocatePage(100);
     final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1, 42);
-    PackedRecordPointer packedPointerWrapper = new PackedRecordPointer();
-    packedPointerWrapper.packedRecordPointer = PackedRecordPointer.packPointer(addressInPage1, 360);
-    Assert.assertEquals(360, packedPointerWrapper.getPartitionId());
-    Assert.assertEquals(addressInPage1, packedPointerWrapper.getRecordPointer());
+    PackedRecordPointer packedPointer = new PackedRecordPointer();
+    packedPointer.set(PackedRecordPointer.packPointer(addressInPage1, 360));
+    Assert.assertEquals(360, packedPointer.getPartitionId());
+    Assert.assertEquals(addressInPage1, packedPointer.getRecordPointer());
     memoryManager.cleanUpAllAllocatedMemory();
   }
 
@@ -48,10 +48,10 @@ public class PackedRecordPointerSuite {
     final MemoryBlock page0 = memoryManager.allocatePage(100);
     final MemoryBlock page1 = memoryManager.allocatePage(100);
     final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1, 42);
-    PackedRecordPointer packedPointerWrapper = new PackedRecordPointer();
-    packedPointerWrapper.packedRecordPointer = PackedRecordPointer.packPointer(addressInPage1, 360);
-    Assert.assertEquals(360, packedPointerWrapper.getPartitionId());
-    Assert.assertEquals(addressInPage1, packedPointerWrapper.getRecordPointer());
+    PackedRecordPointer packedPointer = new PackedRecordPointer();
+    packedPointer.set(PackedRecordPointer.packPointer(addressInPage1, 360));
+    Assert.assertEquals(360, packedPointer.getPartitionId());
+    Assert.assertEquals(addressInPage1, packedPointer.getRecordPointer());
     memoryManager.cleanUpAllAllocatedMemory();
   }
 }

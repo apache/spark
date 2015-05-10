@@ -95,7 +95,7 @@ final class UnsafeShuffleSorter {
 
       @Override
       public void loadNext() {
-        packedRecordPointer.packedRecordPointer = sortBuffer[position];
+        packedRecordPointer.set(sortBuffer[position]);
         position++;
       }
     };

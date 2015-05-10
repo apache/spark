@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle.unsafe;
 
 import java.io.*;
+import java.nio.ByteBuffer;
 import java.util.*;
 
 import scala.*;
@@ -285,6 +286,42 @@ public class UnsafeShuffleWriterSuite {
   @Test
   public void mergeSpillsWithFileStream() throws Exception {
     testMergingSpills(false);
+  }
+
+  @Test
+  public void writeRecordsThatAreBiggerThanDiskWriteBufferSize() throws Exception {
+    final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
+    final ArrayList<Product2<Object, Object>> dataToWrite =
+      new ArrayList<Product2<Object, Object>>();
+    final byte[] bytes = new byte[(int) (UnsafeShuffleExternalSorter.DISK_WRITE_BUFFER_SIZE * 2.5)];
+    new Random(42).nextBytes(bytes);
+    dataToWrite.add(new Tuple2<Object, Object>(1, ByteBuffer.wrap(bytes)));
+    writer.write(dataToWrite.iterator());
+    writer.stop(true);
+    Assert.assertEquals(
+      HashMultiset.create(dataToWrite),
+      HashMultiset.create(readRecordsFromFile()));
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void writeRecordsThatAreBiggerThanMaximumRecordSize() throws Exception {
+    final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
+    final ArrayList<Product2<Object, Object>> dataToWrite =
+      new ArrayList<Product2<Object, Object>>();
+    final byte[] bytes = new byte[UnsafeShuffleWriter.MAXIMUM_RECORD_SIZE * 2];
+    new Random(42).nextBytes(bytes);
+    dataToWrite.add(new Tuple2<Object, Object>(1, bytes));
+    try {
+      // Insert a record and force a spill so that there's something to clean up:
+      writer.insertRecordIntoSorter(new Tuple2<Object, Object>(1, 1));
+      writer.forceSorterToSpill();
+      writer.write(dataToWrite.iterator());
+      Assert.fail("Expected exception to be thrown");
+    } catch (IOException e) {
+      // Pass
+    }
+    assertSpillFilesWereCleanedUp();
   }
 
   @Test

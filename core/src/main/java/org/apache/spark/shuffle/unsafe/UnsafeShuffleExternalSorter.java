@@ -57,8 +57,9 @@ final class UnsafeShuffleExternalSorter {
 
   private final Logger logger = LoggerFactory.getLogger(UnsafeShuffleExternalSorter.class);
 
-  private static final int SER_BUFFER_SIZE = 1024 * 1024;  // TODO: tune this / don't duplicate
-  private static final int PAGE_SIZE = 1024 * 1024;  // TODO: tune this
+  @VisibleForTesting
+  static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
+  private static final int PAGE_SIZE = PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES;
 
   private final int initialSize;
   private final int numPartitions;
@@ -88,13 +89,13 @@ final class UnsafeShuffleExternalSorter {
   private long freeSpaceInCurrentPage = 0;
 
   public UnsafeShuffleExternalSorter(
-    TaskMemoryManager memoryManager,
-    ShuffleMemoryManager shuffleMemoryManager,
-    BlockManager blockManager,
-    TaskContext taskContext,
-    int initialSize,
-    int numPartitions,
-    SparkConf conf) throws IOException {
+      TaskMemoryManager memoryManager,
+      ShuffleMemoryManager shuffleMemoryManager,
+      BlockManager blockManager,
+      TaskContext taskContext,
+      int initialSize,
+      int numPartitions,
+      SparkConf conf) throws IOException {
     this.memoryManager = memoryManager;
     this.shuffleMemoryManager = shuffleMemoryManager;
     this.blockManager = blockManager;
@@ -140,8 +141,9 @@ final class UnsafeShuffleExternalSorter {
 
     // Small writes to DiskBlockObjectWriter will be fairly inefficient. Since there doesn't seem to
     // be an API to directly transfer bytes from managed memory to the disk writer, we buffer
-    // records in a byte array. This array only needs to be big enough to hold a single record.
-    final byte[] arr = new byte[SER_BUFFER_SIZE];
+    // data through a byte array. This array does not need to be large enough to hold a single
+    // record;
+    final byte[] writeBuffer = new byte[DISK_WRITE_BUFFER_SIZE];
 
     // Because this output will be read during shuffle, its compression codec must be controlled by
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
@@ -186,16 +188,23 @@ final class UnsafeShuffleExternalSorter {
       }
 
       final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
-      final int recordLength = PlatformDependent.UNSAFE.getInt(
-        memoryManager.getPage(recordPointer), memoryManager.getOffsetInPage(recordPointer));
-      PlatformDependent.copyMemory(
-        memoryManager.getPage(recordPointer),
-        memoryManager.getOffsetInPage(recordPointer) + 4, // skip over record length
-        arr,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
-        recordLength);
-      assert (writer != null);  // To suppress an IntelliJ warning
-      writer.write(arr, 0, recordLength);
+      final Object recordPage = memoryManager.getPage(recordPointer);
+      final long recordOffsetInPage = memoryManager.getOffsetInPage(recordPointer);
+      int dataRemaining = PlatformDependent.UNSAFE.getInt(recordPage, recordOffsetInPage);
+      long recordReadPosition = recordOffsetInPage + 4; // skip over record length
+      while (dataRemaining > 0) {
+        final int toTransfer = Math.min(DISK_WRITE_BUFFER_SIZE, dataRemaining);
+        PlatformDependent.copyMemory(
+          recordPage,
+          recordReadPosition,
+          writeBuffer,
+          PlatformDependent.BYTE_ARRAY_OFFSET,
+          toTransfer);
+        assert (writer != null);  // To suppress an IntelliJ warning
+        writer.write(writeBuffer, 0, toTransfer);
+        recordReadPosition += toTransfer;
+        dataRemaining -= toTransfer;
+      }
       // TODO: add a test that detects whether we leave this call out:
       writer.recordWritten();
     }

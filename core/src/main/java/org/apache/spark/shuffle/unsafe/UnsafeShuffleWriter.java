@@ -54,7 +54,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private final Logger logger = LoggerFactory.getLogger(UnsafeShuffleWriter.class);
 
-  private static final int SER_BUFFER_SIZE = 1024 * 1024;  // TODO: tune this
+  @VisibleForTesting
+  static final int MAXIMUM_RECORD_SIZE = 1024 * 1024 * 64; // 64 megabytes
   private static final ClassTag<Object> OBJECT_CLASS_TAG = ClassTag$.MODULE$.Object();
 
   private final BlockManager blockManager;
@@ -108,19 +109,26 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.transferToEnabled = sparkConf.getBoolean("spark.file.transferTo", true);
   }
 
-  public void write(Iterator<Product2<K, V>> records) {
+  public void write(Iterator<Product2<K, V>> records) throws IOException {
     write(JavaConversions.asScalaIterator(records));
   }
 
   @Override
-  public void write(scala.collection.Iterator<Product2<K, V>> records) {
+  public void write(scala.collection.Iterator<Product2<K, V>> records) throws IOException {
     try {
       while (records.hasNext()) {
         insertRecordIntoSorter(records.next());
       }
       closeAndWriteOutput();
     } catch (Exception e) {
-      PlatformDependent.throwException(e);
+      // Unfortunately, we have to catch Exception here in order to ensure proper cleanup after
+      // errors becuase Spark's Scala code, or users' custom Serializers, might throw arbitrary
+      // unchecked exceptions.
+      try {
+        sorter.cleanupAfterError();
+      } finally {
+        throw new IOException("Error during shuffle write", e);
+      }
     }
   }
 
@@ -134,7 +142,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       4096, // Initial size (TODO: tune this!)
       partitioner.numPartitions(),
       sparkConf);
-    serArray = new byte[SER_BUFFER_SIZE];
+    serArray = new byte[MAXIMUM_RECORD_SIZE];
     serByteBuffer = ByteBuffer.wrap(serArray);
     serOutputStream = serializer.serializeStream(new ByteBufferOutputStream(serByteBuffer));
   }
