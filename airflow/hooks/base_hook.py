@@ -1,3 +1,5 @@
+import random
+
 from airflow import settings
 from airflow.models import Connection
 
@@ -13,17 +15,20 @@ class BaseHook(object):
     def __init__(self, source):
         pass
 
-    def get_connection(self, conn_id):
+    def get_connections(self, conn_id):
         session = settings.Session()
         db = session.query(
             Connection).filter(
-                Connection.conn_id == conn_id).first()
+                Connection.conn_id == conn_id).all()
         if not db:
             raise Exception(
                 "The conn_id `{0}` isn't defined".format(conn_id))
         session.expunge_all()
         session.close()
         return db
+
+    def get_connection(self, conn_id):
+        return random.choice(self.get_connections(conn_id))
 
     def get_conn(self):
         raise NotImplemented()
