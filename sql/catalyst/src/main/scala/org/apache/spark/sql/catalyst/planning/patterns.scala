@@ -143,11 +143,11 @@ object PartialAggregation {
         // We need to pass all grouping expressions though so the grouping can happen a second
         // time. However some of them might be unnamed so we alias them allowing them to be
         // referenced in the second aggregation.
-        val namedGroupingExpressions: Map[ExpressionEquals, NamedExpression] =
-          groupingExpressions.filter(!_.isInstanceOf[Literal]).map {
-            case n: NamedExpression => (ExpressionEquals(n), n)
-            case other => (ExpressionEquals(other), Alias(other, "PartialGroup")())
-          }.toMap
+        val namedGroupingExpressions = new ExpressionMap[NamedExpression]()
+        groupingExpressions.filter(!_.isInstanceOf[Literal]).foreach {
+          case n: NamedExpression => namedGroupingExpressions.add(n, n)
+          case other => namedGroupingExpressions.add(other, Alias(other, "PartialGroup")())
+        }
 
         // Replace aggregations with a new expression that computes the result from the already
         // computed partial evaluations and grouping values.
@@ -160,7 +160,7 @@ object PartialAggregation {
             // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
             // (Should we just turn `GetField` into a `NamedExpression`?)
             namedGroupingExpressions
-              .get(ExpressionEquals(e.transform { case Alias(g: ExtractValue, _) => g }))
+              .get(e.transform { case Alias(g: ExtractValue, _) => g })
               .map(_.toAttribute)
               .getOrElse(e)
         }).asInstanceOf[Seq[NamedExpression]]

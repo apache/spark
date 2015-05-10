@@ -84,10 +84,10 @@ trait CheckAnalysis {
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
-            val normalizedGroupingExprs = groupingExprs.map(ExpressionEquals.apply)
+            val normalizedGroupingExprs = ExpressionSet(groupingExprs)
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
               case _: AggregateExpression => // OK
-              case e if normalizedGroupingExprs.exists(_ == ExpressionEquals(e)) => // OK
+              case e if normalizedGroupingExprs.contains(e) => // OK
               case e if e.children.size > 0 => e.children.foreach(checkValidAggregateExpression)
               case e: NamedExpression =>
                 failAnalysis(

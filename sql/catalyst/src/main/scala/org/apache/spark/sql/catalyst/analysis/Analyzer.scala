@@ -150,12 +150,12 @@ class Analyzer(
      * @return the attributes of non selected specified via bitmask (with the bit set to 1)
      */
     private def buildNonSelectExprSet(bitmask: Int, exprs: Seq[Expression])
-    : OpenHashSet[ExpressionEquals] = {
-      val set = new OpenHashSet[ExpressionEquals](2)
+    : ExpressionSet = {
+      val set = new ExpressionSet()
 
       var bit = exprs.length - 1
       while (bit >= 0) {
-        if (((bitmask >> bit) & 1) == 0) set.add(ExpressionEquals(exprs(bit)))
+        if (((bitmask >> bit) & 1) == 0) set.add(exprs(bit))
         bit -= 1
       }
 
@@ -201,7 +201,7 @@ class Analyzer(
         val nonSelectedGroupExprSet = buildNonSelectExprSet(bitmask, g.groupByExprs)
 
         val substitution = (g.child.output :+ g.gid).map(expr => expr transformDown {
-          case x: Expression if nonSelectedGroupExprSet.contains(ExpressionEquals(x)) =>
+          case x: Expression if nonSelectedGroupExprSet.contains(x) =>
             // if the input attribute in the Invalid Grouping Expression set of for this group
             // replace it with constant null
             Literal.create(null, expr.dataType)

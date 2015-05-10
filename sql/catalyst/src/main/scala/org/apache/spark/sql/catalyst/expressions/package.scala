@@ -77,29 +77,4 @@ package object expressions  {
     /** Uses the given row to store the output of the projection. */
     def target(row: MutableRow): MutableProjection
   }
-
-  /**
-   * A utility classes for check the expression equality in semantic, not literally.
-   */
-  trait ExpressionEquals
-
-  private[this] class AttributeRefEquals(private val normalized: Expression)
-    extends ExpressionEquals {
-    override def equals(other: Any): Boolean = other match {
-      case o: AttributeRefEquals => normalized == o.normalized
-      case _ => false
-    }
-
-    override def hashCode(): Int = normalized.hashCode()
-  }
-
-  object ExpressionEquals {
-    def apply(e: Expression): ExpressionEquals = new AttributeRefEquals(normalize(e))
-
-    protected def normalize(expr: Expression): Expression = expr.transformUp {
-      case n: AttributeReference =>
-        // We don't care about the name of AttributeReference in its semantic equality check
-        new AttributeReference(null, n.dataType, n.nullable, n.metadata)(n.exprId, n.qualifiers)
-    }
-  }
 }
