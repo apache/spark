@@ -23,7 +23,7 @@ if sys.version > '3':
     xrange = range
 
 from pyspark.mllib.common import callMLlibFunc, inherit_doc
-from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import Vector, Vectors, SparseVector, _convert_to_vector
 
 
 class MLUtils(object):
@@ -172,10 +172,13 @@ class MLUtils(object):
     @staticmethod
     def appendBias(data):
         """
-        Returns a new vector with `1.0` (bias) appended to the input vector.
+        Returns a new vector with `1.0` (bias) appended to
+        the end of the input vector.
         """
         vec = _convert_to_vector(data)
-        return np.append(vec, 1.0)
+        if isinstance(vec, Vector):
+            vec = vec.toArray()
+        return np.append(vec, 1.0).tolist()
 
     @staticmethod
     def loadVectors(sc, path):

@@ -824,6 +824,13 @@ class MLUtilsTests(MLlibTestCase):
         data = [2.0, 2.0, 2.0]
         ret = MLUtils.appendBias(data)
         self.assertEqual(ret[3], 1.0)
+        self.assertEqual(type(ret), list)
+
+    def test_append_bias_with_vector(self):
+        data = Vectors.dense([2.0, 2.0, 2.0])
+        ret = MLUtils.appendBias(data)
+        self.assertEqual(ret[3], 1.0)
+        self.assertEqual(type(ret), list)
 
     def test_load_vectors(self):
         import shutil

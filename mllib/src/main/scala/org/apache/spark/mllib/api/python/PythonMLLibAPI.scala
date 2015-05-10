@@ -77,8 +77,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * @param path file or directory path in any Hadoop-supported file system URI
    * @return serialized vectors in a RDD
    */
-  def loadVectors(jsc: JavaSparkContext,
-                  path: String): RDD[Vector] =
+  def loadVectors(jsc: JavaSparkContext, path: String): RDD[Vector] =
     MLUtils.loadVectors(jsc.sc, path)
 
   private def trainRegressionModel(
