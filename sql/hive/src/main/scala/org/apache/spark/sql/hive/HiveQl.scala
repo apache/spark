@@ -64,10 +64,11 @@ case class CreateTableAsSelect(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
   override lazy val resolved: Boolean =
-    // TODO add more condition?
     tableDesc.specifiedDatabase.isDefined &&
     tableDesc.schema.size > 0 &&
     tableDesc.serde.isDefined &&
+    tableDesc.inputFormat.isDefined &&
+    tableDesc.outputFormat.isDefined &&
     childrenResolved
 }
 
@@ -254,7 +255,6 @@ private[hive] object HiveQl {
 
   /**
    * Returns the HiveConf
-   * TODO get it from HiveContext?
    */
   private[this] def hiveConf(): HiveConf = {
     val ss = SessionState.get() // SessionState is lazy initializaion, it can be null here
