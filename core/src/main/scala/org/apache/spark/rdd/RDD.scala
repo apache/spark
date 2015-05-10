@@ -20,7 +20,7 @@ package org.apache.spark.rdd
 import java.util.Random
 
 import scala.collection.{mutable, Map}
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashSet, Stack}
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 
@@ -1515,22 +1515,39 @@ abstract class RDD[T: ClassTag](
     this.mapPartitions(identity, preservesPartitioning = true)(classTag)
   }
 
-  // Avoid handling doCheckpoint multiple times to prevent excessive recursion
-  @transient private var doCheckpointCalled = false
-
   /**
    * Performs the checkpointing of this RDD by saving this. It is called after a job using this RDD
    * has completed (therefore the RDD has been materialized and potentially stored in memory).
-   * doCheckpoint() is called recursively on the parent RDDs.
+   * If RDD is already checkpointed, do nothing here, just return. Otherwise, traverse the lineage
+   * to check whether there is any RDD need to be checkpointed. If the parent RDDs has already done
+   * checkpoint or has been traversed, then the current branch in lineage is finished traversing, 
+   * and continue traverse other branches until all RDD in lineage are traversed. For
+   * lineage like A -- B -- C -- D, make sure A and B not be visited twice when doCheckpoint on D.
+   *                    \       /
+   *                     `- E -'
+   *                     
+   * O(n) for each call, n is RDD number in lineage.
    */
   private[spark] def doCheckpoint() {
-    if (!doCheckpointCalled) {
-      doCheckpointCalled = true
-      if (checkpointData.isDefined) {
-        checkpointData.get.doCheckpoint()
-      } else {
-        dependencies.foreach(_.rdd.doCheckpoint())
-      }
+    val visited = new HashSet[RDD[_]]
+    // We are manually maintaining a stack here to prevent StackOverflowError
+    // caused by recursively visiting
+    val waitingForVisit = new Stack[RDD[_]]
+    def visit(rdd: RDD[_]) {
+      if (!visited(rdd) && !rdd.isCheckpointed) {
+        visited += rdd
+        if (rdd.checkpointData.isDefined) {
+          rdd.checkpointData.get.doCheckpoint()
+        } else {
+          for (dep <- rdd.dependencies) {
+            waitingForVisit.push(dep.rdd)
+          }
+        }
+      }      
+    }
+    waitingForVisit.push(this)
+    while (!waitingForVisit.isEmpty) {
+      visit(waitingForVisit.pop())
     }
   }
 

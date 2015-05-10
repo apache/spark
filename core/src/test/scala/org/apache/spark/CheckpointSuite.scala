@@ -239,6 +239,60 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     assert(rdd.isCheckpointed === true)
     assert(rdd.partitions.size === 0)
   }
+    
+  test("CheckpointRDD after action") {
+    // rdd lineage: rdd0 --> rdd1 --> rdd2 --> rdd3 
+    //                         |
+    //                          `-->rdd4
+
+    val rdd0 = sc.makeRDD(1 to 4, 2).filter(_>1)
+    val rdd1 = rdd0.map(x => x + 1)
+    val rdd2 = rdd1.map(x => x + 2)
+    val rdd3 = rdd2.map(x => x + 3)
+    val rdd4 = rdd1.map(x => x + 4)    
+    rdd0.checkpoint()
+    assert(rdd0.isCheckpointed === false)
+    assert(rdd1.dependencies.head.rdd === rdd0)
+    rdd3.collect()
+    assert(rdd3.isCheckpointed === false)
+    assert(rdd3.dependencies.head.rdd === rdd2)
+    // rdd0 should be checkPointed after rdd3's action
+    assert(rdd0.isCheckpointed === true)
+    rdd3.checkpoint()
+    assert(rdd3.isCheckpointed === false)
+    rdd3.collect()
+    assert(rdd3.isCheckpointed === true)
+    // rdd3's dependence rdd should be CheckpointRDD instead of rdd2
+    assert(rdd3.dependencies.head.rdd != rdd2)
+    val rdd3Dep = rdd3.dependencies.head.rdd
+    rdd3.checkpoint()
+    rdd3.collect()
+    // rdd3 would not create new CheckpointRDD if it is already checkPointed
+    assert(rdd3.dependencies.head.rdd === rdd3Dep)
+    rdd1.checkpoint()
+    assert(rdd1.isCheckpointed === false)
+    assert(rdd1.dependencies.head.rdd === rdd0)
+    rdd3.collect()
+    // rdd3's action would not cause rdd1's checkpoint since rdd3 is checkPointed on rdd1 --> rdd3
+    // path
+    assert(rdd1.isCheckpointed === false)
+    assert(rdd1.dependencies.head.rdd === rdd0)
+    rdd4.collect()
+    // rdd4's actions will cause rdd1's checkpoint because there is no rdd has been checkpointed
+    // on rdd1 --> rdd4 path
+    assert(rdd1.isCheckpointed === true)
+    assert(rdd1.dependencies.head.rdd != rdd0)
+    rdd2.checkpoint()
+    assert(rdd2.isCheckpointed === false)
+    assert(rdd3.isCheckpointed == true)
+    rdd3.collect()
+    // rdd2 will not be checkPointed if rdd3 is checkPointed, but rdd2.checkpointData should be
+    // defined since rdd2.checkpoint() is called.
+    assert(rdd2.isCheckpointed === false)
+    assert(rdd2.checkpointData.isDefined)
+    assert(rdd3.isCheckpointed === true)
+    assert(rdd3.dependencies.head.rdd === rdd3Dep)
+  }
 
   def defaultCollectFunc[T](rdd: RDD[T]): Any = rdd.collect()
 
