@@ -287,7 +287,7 @@ private[sql] object ResolvedDataSource {
           options)
         sqlContext.executePlan(
           InsertIntoFSBasedRelation(
-            r.asInstanceOf[FSBasedRelation],
+            r,
             data.logicalPlan,
             partitionColumns.toArray,
             mode)).toRdd

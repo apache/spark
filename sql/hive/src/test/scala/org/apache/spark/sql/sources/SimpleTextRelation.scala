@@ -27,7 +27,6 @@ import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputForma
 import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.{Row, SQLContext}
@@ -40,7 +39,7 @@ class SimpleTextSource extends FSBasedRelationProvider {
       sqlContext: SQLContext,
       schema: Option[StructType],
       partitionColumns: Option[StructType],
-      parameters: Map[String, String]): BaseRelation = {
+      parameters: Map[String, String]): FSBasedRelation = {
     new SimpleTextRelation(
       Array(parameters("path")), schema,
       partitionColumns.getOrElse(StructType(Array.empty[StructField])), parameters)(sqlContext)
