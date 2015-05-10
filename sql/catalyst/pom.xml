@@ -52,7 +52,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-unsafe_${scala.binary.version}</artifactId>
+      <artifactId>spark-managedmemory_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>

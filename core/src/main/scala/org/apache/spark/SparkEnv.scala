@@ -29,6 +29,7 @@ import com.google.common.collect.MapMaker
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
+import org.apache.spark.managedmemory.memory.{ExecutorMemoryManager, MemoryAllocator}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
@@ -40,7 +41,6 @@ import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinato
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
 import org.apache.spark.storage._
-import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator}
 import org.apache.spark.util.{RpcUtils, Utils}
 
 /**
@@ -385,7 +385,7 @@ object SparkEnv extends Logging {
     outputCommitCoordinator.coordinatorRef = Some(outputCommitCoordinatorRef)
 
     val executorMemoryManager: ExecutorMemoryManager = {
-      val allocator = if (conf.getBoolean("spark.unsafe.offHeap", false)) {
+      val allocator = if (conf.getBoolean("spark.managedMemory.offHeap", false)) {
         MemoryAllocator.UNSAFE
       } else {
         MemoryAllocator.HEAP

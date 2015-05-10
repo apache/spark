@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.expressions.managedmemory.FixedWidthAggregationMap
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -41,7 +42,7 @@ case class AggregateEvaluation(
  *                ensure all values where `groupingExpressions` are equal are present.
  * @param groupingExpressions expressions that are evaluated to determine grouping.
  * @param aggregateExpressions expressions that are computed for each group.
- * @param unsafeEnabled whether to allow Unsafe-based aggregation buffers to be used.
+ * @param managedMemoryEnabled whether to allow managed memory aggregation buffers to be used.
  * @param child the input data source.
  */
 @DeveloperApi
@@ -49,7 +50,7 @@ case class GeneratedAggregate(
     partial: Boolean,
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
-    unsafeEnabled: Boolean,
+    managedMemoryEnabled: Boolean,
     child: SparkPlan)
   extends UnaryNode {
 
@@ -238,9 +239,9 @@ case class GeneratedAggregate(
       StructType(fields)
     }
 
-    val schemaSupportsUnsafe: Boolean = {
-      UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
-        UnsafeFixedWidthAggregationMap.supportsGroupKeySchema(groupKeySchema)
+    val schemaSupportsManagedMemory: Boolean = {
+      FixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
+        FixedWidthAggregationMap.supportsGroupKeySchema(groupKeySchema)
     }
 
     child.execute().mapPartitions { iter =>
@@ -283,9 +284,9 @@ case class GeneratedAggregate(
 
         val resultProjection = resultProjectionBuilder()
         Iterator(resultProjection(buffer))
-      } else if (unsafeEnabled && schemaSupportsUnsafe) {
-        log.info("Using Unsafe-based aggregator")
-        val aggregationMap = new UnsafeFixedWidthAggregationMap(
+      } else if (managedMemoryEnabled && schemaSupportsManagedMemory) {
+        log.info("Using managed memory aggregator")
+        val aggregationMap = new FixedWidthAggregationMap(
           newAggregationBuffer(EmptyRow),
           aggregationBufferSchema,
           groupKeySchema,
@@ -323,8 +324,9 @@ case class GeneratedAggregate(
           }
         }
       } else {
-        if (unsafeEnabled) {
-          log.info("Not using Unsafe-based aggregator because it is not supported for this schema")
+        if (managedMemoryEnabled) {
+          log.info(
+            "Not using managed memory aggregator because it is not supported for this schema")
         }
         val buffers = new java.util.HashMap[Row, MutableRow]()
 

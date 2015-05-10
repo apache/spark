@@ -27,12 +27,12 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-unsafe_2.10</artifactId>
+  <artifactId>spark-managedmemory_2.10</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Unsafe</name>
+  <name>Spark Project Managed Memory</name>
   <url>http://spark.apache.org/</url>
   <properties>
-    <sbt.project.name>unsafe</sbt.project.name>
+    <sbt.project.name>managed-memory</sbt.project.name>
   </properties>
 
   <dependencies>
