@@ -23,6 +23,7 @@ import java.util.*;
 
 import scala.*;
 import scala.collection.Iterator;
+import scala.reflect.ClassTag;
 import scala.runtime.AbstractFunction1;
 
 import com.google.common.collect.HashMultiset;
@@ -44,11 +45,8 @@ import org.apache.spark.*;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.network.util.LimitedInputStream;
+import org.apache.spark.serializer.*;
 import org.apache.spark.scheduler.MapStatus;
-import org.apache.spark.serializer.DeserializationStream;
-import org.apache.spark.serializer.KryoSerializer;
-import org.apache.spark.serializer.Serializer;
-import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.storage.*;
@@ -305,18 +303,59 @@ public class UnsafeShuffleWriterSuite {
   }
 
   @Test
-  public void writeRecordsThatAreBiggerThanMaximumRecordSize() throws Exception {
+  public void writeRecordsThatAreBiggerThanMaxRecordSize() throws Exception {
+    // Use a custom serializer so that we have exact control over the size of serialized data.
+    final Serializer byteArraySerializer = new Serializer() {
+      @Override
+      public SerializerInstance newInstance() {
+        return new SerializerInstance() {
+          @Override
+          public SerializationStream serializeStream(final OutputStream s) {
+            return new SerializationStream() {
+              @Override
+              public void flush() { }
+
+              @Override
+              public <T> SerializationStream writeObject(T t, ClassTag<T> ev1) {
+                byte[] bytes = (byte[]) t;
+                try {
+                  s.write(bytes);
+                } catch (IOException e) {
+                  throw new RuntimeException(e);
+                }
+                return this;
+              }
+
+              @Override
+              public void close() { }
+            };
+          }
+          public <T> ByteBuffer serialize(T t, ClassTag<T> ev1) { return null; }
+          public DeserializationStream deserializeStream(InputStream s) { return null; }
+          public <T> T deserialize(ByteBuffer b, ClassLoader l, ClassTag<T> ev1) { return null; }
+          public <T> T deserialize(ByteBuffer bytes, ClassTag<T> ev1) { return null; }
+        };
+      }
+    };
+    when(shuffleDep.serializer()).thenReturn(Option.<Serializer>apply(byteArraySerializer));
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
-    final ArrayList<Product2<Object, Object>> dataToWrite =
-      new ArrayList<Product2<Object, Object>>();
-    final byte[] bytes = new byte[UnsafeShuffleWriter.MAXIMUM_RECORD_SIZE * 2];
-    new Random(42).nextBytes(bytes);
-    dataToWrite.add(new Tuple2<Object, Object>(1, bytes));
+    // Insert a record and force a spill so that there's something to clean up:
+    writer.insertRecordIntoSorter(new Tuple2<Object, Object>(new byte[1], new byte[1]));
+    writer.forceSorterToSpill();
+    // We should be able to write a record that's right _at_ the max record size
+    final byte[] atMaxRecordSize = new byte[UnsafeShuffleExternalSorter.MAX_RECORD_SIZE];
+    new Random(42).nextBytes(atMaxRecordSize);
+    writer.insertRecordIntoSorter(new Tuple2<Object, Object>(new byte[0], atMaxRecordSize));
+    writer.forceSorterToSpill();
+    // Inserting a record that's larger than the max record size should fail:
+    final byte[] exceedsMaxRecordSize = new byte[UnsafeShuffleExternalSorter.MAX_RECORD_SIZE + 1];
+    new Random(42).nextBytes(exceedsMaxRecordSize);
+    Product2<Object, Object> hugeRecord =
+      new Tuple2<Object, Object>(new byte[0], exceedsMaxRecordSize);
     try {
-      // Insert a record and force a spill so that there's something to clean up:
-      writer.insertRecordIntoSorter(new Tuple2<Object, Object>(1, 1));
-      writer.forceSorterToSpill();
-      writer.write(dataToWrite.iterator());
+      // Here, we write through the public `write()` interface instead of the test-only
+      // `insertRecordIntoSorter` interface:
+      writer.write(Collections.singletonList(hugeRecord).iterator());
       Assert.fail("Expected exception to be thrown");
     } catch (IOException e) {
       // Pass

@@ -57,9 +57,11 @@ final class UnsafeShuffleExternalSorter {
 
   private final Logger logger = LoggerFactory.getLogger(UnsafeShuffleExternalSorter.class);
 
+  private static final int PAGE_SIZE = PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES;
   @VisibleForTesting
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
-  private static final int PAGE_SIZE = PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES;
+  @VisibleForTesting
+  static final int MAX_RECORD_SIZE = PAGE_SIZE - 4;
 
   private final int initialSize;
   private final int numPartitions;

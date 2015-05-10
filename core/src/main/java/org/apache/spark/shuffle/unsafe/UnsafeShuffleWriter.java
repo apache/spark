@@ -18,7 +18,6 @@
 package org.apache.spark.shuffle.unsafe;
 
 import java.io.*;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
 
@@ -73,8 +72,14 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private MapStatus mapStatus = null;
   private UnsafeShuffleExternalSorter sorter = null;
-  private byte[] serArray = null;
-  private ByteBuffer serByteBuffer;
+
+  /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
+  private static final class MyByteArrayOutputStream extends ByteArrayOutputStream {
+    public MyByteArrayOutputStream(int size) { super(size); }
+    public byte[] getBuf() { return buf; }
+  }
+
+  private MyByteArrayOutputStream serBuffer;
   private SerializationStream serOutputStream;
 
   /**
@@ -142,9 +147,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       4096, // Initial size (TODO: tune this!)
       partitioner.numPartitions(),
       sparkConf);
-    serArray = new byte[MAXIMUM_RECORD_SIZE];
-    serByteBuffer = ByteBuffer.wrap(serArray);
-    serOutputStream = serializer.serializeStream(new ByteBufferOutputStream(serByteBuffer));
+    serBuffer = new MyByteArrayOutputStream(1024 * 1024);
+    serOutputStream = serializer.serializeStream(serBuffer);
   }
 
   @VisibleForTesting
@@ -152,8 +156,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     if (sorter == null) {
       open();
     }
-    serArray = null;
-    serByteBuffer = null;
+    serBuffer = null;
     serOutputStream = null;
     final SpillInfo[] spills = sorter.closeAndGetSpills();
     sorter = null;
@@ -178,16 +181,16 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
     final K key = record._1();
     final int partitionId = partitioner.getPartition(key);
-    serByteBuffer.position(0);
+    serBuffer.reset();
     serOutputStream.writeKey(key, OBJECT_CLASS_TAG);
     serOutputStream.writeValue(record._2(), OBJECT_CLASS_TAG);
     serOutputStream.flush();
 
-    final int serializedRecordSize = serByteBuffer.position();
+    final int serializedRecordSize = serBuffer.size();
     assert (serializedRecordSize > 0);
 
     sorter.insertRecord(
-      serArray, PlatformDependent.BYTE_ARRAY_OFFSET, serializedRecordSize, partitionId);
+      serBuffer.getBuf(), PlatformDependent.BYTE_ARRAY_OFFSET, serializedRecordSize, partitionId);
   }
 
   @VisibleForTesting
