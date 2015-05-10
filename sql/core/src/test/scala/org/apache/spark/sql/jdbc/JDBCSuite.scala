@@ -204,6 +204,14 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(ids(2) === 3)
   }
 
+  test("SELECT aliased field using AS") {
+    // Regression test for bug SPARK-7345
+    val df = sql("SELECT NAME as Name1, NAME as Name2 FROM foobar")
+    assert(df.schema.fields.size == 2)
+    assert(df.schema.fields(0).name == "Name1")
+    assert(df.schema.fields(1).name == "Name2")
+  }
+
   test("Basic API") {
     assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE").collect().size === 3)
   }
