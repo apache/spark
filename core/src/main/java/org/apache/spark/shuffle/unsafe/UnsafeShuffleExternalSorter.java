@@ -288,7 +288,6 @@ final class UnsafeShuffleExternalSorter {
    * @return true if the record can be inserted without requiring more allocations, false otherwise.
    */
   private boolean haveSpaceForRecord(int requiredSpace) {
-    logger.warn("Seeing if there's space for the record");
     assert (requiredSpace > 0);
     // The sort array will automatically expand when inserting a new record, so we only need to
     // worry about it having free space when spilling is enabled.
