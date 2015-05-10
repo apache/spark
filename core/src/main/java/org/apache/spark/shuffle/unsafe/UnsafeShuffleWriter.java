@@ -136,7 +136,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       sparkConf);
     serArray = new byte[SER_BUFFER_SIZE];
     serByteBuffer = ByteBuffer.wrap(serArray);
-    // TODO: we should not depend on this class from Kryo; copy its source or find an alternative
     serOutputStream = serializer.serializeStream(new ByteBufferOutputStream(serByteBuffer));
   }
 
