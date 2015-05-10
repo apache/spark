@@ -26,8 +26,9 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.{Row, _}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -339,6 +340,8 @@ abstract class FSBasedRelation private[sql](
 
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
+  private val codegenEnabled = sqlContext.conf.codegenEnabled
+
   private var _partitionSpec: PartitionSpec = maybePartitionSpec.map { spec =>
     spec.copy(partitionColumns = spec.partitionColumns.asNullable)
   }.getOrElse {
@@ -421,7 +424,25 @@ abstract class FSBasedRelation private[sql](
    *        selected partition.
    */
   def buildScan(requiredColumns: Array[String], inputPaths: Array[String]): RDD[Row] = {
-    buildScan(inputPaths)
+    // Yeah, to workaround serialization...
+    val dataSchema = this.dataSchema
+    val codegenEnabled = this.codegenEnabled
+
+    val requiredOutput = requiredColumns.map { col =>
+      val field = dataSchema(col)
+      BoundReference(dataSchema.fieldIndex(col), field.dataType, field.nullable)
+    }.toSeq
+
+    val buildProjection = if (codegenEnabled) {
+      GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
+    } else {
+      () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)
+    }
+
+    buildScan(inputPaths).mapPartitions { rows =>
+      val mutableProjection = buildProjection()
+      rows.map(mutableProjection)
+    }
   }
 
   /**

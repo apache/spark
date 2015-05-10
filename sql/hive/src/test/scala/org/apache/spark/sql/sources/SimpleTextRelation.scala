@@ -113,19 +113,29 @@ class SimpleTextRelation(
   override def outputWriterClass: Class[_ <: OutputWriter] =
     classOf[SimpleTextOutputWriter]
 
-  override def buildScan(
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      inputPaths: Array[String]): RDD[Row] = {
-    val fields = dataSchema.fields
-    sparkContext.textFile(inputPaths.mkString(",")).map { record =>
-      val valueMap = record.split(",").zip(fields).map {
-        case (value, StructField(name, dataType, _, _)) =>
-          name -> Cast(Literal(value), dataType).eval()
-      }.toMap
+  override def buildScan(inputPaths: Array[String]): RDD[Row] = {
+    val fields = dataSchema.map(_.dataType)
 
-      // This mocks a simple projection
-      Row.fromSeq(requiredColumns.map(valueMap).toSeq)
+    sparkContext.textFile(inputPaths.mkString(",")).map { record =>
+      Row(record.split(",").zip(fields).map { case (value, dataType) =>
+        Cast(Literal(value), dataType).eval()
+      }: _*)
     }
   }
+
+//  override def buildScan(
+//      requiredColumns: Array[String],
+//      filters: Array[Filter],
+//      inputPaths: Array[String]): RDD[Row] = {
+//    val fields = dataSchema.fields
+//    sparkContext.textFile(inputPaths.mkString(",")).map { record =>
+//      val valueMap = record.split(",").zip(fields).map {
+//        case (value, StructField(name, dataType, _, _)) =>
+//          name -> Cast(Literal(value), dataType).eval()
+//      }.toMap
+//
+//      // This mocks a simple projection
+//      Row.fromSeq(requiredColumns.map(valueMap).toSeq)
+//    }
+//  }
 }
