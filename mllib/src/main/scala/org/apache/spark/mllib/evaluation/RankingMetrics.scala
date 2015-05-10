@@ -23,6 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.DataFrame
 
 /**
  * ::Experimental::
@@ -33,6 +34,13 @@ import org.apache.spark.rdd.RDD
 @Experimental
 class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])])
   extends Logging with Serializable {
+
+  /**
+   * An auxiliary constructor taking a DataFrame.
+   * @param predictionAndLabels a DataFrame with two array columns: prediction and label
+   */
+  private[mllib] def this(predictionAndLabels: DataFrame) =
+    this(predictionAndLabels.map(r => (r.getSeq(0).toArray, r.getSeq(1).toArray)))
 
   /**
    * Compute the average precision of all the queries, truncated at ranking position k.
