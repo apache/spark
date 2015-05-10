@@ -210,7 +210,8 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
       s"""
         |CREATE TEMPORARY TABLE renamed
         |USING org.apache.spark.sql.jdbc
-        |OPTIONS (url '$url', dbtable '(select NAME as NAME1, NAME as NAME2 from TEST.PEOPLE)', user 'testUser', password 'testPass')
+        |OPTIONS (url '$url', dbtable '(select NAME as NAME1, NAME as NAME2 from TEST.PEOPLE)',
+        |user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
     val df = sql("SELECT * FROM renamed")
