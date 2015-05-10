@@ -27,7 +27,7 @@ sealed class ExpressionMap[A] extends Serializable {
   def get(k: Expression): Option[A] = baseMap.get(ExpressionEquals.normalize(k))
 
   def add(k: Expression, value: A): Unit = {
-    baseMap.put(k, value)
+    baseMap.put(ExpressionEquals.normalize(k), value)
   }
 
   def values: Iterable[A] = baseMap.values
