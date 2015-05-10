@@ -204,12 +204,19 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(ids(2) === 3)
   }
 
-  test("SELECT aliased field using AS") {
+  test("Register JDBC query with renamed fields") {
     // Regression test for bug SPARK-7345
-    val df = sql("SELECT NAME as Name1, NAME as Name2 FROM foobar")
+    sql(
+      s"""
+        |CREATE TEMPORARY TABLE renamed
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable '(select NAME as NAME1, NAME as NAME2 from TEST.PEOPLE)', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
+    val df = sql("SELECT * FROM renamed")
     assert(df.schema.fields.size == 2)
-    assert(df.schema.fields(0).name == "Name1")
-    assert(df.schema.fields(1).name == "Name2")
+    assert(df.schema.fields(0).name == "NAME1")
+    assert(df.schema.fields(1).name == "NAME2")
   }
 
   test("Basic API") {
