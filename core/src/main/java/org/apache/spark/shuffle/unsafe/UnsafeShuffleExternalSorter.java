@@ -53,7 +53,7 @@ import org.apache.spark.unsafe.memory.TaskMemoryManager;
  * spill files. Instead, this merging is performed in {@link UnsafeShuffleWriter}, which uses a
  * specialized merge procedure that avoids extra serialization/deserialization.
  */
-public final class UnsafeShuffleExternalSorter {
+final class UnsafeShuffleExternalSorter {
 
   private final Logger logger = LoggerFactory.getLogger(UnsafeShuffleExternalSorter.class);
 

@@ -28,7 +28,6 @@ import scala.collection.JavaConversions;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
 
-import com.esotericsoftware.kryo.io.ByteBufferOutputStream;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
@@ -75,7 +74,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private UnsafeShuffleExternalSorter sorter = null;
   private byte[] serArray = null;
   private ByteBuffer serByteBuffer;
-  // TODO: we should not depend on this class from Kryo; copy its source or find an alternative
   private SerializationStream serOutputStream;
 
   /**

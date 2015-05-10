@@ -21,7 +21,7 @@ import java.util.Comparator;
 
 import org.apache.spark.util.collection.Sorter;
 
-public final class UnsafeShuffleSorter {
+final class UnsafeShuffleSorter {
 
   private final Sorter<PackedRecordPointer, long[]> sorter;
   private static final class SortComparator implements Comparator<PackedRecordPointer> {
