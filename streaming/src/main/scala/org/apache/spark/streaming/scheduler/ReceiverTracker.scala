@@ -284,7 +284,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   class ReceiverLauncher {
     @transient val env = ssc.env
     @volatile @transient private var running = false
-    @transient private val TIMEOUT = 10000
     @transient val thread  = new Thread() {
       override def run() {
         try {
@@ -310,12 +309,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       if (graceful) {
         val pollTime = 100
-        var elapsedTime = 0
-        def done: Boolean = { receiverInfo.isEmpty && !running }
         logInfo("Waiting for receiver job to terminate gracefully")
-        while(!done && elapsedTime < TIMEOUT) {
+        while (receiverInfo.nonEmpty || running) {
           Thread.sleep(pollTime)
-          elapsedTime += pollTime
         }
         logInfo("Waited for receiver job to terminate gracefully")
       }
