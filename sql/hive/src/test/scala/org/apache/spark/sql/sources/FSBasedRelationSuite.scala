@@ -25,6 +25,7 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.parquet.ParquetTest
 import org.apache.spark.sql.types._
 
+// TODO Don't extend ParquetTest
 // This test suite extends ParquetTest for some convenient utility methods. These methods should be
 // moved to some more general places, maybe QueryTest.
 class FSBasedRelationSuite extends QueryTest with ParquetTest {

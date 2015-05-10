@@ -238,6 +238,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def defaultDataSourceName: String =
     getConf(DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.parquet")
 
+  private[spark] def partitionDiscoveryEnabled() =
+    getConf(SQLConf.PARTITION_DISCOVERY_ENABLED, "true").toBoolean
+
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
   private[spark] def schemaStringLengthThreshold: Int =

@@ -101,12 +101,8 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           }
         }
 
-      case logical.InsertIntoTable(LogicalRelation(_: InsertableRelation), _, _, _, _) =>
-        // OK
-
-      case logical.InsertIntoTable(LogicalRelation(_: FSBasedRelation), _, _, _, _) =>
-        // OK
-
+      case logical.InsertIntoTable(LogicalRelation(_: InsertableRelation), _, _, _, _) => // OK
+      case logical.InsertIntoTable(LogicalRelation(_: FSBasedRelation), _, _, _, _) => // OK
       case logical.InsertIntoTable(l: LogicalRelation, _, _, _, _) =>
         // The relation in l is not an InsertableRelation.
         failAnalysis(s"$l does not allow insertion.")

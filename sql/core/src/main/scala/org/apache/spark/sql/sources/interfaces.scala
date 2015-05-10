@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import scala.util.Try
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
@@ -24,9 +26,9 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.types.{StructField, StructType}
-import org.apache.spark.sql._
 
 /**
  * ::DeveloperApi::
@@ -87,7 +89,7 @@ trait SchemaRelationProvider {
  * ::DeveloperApi::
  * Implemented by objects that produce relations for a specific kind of data source
  * with a given schema and partitioned columns.  When Spark SQL is given a DDL operation with a
- * USING clause specified (to specify the implemented SchemaRelationProvider), a user defined
+ * USING clause specified (to specify the implemented [[FSBasedRelationProvider]]), a user defined
  * schema, and an optional list of partition columns, this interface is used to pass in the
  * parameters specified by a user.
  *
@@ -114,7 +116,7 @@ trait FSBasedRelationProvider {
       sqlContext: SQLContext,
       schema: Option[StructType],
       partitionColumns: Option[StructType],
-      parameters: Map[String, String]): BaseRelation
+      parameters: Map[String, String]): FSBasedRelation
 }
 
 @DeveloperApi
@@ -282,12 +284,13 @@ abstract class OutputWriter {
    * Closes the [[OutputWriter]]. Invoked on the executor side after all rows are persisted, before
    * the task output is committed.
    */
-  def close(): Unit = ()
+  def close(): Unit
 }
 
 /**
  * ::Experimental::
- * A [[BaseRelation]] that abstracts file system based data sources.
+ * A [[BaseRelation]] that provides much of the common code required for formats that store their
+ * data to an HDFS compatible filesystem.
  *
  * For the read path, similar to [[PrunedFilteredScan]], it can eliminate unneeded columns and
  * filter using selected predicates before producing an RDD containing all matching tuples as
@@ -338,15 +341,12 @@ abstract class FSBasedRelation private[sql](
   private var _partitionSpec: PartitionSpec = maybePartitionSpec.map { spec =>
     spec.copy(partitionColumns = spec.partitionColumns.asNullable)
   }.getOrElse {
-    if (partitionDiscoverEnabled()) {
+    if (sqlContext.conf.partitionDiscoveryEnabled()) {
       discoverPartitions()
     } else {
       PartitionSpec(StructType(Nil), Array.empty[Partition])
     }
   }
-
-  private def partitionDiscoverEnabled() =
-    sqlContext.conf.getConf(SQLConf.PARTITION_DISCOVERY_ENABLED, "true").toBoolean
 
   private[sql] def partitionSpec: PartitionSpec = _partitionSpec
 
@@ -356,7 +356,7 @@ abstract class FSBasedRelation private[sql](
   def partitionColumns: StructType = partitionSpec.partitionColumns
 
   private[sql] def refresh(): Unit = {
-    if (partitionDiscoverEnabled()) {
+    if (sqlContext.conf.partitionDiscoveryEnabled()) {
       _partitionSpec = discoverPartitions()
     }
   }
@@ -365,11 +365,10 @@ abstract class FSBasedRelation private[sql](
     val basePaths = paths.map(new Path(_))
     val leafDirs = basePaths.flatMap { path =>
       val fs = path.getFileSystem(hadoopConf)
-      if (fs.exists(path)) {
-        SparkHadoopUtil.get.listLeafDirStatuses(fs, fs.makeQualified(path))
-      } else {
-        Seq.empty[FileStatus]
-      }
+      Try(fs.getFileStatus(path.makeQualified(fs.getUri, fs.getWorkingDirectory)))
+        .filter(_.isDir)
+        .map(SparkHadoopUtil.get.listLeafDirStatuses(fs, _))
+        .getOrElse(Seq.empty[FileStatus])
     }.map(_.getPath)
 
     if (leafDirs.nonEmpty) {
