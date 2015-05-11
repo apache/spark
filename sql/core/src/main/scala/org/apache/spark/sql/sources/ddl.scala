@@ -239,6 +239,8 @@ private[sql] object ResolvedDataSource {
             SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray
           }
 
+          val dataSchema = StructType(schema.filterNot(f => partitionColumns.contains(f.name)))
+
           dataSource.createRelation(
             sqlContext,
             paths,
@@ -279,7 +281,7 @@ private[sql] object ResolvedDataSource {
       schema.find(_.name == col).getOrElse {
         throw new RuntimeException(s"Partition column $col not found in schema $schema")
       }
-    })
+    }).asNullable
   }
 
   /** Create a [[ResolvedDataSource]] for saving the content of the given [[DataFrame]]. */
@@ -305,10 +307,11 @@ private[sql] object ResolvedDataSource {
           val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
           path.makeQualified(fs.getUri, fs.getWorkingDirectory)
         }
+        val dataSchema = StructType(data.schema.filterNot(f => partitionColumns.contains(f.name)))
         val r = dataSource.createRelation(
           sqlContext,
           Array(outputPath.toString),
-          Some(data.schema),
+          Some(dataSchema.asNullable),
           Some(partitionColumnsSchema(data.schema, partitionColumns)),
           caseInsensitiveOptions)
         sqlContext.executePlan(

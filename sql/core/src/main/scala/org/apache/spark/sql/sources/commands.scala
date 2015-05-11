@@ -197,10 +197,11 @@ private[sql] case class InsertIntoFSBasedRelation(
       if (needsConversion) {
         val converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
         while (iterator.hasNext) {
-          val row = converter(iterator.next()).asInstanceOf[Row]
+          val row = iterator.next()
           val partitionPart = partitionProj(row)
           val dataPart = dataProj(row)
-          writerContainer.outputWriterForRow(partitionPart).write(dataPart)
+          val convertedDataPart = converter(dataPart).asInstanceOf[Row]
+          writerContainer.outputWriterForRow(partitionPart).write(convertedDataPart)
         }
       } else {
         while (iterator.hasNext) {
