@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle.unsafe;
 
-import org.apache.spark.storage.BlockId;
+import org.apache.spark.storage.TempShuffleBlockId;
 
 import java.io.File;
 
@@ -27,9 +27,9 @@ import java.io.File;
 final class SpillInfo {
   final long[] partitionLengths;
   final File file;
-  final BlockId blockId;
+  final TempShuffleBlockId blockId;
 
-  public SpillInfo(int numPartitions, File file, BlockId blockId) {
+  public SpillInfo(int numPartitions, File file, TempShuffleBlockId blockId) {
     this.partitionLengths = new long[numPartitions];
     this.file = file;
     this.blockId = blockId;

@@ -153,7 +153,7 @@ final class UnsafeShuffleExternalSorter {
     final Tuple2<TempShuffleBlockId, File> spilledFileInfo =
       blockManager.diskBlockManager().createTempShuffleBlock();
     final File file = spilledFileInfo._2();
-    final BlockId blockId = spilledFileInfo._1();
+    final TempShuffleBlockId blockId = spilledFileInfo._1();
     final SpillInfo spillInfo = new SpillInfo(numPartitions, file, blockId);
 
     // Unfortunately, we need a serializer instance in order to construct a DiskBlockObjectWriter.
@@ -320,7 +320,7 @@ final class UnsafeShuffleExternalSorter {
       }
     }
     if (requiredSpace > freeSpaceInCurrentPage) {
-      logger.debug("Required space {} is less than free space in current page ({}}", requiredSpace,
+      logger.trace("Required space {} is less than free space in current page ({})", requiredSpace,
         freeSpaceInCurrentPage);
       // TODO: we should track metrics on the amount of space wasted when we roll over to a new page
       // without using the free space at the end of the current page. We should also do this for

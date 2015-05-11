@@ -37,11 +37,14 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
-import static org.mockito.AdditionalAnswers.returnsSecondArg;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.*;
+import org.apache.spark.io.CompressionCodec$;
+import org.apache.spark.io.LZ4CompressionCodec;
+import org.apache.spark.io.LZFCompressionCodec;
+import org.apache.spark.io.SnappyCompressionCodec;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.network.util.LimitedInputStream;
@@ -65,6 +68,7 @@ public class UnsafeShuffleWriterSuite {
   File tempDir;
   long[] partitionSizesInMergedFile;
   final LinkedList<File> spillFilesCreated = new LinkedList<File>();
+  SparkConf conf;
   final Serializer serializer = new KryoSerializer(new SparkConf());
 
   @Mock(answer = RETURNS_SMART_NULLS) ShuffleMemoryManager shuffleMemoryManager;
@@ -74,10 +78,14 @@ public class UnsafeShuffleWriterSuite {
   @Mock(answer = RETURNS_SMART_NULLS) TaskContext taskContext;
   @Mock(answer = RETURNS_SMART_NULLS) ShuffleDependency<Object, Object, Object> shuffleDep;
 
-  private static final class CompressStream extends AbstractFunction1<OutputStream, OutputStream> {
+  private final class CompressStream extends AbstractFunction1<OutputStream, OutputStream> {
     @Override
     public OutputStream apply(OutputStream stream) {
-      return stream;
+      if (conf.getBoolean("spark.shuffle.compress", true)) {
+        return CompressionCodec$.MODULE$.createCodec(conf).compressedOutputStream(stream);
+      } else {
+        return stream;
+      }
     }
   }
 
@@ -98,6 +106,7 @@ public class UnsafeShuffleWriterSuite {
     mergedOutputFile = File.createTempFile("mergedoutput", "", tempDir);
     partitionSizesInMergedFile = null;
     spillFilesCreated.clear();
+    conf = new SparkConf();
 
     when(shuffleMemoryManager.tryToAcquire(anyLong())).then(returnsFirstArg());
 
@@ -123,8 +132,35 @@ public class UnsafeShuffleWriterSuite {
         );
       }
     });
-    when(blockManager.wrapForCompression(any(BlockId.class), any(InputStream.class)))
-      .then(returnsSecondArg());
+    when(blockManager.wrapForCompression(any(BlockId.class), any(InputStream.class))).thenAnswer(
+      new Answer<InputStream>() {
+        @Override
+        public InputStream answer(InvocationOnMock invocation) throws Throwable {
+          assert (invocation.getArguments()[0] instanceof TempShuffleBlockId);
+          InputStream is = (InputStream) invocation.getArguments()[1];
+          if (conf.getBoolean("spark.shuffle.compress", true)) {
+            return CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(is);
+          } else {
+            return is;
+          }
+        }
+      }
+    );
+
+    when(blockManager.wrapForCompression(any(BlockId.class), any(OutputStream.class))).thenAnswer(
+      new Answer<OutputStream>() {
+        @Override
+        public OutputStream answer(InvocationOnMock invocation) throws Throwable {
+          assert (invocation.getArguments()[0] instanceof TempShuffleBlockId);
+          OutputStream os = (OutputStream) invocation.getArguments()[1];
+          if (conf.getBoolean("spark.shuffle.compress", true)) {
+            return CompressionCodec$.MODULE$.createCodec(conf).compressedOutputStream(os);
+          } else {
+            return os;
+          }
+        }
+      }
+    );
 
     when(shuffleBlockResolver.getDataFile(anyInt(), anyInt())).thenReturn(mergedOutputFile);
     doAnswer(new Answer<Void>() {
@@ -136,11 +172,11 @@ public class UnsafeShuffleWriterSuite {
     }).when(shuffleBlockResolver).writeIndexFile(anyInt(), anyInt(), any(long[].class));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(
-      new Answer<Tuple2<TempLocalBlockId, File>>() {
+      new Answer<Tuple2<TempShuffleBlockId, File>>() {
         @Override
-        public Tuple2<TempLocalBlockId, File> answer(
+        public Tuple2<TempShuffleBlockId, File> answer(
           InvocationOnMock invocationOnMock) throws Throwable {
-          TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
+          TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());
           File file = File.createTempFile("spillFile", ".spill", tempDir);
           spillFilesCreated.add(file);
           return Tuple2$.MODULE$.apply(blockId, file);
@@ -154,7 +190,6 @@ public class UnsafeShuffleWriterSuite {
   }
 
   private UnsafeShuffleWriter<Object, Object> createWriter(boolean transferToEnabled) {
-    SparkConf conf = new SparkConf();
     conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
     return new UnsafeShuffleWriter<Object, Object>(
       blockManager,
@@ -164,7 +199,7 @@ public class UnsafeShuffleWriterSuite {
       new UnsafeShuffleHandle<Object, Object>(0, 1, shuffleDep),
       0, // map id
       taskContext,
-      new SparkConf()
+      conf
     );
   }
 
@@ -183,8 +218,11 @@ public class UnsafeShuffleWriterSuite {
       if (partitionSize > 0) {
         InputStream in = new FileInputStream(mergedOutputFile);
         ByteStreams.skipFully(in, startOffset);
-        DeserializationStream recordsStream = serializer.newInstance().deserializeStream(
-          new LimitedInputStream(in, partitionSize));
+        in = new LimitedInputStream(in, partitionSize);
+        if (conf.getBoolean("spark.shuffle.compress", true)) {
+          in = CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(in);
+        }
+        DeserializationStream recordsStream = serializer.newInstance().deserializeStream(in);
         Iterator<Tuple2<Object, Object>> records = recordsStream.asKeyValueIterator();
         while (records.hasNext()) {
           Tuple2<Object, Object> record = records.next();
@@ -245,7 +283,15 @@ public class UnsafeShuffleWriterSuite {
     assertSpillFilesWereCleanedUp();
   }
 
-  private void testMergingSpills(boolean transferToEnabled) throws IOException {
+  private void testMergingSpills(
+      boolean transferToEnabled,
+      String compressionCodecName) throws IOException {
+    if (compressionCodecName != null) {
+      conf.set("spark.shuffle.compress", "true");
+      conf.set("spark.io.compression.codec", compressionCodecName);
+    } else {
+      conf.set("spark.shuffle.compress", "false");
+    }
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(transferToEnabled);
     final ArrayList<Product2<Object, Object>> dataToWrite =
       new ArrayList<Product2<Object, Object>>();
@@ -265,11 +311,13 @@ public class UnsafeShuffleWriterSuite {
     Assert.assertTrue(mergedOutputFile.exists());
     Assert.assertEquals(2, spillFilesCreated.size());
 
-    long sumOfPartitionSizes = 0;
-    for (long size: partitionSizesInMergedFile) {
-      sumOfPartitionSizes += size;
-    }
-    Assert.assertEquals(mergedOutputFile.length(), sumOfPartitionSizes);
+    //    This assertion only holds for the fast merging path:
+    //    long sumOfPartitionSizes = 0;
+    //    for (long size: partitionSizesInMergedFile) {
+    //      sumOfPartitionSizes += size;
+    //    }
+    //    Assert.assertEquals(sumOfPartitionSizes, mergedOutputFile.length());
+    Assert.assertTrue(mergedOutputFile.length() > 0);
     Assert.assertEquals(
       HashMultiset.create(dataToWrite),
       HashMultiset.create(readRecordsFromFile()));
@@ -277,13 +325,43 @@ public class UnsafeShuffleWriterSuite {
   }
 
   @Test
-  public void mergeSpillsWithTransferTo() throws Exception {
-    testMergingSpills(true);
+  public void mergeSpillsWithTransferToAndLZF() throws Exception {
+    testMergingSpills(true, LZFCompressionCodec.class.getName());
   }
 
   @Test
-  public void mergeSpillsWithFileStream() throws Exception {
-    testMergingSpills(false);
+  public void mergeSpillsWithFileStreamAndLZF() throws Exception {
+    testMergingSpills(false, LZFCompressionCodec.class.getName());
+  }
+
+  @Test
+  public void mergeSpillsWithTransferToAndLZ4() throws Exception {
+    testMergingSpills(true, LZ4CompressionCodec.class.getName());
+  }
+
+  @Test
+  public void mergeSpillsWithFileStreamAndLZ4() throws Exception {
+    testMergingSpills(false, LZ4CompressionCodec.class.getName());
+  }
+
+  @Test
+  public void mergeSpillsWithTransferToAndSnappy() throws Exception {
+    testMergingSpills(true, SnappyCompressionCodec.class.getName());
+  }
+
+  @Test
+  public void mergeSpillsWithFileStreamAndSnappy() throws Exception {
+    testMergingSpills(false, SnappyCompressionCodec.class.getName());
+  }
+
+  @Test
+  public void mergeSpillsWithTransferToAndNoCompression() throws Exception {
+    testMergingSpills(true, null);
+  }
+
+  @Test
+  public void mergeSpillsWithFileStreamAndNoCompression() throws Exception {
+    testMergingSpills(false, null);
   }
 
   @Test

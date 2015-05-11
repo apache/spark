@@ -20,6 +20,7 @@ package org.apache.spark.shuffle.unsafe;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
+import javax.annotation.Nullable;
 
 import scala.Option;
 import scala.Product2;
@@ -35,6 +36,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.*;
+import org.apache.spark.io.CompressionCodec;
+import org.apache.spark.io.CompressionCodec$;
+import org.apache.spark.io.LZFCompressionCodec;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.scheduler.MapStatus;
@@ -53,8 +57,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private final Logger logger = LoggerFactory.getLogger(UnsafeShuffleWriter.class);
 
-  @VisibleForTesting
-  static final int MAXIMUM_RECORD_SIZE = 1024 * 1024 * 64; // 64 megabytes
   private static final ClassTag<Object> OBJECT_CLASS_TAG = ClassTag$.MODULE$.Object();
 
   private final BlockManager blockManager;
@@ -201,6 +203,12 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private long[] mergeSpills(SpillInfo[] spills) throws IOException {
     final File outputFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+    final boolean compressionEnabled = sparkConf.getBoolean("spark.shuffle.compress", true);
+    final CompressionCodec compressionCodec = CompressionCodec$.MODULE$.createCodec(sparkConf);
+    final boolean fastMergeEnabled =
+      sparkConf.getBoolean("spark.shuffle.unsafe.fastMergeEnabled", true);
+    final boolean fastMergeIsSupported =
+      !compressionEnabled || compressionCodec instanceof LZFCompressionCodec;
     try {
       if (spills.length == 0) {
         new FileOutputStream(outputFile).close(); // Create an empty file
@@ -215,11 +223,20 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         Files.move(spills[0].file, outputFile);
         return spills[0].partitionLengths;
       } else {
-        // Need to merge multiple spills.
-        if (transferToEnabled) {
-          return mergeSpillsWithTransferTo(spills, outputFile);
+        if (fastMergeEnabled && fastMergeIsSupported) {
+          // Compression is disabled or we are using an IO compression codec that supports
+          // decompression of concatenated compressed streams, so we can perform a fast spill merge
+          // that doesn't need to interpret the spilled bytes.
+          if (transferToEnabled) {
+            logger.debug("Using transferTo-based fast merge");
+            return mergeSpillsWithTransferTo(spills, outputFile);
+          } else {
+            logger.debug("Using fileStream-based fast merge");
+            return mergeSpillsWithFileStream(spills, outputFile, null);
+          }
         } else {
-          return mergeSpillsWithFileStream(spills, outputFile);
+          logger.debug("Using slow merge");
+          return mergeSpillsWithFileStream(spills, outputFile, compressionCodec);
         }
       }
     } catch (IOException e) {
@@ -230,27 +247,40 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
   }
 
-  private long[] mergeSpillsWithFileStream(SpillInfo[] spills, File outputFile) throws IOException {
+  private long[] mergeSpillsWithFileStream(
+      SpillInfo[] spills,
+      File outputFile,
+      @Nullable CompressionCodec compressionCodec) throws IOException {
     final int numPartitions = partitioner.numPartitions();
     final long[] partitionLengths = new long[numPartitions];
-    final FileInputStream[] spillInputStreams = new FileInputStream[spills.length];
-    FileOutputStream mergedFileOutputStream = null;
+    final InputStream[] spillInputStreams = new FileInputStream[spills.length];
+    OutputStream mergedFileOutputStream = null;
 
     try {
       for (int i = 0; i < spills.length; i++) {
         spillInputStreams[i] = new FileInputStream(spills[i].file);
       }
-      mergedFileOutputStream = new FileOutputStream(outputFile);
-
       for (int partition = 0; partition < numPartitions; partition++) {
+        final long initialFileLength = outputFile.length();
+        mergedFileOutputStream = new FileOutputStream(outputFile, true);
+        if (compressionCodec != null) {
+          mergedFileOutputStream = compressionCodec.compressedOutputStream(mergedFileOutputStream);
+        }
+
         for (int i = 0; i < spills.length; i++) {
           final long partitionLengthInSpill = spills[i].partitionLengths[partition];
-          final FileInputStream spillInputStream = spillInputStreams[i];
-          ByteStreams.copy
-            (new LimitedInputStream(spillInputStream, partitionLengthInSpill),
-              mergedFileOutputStream);
-          partitionLengths[partition] += partitionLengthInSpill;
+          if (partitionLengthInSpill > 0) {
+            InputStream partitionInputStream =
+              new LimitedInputStream(spillInputStreams[i], partitionLengthInSpill);
+            if (compressionCodec != null) {
+              partitionInputStream = compressionCodec.compressedInputStream(partitionInputStream);
+            }
+            ByteStreams.copy(partitionInputStream, mergedFileOutputStream);
+          }
         }
+        mergedFileOutputStream.flush();
+        mergedFileOutputStream.close();
+        partitionLengths[partition] = (outputFile.length() - initialFileLength);
       }
     } finally {
       for (InputStream stream : spillInputStreams) {
