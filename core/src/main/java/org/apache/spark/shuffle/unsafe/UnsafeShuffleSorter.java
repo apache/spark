@@ -17,10 +17,8 @@
 
 package org.apache.spark.shuffle.unsafe;
 
-import java.io.IOException;
 import java.util.Comparator;
 
-import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.Sorter;
 
 final class UnsafeShuffleSorter {
@@ -71,7 +69,7 @@ final class UnsafeShuffleSorter {
    * @param partitionId the partition id, which must be less than or equal to
    *                    {@link PackedRecordPointer#MAXIMUM_PARTITION_ID}.
    */
-  public void insertRecord(long recordPointer, int partitionId) throws IOException {
+  public void insertRecord(long recordPointer, int partitionId) {
     if (!hasSpaceForAnotherRecord()) {
       expandSortBuffer();
     }

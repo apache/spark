@@ -135,7 +135,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       closeAndWriteOutput();
     } catch (Exception e) {
       // Unfortunately, we have to catch Exception here in order to ensure proper cleanup after
-      // errors becuase Spark's Scala code, or users' custom Serializers, might throw arbitrary
+      // errors because Spark's Scala code, or users' custom Serializers, might throw arbitrary
       // unchecked exceptions.
       try {
         sorter.cleanupAfterError();

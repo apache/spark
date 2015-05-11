@@ -139,7 +139,7 @@ final class UnsafeShuffleExternalSorter {
 
     // Currently, we need to open a new DiskBlockObjectWriter for each partition; we can avoid this
     // after SPARK-5581 is fixed.
-    BlockObjectWriter writer = null;
+    BlockObjectWriter writer;
 
     // Small writes to DiskBlockObjectWriter will be fairly inefficient. Since there doesn't seem to
     // be an API to directly transfer bytes from managed memory to the disk writer, we buffer
@@ -202,7 +202,6 @@ final class UnsafeShuffleExternalSorter {
           writeBuffer,
           PlatformDependent.BYTE_ARRAY_OFFSET,
           toTransfer);
-        assert (writer != null);  // To suppress an IntelliJ warning
         writer.write(writeBuffer, 0, toTransfer);
         recordReadPosition += toTransfer;
         dataRemaining -= toTransfer;
