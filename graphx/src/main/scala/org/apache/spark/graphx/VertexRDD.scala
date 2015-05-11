@@ -17,11 +17,9 @@
 
 package org.apache.spark.graphx
 
-import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
 

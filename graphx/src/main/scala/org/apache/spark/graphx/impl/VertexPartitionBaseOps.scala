@@ -17,11 +17,9 @@
 
 package org.apache.spark.graphx.impl
 
-import scala.collection.mutable.ArrayBuffer
 import scala.language.higherKinds
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.Logging
 import org.apache.spark.util.collection.BitSet
