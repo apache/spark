@@ -151,8 +151,8 @@ private[sql] class FSBasedParquetRelation(
 
       this.paths.toSet == that.paths.toSet &&
         schemaEquality &&
-        this.maybeDataSchema == that.maybeDataSchema
-      this.maybePartitionSpec == that.maybePartitionSpec
+        this.maybeDataSchema == that.maybeDataSchema &&
+        this.partitionColumns == that.partitionColumns
 
     case _ => false
   }
@@ -214,7 +214,7 @@ private[sql] class FSBasedParquetRelation(
       }
 
     ParquetOutputFormat.setWriteSupportClass(job, writeSupportClass)
-    RowWriteSupport.setSchema(dataSchema.asNullable.toAttributes, conf)
+    RowWriteSupport.setSchema(dataSchema.toAttributes, conf)
 
     // Sets compression scheme
     conf.set(
@@ -271,7 +271,7 @@ private[sql] class FSBasedParquetRelation(
 
     // TODO Stop using `FilteringParquetRowInputFormat` and overriding `getPartition`.
     // After upgrading to Parquet 1.6.0, we should be able to stop caching `FileStatus` objects and
-    // footers.  Especially when a global arbitratve schema (either from metastore or data source
+    // footers.  Especially when a global arbitrative schema (either from metastore or data source
     // DDL) is available.
     new NewHadoopRDD(
       sqlContext.sparkContext,
