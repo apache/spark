@@ -838,16 +838,17 @@ class MLUtilsTests(MLlibTestCase):
             [1.0, 2.0, 3.0],
             [1.0, 2.0, 3.0]
         ]
+        temp_dir = tempfile.mkdtemp()
+        load_vectors_path = os.path.join(temp_dir, "test_load_vectors")
         try:
-            temp_dir = tempfile.mkdtemp()
-            load_vectors_path = os.path.join(temp_dir, "test_load_vectors")
             self.sc.parallelize(data).saveAsTextFile(load_vectors_path)
             ret_rdd = MLUtils.loadVectors(self.sc, load_vectors_path)
             ret = ret_rdd.collect()
-            ret.sort()
             self.assertEqual(len(ret), 2)
             self.assertEqual(ret[0], DenseVector([1.0, 2.0, 3.0]))
             self.assertEqual(ret[1], DenseVector([1.0, 2.0, 3.0]))
+        except:
+            self.fail()
         finally:
             shutil.rmtree(load_vectors_path)
 
