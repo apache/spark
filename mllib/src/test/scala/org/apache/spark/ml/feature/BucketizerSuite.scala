@@ -101,6 +101,8 @@ class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
     checkBinarySearch(Array(0.0, 1.0, Double.PositiveInfinity))
     // length 3, with -inf and inf
     checkBinarySearch(Array(Double.NegativeInfinity, 1.0, Double.PositiveInfinity))
+    // length 4, with -inf and inf
+    checkBinarySearch(Array(Double.NegativeInfinity, 0.0, 1.0, Double.PositiveInfinity))
   }
 
   test("Binary search correctness in contrast with linear search, on random data") {
