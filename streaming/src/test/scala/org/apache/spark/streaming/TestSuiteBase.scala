@@ -139,6 +139,40 @@ class BatchCounter(ssc: StreamingContext) {
   def getNumStartedBatches: Int = this.synchronized {
     numStartedBatches
   }
+
+  /**
+   * Wait until `expectedNumCompletedBatches` batches are completed, or timeout. Return true if
+   * `expectedNumCompletedBatches` batches are completed. Otherwise, return false to indicate it's
+   * timeout.
+   *
+   * @param expectedNumCompletedBatches the `expectedNumCompletedBatches` batches to wait
+   * @param timeout the maximum time to wait in milliseconds.
+   */
+  def waitUntilBatchesCompleted(expectedNumCompletedBatches: Int, timeout: Long): Boolean =
+    waitUntilConditionBecomeTrue(numCompletedBatches >= expectedNumCompletedBatches, timeout)
+
+  /**
+   * Wait until `expectedNumStartedBatches` batches are completed, or timeout. Return true if
+   * `expectedNumStartedBatches` batches are completed. Otherwise, return false to indicate it's
+   * timeout.
+   *
+   * @param expectedNumStartedBatches the `expectedNumStartedBatches` batches to wait
+   * @param timeout the maximum time to wait in milliseconds.
+   */
+  def waitUntilBatchesStarted(expectedNumStartedBatches: Int, timeout: Long): Boolean =
+    waitUntilConditionBecomeTrue(numStartedBatches >= expectedNumStartedBatches, timeout)
+
+  private def waitUntilConditionBecomeTrue(condition: => Boolean, timeout: Long): Boolean = {
+    synchronized {
+      var now = System.currentTimeMillis()
+      val timeoutTick = now + timeout
+      while (!condition && timeoutTick > now) {
+        wait(timeoutTick - now)
+        now = System.currentTimeMillis()
+      }
+      condition
+    }
+  }
 }
 
 /**

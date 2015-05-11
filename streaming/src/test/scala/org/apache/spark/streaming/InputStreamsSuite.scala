@@ -18,9 +18,9 @@
 package org.apache.spark.streaming
 
 import java.io.{File, BufferedWriter, OutputStreamWriter}
-import java.net.{SocketException, ServerSocket}
+import java.net.{Socket, SocketException, ServerSocket}
 import java.nio.charset.Charset
-import java.util.concurrent.{Executors, TimeUnit, ArrayBlockingQueue}
+import java.util.concurrent.{CountDownLatch, Executors, TimeUnit, ArrayBlockingQueue}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer, SynchronizedQueue}
@@ -47,46 +47,51 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     testServer.start()
 
     // Set up the streaming context and input streams
-    val ssc = new StreamingContext(conf, batchDuration)
-    val networkStream = ssc.socketTextStream(
-      "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
-    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
-    val outputStream = new TestOutputStream(networkStream, outputBuffer)
-    def output = outputBuffer.flatMap(x => x)
-    outputStream.register()
-    ssc.start()
+    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+      val input = Seq(1, 2, 3, 4, 5)
+      // Use "batchCount" to make sure we check the result after all batches finish
+      val batchCounter = new BatchCounter(ssc)
+      val networkStream = ssc.socketTextStream(
+        "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
+      val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
+      val outputStream = new TestOutputStream(networkStream, outputBuffer)
+      outputStream.register()
+      ssc.start()
 
-    // Feed data to the server to send to the network receiver
-    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    val input = Seq(1, 2, 3, 4, 5)
-    val expectedOutput = input.map(_.toString)
-    Thread.sleep(1000)
-    for (i <- 0 until input.size) {
-      testServer.send(input(i).toString + "\n")
-      Thread.sleep(500)
-      clock.advance(batchDuration.milliseconds)
-    }
-    Thread.sleep(1000)
-    logInfo("Stopping server")
-    testServer.stop()
-    logInfo("Stopping context")
-    ssc.stop()
+      // Feed data to the server to send to the network receiver
+      val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+      val expectedOutput = input.map(_.toString)
+      for (i <- 0 until input.size) {
+        testServer.send(input(i).toString + "\n")
+        Thread.sleep(500)
+        clock.advance(batchDuration.milliseconds)
+      }
+      // Make sure we finish all batches before "stop"
+      if (!batchCounter.waitUntilBatchesCompleted(input.size, 30000)) {
+        fail("Timeout: cannot finish all batches in 30 seconds")
+      }
+      logInfo("Stopping server")
+      testServer.stop()
+      logInfo("Stopping context")
+      ssc.stop()
 
-    // Verify whether data received was as expected
-    logInfo("--------------------------------")
-    logInfo("output.size = " + outputBuffer.size)
-    logInfo("output")
-    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-    logInfo("expected output.size = " + expectedOutput.size)
-    logInfo("expected output")
-    expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-    logInfo("--------------------------------")
+      // Verify whether data received was as expected
+      logInfo("--------------------------------")
+      logInfo("output.size = " + outputBuffer.size)
+      logInfo("output")
+      outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+      logInfo("expected output.size = " + expectedOutput.size)
+      logInfo("expected output")
+      expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+      logInfo("--------------------------------")
 
-    // Verify whether all the elements received are as expected
-    // (whether the elements were received one in each interval is not verified)
-    assert(output.size === expectedOutput.size)
-    for (i <- 0 until output.size) {
-      assert(output(i) === expectedOutput(i))
+      // Verify whether all the elements received are as expected
+      // (whether the elements were received one in each interval is not verified)
+      val output: ArrayBuffer[String] = outputBuffer.flatMap(x => x)
+      assert(output.size === expectedOutput.size)
+      for (i <- 0 until output.size) {
+        assert(output(i) === expectedOutput(i))
+      }
     }
   }
 
@@ -343,30 +348,45 @@ class TestServer(portToBind: Int = 0) extends Logging {
 
   val serverSocket = new ServerSocket(portToBind)
 
+  private val startLatch = new CountDownLatch(1)
+
   val servingThread = new Thread() {
     override def run() {
       try {
         while(true) {
           logInfo("Accepting connections on port " + port)
           val clientSocket = serverSocket.accept()
-          logInfo("New connection")
-          try {
-            clientSocket.setTcpNoDelay(true)
-            val outputStream = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream))
+          if (startLatch.getCount == 1) {
+            // The first connection is a test connection to implement "waitForStart", so skip it
+            // and send a signal
+            if (!clientSocket.isClosed) {
+              clientSocket.close()
+            }
+            startLatch.countDown()
+          } else {
+            // Real connections
+            logInfo("New connection")
+            try {
+              clientSocket.setTcpNoDelay(true)
+              val outputStream = new BufferedWriter(
+                new OutputStreamWriter(clientSocket.getOutputStream))
 
-            while(clientSocket.isConnected) {
-              val msg = queue.poll(100, TimeUnit.MILLISECONDS)
-              if (msg != null) {
-                outputStream.write(msg)
-                outputStream.flush()
-                logInfo("Message '" + msg + "' sent")
+              while (clientSocket.isConnected) {
+                val msg = queue.poll(100, TimeUnit.MILLISECONDS)
+                if (msg != null) {
+                  outputStream.write(msg)
+                  outputStream.flush()
+                  logInfo("Message '" + msg + "' sent")
+                }
+              }
+            } catch {
+              case e: SocketException => logError("TestServer error", e)
+            } finally {
+              logInfo("Connection closed")
+              if (!clientSocket.isClosed) {
+                clientSocket.close()
               }
             }
-          } catch {
-            case e: SocketException => logError("TestServer error", e)
-          } finally {
-            logInfo("Connection closed")
-            if (!clientSocket.isClosed) clientSocket.close()
           }
         }
       } catch {
@@ -378,7 +398,29 @@ class TestServer(portToBind: Int = 0) extends Logging {
     }
   }
 
-  def start() { servingThread.start() }
+  def start(): Unit = {
+    servingThread.start()
+    if (!waitForStart(10000)) {
+      stop()
+      throw new AssertionError("Timeout: TestServer cannot start in 10 seconds")
+    }
+  }
+
+  /**
+   * Wait until the server starts. Return true if the server starts in "millis" milliseconds.
+   * Otherwise, return false to indicate it's timeout.
+   */
+  private def waitForStart(millis: Long): Boolean = {
+    // We will create a test connection to the server so that we can make sure it has started.
+    val socket = new Socket("localhost", port)
+    try {
+      startLatch.await(millis, TimeUnit.MILLISECONDS)
+    } finally {
+      if (!socket.isClosed) {
+        socket.close()
+      }
+    }
+  }
 
   def send(msg: String) { queue.put(msg) }
 
