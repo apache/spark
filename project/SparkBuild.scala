@@ -378,16 +378,9 @@ object PySparkAssembly {
     // list since that will copy unneeded / unwanted files.
     resourceGenerators in Compile <+= resourceManaged in Compile map { outDir: File =>
       val src = new File(BuildCommons.sparkHome, "python/pyspark")
-
       val zipFile = new File(BuildCommons.sparkHome , "python/lib/pyspark.zip")
       zipFile.delete()
       zipRecursive(src, zipFile)
-
-      val dst = new File(outDir, "pyspark")
-      if (!dst.isDirectory()) {
-        require(dst.mkdirs())
-      }
-
       Seq[File]()
     }
   )
