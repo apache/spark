@@ -131,7 +131,12 @@ class DagBag(object):
         Given a path to a python module, this method imports the module and
         look for dag objects whithin it.
         """
-        dttm = datetime.fromtimestamp(os.path.getmtime(filepath))
+        try:
+            # This failed before in what may have been a git sync
+            # race condition
+            dttm = datetime.fromtimestamp(os.path.getmtime(filepath))
+        except:
+            dttm = datetime(2001, 1, 1)
         mod_name, file_ext = os.path.splitext(os.path.split(filepath)[-1])
         mod_name = 'unusual_prefix_' + mod_name
 
