@@ -37,24 +37,22 @@ final class PackedRecordPointer {
 
   static final int MAXIMUM_PAGE_SIZE_BYTES = 1 << 27;  // 128 megabytes
 
-  static final int MAXIMUM_PARTITION_ID = 1 << 24;  // 16777216
+  static final int MAXIMUM_PARTITION_ID = (1 << 24) - 1;  // 16777215
 
   /** Bit mask for the lower 40 bits of a long. */
-  private static final long MASK_LONG_LOWER_40_BITS = 0xFFFFFFFFFFL;
+  private static final long MASK_LONG_LOWER_40_BITS = (1L << 40) - 1;
 
   /** Bit mask for the upper 24 bits of a long */
   private static final long MASK_LONG_UPPER_24_BITS = ~MASK_LONG_LOWER_40_BITS;
 
   /** Bit mask for the lower 27 bits of a long. */
-  private static final long MASK_LONG_LOWER_27_BITS = 0x7FFFFFFL;
+  private static final long MASK_LONG_LOWER_27_BITS = (1L << 27) - 1;
 
   /** Bit mask for the lower 51 bits of a long. */
-  private static final long MASK_LONG_LOWER_51_BITS = 0x7FFFFFFFFFFFFL;
+  private static final long MASK_LONG_LOWER_51_BITS = (1L << 51) - 1;
 
   /** Bit mask for the upper 13 bits of a long */
   private static final long MASK_LONG_UPPER_13_BITS = ~MASK_LONG_LOWER_51_BITS;
-
-  // TODO: this shifting is probably extremely inefficient; this is just for prototyping
 
   /**
    * Pack a record address and partition id into a single word.

@@ -17,9 +17,9 @@
 
 package org.apache.spark.shuffle.unsafe;
 
-import org.apache.spark.storage.TempShuffleBlockId;
-
 import java.io.File;
+
+import org.apache.spark.storage.TempShuffleBlockId;
 
 /**
  * Metadata for a block of data written by {@link UnsafeShuffleExternalSorter}.
