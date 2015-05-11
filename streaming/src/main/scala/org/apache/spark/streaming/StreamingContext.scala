@@ -613,13 +613,12 @@ class StreamingContext private[streaming] (
         case STARTED =>
           scheduler.stop(stopGracefully)
           uiTab.foreach(_.detach())
-          // Even if the streaming context has not been started, we still need to stop the SparkContext.
-          // Even if we have already stopped, we still need to attempt to stop the SparkContext because
-          // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
           StreamingContext.setActiveContext(null)
-          logInfo("StreamingContext stopped successfully")
           waiter.notifyStop()
+          logInfo("StreamingContext stopped successfully")
       }
+      // Even if we have already stopped, we still need to attempt to stop the SparkContext because
+      // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
       if (stopSparkContext) sc.stop()
     } finally {
       // The state should always be Stopped after calling `stop()`, even if we haven't started yet
