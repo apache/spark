@@ -911,14 +911,27 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table.
+   *
+   * @group specificdata
+   */
+  @Experimental
+  def jdbc(url: String, table: String): DataFrame = {
+    jdbc(url, table, JDBCRelation.columnPartition(null), new Properties())
+  }
+  
+  /**
+   * :: Experimental ::
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
    * url named table and connection properties.
    *
    * @group specificdata
    */
   @Experimental
-  def jdbc(url: String, table: String, properties: Properties = new Properties()): DataFrame = {
+  def jdbc(url: String, table: String, properties: Properties): DataFrame = {
     jdbc(url, table, JDBCRelation.columnPartition(null), properties)
   }
+  
   /**
    * :: Experimental ::
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
@@ -995,16 +1008,20 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group specificdata
    */
   @Experimental
-  def jdbc(url: String, table: String,
-      theParts: Array[String], properties: Properties): DataFrame = {
+  def jdbc(url: String,
+      table: String,
+      theParts: Array[String],
+      properties: Properties): DataFrame = {
     val parts: Array[Partition] = theParts.zipWithIndex.map { case (part, i) =>
       JDBCPartition(part, i) : Partition
     }
     jdbc(url, table, parts, properties)
   }
   
-  private def jdbc(url: String, table: String,
-      parts: Array[Partition], properties: Properties): DataFrame = {
+  private def jdbc(url: String,
+      table: String,
+      parts: Array[Partition],
+      properties: Properties): DataFrame = {
     val relation = JDBCRelation(url, table, parts, properties)(this)
     baseRelationToDataFrame(relation)
   }

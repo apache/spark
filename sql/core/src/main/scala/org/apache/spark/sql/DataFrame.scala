@@ -1489,15 +1489,29 @@ class DataFrame private[sql](
 
   /**
    * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`
-   * and connection propeties optionally passed in `properties`.
    * This will run a `CREATE TABLE` and a bunch of `INSERT INTO` statements.
    * If you pass `true` for `allowExisting`, it will drop any table with the
    * given name; if you pass `false`, it will throw if the table already
    * exists.
    * @group output
    */
-  def createJDBCTable(url: String, table: String, allowExisting: Boolean,
-      properties: Properties = new Properties()): Unit = {
+  def createJDBCTable(url: String, table: String, allowExisting: Boolean): Unit = {
+    createJDBCTable(url, table, allowExisting, new Properties())
+  }
+    
+  /**
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`
+   * and connection properties passed in `properties`.
+   * This will run a `CREATE TABLE` and a bunch of `INSERT INTO` statements.
+   * If you pass `true` for `allowExisting`, it will drop any table with the
+   * given name; if you pass `false`, it will throw if the table already
+   * exists.
+   * @group output
+   */
+  def createJDBCTable(url: String,
+      table: String,
+      allowExisting: Boolean,
+      properties: Properties): Unit = {
     val conn = DriverManager.getConnection(url, properties)
     try {
       if (allowExisting) {
@@ -1515,7 +1529,6 @@ class DataFrame private[sql](
 
   /**
    * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`
-   * and connection propeties optionally passed in `properties`.
    * Assumes the table already exists and has a compatible schema.  If you
    * pass `true` for `overwrite`, it will `TRUNCATE` the table before
    * performing the `INSERT`s.
@@ -1526,8 +1539,27 @@ class DataFrame private[sql](
    * `INSERT INTO table VALUES (?, ?, ..., ?)` should not fail.
    * @group output
    */
-  def insertIntoJDBC(url: String, table: String, overwrite: Boolean,
-      properties: Properties = new Properties()): Unit = {
+  def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
+    insertIntoJDBC(url, table, overwrite, new Properties())
+  }
+
+  /**
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`
+   * and connection properties passed in `properties`.
+   * Assumes the table already exists and has a compatible schema.  If you
+   * pass `true` for `overwrite`, it will `TRUNCATE` the table before
+   * performing the `INSERT`s.
+   *
+   * The table must already exist on the database.  It must have a schema
+   * that is compatible with the schema of this RDD; inserting the rows of
+   * the RDD in order via the simple statement
+   * `INSERT INTO table VALUES (?, ?, ..., ?)` should not fail.
+   * @group output
+   */
+  def insertIntoJDBC(url: String,
+      table: String,
+      overwrite: Boolean,
+      properties: Properties): Unit = {
     if (overwrite) {
       val conn = DriverManager.getConnection(url, properties)
       try {
@@ -1539,7 +1571,7 @@ class DataFrame private[sql](
     }
     JDBCWriteDetails.saveTable(this, url, table, properties)
   }
-
+  
   ////////////////////////////////////////////////////////////////////////////
   // for Python API
   ////////////////////////////////////////////////////////////////////////////

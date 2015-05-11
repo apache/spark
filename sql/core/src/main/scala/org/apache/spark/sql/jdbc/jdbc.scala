@@ -57,8 +57,11 @@ package object jdbc {
      * non-Serializable.  Instead, we explicitly close over all variables that
      * are used.
      */
-    def savePartition(url: String, table: String, iterator: Iterator[Row],
-        rddSchema: StructType, nullTypes: Array[Int],
+    def savePartition(url: String,
+        table: String,
+        iterator: Iterator[Row],
+        rddSchema: StructType,
+        nullTypes: Array[Int],
         properties: Properties): Iterator[Byte] = {
       val conn = DriverManager.getConnection(url, properties)
       var committed = false
@@ -153,7 +156,9 @@ package object jdbc {
     /**
      * Saves the RDD to the database in a single transaction.
      */
-    def saveTable(df: DataFrame, url: String, table: String,
+    def saveTable(df: DataFrame,
+        url: String,
+        table: String,
         properties: Properties = new Properties()) {
       val quirks = DriverQuirks.get(url)
       var nullTypes: Array[Int] = df.schema.fields.map(field => {
