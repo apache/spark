@@ -27,8 +27,8 @@ import org.apache.spark.shuffle.sort.SortShuffleManager
  */
 private class UnsafeShuffleHandle[K, V](
     shuffleId: Int,
-    override val numMaps: Int,
-    override val dependency: ShuffleDependency[K, V, V])
+    numMaps: Int,
+    dependency: ShuffleDependency[K, V, V])
   extends BaseShuffleHandle(shuffleId, numMaps, dependency) {
 }
 
