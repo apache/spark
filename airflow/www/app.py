@@ -25,6 +25,8 @@ from pygments.lexers import (
     IniLexer, YamlLexer, JsonLexer, TextLexer)
 from pygments.formatters import HtmlFormatter
 
+from sqlalchemy import or_
+
 import jinja2
 import markdown
 import chartkick
@@ -212,7 +214,7 @@ class DagModelView(SuperUserMixin, ModelView):
         return (
             super(DagModelView, self)
             .get_query()
-            .filter(models.DagModel.is_active)
+            .filter(or_(models.DagModel.is_active, models.DagModel.is_paused))
             .filter(~models.DagModel.is_subdag)
         )
 
