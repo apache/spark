@@ -337,7 +337,7 @@ final class UnsafeShuffleExternalSorter {
             final long memoryAcquiredAfterSpilling = shuffleMemoryManager.tryToAcquire(PAGE_SIZE);
             if (memoryAcquiredAfterSpilling != PAGE_SIZE) {
               shuffleMemoryManager.release(memoryAcquiredAfterSpilling);
-              throw new IOException("Can't allocate memory!");
+              throw new IOException("Unable to acquire " + PAGE_SIZE + " bytes of memory");
             }
           }
         }

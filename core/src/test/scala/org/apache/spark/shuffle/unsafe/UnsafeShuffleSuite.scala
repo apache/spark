@@ -26,5 +26,8 @@ class UnsafeShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
 
   override def beforeAll() {
     conf.set("spark.shuffle.manager", "unsafe")
+    // UnsafeShuffleManager requires at least 128 MB of memory per task in order to be able to sort
+    // shuffle records.
+    conf.set("spark.shuffle.memoryFraction", "0.5")
   }
 }
