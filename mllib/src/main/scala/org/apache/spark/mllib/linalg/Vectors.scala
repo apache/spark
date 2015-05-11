@@ -150,6 +150,12 @@ sealed trait Vector extends Serializable {
       toDense
     }
   }
+
+  /**
+   * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
+   * Returns -1 if vector has length 0.
+   */
+  def argmax: Int
 }
 
 /**
@@ -588,11 +594,7 @@ class DenseVector(val values: Array[Double]) extends Vector {
     new SparseVector(size, ii, vv)
   }
 
-  /**
-   * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
-   * Returns -1 if vector has length 0.
-   */
-  private[spark] def argmax: Int = {
+  def argmax: Int = {
     if (size == 0) {
       -1
     } else {
@@ -715,6 +717,23 @@ class SparseVector(
         }
       }
       new SparseVector(size, ii, vv)
+    }
+  }
+
+  override def argmax: Int = {
+    if (size == 0) {
+      -1
+    } else {
+      var maxIdx = 0
+      var maxValue = values(0)
+      var i = 1
+      foreachActive{ (i, v) =>
+        if(v > maxValue) {
+          maxIdx = i
+          maxValue = v
+        }
+      }
+      maxIdx
     }
   }
 }
