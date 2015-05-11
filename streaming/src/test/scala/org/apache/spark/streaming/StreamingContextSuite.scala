@@ -129,9 +129,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
     ssc.start()
-    intercept[SparkException] {
-      ssc.start()
-    }
+    ssc.start()
   }
 
   test("stop multiple times") {
