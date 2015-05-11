@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark.mllib.common import JavaModelWrapper
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 from pyspark.sql import SQLContext
 from pyspark.sql.types import StructField, StructType, DoubleType, IntegerType, ArrayType
 
@@ -293,7 +293,7 @@ class RankingMetrics(JavaModelWrapper):
     >>> metrics.ndcgAt(3)
     0.33...
     >>> metrics.ndcgAt(10)
-    0.4...
+    0.48...
 
     """
 
@@ -305,8 +305,7 @@ class RankingMetrics(JavaModelWrapper):
         sql_ctx = SQLContext(sc)
         df = sql_ctx.createDataFrame(predictionAndLabels,
                                      schema=sql_ctx._inferSchema(predictionAndLabels))
-        java_class = sc._jvm.org.apache.spark.mllib.evaluation.RankingMetrics
-        java_model = java_class(df._jdf)
+        java_model = callMLlibFunc("newRankingMetrics", df._jdf)
         super(RankingMetrics, self).__init__(java_model)
 
     def precisionAt(self, k):
