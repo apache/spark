@@ -513,7 +513,12 @@ class StreamingContext private[streaming] (
   /**
    * :: DeveloperApi ::
    *
-   * Return the current state of the context.
+   * Return the current state of the context. The context can be in three possible states -
+   * - StreamingContextState.INTIALIZED - The context has been created, but not been started yet.
+   *   Input DStreams, transformations and output operations can be created on the context.
+   * - StreamingContextState.STARTED - The context has been started, and been not stopped.
+   *   Input DStreams, transformations and output operations cannot be created on the context.
+   * - StreamingContextState.STOPPED - The context has been stopped and cannot be used any more.
    */
   @DeveloperApi
   def getState(): StreamingContextState = {

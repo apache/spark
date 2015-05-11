@@ -22,9 +22,24 @@ import org.apache.spark.annotation.DeveloperApi;
 /**
  * :: DeveloperApi ::
  *
- * Represents the state of the StreamingContext.
+ * Represents the state of a StreamingContext.
  */
 @DeveloperApi
 public enum StreamingContextState {
-  INITIALIZED, STARTED, STOPPED
+  /**
+   * The context has been created, but not been started yet.
+   * Input DStreams, transformations and output operations can be created on the context.
+   */
+  INITIALIZED,
+
+  /**
+   * The context has been started, and been not stopped.
+   * Input DStreams, transformations and output operations cannot be created on the context.
+   */
+  STARTED,
+
+  /**
+   * The context has been stopped and cannot be used any more.
+   */
+  STOPPED
 }

@@ -581,7 +581,20 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   /**
    * :: DeveloperApi ::
    *
-   * Return the current state of the context.
+   * Return the current state of the context. The context can be in three possible states -
+   * <ul>
+   *   <li>
+   *   StreamingContextState.INTIALIZED - The context has been created, but not been started yet.
+   *   Input DStreams, transformations and output operations can be created on the context.
+   *   </li>
+   *   <li>
+   *   StreamingContextState.STARTED - The context has been started, and been not stopped.
+   *   Input DStreams, transformations and output operations cannot be created on the context.
+   *   </li>
+   *   <li>
+   *   StreamingContextState.STOPPED - The context has been stopped and cannot be used any more.
+   *   </li>
+   * </ul>
    */
   def getState(): StreamingContextState = {
     ssc.getState()
