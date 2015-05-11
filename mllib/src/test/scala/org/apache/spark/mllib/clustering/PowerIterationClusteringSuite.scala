@@ -69,7 +69,55 @@ class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext 
     }
     assert(predictions2.toSet == Set((0 to 3).toSet, (4 to 15).toSet))
   }
+ 
+  test("power iteration clustering on graph") {
+    /*
+     We use the following graph to test PIC. All edges are assigned similarity 1.0 except 0.1 for
+     edge (3, 4).
 
+     15-14 -13 -12
+     |           |
+     4 . 3 - 2  11
+     |   | x |   |
+     5   0 - 1  10
+     |           |
+     6 - 7 - 8 - 9
+     */
+
+    val similarities = Seq[(Long, Long, Double)]((0, 1, 1.0), (0, 2, 1.0), (0, 3, 1.0), (1, 2, 1.0),
+      (1, 3, 1.0), (2, 3, 1.0), (3, 4, 0.1), // (3, 4) is a weak edge
+      (4, 5, 1.0), (4, 15, 1.0), (5, 6, 1.0), (6, 7, 1.0), (7, 8, 1.0), (8, 9, 1.0), (9, 10, 1.0),
+      (10, 11, 1.0), (11, 12, 1.0), (12, 13, 1.0), (13, 14, 1.0), (14, 15, 1.0))
+
+    val edges = similarities.flatMap { case (i, j, s) =>
+      if (i != j) {
+        Seq(Edge(i, j, s), Edge(j, i, s))
+      } else {
+        None
+      }
+    }
+    val graph = Graph.fromEdges(sc.parallelize(edges, 2), 0.0)
+
+    val model = new PowerIterationClustering()
+      .setK(2)
+      .run(graph)
+    val predictions = Array.fill(2)(mutable.Set.empty[Long])
+    model.assignments.collect().foreach { a =>
+      predictions(a.cluster) += a.id
+    }
+    assert(predictions.toSet == Set((0 to 3).toSet, (4 to 15).toSet))
+ 
+    val model2 = new PowerIterationClustering()
+      .setK(2)
+      .setInitializationMode("degree")
+      .run(sc.parallelize(similarities, 2))
+    val predictions2 = Array.fill(2)(mutable.Set.empty[Long])
+    model2.assignments.collect().foreach { a =>
+      predictions2(a.cluster) += a.id
+    }
+    assert(predictions2.toSet == Set((0 to 3).toSet, (4 to 15).toSet))
+  }
+ 
   test("normalize and powerIter") {
     /*
      Test normalize() with the following graph:
