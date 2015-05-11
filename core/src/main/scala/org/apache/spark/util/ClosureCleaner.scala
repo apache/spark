@@ -239,15 +239,6 @@ private[spark] object ClosureCleaner extends Logging {
     logDebug(s" + fields accessed by starting closure: " + accessedFields.size)
     accessedFields.foreach { f => logDebug("     " + f) }
 
-    val inInterpreter = {
-      try {
-        val interpClass = Class.forName("spark.repl.Main")
-        interpClass.getMethod("interp").invoke(null) != null
-      } catch {
-        case _: ClassNotFoundException => true
-      }
-    }
-
     // List of outer (class, object) pairs, ordered from outermost to innermost
     // Note that all outer objects but the outermost one (first one in this list) must be closures
     var outerPairs: List[(Class[_], AnyRef)] = (outerClasses zip outerObjects).reverse
@@ -274,7 +265,7 @@ private[spark] object ClosureCleaner extends Logging {
       // required fields from the original object. We need the parent here because the Java
       // language specification requires the first constructor parameter of any closure to be
       // its enclosing object.
-      val clone = instantiateClass(cls, parent, inInterpreter)
+      val clone = instantiateClass(cls, parent, Utils.isInInterpreter)
       for (fieldName <- accessedFields(cls)) {
         val field = cls.getDeclaredField(fieldName)
         field.setAccessible(true)
