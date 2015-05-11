@@ -878,6 +878,13 @@ abstract class RDD[T: ClassTag](
     sc.runJob(this, (iter: Iterator[T]) => cleanF(iter))
   }
 
+  def foreachPartitionWithIndex(f: (Int, Iterator[T]) => Unit): Unit = withScope {
+    val cleanF = sc.clean(f)
+    val processPartitionF = (taskContext: TaskContext, iter: Iterator[T]) =>
+      cleanF(taskContext.partitionId(), iter)
+    sc.runJob(this, processPartitionF)
+  }
+
   /**
    * Return an array that contains all of the elements in this RDD.
    */
