@@ -80,7 +80,7 @@ private[spark] object JettyUtils extends Logging {
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage)
           case e: Exception =>
             logWarning(s"GET ${request.getRequestURI} failed: $e", e)
-            throw e;
+            throw e
         }
       }
       // SPARK-5983 ensure TRACE is not supported
