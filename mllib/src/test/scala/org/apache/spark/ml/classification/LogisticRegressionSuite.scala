@@ -20,7 +20,8 @@ package org.apache.spark.ml.classification
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.classification.LogisticRegressionSuite
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
@@ -208,6 +209,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
   test("binary logistic regression with intercept without regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(true)
     val model = trainer.fit(binaryDataset)
+    assert(model.numClasses == 2)
 
     /**
      * Using the following R code to load the data and train the model using glmnet package.
@@ -234,11 +236,22 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
     assert(model.weights(2) ~== weightsR(2) relTol 1E-3)
     assert(model.weights(3) ~== weightsR(3) relTol 1E-3)
+
+    val result = model.transform(binaryDataset)
+    result.select("features", "prediction", "probability").collect().foreach {
+      case Row(features: DenseVector, prediction: Double, probability: Vector) =>
+        val probabilityR = Array.ofDim[Double](2)
+        probabilityR(0) = 1.0 / (1 + Math.exp(dot(features, Vectors.dense(weightsR)) + interceptR))
+        probabilityR(1) = 1.0 - probabilityR(0)
+        assert(probability ~== Vectors.dense(probabilityR) relTol 1E-3)
+        assert(prediction === probabilityR.zipWithIndex.maxBy(_._1)._2)
+    }
   }
 
   test("binary logistic regression without intercept without regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(false)
     val model = trainer.fit(binaryDataset)
+    assert(model.numClasses == 2)
 
     /**
      * Using the following R code to load the data and train the model using glmnet package.
@@ -266,12 +279,31 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.weights(1) ~== weightsR(1) relTol 1E-2)
     assert(model.weights(2) ~== weightsR(2) relTol 1E-3)
     assert(model.weights(3) ~== weightsR(3) relTol 1E-3)
+
+    val result = model.transform(binaryDataset)
+    result.select("features", "prediction", "probability").collect().foreach {
+      case Row(features: DenseVector, prediction: Double, probability: Vector) =>
+        val probabilityR = Array.ofDim[Double](2)
+        probabilityR(0) = 1.0 / (1 + Math.exp(dot(features, Vectors.dense(weightsR)) + interceptR))
+        probabilityR(1) = 1.0 - probabilityR(0)
+        assert(probability ~== Vectors.dense(probabilityR) relTol 2E-2)
+        if (prediction != probabilityR.zipWithIndex.maxBy(_._1)._2) {
+          print(prediction)
+        }
+        // Some of the predictions have 0.5 probability to be label 0.0,
+        // and the predictions will be different with slightly different
+        // model; as a result, we exculde them from the test.
+        if (probabilityR(0) !~= 0.5 relTol 1E-2) {
+          assert(prediction === probabilityR.zipWithIndex.maxBy(_._1)._2)
+        }
+    }
   }
 
   test("binary logistic regression with intercept with L1 regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(1.0).setRegParam(0.12)
     val model = trainer.fit(binaryDataset)
+    assert(model.numClasses == 2)
 
     /**
      * Using the following R code to load the data and train the model using glmnet package.
@@ -298,12 +330,23 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
     assert(model.weights(2) ~== weightsR(2) relTol 1E-2)
     assert(model.weights(3) ~== weightsR(3) relTol 2E-2)
+
+    val result = model.transform(binaryDataset)
+    result.select("features", "prediction", "probability").collect().foreach {
+      case Row(features: DenseVector, prediction: Double, probability: Vector) =>
+        val probabilityR = Array.ofDim[Double](2)
+        probabilityR(0) = 1.0 / (1 + Math.exp(dot(features, Vectors.dense(weightsR)) + interceptR))
+        probabilityR(1) = 1.0 - probabilityR(0)
+        assert(probability ~== Vectors.dense(probabilityR) relTol 1E-2)
+        assert(prediction === probabilityR.zipWithIndex.maxBy(_._1)._2)
+    }
   }
 
   test("binary logistic regression without intercept with L1 regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(false)
       .setElasticNetParam(1.0).setRegParam(0.12)
     val model = trainer.fit(binaryDataset)
+    assert(model.numClasses == 2)
 
     /**
      * Using the following R code to load the data and train the model using glmnet package.
@@ -331,12 +374,28 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
     assert(model.weights(2) ~== weightsR(2) relTol 1E-2)
     assert(model.weights(3) ~== weightsR(3) relTol 1E-2)
+
+    val result = model.transform(binaryDataset)
+    result.select("features", "prediction", "probability").collect().foreach {
+      case Row(features: DenseVector, prediction: Double, probability: Vector) =>
+        val probabilityR = Array.ofDim[Double](2)
+        probabilityR(0) = 1.0 / (1 + Math.exp(dot(features, Vectors.dense(weightsR)) + interceptR))
+        probabilityR(1) = 1.0 - probabilityR(0)
+        assert(probability ~== Vectors.dense(probabilityR) relTol 1E-2)
+        // Some of the predictions have 0.5 probability to be label 0.0,
+        // and the predictions will be different with slightly different
+        // model; as a result, we exculde them from the test.
+        if (probabilityR(0) !~= 0.5 relTol 1E-2) {
+          assert(prediction === probabilityR.zipWithIndex.maxBy(_._1)._2)
+        }
+    }
   }
 
   test("binary logistic regression with intercept with L2 regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(0.0).setRegParam(1.37)
     val model = trainer.fit(binaryDataset)
+    assert(model.numClasses == 2)
 
     /**
      * Using the following R code to load the data and train the model using glmnet package.
@@ -363,12 +422,23 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
     assert(model.weights(2) ~== weightsR(2) relTol 1E-3)
     assert(model.weights(3) ~== weightsR(3) relTol 1E-3)
+
+    val result = model.transform(binaryDataset)
+    result.select("features", "prediction", "probability").collect().foreach {
+      case Row(features: DenseVector, prediction: Double, probability: Vector) =>
+        val probabilityR = Array.ofDim[Double](2)
+        probabilityR(0) = 1.0 / (1 + Math.exp(dot(features, Vectors.dense(weightsR)) + interceptR))
+        probabilityR(1) = 1.0 - probabilityR(0)
+        assert(probability ~== Vectors.dense(probabilityR) relTol 1E-3)
+        assert(prediction === probabilityR.zipWithIndex.maxBy(_._1)._2)
+    }
   }
 
   test("binary logistic regression without intercept with L2 regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(false)
       .setElasticNetParam(0.0).setRegParam(1.37)
     val model = trainer.fit(binaryDataset)
+    assert(model.numClasses == 2)
 
     /**
      * Using the following R code to load the data and train the model using glmnet package.
@@ -396,6 +466,16 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.weights(1) ~== weightsR(1) relTol 1E-2)
     assert(model.weights(2) ~== weightsR(2) relTol 1E-3)
     assert(model.weights(3) ~== weightsR(3) relTol 1E-3)
+
+    val result = model.transform(binaryDataset)
+    result.select("features", "prediction", "probability").collect().foreach {
+      case Row(features: DenseVector, prediction: Double, probability: Vector) =>
+        val probabilityR = Array.ofDim[Double](2)
+        probabilityR(0) = 1.0 / (1 + Math.exp(dot(features, Vectors.dense(weightsR)) + interceptR))
+        probabilityR(1) = 1.0 - probabilityR(0)
+        assert(probability ~== Vectors.dense(probabilityR) relTol 1E-3)
+        assert(prediction === probabilityR.zipWithIndex.maxBy(_._1)._2)
+    }
   }
 
   test("binary logistic regression with intercept with ElasticNet regularization") {
@@ -428,12 +508,28 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
     assert(model.weights(2) ~== weightsR(2) relTol 5E-3)
     assert(model.weights(3) ~== weightsR(3) relTol 1E-3)
+
+    val result = model.transform(binaryDataset)
+    result.select("features", "prediction", "probability").collect().foreach {
+      case Row(features: DenseVector, prediction: Double, probability: Vector) =>
+        val probabilityR = Array.ofDim[Double](2)
+        probabilityR(0) = 1.0 / (1 + Math.exp(dot(features, Vectors.dense(weightsR)) + interceptR))
+        probabilityR(1) = 1.0 - probabilityR(0)
+        assert(probability ~== Vectors.dense(probabilityR) relTol 1E-2)
+        // Some of the predictions have 0.5 probability to be label 0.0,
+        // and the predictions will be different with slightly different
+        // model; as a result, we exculde them from the test.
+        if (probabilityR(0) !~= 0.5 relTol 1E-2) {
+          assert(prediction === probabilityR.zipWithIndex.maxBy(_._1)._2)
+        }
+    }
   }
 
   test("binary logistic regression without intercept with ElasticNet regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(false)
       .setElasticNetParam(0.38).setRegParam(0.21)
     val model = trainer.fit(binaryDataset)
+    assert(model.numClasses == 2)
 
     /**
      * Using the following R code to load the data and train the model using glmnet package.
@@ -461,12 +557,28 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.weights(1) ~== weightsR(1) absTol 1E-2)
     assert(model.weights(2) ~== weightsR(2) relTol 1E-3)
     assert(model.weights(3) ~== weightsR(3) relTol 1E-2)
+
+    val result = model.transform(binaryDataset)
+    result.select("features", "prediction", "probability").collect().foreach {
+      case Row(features: DenseVector, prediction: Double, probability: Vector) =>
+        val probabilityR = Array.ofDim[Double](2)
+        probabilityR(0) = 1.0 / (1 + Math.exp(dot(features, Vectors.dense(weightsR)) + interceptR))
+        probabilityR(1) = 1.0 - probabilityR(0)
+        assert(probability ~== Vectors.dense(probabilityR) relTol 1E-2)
+        // Some of the predictions have 0.5 probability to be label 0.0,
+        // and the predictions will be different with slightly different
+        // model; as a result, we exculde them from the test.
+        if (probabilityR(0) !~= 0.5 relTol 1E-2) {
+          assert(prediction === probabilityR.zipWithIndex.maxBy(_._1)._2)
+        }
+    }
   }
 
   test("binary logistic regression with intercept with strong L1 regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(1.0).setRegParam(6.0)
     val model = trainer.fit(binaryDataset)
+    assert(model.numClasses == 2)
 
     val histogram = binaryDataset.map { case Row(label: Double, features: Vector) => label }
       .treeAggregate(new MultiClassSummarizer)(
@@ -523,5 +635,15 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.weights(1) ~== weightsR(1) absTol 1E-6)
     assert(model.weights(2) ~== weightsR(2) absTol 1E-6)
     assert(model.weights(3) ~== weightsR(3) absTol 1E-6)
+
+    val result = model.transform(binaryDataset)
+    result.select("features", "prediction", "probability").collect().foreach {
+      case Row(features: DenseVector, prediction: Double, probability: Vector) =>
+        val probabilityR = Array.ofDim[Double](2)
+        probabilityR(0) = 1.0 / (1 + Math.exp(dot(features, Vectors.dense(weightsR)) + interceptR))
+        probabilityR(1) = 1.0 - probabilityR(0)
+        assert(probability ~== Vectors.dense(probabilityR) relTol 1E-3)
+        assert(prediction === probabilityR.zipWithIndex.maxBy(_._1)._2)
+    }
   }
 }
