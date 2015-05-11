@@ -246,7 +246,7 @@ final class UnsafeShuffleExternalSorter {
   }
 
   private long getMemoryUsage() {
-    return sorter.getMemoryUsage() + (allocatedPages.size() * PAGE_SIZE);
+    return sorter.getMemoryUsage() + (allocatedPages.size() * (long) PAGE_SIZE);
   }
 
   private long freeMemory() {
