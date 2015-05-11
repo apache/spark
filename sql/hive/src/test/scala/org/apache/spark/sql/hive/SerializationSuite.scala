@@ -26,8 +26,10 @@ import org.apache.spark.sql.hive.test.TestHive
 class SerializationSuite extends FunSuite {
 
   test("[SPARK-5840] HiveContext should be serializable") {
-    val hiveContext = new HiveContext(TestHive.sparkContext)
+    val hiveContext = TestHive
     hiveContext.hiveconf
-    new JavaSerializer(new SparkConf()).newInstance().serialize(hiveContext)
+    val serializer = new JavaSerializer(new SparkConf()).newInstance()
+    val bytes = serializer.serialize(hiveContext)
+    val deSer = serializer.deserialize[AnyRef](bytes)
   }
 }

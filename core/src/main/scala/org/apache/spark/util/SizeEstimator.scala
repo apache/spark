@@ -47,6 +47,11 @@ private[spark] object SizeEstimator extends Logging {
   private val FLOAT_SIZE   = 4
   private val DOUBLE_SIZE  = 8
 
+  // Fields can be primitive types, sizes are: 1, 2, 4, 8. Or fields can be pointers. The size of
+  // a pointer is 4 or 8 depending on the JVM (32-bit or 64-bit) and UseCompressedOops flag.
+  // The sizes should be in descending order, as we will use that information for fields placement.
+  private val fieldSizes = List(8, 4, 2, 1)
+
   // Alignment boundary for objects
   // TODO: Is this arch dependent ?
   private val ALIGN_SIZE = 8
@@ -171,7 +176,7 @@ private[spark] object SizeEstimator extends Logging {
       // general all ClassLoaders and Classes will be shared between objects anyway.
     } else {
       val classInfo = getClassInfo(cls)
-      state.size += classInfo.shellSize
+      state.size += alignSize(classInfo.shellSize)
       for (field <- classInfo.pointerFields) {
         state.enqueue(field.get(obj))
       }
@@ -237,8 +242,8 @@ private[spark] object SizeEstimator extends Logging {
     }
     size
   }
-  
-  private def primitiveSize(cls: Class[_]): Long = {
+
+  private def primitiveSize(cls: Class[_]): Int = {
     if (cls == classOf[Byte]) {
       BYTE_SIZE
     } else if (cls == classOf[Boolean]) {
@@ -274,21 +279,50 @@ private[spark] object SizeEstimator extends Logging {
     val parent = getClassInfo(cls.getSuperclass)
     var shellSize = parent.shellSize
     var pointerFields = parent.pointerFields
+    val sizeCount = Array.fill(fieldSizes.max + 1)(0)
 
+    // iterate through the fields of this class and gather information.
     for (field <- cls.getDeclaredFields) {
       if (!Modifier.isStatic(field.getModifiers)) {
         val fieldClass = field.getType
         if (fieldClass.isPrimitive) {
-          shellSize += primitiveSize(fieldClass)
+          sizeCount(primitiveSize(fieldClass)) += 1
         } else {
           field.setAccessible(true) // Enable future get()'s on this field
-          shellSize += pointerSize
+          sizeCount(pointerSize) += 1
           pointerFields = field :: pointerFields
         }
       }
     }
 
-    shellSize = alignSize(shellSize)
+    // Based on the simulated field layout code in Aleksey Shipilev's report:
+    // http://cr.openjdk.java.net/~shade/papers/2013-shipilev-fieldlayout-latest.pdf
+    // The code is in Figure 9.
+    // The simplified idea of field layout consists of 4 parts (see more details in the report):
+    //
+    // 1. field alignment: HotSpot lays out the fields aligned by their size.
+    // 2. object alignment: HotSpot rounds instance size up to 8 bytes
+    // 3. consistent fields layouts throughout the hierarchy: This means we should layout
+    // superclass first. And we can use superclass's shellSize as a starting point to layout the
+    // other fields in this class.
+    // 4. class alignment: HotSpot rounds field blocks up to to HeapOopSize not 4 bytes, confirmed
+    // with Aleksey. see https://bugs.openjdk.java.net/browse/CODETOOLS-7901322
+    //
+    // The real world field layout is much more complicated. There are three kinds of fields
+    // order in Java 8. And we don't consider the @contended annotation introduced by Java 8.
+    // see the HotSpot classloader code, layout_fields method for more details.
+    // hg.openjdk.java.net/jdk8/jdk8/hotspot/file/tip/src/share/vm/classfile/classFileParser.cpp
+    var alignedSize = shellSize
+    for (size <- fieldSizes if sizeCount(size) > 0) {
+      val count = sizeCount(size)
+      // If there are internal gaps, smaller field can fit in.
+      alignedSize = math.max(alignedSize, alignSizeUp(shellSize, size) + size * count)
+      shellSize += size * count
+    }
+
+    // Should choose a larger size to be new shellSize and clearly alignedSize >= shellSize, and
+    // round up the instance filed blocks
+    shellSize = alignSizeUp(alignedSize, pointerSize)
 
     // Create and cache a new ClassInfo
     val newInfo = new ClassInfo(shellSize, pointerFields)
@@ -296,8 +330,15 @@ private[spark] object SizeEstimator extends Logging {
     newInfo
   }
 
-  private def alignSize(size: Long): Long = {
-    val rem = size % ALIGN_SIZE
-    if (rem == 0) size else (size + ALIGN_SIZE - rem)
-  }
+  private def alignSize(size: Long): Long = alignSizeUp(size, ALIGN_SIZE)
+
+  /**
+   * Compute aligned size. The alignSize must be 2^n, otherwise the result will be wrong.
+   * When alignSize = 2^n, alignSize - 1 = 2^n - 1. The binary representation of (alignSize - 1)
+   * will only have n trailing 1s(0b00...001..1). ~(alignSize - 1) will be 0b11..110..0. Hence,
+   * (size + alignSize - 1) & ~(alignSize - 1) will set the last n bits to zeros, which leads to
+   * multiple of alignSize.
+   */
+  private def alignSizeUp(size: Long, alignSize: Int): Long =
+    (size + alignSize - 1) & ~(alignSize - 1)
 }

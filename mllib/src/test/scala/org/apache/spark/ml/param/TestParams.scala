@@ -23,15 +23,19 @@ import org.apache.spark.ml.param.shared.{HasInputCol, HasMaxIter}
 class TestParams extends Params with HasMaxIter with HasInputCol {
 
   def setMaxIter(value: Int): this.type = { set(maxIter, value); this }
+
   def setInputCol(value: String): this.type = { set(inputCol, value); this }
 
   setDefault(maxIter -> 10)
 
-  override def validate(paramMap: ParamMap): Unit = {
-    val m = extractParamMap(paramMap)
-    require(m(maxIter) >= 0)
-    require(m.contains(inputCol))
+  def clearMaxIter(): this.type = clear(maxIter)
+
+  override def validateParams(): Unit = {
+    super.validateParams()
+    require(isDefined(inputCol))
   }
 
-  def clearMaxIter(): this.type = clear(maxIter)
+  override def copy(extra: ParamMap): TestParams = {
+    super.copy(extra).asInstanceOf[TestParams]
+  }
 }

@@ -65,6 +65,7 @@ scalastyle.txt
 scalastyle-output.xml
 R-unit-tests.log
 R/unit-tests.out
+python/lib/pyspark.zip
 
 # For Hive
 metastore_db/

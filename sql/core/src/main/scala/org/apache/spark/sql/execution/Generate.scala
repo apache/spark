@@ -46,7 +46,7 @@ case class Generate(
 
   val boundGenerator = BindReferences.bindReference(generator, child.output)
 
-  override def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[Row] = {
     if (join) {
       child.execute().mapPartitions { iter =>
         val nullValues = Seq.fill(generator.elementTypes.size)(Literal(null))
