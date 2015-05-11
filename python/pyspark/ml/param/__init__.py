@@ -243,12 +243,3 @@ class Params(Identifiable):
             if paramMap.has_key(p) and to.hasParam(p.name):
                 to._set((p.name, paramMap[p]))
         return to
-
-    @staticmethod
-    def _copyParamMap(paramMap, to):
-        """
-        Create a copy of the given ParamMap, but with parameter
-        :param paramMap:
-        :param to:
-        :return:
-        """

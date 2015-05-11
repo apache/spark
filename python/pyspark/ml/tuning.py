@@ -232,14 +232,21 @@ class CrossValidator(Estimator):
     def copy(self, extra={}):
         """
         Creates a copy of this instance with a randomly generated uid
-        and some extra params. This copies the underlying estimator, creates a deep copy of the embedded paramMap, and
-        copies the embedded and extra parameters over.
+        and some extra params. This copies the underlying estimator,
+        evaluator, and estimatorParamMap, creates a deep copy of the
+        embedded paramMap, and copies the embedded and extra parameters
+        over.
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """
-        paramMap = self.extractParamMap(extra)
-        stages = map(lambda stage: stage.copy(extra), paramMap[self.stages])
-        return CrossValidator().setStages(stages)
+        newCV = Params.copy(self, extra)
+        if self.isSet(self.estimator):
+            newCV.setEstimator(self.getEstimator().copy(extra))
+        if self.isSet(self.estimatorParamMaps):
+            newCV.setEstimatorParamMaps(self.getEstimatorParamMaps().MAGIC_COPY_TO_BE_IMPLEMENTED(extra)) # TODO
+        if self.isSet(self.evaluator):
+            newCV.setEvaluator(self.getEvaluator().copy(extra))
+        return newCV
 
 
 class CrossValidatorModel(Model):
