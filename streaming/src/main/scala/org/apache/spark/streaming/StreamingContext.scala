@@ -591,6 +591,7 @@ class StreamingContext private[streaming] (
    *                       received data to be completed
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = synchronized {
+    state = STOPPED
     state match {
       case INITIALIZED =>
         logWarning("StreamingContext has not been started yet")
@@ -607,7 +608,6 @@ class StreamingContext private[streaming] (
     if (stopSparkContext) sc.stop()
     uiTab.foreach(_.detach())
     // The state should always be Stopped after calling `stop()`, even if we haven't started yet:
-    state = STOPPED
   }
 }
 
