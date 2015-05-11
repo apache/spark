@@ -101,7 +101,7 @@ class OneVsRestModel(
         val tmpColName = "mbc$tmp" + UUID.randomUUID().toString
         val update: (Map[Int, Double], Vector) => Map[Int, Double]  =
           (predictions: Map[Int, Double], prediction: Vector) => {
-            predictions+((index, prediction(1)))
+            predictions + ((index, prediction(1)))
         }
         val updateUdf = callUDF(update, mapType, col(accColName), col(rawPredictionCol))
         val transformedDataset = model.transform(df).select(columns:_*)
