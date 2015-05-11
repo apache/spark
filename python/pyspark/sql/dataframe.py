@@ -755,8 +755,6 @@ class DataFrame(object):
         jdf = self._jdf.groupBy(self._jcols(*cols))
         return GroupedData(jdf, self.sql_ctx)
 
-    groupby = groupBy
-
     def agg(self, *exprs):
         """ Aggregate on the entire :class:`DataFrame` without groups
         (shorthand for ``df.groupBy.agg()``).
@@ -792,6 +790,36 @@ class DataFrame(object):
         This is equivalent to `EXCEPT` in SQL.
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
+
+    def dropDuplicates(self, subset=None):
+        """Return a new :class:`DataFrame` with duplicate rows removed,
+        optionally only considering certain columns.
+
+        >>> from pyspark.sql import Row
+        >>> df = sc.parallelize([ \
+            Row(name='Alice', age=5, height=80), \
+            Row(name='Alice', age=5, height=80), \
+            Row(name='Alice', age=10, height=80)]).toDF()
+        >>> df.dropDuplicates().show()
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        |  5|    80|Alice|
+        | 10|    80|Alice|
+        +---+------+-----+
+
+        >>> df.dropDuplicates(['name', 'height']).show()
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        |  5|    80|Alice|
+        +---+------+-----+
+        """
+        if subset is None:
+            jdf = self._jdf.dropDuplicates()
+        else:
+            jdf = self._jdf.dropDuplicates(self._jseq(subset))
+        return DataFrame(jdf, self.sql_ctx)
 
     def dropna(self, how='any', thresh=None, subset=None):
         """Returns a new :class:`DataFrame` omitting rows with null values.
@@ -1011,6 +1039,10 @@ class DataFrame(object):
         """
         import pandas as pd
         return pd.DataFrame.from_records(self.collect(), columns=self.columns)
+
+    # Pandas compatibility
+    groupby = groupBy
+    drop_duplicates = dropDuplicates
 
 
 # Having SchemaRDD for backward compatibility (for docs)
