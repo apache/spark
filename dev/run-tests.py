@@ -283,26 +283,12 @@ def build_apache_spark():
     sbt_maven_profile_args = os.environ.get(SBT_MAVEN_PROFILE_ARGS_ENV).split()
     hive_profile_args = sbt_maven_profile_args + ["-Phive", 
                                                   "-Phive-thriftserver"]
-    hive_12_profile_args = hive_profile_args + ["-Phive-0.12.0"]
     # set the default maven args
     base_mvn_args = ["clean", "package", "-DskipTests"]
     # set the necessary sbt goals
-    sbt_hive_12_goals = ["clean", "hive/compile", "hive-thriftserver/compile"]
     sbt_hive_goals = ["package", 
                       "assembly/assembly", 
                       "streaming-kafka-assembly/assembly"]
-
-    # First build with Hive 0.12.0 to ensure patches do not break the Hive 
-    # 0.12.0 build
-    print "[info] Compile with Hive 0.12.0"
-    rm_r("lib_managed")
-    print "[info] Building Spark with these arguments:", 
-    print " ".join(hive_12_profile_args)
-
-    if AMPLAB_JENKINS_BUILD_TOOL == "maven":
-        exec_maven(hive_12_profile_args + base_mvn_args)
-    else:
-        exec_sbt(hive_12_profile_args + sbt_hive_12_goals)
 
     # Then build with default Hive version (0.13.1) because tests are based on
     # this version
