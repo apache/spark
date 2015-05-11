@@ -57,14 +57,12 @@ class JavaWrapper(Params):
             java_obj = getattr(java_obj, name)
         return java_obj()
 
-    def _transfer_params_to_java(self, params, java_obj):
+    def _transfer_params_to_java(self, java_obj):
         """
-        Transforms the embedded params and additional params to the
-        input Java object.
-        :param params: additional params (overwriting embedded values)
+        Transforms the embedded params to the input Java object.
         :param java_obj: Java object to receive the params
         """
-        paramMap = self.extractParamMap(params)
+        paramMap = self.extractParamMap()
         for param in self.params:
             if param in paramMap:
                 value = paramMap[param]
@@ -101,7 +99,7 @@ class JavaEstimator(Estimator, JavaWrapper):
         """
         return JavaModel(java_model)
 
-    def _fit_java(self, dataset, params={}):
+    def _fit_java(self, dataset):
         """
         Fits a Java model to the input dataset.
         :param dataset: input dataset, which is an instance of
@@ -110,11 +108,13 @@ class JavaEstimator(Estimator, JavaWrapper):
         :return: fitted Java model
         """
         java_obj = self._java_obj()
-        self._transfer_params_to_java(params, java_obj)
+        self._transfer_params_to_java(java_obj)
         return java_obj.fit(dataset._jdf, self._empty_java_param_map())
 
     def fit(self, dataset, params={}):
-        java_model = self._fit_java(dataset, params)
+        if len(params) != 0:
+            return self.copy(params).fit(dataset)
+        java_model = self._fit_java(dataset)
         return self._create_model(java_model)
 
 
@@ -128,8 +128,10 @@ class JavaTransformer(Transformer, JavaWrapper):
     __metaclass__ = ABCMeta
 
     def transform(self, dataset, params={}):
+        if len(params) != 0:
+            return self.copy(params).transform(dataset)
         java_obj = self._java_obj()
-        self._transfer_params_to_java(params, java_obj)
+        self._transfer_params_to_java(java_obj)
         return DataFrame(java_obj.transform(dataset._jdf), dataset.sql_ctx)
 
 
@@ -149,6 +151,23 @@ class JavaModel(Model, JavaTransformer):
     def _java_obj(self):
         return self._java_model
 
+    def copy(self, extra={}):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This implementation creates a
+        shallow copy using :py:func:`copy.copy`, creates a deep copy of
+        the embedded paramMap, creates a copy of the Java object,
+        and then copies the embedded and extra parameters over and
+        returns the new instance.
+        Subclasses should override this method if the default approach
+        is not sufficient.
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        that = Params.copy(self, extra)
+        that._java_model = that._java_model.copy()
+        return that
+
 
 @inherit_doc
 class JavaEvaluator(Evaluator, JavaWrapper):
@@ -160,6 +179,13 @@ class JavaEvaluator(Evaluator, JavaWrapper):
     __metaclass__ = ABCMeta
 
     def evaluate(self, dataset, params={}):
+        """
+        Evaluates the output.
+        :param dataset: a dataset that contains labels/observations and predictions.
+        :return: evaluation metric
+        """
+        if len(params) != 0:
+            return self.copy(params).evaluate(dataset)
         java_obj = self._java_obj()
-        self._transfer_params_to_java(params, java_obj)
+        self._transfer_params_to_java(java_obj)
         return java_obj.evaluate(dataset._jdf, self._empty_java_param_map())

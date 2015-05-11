@@ -40,10 +40,14 @@ class Estimator(Params):
 
         :param dataset: input dataset, which is an instance of
                         :py:class:`pyspark.sql.DataFrame`
-        :param params: an optional param map that overwrites embedded
+        :param params: an optional param map that overrides embedded
                        params
         :returns: fitted model
         """
+        # NOTE: Implementing classes should begin with the following
+        #       to handle params:
+        # if len(params) != 0:
+        #     return self.copy(params).fit(dataset)
         raise NotImplementedError()
 
 
@@ -63,10 +67,14 @@ class Transformer(Params):
 
         :param dataset: input dataset, which is an instance of
                         :py:class:`pyspark.sql.DataFrame`
-        :param params: an optional param map that overwrites embedded
+        :param params: an optional param map that overrides embedded
                        params
         :returns: transformed dataset
         """
+        # NOTE: Implementing classes should begin with the following
+        #       to handle params:
+        # if len(params) != 0:
+        #     return self.copy(params).transform(dataset)
         raise NotImplementedError()
 
 
@@ -136,8 +144,9 @@ class Pipeline(Estimator):
         return self._set(**kwargs)
 
     def fit(self, dataset, params={}):
-        paramMap = self.extractParamMap(params)
-        stages = paramMap[self.stages]
+        if len(params) != 0:
+            return self.copy(params).fit(dataset)
+        stages = self.getStages()
         for stage in stages:
             if not (isinstance(stage, Estimator) or isinstance(stage, Transformer)):
                 raise TypeError(
@@ -151,15 +160,28 @@ class Pipeline(Estimator):
             if i <= indexOfLastEstimator:
                 if isinstance(stage, Transformer):
                     transformers.append(stage)
-                    dataset = stage.transform(dataset, paramMap)
+                    dataset = stage.transform(dataset)
                 else:  # must be an Estimator
-                    model = stage.fit(dataset, paramMap)
+                    model = stage.fit(dataset)
                     transformers.append(model)
                     if i < indexOfLastEstimator:
-                        dataset = model.transform(dataset, paramMap)
+                        dataset = model.transform(dataset)
             else:
                 transformers.append(stage)
         return PipelineModel(transformers)
+
+    def copy(self, extra={}):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies each of the component
+        stages, creates a deep copy of the embedded paramMap, and
+        copies the embedded and extra parameters over.
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        paramMap = self.extractParamMap(extra)
+        stages = map(lambda stage: stage.copy(extra), paramMap[self.stages])
+        return Pipeline().setStages(stages)
 
 
 @inherit_doc
@@ -168,15 +190,28 @@ class PipelineModel(Model):
     Represents a compiled pipeline with transformers and fitted models.
     """
 
-    def __init__(self, transformers):
+    def __init__(self, stages):
         super(PipelineModel, self).__init__()
-        self.transformers = transformers
+        self.stages = stages
 
     def transform(self, dataset, params={}):
-        paramMap = self.extractParamMap(params)
-        for t in self.transformers:
-            dataset = t.transform(dataset, paramMap)
+        if len(params) != 0:
+            return self.copy(params).transform(dataset)
+        for t in self.stages:
+            dataset = t.transform(dataset)
         return dataset
+
+    def copy(self, extra={}):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies each of the component
+        stages, creates a deep copy of the embedded paramMap, and
+        copies the embedded and extra parameters over.
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        stages = map(lambda stage: stage.copy(extra), self.stages)
+        return PipelineModel(stages)
 
 
 class Evaluator(Params):
@@ -197,4 +232,8 @@ class Evaluator(Params):
                        params
         :return: metric
         """
+        # NOTE: Implementing classes should begin with the following
+        #       to handle params:
+        # if len(params) != 0:
+        #     return self.copy(params).evaluate(dataset)
         raise NotImplementedError()

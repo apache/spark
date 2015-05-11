@@ -139,6 +139,7 @@ class ParamTests(PySparkTestCase):
         params = testParams.params
         self.assertEqual(params, [inputCol, maxIter])
 
+        self.assertTrue(testParams.hasParam(maxIter))
         self.assertTrue(testParams.hasDefault(maxIter))
         self.assertFalse(testParams.isSet(maxIter))
         self.assertTrue(testParams.isDefined(maxIter))
@@ -147,6 +148,7 @@ class ParamTests(PySparkTestCase):
         self.assertTrue(testParams.isSet(maxIter))
         self.assertEquals(testParams.getMaxIter(), 100)
 
+        self.assertTrue(testParams.hasParam(inputCol))
         self.assertFalse(testParams.hasDefault(inputCol))
         self.assertFalse(testParams.isSet(inputCol))
         self.assertFalse(testParams.isDefined(inputCol))

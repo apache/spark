@@ -229,6 +229,18 @@ class CrossValidator(Estimator):
         bestModel = est.fit(dataset, epm[bestIndex])
         return CrossValidatorModel(bestModel)
 
+    def copy(self, extra={}):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies the underlying estimator, creates a deep copy of the embedded paramMap, and
+        copies the embedded and extra parameters over.
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        paramMap = self.extractParamMap(extra)
+        stages = map(lambda stage: stage.copy(extra), paramMap[self.stages])
+        return CrossValidator().setStages(stages)
+
 
 class CrossValidatorModel(Model):
     """
@@ -242,6 +254,17 @@ class CrossValidatorModel(Model):
 
     def transform(self, dataset, params={}):
         return self.bestModel.transform(dataset, params)
+
+    def copy(self, extra={}):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies the underlying bestModel,
+        creates a deep copy of the embedded paramMap, and
+        copies the embedded and extra parameters over.
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        return CrossValidatorModel(self.bestModel.copy(extra))
 
 
 if __name__ == "__main__":

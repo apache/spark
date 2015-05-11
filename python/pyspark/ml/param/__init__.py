@@ -17,6 +17,8 @@
 
 from abc import ABCMeta
 
+import copy
+
 from pyspark.ml.util import Identifiable
 
 
@@ -56,6 +58,9 @@ class Params(Identifiable):
     #: internal param map for default values
     defaultParamMap = {}
 
+    #: value returned by :py:func:`params`
+    _params = None
+
     @property
     def params(self):
         """
@@ -63,8 +68,10 @@ class Params(Identifiable):
         uses :py:func:`dir` to get all attributes of type
         :py:class:`Param`.
         """
-        return list(filter(lambda attr: isinstance(attr, Param),
-                           [getattr(self, x) for x in dir(self) if x != "params"]))
+        if self._params is None:
+            self._params = list(filter(lambda attr: isinstance(attr, Param),
+                                       [getattr(self, x) for x in dir(self) if x != "params"]))
+        return self._params
 
     def _explain(self, param):
         """
@@ -116,9 +123,17 @@ class Params(Identifiable):
 
     def isDefined(self, param):
         """
-        Checks whether a param is explicitly set by user or has a default value.
+        Checks whether a param is explicitly set by user or has
+        a default value.
         """
         return self.isSet(param) or self.hasDefault(param)
+
+    def hasParam(self, paramName):
+        """
+        Tests whether this instance contains a param with a given
+        (string) name.
+        """
+        return self.params.count(paramName) != 0
 
     def getOrDefault(self, param):
         """
@@ -135,20 +150,37 @@ class Params(Identifiable):
         else:
             raise KeyError("Cannot recognize %r as a param." % param)
 
-    def extractParamMap(self, extraParamMap={}):
+    def extractParamMap(self, extra={}):
         """
         Extracts the embedded default param values and user-supplied
         values, and then merges them with extra values from input into
         a flat param map, where the latter value is used if there exist
         conflicts, i.e., with ordering: default param values <
-        user-supplied values < extraParamMap.
-        :param extraParamMap: extra param values
+        user-supplied values < extra.
+        :param extra: extra param values
         :return: merged param map
         """
         paramMap = self.defaultParamMap.copy()
         paramMap.update(self.paramMap)
-        paramMap.update(extraParamMap)
+        paramMap.update(extra)
         return paramMap
+
+    def copy(self, extra={}):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. The default implementation creates a
+        shallow copy using :py:func:`copy.copy`, creates a deep copy of
+        the embedded paramMap, and then copies the embedded and extra
+        parameters over and returns the new instance.
+        Subclasses should override this method if the default approach
+        is not sufficient.
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        that = copy.copy(self)
+        that.uid = that._generateUID()
+        that.paramMap = copy.deepcopy(self.paramMap)
+        return self._copyValues(that, extra)
 
     def _shouldOwn(self, param):
         """
@@ -175,7 +207,8 @@ class Params(Identifiable):
     @staticmethod
     def _dummy():
         """
-        Returns a dummy Params instance used as a placeholder to generate docs.
+        Returns a dummy Params instance used as a placeholder to
+        generate docs.
         """
         dummy = Params()
         dummy.uid = "undefined"
@@ -196,3 +229,26 @@ class Params(Identifiable):
         for param, value in kwargs.items():
             self.defaultParamMap[getattr(self, param)] = value
         return self
+
+    def _copyValues(self, to, extra={}):
+        """
+        Copies param values from this instance to another instance for
+        params shared by them.
+        :param to: the target instance
+        :param extra: extra params to be copied
+        :return: the target instance with param values copied
+        """
+        paramMap = self.extractParamMap(extra)
+        for p in self.params:
+            if paramMap.has_key(p) and to.hasParam(p.name):
+                to._set((p.name, paramMap[p]))
+        return to
+
+    @staticmethod
+    def _copyParamMap(paramMap, to):
+        """
+        Create a copy of the given ParamMap, but with parameter
+        :param paramMap:
+        :param to:
+        :return:
+        """
