@@ -18,7 +18,7 @@ class BaseExecutor(object):
         :type paralllelism: int
         """
         self.parallelism = parallelism
-        self.queue = {}
+        self.queued_tasks = {}
         self.running = {}
         self.event_buffer = {}
 
@@ -30,9 +30,9 @@ class BaseExecutor(object):
         pass
 
     def queue_command(self, key, command, priority=1):
-        if key not in self.queue and key not in self.running:
+        if key not in self.queued_tasks and key not in self.running:
             logging.info("Adding to queue: " + command)
-            self.queue[key] = (command, priority)
+            self.queued_tasks[key] = (command, priority)
 
     def queue_task_instance(
             self, task_instance, mark_success=False, pickle_id=None):
@@ -58,15 +58,15 @@ class BaseExecutor(object):
 
         # Triggering new jobs
         if not self.parallelism:
-            open_slots = len(self.queue)
+            open_slots = len(self.queued_tasks)
         else:
             open_slots = self.parallelism - len(self.running)
 
         sorted_queue = sorted(
-            [(k, v) for k, v in self.queue.items()],
+            [(k, v) for k, v in self.queued_tasks.items()],
             key=lambda x: x[1][1],
             reverse=True)
-        for i in range(min((open_slots, len(self.queue)))):
+        for i in range(min((open_slots, len(self.queued_tasks)))):
             key, (command, priority) = sorted_queue.pop(0)
             self.running[key] = command
             self.execute_async(key, command)
