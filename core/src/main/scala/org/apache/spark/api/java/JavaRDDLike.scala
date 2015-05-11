@@ -528,6 +528,13 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
+   * Save this RDD as a compressed SequenceFile of serialized objects.
+   */
+  def saveAsObjectFile(path: String, codec: Class[_ <: CompressionCodec]): Unit = {
+    rdd.saveAsObjectFile(path, codec)
+  }
+
+  /**
    * Creates tuples of the elements in this RDD by applying `f`.
    */
   def keyBy[U](f: JFunction[T, U]): JavaPairRDD[U, T] = {

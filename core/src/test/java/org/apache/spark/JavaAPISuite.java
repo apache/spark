@@ -1244,6 +1244,17 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> readRDD = sc.objectFile(outputDir);
     Assert.assertEquals(expected, readRDD.collect());
   }
+  
+  @Test
+  public void objectFilesCompressed() throws IOException {
+    String outputDir = new File(tempDir, "output").getAbsolutePath();
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4));
+    rdd.saveAsObjectFile(outputDir, DefaultCodec.class);
+    // Try reading the output back as an object file
+    List<Integer> expected = Arrays.asList(1, 2, 3, 4);
+    JavaRDD<Integer> readRDD = sc.objectFile(outputDir);
+    Assert.assertEquals(expected, readRDD.collect());
+  }
 
   @SuppressWarnings("unchecked")
   @Test

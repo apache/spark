@@ -106,6 +106,10 @@ object MimaExcludes {
               "org.apache.spark.sql.parquet.ParquetTestData$"),
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.parquet.TestGroupWriteSupport")
+          ) ++ Seq(
+            // SPARK-6333
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.saveAsObjectFile")
           )
 
         case v if v.startsWith("1.3") =>

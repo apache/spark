@@ -169,6 +169,27 @@ class FileSuite extends FunSuite with LocalSparkContext {
     assert(output.collect().toList === List(1, 2, 3, 4))
   }
 
+  test("object files compressed") {
+    sc = new SparkContext("local", "test")
+    val normalDir = new File(tempDir, "output_normal").getAbsolutePath
+    val compressedOutputDir = new File(tempDir, "output_compressed").getAbsolutePath
+    val codec = new DefaultCodec()
+    
+    val nums = sc.makeRDD(1 to 4)
+    nums.saveAsObjectFile(normalDir)
+    nums.saveAsObjectFile(compressedOutputDir, classOf[DefaultCodec])
+    
+    // Try reading the output back as an object file
+    val normalFile = new File(normalDir, "part-00000")
+    val normalContent = sc.objectFile[Int](normalDir)
+    assert(normalContent.collect().toList === List(1, 2, 3, 4))
+    
+    val compressedFile = new File(compressedOutputDir, "part-00000" + codec.getDefaultExtension)
+    val compressedContent = sc.objectFile[Int](compressedOutputDir)
+    assert(compressedContent.collect().toList === List(1, 2, 3, 4))
+    assert(compressedFile.length < normalFile.length)
+  }
+  
   test("object files of complex types") {
     sc = new SparkContext("local", "test")
     val outputDir = new File(tempDir, "output").getAbsolutePath
