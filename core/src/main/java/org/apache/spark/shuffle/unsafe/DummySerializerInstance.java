@@ -17,14 +17,17 @@
 
 package org.apache.spark.shuffle.unsafe;
 
-import org.apache.spark.serializer.DeserializationStream;
-import org.apache.spark.serializer.SerializationStream;
-import org.apache.spark.serializer.SerializerInstance;
-import scala.reflect.ClassTag;
-
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+
+import scala.reflect.ClassTag;
+
+import org.apache.spark.serializer.DeserializationStream;
+import org.apache.spark.serializer.SerializationStream;
+import org.apache.spark.serializer.SerializerInstance;
+import org.apache.spark.unsafe.PlatformDependent;
 
 /**
  * Unfortunately, we need a serializer instance in order to construct a DiskBlockObjectWriter.
@@ -39,10 +42,17 @@ final class DummySerializerInstance extends SerializerInstance {
   private DummySerializerInstance() { }
 
   @Override
-  public SerializationStream serializeStream(OutputStream s) {
+  public SerializationStream serializeStream(final OutputStream s) {
     return new SerializationStream() {
       @Override
-      public void flush() { }
+      public void flush() {
+        // Need to implement this because DiskObjectWriter uses it to flush the compression stream
+        try {
+          s.flush();
+        } catch (IOException e) {
+          PlatformDependent.throwException(e);
+        }
+      }
 
       @Override
       public <T> SerializationStream writeObject(T t, ClassTag<T> ev1) {
@@ -50,7 +60,14 @@ final class DummySerializerInstance extends SerializerInstance {
       }
 
       @Override
-      public void close() { }
+      public void close() {
+        // Need to implement this because DiskObjectWriter uses it to close the compression stream
+        try {
+          s.close();
+        } catch (IOException e) {
+          PlatformDependent.throwException(e);
+        }
+      }
     };
   }
 

@@ -311,13 +311,12 @@ public class UnsafeShuffleWriterSuite {
     Assert.assertTrue(mergedOutputFile.exists());
     Assert.assertEquals(2, spillFilesCreated.size());
 
-    //    This assertion only holds for the fast merging path:
-    //    long sumOfPartitionSizes = 0;
-    //    for (long size: partitionSizesInMergedFile) {
-    //      sumOfPartitionSizes += size;
-    //    }
-    //    Assert.assertEquals(sumOfPartitionSizes, mergedOutputFile.length());
-    Assert.assertTrue(mergedOutputFile.length() > 0);
+    long sumOfPartitionSizes = 0;
+    for (long size: partitionSizesInMergedFile) {
+      sumOfPartitionSizes += size;
+    }
+    Assert.assertEquals(sumOfPartitionSizes, mergedOutputFile.length());
+
     Assert.assertEquals(
       HashMultiset.create(dataToWrite),
       HashMultiset.create(readRecordsFromFile()));
