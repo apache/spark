@@ -521,7 +521,7 @@ class StreamingContext private[streaming] (
    * - StreamingContextState.STOPPED - The context has been stopped and cannot be used any more.
    */
   @DeveloperApi
-  def getState(): StreamingContextState = {
+  def getState(): StreamingContextState = synchronized {
     state
   }
 
