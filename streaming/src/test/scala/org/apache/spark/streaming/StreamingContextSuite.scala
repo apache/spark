@@ -493,6 +493,24 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     }
   }
 
+  test("multiple streaming contexts") {
+    sc = new SparkContext(new SparkConf().setMaster(master).setAppName(appName))
+    ssc = new StreamingContext(sc, Seconds(1))
+    val input = addInputStream(ssc)
+    input.foreachRDD { rdd => rdd.count }
+    ssc.start()
+
+    // Creating another streaming context should not create errors
+    val anotherSsc = new StreamingContext(sc, Seconds(10))
+    val anotherInput = addInputStream(anotherSsc)
+    anotherInput.foreachRDD { rdd => rdd.count }
+
+    val exception = intercept[SparkException] {
+      anotherSsc.start()
+    }
+    assert(exception.getMessage.contains("StreamingContext"), "Did not get the right exception")
+  }
+
   test("DStream and generated RDD creation sites") {
     testPackage.test()
   }
