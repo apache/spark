@@ -101,9 +101,6 @@ public final class TaskMemoryManager {
    * intended for allocating large blocks of memory that will be shared between operators.
    */
   public MemoryBlock allocatePage(long size) {
-    if (logger.isTraceEnabled()) {
-      logger.trace("Allocating {} byte page", size);
-    }
     if (size >= (1L << 51)) {
       throw new IllegalArgumentException("Cannot allocate a page with more than 2^51 bytes");
     }
@@ -120,8 +117,8 @@ public final class TaskMemoryManager {
     final MemoryBlock page = executorMemoryManager.allocate(size);
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
-    if (logger.isDebugEnabled()) {
-      logger.debug("Allocate page number {} ({} bytes)", pageNumber, size);
+    if (logger.isTraceEnabled()) {
+      logger.trace("Allocate page number {} ({} bytes)", pageNumber, size);
     }
     return page;
   }
@@ -130,9 +127,6 @@ public final class TaskMemoryManager {
    * Free a block of memory allocated via {@link TaskMemoryManager#allocatePage(long)}.
    */
   public void freePage(MemoryBlock page) {
-    if (logger.isTraceEnabled()) {
-      logger.trace("Freeing page number {} ({} bytes)", page.pageNumber, page.size());
-    }
     assert (page.pageNumber != -1) :
       "Called freePage() on memory that wasn't allocated with allocatePage()";
     executorMemoryManager.free(page);
@@ -140,8 +134,8 @@ public final class TaskMemoryManager {
       allocatedPages.clear(page.pageNumber);
     }
     pageTable[page.pageNumber] = null;
-    if (logger.isDebugEnabled()) {
-      logger.debug("Freed page number {} ({} bytes)", page.pageNumber, page.size());
+    if (logger.isTraceEnabled()) {
+      logger.trace("Freed page number {} ({} bytes)", page.pageNumber, page.size());
     }
   }
 
