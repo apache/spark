@@ -128,8 +128,8 @@ private[yarn] class YarnAllocator(
         classOf[String]))
     } catch {
       case e: NoSuchMethodException => {
-        logInfo(s"Node label expression $expr will be ignored because YARN version on classpath" +
-          " does not support it.")
+        logWarning(s"Node label expression $expr will be ignored because YARN version on" +
+          " classpath does not support it.")
         None
       }
     }
