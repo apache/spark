@@ -39,14 +39,17 @@ final class Bucketizer private[ml] (override val parent: Estimator[Bucketizer])
 
   /**
    * Parameter for mapping continuous features into buckets. With n splits, there are n+1 buckets.
-   * A bucket defined by splits x,y holds values in the range [x,y). Note that the splits should be
-   * strictly increasing.
+   * A bucket defined by splits x,y holds values in the range [x,y). Splits should be strictly
+   * increasing. Values at -inf, inf must be explicitly provided to cover all Double values;
+   * otherwise, values outside the splits specified will be treated as errors.
    * @group param
    */
   val splits: Param[Array[Double]] = new Param[Array[Double]](this, "splits",
     "Split points for mapping continuous features into buckets. With n splits, there are n+1 " +
       "buckets. A bucket defined by splits x,y holds values in the range [x,y). The splits " +
-      "should be strictly increasing.",
+      "should be strictly increasing. Values at -inf, inf must be explicitly provided to cover" +
+      " all Double values; otherwise, values outside the splits specified will be treated as" +
+      " errors.",
     Bucketizer.checkSplits)
 
   /** @group getParam */
@@ -54,40 +57,6 @@ final class Bucketizer private[ml] (override val parent: Estimator[Bucketizer])
 
   /** @group setParam */
   def setSplits(value: Array[Double]): this.type = set(splits, value)
-
-  /**
-   * An indicator of the inclusiveness of negative infinite. If true, then use implicit bin
-   * (-inf, getSplits.head). If false, then throw exception if values < getSplits.head are
-   * encountered.
-   * @group Param */
-  val lowerInclusive: BooleanParam = new BooleanParam(this, "lowerInclusive",
-    "An indicator of the inclusiveness of negative infinite. If true, then use implicit bin " +
-      "(-inf, getSplits.head).  If false, then throw exception if values < getSplits.head are " +
-      "encountered.")
-  setDefault(lowerInclusive -> true)
-
-  /** @group getParam */
-  def getLowerInclusive: Boolean = $(lowerInclusive)
-
-  /** @group setParam */
-  def setLowerInclusive(value: Boolean): this.type = set(lowerInclusive, value)
-
-  /**
-   * An indicator of the inclusiveness of positive infinite. If true, then use implicit bin
-   * [getSplits.last, inf). If false, then throw exception if values > getSplits.last are
-   * encountered.
-   * @group Param */
-  val upperInclusive: BooleanParam = new BooleanParam(this, "upperInclusive",
-    "An indicator of the inclusiveness of positive infinite. If true, then use implicit bin " +
-      "[getSplits.last, inf).  If false, then throw exception if values > getSplits.last are " +
-      "encountered.")
-  setDefault(upperInclusive -> true)
-
-  /** @group getParam */
-  def getUpperInclusive: Boolean = $(upperInclusive)
-
-  /** @group setParam */
-  def setUpperInclusive(value: Boolean): this.type = set(upperInclusive, value)
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -97,81 +66,66 @@ final class Bucketizer private[ml] (override val parent: Estimator[Bucketizer])
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema)
-    val wrappedSplits = Array(Double.MinValue) ++ $(splits) ++ Array(Double.MaxValue)
     val bucketizer = udf { feature: Double =>
-      Bucketizer
-        .binarySearchForBuckets(wrappedSplits, feature, $(lowerInclusive), $(upperInclusive)) }
+      Bucketizer.binarySearchForBuckets($(splits), feature)
+    }
     val newCol = bucketizer(dataset($(inputCol)))
     val newField = prepOutputField(dataset.schema)
     dataset.withColumn($(outputCol), newCol.as($(outputCol), newField.metadata))
   }
 
   private def prepOutputField(schema: StructType): StructField = {
-    val innerRanges = $(splits).sliding(2).map(bucket => bucket.mkString(", ")).toArray
-    val values = ($(lowerInclusive), $(upperInclusive)) match {
-      case (true, true) =>
-        Array(s"-inf, ${$(splits).head}") ++ innerRanges ++ Array(s"${$(splits).last}, inf")
-      case (true, false) => Array(s"-inf, ${$(splits).head}") ++ innerRanges
-      case (false, true) => innerRanges ++ Array(s"${$(splits).last}, inf")
-      case _ => innerRanges
-    }
-    val attr =
-      new NominalAttribute(name = Some($(outputCol)), isOrdinal = Some(true), values = Some(values))
+    val buckets = $(splits).sliding(2).map(bucket => bucket.mkString(", ")).toArray
+    val attr = new NominalAttribute(name = Some($(outputCol)), isOrdinal = Some(true),
+      values = Some(buckets))
     attr.toStructField()
   }
 
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
-    require(schema.fields.forall(_.name != $(outputCol)),
-      s"Output column ${$(outputCol)} already exists.")
-    StructType(schema.fields :+ prepOutputField(schema))
+    SchemaUtils.appendColumn(schema, prepOutputField(schema))
   }
 }
 
 private[feature] object Bucketizer {
-  /**
-   * The given splits should match 1) its size is larger than zero; 2) it is ordered in a strictly
-   * increasing way.
-   */
-  private def checkSplits(splits: Array[Double]): Boolean = {
-    if (splits.size == 0) false
-    else if (splits.size == 1) true
-    else {
-      splits.foldLeft((true, Double.MinValue)) { case ((validator, prevValue), currValue) =>
-        if (validator && prevValue < currValue) {
-          (true, currValue)
-        } else {
-          (false, currValue)
-        }
-      }._1
+  /** We require splits to be of length >= 3 and to be in strictly increasing order. */
+  def checkSplits(splits: Array[Double]): Boolean = {
+    if (splits.length < 3) {
+      false
+    } else {
+      var i = 0
+      while (i < splits.length - 1) {
+        if (splits(i) >= splits(i + 1)) return false
+        i += 1
+      }
+      true
     }
   }
 
   /**
    * Binary searching in several buckets to place each data point.
+   * @throws RuntimeException if a feature is < splits.head or >= splits.last
    */
-  private[feature] def binarySearchForBuckets(
+  def binarySearchForBuckets(
       splits: Array[Double],
-      feature: Double,
-      lowerInclusive: Boolean,
-      upperInclusive: Boolean): Double = {
-    if ((feature < splits.head && !lowerInclusive) || (feature > splits.last && !upperInclusive)) {
-      throw new RuntimeException(s"Feature $feature out of bound, check your features or loosen " +
-        s"the lower/upper bound constraint.")
+      feature: Double): Double = {
+    // Check bounds.  We make an exception for +inf so that it can exist in some bin.
+    if ((feature < splits.head) || (feature >= splits.last && feature != Double.PositiveInfinity)) {
+      throw new RuntimeException(s"Feature value $feature out of Bucketizer bounds" +
+        s" [${splits.head}, ${splits.last}).  Check your features, or loosen " +
+        s"the lower/upper bound constraints.")
     }
     var left = 0
     var right = splits.length - 2
-    while (left <= right) {
-      val mid = left + (right - left) / 2
-      val split = splits(mid)
-      if ((feature >= split) && (feature < splits(mid + 1))) {
-        return mid
-      } else if (feature < split) {
-        right = mid - 1
+    while (left < right) {
+      val mid = (left + right) / 2
+      val split = splits(mid + 1)
+      if (feature < split) {
+        right = mid
       } else {
         left = mid + 1
       }
     }
-    throw new RuntimeException(s"Unexpected error: failed to find a bucket for feature $feature.")
+    left
   }
 }
