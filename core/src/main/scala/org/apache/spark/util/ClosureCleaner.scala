@@ -265,7 +265,7 @@ private[spark] object ClosureCleaner extends Logging {
       // required fields from the original object. We need the parent here because the Java
       // language specification requires the first constructor parameter of any closure to be
       // its enclosing object.
-      val clone = instantiateClass(cls, parent, Utils.isInInterpreter)
+      val clone = instantiateClass(cls, parent)
       for (fieldName <- accessedFields(cls)) {
         val field = cls.getDeclaredField(fieldName)
         field.setAccessible(true)
@@ -318,9 +318,8 @@ private[spark] object ClosureCleaner extends Logging {
 
   private def instantiateClass(
       cls: Class[_],
-      enclosingObject: AnyRef,
-      inInterpreter: Boolean): AnyRef = {
-    if (!inInterpreter) {
+      enclosingObject: AnyRef): AnyRef = {
+    if (!Utils.isInInterpreter) {
       // This is a bona fide closure class, whose constructor has no effects
       // other than to set its fields, so use its constructor
       val cons = cls.getConstructors()(0)
