@@ -40,7 +40,7 @@ header = """#
 
 def _gen_param_header(name, doc, defaultValueStr):
     """
-    Generates the header part for sharedPython variables
+    Generates the header part for shared variables
 
     :param name: param name
     :param doc: param doc
