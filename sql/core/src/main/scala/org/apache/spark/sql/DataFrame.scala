@@ -433,7 +433,7 @@ class DataFrame private[sql](
    *
    * @param right Right side of the join.
    * @param joinExprs Join expression.
-   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
+   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
    * @group dfops
    */
   def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame = {
