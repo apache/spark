@@ -32,7 +32,7 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark._
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.input.FixedLengthBinaryInputFormat
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -511,8 +511,11 @@ class StreamingContext private[streaming] (
   }
 
   /**
+   * :: DeveloperApi ::
+   *
    * Return the current state of the context.
    */
+  @DeveloperApi
   def getState(): StreamingContextState = {
     state
   }
@@ -601,25 +604,27 @@ class StreamingContext private[streaming] (
    *                       received data to be completed
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = synchronized {
-    state = STOPPED
-    StreamingContext.setActiveContext(null)
-
-    state match {
-      case INITIALIZED =>
-        logWarning("StreamingContext has not been started yet")
-      case STOPPED =>
-        logWarning("StreamingContext has already been stopped")
-      case STARTED =>
-        scheduler.stop(stopGracefully)
-        logInfo("StreamingContext stopped successfully")
-        waiter.notifyStop()
+    try {
+      state match {
+        case INITIALIZED =>
+          logWarning("StreamingContext has not been started yet")
+        case STOPPED =>
+          logWarning("StreamingContext has already been stopped")
+        case STARTED =>
+          scheduler.stop(stopGracefully)
+          uiTab.foreach(_.detach())
+          // Even if the streaming context has not been started, we still need to stop the SparkContext.
+          // Even if we have already stopped, we still need to attempt to stop the SparkContext because
+          // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
+          StreamingContext.setActiveContext(null)
+          logInfo("StreamingContext stopped successfully")
+          waiter.notifyStop()
+      }
+      if (stopSparkContext) sc.stop()
+    } finally {
+      // The state should always be Stopped after calling `stop()`, even if we haven't started yet
+      state = STOPPED
     }
-    // Even if the streaming context has not been started, we still need to stop the SparkContext.
-    // Even if we have already stopped, we still need to attempt to stop the SparkContext because
-    // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
-    if (stopSparkContext) sc.stop()
-    uiTab.foreach(_.detach())
-    // The state should always be Stopped after calling `stop()`, even if we haven't started yet:
   }
 }
 
