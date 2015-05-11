@@ -379,10 +379,19 @@ private class LeastSquaresAggregator(
     this
   }
 
+  /**
+   * @return The numbers of training samples.
+   */
   def count: Long = totalCnt
 
+  /**
+   * @return The loss of Least-squared loss function.
+   */
   def loss: Double = lossSum / totalCnt
 
+  /**
+   * @return The gradient of Least-squared loss function.
+   */
   def gradient: Vector = {
     val result = Vectors.dense(gradientSumArray.clone())
     scal(1.0 / totalCnt, result)
