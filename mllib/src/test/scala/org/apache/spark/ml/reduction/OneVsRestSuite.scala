@@ -81,19 +81,6 @@ class OneVsRestSuite extends FunSuite with MLlibTestSparkContext {
     assert(expectedMetrics.confusionMatrix ~== ovaMetrics.confusionMatrix absTol 400)
   }
 
-  test("one-vs-rest: test read label metadata") {
-    val numClasses = 8
-    val ova = new OneVsRest()
-    ova.setClassifier(new LogisticRegression)
-    val labelMetadata = NominalAttribute.defaultAttr.withName("label").withNumValues(8)
-    val labelWithMetadata = dataset("label").as("label", labelMetadata.toMetadata())
-    val features = dataset("features").as("features")
-    val datasetWithLabelMetadata = dataset.select(labelWithMetadata, features)
-    val ovaModel = ova.fit(datasetWithLabelMetadata)
-    // The number of distinct classes in the training dataset = 3, but metadata has value 8
-    assert(ovaModel.models.size == numClasses)
-  }
-
   test("one-vs-rest: pass label metadata correctly during train") {
     val numClasses = 3
     val ova = new OneVsRest()
