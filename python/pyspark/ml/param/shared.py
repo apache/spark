@@ -438,7 +438,6 @@ class DecisionTreeParams(Params):
     minInfoGain = Param(Params._dummy(), "minInfoGain", "Minimum information gain for a split to be considered at a tree node.")
     maxMemoryInMB = Param(Params._dummy(), "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation.")
     cacheNodeIds = Param(Params._dummy(), "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.")
-    
 
     def __init__(self):
         super(DecisionTreeParams, self).__init__()
@@ -448,7 +447,7 @@ class DecisionTreeParams(Params):
         self.minInfoGain = Param(self, "minInfoGain", "Minimum information gain for a split to be considered at a tree node.")
         self.maxMemoryInMB = Param(self, "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation.")
         self.cacheNodeIds = Param(self, "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.")
-        
+
     def setMaxDepth(self, value):
         """
         Sets the value of :py:attr:`maxDepth`.
