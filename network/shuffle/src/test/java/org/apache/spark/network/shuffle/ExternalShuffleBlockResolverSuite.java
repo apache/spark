@@ -30,7 +30,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
-public class ExternalShuffleBlockManagerSuite {
+public class ExternalShuffleBlockResolverSuite {
   static String sortBlock0 = "Hello!";
   static String sortBlock1 = "World!";
 
@@ -60,29 +60,29 @@ public class ExternalShuffleBlockManagerSuite {
 
   @Test
   public void testBadRequests() {
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf);
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf);
     // Unregistered executor
     try {
-      manager.getBlockData("app0", "exec1", "shuffle_1_1_0");
+      resolver.getBlockData("app0", "exec1", "shuffle_1_1_0");
       fail("Should have failed");
     } catch (RuntimeException e) {
       assertTrue("Bad error message: " + e, e.getMessage().contains("not registered"));
     }
 
     // Invalid shuffle manager
-    manager.registerExecutor("app0", "exec2", dataContext.createExecutorInfo("foobar"));
+    resolver.registerExecutor("app0", "exec2", dataContext.createExecutorInfo("foobar"));
     try {
-      manager.getBlockData("app0", "exec2", "shuffle_1_1_0");
+      resolver.getBlockData("app0", "exec2", "shuffle_1_1_0");
       fail("Should have failed");
     } catch (UnsupportedOperationException e) {
       // pass
     }
 
     // Nonexistent shuffle block
-    manager.registerExecutor("app0", "exec3",
+    resolver.registerExecutor("app0", "exec3",
       dataContext.createExecutorInfo("org.apache.spark.shuffle.sort.SortShuffleManager"));
     try {
-      manager.getBlockData("app0", "exec3", "shuffle_1_1_0");
+      resolver.getBlockData("app0", "exec3", "shuffle_1_1_0");
       fail("Should have failed");
     } catch (Exception e) {
       // pass
@@ -91,18 +91,18 @@ public class ExternalShuffleBlockManagerSuite {
 
   @Test
   public void testSortShuffleBlocks() throws IOException {
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf);
-    manager.registerExecutor("app0", "exec0",
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf);
+    resolver.registerExecutor("app0", "exec0",
       dataContext.createExecutorInfo("org.apache.spark.shuffle.sort.SortShuffleManager"));
 
     InputStream block0Stream =
-      manager.getBlockData("app0", "exec0", "shuffle_0_0_0").createInputStream();
+      resolver.getBlockData("app0", "exec0", "shuffle_0_0_0").createInputStream();
     String block0 = CharStreams.toString(new InputStreamReader(block0Stream));
     block0Stream.close();
     assertEquals(sortBlock0, block0);
 
     InputStream block1Stream =
-      manager.getBlockData("app0", "exec0", "shuffle_0_0_1").createInputStream();
+      resolver.getBlockData("app0", "exec0", "shuffle_0_0_1").createInputStream();
     String block1 = CharStreams.toString(new InputStreamReader(block1Stream));
     block1Stream.close();
     assertEquals(sortBlock1, block1);
@@ -110,18 +110,18 @@ public class ExternalShuffleBlockManagerSuite {
 
   @Test
   public void testHashShuffleBlocks() throws IOException {
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf);
-    manager.registerExecutor("app0", "exec0",
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf);
+    resolver.registerExecutor("app0", "exec0",
       dataContext.createExecutorInfo("org.apache.spark.shuffle.hash.HashShuffleManager"));
 
     InputStream block0Stream =
-      manager.getBlockData("app0", "exec0", "shuffle_1_0_0").createInputStream();
+      resolver.getBlockData("app0", "exec0", "shuffle_1_0_0").createInputStream();
     String block0 = CharStreams.toString(new InputStreamReader(block0Stream));
     block0Stream.close();
     assertEquals(hashBlock0, block0);
 
     InputStream block1Stream =
-      manager.getBlockData("app0", "exec0", "shuffle_1_0_1").createInputStream();
+      resolver.getBlockData("app0", "exec0", "shuffle_1_0_1").createInputStream();
     String block1 = CharStreams.toString(new InputStreamReader(block1Stream));
     block1Stream.close();
     assertEquals(hashBlock1, block1);

@@ -1204,7 +1204,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       nodeToExpr(qualifier) match {
         case UnresolvedAttribute(qualifierName) =>
           UnresolvedAttribute(qualifierName :+ cleanIdentifier(attr))
-        case other => UnresolvedGetField(other, attr)
+        case other => UnresolvedExtractValue(other, Literal(attr))
       }
 
     /* Stars (*) */
@@ -1329,7 +1329,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     /* Complex datatype manipulation */
     case Token("[", child :: ordinal :: Nil) =>
-      GetItem(nodeToExpr(child), nodeToExpr(ordinal))
+      UnresolvedExtractValue(nodeToExpr(child), nodeToExpr(ordinal))
 
     /* Other functions */
     case Token("TOK_FUNCTION", Token(ARRAY(), Nil) :: children) =>

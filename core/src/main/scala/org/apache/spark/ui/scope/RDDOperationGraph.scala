@@ -101,7 +101,7 @@ private[ui] object RDDOperationGraph extends Logging {
       val node = nodes.getOrElseUpdate(
         rdd.id, RDDOperationNode(rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE))
 
-      if (rdd.scope == null) {
+      if (rdd.scope.isEmpty) {
         // This RDD has no encompassing scope, so we put it directly in the root cluster
         // This should happen only if an RDD is instantiated outside of a public RDD API
         rootCluster.attachChildNode(node)
@@ -182,7 +182,7 @@ private[ui] object RDDOperationGraph extends Logging {
     if (forJob) {
       s"""${node.id} [label="$label" shape="circle" padding="5" labelStyle="font-size: 0"]"""
     } else {
-      s"""${node.id} [label="$label" padding="5" labelStyle="font-size: 10"]"""
+      s"""${node.id} [label="$label" padding="5" labelStyle="font-size: 12px"]"""
     }
   }
 

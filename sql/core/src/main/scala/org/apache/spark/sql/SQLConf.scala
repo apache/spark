@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql
 
+import java.util.Properties
+
 import scala.collection.immutable
 import scala.collection.JavaConversions._
 
-import java.util.Properties
+import org.apache.spark.sql.catalyst.CatalystConf
 
 private[spark] object SQLConf {
   val COMPRESS_CACHED = "spark.sql.inMemoryColumnarStorage.compressed"
@@ -32,6 +34,7 @@ private[spark] object SQLConf {
   val CODEGEN_ENABLED = "spark.sql.codegen"
   val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
   val DIALECT = "spark.sql.dialect"
+  val CASE_SENSITIVE = "spark.sql.caseSensitive"
 
   val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
   val PARQUET_INT96_AS_TIMESTAMP = "spark.sql.parquet.int96AsTimestamp"
@@ -89,7 +92,8 @@ private[spark] object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] class SQLConf extends Serializable {
+
+private[sql] class SQLConf extends Serializable with CatalystConf {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -157,6 +161,11 @@ private[sql] class SQLConf extends Serializable {
    * Defaults to false as this feature is currently experimental.
    */
   private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, "false").toBoolean
+
+  /**
+   * caseSensitive analysis true by default
+   */
+  def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, "true").toBoolean
 
   /**
    * When set to true, Spark SQL will use managed memory for certain operations.  This option only

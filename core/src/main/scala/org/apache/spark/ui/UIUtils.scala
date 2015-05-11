@@ -156,10 +156,10 @@ private[spark] object UIUtils extends Logging {
 
   def commonHeaderNodes: Seq[Node] = {
     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-    <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/webui.css")} type="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")} type="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")} type="text/css" />
+    <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/webui.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri("/static/sorttable.js")} ></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
     <script src={prependBaseUri("/static/vis.min.js")}></script>
@@ -250,7 +250,7 @@ private[spark] object UIUtils extends Logging {
               <h3 style="vertical-align: middle; display: inline-block;">
                 <a style="text-decoration: none" href={prependBaseUri("/")}>
                   <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
-                  <span class="version" 
+                  <span class="version"
                         style="margin-right: 15px;">{org.apache.spark.SPARK_VERSION}</span>
                 </a>
                 {title}
@@ -350,7 +350,10 @@ private[spark] object UIUtils extends Logging {
     <div>
       <span class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
         <span class="expand-dag-viz-arrow arrow-closed"></span>
-        <strong>DAG visualization</strong>
+        <a data-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
+           data-placement="right">
+          DAG Visualization
+        </a>
       </span>
       <div id="dag-viz-graph"></div>
       <div id="dag-viz-metadata">

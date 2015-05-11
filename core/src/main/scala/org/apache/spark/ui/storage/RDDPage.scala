@@ -21,8 +21,8 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.storage.{BlockId, BlockStatus, StorageStatus, StorageUtils}
-import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.status.api.v1.{AllRDDResource, RDDDataDistribution, RDDPartitionInfo}
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
@@ -32,28 +32,19 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
-
     val rddId = parameterId.toInt
-    val storageStatusList = listener.storageStatusList
-    val rddInfo = listener.rddInfoList.find(_.id == rddId).getOrElse {
-      // Rather than crashing, render an "RDD Not Found" page
-      return UIUtils.headerSparkPage("RDD Not Found", Seq[Node](), parent)
-    }
+    val rddStorageInfo = AllRDDResource.getRDDStorageInfo(rddId, listener,includeDetails = true)
+      .getOrElse {
+        // Rather than crashing, render an "RDD Not Found" page
+        return UIUtils.headerSparkPage("RDD Not Found", Seq[Node](), parent)
+      }
 
     // Worker table
-    val workers = storageStatusList.map((rddId, _))
-    val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers,
-      id = Some("rdd-storage-by-worker-table"))
+    val workerTable = UIUtils.listingTable(workerHeader, workerRow,
+      rddStorageInfo.dataDistribution.get, id = Some("rdd-storage-by-worker-table"))
 
     // Block table
-    val blockLocations = StorageUtils.getRddBlockLocations(rddId, storageStatusList)
-    val blocks = storageStatusList
-      .flatMap(_.rddBlocksById(rddId))
-      .sortWith(_._1.name < _._1.name)
-      .map { case (blockId, status) =>
-        (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
-      }
-    val blockTable = UIUtils.listingTable(blockHeader, blockRow, blocks,
+    val blockTable = UIUtils.listingTable(blockHeader, blockRow, rddStorageInfo.partitions.get,
       id = Some("rdd-storage-by-block-table"))
 
     val content =
@@ -62,23 +53,23 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
           <ul class="unstyled">
             <li>
               <strong>Storage Level:</strong>
-              {rddInfo.storageLevel.description}
+              {rddStorageInfo.storageLevel}
             </li>
             <li>
               <strong>Cached Partitions:</strong>
-              {rddInfo.numCachedPartitions}
+              {rddStorageInfo.numCachedPartitions}
             </li>
             <li>
               <strong>Total Partitions:</strong>
-              {rddInfo.numPartitions}
+              {rddStorageInfo.numPartitions}
             </li>
             <li>
               <strong>Memory Size:</strong>
-              {Utils.bytesToString(rddInfo.memSize)}
+              {Utils.bytesToString(rddStorageInfo.memoryUsed)}
             </li>
             <li>
               <strong>Disk Size:</strong>
-              {Utils.bytesToString(rddInfo.diskSize)}
+              {Utils.bytesToString(rddStorageInfo.diskUsed)}
             </li>
           </ul>
         </div>
@@ -86,19 +77,19 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
 
       <div class="row-fluid">
         <div class="span12">
-          <h4> Data Distribution on {workers.size} Executors </h4>
+          <h4> Data Distribution on {rddStorageInfo.dataDistribution.size} Executors </h4>
           {workerTable}
         </div>
       </div>
 
       <div class="row-fluid">
         <div class="span12">
-          <h4> {blocks.size} Partitions </h4>
+          <h4> {rddStorageInfo.partitions.size} Partitions </h4>
           {blockTable}
         </div>
       </div>;
 
-    UIUtils.headerSparkPage("RDD Storage Info for " + rddInfo.name, content, parent)
+    UIUtils.headerSparkPage("RDD Storage Info for " + rddStorageInfo.name, content, parent)
   }
 
   /** Header fields for the worker table */
@@ -116,34 +107,32 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     "Executors")
 
   /** Render an HTML row representing a worker */
-  private def workerRow(worker: (Int, StorageStatus)): Seq[Node] = {
-    val (rddId, status) = worker
+  private def workerRow(worker: RDDDataDistribution): Seq[Node] = {
     <tr>
-      <td>{status.blockManagerId.host + ":" + status.blockManagerId.port}</td>
+      <td>{worker.address}</td>
       <td>
-        {Utils.bytesToString(status.memUsedByRdd(rddId))}
-        ({Utils.bytesToString(status.memRemaining)} Remaining)
+        {Utils.bytesToString(worker.memoryUsed)}
+        ({Utils.bytesToString(worker.memoryRemaining)} Remaining)
       </td>
-      <td>{Utils.bytesToString(status.diskUsedByRdd(rddId))}</td>
+      <td>{Utils.bytesToString(worker.diskUsed)}</td>
     </tr>
   }
 
   /** Render an HTML row representing a block */
-  private def blockRow(row: (BlockId, BlockStatus, Seq[String])): Seq[Node] = {
-    val (id, block, locations) = row
+  private def blockRow(row: RDDPartitionInfo): Seq[Node] = {
     <tr>
-      <td>{id}</td>
+      <td>{row.blockName}</td>
       <td>
-        {block.storageLevel.description}
+        {row.storageLevel}
       </td>
-      <td sorttable_customkey={block.memSize.toString}>
-        {Utils.bytesToString(block.memSize)}
+      <td sorttable_customkey={row.memoryUsed.toString}>
+        {Utils.bytesToString(row.memoryUsed)}
       </td>
-      <td sorttable_customkey={block.diskSize.toString}>
-        {Utils.bytesToString(block.diskSize)}
+      <td sorttable_customkey={row.diskUsed.toString}>
+        {Utils.bytesToString(row.diskUsed)}
       </td>
       <td>
-        {locations.map(l => <span>{l}<br/></span>)}
+        {row.executors.map(l => <span>{l}<br/></span>)}
       </td>
     </tr>
   }
