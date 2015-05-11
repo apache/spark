@@ -37,6 +37,8 @@ final class PackedRecordPointer {
 
   static final int MAXIMUM_PAGE_SIZE_BYTES = 1 << 27;  // 128 megabytes
 
+  static final int MAXIMUM_PARTITION_ID = 1 << 24;  // 16777216
+
   /** Bit mask for the lower 40 bits of a long. */
   private static final long MASK_LONG_LOWER_40_BITS = 0xFFFFFFFFFFL;
 
@@ -62,6 +64,7 @@ final class PackedRecordPointer {
    * @return a packed pointer that can be decoded using the {@link PackedRecordPointer} class.
    */
   public static long packPointer(long recordPointer, int partitionId) {
+    assert (partitionId <= MAXIMUM_PARTITION_ID);
     // Note that without word alignment we can address 2^27 bytes = 128 megabytes per page.
     // Also note that this relies on some internals of how TaskMemoryManager encodes its addresses.
     final int pageNumber = (int) ((recordPointer & MASK_LONG_UPPER_13_BITS) >>> 51);

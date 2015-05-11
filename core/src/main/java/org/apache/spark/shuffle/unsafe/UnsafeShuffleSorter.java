@@ -17,8 +17,10 @@
 
 package org.apache.spark.shuffle.unsafe;
 
+import java.io.IOException;
 import java.util.Comparator;
 
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.Sorter;
 
 final class UnsafeShuffleSorter {
@@ -59,8 +61,17 @@ final class UnsafeShuffleSorter {
     return sortBuffer.length * 8L;
   }
 
-  // TODO: clairify assumption that pointer points to record length.
-  public void insertRecord(long recordPointer, int partitionId) {
+  /**
+   * Inserts a record to be sorted.
+   *
+   * @param recordPointer a pointer to the record, encoded by the task memory manager. Due to
+   *                      certain pointer compression techniques used by the sorter, the sort can
+   *                      only operate on pointers that point to locations in the first
+   *                      {@link PackedRecordPointer#MAXIMUM_PAGE_SIZE_BYTES} bytes of a data page.
+   * @param partitionId the partition id, which must be less than or equal to
+   *                    {@link PackedRecordPointer#MAXIMUM_PARTITION_ID}.
+   */
+  public void insertRecord(long recordPointer, int partitionId) throws IOException {
     if (!hasSpaceForAnotherRecord()) {
       expandSortBuffer();
     }

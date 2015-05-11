@@ -100,6 +100,12 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       int mapId,
       TaskContext taskContext,
       SparkConf sparkConf) {
+    final int numPartitions = handle.dependency().partitioner().numPartitions();
+    if (numPartitions > PackedRecordPointer.MAXIMUM_PARTITION_ID) {
+      throw new IllegalArgumentException(
+        "UnsafeShuffleWriter can only be used for shuffles with at most " +
+          PackedRecordPointer.MAXIMUM_PARTITION_ID + " reduce partitions");
+    }
     this.blockManager = blockManager;
     this.shuffleBlockResolver = shuffleBlockResolver;
     this.memoryManager = memoryManager;
