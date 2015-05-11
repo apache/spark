@@ -228,7 +228,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
 
   def children: Seq[SparkPlan] = child :: Nil
 
-  def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[Row] = {
     val childResults = child.execute().map(_.copy())
 
     val parent = childResults.mapPartitions { iter =>
