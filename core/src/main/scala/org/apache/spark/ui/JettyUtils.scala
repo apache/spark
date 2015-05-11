@@ -80,12 +80,7 @@ private[spark] object JettyUtils extends Logging {
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage)
           case e: Exception =>
             logWarning(s"GET ${request.getRequestURI} failed: $e", e)
-            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
-            response.setContentType("text/plain;charset=utf-8")
-            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-            val writer = response.getWriter
-            writer.println(e.toString)
-            e.printStackTrace(writer)
+            throw e;
         }
       }
       // SPARK-5983 ensure TRACE is not supported
@@ -225,6 +220,9 @@ private[spark] object JettyUtils extends Logging {
       val pool = new QueuedThreadPool
       pool.setDaemon(true)
       server.setThreadPool(pool)
+      val errorHandler = new ErrorHandler();
+      errorHandler.setShowStacks(true);
+      server.addBean(errorHandler);
       server.setHandler(collection)
       try {
         server.start()
