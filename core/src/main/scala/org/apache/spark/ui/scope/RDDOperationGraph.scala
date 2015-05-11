@@ -101,7 +101,7 @@ private[ui] object RDDOperationGraph extends Logging {
       val node = nodes.getOrElseUpdate(
         rdd.id, RDDOperationNode(rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE))
 
-      if (rdd.scope == null) {
+      if (rdd.scope.isEmpty) {
         // This RDD has no encompassing scope, so we put it directly in the root cluster
         // This should happen only if an RDD is instantiated outside of a public RDD API
         rootCluster.attachChildNode(node)
@@ -178,10 +178,11 @@ private[ui] object RDDOperationGraph extends Logging {
    * On the stage page, it is displayed as a box with an embedded label.
    */
   private def makeDotNode(node: RDDOperationNode, forJob: Boolean): String = {
+    val label = s"${node.name} (${node.id})"
     if (forJob) {
-      s"""${node.id} [label=" " shape="circle" padding="5" labelStyle="font-size: 0"]"""
+      s"""${node.id} [label="$label" shape="circle" padding="5" labelStyle="font-size: 0"]"""
     } else {
-      s"""${node.id} [label="${node.name} (${node.id})" padding="5" labelStyle="font-size: 10"]"""
+      s"""${node.id} [label="$label" padding="5" labelStyle="font-size: 12px"]"""
     }
   }
 

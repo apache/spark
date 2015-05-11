@@ -25,6 +25,7 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.status.api.v1.{ApplicationInfo, ApplicationsListResource, JsonRootResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{SignalLogger, Utils}
@@ -45,7 +46,7 @@ class HistoryServer(
     provider: ApplicationHistoryProvider,
     securityManager: SecurityManager,
     port: Int)
-  extends WebUI(securityManager, port, conf) with Logging {
+  extends WebUI(securityManager, port, conf) with Logging with UIRoot {
 
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
@@ -56,7 +57,7 @@ class HistoryServer(
       require(parts.length == 1 || parts.length == 2, s"Invalid app key $key")
       val ui = provider
         .getAppUI(parts(0), if (parts.length > 1) Some(parts(1)) else None)
-        .getOrElse(throw new NoSuchElementException())
+        .getOrElse(throw new NoSuchElementException(s"no app with key $key"))
       attachSparkUI(ui)
       ui
     }
@@ -82,35 +83,35 @@ class HistoryServer(
         return
       }
 
-      val appKey =
-        if (parts.length == 3) {
-          s"${parts(1)}/${parts(2)}"
-        } else {
-          parts(1)
+      val appId = parts(1)
+      val attemptId = if (parts.length >= 3) Some(parts(2)) else None
+
+      // Since we may have applications with multiple attempts mixed with applications with a
+      // single attempt, we need to try both. Try the single-attempt route first, and if an
+      // error is raised, then try the multiple attempt route.
+      if (!loadAppUi(appId, None) && (!attemptId.isDefined || !loadAppUi(appId, attemptId))) {
+        val msg = <div class="row-fluid">Application {appId} not found.</div>
+        res.setStatus(HttpServletResponse.SC_NOT_FOUND)
+        UIUtils.basicSparkPage(msg, "Not Found").foreach { n =>
+          res.getWriter().write(n.toString)
         }
+        return
+      }
 
       // Note we don't use the UI retrieved from the cache; the cache loader above will register
       // the app's UI, and all we need to do is redirect the user to the same URI that was
       // requested, and the proper data should be served at that point.
-      try {
-        appCache.get(appKey)
-        res.sendRedirect(res.encodeRedirectURL(req.getRequestURI()))
-      } catch {
-        case e: Exception => e.getCause() match {
-          case nsee: NoSuchElementException =>
-            val msg = <div class="row-fluid">Application {appKey} not found.</div>
-            res.setStatus(HttpServletResponse.SC_NOT_FOUND)
-            UIUtils.basicSparkPage(msg, "Not Found").foreach(
-              n => res.getWriter().write(n.toString))
-
-          case cause: Exception => throw cause
-        }
-      }
+      res.sendRedirect(res.encodeRedirectURL(req.getRequestURI()))
     }
+
     // SPARK-5983 ensure TRACE is not supported
     protected override def doTrace(req: HttpServletRequest, res: HttpServletResponse): Unit = {
       res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
     }
+  }
+
+  def getSparkUI(appKey: String): Option[SparkUI] = {
+    Option(appCache.get(appKey))
   }
 
   initialize()
@@ -123,6 +124,9 @@ class HistoryServer(
    */
   def initialize() {
     attachPage(new HistoryPage(this))
+
+    attachHandler(JsonRootResource.getJsonServlet(this))
+
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
 
     val contextHandler = new ServletContextHandler
@@ -160,7 +164,13 @@ class HistoryServer(
    *
    * @return List of all known applications.
    */
-  def getApplicationList(): Iterable[ApplicationHistoryInfo] = provider.getListing()
+  def getApplicationList(): Iterable[ApplicationHistoryInfo] = {
+    provider.getListing()
+  }
+
+  def getApplicationInfoList: Iterator[ApplicationInfo] = {
+    getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+  }
 
   /**
    * Returns the provider configuration to show in the listing page.
@@ -168,6 +178,20 @@ class HistoryServer(
    * @return A map with the provider's configuration.
    */
   def getProviderConfig(): Map[String, String] = provider.getConfig()
+
+  private def loadAppUi(appId: String, attemptId: Option[String]): Boolean = {
+    try {
+      appCache.get(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
+      true
+    } catch {
+      case e: Exception => e.getCause() match {
+        case nsee: NoSuchElementException =>
+          false
+
+        case cause: Exception => throw cause
+      }
+    }
+  }
 
 }
 
@@ -189,8 +213,8 @@ object HistoryServer extends Logging {
 
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
-    initSecurity()
     new HistoryServerArguments(conf, argStrings)
+    initSecurity()
     val securityManager = new SecurityManager(conf)
 
     val providerName = conf.getOption("spark.history.provider")

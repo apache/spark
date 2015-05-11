@@ -27,24 +27,22 @@ __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel']
 
 
 class ParamGridBuilder(object):
-    """
+    r"""
     Builder for a param grid used in grid search-based model selection.
 
-    >>> from classification import LogisticRegression
+    >>> from pyspark.ml.classification import LogisticRegression
     >>> lr = LogisticRegression()
-    >>> output = ParamGridBuilder().baseOn({lr.labelCol: 'l'}) \
-            .baseOn([lr.predictionCol, 'p']) \
-            .addGrid(lr.regParam, [1.0, 2.0, 3.0]) \
-            .addGrid(lr.maxIter, [1, 5]) \
-            .addGrid(lr.featuresCol, ['f']) \
-            .build()
-    >>> expected = [ \
-{lr.regParam: 1.0, lr.featuresCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 2.0, lr.featuresCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 3.0, lr.featuresCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 1.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 2.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 3.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}]
+    >>> output = ParamGridBuilder() \
+    ...     .baseOn({lr.labelCol: 'l'}) \
+    ...     .baseOn([lr.predictionCol, 'p']) \
+    ...     .addGrid(lr.regParam, [1.0, 2.0]) \
+    ...     .addGrid(lr.maxIter, [1, 5]) \
+    ...     .build()
+    >>> expected = [
+    ...     {lr.regParam: 1.0, lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'},
+    ...     {lr.regParam: 2.0, lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'},
+    ...     {lr.regParam: 1.0, lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'},
+    ...     {lr.regParam: 2.0, lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}]
     >>> len(output) == len(expected)
     True
     >>> all([m in expected for m in output])
@@ -103,10 +101,10 @@ class CrossValidator(Estimator):
     >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1, 5]).build()
     >>> evaluator = BinaryClassificationEvaluator()
     >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
-    >>> cvModel = cv.fit(dataset)
-    >>> expected = lr.fit(dataset, {lr.maxIter: 5}).transform(dataset)
-    >>> cvModel.transform(dataset).collect() == expected.collect()
-    True
+    >>> # SPARK-7432: The following test is flaky.
+    >>> # cvModel = cv.fit(dataset)
+    >>> # expected = lr.fit(dataset, {lr.maxIter: 5}).transform(dataset)
+    >>> # cvModel.transform(dataset).collect() == expected.collect()
     """
 
     # a placeholder to make it appear in the generated doc
@@ -238,6 +236,7 @@ class CrossValidatorModel(Model):
     """
 
     def __init__(self, bestModel):
+        super(CrossValidatorModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
 

@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedStar, UnresolvedGetField}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedStar, UnresolvedExtractValue}
 import org.apache.spark.sql.types._
 
 
@@ -66,6 +66,19 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   }
 
   override def hashCode: Int = this.expr.hashCode
+
+  /**
+   * Extracts a value or values from a complex type.
+   * The following types of extraction are supported:
+   * - Given an Array, an integer ordinal can be used to retrieve a single value.
+   * - Given a Map, a key of the correct type can be used to retrieve an individual value.
+   * - Given a Struct, a string fieldName can be used to extract that field.
+   * - Given an Array of Structs, a string fieldName can be used to extract filed
+   *   of every struct in that array, and return an Array of fields
+   *
+   * @group expr_ops
+   */
+  def apply(field: Any): Column = UnresolvedExtractValue(expr, Literal(field))
 
   /**
    * Unary minus, i.e. negate the expression.
@@ -529,14 +542,14 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group expr_ops
    */
-  def getItem(key: Any): Column = GetItem(expr, Literal(key))
+  def getItem(key: Any): Column = UnresolvedExtractValue(expr, Literal(key))
 
   /**
    * An expression that gets a field by name in a [[StructType]].
    *
    * @group expr_ops
    */
-  def getField(fieldName: String): Column = UnresolvedGetField(expr, fieldName)
+  def getField(fieldName: String): Column = UnresolvedExtractValue(expr, Literal(fieldName))
 
   /**
    * An expression that returns a substring.
@@ -698,6 +711,37 @@ class Column(protected[sql] val expr: Expression) extends Logging {
       println(expr.prettyString)
     }
   }
+
+  /**
+   * Compute bitwise OR of this expression with another expression.
+   * {{{
+   *   df.select($"colA".bitwiseOR($"colB"))
+   * }}}
+   *
+   * @group expr_ops
+   */
+  def bitwiseOR(other: Any): Column = BitwiseOr(expr, lit(other).expr)
+
+  /**
+   * Compute bitwise AND of this expression with another expression.
+   * {{{
+   *   df.select($"colA".bitwiseAND($"colB"))
+   * }}}
+   *
+   * @group expr_ops
+   */
+  def bitwiseAND(other: Any): Column = BitwiseAnd(expr, lit(other).expr)
+
+  /**
+   * Compute bitwise XOR of this expression with another expression.
+   * {{{
+   *   df.select($"colA".bitwiseXOR($"colB"))
+   * }}}
+   *
+   * @group expr_ops
+   */
+  def bitwiseXOR(other: Any): Column = BitwiseXor(expr, lit(other).expr)
+
 }
 
 

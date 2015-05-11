@@ -209,7 +209,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
           // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
           // Then this will add GetField("c", GetField("b", a)), and alias
           // the final expression as "c".
-          val fieldExprs = nestedFields.foldLeft(a: Expression)(GetField(_, _, resolver))
+          val fieldExprs = nestedFields.foldLeft(a: Expression)((expr, fieldName) =>
+            ExtractValue(expr, Literal(fieldName), resolver))
           val aliasName = nestedFields.last
           Some(Alias(fieldExprs, aliasName)())
         } catch {

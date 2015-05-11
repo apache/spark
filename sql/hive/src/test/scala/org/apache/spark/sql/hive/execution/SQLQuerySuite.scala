@@ -493,6 +493,12 @@ class SQLQuerySuite extends QueryTest {
     }
   }
 
+  test("SPARK-4699 HiveContext should be case insensitive by default") {
+    checkAnswer(
+      sql("SELECT KEY FROM Src ORDER BY value"),
+      sql("SELECT key FROM src ORDER BY value").collect().toSeq)
+  }
+
   test("SPARK-5284 Insert into Hive throws NPE when a inner complex type field has a null value") {
     val schema = StructType(
       StructField("s",
@@ -750,5 +756,12 @@ class SQLQuerySuite extends QueryTest {
         (5, "c", 1, 5),
         (6, "c", 0, 6)
       ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("test case key when") {
+    (1 to 5).map(i => (i, i.toString)).toDF("k", "v").registerTempTable("t")
+    checkAnswer(
+      sql("SELECT CASE k WHEN 2 THEN 22 WHEN 4 THEN 44 ELSE 0 END, v FROM t"),
+      Row(0, "1") :: Row(22, "2") :: Row(0, "3") :: Row(44, "4") :: Row(0, "5") :: Nil)
   }
 }

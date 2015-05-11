@@ -229,6 +229,14 @@
       <version>3.2.10</version>
     </dependency>
     <dependency>
+      <groupId>com.sun.jersey</groupId>
+      <artifactId>jersey-server</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.sun.jersey</groupId>
+      <artifactId>jersey-core</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.mesos</groupId>
       <artifactId>mesos</artifactId>
       <classifier>${mesos.classifier}</classifier>

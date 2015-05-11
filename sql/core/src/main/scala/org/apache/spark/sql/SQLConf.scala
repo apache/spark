@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql
 
+import java.util.Properties
+
 import scala.collection.immutable
 import scala.collection.JavaConversions._
 
-import java.util.Properties
+import org.apache.spark.sql.catalyst.CatalystConf
 
 private[spark] object SQLConf {
   val COMPRESS_CACHED = "spark.sql.inMemoryColumnarStorage.compressed"
@@ -32,6 +34,7 @@ private[spark] object SQLConf {
   val CODEGEN_ENABLED = "spark.sql.codegen"
   val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
   val DIALECT = "spark.sql.dialect"
+  val CASE_SENSITIVE = "spark.sql.caseSensitive"
 
   val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
   val PARQUET_INT96_AS_TIMESTAMP = "spark.sql.parquet.int96AsTimestamp"
@@ -73,6 +76,8 @@ private[spark] object SQLConf {
 
   val USE_SQL_SERIALIZER2 = "spark.sql.useSerializer2"
 
+  val USE_JACKSON_STREAMING_API = "spark.sql.json.useJacksonStreamingAPI"
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -87,7 +92,8 @@ private[spark] object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] class SQLConf extends Serializable {
+
+private[sql] class SQLConf extends Serializable with CatalystConf {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -157,6 +163,11 @@ private[sql] class SQLConf extends Serializable {
   private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, "false").toBoolean
 
   /**
+   * caseSensitive analysis true by default
+   */
+  def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, "true").toBoolean
+
+  /**
    * When set to true, Spark SQL will use managed memory for certain operations.  This option only
    * takes effect if codegen is enabled.
    *
@@ -165,6 +176,12 @@ private[sql] class SQLConf extends Serializable {
   private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, "false").toBoolean
 
   private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2, "true").toBoolean
+
+  /**
+   * Selects between the new (true) and old (false) JSON handlers, to be removed in Spark 1.5.0
+   */
+  private[spark] def useJacksonStreamingAPI: Boolean =
+    getConf(USE_JACKSON_STREAMING_API, "true").toBoolean
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to

@@ -193,6 +193,7 @@ object SparkBuild extends PomBuild {
    * Usage: `build/sbt sparkShell`
    */
   val sparkShell = taskKey[Unit]("start a spark-shell.")
+  val sparkSql = taskKey[Unit]("starts the spark sql CLI.")
 
   enable(Seq(
     connectInput in run := true,
@@ -203,6 +204,12 @@ object SparkBuild extends PomBuild {
 
     sparkShell := {
       (runMain in Compile).toTask(" org.apache.spark.repl.Main -usejavacp").value
+    },
+
+    javaOptions in Compile += "-Dspark.master=local",
+
+    sparkSql := {
+      (runMain in Compile).toTask(" org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver").value
     }
   ))(assembly)
 
@@ -363,6 +370,7 @@ object Assembly {
 object PySparkAssembly {
   import sbtassembly.Plugin._
   import AssemblyKeys._
+  import java.util.zip.{ZipOutputStream, ZipEntry}
 
   lazy val settings = Seq(
     unmanagedJars in Compile += { BuildCommons.sparkHome / "python/lib/py4j-0.8.2.1-src.zip" },
@@ -370,15 +378,47 @@ object PySparkAssembly {
     // to be included in the assembly. We can't just add "python/" to the assembly's resource dir
     // list since that will copy unneeded / unwanted files.
     resourceGenerators in Compile <+= resourceManaged in Compile map { outDir: File =>
+      val src = new File(BuildCommons.sparkHome, "python/pyspark")
+
+      val zipFile = new File(BuildCommons.sparkHome , "python/lib/pyspark.zip")
+      zipFile.delete()
+      zipRecursive(src, zipFile)
+
       val dst = new File(outDir, "pyspark")
       if (!dst.isDirectory()) {
         require(dst.mkdirs())
       }
-
-      val src = new File(BuildCommons.sparkHome, "python/pyspark")
       copy(src, dst)
     }
   )
+
+  private def zipRecursive(source: File, destZipFile: File) = {
+    val destOutput = new ZipOutputStream(new FileOutputStream(destZipFile))
+    addFilesToZipStream("", source, destOutput)
+    destOutput.flush()
+    destOutput.close()
+  }
+
+  private def addFilesToZipStream(parent: String, source: File, output: ZipOutputStream): Unit = {
+    if (source.isDirectory()) {
+      output.putNextEntry(new ZipEntry(parent + source.getName()))
+      for (file <- source.listFiles()) {
+        addFilesToZipStream(parent + source.getName() + File.separator, file, output)
+      }
+    } else {
+      val in = new FileInputStream(source)
+      output.putNextEntry(new ZipEntry(parent + source.getName()))
+      val buf = new Array[Byte](8192)
+      var n = 0
+      while (n != -1) {
+        n = in.read(buf)
+        if (n != -1) {
+          output.write(buf, 0, n)
+        }
+      }
+      in.close()
+    }
+  }
 
   private def copy(src: File, dst: File): Seq[File] = {
     src.listFiles().flatMap { f =>
@@ -497,7 +537,7 @@ object TestSettings {
     // Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
     // launched by the tests have access to the correct test-time classpath.
     envVars in Test ++= Map(
-      "SPARK_DIST_CLASSPATH" -> 
+      "SPARK_DIST_CLASSPATH" ->
         (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
       "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home"))),
     javaOptions in Test += "-Dspark.test.home=" + sparkHome,

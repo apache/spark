@@ -29,7 +29,6 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.spark.{SparkFiles, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -900,7 +899,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |DROP TABLE IF EXISTS dynamic_part_table;
     """.stripMargin)
 
-  test("Dynamic partition folder layout") {
+  ignore("Dynamic partition folder layout") {
     sql("DROP TABLE IF EXISTS dynamic_part_table")
     sql("CREATE TABLE dynamic_part_table(intcol INT) PARTITIONED BY (partcol1 INT, partcol2 INT)")
     sql("SET hive.exec.dynamic.partition.mode=nonstrict")
