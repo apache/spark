@@ -46,7 +46,12 @@ class StreamingContextState private (enumValue: Int) {
  */
 @DeveloperApi
 object StreamingContextState {
+  /** State representing that the StreamingContext has been initialized and ready for setup */
   val INITIALIZED = new StreamingContextState(0)
+
+  /** State representing that the StreamingContext has been started after setting it up */
   val STARTED = new StreamingContextState(1)
+
+  /** State representing that the StreamingContext has been stopped and cannot be used any more*/
   val STOPPED = new StreamingContextState(2)
 }

@@ -579,6 +579,9 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   }
 
 
+  /**
+   * Return the current state of the context.
+   */
   def getState(): StreamingContextState = {
     ssc.getState()
   }
