@@ -20,20 +20,11 @@ package org.apache.spark.util.collection
 import org.apache.spark.Logging
 import org.apache.spark.SparkEnv
 
-private[spark] object Spillable {
-  // Initial threshold for the size of a collection before we start tracking its memory usage
-  val initialMemoryThreshold: Long =
-    SparkEnv.get.conf.getLong("spark.shuffle.spill.initialMemoryThreshold", 5 * 1024 * 1024)
-}
-
 /**
  * Spills contents of an in-memory collection to disk when the memory threshold
  * has been exceeded.
  */
 private[spark] trait Spillable[C] extends Logging {
-
-  import Spillable._
-
   /**
    * Spills the current in-memory collection to disk, and releases the memory.
    *
@@ -50,6 +41,11 @@ private[spark] trait Spillable[C] extends Logging {
 
   // Memory manager that can be used to acquire/release memory
   private[this] val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
+
+  // Initial threshold for the size of a collection before we start tracking its memory usage
+  // Exposed for testing
+  private[this] val initialMemoryThreshold: Long =
+    SparkEnv.get.conf.getLong("spark.shuffle.spill.initialMemoryThreshold", 5 * 1024 * 1024)
 
   // Threshold for this collection's size in bytes before we start tracking its memory usage
   // To avoid a large number of small spills, initialize this to a value orders of magnitude > 0
