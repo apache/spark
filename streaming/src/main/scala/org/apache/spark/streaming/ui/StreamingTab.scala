@@ -37,7 +37,10 @@ private[spark] class StreamingTab(val ssc: StreamingContext)
   ssc.sc.addSparkListener(listener)
   attachPage(new StreamingPage(this))
   attachPage(new BatchPage(this))
-  parent.attachTab(this)
+
+  def attach() {
+    getSparkUI(ssc).attachTab(this)
+  }
 
   def detach() {
     getSparkUI(ssc).detachTab(this)

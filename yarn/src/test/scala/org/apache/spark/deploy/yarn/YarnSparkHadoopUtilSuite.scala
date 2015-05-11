@@ -20,6 +20,8 @@ package org.apache.spark.deploy.yarn
 import java.io.{File, IOException}
 
 import com.google.common.io.{ByteStreams, Files}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -27,7 +29,7 @@ import org.scalatest.{FunSuite, Matchers}
 
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.util.Utils
 
 
@@ -172,5 +174,63 @@ class YarnSparkHadoopUtilSuite extends FunSuite with Matchers with Logging {
     } else {
       YarnSparkHadoopUtil.getClassPathSeparator() should be (":")
     }
+  }
+
+  test("check access nns empty") {
+    val sparkConf = new SparkConf()
+    val util = new YarnSparkHadoopUtil
+    sparkConf.set("spark.yarn.access.namenodes", "")
+    val nns = util.getNameNodesToAccess(sparkConf)
+    nns should be(Set())
+  }
+
+  test("check access nns unset") {
+    val sparkConf = new SparkConf()
+    val util = new YarnSparkHadoopUtil
+    val nns = util.getNameNodesToAccess(sparkConf)
+    nns should be(Set())
+  }
+
+  test("check access nns") {
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032")
+    val util = new YarnSparkHadoopUtil
+    val nns = util.getNameNodesToAccess(sparkConf)
+    nns should be(Set(new Path("hdfs://nn1:8032")))
+  }
+
+  test("check access nns space") {
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032, ")
+    val util = new YarnSparkHadoopUtil
+    val nns = util.getNameNodesToAccess(sparkConf)
+    nns should be(Set(new Path("hdfs://nn1:8032")))
+  }
+
+  test("check access two nns") {
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032,hdfs://nn2:8032")
+    val util = new YarnSparkHadoopUtil
+    val nns = util.getNameNodesToAccess(sparkConf)
+    nns should be(Set(new Path("hdfs://nn1:8032"), new Path("hdfs://nn2:8032")))
+  }
+
+  test("check token renewer") {
+    val hadoopConf = new Configuration()
+    hadoopConf.set("yarn.resourcemanager.address", "myrm:8033")
+    hadoopConf.set("yarn.resourcemanager.principal", "yarn/myrm:8032@SPARKTEST.COM")
+    val util = new YarnSparkHadoopUtil
+    val renewer = util.getTokenRenewer(hadoopConf)
+    renewer should be ("yarn/myrm:8032@SPARKTEST.COM")
+  }
+
+  test("check token renewer default") {
+    val hadoopConf = new Configuration()
+    val util = new YarnSparkHadoopUtil
+    val caught =
+      intercept[SparkException] {
+        util.getTokenRenewer(hadoopConf)
+      }
+    assert(caught.getMessage === "Can't get Master Kerberos principal for use as renewer")
   }
 }

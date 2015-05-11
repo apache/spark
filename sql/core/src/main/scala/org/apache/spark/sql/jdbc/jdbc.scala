@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Connection, DriverManager, PreparedStatement}
+import java.sql.{Connection, Driver, DriverManager, DriverPropertyInfo, PreparedStatement, SQLFeatureNotSupportedException}
+import java.util.Properties
+
+import scala.collection.mutable
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 package object jdbc {
   private[sql] object JDBCWriteDetails extends Logging {
@@ -179,4 +183,60 @@ package object jdbc {
     }
 
   }
+
+  private [sql] class DriverWrapper(val wrapped: Driver) extends Driver {
+    override def acceptsURL(url: String): Boolean = wrapped.acceptsURL(url)
+
+    override def jdbcCompliant(): Boolean = wrapped.jdbcCompliant()
+
+    override def getPropertyInfo(url: String, info: Properties): Array[DriverPropertyInfo] = {
+      wrapped.getPropertyInfo(url, info)
+    }
+
+    override def getMinorVersion: Int = wrapped.getMinorVersion
+
+    def getParentLogger: java.util.logging.Logger =
+      throw new SQLFeatureNotSupportedException(
+        s"${this.getClass().getName}.getParentLogger is not yet implemented.")
+
+    override def connect(url: String, info: Properties): Connection = wrapped.connect(url, info)
+
+    override def getMajorVersion: Int = wrapped.getMajorVersion
+  }
+
+  /**
+   * java.sql.DriverManager is always loaded by bootstrap classloader,
+   * so it can't load JDBC drivers accessible by Spark ClassLoader.
+   *
+   * To solve the problem, drivers from user-supplied jars are wrapped
+   * into thin wrapper.
+   */
+  private [sql] object DriverRegistry extends Logging {
+
+    private val wrapperMap: mutable.Map[String, DriverWrapper] = mutable.Map.empty
+
+    def register(className: String): Unit = {
+      val cls = Utils.getContextOrSparkClassLoader.loadClass(className)
+      if (cls.getClassLoader == null) {
+        logTrace(s"$className has been loaded with bootstrap ClassLoader, wrapper is not required")
+      } else if (wrapperMap.get(className).isDefined) {
+        logTrace(s"Wrapper for $className already exists")
+      } else {
+        synchronized {
+          if (wrapperMap.get(className).isEmpty) {
+            val wrapper = new DriverWrapper(cls.newInstance().asInstanceOf[Driver])
+            DriverManager.registerDriver(wrapper)
+            wrapperMap(className) = wrapper
+            logTrace(s"Wrapper for $className registered")
+          }
+        }
+      }
+    }
+    
+    def getDriverClassName(url: String): String = DriverManager.getDriver(url) match {
+      case wrapper: DriverWrapper => wrapper.wrapped.getClass.getCanonicalName
+      case driver => driver.getClass.getCanonicalName  
+    }
+  }
+
 } // package object jdbc

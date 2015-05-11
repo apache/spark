@@ -134,6 +134,13 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.am.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the YARN Application Master to listen on. In YARN client mode, this is used to communicate between the Spark driver running on a gateway and the Application Master running on YARN. In YARN cluster mode, this is used for the dynamic executor feature, where it handles the kill from the scheduler backend.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.queue</code></td>
   <td>default</td>
   <td>
@@ -187,6 +194,13 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>
   A string of extra JVM options to pass to the YARN Application Master in client mode.
   In cluster mode, use spark.driver.extraJavaOptions instead.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.am.extraLibraryPath</code></td>
+  <td>(none)</td>
+  <td>
+    Set a special library path to use when launching the application master in client mode.
   </td>
 </tr>
 <tr>

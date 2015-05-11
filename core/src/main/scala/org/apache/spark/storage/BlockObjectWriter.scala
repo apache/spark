@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
  * This interface does not support concurrent writes. Also, once the writer has
  * been opened, it cannot be reopened again.
  */
-private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
+private[spark] abstract class BlockObjectWriter(val blockId: BlockId) extends OutputStream {
 
   def open(): BlockObjectWriter
 
@@ -54,9 +54,14 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
   def revertPartialWritesAndClose()
 
   /**
-   * Writes an object.
+   * Writes a key-value pair.
    */
-  def write(value: Any)
+  def write(key: Any, value: Any)
+
+  /**
+   * Notify the writer that a record worth of bytes has been written with OutputStream#write.
+   */
+  def recordWritten()
 
   /**
    * Returns the file segment of committed data that this Writer has written.
@@ -203,12 +208,27 @@ private[spark] class DiskBlockObjectWriter(
     }
   }
 
-  override def write(value: Any) {
+  override def write(key: Any, value: Any) {
     if (!initialized) {
       open()
     }
 
-    objOut.writeObject(value)
+    objOut.writeKey(key)
+    objOut.writeValue(value)
+    recordWritten()
+  }
+
+  override def write(b: Int): Unit = throw new UnsupportedOperationException()
+
+  override def write(kvBytes: Array[Byte], offs: Int, len: Int): Unit = {
+    if (!initialized) {
+      open()
+    }
+
+    bs.write(kvBytes, offs, len)
+  }
+
+  override def recordWritten(): Unit = {
     numRecordsWritten += 1
     writeMetrics.incShuffleRecordsWritten(1)
 
@@ -238,7 +258,7 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   // For testing
-  private[spark] def flush() {
+  private[spark] override def flush() {
     objOut.flush()
     bs.flush()
   }

@@ -50,6 +50,9 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   // These two are created only when scheduler starts.
   // eventLoop not being null means the scheduler has been started and not stopped
   var receiverTracker: ReceiverTracker = null
+  // A tracker to track all the input stream information as well as processed record number
+  var inputInfoTracker: InputInfoTracker = null
+
   private var eventLoop: EventLoop[JobSchedulerEvent] = null
 
   def start(): Unit = synchronized {
@@ -65,6 +68,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
     listenerBus.start(ssc.sparkContext)
     receiverTracker = new ReceiverTracker(ssc)
+    inputInfoTracker = new InputInfoTracker(ssc)
     receiverTracker.start()
     jobGenerator.start()
     logInfo("Started JobScheduler")

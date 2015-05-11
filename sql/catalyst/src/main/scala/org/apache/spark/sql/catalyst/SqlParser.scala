@@ -296,13 +296,13 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     | LOWER ~ "(" ~> expression <~ ")" ^^ { case exp => Lower(exp) }
     | IF ~ "(" ~> expression ~ ("," ~> expression) ~ ("," ~> expression) <~ ")" ^^
       { case c ~ t ~ f => If(c, t, f) }
-    | CASE ~> expression.? ~ (WHEN ~> expression ~ (THEN ~> expression)).* ~
+    | CASE ~> expression.? ~ rep1(WHEN ~> expression ~ (THEN ~> expression)) ~
         (ELSE ~> expression).? <~ END ^^ {
           case casePart ~ altPart ~ elsePart =>
-            val altExprs = altPart.flatMap { case whenExpr ~ thenExpr =>
-              Seq(casePart.fold(whenExpr)(EqualTo(_, whenExpr)), thenExpr)
-            }
-            CaseWhen(altExprs ++ elsePart.toList)
+            val branches = altPart.flatMap { case whenExpr ~ thenExpr =>
+              Seq(whenExpr, thenExpr)
+            } ++ elsePart
+            casePart.map(CaseKeyWhen(_, branches)).getOrElse(CaseWhen(branches))
         }
     | (SUBSTR | SUBSTRING) ~ "(" ~> expression ~ ("," ~> expression) <~ ")" ^^
       { case s ~ p => Substring(s, p, Literal(Integer.MAX_VALUE)) }
@@ -365,6 +365,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val baseExpression: Parser[Expression] =
     ( "*" ^^^ UnresolvedStar(None)
+    | ident <~ "." ~ "*" ^^ { case tableName  => UnresolvedStar(Option(tableName)) }
     | primary
     )
 
@@ -374,9 +375,9 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val primary: PackratParser[Expression] =
     ( literal
     | expression ~ ("[" ~> expression <~ "]") ^^
-      { case base ~ ordinal => GetItem(base, ordinal) }
+      { case base ~ ordinal => UnresolvedExtractValue(base, ordinal) }
     | (expression <~ ".") ~ ident ^^
-      { case base ~ fieldName => UnresolvedGetField(base, fieldName) }
+      { case base ~ fieldName => UnresolvedExtractValue(base, Literal(fieldName)) }
     | cast
     | "(" ~> expression <~ ")"
     | function

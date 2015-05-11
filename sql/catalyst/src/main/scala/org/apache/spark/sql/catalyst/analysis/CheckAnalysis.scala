@@ -70,6 +70,11 @@ trait CheckAnalysis {
             failAnalysis(
               s"invalid expression ${b.prettyString} " +
                 s"between ${b.left.simpleString} and ${b.right.simpleString}")
+
+          case w @ WindowExpression(windowFunction, windowSpec) if windowSpec.validate.nonEmpty =>
+            // The window spec is not valid.
+            val reason = windowSpec.validate.get
+            failAnalysis(s"Window specification $windowSpec is not valid because $reason")
         }
 
         operator match {

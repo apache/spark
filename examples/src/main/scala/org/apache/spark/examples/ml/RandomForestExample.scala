@@ -209,16 +209,14 @@ object RandomForestExample {
     // Get the trained Random Forest from the fitted PipelineModel
     algo match {
       case "classification" =>
-        val rfModel = pipelineModel.getModel[RandomForestClassificationModel](
-          dt.asInstanceOf[RandomForestClassifier])
+        val rfModel = pipelineModel.stages.last.asInstanceOf[RandomForestClassificationModel]
         if (rfModel.totalNumNodes < 30) {
           println(rfModel.toDebugString) // Print full model.
         } else {
           println(rfModel) // Print model summary.
         }
       case "regression" =>
-        val rfModel = pipelineModel.getModel[RandomForestRegressionModel](
-          dt.asInstanceOf[RandomForestRegressor])
+        val rfModel = pipelineModel.stages.last.asInstanceOf[RandomForestRegressionModel]
         if (rfModel.totalNumNodes < 30) {
           println(rfModel.toDebugString) // Print full model.
         } else {

@@ -351,9 +351,9 @@ public final class BytesToBytesMap {
      * As an example usage, here's the proper way to store a new key:
      * <p>
      * <pre>
-     *   Location loc = map.lookup(keyBaseOffset, keyBaseObject, keyLengthInBytes);
+     *   Location loc = map.lookup(keyBaseObject, keyBaseOffset, keyLengthInBytes);
      *   if (!loc.isDefined()) {
-     *     loc.putNewKey(keyBaseOffset, keyBaseObject, keyLengthInBytes, ...)
+     *     loc.putNewKey(keyBaseObject, keyBaseOffset, keyLengthInBytes, ...)
      *   }
      * </pre>
      * <p>
@@ -401,11 +401,11 @@ public final class BytesToBytesMap {
 
       // Copy the key
       PlatformDependent.UNSAFE.putLong(pageBaseObject, keySizeOffsetInPage, keyLengthBytes);
-      PlatformDependent.UNSAFE.copyMemory(
+      PlatformDependent.copyMemory(
         keyBaseObject, keyBaseOffset, pageBaseObject, keyDataOffsetInPage, keyLengthBytes);
       // Copy the value
       PlatformDependent.UNSAFE.putLong(pageBaseObject, valueSizeOffsetInPage, valueLengthBytes);
-      PlatformDependent.UNSAFE.copyMemory(
+      PlatformDependent.copyMemory(
         valueBaseObject, valueBaseOffset, pageBaseObject, valueDataOffsetInPage, valueLengthBytes);
 
       final long storedKeyAddress = memoryManager.encodePageNumberAndOffset(
@@ -429,7 +429,7 @@ public final class BytesToBytesMap {
   private void allocate(int capacity) {
     capacity = Math.max((int) Math.min(Integer.MAX_VALUE, nextPowerOf2(capacity)), 64);
     longArray = new LongArray(memoryManager.allocate(capacity * 8 * 2));
-    bitset = new BitSet(memoryManager.allocate(capacity / 8).zero());
+    bitset = new BitSet(MemoryBlock.fromLongArray(new long[capacity / 64]));
 
     this.growthThreshold = (int) (capacity * loadFactor);
     this.mask = capacity - 1;
@@ -447,7 +447,7 @@ public final class BytesToBytesMap {
       longArray = null;
     }
     if (bitset != null) {
-      memoryManager.free(bitset.memoryBlock());
+      // The bitset's heap memory isn't managed by a memory manager, so no need to free it here.
       bitset = null;
     }
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
@@ -535,7 +535,6 @@ public final class BytesToBytesMap {
 
     // Deallocate the old data structures.
     memoryManager.free(oldLongArray.memoryBlock());
-    memoryManager.free(oldBitSet.memoryBlock());
     if (enablePerfMetrics) {
       timeSpentResizingNs += System.nanoTime() - resizeStartTime;
     }

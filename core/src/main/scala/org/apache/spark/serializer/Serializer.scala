@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Private}
 import org.apache.spark.util.{Utils, ByteBufferInputStream, NextIterator}
 
 /**
@@ -63,6 +63,39 @@ abstract class Serializer {
 
   /** Creates a new [[SerializerInstance]]. */
   def newInstance(): SerializerInstance
+
+  /**
+   * :: Private ::
+   * Returns true if this serializer supports relocation of its serialized objects and false
+   * otherwise. This should return true if and only if reordering the bytes of serialized objects
+   * in serialization stream output is equivalent to having re-ordered those elements prior to
+   * serializing them. More specifically, the following should hold if a serializer supports
+   * relocation:
+   *
+   * {{{
+   * serOut.open()
+   * position = 0
+   * serOut.write(obj1)
+   * serOut.flush()
+   * position = # of bytes writen to stream so far
+   * obj1Bytes = output[0:position-1]
+   * serOut.write(obj2)
+   * serOut.flush()
+   * position2 = # of bytes written to stream so far
+   * obj2Bytes = output[position:position2-1]
+   * serIn.open([obj2bytes] concatenate [obj1bytes]) should return (obj2, obj1)
+   * }}}
+   *
+   * In general, this property should hold for serializers that are stateless and that do not
+   * write special metadata at the beginning or end of the serialization stream.
+   *
+   * This API is private to Spark; this method should not be overridden in third-party subclasses
+   * or called in user code and is subject to removal in future Spark releases.
+   *
+   * See SPARK-7311 for more details.
+   */
+  @Private
+  private[spark] def supportsRelocationOfSerializedObjects: Boolean = false
 }
 
 
@@ -101,7 +134,12 @@ abstract class SerializerInstance {
  */
 @DeveloperApi
 abstract class SerializationStream {
+  /** The most general-purpose method to write an object. */
   def writeObject[T: ClassTag](t: T): SerializationStream
+  /** Writes the object representing the key of a key-value pair. */
+  def writeKey[T: ClassTag](key: T): SerializationStream = writeObject(key)
+  /** Writes the object representing the value of a key-value pair. */
+  def writeValue[T: ClassTag](value: T): SerializationStream = writeObject(value)
   def flush(): Unit
   def close(): Unit
 
@@ -120,7 +158,12 @@ abstract class SerializationStream {
  */
 @DeveloperApi
 abstract class DeserializationStream {
+  /** The most general-purpose method to read an object. */
   def readObject[T: ClassTag](): T
+  /** Reads the object representing the key of a key-value pair. */
+  def readKey[T: ClassTag](): T = readObject[T]()
+  /** Reads the object representing the value of a key-value pair. */
+  def readValue[T: ClassTag](): T = readObject[T]()
   def close(): Unit
 
   /**
@@ -134,6 +177,27 @@ abstract class DeserializationStream {
       } catch {
         case eof: EOFException =>
           finished = true
+      }
+    }
+
+    override protected def close() {
+      DeserializationStream.this.close()
+    }
+  }
+
+  /**
+   * Read the elements of this stream through an iterator over key-value pairs. This can only be
+   * called once, as reading each element will consume data from the input source.
+   */
+  def asKeyValueIterator: Iterator[(Any, Any)] = new NextIterator[(Any, Any)] {
+    override protected def getNext() = {
+      try {
+        (readKey[Any](), readValue[Any]())
+      } catch {
+        case eof: EOFException => {
+          finished = true
+          null
+        }
       }
     }
 

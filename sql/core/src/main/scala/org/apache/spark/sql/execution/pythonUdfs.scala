@@ -219,8 +219,8 @@ case class EvaluatePython(
 
 /**
  * :: DeveloperApi ::
- * Uses PythonRDD to evaluate a [[PythonUDF]], one partition of tuples at a time.  The input
- * data is cached and zipped with the result of the udf evaluation.
+ * Uses PythonRDD to evaluate a [[PythonUDF]], one partition of tuples at a time.
+ * The input data is zipped with the result of the udf evaluation.
  */
 @DeveloperApi
 case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: SparkPlan)
@@ -228,9 +228,8 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
 
   def children: Seq[SparkPlan] = child :: Nil
 
-  def execute(): RDD[Row] = {
-    // TODO: Clean up after ourselves?
-    val childResults = child.execute().map(_.copy()).cache()
+  protected override def doExecute(): RDD[Row] = {
+    val childResults = child.execute().map(_.copy())
 
     val parent = childResults.mapPartitions { iter =>
       val pickle = new Pickler

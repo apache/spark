@@ -57,7 +57,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   private static byte[] getByteArray(MemoryLocation loc, int size) {
     final byte[] arr = new byte[size];
-    PlatformDependent.UNSAFE.copyMemory(
+    PlatformDependent.copyMemory(
       loc.getBaseObject(),
       loc.getBaseOffset(),
       arr,

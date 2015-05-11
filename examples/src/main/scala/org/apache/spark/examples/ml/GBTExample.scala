@@ -201,14 +201,14 @@ object GBTExample {
     // Get the trained GBT from the fitted PipelineModel
     algo match {
       case "classification" =>
-        val rfModel = pipelineModel.getModel[GBTClassificationModel](dt.asInstanceOf[GBTClassifier])
+        val rfModel = pipelineModel.stages.last.asInstanceOf[GBTClassificationModel]
         if (rfModel.totalNumNodes < 30) {
           println(rfModel.toDebugString) // Print full model.
         } else {
           println(rfModel) // Print model summary.
         }
       case "regression" =>
-        val rfModel = pipelineModel.getModel[GBTRegressionModel](dt.asInstanceOf[GBTRegressor])
+        val rfModel = pipelineModel.stages.last.asInstanceOf[GBTRegressionModel]
         if (rfModel.totalNumNodes < 30) {
           println(rfModel.toDebugString) // Print full model.
         } else {
