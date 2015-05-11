@@ -57,7 +57,7 @@ private[spark] object PythonUtils {
   /**
    * Convert java map of K, V into Map of K, V (for calling API with varargs)
    */
-  def toMap[K, V](jm: java.util.Map[K, V]): Map[K, V] = {
+  def toScalaMap[K, V](jm: java.util.Map[K, V]): Map[K, V] = {
     jm.toMap
   }
 }

@@ -579,8 +579,8 @@ class DataFrame(object):
         return _to_seq(self.sql_ctx._sc, cols, converter)
 
     def _jmap(self, jm):
-        """Return a JVM Map from a dict"""
-        return _to_map(self.sql_ctx._sc, jm)
+        """Return a JVM Scala Map from a dict"""
+        return _to_scala_map(self.sql_ctx._sc, jm)
 
     def _jcols(self, *cols):
         """Return a JVM Seq of Columns from a list of Column or column names
@@ -1300,11 +1300,11 @@ def _to_seq(sc, cols, converter=None):
     return sc._jvm.PythonUtils.toSeq(cols)
 
 
-def _to_map(sc, jm):
+def _to_scala_map(sc, jm):
     """
     Convert a dict into a JVM Map.
     """
-    return sc._jvm.PythonUtils.toMap(jm)
+    return sc._jvm.PythonUtils.toScalaMap(jm)
 
 
 def _unary_op(name, doc="unary operator"):
