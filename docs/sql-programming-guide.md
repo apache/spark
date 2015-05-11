@@ -1594,6 +1594,64 @@ options.
 
 # Migration Guide
 
+## Upgrading from Spark SQL 1.3 to 1.4
+
+Based on user feedback, we changed the default behavior of `DataFrame.groupBy().agg()` to retain the grouping columns in the resulting `DataFrame`. To keep the behavior in 1.3, set `spark.sql.retainGroupColumns` to `false`.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+
+// In 1.3.x, in order for the grouping column "department" to show up,
+// it must be included explicitly as part of the agg function call.
+df.groupBy("department").agg($"department", max("age"), sum("expense"))
+
+// In 1.4+, grouping column "department" is included automatically.
+df.groupBy("department").agg(max("age"), sum("expense"))
+
+// Revert to 1.3 behavior (not retaining grouping column) by:
+sqlContext.setConf("spark.sql.retainGroupColumns", "false")
+
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+
+// In 1.3.x, in order for the grouping column "department" to show up,
+// it must be included explicitly as part of the agg function call.
+df.groupBy("department").agg(col("department"), max("age"), sum("expense"));
+
+// In 1.4+, grouping column "department" is included automatically.
+df.groupBy("department").agg(max("age"), sum("expense"));
+
+// Revert to 1.3 behavior (not retaining grouping column) by:
+sqlContext.setConf("spark.sql.retainGroupColumns", "false");
+
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+
+import pyspark.sql.functions as func
+
+# In 1.3.x, in order for the grouping column "department" to show up,
+# it must be included explicitly as part of the agg function call.
+df.groupBy("department").agg("department"), func.max("age"), func.sum("expense"))
+
+# In 1.4+, grouping column "department" is included automatically.
+df.groupBy("department").agg(func.max("age"), func.sum("expense"))
+
+# Revert to 1.3.x behavior (not retaining grouping column) by:
+sqlContext.setConf("spark.sql.retainGroupColumns", "false")
+
+{% endhighlight %}
+</div>
+
+</div>
+
+
 ## Upgrading from Spark SQL 1.0-1.2 to 1.3
 
 In Spark 1.3 we removed the "Alpha" label from Spark SQL and as part of this did a cleanup of the
@@ -1651,7 +1709,7 @@ moved into the udf object in `SQLContext`.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% highlight java %}
+{% highlight scala %}
 
 sqlContext.udf.register("strLen", (s: String) => s.length())
 
