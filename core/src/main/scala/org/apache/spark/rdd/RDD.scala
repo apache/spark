@@ -1161,8 +1161,8 @@ abstract class RDD[T: ClassTag](
    */
   @Experimental
   def countApproxDistinct(p: Int, sp: Int): Long = withScope {
-    require(p >= 4, s"p ($p) must be at least 4")
-    require(sp <= 32, s"sp ($sp) cannot be greater than 32")
+    require(p >= 4, s"p ($p) must be >= 4")
+    require(sp <= 32, s"sp ($sp) must be <= 32")
     require(sp == 0 || p <= sp, s"p ($p) cannot be greater than sp ($sp)")
     val zeroCounter = new HyperLogLogPlus(p, sp)
     aggregate(zeroCounter)(
@@ -1187,8 +1187,9 @@ abstract class RDD[T: ClassTag](
    *                   It must be greater than 0.000017.
    */
   def countApproxDistinct(relativeSD: Double = 0.05): Long = withScope {
+    require(relativeSD > 0.000017, s"accuracy ($relativeSD) must be greater than 0.000017")
     val p = math.ceil(2.0 * math.log(1.054 / relativeSD) / math.log(2)).toInt
-    countApproxDistinct(p, 0)
+    countApproxDistinct(if (p < 4) 4 else p, 0)
   }
 
   /**
