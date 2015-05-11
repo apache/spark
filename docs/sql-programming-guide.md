@@ -470,7 +470,7 @@ parts = lines.map(lambda l: l.split(","))
 people = parts.map(lambda p: Row(name=p[0], age=int(p[1])))
 
 # Infer the schema, and register the DataFrame as a table.
-schemaPeople = sqlContext.inferSchema(people)
+schemaPeople = sqlContext.createDataFrame(people)
 schemaPeople.registerTempTable("people")
 
 # SQL can be run over DataFrames that have been registered as a table.
