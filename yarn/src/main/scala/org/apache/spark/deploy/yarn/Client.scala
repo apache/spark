@@ -259,7 +259,7 @@ private[spark] class Client(
       val destFs = FileSystem.get(destinationPath.toUri(), hadoopConf)
       distCacheMgr.addResource(
         destFs, hadoopConf, destinationPath, localResources, LocalResourceType.FILE,
-        sparkConf.get("spark.yarn.keytab"), statCache, appMasterOnly = true)
+        sparkConf.get("spark.internal.yarn.keytab"), statCache, appMasterOnly = true)
     }
 
     def addDistributedUri(uri: URI): Boolean = {
@@ -416,7 +416,7 @@ private[spark] class Client(
     val creds = new Credentials()
     val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + stagingDirPath
     YarnSparkHadoopUtil.get.obtainTokensForNamenodes(
-      nns, hadoopConf, creds, Some(sparkConf.get("spark.yarn.principal")))
+      nns, hadoopConf, creds, Some(sparkConf.get("spark.internal.yarn.principal")))
     val t = creds.getAllTokens
       .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
       .head
@@ -444,7 +444,7 @@ private[spark] class Client(
       val stagingDirPath = new Path(remoteFs.getHomeDirectory, stagingDir)
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
       sparkConf.set(
-        "spark.yarn.credentials.file", new Path(stagingDirPath, credentialsFile).toString)
+        "spark.internal.yarn.credentials.file", new Path(stagingDirPath, credentialsFile).toString)
       logInfo(s"Credentials file set to: $credentialsFile")
       val renewalInterval = getTokenRenewalInterval(stagingDirPath)
       sparkConf.set("spark.yarn.token.renewal.interval", renewalInterval.toString)
@@ -709,8 +709,8 @@ private[spark] class Client(
       val keytabFileName = f.getName + "-" + UUID.randomUUID().toString
       UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
       loginFromKeytab = true
-      sparkConf.set("spark.yarn.keytab", keytabFileName)
-      sparkConf.set("spark.yarn.principal", args.principal)
+      sparkConf.set("spark.internal.yarn.keytab", keytabFileName)
+      sparkConf.set("spark.internal.yarn.principal", args.principal)
       logInfo("Successfully logged into the KDC.")
     }
     credentials = UserGroupInformation.getCurrentUser.getCredentials

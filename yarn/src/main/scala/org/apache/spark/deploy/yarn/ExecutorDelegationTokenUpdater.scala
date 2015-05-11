@@ -34,7 +34,7 @@ private[spark] class ExecutorDelegationTokenUpdater(
 
   @volatile private var lastCredentialsFileSuffix = 0
 
-  private val credentialsFile = sparkConf.get("spark.yarn.credentials.file")
+  private val credentialsFile = sparkConf.get("spark.internal.yarn.credentials.file")
 
   private val delegationTokenRenewer =
     Executors.newSingleThreadScheduledExecutor(
