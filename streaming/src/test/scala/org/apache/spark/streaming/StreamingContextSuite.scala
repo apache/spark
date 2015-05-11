@@ -124,6 +124,11 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     assert(ssc.getState() === StreamingContextState.STARTED)
     ssc.stop()
     assert(ssc.getState() === StreamingContextState.STOPPED)
+
+    // Make sure that the SparkContext is also stopped by default
+    intercept[Exception] {
+      ssc.sparkContext.makeRDD(1 to 10)
+    }
   }
 
   test("start multiple times") {
@@ -166,17 +171,27 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
   }
 
   test("stop only streaming context") {
-    ssc = new StreamingContext(master, appName, batchDuration)
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+
+    // Explicitly do not stop SparkContext
+    ssc = new StreamingContext(conf, batchDuration)
     sc = ssc.sparkContext
     addInputStream(ssc).register()
     ssc.start()
     ssc.stop(stopSparkContext = false)
     assert(ssc.getState() === StreamingContextState.STOPPED)
     assert(sc.makeRDD(1 to 100).collect().size === 100)
-    ssc = new StreamingContext(sc, batchDuration)
+    sc.stop()
+
+    // Implicitly do not stop SparkContext
+    conf.set("spark.streaming.stopSparkContextByDefault", "false")
+    ssc = new StreamingContext(conf, batchDuration)
+    sc = ssc.sparkContext
     addInputStream(ssc).register()
     ssc.start()
     ssc.stop()
+    assert(sc.makeRDD(1 to 100).collect().size === 100)
+    sc.stop()
   }
 
   test("stop(stopSparkContext=true) after stop(stopSparkContext=false)") {

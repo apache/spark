@@ -22,6 +22,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, MultivariateOnlineSummarizer}
+import org.apache.spark.sql.DataFrame
 
 /**
  * :: Experimental ::
@@ -31,6 +32,14 @@ import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Multivariate
  */
 @Experimental
 class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extends Logging {
+
+  /**
+   * An auxiliary constructor taking a DataFrame.
+   * @param predictionAndObservations a DataFrame with two double columns:
+   *                                  prediction and observation
+   */
+  private[mllib] def this(predictionAndObservations: DataFrame) =
+    this(predictionAndObservations.map(r => (r.getDouble(0), r.getDouble(1))))
 
   /**
    * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.

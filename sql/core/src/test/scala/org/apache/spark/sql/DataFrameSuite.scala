@@ -24,7 +24,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, TestSQLContext}
 import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
 import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.sql.test.TestSQLContext.sql
 
 
 class DataFrameSuite extends QueryTest {
@@ -116,44 +115,6 @@ class DataFrameSuite extends QueryTest {
       df.explode("words", "word") { word: String => word.split(" ").toSeq }.select('word),
       Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
     )
-  }
-
-  test("join - join using") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-    val df2 = Seq(1, 2, 3).map(i => (i, (i + 1).toString)).toDF("int", "str")
-
-    checkAnswer(
-      df.join(df2, "int"),
-      Row(1, "1", "2") :: Row(2, "2", "3") :: Row(3, "3", "4") :: Nil)
-  }
-
-  test("join - join using self join") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-
-    // self join
-    checkAnswer(
-      df.join(df, "int"),
-      Row(1, "1", "1") :: Row(2, "2", "2") :: Row(3, "3", "3") :: Nil)
-  }
-
-  test("join - self join") {
-    val df1 = testData.select(testData("key")).as('df1)
-    val df2 = testData.select(testData("key")).as('df2)
-
-    checkAnswer(
-      df1.join(df2, $"df1.key" === $"df2.key"),
-      sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key").collect().toSeq)
-  }
-
-  test("join - using aliases after self join") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-    checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
-
-    checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").count(),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
   test("explode") {
@@ -347,6 +308,11 @@ class DataFrameSuite extends QueryTest {
       testData2.agg(avg('a)),
       Row(2.0))
 
+    // Also check mean
+    checkAnswer(
+      testData2.agg(mean('a)),
+      Row(2.0))
+
     checkAnswer(
       testData2.agg(avg('a), sumDistinct('a)), // non-partial
       Row(2.0, 6.0) :: Nil)
@@ -488,7 +454,7 @@ class DataFrameSuite extends QueryTest {
       testData.collect().map { case Row(key: Int, value: String) =>
         Row(key, value, key + 1)
       }.toSeq)
-    assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
+    assert(df.schema.map(_.name) === Seq("key", "value", "newCol"))
   }
 
   test("replace column using withColumn") {
@@ -523,7 +489,7 @@ class DataFrameSuite extends QueryTest {
       testData.collect().map { case Row(key: Int, value: String) =>
         Row(key, value, key + 1)
       }.toSeq)
-    assert(df.schema.map(_.name).toSeq === Seq("key", "valueRenamed", "newCol"))
+    assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
   }
 
   test("randomSplit") {
@@ -631,5 +597,11 @@ class DataFrameSuite extends QueryTest {
       decimalData.agg(avg('a)),
       Row(new java.math.BigDecimal(2.0)))
     TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+  }
+
+  test("SPARK-7133: Implement struct, array, and map field accessor") {
+    assert(complexData.filter(complexData("a")(0) === 2).count() == 1)
+    assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
+    assert(complexData.filter(complexData("s")("key") === 1).count() == 1)
   }
 }

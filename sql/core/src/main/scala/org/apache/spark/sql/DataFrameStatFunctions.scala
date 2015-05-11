@@ -37,7 +37,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
     StatFunctions.calculateCov(df, Seq(col1, col2))
   }
 
-  /*
+  /**
    * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
    * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in 
    * MLlib's Statistics.
@@ -65,16 +65,17 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
    * Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
-   * The number of distinct values for each column should be less than 1e4. The first
-   * column of each row will be the distinct values of `col1` and the column names will be the
-   * distinct values of `col2`. The name of the first column will be `$col1_$col2`. Counts will be
-   * returned as `Long`s. Pairs that have no occurrences will have `null` as their counts.
+   * The number of distinct values for each column should be less than 1e4. At most 1e6 non-zero
+   * pair frequencies will be returned.
+   * The first column of each row will be the distinct values of `col1` and the column names will
+   * be the distinct values of `col2`. The name of the first column will be `$col1_$col2`. Counts
+   * will be returned as `Long`s. Pairs that have no occurrences will have `null` as their counts.
    *
    * @param col1 The name of the first column. Distinct items will make the first item of
    *             each row.
    * @param col2 The name of the second column. Distinct items will make the column names
    *             of the DataFrame.
-   * @return A Local DataFrame containing the table
+   * @return A DataFrame containing for the contingency table.
    */
   def crosstab(col1: String, col2: String): DataFrame = {
     StatFunctions.crossTabulate(df, col1, col2)
@@ -109,14 +110,25 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Python friendly implementation for `freqItems`
+   * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
+   * frequent element count algorithm described in
+   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   *
+   * @param cols the names of the columns to search frequent items in.
+   * @return A Local DataFrame with the Array of frequent items for each column.
    */
   def freqItems(cols: Seq[String], support: Double): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, support)
   }
 
   /**
-   * Python friendly implementation for `freqItems` with a default `support` of 1%.
+   * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
+   * frequent element count algorithm described in
+   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * Uses a `default` support of 1%.
+   *
+   * @param cols the names of the columns to search frequent items in.
+   * @return A Local DataFrame with the Array of frequent items for each column.
    */
   def freqItems(cols: Seq[String]): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, 0.01)

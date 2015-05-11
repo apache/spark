@@ -353,56 +353,57 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
 }
 
-// scalastyle:off
-/**
- * Case statements of the form "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END".
- * Refer to this link for the corresponding semantics:
- * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
- *
- * The other form of case statements "CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END" gets
- * translated to this form at parsing time.  Namely, such a statement gets translated to
- * "CASE WHEN a=b THEN c [WHEN a=d THEN e]* [ELSE f] END".
- *
- * Note that `branches` are considered in consecutive pairs (cond, val), and the optional last
- * element is the value for the default catch-all case (if provided). Hence, `branches` consists of
- * at least two elements, and can have an odd or even length.
- */
-// scalastyle:on
-case class CaseWhen(branches: Seq[Expression]) extends Expression {
+trait CaseWhenLike extends Expression {
+  self: Product =>
+
   type EvaluatedType = Any
 
-  override def children: Seq[Expression] = branches
+  // Note that `branches` are considered in consecutive pairs (cond, val), and the optional last
+  // element is the value for the default catch-all case (if provided).
+  // Hence, `branches` consists of at least two elements, and can have an odd or even length.
+  def branches: Seq[Expression]
+
+  @transient lazy val whenList =
+    branches.sliding(2, 2).collect { case Seq(whenExpr, _) => whenExpr }.toSeq
+  @transient lazy val thenList =
+    branches.sliding(2, 2).collect { case Seq(_, thenExpr) => thenExpr }.toSeq
+  val elseValue = if (branches.length % 2 == 0) None else Option(branches.last)
+
+  // both then and else val should be considered.
+  def valueTypes: Seq[DataType] = (thenList ++ elseValue).map(_.dataType)
+  def valueTypesEqual: Boolean = valueTypes.distinct.size <= 1
 
   override def dataType: DataType = {
     if (!resolved) {
       throw new UnresolvedException(this, "cannot resolve due to differing types in some branches")
     }
-    branches(1).dataType
+    valueTypes.head
   }
-
-  @transient private[this] lazy val branchesArr = branches.toArray
-  @transient private[this] lazy val predicates =
-    branches.sliding(2, 2).collect { case Seq(cond, _) => cond }.toSeq
-  @transient private[this] lazy val values =
-    branches.sliding(2, 2).collect { case Seq(_, value) => value }.toSeq
-  @transient private[this] lazy val elseValue =
-    if (branches.length % 2 == 0) None else Option(branches.last)
 
   override def nullable: Boolean = {
     // If no value is nullable and no elseValue is provided, the whole statement defaults to null.
-    values.exists(_.nullable) || (elseValue.map(_.nullable).getOrElse(true))
+    thenList.exists(_.nullable) || (elseValue.map(_.nullable).getOrElse(true))
   }
+}
 
-  override lazy val resolved: Boolean = {
-    if (!childrenResolved) {
-      false
-    } else {
-      val allCondBooleans = predicates.forall(_.dataType == BooleanType)
-      // both then and else val should be considered.
-      val dataTypesEqual = (values ++ elseValue).map(_.dataType).distinct.size <= 1
-      allCondBooleans && dataTypesEqual
-    }
-  }
+// scalastyle:off
+/**
+ * Case statements of the form "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END".
+ * Refer to this link for the corresponding semantics:
+ * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
+ */
+// scalastyle:on
+case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
+
+  // Use private[this] Array to speed up evaluation.
+  @transient private[this] lazy val branchesArr = branches.toArray
+
+  override def children: Seq[Expression] = branches
+
+  override lazy val resolved: Boolean =
+    childrenResolved &&
+    whenList.forall(_.dataType == BooleanType) &&
+    valueTypesEqual
 
   /** Written in imperative fashion for performance considerations. */
   override def eval(input: Row): Any = {
@@ -410,22 +411,76 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
     var i = 0
     // If all branches fail and an elseVal is not provided, the whole statement
     // defaults to null, according to Hive's semantics.
-    var res: Any = null
     while (i < len - 1) {
       if (branchesArr(i).eval(input) == true) {
-        res = branchesArr(i + 1).eval(input)
-        return res
+        return branchesArr(i + 1).eval(input)
       }
       i += 2
     }
+    var res: Any = null
     if (i == len - 1) {
       res = branchesArr(i).eval(input)
     }
-    res
+    return res
   }
 
   override def toString: String = {
     "CASE" + branches.sliding(2, 2).map {
+      case Seq(cond, value) => s" WHEN $cond THEN $value"
+      case Seq(elseValue) => s" ELSE $elseValue"
+    }.mkString
+  }
+}
+
+// scalastyle:off
+/**
+ * Case statements of the form "CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END".
+ * Refer to this link for the corresponding semantics:
+ * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
+ */
+// scalastyle:on
+case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseWhenLike {
+
+  // Use private[this] Array to speed up evaluation.
+  @transient private[this] lazy val branchesArr = branches.toArray
+
+  override def children: Seq[Expression] = key +: branches
+
+  override lazy val resolved: Boolean =
+    childrenResolved && valueTypesEqual
+
+  /** Written in imperative fashion for performance considerations. */
+  override def eval(input: Row): Any = {
+    val evaluatedKey = key.eval(input)
+    val len = branchesArr.length
+    var i = 0
+    // If all branches fail and an elseVal is not provided, the whole statement
+    // defaults to null, according to Hive's semantics.
+    while (i < len - 1) {
+      if (equalNullSafe(evaluatedKey, branchesArr(i).eval(input))) {
+        return branchesArr(i + 1).eval(input)
+      }
+      i += 2
+    }
+    var res: Any = null
+    if (i == len - 1) {
+      res = branchesArr(i).eval(input)
+    }
+    return res
+  }
+
+  private def equalNullSafe(l: Any, r: Any) = {
+    if (l == null && r == null) {
+      true
+    } else if (l == null || r == null) {
+      false
+    } else {
+      l == r
+    }
+  }
+
+  override def toString: String = {
+    s"CASE $key" + branches.sliding(2, 2).map {
       case Seq(cond, value) => s" WHEN $cond THEN $value"
       case Seq(elseValue) => s" ELSE $elseValue"
     }.mkString

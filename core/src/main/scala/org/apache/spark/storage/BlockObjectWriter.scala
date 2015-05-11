@@ -59,7 +59,7 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) extends Ou
   def write(key: Any, value: Any)
 
   /**
-   * Notify the writer that a record worth of bytes has been written with writeBytes.
+   * Notify the writer that a record worth of bytes has been written with OutputStream#write.
    */
   def recordWritten()
 
@@ -215,12 +215,7 @@ private[spark] class DiskBlockObjectWriter(
 
     objOut.writeKey(key)
     objOut.writeValue(value)
-    numRecordsWritten += 1
-    writeMetrics.incShuffleRecordsWritten(1)
-
-    if (numRecordsWritten % 32 == 0) {
-      updateBytesWritten()
-    }
+    recordWritten()
   }
 
   override def write(b: Int): Unit = throw new UnsupportedOperationException()
