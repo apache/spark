@@ -727,7 +727,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val executorIdleTimeout = 3L
 
   private def createStageInfo(stageId: Int, numTasks: Int): StageInfo = {
-    new StageInfo(stageId, 0, "name", numTasks, Seq.empty, "no details")
+    new StageInfo(stageId, 0, "name", numTasks, Seq.empty, Seq.empty, "no details")
   }
 
   private def createTaskInfo(taskId: Int, taskIndex: Int, executorId: String): TaskInfo = {

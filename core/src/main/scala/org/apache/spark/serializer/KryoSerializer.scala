@@ -32,6 +32,7 @@ import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.HttpBroadcast
 import org.apache.spark.network.nio.{GetBlock, GotBlock, PutBlock}
+import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
 import org.apache.spark.util.BoundedPriorityQueue
@@ -51,18 +52,18 @@ class KryoSerializer(conf: SparkConf)
 
   private val bufferSizeKb = conf.getSizeAsKb("spark.kryoserializer.buffer", "64k")
   
-  if (bufferSizeKb >= 2048) {
+  if (bufferSizeKb >= ByteUnit.GiB.toKiB(2)) {
     throw new IllegalArgumentException("spark.kryoserializer.buffer must be less than " +
-      s"2048 mb, got: + $bufferSizeKb mb.")
+      s"2048 mb, got: + ${ByteUnit.KiB.toMiB(bufferSizeKb)} mb.")
   }
-  private val bufferSize = (bufferSizeKb * 1024).toInt
+  private val bufferSize = ByteUnit.KiB.toBytes(bufferSizeKb).toInt
 
   val maxBufferSizeMb = conf.getSizeAsMb("spark.kryoserializer.buffer.max", "64m").toInt
-  if (maxBufferSizeMb >= 2048) {
+  if (maxBufferSizeMb >= ByteUnit.GiB.toMiB(2)) {
     throw new IllegalArgumentException("spark.kryoserializer.buffer.max must be less than " +
       s"2048 mb, got: + $maxBufferSizeMb mb.")
   }
-  private val maxBufferSize = maxBufferSizeMb * 1024 * 1024
+  private val maxBufferSize = ByteUnit.MiB.toBytes(maxBufferSizeMb).toInt
 
   private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
   private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", false)
@@ -124,6 +125,13 @@ class KryoSerializer(conf: SparkConf)
 
   override def newInstance(): SerializerInstance = {
     new KryoSerializerInstance(this)
+  }
+
+  private[spark] override lazy val supportsRelocationOfSerializedObjects: Boolean = {
+    // If auto-reset is disabled, then Kryo may store references to duplicate occurrences of objects
+    // in the stream rather than writing those objects' serialized bytes, breaking relocation. See
+    // https://groups.google.com/d/msg/kryo-users/6ZUSyfjjtdo/FhGG1KHDXPgJ for more details.
+    newInstance().asInstanceOf[KryoSerializerInstance].getAutoReset()
   }
 }
 

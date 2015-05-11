@@ -21,8 +21,6 @@ import java.io.PrintWriter
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.ml.param.ParamValidators
-
 /**
  * Code generator for shared params (sharedParams.scala). Run under the Spark folder with
  * {{{
@@ -42,8 +40,10 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("predictionCol", "prediction column name", Some("\"prediction\"")),
       ParamDesc[String]("rawPredictionCol", "raw prediction (a.k.a. confidence) column name",
         Some("\"rawPrediction\"")),
-      ParamDesc[String]("probabilityCol",
-        "column name for predicted class conditional probabilities", Some("\"probability\"")),
+      ParamDesc[String]("probabilityCol", "Column name for predicted class conditional" +
+        " probabilities. Note: Not all models output well-calibrated probability estimates!" +
+        " These probabilities should be treated as confidences, not precise probabilities.",
+        Some("\"probability\"")),
       ParamDesc[Double]("threshold",
         "threshold in binary classification prediction, in range [0, 1]",
         isValid = "ParamValidators.inRange(0, 1)"),
@@ -85,6 +85,7 @@ private[shared] object SharedParamsCodeGen {
         case _ if c == classOf[Float] => "FloatParam"
         case _ if c == classOf[Double] => "DoubleParam"
         case _ if c == classOf[Boolean] => "BooleanParam"
+        case _ if c.isArray && c.getComponentType == classOf[String] => s"StringArrayParam"
         case _ => s"Param[${getTypeString(c)}]"
       }
     }
@@ -142,7 +143,7 @@ private[shared] object SharedParamsCodeGen {
       |  final val $name: $Param = new $Param(this, "$name", "$doc"$isValid)
       |$setDefault
       |  /** @group getParam */
-      |  final def get$Name: $T = getOrDefault($name)
+      |  final def get$Name: $T = $$($name)
       |}
       |""".stripMargin
   }
@@ -169,7 +170,6 @@ private[shared] object SharedParamsCodeGen {
         |
         |package org.apache.spark.ml.param.shared
         |
-        |import org.apache.spark.annotation.DeveloperApi
         |import org.apache.spark.ml.param._
         |import org.apache.spark.util.Utils
         |

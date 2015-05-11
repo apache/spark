@@ -111,7 +111,7 @@ object GBTExample {
         .text(s"input path to test dataset.  If given, option fracTest is ignored." +
         s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
-      opt[String]("<dataFormat>")
+      opt[String]("dataFormat")
         .text("data format: libsvm (default), dense (deprecated in Spark v1.1)")
         .action((x, c) => c.copy(dataFormat = x))
       arg[String]("<input>")
@@ -201,14 +201,14 @@ object GBTExample {
     // Get the trained GBT from the fitted PipelineModel
     algo match {
       case "classification" =>
-        val rfModel = pipelineModel.getModel[GBTClassificationModel](dt.asInstanceOf[GBTClassifier])
+        val rfModel = pipelineModel.stages.last.asInstanceOf[GBTClassificationModel]
         if (rfModel.totalNumNodes < 30) {
           println(rfModel.toDebugString) // Print full model.
         } else {
           println(rfModel) // Print model summary.
         }
       case "regression" =>
-        val rfModel = pipelineModel.getModel[GBTRegressionModel](dt.asInstanceOf[GBTRegressor])
+        val rfModel = pipelineModel.stages.last.asInstanceOf[GBTRegressionModel]
         if (rfModel.totalNumNodes < 30) {
           println(rfModel.toDebugString) // Print full model.
         } else {

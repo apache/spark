@@ -174,6 +174,10 @@ class DAGSchedulerSuite
     dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
   }
 
+  after {
+    scheduler.stop()
+  }
+
   override def afterAll() {
     super.afterAll()
   }
@@ -261,8 +265,9 @@ class DAGSchedulerSuite
       override def taskSucceeded(partition: Int, value: Any) = numResults += 1
       override def jobFailed(exception: Exception) = throw exception
     }
-    submit(new MyRDD(sc, 0, Nil), Array(), listener = fakeListener)
+    val jobId = submit(new MyRDD(sc, 0, Nil), Array(), listener = fakeListener)
     assert(numResults === 0)
+    cancel(jobId)
   }
 
   test("run trivial job") {

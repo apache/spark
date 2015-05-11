@@ -89,6 +89,8 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Vector.numActives")
           ) ++ Seq(
+            // Execution should never be included as its always internal.
+            MimaBuild.excludeSparkPackage("sql.execution"),
             // This `protected[sql]` method was removed in 1.3.1
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.sql.SQLContext.checkAnalysis"),

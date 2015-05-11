@@ -275,9 +275,12 @@ class DataFrame(object):
         >>> df
         DataFrame[age: int, name: string]
         >>> df.show()
-        age name
-        2   Alice
-        5   Bob
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
         """
         print(self._jdf.showString(n))
 
@@ -591,12 +594,15 @@ class DataFrame(object):
         given, this function computes statistics for all numerical columns.
 
         >>> df.describe().show()
-        summary age
-        count   2
-        mean    3.5
-        stddev  1.5
-        min     2
-        max     5
+        +-------+---+
+        |summary|age|
+        +-------+---+
+        |  count|  2|
+        |   mean|3.5|
+        | stddev|1.5|
+        |    min|  2|
+        |    max|  5|
+        +-------+---+
         """
         jdf = self._jdf.describe(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
@@ -801,12 +807,18 @@ class DataFrame(object):
         :param subset: optional list of column names to consider.
 
         >>> df4.dropna().show()
-        age height name
-        10  80     Alice
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        +---+------+-----+
 
         >>> df4.na.drop().show()
-        age height name
-        10  80     Alice
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        +---+------+-----+
         """
         if how is not None and how not in ['any', 'all']:
             raise ValueError("how ('" + how + "') should be 'any' or 'all'")
@@ -837,25 +849,34 @@ class DataFrame(object):
             then the non-string column is simply ignored.
 
         >>> df4.fillna(50).show()
-        age height name
-        10  80     Alice
-        5   50     Bob
-        50  50     Tom
-        50  50     null
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        |  5|    50|  Bob|
+        | 50|    50|  Tom|
+        | 50|    50| null|
+        +---+------+-----+
 
         >>> df4.fillna({'age': 50, 'name': 'unknown'}).show()
-        age height name
-        10  80     Alice
-        5   null   Bob
-        50  null   Tom
-        50  null   unknown
+        +---+------+-------+
+        |age|height|   name|
+        +---+------+-------+
+        | 10|    80|  Alice|
+        |  5|  null|    Bob|
+        | 50|  null|    Tom|
+        | 50|  null|unknown|
+        +---+------+-------+
 
         >>> df4.na.fill({'age': 50, 'name': 'unknown'}).show()
-        age height name
-        10  80     Alice
-        5   null   Bob
-        50  null   Tom
-        50  null   unknown
+        +---+------+-------+
+        |age|height|   name|
+        +---+------+-------+
+        | 10|    80|  Alice|
+        |  5|  null|    Bob|
+        | 50|  null|    Tom|
+        | 50|  null|unknown|
+        +---+------+-------+
         """
         if not isinstance(value, (float, int, long, basestring, dict)):
             raise ValueError("value should be a float, int, long, string, or dict")
@@ -909,6 +930,27 @@ class DataFrame(object):
         if not isinstance(col2, str):
             raise ValueError("col2 should be a string.")
         return self._jdf.stat().cov(col1, col2)
+
+    def crosstab(self, col1, col2):
+        """
+        Computes a pair-wise frequency table of the given columns. Also known as a contingency
+        table. The number of distinct values for each column should be less than 1e4. At most 1e6
+        non-zero pair frequencies will be returned.
+        The first column of each row will be the distinct values of `col1` and the column names
+        will be the distinct values of `col2`. The name of the first column will be `$col1_$col2`.
+        Pairs that have no occurrences will have `null` as their counts.
+        :func:`DataFrame.crosstab` and :func:`DataFrameStatFunctions.crosstab` are aliases.
+
+        :param col1: The name of the first column. Distinct items will make the first item of
+            each row.
+        :param col2: The name of the second column. Distinct items will make the column names
+            of the DataFrame.
+        """
+        if not isinstance(col1, str):
+            raise ValueError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise ValueError("col2 should be a string.")
+        return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sql_ctx)
 
     def freqItems(self, cols, support=None):
         """
@@ -1027,7 +1069,7 @@ class GroupedData(object):
 
         >>> from pyspark.sql import functions as F
         >>> gdf.agg(F.min(df.age)).collect()
-        [Row(MIN(age)=2), Row(MIN(age)=5)]
+        [Row(name=u'Alice', MIN(age)=2), Row(name=u'Bob', MIN(age)=5)]
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
@@ -1233,7 +1275,12 @@ class Column(object):
 
     # container operators
     __contains__ = _bin_op("contains")
-    __getitem__ = _bin_op("getItem")
+    __getitem__ = _bin_op("apply")
+
+    # bitwise operators
+    bitwiseOR = _bin_op("bitwiseOR")
+    bitwiseAND = _bin_op("bitwiseAND")
+    bitwiseXOR = _bin_op("bitwiseXOR")
 
     def getItem(self, key):
         """An expression that gets an item at position `ordinal` out of a list,
@@ -1241,11 +1288,17 @@ class Column(object):
 
         >>> df = sc.parallelize([([1, 2], {"key": "value"})]).toDF(["l", "d"])
         >>> df.select(df.l.getItem(0), df.d.getItem("key")).show()
-        l[0] d[key]
-        1    value
+        +----+------+
+        |l[0]|d[key]|
+        +----+------+
+        |   1| value|
+        +----+------+
         >>> df.select(df.l[0], df.d["key"]).show()
-        l[0] d[key]
-        1    value
+        +----+------+
+        |l[0]|d[key]|
+        +----+------+
+        |   1| value|
+        +----+------+
         """
         return self[key]
 
@@ -1255,13 +1308,19 @@ class Column(object):
         >>> from pyspark.sql import Row
         >>> df = sc.parallelize([Row(r=Row(a=1, b="b"))]).toDF()
         >>> df.select(df.r.getField("b")).show()
-        r.b
-        b
+        +----+
+        |r[b]|
+        +----+
+        |   b|
+        +----+
         >>> df.select(df.r.a).show()
-        r.a
-        1
+        +----+
+        |r[a]|
+        +----+
+        |   1|
+        +----+
         """
-        return Column(self._jc.getField(name))
+        return self[name]
 
     def __getattr__(self, item):
         if item.startswith("__"):
@@ -1351,6 +1410,13 @@ class Column(object):
             raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
 
+    @ignore_unicode_prefix
+    def between(self, lowerBound, upperBound):
+        """ A boolean expression that is evaluated to true if the value of this
+        expression is between the given columns.
+        """
+        return (self >= lowerBound) & (self <= upperBound)
+
     def __repr__(self):
         return 'Column<%s>' % self._jc.toString().encode('utf8')
 
@@ -1389,6 +1455,11 @@ class DataFrameStatFunctions(object):
         return self.df.cov(col1, col2)
 
     cov.__doc__ = DataFrame.cov.__doc__
+
+    def crosstab(self, col1, col2):
+        return self.df.crosstab(col1, col2)
+
+    crosstab.__doc__ = DataFrame.crosstab.__doc__
 
     def freqItems(self, cols, support=None):
         return self.df.freqItems(cols, support)

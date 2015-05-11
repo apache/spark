@@ -18,7 +18,7 @@
 package org.apache.spark.streaming
 
 import java.io.InputStream
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.Map
 import scala.collection.mutable.Queue
@@ -28,8 +28,9 @@ import akka.actor.{Props, SupervisorStrategy}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
-import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
+import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
+
 import org.apache.spark._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.input.FixedLengthBinaryInputFormat
@@ -37,8 +38,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
-import org.apache.spark.streaming.scheduler._
+import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
+import org.apache.spark.util.CallSite
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -201,6 +203,8 @@ class StreamingContext private[streaming] (
 
   import StreamingContextState._
   private[streaming] var state = Initialized
+
+  private val startSite = new AtomicReference[CallSite](null)
 
   /**
    * Return the associated Spark context
@@ -518,6 +522,7 @@ class StreamingContext private[streaming] (
    * @throws SparkException if the context has already been started or stopped.
    */
   def start(): Unit = synchronized {
+    import StreamingContext._
     if (state == Started) {
       throw new SparkException("StreamingContext has already been started")
     }
@@ -525,9 +530,15 @@ class StreamingContext private[streaming] (
       throw new SparkException("StreamingContext has already been stopped")
     }
     validate()
-    sparkContext.setCallSite(DStream.getCreationSite())
-    scheduler.start()
-    state = Started
+    startSite.set(DStream.getCreationSite())
+    sparkContext.setCallSite(startSite.get)
+    ACTIVATION_LOCK.synchronized {
+      assertNoOtherContextIsActive()
+      scheduler.start()
+      uiTab.foreach(_.attach())
+      state = Started
+      setActiveContext(this)
+    }
   }
 
   /**
@@ -562,13 +573,17 @@ class StreamingContext private[streaming] (
 
   /**
    * Stop the execution of the streams immediately (does not wait for all received data
-   * to be processed).
+   * to be processed). By default, if `stopSparkContext` is not specified, the underlying
+   * SparkContext will also be stopped. This implicit behavior can be configured using the
+   * SparkConf configuration spark.streaming.stopSparkContextByDefault.
    *
-   * @param stopSparkContext if true, stops the associated SparkContext. The underlying SparkContext
+   * @param stopSparkContext If true, stops the associated SparkContext. The underlying SparkContext
    *                         will be stopped regardless of whether this StreamingContext has been
    *                         started.
    */
-  def stop(stopSparkContext: Boolean = true): Unit = synchronized {
+  def stop(
+      stopSparkContext: Boolean = conf.getBoolean("spark.streaming.stopSparkContextByDefault", true)
+     ): Unit = synchronized {
     stop(stopSparkContext, false)
   }
 
@@ -598,6 +613,7 @@ class StreamingContext private[streaming] (
     uiTab.foreach(_.detach())
     // The state should always be Stopped after calling `stop()`, even if we haven't started yet:
     state = Stopped
+    StreamingContext.setActiveContext(null)
   }
 }
 
@@ -607,8 +623,29 @@ class StreamingContext private[streaming] (
  */
 
 object StreamingContext extends Logging {
+  /**
+   * Lock that guards access to global variables that track active StreamingContext.
+   */
+  private val ACTIVATION_LOCK = new Object()
 
-  private[streaming] val DEFAULT_CLEANER_TTL = 3600
+  private val activeContext = new AtomicReference[StreamingContext](null)
+
+  private def assertNoOtherContextIsActive(): Unit = {
+    ACTIVATION_LOCK.synchronized {
+      if (activeContext.get() != null) {
+        throw new SparkException(
+          "Only one StreamingContext may be started in this JVM. " +
+            "Currently running StreamingContext was started at" +
+            activeContext.get.startSite.get.longForm)
+      }
+    }
+  }
+
+  private def setActiveContext(ssc: StreamingContext): Unit = {
+    ACTIVATION_LOCK.synchronized {
+      activeContext.set(ssc)
+    }
+  }
 
   @deprecated("Replaced by implicit functions in the DStream companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")

@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{OutputStream, PrintStream}
-
 import scala.util.Try
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.{AnalysisException, QueryTest}
@@ -107,25 +106,6 @@ class ErrorPositionSuite extends QueryTest with BeforeAndAfter {
   ignore("other expressions") {
     positionTest("bad addition",
       "SELECT 1 + array(1)", "1 + array")
-  }
-
-  /** Hive can be very noisy, messing up the output of our tests. */
-  private def quietly[A](f: => A): A = {
-    val origErr = System.err
-    val origOut = System.out
-    try {
-      System.setErr(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-      System.setOut(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-
-      f
-    } finally {
-      System.setErr(origErr)
-      System.setOut(origOut)
-    }
   }
 
   /**

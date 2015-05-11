@@ -20,9 +20,10 @@ package org.apache.spark.ui
 import java.text.SimpleDateFormat
 import java.util.{Locale, Date}
 
-import scala.xml.{Node, Text}
+import scala.xml.{Node, Text, Unparsed}
 
 import org.apache.spark.Logging
+import org.apache.spark.ui.scope.RDDOperationGraph
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
@@ -155,13 +156,10 @@ private[spark] object UIUtils extends Logging {
 
   def commonHeaderNodes: Seq[Node] = {
     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-    <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
-          type="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
-          type="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")}
-          typ="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")}></link>
+    <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/webui.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri("/static/sorttable.js")} ></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
     <script src={prependBaseUri("/static/vis.min.js")}></script>
@@ -172,13 +170,22 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/timeline-view.js")}></script>
   }
 
+  def vizHeaderNodes: Seq[Node] = {
+    <link rel="stylesheet" href={prependBaseUri("/static/spark-dag-viz.css")} type="text/css" />
+    <script src={prependBaseUri("/static/d3.min.js")}></script>
+    <script src={prependBaseUri("/static/dagre-d3.min.js")}></script>
+    <script src={prependBaseUri("/static/graphlib-dot.min.js")}></script>
+    <script src={prependBaseUri("/static/spark-dag-viz.js")}></script>
+  }
+
   /** Returns a spark page with correctly formatted headers */
   def headerSparkPage(
       title: String,
       content: => Seq[Node],
       activeTab: SparkUITab,
       refreshInterval: Option[Int] = None,
-      helpText: Option[String] = None): Seq[Node] = {
+      helpText: Option[String] = None,
+      showVisualization: Boolean = false): Seq[Node] = {
 
     val appName = activeTab.appName
     val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
@@ -196,6 +203,7 @@ private[spark] object UIUtils extends Logging {
     <html>
       <head>
         {commonHeaderNodes}
+        {if (showVisualization) vizHeaderNodes else Seq.empty}
         <title>{appName} - {title}</title>
       </head>
       <body>
@@ -242,7 +250,7 @@ private[spark] object UIUtils extends Logging {
               <h3 style="vertical-align: middle; display: inline-block;">
                 <a style="text-decoration: none" href={prependBaseUri("/")}>
                   <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
-                  <span class="version" 
+                  <span class="version"
                         style="margin-right: 15px;">{org.apache.spark.SPARK_VERSION}</span>
                 </a>
                 {title}
@@ -320,4 +328,58 @@ private[spark] object UIUtils extends Logging {
       <div class="bar bar-running" style={startWidth}></div>
     </div>
   }
+
+  /** Return a "DAG visualization" DOM element that expands into a visualization for a stage. */
+  def showDagVizForStage(stageId: Int, graph: Option[RDDOperationGraph]): Seq[Node] = {
+    showDagViz(graph.toSeq, forJob = false)
+  }
+
+  /** Return a "DAG visualization" DOM element that expands into a visualization for a job. */
+  def showDagVizForJob(jobId: Int, graphs: Seq[RDDOperationGraph]): Seq[Node] = {
+    showDagViz(graphs, forJob = true)
+  }
+
+  /**
+   * Return a "DAG visualization" DOM element that expands into a visualization on the UI.
+   *
+   * This populates metadata necessary for generating the visualization on the front-end in
+   * a format that is expected by spark-dag-viz.js. Any changes in the format here must be
+   * reflected there.
+   */
+  private def showDagViz(graphs: Seq[RDDOperationGraph], forJob: Boolean): Seq[Node] = {
+    <div>
+      <span class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
+        <span class="expand-dag-viz-arrow arrow-closed"></span>
+        <a data-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
+           data-placement="right">
+          DAG Visualization
+        </a>
+      </span>
+      <div id="dag-viz-graph"></div>
+      <div id="dag-viz-metadata">
+        {
+          graphs.map { g =>
+            <div class="stage-metadata" stage-id={g.rootCluster.id} style="display:none">
+              <div class="dot-file">{RDDOperationGraph.makeDotFile(g, forJob)}</div>
+              { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
+              { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }
+              {
+                g.rootCluster.getAllNodes.filter(_.cached).map { n =>
+                  <div class="cached-rdd">{n.id}</div>
+                }
+              }
+            </div>
+          }
+        }
+      </div>
+    </div>
+  }
+
+  /** Return a script element that automatically expands the DAG visualization on page load. */
+  def expandDagVizOnLoad(forJob: Boolean): Seq[Node] = {
+    <script type="text/javascript">
+      {Unparsed("$(document).ready(function() { toggleDagViz(" + forJob + ") });")}
+    </script>
+  }
+
 }
