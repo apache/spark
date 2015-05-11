@@ -59,6 +59,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private static final ClassTag<Object> OBJECT_CLASS_TAG = ClassTag$.MODULE$.Object();
 
+  @VisibleForTesting
+  static final int INITIAL_SORT_BUFFER_SIZE = 4096;
+
   private final BlockManager blockManager;
   private final IndexShuffleBlockResolver shuffleBlockResolver;
   private final TaskMemoryManager memoryManager;
@@ -152,7 +155,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       shuffleMemoryManager,
       blockManager,
       taskContext,
-      4096, // Initial size (TODO: tune this!)
+      INITIAL_SORT_BUFFER_SIZE,
       partitioner.numPartitions(),
       sparkConf);
     serBuffer = new MyByteArrayOutputStream(1024 * 1024);
