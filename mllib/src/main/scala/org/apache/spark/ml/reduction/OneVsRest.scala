@@ -80,7 +80,7 @@ class OneVsRestModel(
     val origCols = dataset.schema.map(f => col(f.name))
 
     // add an accumulator column to store predictions of all the models
-    val accColName = "mbc$tmp" + UUID.randomUUID().toString
+    val accColName = "mbc$acc" + UUID.randomUUID().toString
     val init: () => Map[Int, Double] = () => {Map()}
     val mapType = MapType(IntegerType, DoubleType, false)
     val newDataset = dataset.withColumn(accColName,callUDF(init, mapType))
@@ -98,10 +98,10 @@ class OneVsRestModel(
         val columns = origCols ++ List(col(rawPredictionCol), col(accColName))
 
         // add temporary column to store intermediate scores and update
-        val tmpColName = "mbc$tmp_" + UUID.randomUUID().toString
+        val tmpColName = "mbc$tmp" + UUID.randomUUID().toString
         val update: (Map[Int, Double], Vector) => Map[Int, Double]  =
           (predictions: Map[Int, Double], prediction: Vector) => {
-          predictions.+((index, prediction(1)))
+            predictions+((index, prediction(1)))
         }
         val updateUdf = callUDF(update, mapType, col(accColName), col(rawPredictionCol))
         val transformedDataset = model.transform(df).select(columns:_*)
@@ -140,7 +140,9 @@ class OneVsRest extends Estimator[OneVsRestModel] with OneVsRestParams {
 
   /** @group setParam */
   // TODO: Find a better way to do this. Existential Types don't work with Java API so cast needed.
-  def setClassifier(value: Classifier[_,_,_]): this.type = set(classifier, value.asInstanceOf[ClassifierType])
+  def setClassifier(value: Classifier[_,_,_]): this.type = {
+    set(classifier, value.asInstanceOf[ClassifierType])
+  }
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
