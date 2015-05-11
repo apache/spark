@@ -433,13 +433,13 @@ abstract class FSBasedRelation private[sql](
       BoundReference(dataSchema.fieldIndex(col), field.dataType, field.nullable)
     }.toSeq
 
-    val buildProjection = if (codegenEnabled) {
-      GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
-    } else {
-      () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)
-    }
-
     buildScan(inputPaths).mapPartitions { rows =>
+      val buildProjection = if (codegenEnabled) {
+        GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
+      } else {
+        () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)
+      }
+
       val mutableProjection = buildProjection()
       rows.map(mutableProjection)
     }
