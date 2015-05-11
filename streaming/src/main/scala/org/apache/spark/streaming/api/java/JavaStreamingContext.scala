@@ -578,6 +578,11 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     ssc.addStreamingListener(streamingListener)
   }
 
+
+  def getState(): StreamingContextState = {
+    ssc.getState()
+  }
+
   /**
    * Start the execution of the streams.
    */

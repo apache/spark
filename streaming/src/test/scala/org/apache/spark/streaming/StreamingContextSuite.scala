@@ -109,24 +109,32 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     assert(ssc.conf.getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)
   }
 
+  test("state matching") {
+    import StreamingContextState._
+    assert(INITIALIZED === INITIALIZED)
+    assert(INITIALIZED != STARTED)
+  }
+
   test("start and stop state check") {
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
 
-    assert(ssc.state === ssc.StreamingContextState.Initialized)
+    assert(ssc.getState() === StreamingContextState.INITIALIZED)
     ssc.start()
-    assert(ssc.state === ssc.StreamingContextState.Started)
+    assert(ssc.getState() === StreamingContextState.STARTED)
     ssc.stop()
-    assert(ssc.state === ssc.StreamingContextState.Stopped)
+    assert(ssc.getState() === StreamingContextState.STOPPED)
   }
 
   test("start multiple times") {
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
     ssc.start()
+    assert(ssc.getState() === StreamingContextState.STARTED)
     intercept[SparkException] {
       ssc.start()
     }
+    assert(ssc.getState() === StreamingContextState.STARTED)
   }
 
   test("stop multiple times") {
@@ -134,13 +142,16 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     addInputStream(ssc).register()
     ssc.start()
     ssc.stop()
+    assert(ssc.getState() === StreamingContextState.STOPPED)
     ssc.stop()
+    assert(ssc.getState() === StreamingContextState.STOPPED)
   }
 
   test("stop before start") {
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
     ssc.stop()  // stop before start should not throw exception
+    assert(ssc.getState() === StreamingContextState.STOPPED)
   }
 
   test("start after stop") {
@@ -151,6 +162,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     intercept[SparkException] {
       ssc.start() // start after stop should throw exception
     }
+    assert(ssc.getState() === StreamingContextState.STOPPED)
   }
 
   test("stop only streaming context") {
@@ -159,6 +171,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     addInputStream(ssc).register()
     ssc.start()
     ssc.stop(stopSparkContext = false)
+    assert(ssc.getState() === StreamingContextState.STOPPED)
     assert(sc.makeRDD(1 to 100).collect().size === 100)
     ssc = new StreamingContext(sc, batchDuration)
     addInputStream(ssc).register()

@@ -35,6 +35,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.input.FixedLengthBinaryInputFormat
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler._
@@ -193,14 +194,7 @@ class StreamingContext private[streaming] (
   assert(env.metricsSystem != null)
   env.metricsSystem.registerSource(streamingSource)
 
-  /** Enumeration to identify current state of the StreamingContext */
-  private[streaming] object StreamingContextState extends Enumeration {
-    type CheckpointState = Value
-    val Initialized, Started, Stopped = Value
-  }
-
-  import StreamingContextState._
-  private[streaming] var state = Initialized
+  private var state: StreamingContextState = INITIALIZED
 
   /**
    * Return the associated Spark context
@@ -513,22 +507,31 @@ class StreamingContext private[streaming] (
   }
 
   /**
+   * Return the current state of the context.
+   */
+  def getState(): StreamingContextState = {
+    state
+  }
+
+  /**
    * Start the execution of the streams.
    *
    * @throws SparkException if the context has already been started or stopped.
    */
   def start(): Unit = synchronized {
-    if (state == Started) {
-      throw new SparkException("StreamingContext has already been started")
-    }
-    if (state == Stopped) {
-      throw new SparkException("StreamingContext has already been stopped")
+    state match {
+      case INITIALIZED =>
+        // good to start
+      case STARTED =>
+        throw new SparkException("StreamingContext has already been started")
+      case STOPPED =>
+        throw new SparkException("StreamingContext has already been stopped")
     }
     validate()
     sparkContext.setCallSite(DStream.getCreationSite())
     scheduler.start()
     uiTab.foreach(_.attach())
-    state = Started
+    state = StreamingContextState.STARTED
   }
 
   /**
@@ -585,9 +588,11 @@ class StreamingContext private[streaming] (
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = synchronized {
     state match {
-      case Initialized => logWarning("StreamingContext has not been started yet")
-      case Stopped => logWarning("StreamingContext has already been stopped")
-      case Started =>
+      case INITIALIZED =>
+        logWarning("StreamingContext has not been started yet")
+      case STOPPED =>
+        logWarning("StreamingContext has already been stopped")
+      case STARTED =>
         scheduler.stop(stopGracefully)
         logInfo("StreamingContext stopped successfully")
         waiter.notifyStop()
@@ -598,7 +603,7 @@ class StreamingContext private[streaming] (
     if (stopSparkContext) sc.stop()
     uiTab.foreach(_.detach())
     // The state should always be Stopped after calling `stop()`, even if we haven't started yet:
-    state = Stopped
+    state = STOPPED
   }
 }
 
