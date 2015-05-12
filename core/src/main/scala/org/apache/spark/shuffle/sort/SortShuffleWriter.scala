@@ -66,9 +66,10 @@ private[spark] class SortShuffleWriter[K, V, C](
     // because it just opens a single file, so is typically too fast to measure accurately
     // (see SPARK-3570).
     val outputFile = shuffleBlockManager.getDataFile(dep.shuffleId, mapId)
+    val initialFileLength = outputFile.length()
     val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockManager.NOOP_REDUCE_ID)
     val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile)
-    shuffleBlockManager.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
+    shuffleBlockManager.writeIndexFile(dep.shuffleId, mapId, partitionLengths, initialFileLength)
 
     mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
   }
