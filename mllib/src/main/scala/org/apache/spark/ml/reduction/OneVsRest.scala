@@ -23,7 +23,7 @@ import scala.language.existentials
 
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.ml._
-import org.apache.spark.ml.attribute.BinaryAttribute
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.classification.{ClassificationModel, Classifier}
 import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.util.MetadataUtils
@@ -64,12 +64,15 @@ private[ml] trait OneVsRestParams extends PredictorParams {
  * is picked to label the example.
  * TODO: API may need to change when we introduce a ClassificationModel trait as the public API
  * @param parent
+ * @param labelMetadata Metadata of label column if it exists, or Nominal attribute
+ *                      representing the number of classes in training dataset otherwise.
  * @param models the binary classification models for reduction.
  *               The i-th model is produced by testing the i-th class vs the rest.
  */
 @AlphaComponent
 class OneVsRestModel(
       override val parent: OneVsRest,
+      labelMetadata: Metadata,
       val models: Array[_ <: ClassificationModel[_,_]])
   extends Model[OneVsRestModel] with OneVsRestParams {
 
@@ -126,7 +129,10 @@ class OneVsRestModel(
     val label: Map[Int, Double] => Double = (predictions: Map[Int, Double]) => {
       predictions.maxBy(_._2)._1.toDouble
     }
-    aggregatedDataset.withColumn($(predictionCol), callUDF(label, DoubleType, col(accColName)))
+
+    // output label and label metadata as prediction
+    val labelUdf = callUDF(label, DoubleType, col(accColName))
+    aggregatedDataset.withColumn($(predictionCol), labelUdf.as($(predictionCol), labelMetadata))
   }
 }
 
@@ -192,6 +198,14 @@ final class OneVsRest extends Estimator[OneVsRestModel] with OneVsRestParams {
       multiclassLabeled.unpersist()
     }
 
-    copyValues(new OneVsRestModel(this, models))
+    // extract label metadata from label column if present, or create a nominal attribute
+    // to output the number of labels
+    val labelAttribute = Attribute.fromStructField(labelSchema) match {
+      case _: NumericAttribute | UnresolvedAttribute => {
+        NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses)
+      }
+      case attr: Attribute => attr
+    }
+    copyValues(new OneVsRestModel(this, labelAttribute.toMetadata(), models))
   }
 }

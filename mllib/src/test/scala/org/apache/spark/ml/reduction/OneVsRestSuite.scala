@@ -65,7 +65,13 @@ class OneVsRestSuite extends FunSuite with MLlibTestSparkContext {
     assert(ova.getPredictionCol === "prediction")
     val ovaModel = ova.fit(dataset)
     assert(ovaModel.models.size === numClasses)
-    val ovaResults = ovaModel.transform(dataset)
+    val transformedDataset = ovaModel.transform(dataset)
+
+    // check for label metadata in prediction col
+    val predictionColSchema = transformedDataset.schema(ovaModel.getPredictionCol)
+    assert(MetadataUtils.getNumClasses(predictionColSchema) === Some(3))
+
+    val ovaResults = transformedDataset
       .select("prediction", "label")
       .map(row => (row.getDouble(0), row.getDouble(1)))
 
