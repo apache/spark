@@ -528,27 +528,26 @@ class StreamingContext private[streaming] (
   /**
    * Start the execution of the streams.
    *
-   * @throws SparkException if the context has already been started or stopped.
+   * @throws SparkException if the StreamingContext is already stopped.
    */
   def start(): Unit = synchronized {
-    import StreamingContext._
     state match {
       case INITIALIZED =>
-        // good to start
+        validate()
+        startSite.set(DStream.getCreationSite())
+        sparkContext.setCallSite(startSite.get)
+        StreamingContext.ACTIVATION_LOCK.synchronized {
+          StreamingContext.assertNoOtherContextIsActive()
+          scheduler.start()
+          uiTab.foreach(_.attach())
+          state = StreamingContextState.ACTIVE
+          StreamingContext.setActiveContext(this)
+        }
+        logInfo("StreamingContext started")
       case ACTIVE =>
-        throw new SparkException("StreamingContext has already been started")
+        logWarning("StreamingContext has already been started")
       case STOPPED =>
         throw new SparkException("StreamingContext has already been stopped")
-    }
-    validate()
-    startSite.set(DStream.getCreationSite())
-    sparkContext.setCallSite(startSite.get)
-    ACTIVATION_LOCK.synchronized {
-      assertNoOtherContextIsActive()
-      scheduler.start()
-      uiTab.foreach(_.attach())
-      state = StreamingContextState.ACTIVE
-      setActiveContext(this)
     }
   }
 
