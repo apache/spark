@@ -17,13 +17,14 @@
 
 package org.apache.spark.shuffle.unsafe;
 
-import org.junit.Assert;
 import org.junit.Test;
+import static org.junit.Assert.*;
 
 import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import static org.apache.spark.shuffle.unsafe.PackedRecordPointer.*;
 
 public class PackedRecordPointerSuite {
 
@@ -36,8 +37,8 @@ public class PackedRecordPointerSuite {
     final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1, 42);
     PackedRecordPointer packedPointer = new PackedRecordPointer();
     packedPointer.set(PackedRecordPointer.packPointer(addressInPage1, 360));
-    Assert.assertEquals(360, packedPointer.getPartitionId());
-    Assert.assertEquals(addressInPage1, packedPointer.getRecordPointer());
+    assertEquals(360, packedPointer.getPartitionId());
+    assertEquals(addressInPage1, packedPointer.getRecordPointer());
     memoryManager.cleanUpAllAllocatedMemory();
   }
 
@@ -50,8 +51,43 @@ public class PackedRecordPointerSuite {
     final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1, 42);
     PackedRecordPointer packedPointer = new PackedRecordPointer();
     packedPointer.set(PackedRecordPointer.packPointer(addressInPage1, 360));
-    Assert.assertEquals(360, packedPointer.getPartitionId());
-    Assert.assertEquals(addressInPage1, packedPointer.getRecordPointer());
+    assertEquals(360, packedPointer.getPartitionId());
+    assertEquals(addressInPage1, packedPointer.getRecordPointer());
     memoryManager.cleanUpAllAllocatedMemory();
+  }
+
+  @Test
+  public void maximumPartitionIdCanBeEncoded() {
+    PackedRecordPointer packedPointer = new PackedRecordPointer();
+    packedPointer.set(PackedRecordPointer.packPointer(0, MAXIMUM_PARTITION_ID));
+    assertEquals(MAXIMUM_PARTITION_ID, packedPointer.getPartitionId());
+  }
+
+  @Test
+  public void partitionIdsGreaterThanMaximumPartitionIdWillOverflowOrTriggerError() {
+    PackedRecordPointer packedPointer = new PackedRecordPointer();
+    try {
+      // Pointers greater than the maximum partition ID will overflow or trigger an assertion error
+      packedPointer.set(PackedRecordPointer.packPointer(0, MAXIMUM_PARTITION_ID + 1));
+      assertFalse(MAXIMUM_PARTITION_ID  + 1 == packedPointer.getPartitionId());
+    } catch (AssertionError e ) {
+      // pass
+    }
+  }
+
+  @Test
+  public void maximumOffsetInPageCanBeEncoded() {
+    PackedRecordPointer packedPointer = new PackedRecordPointer();
+    long address = TaskMemoryManager.encodePageNumberAndOffset(0, MAXIMUM_PAGE_SIZE_BYTES - 1);
+    packedPointer.set(PackedRecordPointer.packPointer(address, 0));
+    assertEquals(address, packedPointer.getRecordPointer());
+  }
+
+  @Test
+  public void offsetsPastMaxOffsetInPageWillOverflow() {
+    PackedRecordPointer packedPointer = new PackedRecordPointer();
+    long address = TaskMemoryManager.encodePageNumberAndOffset(0, MAXIMUM_PAGE_SIZE_BYTES);
+    packedPointer.set(PackedRecordPointer.packPointer(address, 0));
+    assertEquals(0, packedPointer.getRecordPointer());
   }
 }

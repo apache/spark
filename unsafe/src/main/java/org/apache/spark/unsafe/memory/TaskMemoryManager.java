@@ -19,6 +19,7 @@ package org.apache.spark.unsafe.memory;
 
 import java.util.*;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -169,8 +170,13 @@ public final class TaskMemoryManager {
    * This address will remain valid as long as the corresponding page has not been freed.
    */
   public long encodePageNumberAndOffset(MemoryBlock page, long offsetInPage) {
-    assert (page.pageNumber != -1) : "encodePageNumberAndOffset called with invalid page";
-    return (((long) page.pageNumber) << 51) | (offsetInPage & MASK_LONG_LOWER_51_BITS);
+    return encodePageNumberAndOffset(page.pageNumber, offsetInPage);
+  }
+
+  @VisibleForTesting
+  public static long encodePageNumberAndOffset(int pageNumber, long offsetInPage) {
+    assert (pageNumber != -1) : "encodePageNumberAndOffset called with invalid page";
+    return (((long) pageNumber) << 51) | (offsetInPage & MASK_LONG_LOWER_51_BITS);
   }
 
   /**
