@@ -43,6 +43,8 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * data source 'org.apache.spark.sql.json.DefaultSource'
  *
  * A new instance of this class with be instantiated each time a DDL call is made.
+ *
+ * @since 1.3.0
  */
 @DeveloperApi
 trait RelationProvider {
@@ -72,6 +74,8 @@ trait RelationProvider {
  * users need to provide a schema when using a SchemaRelationProvider.
  * A relation provider can inherits both [[RelationProvider]] and [[SchemaRelationProvider]]
  * if it can support both schema inference and user-specified schemas.
+ *
+ * @since 1.3.0
  */
 @DeveloperApi
 trait SchemaRelationProvider {
@@ -106,6 +110,8 @@ trait SchemaRelationProvider {
  * using a SchemaRelationProvider. A relation provider can inherits both [[RelationProvider]],
  * and [[FSBasedRelationProvider]] if it can support schema inference, user-specified
  * schemas, and accessing partitioned relations.
+ *
+ * @since 1.4.0
  */
 trait FSBasedRelationProvider {
   /**
@@ -121,6 +127,9 @@ trait FSBasedRelationProvider {
       parameters: Map[String, String]): FSBasedRelation
 }
 
+/**
+ * @since 1.3.0
+ */
 @DeveloperApi
 trait CreatableRelationProvider {
   /**
@@ -134,6 +143,8 @@ trait CreatableRelationProvider {
     * existing data is expected to be overwritten by the contents of the DataFrame.
     * ErrorIfExists mode means that when saving a DataFrame to a data source,
     * if data already exists, an exception is expected to be thrown.
+     *
+     * @since 1.3.0
     */
   def createRelation(
       sqlContext: SQLContext,
@@ -152,6 +163,8 @@ trait CreatableRelationProvider {
  * BaseRelations must also define a equality function that only returns true when the two
  * instances will return the same data. This equality function is used when determining when
  * it is safe to substitute cached results for a given relation.
+ *
+ * @since 1.3.0
  */
 @DeveloperApi
 abstract class BaseRelation {
@@ -167,6 +180,8 @@ abstract class BaseRelation {
    *
    * Note that it is always better to overestimate size than underestimate, because underestimation
    * could lead to execution plans that are suboptimal (i.e. broadcasting a very large table).
+   *
+   * @since 1.3.0
    */
   def sizeInBytes: Long = sqlContext.conf.defaultSizeInBytes
 
@@ -177,6 +192,8 @@ abstract class BaseRelation {
    *
    * Note: The internal representation is not stable across releases and thus data sources outside
    * of Spark SQL should leave this as true.
+   *
+   * @since 1.4.0
    */
   def needConversion: Boolean = true
 }
@@ -184,6 +201,8 @@ abstract class BaseRelation {
 /**
  * ::DeveloperApi::
  * A BaseRelation that can produce all of its tuples as an RDD of Row objects.
+ *
+ * @since 1.3.0
  */
 @DeveloperApi
 trait TableScan {
@@ -194,6 +213,8 @@ trait TableScan {
  * ::DeveloperApi::
  * A BaseRelation that can eliminate unneeded columns before producing an RDD
  * containing all of its tuples as Row objects.
+ *
+ * @since 1.3.0
  */
 @DeveloperApi
 trait PrunedScan {
@@ -211,6 +232,8 @@ trait PrunedScan {
  * The pushed down filters are currently purely an optimization as they will all be evaluated
  * again.  This means it is safe to use them with methods that produce false positives such
  * as filtering partitions based on a bloom filter.
+ *
+ * @since 1.3.0
  */
 @DeveloperApi
 trait PrunedFilteredScan {
@@ -232,6 +255,8 @@ trait PrunedFilteredScan {
  * 3. It assumes that fields of the data provided in the insert method are nullable.
  * If a data source needs to check the actual nullability of a field, it needs to do it in the
  * insert method.
+ *
+ * @since 1.3.0
  */
 @DeveloperApi
 trait InsertableRelation {
@@ -245,6 +270,8 @@ trait InsertableRelation {
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].  Unlike the other APIs this
  * interface is NOT designed to be binary compatible across releases and thus should only be used
  * for experimentation.
+ *
+ * @since 1.3.0
  */
 @Experimental
 trait CatalystScan {
@@ -257,6 +284,8 @@ trait CatalystScan {
  * underlying file system.  Subclasses of [[OutputWriter]] must provide a zero-argument constructor.
  * An [[OutputWriter]] instance is created and initialized when a new output file is opened on
  * executor side.  This instance is used to persist rows to this single output file.
+ *
+ * @since 1.4.0
  */
 @Experimental
 abstract class OutputWriter {
@@ -270,6 +299,8 @@ abstract class OutputWriter {
    * @param dataSchema Schema of the rows to be written. Partition columns are not included in the
    *        schema if the corresponding relation is partitioned.
    * @param context The Hadoop MapReduce task context.
+   *
+   * @since 1.4.0
    */
   def init(
       path: String,
@@ -279,12 +310,16 @@ abstract class OutputWriter {
   /**
    * Persists a single row.  Invoked on the executor side.  When writing to dynamically partitioned
    * tables, dynamic partition columns are not included in rows to be written.
+   *
+   * @since 1.4.0
    */
   def write(row: Row): Unit
 
   /**
    * Closes the [[OutputWriter]]. Invoked on the executor side after all rows are persisted, before
    * the task output is committed.
+   *
+   * @since 1.4.0
    */
   def close(): Unit
 }
@@ -310,6 +345,8 @@ abstract class OutputWriter {
  *        directories of all partition directories.
  * @param maybePartitionSpec An [[FSBasedRelation]] can be created with an optional
  *        [[PartitionSpec]], so that partition discovery can be skipped.
+ *
+ * @since 1.4.0
  */
 @Experimental
 abstract class FSBasedRelation private[sql](
@@ -323,6 +360,8 @@ abstract class FSBasedRelation private[sql](
    * @param paths Base paths of this relation.  For partitioned relations, it should be either root
    *        directories of all partition directories.
    * @param partitionColumns Partition columns of this relation.
+   *
+   * @since 1.4.0
    */
   def this(paths: Array[String], partitionColumns: StructType) =
     this(paths, {
@@ -335,6 +374,8 @@ abstract class FSBasedRelation private[sql](
    *
    * @param paths Base paths of this relation.  For partitioned relations, it should be root
    *        directories of all partition directories.
+   *
+   * @since 1.4.0
    */
   def this(paths: Array[String]) = this(paths, None)
 
@@ -356,6 +397,8 @@ abstract class FSBasedRelation private[sql](
 
   /**
    * Partition columns. Note that they are always nullable.
+   *
+   * @since 1.4.0
    */
   def partitionColumns: StructType = partitionSpec.partitionColumns
 
@@ -385,6 +428,8 @@ abstract class FSBasedRelation private[sql](
   /**
    * Schema of this relation.  It consists of columns appearing in [[dataSchema]] and all partition
    * columns not appearing in [[dataSchema]].
+   *
+   * @since 1.4.0
    */
   override lazy val schema: StructType = {
     val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
@@ -396,6 +441,8 @@ abstract class FSBasedRelation private[sql](
   /**
    * Specifies schema of actual data files.  For partitioned relations, if one or more partitioned
    * columns are contained in the data files, they should also appear in `dataSchema`.
+   *
+   * @since 1.4.0
    */
   def dataSchema: StructType
 
@@ -407,6 +454,8 @@ abstract class FSBasedRelation private[sql](
    * @param inputPaths For a non-partitioned relation, it contains paths of all data files in the
    *        relation. For a partitioned relation, it contains paths of all data files in a single
    *        selected partition.
+   *
+   * @since 1.4.0
    */
   def buildScan(inputPaths: Array[String]): RDD[Row] = {
     throw new RuntimeException(
@@ -422,6 +471,8 @@ abstract class FSBasedRelation private[sql](
    * @param inputPaths For a non-partitioned relation, it contains paths of all data files in the
    *        relation. For a partitioned relation, it contains paths of all data files in a single
    *        selected partition.
+   *
+   * @since 1.4.0
    */
   def buildScan(requiredColumns: Array[String], inputPaths: Array[String]): RDD[Row] = {
     // Yeah, to workaround serialization...
@@ -458,6 +509,8 @@ abstract class FSBasedRelation private[sql](
    * @param inputPaths For a non-partitioned relation, it contains paths of all data files in the
    *        relation. For a partitioned relation, it contains paths of all data files in a single
    *        selected partition.
+   *
+   * @since 1.4.0
    */
   def buildScan(
       requiredColumns: Array[String],
@@ -473,12 +526,16 @@ abstract class FSBasedRelation private[sql](
    * Note that the only side effect expected here is mutating `job` via its setters.  Especially,
    * Spark SQL caches [[BaseRelation]] instances for performance, mutating relation internal states
    * may cause unexpected behaviors.
+   *
+   * @since 1.4.0
    */
   def prepareForWrite(job: Job): Unit = ()
 
   /**
    * This method is responsible for producing a new [[OutputWriter]] for each newly opened output
    * file on the executor side.
+   *
+   * @since 1.4.0
    */
   def outputWriterClass: Class[_ <: OutputWriter]
 }
