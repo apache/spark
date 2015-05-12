@@ -529,9 +529,9 @@ class StreamingContext private[streaming] (
    * Start the execution of the streams.
    */
   def start(): Unit = synchronized {
-    import StreamingContext._
     state match {
       case INITIALIZED =>
+        import StreamingContext._
         validate()
         startSite.set(DStream.getCreationSite())
         sparkContext.setCallSite(startSite.get)
