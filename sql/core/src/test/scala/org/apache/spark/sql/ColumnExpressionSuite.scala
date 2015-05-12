@@ -270,9 +270,10 @@ class ColumnExpressionSuite extends QueryTest {
       Seq(Row(-1), Row(-2), Row(null))
     )
 
-    intercept[IllegalArgumentException] {
-      $"key".when($"key" === 1, -1)
-    }
+    // Test error handling for invalid expressions.
+    intercept[IllegalArgumentException] { $"key".when($"key" === 1, -1) }
+    intercept[IllegalArgumentException] { $"key".otherwise(-1) }
+    intercept[IllegalArgumentException] { when($"key" === 1, -1).otherwise(-1).otherwise(-1) }
   }
 
   test("sqrt") {
