@@ -232,9 +232,8 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
       Vectors.dense(0.0))
 
     val model = NaiveBayes.train(sc.makeRDD(okTrain, 2), 1.0, "Bernoulli")
-
     intercept[SparkException] {
-      model.predict(sc.makeRDD(badPredict, 2))
+      model.predict(sc.makeRDD(badPredict, 2)).collect()
     }
   }
 
