@@ -31,12 +31,12 @@ In the following code segment, we start with a set of sentences.  We split each 
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
-case class LabeledSentence(label: Double, sentence: String)
-val sentenceDataFrame = sqlContext.createDataFrame(Array(
-  LabeledSentence(0, "Hi I heard about Spark"),
-  LabeledSentence(0, "I wish Java could use case classes"),
-  LabeledSentence(1, "Logistic regression models are neat")
-))
+
+val sentenceDataFrame = sqlContext.createDataFrame(Seq(
+  (0, "Hi I heard about Spark"),
+  (0, "I wish Java could use case classes"),
+  (1, "Logistic regression models are neat")
+)).toDF("label", "sentence")
 val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
 val wordsDataFrame = tokenizer.transform(sentenceDataFrame)
 val hashingTF = new HashingTF().setInputCol("words").setOutputCol("features").setNumFeatures(20)
@@ -48,6 +48,7 @@ featurized.select("features", "label").take(3).foreach(println)
 <div data-lang="java" markdown="1">
 {% highlight java %}
 import com.google.common.collect.Lists;
+
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.HashingTF;
 import org.apache.spark.ml.feature.Tokenizer;
@@ -59,6 +60,7 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+
 JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
   RowFactory.create(0, "Hi I heard about Spark"),
   RowFactory.create(0, "I wish Java could use case classes"),
@@ -88,14 +90,15 @@ for (Row r : featurized.select("features", "label").take(3)) {
 <div data-lang="python" markdown="1">
 {% highlight python %}
 from pyspark.ml.feature import HashingTF, Tokenizer
+
 sentenceDataFrame = sqlContext.createDataFrame([
   (0, "Hi I heard about Spark"),
   (0, "I wish Java could use case classes"),
   (1, "Logistic regression models are neat")
 ], ["label", "sentence"])
-tokenizer = Tokenizer().setInputCol("sentence").setOutputCol("words")
+tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
 wordsDataFrame = tokenizer.transform(sentenceDataFrame)
-hashingTF = HashingTF().setInputCol("words").setOutputCol("features").setNumFeatures(20)
+hashingTF = HashingTF(inputCol="words", outputCol="features", numFeatures=20)
 featurized = hashingTF.transform(wordsDataFrame)
 for features_label in featurized.select("features", "label").take(3):
   print features_label
@@ -115,13 +118,13 @@ Note: A more advanced tokenizer is provided via [RegexTokenizer](api/scala/index
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
-import org.apache.spark.ml.feature.Tokenizer
-case class LabeledSentence(label: Double, sentence: String)
-val sentenceDataFrame = sqlContext.createDataFrame(Array(
-  LabeledSentence(0, "Hi I heard about Spark"),
-  LabeledSentence(0, "I wish Java could use case classes"),
-  LabeledSentence(1, "Logistic regression models are neat")
-))
+import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
+
+val sentenceDataFrame = sqlContext.createDataFrame(Seq(
+  (0, "Hi I heard about Spark"),
+  (0, "I wish Java could use case classes"),
+  (1, "Logistic regression models are neat")
+)).toDF("label", "sentence")
 val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
 val wordsDataFrame = tokenizer.transform(sentenceDataFrame)
 wordsDataFrame.select("words", "label").take(3).foreach(println)
@@ -131,6 +134,7 @@ wordsDataFrame.select("words", "label").take(3).foreach(println)
 <div data-lang="java" markdown="1">
 {% highlight java %}
 import com.google.common.collect.Lists;
+
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.Tokenizer;
 import org.apache.spark.mllib.linalg.Vector;
@@ -141,6 +145,7 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+
 JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
   RowFactory.create(0, "Hi I heard about Spark"),
   RowFactory.create(0, "I wish Java could use case classes"),
@@ -164,12 +169,13 @@ for (Row r : wordsDataFrame.select("words", "label").take(3)) {
 <div data-lang="python" markdown="1">
 {% highlight python %}
 from pyspark.ml.feature import Tokenizer
+
 sentenceDataFrame = sqlContext.createDataFrame([
   (0, "Hi I heard about Spark"),
   (0, "I wish Java could use case classes"),
   (1, "Logistic regression models are neat")
 ], ["label", "sentence"])
-tokenizer = Tokenizer().setInputCol("sentence").setOutputCol("words")
+tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
 wordsDataFrame = tokenizer.transform(sentenceDataFrame)
 for words_label in wordsDataFrame.select("words", "label").take(3):
   print words_label
