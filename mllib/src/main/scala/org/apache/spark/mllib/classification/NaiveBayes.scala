@@ -87,12 +87,15 @@ class NaiveBayesModel private[mllib] (
   }
 
   override def predict(testData: Vector): Double = {
+    val brzData = testData.toBreeze
     modelType match {
       case "Multinomial" =>
-        labels (brzArgmax (brzPi + brzTheta * testData.toBreeze) )
+        labels (brzArgmax (brzPi + brzTheta * brzData) )
       case "Bernoulli" =>
+        brzData.foreach(v => if (!(v == 0.0 || v == 1.0))
+          throw new SparkException(s"Bernoulli Naive Bayes requires 0 or 1 feature values but found $v."))
         labels (brzArgmax (brzPi +
-          (brzTheta - brzNegTheta.get) * testData.toBreeze + brzNegThetaSum.get))
+          (brzTheta - brzNegTheta.get) * brzData + brzNegThetaSum.get))
       case _ =>
         // This should never happen.
         throw new UnknownError(s"NaiveBayesModel was created with an unknown ModelType: $modelType")
@@ -290,6 +293,9 @@ class NaiveBayes private (
       }
       if (!values.forall(_ >= 0.0)) {
         throw new SparkException(s"Naive Bayes requires nonnegative feature values but found $v.")
+      }
+      if (modelType == "Bernoulli" && (!values.forall(v => v == 0.0 || v == 1.0) )) {
+        throw new SparkException(s"Bernoulli Naive Bayes requires 0 or 1 feature values but found $v.")
       }
     }
 
