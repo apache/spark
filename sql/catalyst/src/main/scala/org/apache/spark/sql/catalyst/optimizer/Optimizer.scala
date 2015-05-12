@@ -46,13 +46,13 @@ object DefaultOptimizer extends Optimizer {
       CombineLimits) ::
     Batch("ConstantFolding", FixedPoint(100),
       NullPropagation,
+      OptimizeIn,
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
       SimplifyFilters,
       SimplifyCasts,
-      SimplifyCaseConversionExpressions,
-      OptimizeIn) ::
+      SimplifyCaseConversionExpressions) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),

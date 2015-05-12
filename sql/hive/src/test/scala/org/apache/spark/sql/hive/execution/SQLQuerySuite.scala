@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.errors.DialectException
-import org.apache.spark.sql.DefaultDialect
+import org.apache.spark.sql.DefaultParserDialect
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
 import org.apache.spark.sql.hive.MetastoreRelation
 import org.apache.spark.sql.hive.test.TestHive
@@ -53,7 +53,7 @@ case class WindowData(
     area: String,
     product: Int)
 /** A SQL Dialect for testing purpose, and it can not be nested type */
-class MyDialect extends DefaultDialect
+class MyDialect extends DefaultParserDialect
 
 /**
  * A collection of hive query tests where we generate the answers ourselves instead of depending on
@@ -201,7 +201,7 @@ class SQLQuerySuite extends QueryTest {
     var message = intercept[AnalysisException] {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
     }.getMessage
-    assert(message.contains("Table ctas1 already exists"))
+    assert(message.contains("ctas1 already exists"))
     checkRelation("ctas1", true)
     sql("DROP TABLE ctas1")
 
@@ -247,7 +247,7 @@ class SQLQuerySuite extends QueryTest {
 
     // set the dialect back to the DefaultSQLDialect
     sql("SET spark.sql.dialect=sql")
-    assert(getSQLDialect().getClass === classOf[DefaultDialect])
+    assert(getSQLDialect().getClass === classOf[DefaultParserDialect])
     sql("SET spark.sql.dialect=hiveql")
     assert(getSQLDialect().getClass === classOf[HiveQLDialect])
 
@@ -314,7 +314,7 @@ class SQLQuerySuite extends QueryTest {
           SELECT key, value
           FROM src
           ORDER BY key, value""").collect().toSeq)
-    intercept[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] {
+    intercept[AnalysisException] {
       sql(
         """CREATE TABLE ctas4 AS
           | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()

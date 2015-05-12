@@ -74,6 +74,9 @@ private[spark] object SQLConf {
   // See SPARK-6231.
   val DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY = "spark.sql.selfJoinAutoResolveAmbiguity"
 
+  // Whether to retain group by columns or not in GroupedData.agg.
+  val DATAFRAME_RETAIN_GROUP_COLUMNS = "spark.sql.retainGroupColumns"
+
   val USE_SQL_SERIALIZER2 = "spark.sql.useSerializer2"
 
   val USE_JACKSON_STREAMING_API = "spark.sql.json.useJacksonStreamingAPI"
@@ -242,6 +245,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY, "true").toBoolean
+
+  private[spark] def dataFrameRetainGroupColumns: Boolean =
+    getConf(DATAFRAME_RETAIN_GROUP_COLUMNS, "true").toBoolean
   
   /** ********************** SQLConf functionality methods ************ */
 

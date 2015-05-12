@@ -407,64 +407,58 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
    * For example, because of a CREATE TABLE X AS statement.
    */
   object CreateTables extends Rule[LogicalPlan] {
-    import org.apache.hadoop.hive.ql.Context
-    import org.apache.hadoop.hive.ql.parse.{ASTNode, QB, SemanticAnalyzer}
-
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
+      case p: LogicalPlan if p.resolved => p
+      case p @ CreateTableAsSelect(table, child, allowExisting) =>
+        val schema = if (table.schema.size > 0) {
+          table.schema
+        } else {
+          child.output.map {
+            attr => new HiveColumn(
+              attr.name,
+              HiveMetastoreTypes.toMetastoreType(attr.dataType), null)
+          }
+        }
 
-      case CreateTableAsSelect(desc, child, allowExisting) =>
-        if (hive.convertCTAS && !desc.serde.isDefined) {
+        val desc = table.copy(schema = schema)
+
+        if (hive.convertCTAS && table.serde.isEmpty) {
           // Do the conversion when spark.sql.hive.convertCTAS is true and the query
           // does not specify any storage format (file format and storage handler).
-          if (desc.specifiedDatabase.isDefined) {
+          if (table.specifiedDatabase.isDefined) {
             throw new AnalysisException(
               "Cannot specify database name in a CTAS statement " +
-              "when spark.sql.hive.convertCTAS is set to true.")
+                "when spark.sql.hive.convertCTAS is set to true.")
           }
 
           val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
           CreateTableUsingAsSelect(
             desc.name,
-            conf.defaultDataSourceName,
+            hive.conf.defaultDataSourceName,
             temporary = false,
             mode,
             options = Map.empty[String, String],
             child
           )
         } else {
-          execution.CreateTableAsSelect(
-            desc.copy(
-              specifiedDatabase = Option(desc.specifiedDatabase.getOrElse(client.currentDatabase))),
-            child,
-            allowExisting)
-        }
-
-      case p: LogicalPlan if p.resolved => p
-
-      case p @ CreateTableAsSelect(desc, child, allowExisting) =>
-        val (dbName, tblName) = processDatabaseAndTableName(desc.database, desc.name)
-
-        if (hive.convertCTAS) {
-          if (desc.specifiedDatabase.isDefined) {
-            throw new AnalysisException(
-              "Cannot specify database name in a CTAS statement " +
-              "when spark.sql.hive.convertCTAS is set to true.")
+          val desc = if (table.serde.isEmpty) {
+            // add default serde
+            table.copy(
+              serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+          } else {
+            table
           }
 
-          val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
-          CreateTableUsingAsSelect(
-            tblName,
-            conf.defaultDataSourceName,
-            temporary = false,
-            mode,
-            options = Map.empty[String, String],
-            child
-          )
-        } else {
+          val (dbName, tblName) =
+            processDatabaseAndTableName(
+              desc.specifiedDatabase.getOrElse(client.currentDatabase), desc.name)
+
           execution.CreateTableAsSelect(
-            desc,
+            desc.copy(
+              specifiedDatabase = Some(dbName),
+              name = tblName),
             child,
             allowExisting)
         }
