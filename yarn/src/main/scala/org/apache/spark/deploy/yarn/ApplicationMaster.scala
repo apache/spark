@@ -300,11 +300,14 @@ private[spark] class ApplicationMaster(
     val expiryInterval = yarnConf.getInt(YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS, 120000)
 
     // we want to be reasonably responsive without causing too many requests to RM.
-    val schedulerInterval =
-      sparkConf.getTimeAsMs("spark.yarn.scheduler.heartbeat.interval-ms", "5s")
+    val heartbeatInterval = math.max(0, math.min(expiryInterval / 2,
+      sparkConf.getTimeAsMs("spark.yarn.scheduler.heartbeat.interval-ms", "5s")))
 
-    // must be <= expiryInterval / 2.
-    val interval = math.max(0, math.min(expiryInterval / 2, schedulerInterval))
+    // we want to check more frequently for pending containers
+    val eagerAllocationInterval = math.min(heartbeatInterval,
+      sparkConf.getTimeAsMs("spark.yarn.scheduler.allocation.interval-ms", "200"))
+
+    var currentAllocationInterval = eagerAllocationInterval
 
     // The number of failures in a row until Reporter thread give up
     val reporterMaxFailures = sparkConf.getInt("spark.yarn.scheduler.reporterThread.maxFailures", 5)
@@ -331,14 +334,25 @@ private[spark] class ApplicationMaster(
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
                     s"${failureCount} time(s) from Reporter thread.")
-
               } else {
                 logWarning(s"Reporter thread fails ${failureCount} time(s) in a row.", e)
               }
             }
           }
           try {
-            Thread.sleep(interval)
+            val numPendingAllocate = allocator.getNumPendingAllocate
+            if (numPendingAllocate > 0) {
+              currentAllocationInterval =
+                math.min(heartbeatInterval,currentAllocationInterval * 2)
+              logDebug(s"Number of pending allocations is ${numPendingAllocate}. " +
+                        "Sleeping for " + currentAllocationInterval)
+              Thread.sleep(currentAllocationInterval)
+            } else {
+              logDebug(s"Number of pending allocations is ${numPendingAllocate}. " +
+                        "Sleeping for " + heartbeatInterval)
+              currentAllocationInterval = eagerAllocationInterval
+              Thread.sleep(heartbeatInterval)
+            }
           } catch {
             case e: InterruptedException =>
           }
@@ -349,7 +363,8 @@ private[spark] class ApplicationMaster(
     t.setDaemon(true)
     t.setName("Reporter")
     t.start()
-    logInfo("Started progress reporter thread - sleep time : " + interval)
+    logInfo("Started progress reporter thread with (heartbeat : " + heartbeatInterval +
+            ", eager allocation : " + eagerAllocationInterval + ") intervals")
     t
   }
 
@@ -573,7 +588,7 @@ object ApplicationMaster extends Logging {
   }
 
   private[spark] def sparkContextInitialized(sc: SparkContext): Unit = {
-    if(master == null) {
+    if (master == null) {
       throw new SparkException(
         "ApplicationMaster is not initialized! This might indicate that " +
         "SparkContext is running in yarn-cluster mode, but has not been deployed " +
@@ -583,7 +598,7 @@ object ApplicationMaster extends Logging {
   }
 
   private[spark] def sparkContextStopped(sc: SparkContext): Boolean = {
-    if(master == null) {
+    if (master == null) {
       throw new SparkException("ApplicationMaster is not initialized!")
     }
     master.sparkContextStopped(sc)
