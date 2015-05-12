@@ -1416,6 +1416,8 @@ class Column(object):
     def when(self, whenExpr, thenExpr):
         if isinstance(whenExpr, Column):
             jc = self._jc.when(whenExpr._jc, thenExpr)
+        else:
+            raise TypeError("whenExpr should be Column")
         return Column(jc)
 
     @ignore_unicode_prefix

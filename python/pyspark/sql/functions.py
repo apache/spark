@@ -27,7 +27,7 @@ from pyspark import SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
-from pyspark.sql.dataframe import Column, _to_java_column, _to_seq, _create_column_from_literal
+from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
 
 
 __all__ = [
@@ -152,9 +152,14 @@ def when(whenExpr, thenExpr):
     [Row(age=3), Row(age=4)]
     >>> df.select(when(df.age == 2, 3).alias("age")).collect()
     [Row(age=3), Row(age=None)]
+    >>> df.select(when(df.age == 2, 3==3).alias("age")).collect()
+    [Row(age=True), Row(age=None)]
     """
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.when(whenExpr._jc, thenExpr)
+    if isinstance(whenExpr, Column):
+        jc = sc._jvm.functions.when(whenExpr._jc, thenExpr)
+    else:
+        raise TypeError("whenExpr should be Column")
     return Column(jc)
 
 def rand(seed=None):
