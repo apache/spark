@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import com.amazonaws.auth.AWSCredentials;
 import org.apache.log4j.Logger;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.FlatMapFunction;
@@ -126,12 +127,15 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
         /* Setup the StreamingContext */
         JavaStreamingContext jssc = new JavaStreamingContext(sparkConfig, batchInterval);
 
+        /* AWS Credentials */
+        AWSCredentials credentials = null;
+
         /* Create the same number of Kinesis DStreams/Receivers as Kinesis stream's shards */
         List<JavaDStream<byte[]>> streamsList = new ArrayList<JavaDStream<byte[]>>(numStreams);
         for (int i = 0; i < numStreams; i++) {
           streamsList.add(
             KinesisUtils.createStream(jssc, streamName, endpointUrl, checkpointInterval, 
-            InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2())
+            InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2(), credentials)
           );
         }
 

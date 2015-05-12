@@ -16,6 +16,7 @@
  */
 package org.apache.spark.streaming.kinesis
 
+import com.amazonaws.auth.AWSCredentials
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.Duration
@@ -49,6 +50,7 @@ object KinesisUtils {
    *                                 (InitialPositionInStream.TRIM_HORIZON) or
    *                                 the tip of the stream (InitialPositionInStream.LATEST).
    * @param storageLevel Storage level to use for storing the received objects
+   * @param credentials  AWS credentials
    *
    * @return ReceiverInputDStream[Array[Byte]]
    */
@@ -59,9 +61,10 @@ object KinesisUtils {
       endpointUrl: String,
       checkpointInterval: Duration,
       initialPositionInStream: InitialPositionInStream,
-      storageLevel: StorageLevel): ReceiverInputDStream[Array[Byte]] = {
+      storageLevel: StorageLevel,
+      credentials: Option[AWSCredentials] = None): ReceiverInputDStream[Array[Byte]] = {
     ssc.receiverStream(new KinesisReceiver(ssc.sc.appName, streamName, endpointUrl,
-        checkpointInterval, initialPositionInStream, storageLevel))
+        checkpointInterval, initialPositionInStream, storageLevel, credentials))
   }
 
   /**
@@ -80,6 +83,7 @@ object KinesisUtils {
    *                                 (InitialPositionInStream.TRIM_HORIZON) or
    *                                 the tip of the stream (InitialPositionInStream.LATEST).
    * @param storageLevel Storage level to use for storing the received objects
+   * @param credentials  AWS credentials
    *
    * @return JavaReceiverInputDStream[Array[Byte]]
    */
@@ -90,8 +94,9 @@ object KinesisUtils {
       endpointUrl: String, 
       checkpointInterval: Duration,
       initialPositionInStream: InitialPositionInStream,
-      storageLevel: StorageLevel): JavaReceiverInputDStream[Array[Byte]] = {
-    jssc.receiverStream(new KinesisReceiver(jssc.ssc.sc.appName, streamName,
-        endpointUrl, checkpointInterval, initialPositionInStream, storageLevel))
+      storageLevel: StorageLevel,
+      credentials: AWSCredentials): JavaReceiverInputDStream[Array[Byte]] = {
+    jssc.receiverStream(new KinesisReceiver(jssc.ssc.sc.appName, streamName, endpointUrl,
+      checkpointInterval, initialPositionInStream, storageLevel, Option(credentials)))
   }
 }
