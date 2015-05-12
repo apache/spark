@@ -78,7 +78,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group expr_ops
    */
-  def apply(field: Any): Column = UnresolvedExtractValue(expr, Literal(field))
+  def apply(extraction: Any): Column = UnresolvedExtractValue(expr, lit(extraction).expr)
 
   /**
    * Unary minus, i.e. negate the expression.

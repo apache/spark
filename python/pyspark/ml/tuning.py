@@ -236,6 +236,7 @@ class CrossValidatorModel(Model):
     """
 
     def __init__(self, bestModel):
+        super(CrossValidatorModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
 

@@ -147,7 +147,7 @@ object HiveThriftServer2 extends Logging {
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       server.stop()
     }
-
+    var onlineSessionNum: Int = 0
     val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
     val executionList = new mutable.LinkedHashMap[String, ExecutionInfo]
     val retainedStatements =
@@ -170,11 +170,13 @@ object HiveThriftServer2 extends Logging {
     def onSessionCreated(ip: String, sessionId: String, userName: String = "UNKNOWN"): Unit = {
       val info = new SessionInfo(sessionId, System.currentTimeMillis, ip, userName)
       sessionList.put(sessionId, info)
+      onlineSessionNum += 1
       trimSessionIfNecessary()
     }
 
     def onSessionClosed(sessionId: String): Unit = {
       sessionList(sessionId).finishTimestamp = System.currentTimeMillis
+      onlineSessionNum -= 1
     }
 
     def onStatementStart(
