@@ -448,6 +448,15 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
         }
       }
     }
+
+    // System property spark.yarn.app.id must be set if user code ran by AM on a YARN cluster
+    // yarn-standalone is deprecated, but still supported
+    if ((get("spark.master") == "yarn-cluster" || get("spark.master") == "yarn-standalone") &&
+      get("spark.yarn.app.id", null) == null) {
+      throw new SparkException("Detected yarn-cluster mode, but isn't running on a cluster. " +
+        "Deployment to YARN is not supported directly by SparkContext. Please use spark-submit.")
+    }
+
   }
 
   /**

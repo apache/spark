@@ -573,16 +573,10 @@ object ApplicationMaster extends Logging {
   }
 
   private[spark] def sparkContextInitialized(sc: SparkContext): Unit = {
-    if (master == null){
-      throw new SparkException("ApplicationMaster is not initialized!")
-    }
     master.sparkContextInitialized(sc)
   }
 
   private[spark] def sparkContextStopped(sc: SparkContext): Boolean = {
-    if (master == null){
-      throw new SparkException("ApplicationMaster is not initialized!")
-    }
     master.sparkContextStopped(sc)
   }
 
