@@ -26,6 +26,48 @@ import org.apache.spark.sql.types._
 
 private[sql] object StatFunctions extends Logging {
   
+  /** Calculate Spearman Correlation Coefficient for the given columns */
+  private[sql] def spearmanCorrelation(df: DataFrame, cols: Seq[String], tie: Boolean): Double = {
+    require(cols.length == 2, "Spearman correlation can only be calculated " +
+      "between two columns.")
+    val rankDF = calRanks(df, cols)
+    if (tie) {
+      // Calculate Spearman Correlation Coefficient with tie correction
+      pearsonCorrelation(rankDF, Seq("avgDX", "avgDY"))
+    } else {
+      // Calculate Spearman Correlation Coefficient with no tie correction
+      val n = df.count().toDouble
+      val sumOfRankingsDiff = calSumOfRankingsDiff(rankDF)
+      1.0 - 6.0 * sumOfRankingsDiff / (n * (n * n - 1.0))
+    }
+  }
+
+  private[sql] def calRanks(df: DataFrame, cols: Seq[String]): DataFrame = {
+    import df.sqlContext.implicits._
+    val columns = cols.map(n => Column(Cast(Column(n).expr, DoubleType)))
+    val doubleDF = df.select(columns: _*).toDF(cols(0), cols(1))
+
+    val sortOnCol1 = doubleDF.select(cols(0)).sort(cols(0)).rdd.zipWithIndex()
+      .map(kv => (kv._1.getDouble(0), kv._2 + 1.0)).toDF(cols(0), "dX")
+    val avgRankings1 = sortOnCol1.groupBy(cols(0)).avg("dX").toDF(cols(0), "avgDX")
+    val avg1 = sortOnCol1.join(avgRankings1, sortOnCol1(cols(0)) === avgRankings1(cols(0)))
+      .select(sortOnCol1(cols(0)), avgRankings1("avgDX"))
+
+    val sortOnCol2 = doubleDF.select(cols(1)).sort(cols(1)).rdd.zipWithIndex()
+      .map(kv => (kv._1.getDouble(0), kv._2 + 1.0)).toDF(cols(1), "dY")
+    val avgRankings2 = sortOnCol2.groupBy(cols(1)).avg("dY").toDF(cols(1), "avgDY")
+    val avg2 = sortOnCol2.join(avgRankings2, sortOnCol2(cols(1)) === avgRankings2(cols(1)))
+      .select(sortOnCol2(cols(1)), avgRankings2("avgDY"))
+
+    doubleDF.join(avg1, doubleDF(cols(0)) === avg1(cols(0)))
+      .join(avg2, doubleDF(cols(1)) === avg2(cols(1))).distinct.select("avgDX", "avgDY")
+  }
+
+  private[sql] def calSumOfRankingsDiff(rankDF: DataFrame): Double = {
+    import rankDF.sqlContext.implicits._
+    rankDF.select(sum(($"avgDX" - $"avgDY") * ($"avgDX" - $"avgDY"))).collect()(0).getDouble(0)
+  }
+
   /** Calculate the Pearson Correlation Coefficient for the given columns */
   private[sql] def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
     val counts = collectStatisticalData(df, cols)

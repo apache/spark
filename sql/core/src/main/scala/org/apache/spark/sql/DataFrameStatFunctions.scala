@@ -39,17 +39,36 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
    * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
-   * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in 
-   * MLlib's Statistics.
+   * Correlation and Spearman Correlation Coefficient.
    *
    * @param col1 the name of the column
    * @param col2 the name of the column to calculate the correlation against
-   * @return The Pearson Correlation Coefficient as a Double.
+   * @param params the parameters for calculating the correlation
+   * @return The Correlation Coefficient as a Double.
+   */
+  def corr(col1: String, col2: String, method: String, params: Map[String, Any] = Map()): Double = {
+    require(method == "pearson" || method == "spearman",
+      "Currently only the calculation of the Pearson Correlation and Spearman correlation " +
+        "coefficient are supported.")
+    method match {
+      case "pearson" =>
+        StatFunctions.pearsonCorrelation(df, Seq(col1, col2))
+      case "spearman" =>
+        val tie = params.getOrElse("tie", true).asInstanceOf[Boolean]
+        StatFunctions.spearmanCorrelation(df, Seq(col1, col2), tie)
+    }
+  }
+
+  /**
+   * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
+   * Correlation and Spearman Correlation Coefficient.
+   *
+   * @param col1 the name of the column
+   * @param col2 the name of the column to calculate the correlation against
+   * @return The Correlation Coefficient as a Double.
    */
   def corr(col1: String, col2: String, method: String): Double = {
-    require(method == "pearson", "Currently only the calculation of the Pearson Correlation " +
-      "coefficient is supported.")
-    StatFunctions.pearsonCorrelation(df, Seq(col1, col2))
+    corr(col1, col2, method, Map())
   }
 
   /**

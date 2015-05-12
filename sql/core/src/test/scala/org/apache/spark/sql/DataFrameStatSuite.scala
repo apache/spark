@@ -51,6 +51,45 @@ class DataFrameStatSuite extends FunSuite  {
     assert(math.abs(corr3 - 0.95723391394758572) < 1e-12)
   }
 
+  test("spearman correlation") {
+    val x = Seq(5.05, 6.75, 3.21, 2.66)
+    val y = Seq(1.65, 26.5, -5.93, 7.96)
+    val z = Seq(1.65, 2.64, 2.64, 6.95)
+
+    // To calculate the Spearman Correlation in R:
+    // > x <- c(5.05, 6.75, 3.21, 2.66)
+    // > y <- c(1.65, 26.5, -5.93, 7.96)
+    // > z <- c(1.65, 2.64, 2.64, 6.95)
+    // No tie correction is needed
+    // > cor(x, y, method="spearman")
+    // [1] 0.4
+    // Tie correction is needed
+    // > cor(x, z, method="spearman")
+    // [1] -0.6324555
+    // > cor(y, z, method="spearman")
+    // [1] 0.3162278
+
+    // No tie-correction
+    val params1: Map[String, Any] = Map("tie" -> false)
+
+    val df1 = x.zip(y).toDF("a", "b")
+    val corr1 = df1.stat.corr("a", "b", "spearman", params1)
+
+    // With tie-correction
+    val params2: Map[String, Any] = Map("tie" -> true)
+
+    val df2 = x.zip(z).toDF("a", "c")
+    val corr2 = df2.stat.corr("a", "c", "spearman", params2)
+
+    // Default is with tie-correction
+    val df3 = y.zip(z).toDF("b", "c")
+    val corr3 = df3.stat.corr("b", "c", "spearman")
+
+    assert(corr1 - 0.4 < 1e-12)
+    assert(corr2 + 0.6324555 < 1e-12)
+    assert(corr3 - 0.3162278 < 1e-12)
+  }
+
   test("covariance") {
     val df = Seq.tabulate(10)(i => (i, 2.0 * i, toLetter(i))).toDF("singles", "doubles", "letters")
 
