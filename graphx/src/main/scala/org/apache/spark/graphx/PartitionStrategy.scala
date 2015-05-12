@@ -32,7 +32,7 @@ trait PartitionStrategy extends Serializable {
 object PartitionStrategy {
   /**
    * Assigns edges to partitions using a 2D partitioning of the sparse edge adjacency matrix,
-   * guaranteeing a `2 * sqrt(numParts) - 1` bound on vertex replication.
+   * guaranteeing a `2 * ceil(sqrt(numParts))` bound on vertex replication.
    *
    * Suppose we have a graph with 12 vertices that we want to partition
    * over 9 machines.  We can use the following sparse matrix representation:
@@ -61,26 +61,27 @@ object PartitionStrategy {
    * that edges adjacent to `v11` can only be in the first column of blocks `(P0, P3,
    * P6)` or the last
    * row of blocks `(P6, P7, P8)`.  As a consequence we can guarantee that `v11` will need to be
-   * replicated to at most `2 * sqrt(numParts) - 1` machines.
+   * replicated to at most `2 * ceil(sqrt(numParts))` machines.
    *
    * Notice that `P0` has many edges and as a consequence this partitioning would lead to poor work
    * balance.  To improve balance we first multiply each vertex id by a large prime to shuffle the
    * vertex locations.
    *
-   * One of the limitations of this approach is that the number of machines must either be a
-   * perfect square. We partially address this limitation by computing the machine assignment to
-   * the next
-   * largest perfect square and then mapping back down to the actual number of machines.
-   * Unfortunately, this can also lead to work imbalance and so it is suggested that a perfect
-   * square is used.
+   * In a prior implementation of this approach there was a limitation that the number of partitions
+   * must be a perfect square or partitions were imbalanced. In the current implementation we extend
+   * this method to work for all number of partitions and give a balanced partitioning. If numParts
+   * is a perfect square the partitioning is unchanged.
    */
   case object EdgePartition2D extends PartitionStrategy {
     override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
-      val ceilSqrtNumParts: PartitionID = math.ceil(math.sqrt(numParts)).toInt
+      val sqrtNumParts = math.sqrt(numParts)
+      val rows = math.round(sqrtNumParts).toInt
+      val cols = math.ceil(sqrtNumParts).toInt
+      val lastColRows = numParts - rows * (cols - 1) //gives a number in range [1,rows]
       val mixingPrime: VertexId = 1125899906842597L
-      val col: PartitionID = (math.abs(src * mixingPrime) % ceilSqrtNumParts).toInt
-      val row: PartitionID = (math.abs(dst * mixingPrime) % ceilSqrtNumParts).toInt
-      (col * ceilSqrtNumParts + row) % numParts
+      val col = (math.abs(src * mixingPrime) % numParts % rows).toInt
+      val row = (math.abs(dst * mixingPrime) % (if (col < cols - 1) rows else lastColRows)).toInt
+      col * rows + row // guaranteed in [0, numParts) so no need for extra mod
     }
   }
 
