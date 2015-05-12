@@ -19,10 +19,10 @@ package org.apache.spark.deploy
 
 import java.net.URI
 import java.io.File
-import scala.util.Try
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
+import scala.util.Try
 
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.util.{RedirectThread, Utils}
@@ -98,7 +98,7 @@ object PythonRunner {
 
     // In Windows, the drive should not be prefixed with "/"
     // For instance, python does not understand "/C:/path/to/sheep.py"
-    if (formattedPath.matches("/[a-zA-Z]:/.*")) {
+    if (Utils.isWindows && formattedPath.matches("/[a-zA-Z]:/.*")) {
       formattedPath = formattedPath.stripPrefix("/")
     }
     formattedPath

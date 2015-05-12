@@ -18,6 +18,7 @@
 package org.apache.spark.deploy
 
 import org.scalatest.FunSuite
+
 import org.apache.spark.util.Utils
 
 class PythonRunnerSuite extends FunSuite {
@@ -29,9 +30,9 @@ class PythonRunnerSuite extends FunSuite {
     assert(PythonRunner.formatPath("file:///spark.py") === "/spark.py")
     assert(PythonRunner.formatPath("local:/spark.py") === "/spark.py")
     assert(PythonRunner.formatPath("local:///spark.py") === "/spark.py")
-    assert(PythonRunner.formatPath("file:/C:/a/b/spark.py", testWindows = true) ===
-      "C:/a/b/spark.py")
     if (Utils.isWindows) {
+      assert(PythonRunner.formatPath("file:/C:/a/b/spark.py", testWindows = true) ===
+        "C:/a/b/spark.py")
       assert(PythonRunner.formatPath("C:\\a\\b\\spark.py", testWindows = true) ===
         "C:/a/b/spark.py")
       assert(PythonRunner.formatPath("C:\\a b\\spark.py", testWindows = true) ===
