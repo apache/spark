@@ -228,6 +228,15 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   Otherwise, the client process will exit after submission.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.executor.nodeLabelExpression</code></td>
+  <td>(none)</td>
+  <td>
+  A YARN node label expression that restricts the set of nodes executors will be scheduled on.
+  Only versions of YARN greater than or equal to 2.6 support node label expressions, so when
+  running against earlier versions, this property will be ignored.
+  </td>
+</tr>
 </table>
 
 # Launching Spark on YARN
