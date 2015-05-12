@@ -493,8 +493,8 @@ class SQLTests(ReusedPySparkTestCase):
         tmpPath2 = tempfile.mkdtemp()
         shutil.rmtree(tmpPath2)
         rdd = self.sc.parallelize(['{"obj": {"a": "hello"}}', '{"obj": {"b": "world"}}'])
-        df = self.sqlCtx.jsonRDD(rdd,
-            StructType([StructField("obj", MapType(StringType(), StringType()), True)]))
+        schema = StructType([StructField("obj", MapType(StringType(), StringType()), True)])
+        df = self.sqlCtx.jsonRDD(rdd, schema)
         df.save(tmpPath2, 'org.apache.spark.sql.parquet', mode='overwrite')
 
         shutil.rmtree(tmpPath)
