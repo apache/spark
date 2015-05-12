@@ -40,8 +40,8 @@ private[ml] trait OneVsRestParams extends PredictorParams {
 
   type ClassifierType = Classifier[F, E, M] forSome {
     type F
-    type M <: ClassificationModel[F,M]
-    type E <:  Classifier[F, E,M]
+    type M <: ClassificationModel[F, M]
+    type E <:  Classifier[F, E, M]
   }
 
   /**
