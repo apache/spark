@@ -47,10 +47,7 @@ abstract class DataType {
    *     ...
    * }}}
    */
-  private[sql] def unapply(a: Expression): Boolean = a match {
-    case e: Expression if e.dataType == this => true
-    case _ => false
-  }
+  private[sql] def unapply(e: Expression): Boolean = e.dataType == this
 
   /**
    * The default size of a value of this data type, used internally for size estimation.
