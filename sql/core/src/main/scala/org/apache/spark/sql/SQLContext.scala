@@ -998,17 +998,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
     jdbc(url, table, theParts, new Properties())
   }
 
-    /**
+  /**
    * :: Experimental ::
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
-   * url named table and connection properties. The theParts parameter gives a list expressions
+   * url named table using connection properties. The theParts parameter gives a list expressions
    * suitable for inclusion in WHERE clauses; each one defines one partition
    * of the [[DataFrame]].
    *
    * @group specificdata
    */
   @Experimental
-  def jdbc(url: String,
+  def jdbc(
+      url: String,
       table: String,
       theParts: Array[String],
       properties: Properties): DataFrame = {
@@ -1018,7 +1019,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
     jdbc(url, table, parts, properties)
   }
   
-  private def jdbc(url: String,
+  private def jdbc(
+      url: String,
       table: String,
       parts: Array[Partition],
       properties: Properties): DataFrame = {

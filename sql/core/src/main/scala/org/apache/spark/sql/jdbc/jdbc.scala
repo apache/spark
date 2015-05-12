@@ -57,7 +57,8 @@ package object jdbc {
      * non-Serializable.  Instead, we explicitly close over all variables that
      * are used.
      */
-    def savePartition(url: String,
+    def savePartition(
+        url: String,
         table: String,
         iterator: Iterator[Row],
         rddSchema: StructType,
@@ -156,7 +157,8 @@ package object jdbc {
     /**
      * Saves the RDD to the database in a single transaction.
      */
-    def saveTable(df: DataFrame,
+    def saveTable(
+        df: DataFrame,
         url: String,
         table: String,
         properties: Properties = new Properties()) {

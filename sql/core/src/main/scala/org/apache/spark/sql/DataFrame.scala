@@ -1488,7 +1488,7 @@ class DataFrame private[sql](
   ////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`.
    * This will run a `CREATE TABLE` and a bunch of `INSERT INTO` statements.
    * If you pass `true` for `allowExisting`, it will drop any table with the
    * given name; if you pass `false`, it will throw if the table already
@@ -1501,14 +1501,15 @@ class DataFrame private[sql](
     
   /**
    * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`
-   * and connection properties passed in `properties`.
+   * using connection properties defined in `properties`.
    * This will run a `CREATE TABLE` and a bunch of `INSERT INTO` statements.
    * If you pass `true` for `allowExisting`, it will drop any table with the
    * given name; if you pass `false`, it will throw if the table already
    * exists.
    * @group output
    */
-  def createJDBCTable(url: String,
+  def createJDBCTable(
+      url: String,
       table: String,
       allowExisting: Boolean,
       properties: Properties): Unit = {
@@ -1528,7 +1529,7 @@ class DataFrame private[sql](
   }
 
   /**
-   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`.
    * Assumes the table already exists and has a compatible schema.  If you
    * pass `true` for `overwrite`, it will `TRUNCATE` the table before
    * performing the `INSERT`s.
@@ -1545,7 +1546,7 @@ class DataFrame private[sql](
 
   /**
    * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`
-   * and connection properties passed in `properties`.
+   * using connection properties defined in `properties`.
    * Assumes the table already exists and has a compatible schema.  If you
    * pass `true` for `overwrite`, it will `TRUNCATE` the table before
    * performing the `INSERT`s.
@@ -1556,7 +1557,8 @@ class DataFrame private[sql](
    * `INSERT INTO table VALUES (?, ?, ..., ?)` should not fail.
    * @group output
    */
-  def insertIntoJDBC(url: String,
+  def insertIntoJDBC(
+      url: String,
       table: String,
       overwrite: Boolean,
       properties: Properties): Unit = {
@@ -1571,7 +1573,6 @@ class DataFrame private[sql](
     }
     JDBCWriteDetails.saveTable(this, url, table, properties)
   }
-  
   ////////////////////////////////////////////////////////////////////////////
   // for Python API
   ////////////////////////////////////////////////////////////////////////////
