@@ -118,7 +118,7 @@ Note: A more advanced tokenizer is provided via [RegexTokenizer](api/scala/index
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
-import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
+import org.apache.spark.ml.feature.Tokenizer
 
 val sentenceDataFrame = sqlContext.createDataFrame(Seq(
   (0, "Hi I heard about Spark"),
