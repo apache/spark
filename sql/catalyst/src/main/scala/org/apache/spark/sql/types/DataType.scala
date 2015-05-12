@@ -137,10 +137,7 @@ private[sql] object IntegralType {
    *     ...
    * }}}
    */
-  def unapply(a: Expression): Boolean = a match {
-    case e: Expression if e.dataType.isInstanceOf[IntegralType] => true
-    case _ => false
-  }
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[IntegralType]
 }
 
 
@@ -157,10 +154,7 @@ private[sql] object FractionalType {
    *     ...
    * }}}
    */
-  def unapply(a: Expression): Boolean = a match {
-    case e: Expression if e.dataType.isInstanceOf[FractionalType] => true
-    case _ => false
-  }
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[FractionalType]
 }
 
 
