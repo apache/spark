@@ -70,6 +70,7 @@ final class UnsafeShuffleExternalSorter {
   private final BlockManager blockManager;
   private final TaskContext taskContext;
   private final boolean spillingEnabled;
+  private final ShuffleWriteMetrics writeMetrics;
 
   /** The buffer size to use when writing spills using DiskBlockObjectWriter */
   private final int fileBufferSize;
@@ -97,7 +98,8 @@ final class UnsafeShuffleExternalSorter {
       TaskContext taskContext,
       int initialSize,
       int numPartitions,
-      SparkConf conf) throws IOException {
+      SparkConf conf,
+      ShuffleWriteMetrics writeMetrics) throws IOException {
     this.memoryManager = memoryManager;
     this.shuffleMemoryManager = shuffleMemoryManager;
     this.blockManager = blockManager;
@@ -107,6 +109,7 @@ final class UnsafeShuffleExternalSorter {
     this.spillingEnabled = conf.getBoolean("spark.shuffle.spill", true);
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     this.fileBufferSize = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
+    this.writeMetrics = writeMetrics;
     openSorter();
   }
 
@@ -131,8 +134,24 @@ final class UnsafeShuffleExternalSorter {
   /**
    * Sorts the in-memory records and writes the sorted records to a spill file.
    * This method does not free the sort data structures.
+   *
+   * @param isSpill if true, this indicates that we're writing a spill and that bytes written should
+   *                be counted towards shuffle spill metrics rather than shuffle write metrics.
    */
-  private SpillInfo writeSpillFile() throws IOException {
+  private void writeSpillFile(boolean isSpill) throws IOException {
+
+    final ShuffleWriteMetrics writeMetricsToUse;
+
+    if (isSpill) {
+      // We're spilling, so bytes written should be counted towards spill rather than write.
+      // Create a dummy WriteMetrics object to absorb these metrics, since we don't want to count
+      // them towards shuffle bytes written.
+      writeMetricsToUse = new ShuffleWriteMetrics();
+    } else {
+      // We're writing the final non-spill file, so we _do_ want to count this as shuffle bytes.
+      writeMetricsToUse = writeMetrics;
+    }
+
     // This call performs the actual sort.
     final UnsafeShuffleSorter.UnsafeShuffleSorterIterator sortedRecords =
       sorter.getSortedIterator();
@@ -161,17 +180,8 @@ final class UnsafeShuffleExternalSorter {
     // OutputStream methods), but DiskBlockObjectWriter still calls some methods on it. To work
     // around this, we pass a dummy no-op serializer.
     final SerializerInstance ser = DummySerializerInstance.INSTANCE;
-    // TODO: audit the metrics-related code and ensure proper metrics integration:
-    // It's not clear how we should handle shuffle write metrics for spill files; currently, Spark
-    // doesn't report IO time spent writing spill files (see SPARK-7413). This method,
-    // writeSpillFile(), is called both when writing spill files and when writing the single output
-    // file in cases where we didn't spill. As a result, we don't necessarily know whether this
-    // should be reported as bytes spilled or as shuffle bytes written. We could defer the updating
-    // of these metrics until the end of the shuffle write, but that would mean that that users
-    // wouldn't get useful metrics updates in the UI from long-running tasks. Given this complexity,
-    // I'm deferring these decisions to a separate follow-up commit or patch.
-    writer =
-      blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, new ShuffleWriteMetrics());
+
+    writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, writeMetricsToUse);
 
     int currentPartition = -1;
     while (sortedRecords.hasNext()) {
@@ -185,8 +195,7 @@ final class UnsafeShuffleExternalSorter {
           spillInfo.partitionLengths[currentPartition] = writer.fileSegment().length();
         }
         currentPartition = partition;
-        writer =
-          blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, new ShuffleWriteMetrics());
+        writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, writeMetricsToUse);
       }
 
       final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
@@ -220,7 +229,14 @@ final class UnsafeShuffleExternalSorter {
         spills.add(spillInfo);
       }
     }
-    return spillInfo;
+
+    if (isSpill) {
+      writeMetrics.incShuffleRecordsWritten(writeMetricsToUse.shuffleRecordsWritten());
+      // Consistent with ExternalSorter, we do not count this IO towards shuffle write time.
+      // This means that this IO time is not accounted for anywhere; SPARK-3577 will fix this.
+      // writeMetrics.incShuffleWriteTime(writeMetricsToUse.shuffleWriteTime());
+      taskContext.taskMetrics().incDiskBytesSpilled(writeMetricsToUse.shuffleBytesWritten());
+    }
   }
 
   /**
@@ -233,13 +249,12 @@ final class UnsafeShuffleExternalSorter {
       org.apache.spark.util.Utils.bytesToString(getMemoryUsage()) + " to disk (" +
       (spills.size() + (spills.size() > 1 ? " times" : " time")) + " so far)");
 
-    final SpillInfo spillInfo = writeSpillFile();
+    writeSpillFile(true);
     final long sorterMemoryUsage = sorter.getMemoryUsage();
     sorter = null;
     shuffleMemoryManager.release(sorterMemoryUsage);
     final long spillSize = freeMemory();
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
-    taskContext.taskMetrics().incDiskBytesSpilled(spillInfo.file.length());
 
     openSorter();
   }
@@ -389,7 +404,8 @@ final class UnsafeShuffleExternalSorter {
   public SpillInfo[] closeAndGetSpills() throws IOException {
     try {
       if (sorter != null) {
-        writeSpillFile();
+        // Do not count the final file towards the spill count.
+        writeSpillFile(false);
         freeMemory();
       }
       return spills.toArray(new SpillInfo[spills.size()]);
