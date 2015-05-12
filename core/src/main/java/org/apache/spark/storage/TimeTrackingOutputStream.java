@@ -15,25 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.unsafe;
+package org.apache.spark.storage;
 
-import org.apache.spark.executor.ShuffleWriteMetrics;
-
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 
+import org.apache.spark.executor.ShuffleWriteMetrics;
+
 /**
- * Intercepts write calls and tracks total time spent writing.
+ * Intercepts write calls and tracks total time spent writing in order to update shuffle write
+ * metrics. Not thread safe.
  */
-final class TimeTrackingFileOutputStream extends OutputStream {
+public final class TimeTrackingOutputStream extends OutputStream {
 
   private final ShuffleWriteMetrics writeMetrics;
-  private final FileOutputStream outputStream;
+  private final OutputStream outputStream;
 
-  public TimeTrackingFileOutputStream(
-      ShuffleWriteMetrics writeMetrics,
-      FileOutputStream outputStream) {
+  public TimeTrackingOutputStream(ShuffleWriteMetrics writeMetrics, OutputStream outputStream) {
     this.writeMetrics = writeMetrics;
     this.outputStream = outputStream;
   }
@@ -49,7 +47,8 @@ final class TimeTrackingFileOutputStream extends OutputStream {
   public void write(byte[] b) throws IOException {
     final long startTime = System.nanoTime();
     outputStream.write(b);
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);  }
+    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);
+  }
 
   @Override
   public void write(byte[] b, int off, int len) throws IOException {
@@ -60,11 +59,15 @@ final class TimeTrackingFileOutputStream extends OutputStream {
 
   @Override
   public void flush() throws IOException {
+    final long startTime = System.nanoTime();
     outputStream.flush();
+    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);
   }
 
   @Override
   public void close() throws IOException {
+    final long startTime = System.nanoTime();
     outputStream.close();
+    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);
   }
 }

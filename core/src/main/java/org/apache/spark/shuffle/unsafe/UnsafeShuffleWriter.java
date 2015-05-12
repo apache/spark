@@ -50,6 +50,7 @@ import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.BlockManager;
+import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
@@ -301,7 +302,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       for (int partition = 0; partition < numPartitions; partition++) {
         final long initialFileLength = outputFile.length();
         mergedFileOutputStream =
-          new TimeTrackingFileOutputStream(writeMetrics, new FileOutputStream(outputFile, true));
+          new TimeTrackingOutputStream(writeMetrics, new FileOutputStream(outputFile, true));
         if (compressionCodec != null) {
           mergedFileOutputStream = compressionCodec.compressedOutputStream(mergedFileOutputStream);
         }
