@@ -78,14 +78,29 @@ final class UnsafeShuffleInMemorySorter {
     sortBufferInsertPosition++;
   }
 
-  public static abstract class UnsafeShuffleSorterIterator {
+  /**
+   * An iterator-like class that's used instead of Java's Iterator in order to facilitate inlining.
+   */
+  public static final class UnsafeShuffleSorterIterator {
 
+    private final long[] sortBuffer;
+    private final int numRecords;
     final PackedRecordPointer packedRecordPointer = new PackedRecordPointer();
+    private int position = 0;
 
-    public abstract boolean hasNext();
+    public UnsafeShuffleSorterIterator(int numRecords, long[] sortBuffer) {
+      this.numRecords = numRecords;
+      this.sortBuffer = sortBuffer;
+    }
 
-    public abstract void loadNext();
+    public boolean hasNext() {
+      return position < numRecords;
+    }
 
+    public void loadNext() {
+      packedRecordPointer.set(sortBuffer[position]);
+      position++;
+    }
   }
 
   /**
@@ -93,20 +108,6 @@ final class UnsafeShuffleInMemorySorter {
    */
   public UnsafeShuffleSorterIterator getSortedIterator() {
     sorter.sort(sortBuffer, 0, sortBufferInsertPosition, SORT_COMPARATOR);
-    return new UnsafeShuffleSorterIterator() {
-
-      private int position = 0;
-
-      @Override
-      public boolean hasNext() {
-        return position < sortBufferInsertPosition;
-      }
-
-      @Override
-      public void loadNext() {
-        packedRecordPointer.set(sortBuffer[position]);
-        position++;
-      }
-    };
+    return new UnsafeShuffleSorterIterator(sortBufferInsertPosition, sortBuffer);
   }
 }
