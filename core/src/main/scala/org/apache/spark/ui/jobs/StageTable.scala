@@ -125,13 +125,13 @@ private[ui] class StageTableBase(
     <td>{stageId}</td> ++
     {if (isFairScheduler) {<td>-</td>} else Seq.empty} ++
     <td>No data available for this stage</td> ++ // Description
-    <td>-</td> ++ // Submitted
-    <td>-</td> ++ // Duration
-    <td>-</td> ++ // Tasks: Succeeded/Total
-    <td>-</td> ++ // Input
-    <td>-</td> ++ // Output
-    <td>-</td> ++ // Shuffle Read
-    <td>-</td> // Shuffle Write
+    <td></td> ++ // Submitted
+    <td></td> ++ // Duration
+    <td></td> ++ // Tasks: Succeeded/Total
+    <td></td> ++ // Input
+    <td></td> ++ // Output
+    <td></td> ++ // Shuffle Read
+    <td></td> // Shuffle Write
   }
 
   protected def stageRow(s: StageInfo): Seq[Node] = {
@@ -207,7 +207,7 @@ private[ui] class FailedStageTable(
 
   override protected def stageRow(s: StageInfo): Seq[Node] = {
     val basicColumns = super.stageRow(s)
-    val failureReason = s.failureReason.getOrElse("-")
+    val failureReason = s.failureReason.getOrElse("")
     val isMultiline = failureReason.indexOf('\n') >= 0
     // Display the first line by default
     val failureReasonSummary = StringEscapeUtils.escapeHtml4(
