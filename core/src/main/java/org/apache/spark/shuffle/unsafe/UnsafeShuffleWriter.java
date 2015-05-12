@@ -36,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.*;
+import org.apache.spark.annotation.Private;
 import org.apache.spark.io.CompressionCodec;
 import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.LZFCompressionCodec;
@@ -54,6 +55,7 @@ import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
+@Private
 public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private final Logger logger = LoggerFactory.getLogger(UnsafeShuffleWriter.class);

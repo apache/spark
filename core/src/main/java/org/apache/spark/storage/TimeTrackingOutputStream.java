@@ -20,12 +20,14 @@ package org.apache.spark.storage;
 import java.io.IOException;
 import java.io.OutputStream;
 
+import org.apache.spark.annotation.Private;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 
 /**
  * Intercepts write calls and tracks total time spent writing in order to update shuffle write
  * metrics. Not thread safe.
  */
+@Private
 public final class TimeTrackingOutputStream extends OutputStream {
 
   private final ShuffleWriteMetrics writeMetrics;
