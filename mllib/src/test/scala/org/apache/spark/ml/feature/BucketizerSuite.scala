@@ -57,16 +57,18 @@ class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
 
     // Check for exceptions when using a set of invalid feature values.
     val invalidData1: Array[Double] = Array(-0.9) ++ validData
-    val invalidData2 = Array(0.5) ++ validData
+    val invalidData2 = Array(0.51) ++ validData
     val badDF1 = sqlContext.createDataFrame(invalidData1.zipWithIndex).toDF("feature", "idx")
-    intercept[RuntimeException]{
-      bucketizer.transform(badDF1).collect()
-      println("Invalid feature value -0.9 was not caught as an invalid feature!")
+    withClue("Invalid feature value -0.9 was not caught as an invalid feature!") {
+      intercept[SparkException] {
+        bucketizer.transform(badDF1).collect()
+      }
     }
     val badDF2 = sqlContext.createDataFrame(invalidData2.zipWithIndex).toDF("feature", "idx")
-    intercept[RuntimeException]{
-      bucketizer.transform(badDF2).collect()
-      println("Invalid feature value 0.5 was not caught as an invalid feature!")
+    withClue("Invalid feature value 0.51 was not caught as an invalid feature!") {
+      intercept[SparkException] {
+        bucketizer.transform(badDF2).collect()
+      }
     }
   }
 
@@ -137,12 +139,11 @@ private object BucketizerSuite extends FunSuite {
     }
     var i = 0
     while (i < splits.length - 1) {
-      testFeature(splits(i), i) // Split i should fall in bucket i.
-      testFeature((splits(i) + splits(i + 1)) / 2, i) // Value between splits i,i+1 should be in i.
+      // Split i should fall in bucket i.
+      testFeature(splits(i), i)
+      // Value between splits i,i+1 should be in i, which is also true if the (i+1)-th split is inf.
+      testFeature((splits(i) + splits(i + 1)) / 2, i)
       i += 1
-    }
-    if (splits.last === Double.PositiveInfinity) {
-      testFeature(Double.PositiveInfinity, splits.length - 2)
     }
   }
 }
