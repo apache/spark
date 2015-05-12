@@ -620,12 +620,14 @@ private[spark] class TaskSetManager(
     val index = info.index
     info.markSuccessful()
     removeRunningTask(tid)
+    val task = tasks(index)
     sched.dagScheduler.taskEnded(
-      tasks(index), Success, result.value(), result.accumUpdates, info, result.metrics)
+      task, Success, result.value(), result.accumUpdates, info, result.metrics)
     if (!successful(index)) {
       tasksSuccessful += 1
-      logInfo("Finished task %s in stage %s (TID %d) in %d ms on %s (%d/%d)".format(
-        info.id, taskSet.id, info.taskId, info.duration, info.host, tasksSuccessful, numTasks))
+      // include the partition here b/c on a retry, the partition is *not* the same as info.id
+      logInfo("Finished task %s (partition %d) in stage %s (TID %d) in %d ms on executor %s (%s) (%d/%d)".format(
+        info.id, task.partitionId, taskSet.id, info.taskId, info.duration, info.executorId, info.host, tasksSuccessful, numTasks))
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       if (tasksSuccessful == numTasks) {

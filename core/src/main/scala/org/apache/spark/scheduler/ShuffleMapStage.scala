@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.ShuffleDependency
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.BlockManagerId
@@ -43,11 +45,29 @@ private[spark] class ShuffleMapStage(
 
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
 
+  private val partitionComputeCount = HashMap[Int, Int]()
+
+  def incComputeCount(partition: Int): Int = {
+    partitionComputeCount(partition) = partitionComputeCount.getOrElse(partition, 0) + 1
+    partitionComputeCount(partition)
+  }
+
+  def clearPartitionComputeCount(): Unit = {
+    partitionComputeCount.clear()
+  }
+
   def addOutputLoc(partition: Int, status: MapStatus): Unit = {
     val prevList = outputLocs(partition)
     outputLocs(partition) = status :: prevList
     if (prevList == Nil) {
       numAvailableOutputs += 1
+    }
+  }
+
+  def removeOutputLoc(partition: Int): Unit = {
+    if (outputLocs(partition) != Nil) {
+      outputLocs(partition) = Nil
+      numAvailableOutputs -= 1
     }
   }
 

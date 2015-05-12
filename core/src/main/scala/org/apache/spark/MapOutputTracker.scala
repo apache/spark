@@ -378,12 +378,14 @@ private[spark] object MapOutputTracker extends Logging {
       reduceId: Int,
       statuses: Array[MapStatus]): Array[(BlockManagerId, Long)] = {
     assert (statuses != null)
+    var idx = -1
     statuses.map {
       status =>
+        idx += 1
         if (status == null) {
-          logError("Missing an output location for shuffle " + shuffleId)
-          throw new MetadataFetchFailedException(
-            shuffleId, reduceId, "Missing an output location for shuffle " + shuffleId)
+          val msg = "Missing an output location for shuffle " + shuffleId + ": map " + idx
+          logError(msg)
+          throw new MetadataFetchFailedException(shuffleId, reduceId, msg)
         } else {
           (status.location, status.getSizeForBlock(reduceId))
         }

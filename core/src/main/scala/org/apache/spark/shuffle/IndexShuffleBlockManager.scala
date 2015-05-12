@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.{TaskContext, Logging, SparkConf, SparkEnv}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.storage._
@@ -42,7 +42,7 @@ import IndexShuffleBlockManager.NOOP_REDUCE_ID
 // Note: Changes to the format in this file should be kept in sync with
 // org.apache.spark.network.shuffle.StandaloneShuffleBlockManager#getSortBasedShuffleBlockData().
 private[spark]
-class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockResolver {
+class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockResolver with Logging {
 
   private lazy val blockManager = SparkEnv.get.blockManager
 
