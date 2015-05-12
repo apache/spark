@@ -781,7 +781,7 @@ class DAGSchedulerSuite
     // could be enough to cause havoc.
 
     val conf = new SparkConf().set("spark.executor.memory", "100m")
-    val clusterSc = new SparkContext("local-cluster[10,4,100]", "test-cluster", conf)
+    val clusterSc = new SparkContext("local-cluster[5,4,100]", "test-cluster", conf)
     val bms = ArrayBuffer[BlockManagerId]()
     val stageFailureCount = HashMap[Int, Int]()
     clusterSc.addSparkListener(new SparkListener {
@@ -792,11 +792,12 @@ class DAGSchedulerSuite
         if (stageCompleted.stageInfo.failureReason.isDefined) {
           val stage = stageCompleted.stageInfo.stageId
           stageFailureCount(stage) = stageFailureCount.getOrElse(stage, 0) + 1
+          println("stage " + stage + " failed: " + stageFailureCount(stage))
         }
       }
     })
     try {
-      val rawData = clusterSc.parallelize(1 to 1e6.toInt, 500).map{x => (x % 100) -> x}.cache()
+      val rawData = clusterSc.parallelize(1 to 1e6.toInt, 20).map{x => (x % 100) -> x}.cache()
       rawData.count()
       val aBm = bms(0)
       val shuffled = rawData.groupByKey(100).mapPartitionsWithIndex{ case (idx, itr) =>
@@ -810,20 +811,16 @@ class DAGSchedulerSuite
             Thread.sleep(10000)
             throw new FetchFailedException(aBm, 0, 0, idx,
               cause = new RuntimeException("simulated fetch failure"))
+          } else {
+            // want to make sure plenty of these finish after task 0 fails, and some even finish
+            // after the previous stage is retried and this stage retry is started
+            Thread.sleep((500 + math.random * 5000).toLong)
           }
-        } else {
-          Thread.sleep(10000)
         }
-        // want to make sure plenty of these finish after task 0 fails, and some even finish
-        // after the previous stage is retried and this stage retry is started
-        Thread.sleep((500 + math.random * 5000).toLong)
         itr.map{x => ((x._1 + 5) % 100) -> x._2 }
       }
-      val shuffledAgain = shuffled.flatMap{ case(k,vs) => vs.map{k -> _}}.groupByKey(100)
-      val data = shuffledAgain.mapPartitions { itr =>
-        Thread.sleep(10000)
-        itr.flatMap{_._2}
-      }.cache().collect()
+      val shuffledAgain = shuffled.flatMap{ case(k,vs) => vs.map(k -> _) }.groupByKey(100)
+      val data = shuffledAgain.mapPartitions { itr => itr.flatMap(_._2) }.cache().collect()
       val count = data.size
       assert(count === 1e6.toInt)
       assert(data.toSet === (1 to 1e6.toInt).toSet)
