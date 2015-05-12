@@ -18,11 +18,11 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.ml.Model
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
@@ -32,10 +32,10 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
  * `Bucketizer` maps a column of continuous features to a column of feature buckets.
  */
 @AlphaComponent
-final class Bucketizer private[ml] (override val parent: Estimator[Bucketizer])
+final class Bucketizer(override val uid: String)
   extends Model[Bucketizer] with HasInputCol with HasOutputCol {
 
-  def this() = this(null)
+  def this() = this(Identifiable.randomUID("bucketizer"))
 
   /**
    * Parameter for mapping continuous features into buckets. With n splits, there are n+1 buckets.
@@ -50,7 +50,7 @@ final class Bucketizer private[ml] (override val parent: Estimator[Bucketizer])
       "should be strictly increasing. Values at -inf, inf must be explicitly provided to cover" +
       " all Double values; otherwise, values outside the splits specified will be treated as" +
       " errors.",
-    Bucketizer.checkSplits)
+    Bucketizer.checkSplits _)
 
   /** @group getParam */
   def getSplits: Array[Double] = $(splits)
