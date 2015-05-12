@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.feature;
 
-
 import com.google.common.collect.Lists;
 import org.junit.After;
 import org.junit.Assert;
