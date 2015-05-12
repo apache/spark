@@ -1003,6 +1003,9 @@ class DataFrame private[sql](
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive.
    * @group output
    */
   @Experimental
@@ -1019,6 +1022,9 @@ class DataFrame private[sql](
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive.
    * @group output
    */
   @Experimental
@@ -1043,6 +1049,9 @@ class DataFrame private[sql](
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive.
    * @group output
    */
   @Experimental
@@ -1059,6 +1068,9 @@ class DataFrame private[sql](
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive.
    * @group output
    */
   @Experimental
@@ -1075,6 +1087,9 @@ class DataFrame private[sql](
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive.
    * @group output
    */
   @Experimental
@@ -1096,6 +1111,9 @@ class DataFrame private[sql](
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive.
    * @group output
    */
   @Experimental
