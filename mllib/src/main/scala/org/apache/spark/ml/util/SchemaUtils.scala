@@ -58,4 +58,15 @@ object SchemaUtils {
     val outputFields = schema.fields :+ StructField(colName, dataType, nullable = false)
     StructType(outputFields)
   }
+
+  /**
+   * Appends a new column to the input schema. This fails if the given output column already exists.
+   * @param schema input schema
+   * @param col New column schema
+   * @return new schema with the input column appended
+   */
+  def appendColumn(schema: StructType, col: StructField): StructType = {
+    require(!schema.fieldNames.contains(col.name), s"Column ${col.name} already exists.")
+    StructType(schema.fields :+ col)
+  }
 }

@@ -24,6 +24,7 @@ import scala.collection.JavaConversions._
 import scala.collection.immutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.control.NonFatal
 
 import com.google.common.reflect.TypeToken
 
@@ -32,9 +33,11 @@ import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.ParserDialect
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, expressions}
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
@@ -43,6 +46,42 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.{Partition, SparkContext}
+
+/**
+ * Currently we support the default dialect named "sql", associated with the class
+ * [[DefaultParserDialect]]
+ *
+ * And we can also provide custom SQL Dialect, for example in Spark SQL CLI:
+ * {{{
+ *-- switch to "hiveql" dialect
+ *   spark-sql>SET spark.sql.dialect=hiveql;
+ *   spark-sql>SELECT * FROM src LIMIT 1;
+ *
+ *-- switch to "sql" dialect
+ *   spark-sql>SET spark.sql.dialect=sql;
+ *   spark-sql>SELECT * FROM src LIMIT 1;
+ *
+ *-- register the new SQL dialect
+ *   spark-sql> SET spark.sql.dialect=com.xxx.xxx.SQL99Dialect;
+ *   spark-sql> SELECT * FROM src LIMIT 1;
+ *
+ *-- register the non-exist SQL dialect
+ *   spark-sql> SET spark.sql.dialect=NotExistedClass;
+ *   spark-sql> SELECT * FROM src LIMIT 1;
+ *
+ *-- Exception will be thrown and switch to dialect
+ *-- "sql" (for SQLContext) or
+ *-- "hiveql" (for HiveContext)
+ * }}}
+ */
+private[spark] class DefaultParserDialect extends ParserDialect {
+  @transient
+  protected val sqlParser = new catalyst.SqlParser
+
+  override def parse(sqlText: String): LogicalPlan = {
+    sqlParser.parse(sqlText)
+  }
+}
 
 /**
  * The entry point for working with structured data (rows and columns) in Spark.  Allows the
@@ -68,7 +107,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * @return Spark SQL configuration
    */
-  protected[sql] def conf = tlSession.get().conf
+  protected[sql] def conf = currentSession().conf
 
   /**
    * Set Spark SQL configuration properties.
@@ -109,7 +148,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   // TODO how to handle the temp table per user session?
   @transient
-  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(true)
+  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
 
   // TODO how to handle the temp function per user session?
   @transient
@@ -117,7 +156,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = true) {
+    new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         ExtractPythonUdfs ::
         sources.PreInsertCastAndRename ::
@@ -135,14 +174,27 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
 
   @transient
-  protected[sql] val sqlParser = {
-    val fallback = new catalyst.SqlParser
-    new SparkSQLParser(fallback.parse(_))
+  protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect().parse(_))
+
+  protected[sql] def getSQLDialect(): ParserDialect = {
+    try {
+      val clazz = Utils.classForName(dialectClassName)
+      clazz.newInstance().asInstanceOf[ParserDialect]
+    } catch {
+      case NonFatal(e) =>
+        // Since we didn't find the available SQL Dialect, it will fail even for SET command:
+        // SET spark.sql.dialect=sql; Let's reset as default dialect automatically.
+        val dialect = conf.dialect
+        // reset the sql dialect
+        conf.unsetConf(SQLConf.DIALECT)
+        // throw out the exception, and the default sql dialect will take effect for next query.
+        throw new DialectException(
+          s"""Instantiating dialect '$dialect' failed.
+             |Reverting to default dialect '${conf.dialect}'""".stripMargin, e)
+    }
   }
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = {
-    ddlParser.parse(sql, false).getOrElse(sqlParser.parse(sql))
-  }
+  protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
 
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
 
@@ -155,6 +207,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   @transient
   protected[sql] val defaultSession = createSession()
+
+  protected[sql] def dialectClassName = if (conf.dialect == "sql") {
+    classOf[DefaultParserDialect].getCanonicalName
+  } else {
+    conf.dialect
+  }
 
   sparkContext.getConf.getAll.foreach {
     case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
@@ -429,20 +487,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * Creates a [[DataFrame]] from an [[JavaRDD]] containing [[Row]]s by applying
-   * a seq of names of columns to this RDD, the data type for each column will
-   * be inferred by the first row.
-   *
-   * @param rowRDD an JavaRDD of Row
-   * @param columns names for each column
-   * @return DataFrame
-   * @group dataframes
-   */
-  def createDataFrame(rowRDD: JavaRDD[Row], columns: java.util.List[String]): DataFrame = {
-    createDataFrame(rowRDD.rdd, columns.toSeq)
-  }
-
-  /**
    * Applies a schema to an RDD of Java Beans.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
@@ -615,13 +659,17 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
-    val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
-    val appliedSchema =
-      Option(schema).getOrElse(
-        JsonRDD.nullTypeToStringType(
-          JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
-    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    createDataFrame(rowRDD, appliedSchema, needsConversion = false)
+    if (conf.useJacksonStreamingAPI) {
+      baseRelationToDataFrame(new JSONRelation(() => json, None, 1.0, Some(schema))(this))
+    } else {
+      val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
+      val appliedSchema =
+        Option(schema).getOrElse(
+          JsonRDD.nullTypeToStringType(
+            JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
+      val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
+      createDataFrame(rowRDD, appliedSchema, needsConversion = false)
+    }
   }
 
   /**
@@ -645,12 +693,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
-    val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
-    val appliedSchema =
-      JsonRDD.nullTypeToStringType(
-        JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
-    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    createDataFrame(rowRDD, appliedSchema, needsConversion = false)
+    if (conf.useJacksonStreamingAPI) {
+      baseRelationToDataFrame(new JSONRelation(() => json, None, samplingRatio, None)(this))
+    } else {
+      val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
+      val appliedSchema =
+        JsonRDD.nullTypeToStringType(
+          JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
+      val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
+      createDataFrame(rowRDD, appliedSchema, needsConversion = false)
+    }
   }
 
   /**
@@ -945,11 +997,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group basic
    */
   def sql(sqlText: String): DataFrame = {
-    if (conf.dialect == "sql") {
-      DataFrame(this, parseSql(sqlText))
-    } else {
-      sys.error(s"Unsupported SQL dialect: ${conf.dialect}")
-    }
+    DataFrame(this, parseSql(sqlText))
   }
 
   /**
@@ -1149,13 +1197,17 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |${stringOrError(executedPlan)}
       """.stripMargin.trim
 
-    override def toString: String =
+    override def toString: String = {
+      def output =
+        analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
+
       // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
       // however, the `toRdd` will cause the real execution, which is not what we want.
       // We need to think about how to avoid the side effect.
       s"""== Parsed Logical Plan ==
          |${stringOrError(logical)}
          |== Analyzed Logical Plan ==
+         |${stringOrError(output)}
          |${stringOrError(analyzed)}
          |== Optimized Logical Plan ==
          |${stringOrError(optimizedPlan)}
@@ -1164,6 +1216,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
          |== RDD ==
       """.stripMargin.trim
+    }
   }
 
   /**

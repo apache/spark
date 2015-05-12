@@ -89,6 +89,8 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Vector.numActives")
           ) ++ Seq(
+            // Execution should never be included as its always internal.
+            MimaBuild.excludeSparkPackage("sql.execution"),
             // This `protected[sql]` method was removed in 1.3.1
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.sql.SQLContext.checkAnalysis"),
@@ -104,6 +106,10 @@ object MimaExcludes {
               "org.apache.spark.sql.parquet.ParquetTestData$"),
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.parquet.TestGroupWriteSupport")
+          ) ++ Seq(
+            // SPARK-7530 Added StreamingContext.getState()
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.StreamingContext.state_=")
           )
 
         case v if v.startsWith("1.3") =>

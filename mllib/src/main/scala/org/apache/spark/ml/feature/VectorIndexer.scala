@@ -18,18 +18,16 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute.{BinaryAttribute, NumericAttribute, NominalAttribute,
-  Attribute, AttributeGroup}
-import org.apache.spark.ml.param.{ParamValidators, IntParam, ParamMap, Params}
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, BinaryAttribute, NominalAttribute, NumericAttribute}
+import org.apache.spark.ml.param.{IntParam, ParamValidators, Params}
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, VectorUDT}
-import org.apache.spark.sql.{Row, DataFrame}
+import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.callUDF
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.collection.OpenHashSet
-
 
 /** Private trait for params for VectorIndexer and VectorIndexerModel */
 private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOutputCol {
@@ -49,7 +47,7 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
   setDefault(maxCategories -> 20)
 
   /** @group getParam */
-  def getMaxCategories: Int = getOrDefault(maxCategories)
+  def getMaxCategories: Int = $(maxCategories)
 }
 
 /**
@@ -100,33 +98,29 @@ class VectorIndexer extends Estimator[VectorIndexerModel] with VectorIndexerPara
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def fit(dataset: DataFrame, paramMap: ParamMap): VectorIndexerModel = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
-    val firstRow = dataset.select(map(inputCol)).take(1)
+  override def fit(dataset: DataFrame): VectorIndexerModel = {
+    transformSchema(dataset.schema, logging = true)
+    val firstRow = dataset.select($(inputCol)).take(1)
     require(firstRow.length == 1, s"VectorIndexer cannot be fit on an empty dataset.")
     val numFeatures = firstRow(0).getAs[Vector](0).size
-    val vectorDataset = dataset.select(map(inputCol)).map { case Row(v: Vector) => v }
-    val maxCats = map(maxCategories)
+    val vectorDataset = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
+    val maxCats = $(maxCategories)
     val categoryStats: VectorIndexer.CategoryStats = vectorDataset.mapPartitions { iter =>
       val localCatStats = new VectorIndexer.CategoryStats(numFeatures, maxCats)
       iter.foreach(localCatStats.addVector)
       Iterator(localCatStats)
     }.reduce((stats1, stats2) => stats1.merge(stats2))
-    val model = new VectorIndexerModel(this, map, numFeatures, categoryStats.getCategoryMaps)
-    Params.inheritValues(map, this, model)
-    model
+    copyValues(new VectorIndexerModel(this, numFeatures, categoryStats.getCategoryMaps))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType): StructType = {
     // We do not transfer feature metadata since we do not know what types of features we will
     // produce in transform().
-    val map = extractParamMap(paramMap)
     val dataType = new VectorUDT
-    require(map.contains(inputCol), s"VectorIndexer requires input column parameter: $inputCol")
-    require(map.contains(outputCol), s"VectorIndexer requires output column parameter: $outputCol")
-    SchemaUtils.checkColumnType(schema, map(inputCol), dataType)
-    SchemaUtils.appendColumn(schema, map(outputCol), dataType)
+    require(isDefined(inputCol), s"VectorIndexer requires input column parameter: $inputCol")
+    require(isDefined(outputCol), s"VectorIndexer requires output column parameter: $outputCol")
+    SchemaUtils.checkColumnType(schema, $(inputCol), dataType)
+    SchemaUtils.appendColumn(schema, $(outputCol), dataType)
   }
 }
 
@@ -243,7 +237,6 @@ private object VectorIndexer {
 @AlphaComponent
 class VectorIndexerModel private[ml] (
     override val parent: VectorIndexer,
-    override val fittingParamMap: ParamMap,
     val numFeatures: Int,
     val categoryMaps: Map[Int, Map[Double, Int]])
   extends Model[VectorIndexerModel] with VectorIndexerParams {
@@ -326,35 +319,33 @@ class VectorIndexerModel private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
-    val newField = prepOutputField(dataset.schema, map)
-    val newCol = callUDF(transformFunc, new VectorUDT, dataset(map(inputCol)))
-    dataset.withColumn(map(outputCol), newCol.as(map(outputCol), newField.metadata))
+  override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+    val newField = prepOutputField(dataset.schema)
+    val newCol = callUDF(transformFunc, new VectorUDT, dataset($(inputCol)))
+    dataset.withColumn($(outputCol), newCol.as($(outputCol), newField.metadata))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
+  override def transformSchema(schema: StructType): StructType = {
     val dataType = new VectorUDT
-    require(map.contains(inputCol),
+    require(isDefined(inputCol),
       s"VectorIndexerModel requires input column parameter: $inputCol")
-    require(map.contains(outputCol),
+    require(isDefined(outputCol),
       s"VectorIndexerModel requires output column parameter: $outputCol")
-    SchemaUtils.checkColumnType(schema, map(inputCol), dataType)
+    SchemaUtils.checkColumnType(schema, $(inputCol), dataType)
 
     // If the input metadata specifies numFeatures, compare with expected numFeatures.
-    val origAttrGroup = AttributeGroup.fromStructField(schema(map(inputCol)))
+    val origAttrGroup = AttributeGroup.fromStructField(schema($(inputCol)))
     val origNumFeatures: Option[Int] = if (origAttrGroup.attributes.nonEmpty) {
       Some(origAttrGroup.attributes.get.length)
     } else {
       origAttrGroup.numAttributes
     }
     require(origNumFeatures.forall(_ == numFeatures), "VectorIndexerModel expected" +
-      s" $numFeatures features, but input column ${map(inputCol)} had metadata specifying" +
+      s" $numFeatures features, but input column ${$(inputCol)} had metadata specifying" +
       s" ${origAttrGroup.numAttributes.get} features.")
 
-    val newField = prepOutputField(schema, map)
+    val newField = prepOutputField(schema)
     val outputFields = schema.fields :+ newField
     StructType(outputFields)
   }
@@ -362,11 +353,10 @@ class VectorIndexerModel private[ml] (
   /**
    * Prepare the output column field, including per-feature metadata.
    * @param schema  Input schema
-   * @param map  Parameter map (with this class' embedded parameter map folded in)
    * @return  Output column field.  This field does not contain non-ML metadata.
    */
-  private def prepOutputField(schema: StructType, map: ParamMap): StructField = {
-    val origAttrGroup = AttributeGroup.fromStructField(schema(map(inputCol)))
+  private def prepOutputField(schema: StructType): StructField = {
+    val origAttrGroup = AttributeGroup.fromStructField(schema($(inputCol)))
     val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
       // Convert original attributes to modified attributes
       val origAttrs: Array[Attribute] = origAttrGroup.attributes.get
@@ -389,7 +379,7 @@ class VectorIndexerModel private[ml] (
     } else {
       partialFeatureAttributes
     }
-    val newAttributeGroup = new AttributeGroup(map(outputCol), featureAttributes)
+    val newAttributeGroup = new AttributeGroup($(outputCol), featureAttributes)
     newAttributeGroup.toStructField()
   }
 }

@@ -36,6 +36,7 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.server.TransportRequestHandler;
 import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -82,13 +83,21 @@ public class TransportContext {
   }
 
   /** Create a server which will attempt to bind to a specific port. */
-  public TransportServer createServer(int port) {
-    return new TransportServer(this, port);
+  public TransportServer createServer(int port, List<TransportServerBootstrap> bootstraps) {
+    return new TransportServer(this, port, rpcHandler, bootstraps);
   }
 
   /** Creates a new server, binding to any available ephemeral port. */
+  public TransportServer createServer(List<TransportServerBootstrap> bootstraps) {
+    return createServer(0, bootstraps);
+  }
+
   public TransportServer createServer() {
-    return new TransportServer(this, 0);
+    return createServer(0, Lists.<TransportServerBootstrap>newArrayList());
+  }
+
+  public TransportChannelHandler initializePipeline(SocketChannel channel) {
+    return initializePipeline(channel, rpcHandler);
   }
 
   /**
@@ -96,13 +105,18 @@ public class TransportContext {
    * has a {@link org.apache.spark.network.server.TransportChannelHandler} to handle request or
    * response messages.
    *
+   * @param channel The channel to initialize.
+   * @param channelRpcHandler The RPC handler to use for the channel.
+   *
    * @return Returns the created TransportChannelHandler, which includes a TransportClient that can
    * be used to communicate on this channel. The TransportClient is directly associated with a
    * ChannelHandler to ensure all users of the same channel get the same TransportClient object.
    */
-  public TransportChannelHandler initializePipeline(SocketChannel channel) {
+  public TransportChannelHandler initializePipeline(
+      SocketChannel channel,
+      RpcHandler channelRpcHandler) {
     try {
-      TransportChannelHandler channelHandler = createChannelHandler(channel);
+      TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
       channel.pipeline()
         .addLast("encoder", encoder)
         .addLast("frameDecoder", NettyUtils.createFrameDecoder())
@@ -123,7 +137,7 @@ public class TransportContext {
    * ResponseMessages. The channel is expected to have been successfully created, though certain
    * properties (such as the remoteAddress()) may not be available yet.
    */
-  private TransportChannelHandler createChannelHandler(Channel channel) {
+  private TransportChannelHandler createChannelHandler(Channel channel, RpcHandler rpcHandler) {
     TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
     TransportClient client = new TransportClient(channel, responseHandler);
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,

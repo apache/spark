@@ -139,7 +139,6 @@ DataFrames provide a domain-specific language for structured data manipulation i
 
 Here we include some basic examples of structured data processing using DataFrames:
 
-
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
@@ -242,6 +241,12 @@ df.groupBy("age").count().show();
 </div>
 
 <div data-lang="python"  markdown="1">
+In Python it's possible to access a DataFrame's columns either by attribute
+(`df.age`) or by indexing (`df['age']`). While the former is convenient for
+interactive data exploration, users are highly encouraged to use the
+latter form, which is future proof and won't break with column names that
+are also attributes on the DataFrame class.
+
 {% highlight python %}
 from pyspark.sql import SQLContext
 sqlContext = SQLContext(sc)
@@ -270,14 +275,14 @@ df.select("name").show()
 ## Justin
 
 # Select everybody, but increment the age by 1
-df.select(df.name, df.age + 1).show()
+df.select(df['name'], df['age'] + 1).show()
 ## name    (age + 1)
 ## Michael null
 ## Andy    31
 ## Justin  20
 
 # Select people older than 21
-df.filter(df.age > 21).show()
+df.filter(df['age'] > 21).show()
 ## age name
 ## 30  Andy
 
@@ -465,7 +470,7 @@ parts = lines.map(lambda l: l.split(","))
 people = parts.map(lambda p: Row(name=p[0], age=int(p[1])))
 
 # Infer the schema, and register the DataFrame as a table.
-schemaPeople = sqlContext.inferSchema(people)
+schemaPeople = sqlContext.createDataFrame(people)
 schemaPeople.registerTempTable("people")
 
 # SQL can be run over DataFrames that have been registered as a table.
@@ -1589,6 +1594,64 @@ options.
 
 # Migration Guide
 
+## Upgrading from Spark SQL 1.3 to 1.4
+
+Based on user feedback, we changed the default behavior of `DataFrame.groupBy().agg()` to retain the grouping columns in the resulting `DataFrame`. To keep the behavior in 1.3, set `spark.sql.retainGroupColumns` to `false`.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+
+// In 1.3.x, in order for the grouping column "department" to show up,
+// it must be included explicitly as part of the agg function call.
+df.groupBy("department").agg($"department", max("age"), sum("expense"))
+
+// In 1.4+, grouping column "department" is included automatically.
+df.groupBy("department").agg(max("age"), sum("expense"))
+
+// Revert to 1.3 behavior (not retaining grouping column) by:
+sqlContext.setConf("spark.sql.retainGroupColumns", "false")
+
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+
+// In 1.3.x, in order for the grouping column "department" to show up,
+// it must be included explicitly as part of the agg function call.
+df.groupBy("department").agg(col("department"), max("age"), sum("expense"));
+
+// In 1.4+, grouping column "department" is included automatically.
+df.groupBy("department").agg(max("age"), sum("expense"));
+
+// Revert to 1.3 behavior (not retaining grouping column) by:
+sqlContext.setConf("spark.sql.retainGroupColumns", "false");
+
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+
+import pyspark.sql.functions as func
+
+# In 1.3.x, in order for the grouping column "department" to show up,
+# it must be included explicitly as part of the agg function call.
+df.groupBy("department").agg("department"), func.max("age"), func.sum("expense"))
+
+# In 1.4+, grouping column "department" is included automatically.
+df.groupBy("department").agg(func.max("age"), func.sum("expense"))
+
+# Revert to 1.3.x behavior (not retaining grouping column) by:
+sqlContext.setConf("spark.sql.retainGroupColumns", "false")
+
+{% endhighlight %}
+</div>
+
+</div>
+
+
 ## Upgrading from Spark SQL 1.0-1.2 to 1.3
 
 In Spark 1.3 we removed the "Alpha" label from Spark SQL and as part of this did a cleanup of the
@@ -1646,7 +1709,7 @@ moved into the udf object in `SQLContext`.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% highlight java %}
+{% highlight scala %}
 
 sqlContext.udf.register("strLen", (s: String) => s.length())
 

@@ -26,14 +26,16 @@ import scala.xml.{Elem, Node, Unparsed}
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
 import org.apache.spark.ui.jobs.UIData._
+import org.apache.spark.ui.scope.RDDOperationGraph
 import org.apache.spark.util.{Utils, Distribution}
-import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
-  private val listener = parent.listener
+  private val progressListener = parent.progressListener
+  private val operationGraphListener = parent.operationGraphListener
 
   private val TIMELINE_LEGEND = {
     <div class="legend-area">
@@ -68,40 +70,55 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     </div>
   }
 
+  // TODO: We should consider increasing the number of this parameter over time if we find that it's okey.
+  private val MAX_TIMELINE_TASKS = parent.conf.getInt("spark.ui.timeline.tasks.maximum", 1000)
+
   def render(request: HttpServletRequest): Seq[Node] = {
-    listener.synchronized {
+    progressListener.synchronized {
       val parameterId = request.getParameter("id")
       require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
       val parameterAttempt = request.getParameter("attempt")
       require(parameterAttempt != null && parameterAttempt.nonEmpty, "Missing attempt parameter")
 
+      // If this is set, expand the dag visualization by default
+      val expandDagVizParam = request.getParameter("expandDagViz")
+      val expandDagViz = expandDagVizParam != null && expandDagVizParam.toBoolean
+
       val stageId = parameterId.toInt
       val stageAttemptId = parameterAttempt.toInt
-      val stageDataOption = listener.stageIdToData.get((stageId, stageAttemptId))
+      val stageDataOption = progressListener.stageIdToData.get((stageId, stageAttemptId))
 
-      if (stageDataOption.isEmpty || stageDataOption.get.taskData.isEmpty) {
+      val stageHeader = s"Details for Stage $stageId (Attempt $stageAttemptId)"
+      if (stageDataOption.isEmpty) {
+        val content =
+          <div id="no-info">
+            <p>No information to display for Stage {stageId} (Attempt {stageAttemptId})</p>
+          </div>
+        return UIUtils.headerSparkPage(stageHeader, content, parent)
+
+      }
+      if (stageDataOption.get.taskData.isEmpty) {
         val content =
           <div>
             <h4>Summary Metrics</h4> No tasks have started yet
             <h4>Tasks</h4> No tasks have started yet
           </div>
-        return UIUtils.headerSparkPage(
-          s"Details for Stage $stageId (Attempt $stageAttemptId)", content, parent)
+        return UIUtils.headerSparkPage(stageHeader, content, parent)
       }
 
       val stageData = stageDataOption.get
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
 
       val numCompleted = tasks.count(_.taskInfo.finished)
-      val accumulables = listener.stageIdToData((stageId, stageAttemptId)).accumulables
+      val accumulables = progressListener.stageIdToData((stageId, stageAttemptId)).accumulables
       val hasAccumulators = accumulables.size > 0
 
       val summary =
         <div>
           <ul class="unstyled">
             <li>
-              <strong>Total task time across all tasks: </strong>
+              <strong>Total Time Across All Tasks: </strong>
               {UIUtils.formatDuration(stageData.executorRunTime)}
             </li>
             {if (stageData.hasInput) {
@@ -118,25 +135,25 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             }}
             {if (stageData.hasShuffleRead) {
               <li>
-                <strong>Shuffle read: </strong>
+                <strong>Shuffle Read: </strong>
                 {s"${Utils.bytesToString(stageData.shuffleReadTotalBytes)} / " +
                  s"${stageData.shuffleReadRecords}"}
               </li>
             }}
             {if (stageData.hasShuffleWrite) {
               <li>
-                <strong>Shuffle write: </strong>
+                <strong>Shuffle Write: </strong>
                  {s"${Utils.bytesToString(stageData.shuffleWriteBytes)} / " +
                  s"${stageData.shuffleWriteRecords}"}
               </li>
             }}
             {if (stageData.hasBytesSpilled) {
               <li>
-                <strong>Shuffle spill (memory): </strong>
+                <strong>Shuffle Spill (Memory): </strong>
                 {Utils.bytesToString(stageData.memoryBytesSpilled)}
               </li>
               <li>
-                <strong>Shuffle spill (disk): </strong>
+                <strong>Shuffle Spill (Disk): </strong>
                 {Utils.bytesToString(stageData.diskBytesSpilled)}
               </li>
             }}
@@ -147,10 +164,10 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         <div>
           <span class="expand-additional-metrics">
             <span class="expand-additional-metrics-arrow arrow-closed"></span>
-            <strong>Show additional metrics</strong>
+            <a>Show Additional Metrics</a>
           </span>
           <div class="additional-metrics collapsed">
-            <ul style="list-style-type:none">
+            <ul>
               <li>
                   <input type="checkbox" id="select-all-metrics"/>
                   <span class="additional-metric-title"><em>(De)select All</em></span>
@@ -202,6 +219,16 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             </ul>
           </div>
         </div>
+
+      val dagViz = UIUtils.showDagVizForStage(
+        stageId, operationGraphListener.getOperationGraphForStage(stageId))
+
+      val maybeExpandDagViz: Seq[Node] =
+        if (expandDagViz) {
+          UIUtils.expandDagVizOnLoad(forJob = false)
+        } else {
+          Seq.empty
+        }
 
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
       def accumulableRow(acc: AccumulableInfo): Elem =
@@ -469,6 +496,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val content =
         summary ++
+        dagViz ++
+        maybeExpandDagViz ++
         showAdditionalMetrics ++
         makeTimeline(stageData.taskData.values.toSeq, currentTime) ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
@@ -476,7 +505,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         maybeAccumulableTable ++
         <h4>Tasks</h4> ++ taskTable
-      UIUtils.headerSparkPage("Details for Stage %d".format(stageId), content, parent)
+      UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
     }
   }
 
@@ -489,7 +518,19 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     val executorsArrayStr = tasks.filter { taskUIData =>
       val taskInfo = taskUIData.taskInfo
       taskInfo.successful || taskInfo.running || taskInfo.failed
-    }.map { taskUIData =>
+    }.sortWith { (uiDataL, uiDataR) =>
+      val taskInfoL = uiDataL.taskInfo
+      val launchTimeL = taskInfoL.launchTime
+      val finishTimeL = if (!taskInfoL.running) taskInfoL.finishTime else currentTime
+      val totalExecutionTimeL = finishTimeL - launchTimeL
+
+      val taskInfoR = uiDataR.taskInfo
+      val launchTimeR = taskInfoR.launchTime
+      val finishTimeR = if (!taskInfoR.running) taskInfoR.finishTime else currentTime
+      val totalExecutionTimeR = finishTimeR - launchTimeR
+
+      totalExecutionTimeL > totalExecutionTimeR
+    }.take(MAX_TIMELINE_TASKS).map { taskUIData =>
       val taskInfo = taskUIData.taskInfo
       val executorId = taskInfo.executorId
       val host = taskInfo.host
@@ -643,14 +684,14 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
     <span class="expand-task-assignment-timeline">
       <span class="expand-task-assignment-timeline-arrow arrow-closed"></span>
-      <strong>Event Timeline</strong>
+      <a>Event Timeline(Longest {numEffectiveTasks.min(MAX_TIMELINE_TASKS)} tasks)</a>
     </span> ++
     <div id="task-assignment-timeline" class="collapsed">
       <div class="timeline-header">
         <div class="control-panel">
           <div id="task-assignment-timeline-zoom-lock">
-            <input type="checkbox" checked="checked"></input>
-            <span>Zoom Lock</span>
+            <input type="checkbox"></input>
+            <span>Enable zooming</span>
           </div>
         </div>
         {TIMELINE_LEGEND}
