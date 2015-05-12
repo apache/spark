@@ -209,21 +209,25 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("detect non zero or one values in Bernoulli") {
-    val bad = Seq(
+    val badTrain = Seq(
       LabeledPoint(1.0, Vectors.dense(1.0)),
       LabeledPoint(0.0, Vectors.dense(2.0)),
       LabeledPoint(1.0, Vectors.dense(1.0)),
       LabeledPoint(1.0, Vectors.dense(0.0)))
 
     intercept[SparkException] {
-      NaiveBayes.train(sc.makeRDD(bad, 2), 1.0, "Bernoulli")
+      NaiveBayes.train(sc.makeRDD(badTrain, 2), 1.0, "Bernoulli")
     }
 
     val okTrain = Seq(
       LabeledPoint(1.0, Vectors.dense(1.0)),
       LabeledPoint(0.0, Vectors.dense(0.0)),
       LabeledPoint(1.0, Vectors.dense(1.0)),
-      LabeledPoint(1.0, Vectors.dense(0.0)))
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0))
+    )
 
     val badPredict = Seq(
       Vectors.dense(1.0),

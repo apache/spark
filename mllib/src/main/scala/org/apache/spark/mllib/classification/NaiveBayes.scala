@@ -92,8 +92,10 @@ class NaiveBayesModel private[mllib] (
       case "Multinomial" =>
         labels (brzArgmax (brzPi + brzTheta * brzData) )
       case "Bernoulli" =>
-        brzData.foreach(v => if (!(v == 0.0 || v == 1.0))
-          throw new SparkException(s"Bernoulli Naive Bayes requires 0 or 1 feature values but found $v."))
+        if (!brzData.forall(v => v == 0.0 || v == 1.0)) {
+          throw new SparkException(
+            s"Bernoulli Naive Bayes requires 0 or 1 feature values but found $testData.")
+        }
         labels (brzArgmax (brzPi +
           (brzTheta - brzNegTheta.get) * brzData + brzNegThetaSum.get))
       case _ =>
@@ -294,8 +296,19 @@ class NaiveBayes private (
       if (!values.forall(_ >= 0.0)) {
         throw new SparkException(s"Naive Bayes requires nonnegative feature values but found $v.")
       }
-      if (modelType == "Bernoulli" && (!values.forall(v => v == 0.0 || v == 1.0) )) {
-        throw new SparkException(s"Bernoulli Naive Bayes requires 0 or 1 feature values but found $v.")
+    }
+
+    val requireZeroOneBernoulliValues: Vector => Unit = (v: Vector) => {
+      if (modelType == "Bernoulli") {
+        val values = v match {
+          case SparseVector(size, indices, values) =>
+            values
+          case DenseVector(values) =>
+            values
+        }
+        if (!values.forall(v => v == 0.0 || v == 1.0)) {
+          throw new SparkException(s"Bernoulli Naive Bayes requires 0 or 1 feature values but found $v.")
+        }
       }
     }
 
@@ -305,6 +318,7 @@ class NaiveBayes private (
     val aggregated = data.map(p => (p.label, p.features)).combineByKey[(Long, BDV[Double])](
       createCombiner = (v: Vector) => {
         requireNonnegativeValues(v)
+        requireZeroOneBernoulliValues(v)
         (1L, v.toBreeze.toDenseVector)
       },
       mergeValue = (c: (Long, BDV[Double]), v: Vector) => {
