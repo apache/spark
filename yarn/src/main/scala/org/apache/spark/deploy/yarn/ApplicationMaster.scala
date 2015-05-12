@@ -585,6 +585,7 @@ object ApplicationMaster extends Logging {
     }
     master.sparkContextStopped(sc)
   }
+
 }
 
 /**
