@@ -631,28 +631,27 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                 '<br>Shuffle Write Time: ${UIUtils.formatDuration(shuffleWriteTime)}' +
                 '<br>Result Serialization Time: ${UIUtils.formatDuration(serializationTime)}' +
                 '<br>Getting Result Time: ${UIUtils.formatDuration(gettingResultTime)}">' +
-           |    '${taskIdWithIndexAndAttempt}</div>' +
            |    '<svg class="task-assignment-timeline-duration-bar">' +
            |    '<rect class="scheduler-delay-proportion" ' +
-           |      'x="${schedulerDelayProportionPos}%" y="0" height="100%"' +
+           |      'x="${schedulerDelayProportionPos}%" y="0" height="24px"' +
            |      'width="${schedulerDelayProportion}%""></rect>' +
            |    '<rect class="deserialization-time-proportion" '+
-           |      'x="${deserializationTimeProportionPos}%" y="0" height="100%"' +
+           |      'x="${deserializationTimeProportionPos}%" y="0" height="24px"' +
            |      'width="${deserializationTimeProportion}%"></rect>' +
            |    '<rect class="shuffle-read-time-proportion" ' +
-           |      'x="${shuffleReadTimeProportionPos}%" y="0" height="100%"' +
+           |      'x="${shuffleReadTimeProportionPos}%" y="0" height="24px"' +
            |      'width="${shuffleReadTimeProportion}%"></rect>' +
            |    '<rect class="executor-runtime-proportion" ' +
-           |      'x="${executorRuntimeProportionPos}%" y="0" height="100%"' +
+           |      'x="${executorRuntimeProportionPos}%" y="0" height="24px"' +
            |      'width="${executorComputingTimeProportion}%"></rect>' +
            |    '<rect class="shuffle-write-time-proportion" ' +
-           |      'x="${shuffleWriteTimeProportionPos}%" y="0" height="100%"' +
+           |      'x="${shuffleWriteTimeProportionPos}%" y="0" height="24px"' +
            |      'width="${shuffleWriteTimeProportion}%"></rect>' +
            |    '<rect class="serialization-time-proportion" ' +
-           |      'x="${serializationTimeProportionPos}%" y="0" height="100%"' +
+           |      'x="${serializationTimeProportionPos}%" y="0" height="24px"' +
            |      'width="${serializationTimeProportion}%"></rect>' +
            |    '<rect class="getting-result-time-proportion" ' +
-           |      'x="${gettingResultTimeProportionPos}%" y="0" height="100%"' +
+           |      'x="${gettingResultTimeProportionPos}%" y="0" height="24px"' +
            |      'width="${gettingResultTimeProportion}%"></rect></svg>',
            |  'start': new Date(${launchTime}),
            |  'end': new Date(${finishTime})
