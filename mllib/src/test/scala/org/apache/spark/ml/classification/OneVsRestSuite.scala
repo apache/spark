@@ -57,7 +57,7 @@ class OneVsRestSuite extends FunSuite with MLlibTestSparkContext {
   test("one-vs-rest: default params") {
     val numClasses = 3
     val ova = new OneVsRest()
-      .setClassifier(new LogisticRegression)
+    ova.setClassifier(new LogisticRegression)
     assert(ova.getLabelCol === "label")
     assert(ova.getPredictionCol === "prediction")
     val ovaModel = ova.fit(dataset)
@@ -97,9 +97,7 @@ class OneVsRestSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-private class MockLogisticRegression(uid: String) extends LogisticRegression(uid) {
-
-  def this() = this("mockLogReg")
+private class MockLogisticRegression extends LogisticRegression {
 
   setMaxIter(1)
 
