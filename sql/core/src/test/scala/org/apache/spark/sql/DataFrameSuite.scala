@@ -460,11 +460,11 @@ class DataFrameSuite extends QueryTest {
 
   test("SPARK-7324 dropDuplicates") {
     val testData = TestSQLContext.sparkContext.parallelize(
-      (2, 1, 2) ::(1, 1, 1) ::
-        (1, 2, 1) ::(2, 1, 2) ::
-        (2, 2, 2) ::(2, 2, 1) ::
-        (2, 1, 1) ::(1, 1, 2) ::
-        (1, 2, 2) ::(1, 2, 1) :: Nil).toDF("key", "value1", "value2")
+      (2, 1, 2) :: (1, 1, 1) ::
+      (1, 2, 1) :: (2, 1, 2) ::
+      (2, 2, 2) :: (2, 2, 1) ::
+      (2, 1, 1) :: (1, 1, 2) ::
+      (1, 2, 2) :: (1, 2, 1) :: Nil).toDF("key", "value1", "value2")
 
     checkAnswer(
       testData.dropDuplicates(),
