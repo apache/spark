@@ -74,6 +74,14 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>5000</td>
   <td>
     The interval in ms in which the Spark application master heartbeats into the YARN ResourceManager.
+    To avoid the application master to be expired by late reporting, if a higher value is provided, the interval will be set to the half of the expiry interval in YARN's configuration <code>(yarn.am.liveness-monitor.expiry-interval-ms / 2)</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.scheduler.allocation.interval-ms</code></td>
+  <td>200</td>
+  <td>
+    The interval in ms in which the Spark application master eagerly heartbeats to the YARN ResourceManager on pending container allocations. It should be no larger than <code>spark.yarn.scheduler.heartbeat.interval-ms</code>. The allocation interval will double on successive eager heartbeats if pending containers still exist, until <code>spark.yarn.scheduler.heartbeat.interval-ms</code> reached.
   </td>
 </tr>
 <tr>
@@ -218,15 +226,6 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   In YARN cluster mode, controls whether the client waits to exit until the application completes.
   If set to true, the client process will stay alive reporting the application's status.
   Otherwise, the client process will exit after submission.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.yarn.executor.nodeLabelExpression</code></td>
-  <td>(none)</td>
-  <td>
-  A YARN node label expression that restricts the set of nodes executors will be scheduled on.
-  Only versions of YARN greater than or equal to 2.6 support node label expressions, so when
-  running against earlier versions, this property will be ignored.
   </td>
 </tr>
 </table>
