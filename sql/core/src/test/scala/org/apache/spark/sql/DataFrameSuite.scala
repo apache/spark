@@ -493,4 +493,16 @@ class DataFrameSuite extends QueryTest {
       testData.dropDuplicates(Seq("value2")),
       Seq(Row(2, 1, 2), Row(1, 1, 1)))
   }
+
+  test("SPARK-7276: Project collapse for continuous select") {
+    var df = testData
+    for (i <- 1 to 5) {
+      df = df.select($"*")
+    }
+
+    import org.apache.spark.sql.catalyst.plans.logical.Project
+    // make sure df have at most two Projects
+    val p = df.logicalPlan.asInstanceOf[Project].child.asInstanceOf[Project]
+    assert(!p.child.isInstanceOf[Project])
+  }
 }
