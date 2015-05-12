@@ -986,7 +986,7 @@ class DataFrame(object):
 
     @ignore_unicode_prefix
     def withColumnRenamed(self, existing, new):
-        """REturns a new :class:`DataFrame` by renaming an existing column.
+        """Returns a new :class:`DataFrame` by renaming an existing column.
 
         :param existing: string, name of the existing column to rename.
         :param col: string, new name of the column.
@@ -998,6 +998,18 @@ class DataFrame(object):
                 if c == existing else c
                 for c in self.columns]
         return self.select(*cols)
+
+    @ignore_unicode_prefix
+    def drop(self, colName):
+        """Returns a new :class:`DataFrame` that drops the specified column.
+
+        :param colName: string, name of the column to drop.
+
+        >>> df.drop('age').collect()
+        [Row(name=u'Alice'), Row(name=u'Bob')]
+        """
+        jdf = self._jdf.drop(colName)
+        return DataFrame(jdf, self.sql_ctx)
 
     def toPandas(self):
         """Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
