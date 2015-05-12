@@ -640,7 +640,7 @@ object StreamingContext extends Logging {
 
   /**
    * Lock that guards activation of a StreamingContext as well as access to the singleton active
-   * StreamingContext in getOrCreate().
+   * StreamingContext in getActiveOrCreate().
    */
   private val ACTIVATION_LOCK = new Object()
 
@@ -664,7 +664,7 @@ object StreamingContext extends Logging {
   }
 
   /**
-   * Get the context that is currently active, that is, started but not stopped.
+   * Get the currently active context, if there is one. Active means started but not stopped.
    */
   @Experimental
   def getActive(): Option[StreamingContext] = {

@@ -492,7 +492,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     }
   }
 
-  test("getActiveOrCreate and getActiveContext") {
+  test("getActive and getActiveOrCreate") {
     require(StreamingContext.getActive().isEmpty, "context exists from before")
     sc = new SparkContext(conf)
 
@@ -501,7 +501,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     def creatingFunc(): StreamingContext = {
       newContextCreated = true
       val newSsc = new StreamingContext(sc, batchDuration)
-      val input = addInputStream(ssc)
+      val input = addInputStream(newSsc)
       input.foreachRDD { rdd => rdd.count }
       newSsc
     }
@@ -518,7 +518,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
       }
     }
 
-    // getOrCreate should create new context and getActiveContext should return it only
+    // getOrCreate should create new context and getActive should return it only
     // after starting the context
     testGetActiveOrCreate {
       ssc = StreamingContext.getActiveOrCreate(creatingFunc _)
@@ -526,7 +526,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
       assert(StreamingContext.getActive().isEmpty,
         "new initialized context returned before starting")
       ssc.start()
-      assert(StreamingContext.getActive().nonEmpty,
+      assert(StreamingContext.getActive() === Some(ssc),
         "active context not returned")
       assert(StreamingContext.getActiveOrCreate(creatingFunc _) === ssc,
         "active context not returned")
@@ -540,13 +540,16 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     // getOrCreate and getActive should return independently created context after activating
     testGetActiveOrCreate {
       ssc = creatingFunc()  // Create
-      assert(ssc.getState() === StreamingContextState.INITIALIZED)
       assert(StreamingContext.getActive().isEmpty,
         "new initialized context returned before starting")
       ssc.start()
-      assert(StreamingContext.getActive().nonEmpty,
+      assert(StreamingContext.getActive() === Some(ssc),
+        "active context not returned")
+      assert(StreamingContext.getActiveOrCreate(creatingFunc _) === ssc,
         "active context not returned")
       ssc.stop()
+      assert(StreamingContext.getActive().isEmpty,
+        "inactive context returned")
     }
   }
 
