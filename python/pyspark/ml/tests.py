@@ -74,7 +74,8 @@ class MockEstimator(Estimator, HasFake):
         return model
 
 
-class MockModel(MockTransformer, Model, HasFake): pass
+class MockModel(MockTransformer, Model, HasFake):
+    pass
 
 
 class PipelineTests(PySparkTestCase):

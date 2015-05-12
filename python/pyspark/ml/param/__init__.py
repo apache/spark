@@ -242,6 +242,6 @@ class Params(Identifiable):
         """
         paramMap = self.extractParamMap(extra)
         for p in self.params:
-            if paramMap.has_key(p) and to.hasParam(p.name):
+            if p in paramMap and to.hasParam(p.name):
                 to._set((p.name, paramMap[p]))
         return to

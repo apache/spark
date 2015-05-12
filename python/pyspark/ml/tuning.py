@@ -241,8 +241,7 @@ class CrossValidator(Estimator):
         newCV = Params.copy(self, extra)
         if self.isSet(self.estimator):
             newCV.setEstimator(self.getEstimator().copy(extra))
-        if self.isSet(self.estimatorParamMaps):
-            newCV.setEstimatorParamMaps(self.getEstimatorParamMaps().MAGIC_COPY_TO_BE_IMPLEMENTED(extra)) # TODO
+        # estimatorParamMaps remain the same
         if self.isSet(self.evaluator):
             newCV.setEvaluator(self.getEvaluator().copy(extra))
         return newCV
