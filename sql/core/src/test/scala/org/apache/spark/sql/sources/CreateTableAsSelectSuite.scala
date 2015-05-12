@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.sources
 
-import java.io.{IOException, File}
+import java.io.{File, IOException}
 
-import org.apache.spark.sql.{SQLContext, AnalysisException}
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.util.Utils
 
 class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
 
-  import caseInsensisitiveContext._
+  import caseInsensitiveContext._
 
   var path: File = null
 

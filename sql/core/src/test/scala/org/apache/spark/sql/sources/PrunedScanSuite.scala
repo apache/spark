@@ -52,7 +52,7 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLCo
 }
 
 class PrunedScanSuite extends DataSourceTest {
-  import caseInsensisitiveContext._
+  import caseInsensitiveContext._
 
   before {
     sql(
