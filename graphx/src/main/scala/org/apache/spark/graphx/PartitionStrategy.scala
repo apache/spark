@@ -77,11 +77,11 @@ object PartitionStrategy {
       val sqrtNumParts = math.sqrt(numParts)
       val rows = math.round(sqrtNumParts).toInt
       val cols = math.ceil(sqrtNumParts).toInt
-      val lastColRows = numParts - rows * (cols - 1) //gives a number in range [1,rows]
+      val lastColRows = numParts - rows * (cols - 1)
       val mixingPrime: VertexId = 1125899906842597L
       val col = (math.abs(src * mixingPrime) % numParts % rows).toInt
       val row = (math.abs(dst * mixingPrime) % (if (col < cols - 1) rows else lastColRows)).toInt
-      col * rows + row // guaranteed in [0, numParts) so no need for extra mod
+      col * rows + row
     }
   }
 
