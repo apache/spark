@@ -15,21 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.reduction;
+package org.apache.spark.ml.classification;
 
 import java.io.Serializable;
 import java.util.List;
+
+import static scala.collection.JavaConversions.seqAsJavaList;
 
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import static scala.collection.JavaConversions.seqAsJavaList;
-
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.classification.LogisticRegression;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateMultinomialLogisticInput;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.DataFrame;
@@ -48,10 +47,8 @@ public class JavaOneVsRestSuite implements Serializable {
         jsql = new SQLContext(jsc);
         int nPoints = 3;
 
-        /**
-         * The following weights and xMean/xVariance are computed from iris dataset with lambda = 0.2.
-         * As a result, we are actually drawing samples from probability distribution of built model.
-         */
+        // The following weights and xMean/xVariance are computed from iris dataset with lambda=0.2.
+        // As a result, we are drawing samples from probability distribution of an actual model.
         double[] weights = {
                 -0.57997, 0.912083, -0.371077, -0.819866, 2.688191,
                 -0.16624, -0.84355, -0.048509, -0.301789, 4.170682 };
