@@ -429,7 +429,7 @@ function addTooltipsForRDDs(svgContainer) {
     if (tooltipText) {
       node.select("circle")
         .attr("data-toggle", "tooltip")
-        .attr("data-placement", "right")
+        .attr("data-placement", "bottom")
         .attr("title", tooltipText)
     }
   });
