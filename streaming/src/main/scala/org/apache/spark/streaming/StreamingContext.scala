@@ -531,16 +531,15 @@ class StreamingContext private[streaming] (
   def start(): Unit = synchronized {
     state match {
       case INITIALIZED =>
-        import StreamingContext._
         validate()
         startSite.set(DStream.getCreationSite())
         sparkContext.setCallSite(startSite.get)
-        ACTIVATION_LOCK.synchronized {
-          assertNoOtherContextIsActive()
+        StreamingContext.ACTIVATION_LOCK.synchronized {
+          StreamingContext.assertNoOtherContextIsActive()
           scheduler.start()
           uiTab.foreach(_.attach())
           state = StreamingContextState.ACTIVE
-          setActiveContext(this)
+          StreamingContext.setActiveContext(this)
         }
         logInfo("StreamingContext started")
       case ACTIVE =>
