@@ -516,7 +516,7 @@ class StreamingContext private[streaming] (
    * Return the current state of the context. The context can be in three possible states -
    * - StreamingContextState.INTIALIZED - The context has been created, but not been started yet.
    *   Input DStreams, transformations and output operations can be created on the context.
-   * - StreamingContextState.STARTED - The context has been started, and been not stopped.
+   * - StreamingContextState.ACTIVE - The context has been started, and been not stopped.
    *   Input DStreams, transformations and output operations cannot be created on the context.
    * - StreamingContextState.STOPPED - The context has been stopped and cannot be used any more.
    */
@@ -535,7 +535,7 @@ class StreamingContext private[streaming] (
     state match {
       case INITIALIZED =>
         // good to start
-      case STARTED =>
+      case ACTIVE =>
         throw new SparkException("StreamingContext has already been started")
       case STOPPED =>
         throw new SparkException("StreamingContext has already been stopped")
@@ -547,7 +547,7 @@ class StreamingContext private[streaming] (
       assertNoOtherContextIsActive()
       scheduler.start()
       uiTab.foreach(_.attach())
-      state = StreamingContextState.STARTED
+      state = StreamingContextState.ACTIVE
       setActiveContext(this)
     }
   }
@@ -615,7 +615,7 @@ class StreamingContext private[streaming] (
           logWarning("StreamingContext has not been started yet")
         case STOPPED =>
           logWarning("StreamingContext has already been stopped")
-        case STARTED =>
+        case ACTIVE =>
           scheduler.stop(stopGracefully)
           uiTab.foreach(_.detach())
           StreamingContext.setActiveContext(null)

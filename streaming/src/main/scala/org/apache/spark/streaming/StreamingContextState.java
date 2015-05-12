@@ -36,7 +36,7 @@ public enum StreamingContextState {
    * The context has been started, and been not stopped.
    * Input DStreams, transformations and output operations cannot be created on the context.
    */
-  STARTED,
+  ACTIVE,
 
   /**
    * The context has been stopped and cannot be used any more.

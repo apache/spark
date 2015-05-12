@@ -112,7 +112,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
   test("state matching") {
     import StreamingContextState._
     assert(INITIALIZED === INITIALIZED)
-    assert(INITIALIZED != STARTED)
+    assert(INITIALIZED != ACTIVE)
   }
 
   test("start and stop state check") {
@@ -121,7 +121,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
 
     assert(ssc.getState() === StreamingContextState.INITIALIZED)
     ssc.start()
-    assert(ssc.getState() === StreamingContextState.STARTED)
+    assert(ssc.getState() === StreamingContextState.ACTIVE)
     ssc.stop()
     assert(ssc.getState() === StreamingContextState.STOPPED)
 
@@ -135,11 +135,11 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
     ssc.start()
-    assert(ssc.getState() === StreamingContextState.STARTED)
+    assert(ssc.getState() === StreamingContextState.ACTIVE)
     intercept[SparkException] {
       ssc.start()
     }
-    assert(ssc.getState() === StreamingContextState.STARTED)
+    assert(ssc.getState() === StreamingContextState.ACTIVE)
   }
 
   test("stop multiple times") {

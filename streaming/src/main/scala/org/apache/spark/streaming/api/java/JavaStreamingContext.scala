@@ -588,7 +588,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    *   Input DStreams, transformations and output operations can be created on the context.
    *   </li>
    *   <li>
-   *   StreamingContextState.STARTED - The context has been started, and been not stopped.
+   *   StreamingContextState.ACTIVE - The context has been started, and been not stopped.
    *   Input DStreams, transformations and output operations cannot be created on the context.
    *   </li>
    *   <li>

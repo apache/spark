@@ -79,7 +79,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(stream);
     Assert.assertTrue(ssc.getState() == StreamingContextState.INITIALIZED);
     ssc.start();
-    Assert.assertTrue(ssc.getState() == StreamingContextState.STARTED);
+    Assert.assertTrue(ssc.getState() == StreamingContextState.ACTIVE);
     ssc.stop();
     Assert.assertTrue(ssc.getState() == StreamingContextState.STOPPED);
   }
