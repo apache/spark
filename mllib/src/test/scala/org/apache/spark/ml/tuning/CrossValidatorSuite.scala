@@ -52,6 +52,5 @@ class CrossValidatorSuite extends FunSuite with MLlibTestSparkContext {
     val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
-    assert(cvModel.avgMetrics.length == lrParamMaps.length)
   }
 }
