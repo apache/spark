@@ -664,6 +664,8 @@ object StreamingContext extends Logging {
   }
 
   /**
+   * :: Experimental ::
+   *
    * Get the currently active context, if there is one. Active means started but not stopped.
    */
   @Experimental
@@ -682,6 +684,8 @@ object StreamingContext extends Logging {
   }
 
   /**
+   * :: Experimental ::
+   *
    * Either return the "active" StreamingContext (that is, started but not stopped), or create a
    * new StreamingContext that is
    * @param creatingFunc   Function to create a new StreamingContext
@@ -694,6 +698,8 @@ object StreamingContext extends Logging {
   }
 
   /**
+   * :: Experimental ::
+   *
    * Either get the currently active StreamingContext (that is, started but not stopped),
    * OR recreate a StreamingContext from checkpoint data in the given path. If checkpoint data
    * does not exist in the provided, then create a new StreamingContext by calling the provided
