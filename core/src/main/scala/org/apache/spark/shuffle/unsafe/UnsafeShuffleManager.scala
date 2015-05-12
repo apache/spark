@@ -113,7 +113,14 @@ private[spark] object UnsafeShuffleManager extends Logging {
  *
  * For more details on UnsafeShuffleManager's design, see SPARK-7081.
  */
-private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManager {
+private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
+
+  if (!conf.getBoolean("spark.shuffle.spill", true)) {
+    logWarning(
+      "spark.shuffle.spill was set to false, but this is ignored by UnsafeShuffleManager; " +
+      "its optimized shuffles will continue to spill to disk when necessary.")
+  }
+
 
   private[this] val sortShuffleManager: SortShuffleManager = new SortShuffleManager(conf)
 
