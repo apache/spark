@@ -92,11 +92,10 @@ private[sql] class DefaultSource
 }
 
 @DeveloperApi
-private[sql] case class OrcRelation(
-                                     path: String,
-                                     parameters: Map[String, String],
-                                     maybeSchema: Option[StructType] = None)(
-                                     @transient val sqlContext: SQLContext)
+private[sql] case class OrcRelation(path: String,
+    parameters: Map[String, String],
+    maybeSchema: Option[StructType] = None,
+    maybePartitionSpec: Option[PartitionSpec] = None)(@transient val sqlContext: SQLContext)
   extends BaseRelation
   with CatalystScan
   with InsertableRelation
@@ -104,11 +103,16 @@ private[sql] case class OrcRelation(
   with Logging {
   self: Product =>
 
+  println(s"create orc relation: ${maybeSchema}")
   @transient val conf = sqlContext.sparkContext.hadoopConfiguration
-  override def schema: StructType =
-    maybeSchema.getOrElse(OrcFileOperator.readSchema(path, Some(conf)))
+
+
+  @transient var partitionInfo: OrcPartition = OrcPartition(this, parameters, Seq(path), maybeSchema, maybePartitionSpec)
+  partitionInfo.refresh()
+
+  override def schema: StructType = partitionInfo.schema
   /** Attributes */
-  val output: Seq[Attribute] = schema.toAttributes
+  var output: Seq[Attribute] = schema.toAttributes
 
   // Equals must also take into account the output attributes so that we can distinguish between
   // different instances of the same relation,
@@ -123,6 +127,7 @@ private[sql] case class OrcRelation(
   }
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     InsertIntoOrcTable(this, data, overwrite).execute()
+    partitionInfo.refresh()
   }
 }
 

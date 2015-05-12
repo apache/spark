@@ -23,20 +23,20 @@ import java.util._
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
-import org.apache.hadoop.hive.ql.io.orc.{OrcFile, CompressionKind, OrcInputFormat, OrcSerde, OrcOutputFormat}
+import org.apache.hadoop.hive.ql.io.orc._
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfoUtils, TypeInfo}
 import org.apache.spark.sql.DataFrame
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Writable
-import org.apache.hadoop.mapred.{Reporter, JobConf}
+import org.apache.hadoop.mapred.{InputSplit, Reporter, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskID}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, FileOutputCommitter}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.plans.logical.{UnaryNode => LogicalUnaryNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{LeafNode, UnaryNode, SparkPlan}
@@ -44,22 +44,21 @@ import org.apache.spark.sql.hive.orc._
 import org.apache.spark.sql.hive.{HiveShim, HiveMetastoreTypes}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.{Logging, TaskContext, SerializableWritable}
+import parquet.hadoop.ParquetInputSplit
 import scala.collection.JavaConversions._
 
 case class InsertIntoOrcTable(relation: OrcRelation,
-                              data: DataFrame,
-                              overwrite: Boolean = false)
+    data: DataFrame,
+    overwrite: Boolean = false)
   extends SparkHadoopMapReduceUtil with Logging {
 
   @transient val sqlContext = relation.sqlContext
-
-  def output = data.schema.toAttributes
 
   // Inserts all rows into the Orc file.
   def execute() = {
     val childRdd = data.rdd
     assert(childRdd != null)
-    val structType =  StructType.fromAttributes(relation.output)
+    val structType =  data.schema
     val orcSchema = HiveMetastoreTypes.toMetastoreType(structType)
 
     val rdd = childRdd.mapPartitions { iter =>
@@ -152,18 +151,19 @@ case class InsertIntoOrcTable(relation: OrcRelation,
 
 @DeveloperApi
 case class OrcTableScan(attributes: Seq[Attribute],
-                        relation: OrcRelation,
-                        predicates: Seq[Expression]) extends Logging{
+    relation: OrcRelation,
+    predicates: Seq[Expression]) extends Logging{
 
-  val output = attributes
   @transient val sqlContext = relation.sqlContext
+  @transient val partitionInfo: OrcPartition = relation.partitionInfo
 
   def addColumnIds(output: Seq[Attribute],
-                   relation: OrcRelation, conf: Configuration) {
+      relation: OrcRelation, conf: Configuration) {
+    println("requested columns: " + output)
     val ids =
       output.map(a =>
-        relation.output.indexWhere(_.name == a.name): Integer)
-        .filter(index => index >= 0)
+        partitionInfo.orcSchema.toAttributes.indexWhere(_.name == a.name): Integer)
+        .filter(_ >= 0)
     val names = attributes.map(_.name)
     val sorted = ids.zip(names).sorted
     HiveShim.appendReadColumns(conf, sorted.map(_._1), sorted.map(_._2))
@@ -193,13 +193,10 @@ case class OrcTableScan(attributes: Seq[Attribute],
 
   // Transform all given raw `Writable`s into `Row`s.
   def fillObject(conf: Configuration,
-                 iterator: scala.collection.Iterator[Writable],
+                 iterator: Iterator[org.apache.hadoop.io.Writable],
                  nonPartitionKeyAttrs: Seq[(Attribute, Int)],
                  mutableRow: MutableRow): Iterator[Row] = {
-    val schema =  StructType.fromAttributes(relation.output)
-    val orcSchema = HiveMetastoreTypes.toMetastoreType(schema)
     val deserializer = new OrcSerde
-    val typeInfo: TypeInfo = TypeInfoUtils.getTypeInfoFromTypeString(orcSchema)
     val soi = OrcFileOperator.getObjectInspector(relation.path, Some(conf))
     val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map {
       case (attr, ordinal) =>
@@ -221,18 +218,18 @@ case class OrcTableScan(attributes: Seq[Attribute],
         }
         i += 1
       }
-      logDebug("Mutable row: " + mutableRow)
       mutableRow: Row
     }
   }
 
-  def execute(): RDD[Row] = {
+
+  def execute1(): RDD[Row] = {
     val sc = sqlContext.sparkContext
     val job = new Job(sc.hadoopConfiguration)
     buildFilter(job)(predicates)
     val conf: Configuration = job.getConfiguration
     val fileList = OrcFileOperator.listOrcFiles(relation.path, conf)
-    addColumnIds(output, relation, conf)
+    addColumnIds(attributes, relation, conf)
     for (path <- fileList if !path.getName.startsWith("_")) {
       FileInputFormat.addInputPath(job, path)
     }
@@ -248,8 +245,66 @@ case class OrcTableScan(attributes: Seq[Attribute],
     val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
     val wrappedConf = new SerializableWritable(conf)
     val rowRdd: RDD[Row] = rdd.mapPartitions { iter =>
-        fillObject(wrappedConf.value, iter, attributes.zipWithIndex, mutableRow)
+      fillObject(wrappedConf.value, iter, attributes.zipWithIndex, mutableRow)
     }
-      rowRdd
+    rowRdd
+  }
+
+  def execute(): RDD[Row] = {
+    val sc = sqlContext.sparkContext
+    val job = new Job(sc.hadoopConfiguration)
+    println(s"origin: $predicates")
+    buildFilter(job)(partitionInfo.getPushDownFilters(predicates))
+    val conf: Configuration = job.getConfiguration
+    val fileList = partitionInfo.getPartitionFiles(predicates)
+    val columns = partitionInfo.getOrcReadColumn(attributes)
+    addColumnIds(columns, relation, conf)
+    val mappedColumn = columns.map(c=>(c, attributes.map(_.name).indexOf(c.name)))
+    val selectedPartitions = partitionInfo.getSelectedPartitions(predicates)
+    for (path <- fileList if !path.getPath.getName.startsWith("_")) {
+      FileInputFormat.addInputPath(job, path.getPath)
+    }
+
+    // The map between partition index from file name and the index in the attributes
+    val partitionKeyLocations = partitionInfo.getPartitionKeyMap(attributes)
+    val requiredPartOrdinal = partitionKeyLocations.keys.toSeq
+
+    val inputClass = classOf[OrcInputFormat].asInstanceOf[
+      Class[_ <: org.apache.hadoop.mapred.InputFormat[NullWritable, Writable]]]
+
+    val rdd = sc.hadoopRDD(conf.asInstanceOf[JobConf],
+      inputClass, classOf[NullWritable], classOf[Writable])
+      .asInstanceOf[HadoopRDD[NullWritable, Writable]]
+    // orc optimize too much even the getPartition part, in multiple query, only the
+    // partition not trimmed is visible in the first query
+
+    val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
+    val wrappedConf = new SerializableWritable(conf)
+    val rowRdd: RDD[Row] = rdd.mapPartitionsWithInputSplit { case (split: OrcSplit, iter) =>
+      val rowIter = fillObject(wrappedConf.value, iter.map(_._2),
+        mappedColumn, mutableRow)
+        .asInstanceOf[Iterator[SpecificMutableRow]]
+
+      // Fill in the partition value
+      val partValues = selectedPartitions.collectFirst {
+        case p if split.getPath.getParent.toString == p.path => p.values
+      }.get
+
+      println(s"selectedPartitions: $selectedPartitions key locations: $partitionKeyLocations " +
+        s"requiredPartOrdinal: $requiredPartOrdinal partValues: $partValues")
+
+      val partitionRowIter = rowIter.map { row =>
+        var i = 0
+        while (i < requiredPartOrdinal.size) {
+          // TODO Avoids boxing cost here!
+          val partOrdinal = requiredPartOrdinal(i)
+          row.update(partitionKeyLocations(partOrdinal), partValues(partOrdinal))
+          i += 1
+        }
+        row
+      }
+      partitionRowIter
+    }
+    rowRdd
   }
 }

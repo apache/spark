@@ -27,6 +27,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.Logging
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.hive.HiveMetastoreTypes
 import org.apache.spark.sql.types.StructType
@@ -72,6 +73,24 @@ private[orc] object OrcFileOperator extends Logging{
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
+    val path = origPath.makeQualified(fs)
+    val paths = SparkHadoopUtil.get.listLeafStatuses(fs, origPath)
+      .filterNot(_.isDir)
+      .map(_.getPath)
+      .filterNot(_.getName.startsWith("_"))
+    if (paths == null || paths.size == 0) {
+      throw new IllegalArgumentException(
+        s"orcFileOperator: path $path does not have valid orc files matching the pattern")
+    }
+    logInfo("Qualified file list: ")
+    paths.foreach{x=>logInfo(x.toString)}
+    paths
+  }
+
+  def listOrcFiles1(pathStr: String, conf: Configuration): Seq[Path] = {
+
+    val origPath = new Path(pathStr)
+    val fs = origPath.getFileSystem(conf)
     if (fs == null) {
       throw new IllegalArgumentException(
         s"orcFileOperator: Path $origPath is incorrectly formatted")
@@ -95,7 +114,8 @@ private[orc] object OrcFileOperator extends Logging{
   }
 
   def checkPath(pathStr: String,
-                allowExisting: Boolean, conf: Configuration): Path = {
+      allowExisting: Boolean,
+      conf: Configuration): Path = {
     if (pathStr == null) {
       throw new IllegalArgumentException("Unable to create OrcRelation: path is null")
     }

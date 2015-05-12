@@ -40,10 +40,10 @@ package object orc {
   }
 
   implicit class OrcSchemaRDD(dataFrame: DataFrame) {
-    def saveAsOrcFile(path: String): Unit = {
+    def saveAsOrcFile(path: String, overwrite: Boolean = false): Unit = {
       val parameters = Map("path"->path)
       val relation = OrcRelation(path, parameters, Some(dataFrame.schema))(dataFrame.sqlContext)
-      relation.insert(dataFrame, false)
+      relation.insert(dataFrame, overwrite)
     }
   }
 
