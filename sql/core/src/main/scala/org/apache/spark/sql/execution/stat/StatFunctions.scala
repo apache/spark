@@ -104,7 +104,7 @@ private[sql] object StatFunctions extends Logging {
   /** Generate a table of frequencies for the elements of two columns. */
   private[sql] def crossTabulate(df: DataFrame, col1: String, col2: String): DataFrame = {
     val tableName = s"${col1}_$col2"
-    val counts = df.groupBy(col1, col2).agg(col(col1), col(col2), count("*")).take(1e6.toInt)
+    val counts = df.groupBy(col1, col2).agg(count("*")).take(1e6.toInt)
     if (counts.length == 1e6.toInt) {
       logWarning("The maximum limit of 1e6 pairs have been collected, which may not be all of " +
         "the pairs. Please try reducing the amount of distinct items in your columns.")
