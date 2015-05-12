@@ -209,18 +209,18 @@ test_that("registerTempTable() results in a queryable table and sql() results in
 })
 
 test_that("insertInto() on a registered table", {
-  df <- load(sqlCtx, jsonPath, "json")
-  save(df, parquetPath, "parquet", "overwrite")
-  dfParquet <- load(sqlCtx, parquetPath, "parquet")
+  df <- read.df(sqlCtx, jsonPath, "json")
+  write.df(df, parquetPath, "parquet", "overwrite")
+  dfParquet <- read.df(sqlCtx, parquetPath, "parquet")
 
   lines <- c("{\"name\":\"Bob\", \"age\":24}",
              "{\"name\":\"James\", \"age\":35}")
   jsonPath2 <- tempfile(pattern="jsonPath2", fileext=".tmp")
   parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
   writeLines(lines, jsonPath2)
-  df2 <- load(sqlCtx, jsonPath2, "json")
-  save(df2, parquetPath2, "parquet", "overwrite")
-  dfParquet2 <- load(sqlCtx, parquetPath2, "parquet")
+  df2 <- read.df(sqlCtx, jsonPath2, "json")
+  write.df(df2, parquetPath2, "parquet", "overwrite")
+  dfParquet2 <- read.df(sqlCtx, parquetPath2, "parquet")
 
   registerTempTable(dfParquet, "table1")
   insertInto(dfParquet2, "table1")
@@ -491,16 +491,16 @@ test_that("column calculation", {
   expect_true(count(df2) == 3)
 })
 
-test_that("load() from json file", {
-  df <- load(sqlCtx, jsonPath, "json")
+test_that("read.df() from json file", {
+  df <- read.df(sqlCtx, jsonPath, "json")
   expect_true(inherits(df, "DataFrame"))
   expect_true(count(df) == 3)
 })
 
-test_that("save() as parquet file", {
-  df <- load(sqlCtx, jsonPath, "json")
-  save(df, parquetPath, "parquet", mode="overwrite")
-  df2 <- load(sqlCtx, parquetPath, "parquet")
+test_that("write.df() as parquet file", {
+  df <- read.df(sqlCtx, jsonPath, "json")
+  write.df(df, parquetPath, "parquet", mode="overwrite")
+  df2 <- read.df(sqlCtx, parquetPath, "parquet")
   expect_true(inherits(df2, "DataFrame"))
   expect_true(count(df2) == 3)
 })
@@ -670,7 +670,7 @@ test_that("unionAll(), except(), and intersect() on a DataFrame", {
              "{\"name\":\"James\", \"age\":35}")
   jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
   writeLines(lines, jsonPath2)
-  df2 <- load(sqlCtx, jsonPath2, "json")
+  df2 <- read.df(sqlCtx, jsonPath2, "json")
 
   unioned <- arrange(unionAll(df, df2), df$age)
   expect_true(inherits(unioned, "DataFrame"))
@@ -712,9 +712,9 @@ test_that("mutate() and rename()", {
   expect_true(columns(newDF2)[1] == "newerAge")
 })
 
-test_that("save() on DataFrame and works with parquetFile", {
+test_that("write.df() on DataFrame and works with parquetFile", {
   df <- jsonFile(sqlCtx, jsonPath)
-  save(df, parquetPath, "parquet", mode="overwrite")
+  write.df(df, parquetPath, "parquet", mode="overwrite")
   parquetDF <- parquetFile(sqlCtx, parquetPath)
   expect_true(inherits(parquetDF, "DataFrame"))
   expect_equal(count(df), count(parquetDF))
@@ -722,9 +722,9 @@ test_that("save() on DataFrame and works with parquetFile", {
 
 test_that("parquetFile works with multiple input paths", {
   df <- jsonFile(sqlCtx, jsonPath)
-  save(df, parquetPath, "parquet", mode="overwrite")
+  write.df(df, parquetPath, "parquet", mode="overwrite")
   parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
-  save(df, parquetPath2, "parquet", mode="overwrite")
+  write.df(df, parquetPath2, "parquet", mode="overwrite")
   parquetDF <- parquetFile(sqlCtx, parquetPath, parquetPath2)
   expect_true(inherits(parquetDF, "DataFrame"))
   expect_true(count(parquetDF) == count(df)*2)

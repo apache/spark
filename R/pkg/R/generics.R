@@ -480,9 +480,13 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
   standardGeneric("saveAsTable")
 })
 
-#' @rdname save
+#' @rdname write.df
 #' @export
-setGeneric("save", function(df, path, source, mode, ...) { standardGeneric("save") })
+setGeneric("write.df", function(df, path, source, mode, ...) { standardGeneric("write.df") })
+
+#' @rdname write.df
+#' @export
+setGeneric("saveDF", function(df, path, source, mode, ...) { standardGeneric("saveDF") })
 
 #' @rdname schema
 #' @export

@@ -294,8 +294,8 @@ setMethod("registerTempTable",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlCtx <- sparkRSQL.init(sc)
-#' df <- load(sqlCtx, path, "parquet")
-#' df2 <- load(sqlCtx, path2, "parquet")
+#' df <- read.df(sqlCtx, path, "parquet")
+#' df2 <- read.df(sqlCtx, path2, "parquet")
 #' registerTempTable(df, "table1")
 #' insertInto(df2, "table1", overwrite = TRUE)
 #'}
@@ -1303,7 +1303,7 @@ setMethod("except",
 #' @param source A name for external data source
 #' @param mode One of 'append', 'overwrite', 'error', 'ignore'
 #'
-#' @rdname save
+#' @rdname write.df 
 #' @export
 #' @examples
 #'\dontrun{
@@ -1311,9 +1311,9 @@ setMethod("except",
 #' sqlCtx <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlCtx, path)
-#' save(df, "myfile", "parquet", "overwrite")
+#' write.df(df, "myfile", "parquet", "overwrite")
 #' }
-setMethod("save",
+setMethod("write.df",
           signature(df = "DataFrame", path = 'character', source = 'character',
                     mode = 'character'),
           function(df, path = NULL, source = NULL, mode = "append", ...){
@@ -1334,6 +1334,15 @@ setMethod("save",
             callJMethod(df@sdf, "save", source, jmode, options)
           })
 
+#' @rdname write.df
+#' @aliases saveDF
+#' @export
+setMethod("saveDF",
+          signature(df = "DataFrame", path = 'character', source = 'character',
+                    mode = 'character'),
+          function(df, path = NULL, source = NULL, mode = "append", ...){
+            write.df(df, path, source, mode, ...)
+          })
 
 #' saveAsTable
 #'
