@@ -201,7 +201,7 @@ class SQLQuerySuite extends QueryTest {
     var message = intercept[AnalysisException] {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
     }.getMessage
-    assert(message.contains("Table ctas1 already exists"))
+    assert(message.contains("ctas1 already exists"))
     checkRelation("ctas1", true)
     sql("DROP TABLE ctas1")
 
@@ -314,7 +314,7 @@ class SQLQuerySuite extends QueryTest {
           SELECT key, value
           FROM src
           ORDER BY key, value""").collect().toSeq)
-    intercept[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] {
+    intercept[AnalysisException] {
       sql(
         """CREATE TABLE ctas4 AS
           | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
