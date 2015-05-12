@@ -115,7 +115,7 @@ public class UnsafeShuffleInMemorySorterSuite {
     int[] numbersToSort = new int[128000];
     Random random = new Random(16);
     for (int i = 0; i < numbersToSort.length; i++) {
-      numbersToSort[i] = random.nextInt(PackedRecordPointer.MAXIMUM_PARTITION_ID);
+      numbersToSort[i] = random.nextInt(PackedRecordPointer.MAXIMUM_PARTITION_ID + 1);
       sorter.insertRecord(0, numbersToSort[i]);
     }
     Arrays.sort(numbersToSort);
