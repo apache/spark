@@ -1470,7 +1470,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def addJar(path: String) {
     if (path == null) {
       logWarning("null specified as parameter to addJar")
-      // yarn-standalone is deprecated, but still supported
     } else {
       var key = ""
       if (path.contains("\\")) {
