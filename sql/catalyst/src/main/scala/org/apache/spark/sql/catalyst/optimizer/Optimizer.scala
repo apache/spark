@@ -43,7 +43,8 @@ object DefaultOptimizer extends Optimizer {
       PushPredicateThroughJoin,
       PushPredicateThroughGenerate,
       ColumnPruning,
-      CombineLimits) ::
+      CombineLimits,
+      CombineLimitSort) ::
     Batch("ConstantFolding", FixedPoint(100),
       NullPropagation,
       OptimizeIn,
@@ -432,6 +433,17 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 object CombineFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ff @ Filter(fc, nf @ Filter(nc, grandChild)) => Filter(And(nc, fc), grandChild)
+  }
+}
+
+/**
+ * Combines Limit and Sort if possible, so it will be planed as TakeOrdered
+ * and won't do total ordering.
+ */
+object CombineLimitSort extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case l @ Limit(limitExpr, p @ Project(projectList, s @ Sort(_, _, _))) =>
+      Project(projectList, Limit(limitExpr, s))
   }
 }
 
