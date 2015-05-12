@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.CharArrayWriter
 import java.sql.DriverManager
+import java.util.Properties
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
@@ -1582,7 +1583,24 @@ class DataFrame private[sql](
    * @group output
    */
   def createJDBCTable(url: String, table: String, allowExisting: Boolean): Unit = {
-    val conn = DriverManager.getConnection(url)
+    createJDBCTable(url, table, allowExisting, new Properties())
+  }
+    
+  /**
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`
+   * using connection properties defined in `properties`.
+   * This will run a `CREATE TABLE` and a bunch of `INSERT INTO` statements.
+   * If you pass `true` for `allowExisting`, it will drop any table with the
+   * given name; if you pass `false`, it will throw if the table already
+   * exists.
+   * @group output
+   */
+  def createJDBCTable(
+      url: String,
+      table: String,
+      allowExisting: Boolean,
+      properties: Properties): Unit = {
+    val conn = DriverManager.getConnection(url, properties)
     try {
       if (allowExisting) {
         val sql = s"DROP TABLE IF EXISTS $table"
@@ -1594,7 +1612,7 @@ class DataFrame private[sql](
     } finally {
       conn.close()
     }
-    JDBCWriteDetails.saveTable(this, url, table)
+    JDBCWriteDetails.saveTable(this, url, table, properties)
   }
 
   /**
@@ -1610,8 +1628,29 @@ class DataFrame private[sql](
    * @group output
    */
   def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
+    insertIntoJDBC(url, table, overwrite, new Properties())
+  }
+
+  /**
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`
+   * using connection properties defined in `properties`.
+   * Assumes the table already exists and has a compatible schema.  If you
+   * pass `true` for `overwrite`, it will `TRUNCATE` the table before
+   * performing the `INSERT`s.
+   *
+   * The table must already exist on the database.  It must have a schema
+   * that is compatible with the schema of this RDD; inserting the rows of
+   * the RDD in order via the simple statement
+   * `INSERT INTO table VALUES (?, ?, ..., ?)` should not fail.
+   * @group output
+   */
+  def insertIntoJDBC(
+      url: String,
+      table: String,
+      overwrite: Boolean,
+      properties: Properties): Unit = {
     if (overwrite) {
-      val conn = DriverManager.getConnection(url)
+      val conn = DriverManager.getConnection(url, properties)
       try {
         val sql = s"TRUNCATE TABLE $table"
         conn.prepareStatement(sql).executeUpdate()
@@ -1619,9 +1658,8 @@ class DataFrame private[sql](
         conn.close()
       }
     }
-    JDBCWriteDetails.saveTable(this, url, table)
+    JDBCWriteDetails.saveTable(this, url, table, properties)
   }
-
   ////////////////////////////////////////////////////////////////////////////
   // for Python API
   ////////////////////////////////////////////////////////////////////////////
