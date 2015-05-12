@@ -475,7 +475,7 @@ object RandomForest extends Serializable with Logging {
       // Choose subset of features for node (if subsampling).
       val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
         Some(SamplingUtils.reservoirSampleAndCount(Range(0, 
-          metadata.numFeatures).iterator, metadata.numFeaturesPerNode, 41L)._1)
+          metadata.numFeatures).iterator, metadata.numFeaturesPerNode, rng.nextLong)._1)
       } else {
         None
       }
