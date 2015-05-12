@@ -42,9 +42,9 @@ import org.apache.spark.unsafe.memory.TaskMemoryManager;
  * <p>
  * Incoming records are appended to data pages. When all records have been inserted (or when the
  * current thread's shuffle memory limit is reached), the in-memory records are sorted according to
- * their partition ids (using a {@link UnsafeShuffleSorter}). The sorted records are then written
- * to a single output file (or multiple files, if we've spilled). The format of the output files is
- * the same as the format of the final output file written by
+ * their partition ids (using a {@link UnsafeShuffleInMemorySorter}). The sorted records are then
+ * written to a single output file (or multiple files, if we've spilled). The format of the output
+ * files is the same as the format of the final output file written by
  * {@link org.apache.spark.shuffle.sort.SortShuffleWriter}: each output partition's records are
  * written as a single serialized, compressed stream that can be read with a new decompression and
  * deserialization stream.
@@ -86,7 +86,7 @@ final class UnsafeShuffleExternalSorter {
   private final LinkedList<SpillInfo> spills = new LinkedList<SpillInfo>();
 
   // All three of these variables are reset after spilling:
-  private UnsafeShuffleSorter sorter;
+  private UnsafeShuffleInMemorySorter sorter;
   private MemoryBlock currentPage = null;
   private long currentPagePosition = -1;
   private long freeSpaceInCurrentPage = 0;
@@ -128,7 +128,7 @@ final class UnsafeShuffleExternalSorter {
       }
     }
 
-    this.sorter = new UnsafeShuffleSorter(initialSize);
+    this.sorter = new UnsafeShuffleInMemorySorter(initialSize);
   }
 
   /**
@@ -153,7 +153,7 @@ final class UnsafeShuffleExternalSorter {
     }
 
     // This call performs the actual sort.
-    final UnsafeShuffleSorter.UnsafeShuffleSorterIterator sortedRecords =
+    final UnsafeShuffleInMemorySorter.UnsafeShuffleSorterIterator sortedRecords =
       sorter.getSortedIterator();
 
     // Currently, we need to open a new DiskBlockObjectWriter for each partition; we can avoid this

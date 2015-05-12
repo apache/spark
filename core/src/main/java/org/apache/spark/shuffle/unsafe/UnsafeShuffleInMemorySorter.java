@@ -21,7 +21,7 @@ import java.util.Comparator;
 
 import org.apache.spark.util.collection.Sorter;
 
-final class UnsafeShuffleSorter {
+final class UnsafeShuffleInMemorySorter {
 
   private final Sorter<PackedRecordPointer, long[]> sorter;
   private static final class SortComparator implements Comparator<PackedRecordPointer> {
@@ -39,7 +39,7 @@ final class UnsafeShuffleSorter {
    */
   private int sortBufferInsertPosition = 0;
 
-  public UnsafeShuffleSorter(int initialSize) {
+  public UnsafeShuffleInMemorySorter(int initialSize) {
     assert (initialSize > 0);
     this.sortBuffer = new long[initialSize];
     this.sorter = new Sorter<PackedRecordPointer, long[]>(UnsafeShuffleSortDataFormat.INSTANCE);
