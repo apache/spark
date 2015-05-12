@@ -610,7 +610,8 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
         corruptedCheckpointPath, creatingFunction _, createOnError = false)
     }
 
-    // getActiveOrCreate should create new context with fake checkpoint file and createOnError = true
+    // getActiveOrCreate should create new context with fake
+    // checkpoint file and createOnError = true
     testGetActiveOrCreate {
       ssc = StreamingContext.getActiveOrCreate(
         corruptedCheckpointPath, creatingFunction _, createOnError = true)
