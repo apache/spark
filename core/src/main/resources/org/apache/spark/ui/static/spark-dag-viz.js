@@ -272,7 +272,8 @@ function preprocessGraphLayout(g, forJob) {
   // Curve the edges
   var edges = g.edges();
   for (var j = 0; j < edges.length; j++) {
-    edges[j].lineInterpolate = "basis";
+    var edge = g.edge(edges[j]);
+    edge.lineInterpolate = "basis";
   }
   // Adjust vertical separation between nodes
   if (forJob) {
