@@ -527,6 +527,8 @@ class StreamingContext private[streaming] (
 
   /**
    * Start the execution of the streams.
+   *
+   * @throws SparkException if the StreamingContext is already stopped.
    */
   def start(): Unit = synchronized {
     state match {
