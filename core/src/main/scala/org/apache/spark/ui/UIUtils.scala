@@ -360,7 +360,7 @@ private[spark] object UIUtils extends Logging {
         {
           graphs.map { g =>
             <div class="stage-metadata" stage-id={g.rootCluster.id} style="display:none">
-              <div class="dot-file">{RDDOperationGraph.makeDotFile(g, forJob)}</div>
+              <div class="dot-file">{RDDOperationGraph.makeDotFile(g)}</div>
               { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
               { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }
               {

@@ -158,54 +158,32 @@ private[ui] object RDDOperationGraph extends Logging {
    *
    * For the complete DOT specification, see http://www.graphviz.org/Documentation/dotguide.pdf.
    */
-  def makeDotFile(graph: RDDOperationGraph, forJob: Boolean): String = {
+  def makeDotFile(graph: RDDOperationGraph): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
-    dotFile.append(makeDotSubgraph(graph.rootCluster, forJob, indent = "  "))
-    graph.edges.foreach { edge =>
-      dotFile.append(s"""  ${edge.fromId}->${edge.toId} [lineInterpolate="basis"];\n""")
-    }
+    dotFile.append(makeDotSubgraph(graph.rootCluster, indent = "  "))
+    graph.edges.foreach { edge => dotFile.append(s"""  ${edge.fromId}->${edge.toId};\n""") }
     dotFile.append("}")
     val result = dotFile.toString()
     logDebug(result)
     result
   }
 
-  /**
-   * Return the dot representation of a node in an RDDOperationGraph.
-   *
-   * On the job page, is displayed as a small circle without labels.
-   * On the stage page, it is displayed as a box with an embedded label.
-   */
-  private def makeDotNode(node: RDDOperationNode, forJob: Boolean): String = {
-    val label = s"${node.name} (${node.id})"
-    if (forJob) {
-      s"""${node.id} [label="$label" shape="circle" padding="5" labelStyle="font-size: 0"]"""
-    } else {
-      s"""${node.id} [label="$label" padding="5" labelStyle="font-size: 12px"]"""
-    }
+  /** Return the dot representation of a node in an RDDOperationGraph. */
+  private def makeDotNode(node: RDDOperationNode): String = {
+    s"""${node.id} [label="${node.name} (${node.id})"]"""
   }
 
   /** Return the dot representation of a subgraph in an RDDOperationGraph. */
-  private def makeDotSubgraph(
-      cluster: RDDOperationCluster,
-      forJob: Boolean,
-      indent: String): String = {
+  private def makeDotSubgraph(cluster: RDDOperationCluster, indent: String): String = {
     val subgraph = new StringBuilder
-    // TODO: move specific graph properties like these to spark-dag-viz.js
-    val paddingTop = if (forJob) 10 else 20
     subgraph.append(indent + s"subgraph cluster${cluster.id} {\n")
     subgraph.append(indent + s"""  label="${cluster.name}";\n""")
-    // If there are nested clusters, add some padding
-    // Do this for the stage page because we use bigger fonts there
-    if (cluster.childClusters.nonEmpty) {
-      subgraph.append(indent + s"""  paddingTop="$paddingTop";\n""")
-    }
     cluster.childNodes.foreach { node =>
-      subgraph.append(indent + s"  ${makeDotNode(node, forJob)};\n")
+      subgraph.append(indent + s"  ${makeDotNode(node)};\n")
     }
     cluster.childClusters.foreach { cscope =>
-      subgraph.append(makeDotSubgraph(cscope, forJob, indent + "  "))
+      subgraph.append(makeDotSubgraph(cscope, indent + "  "))
     }
     subgraph.append(indent + "}\n")
     subgraph.toString()
