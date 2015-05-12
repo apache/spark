@@ -1005,7 +1005,7 @@ class DataFrame private[sql](
    * be the target of an `insertInto`.
    *
    * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive.
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
    */
   @Experimental
@@ -1024,7 +1024,7 @@ class DataFrame private[sql](
    * be the target of an `insertInto`.
    *
    * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive.
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
    */
   @Experimental
@@ -1051,7 +1051,7 @@ class DataFrame private[sql](
    * be the target of an `insertInto`.
    *
    * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive.
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
    */
   @Experimental
@@ -1070,7 +1070,7 @@ class DataFrame private[sql](
    * be the target of an `insertInto`.
    *
    * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive.
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
    */
   @Experimental
@@ -1089,7 +1089,7 @@ class DataFrame private[sql](
    * be the target of an `insertInto`.
    *
    * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive.
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
    */
   @Experimental
@@ -1113,7 +1113,7 @@ class DataFrame private[sql](
    * be the target of an `insertInto`.
    *
    * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive.
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
    */
   @Experimental
