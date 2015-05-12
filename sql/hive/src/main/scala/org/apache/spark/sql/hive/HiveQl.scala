@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
 import org.apache.spark.sql.{AnalysisException, SparkSQLParser}
+import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -223,12 +224,23 @@ private[hive] object HiveQl {
      * Otherwise, there will be Null pointer exception,
      * when retrieving properties form HiveConf.
      */
-    val hContext = new Context(new HiveConf())
+    val hContext = new Context(hiveConf)
     val node = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql, hContext))
     hContext.clear()
     node
   }
 
+  /**
+   * Returns the HiveConf
+   */
+  private[this] def hiveConf(): HiveConf = {
+    val ss = SessionState.get() // SessionState is lazy initializaion, it can be null here
+    if (ss == null) {
+      new HiveConf()
+    } else {
+      ss.getConf
+    }
+  }
 
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = hqlParser(sql)
