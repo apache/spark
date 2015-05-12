@@ -1414,11 +1414,14 @@ class Column(object):
 
     @ignore_unicode_prefix
     def when(self, whenExpr, thenExpr):
-        return self._jc.when(whenExpr, thenExpr)
+        if isinstance(whenExpr, Column):
+            jc = self._jc.when(whenExpr._jc, thenExpr)
+        return Column(jc)
 
     @ignore_unicode_prefix
     def otherwise(self, elseExpr):
-        return self._jc.otherwise(elseExpr)
+        jc = self._jc.otherwise(elseExpr)
+        return Column(jc)
 
     def __repr__(self):
         return 'Column<%s>' % self._jc.toString().encode('utf8')
