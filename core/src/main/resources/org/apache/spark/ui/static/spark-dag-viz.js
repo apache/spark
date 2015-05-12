@@ -108,7 +108,7 @@ function toggleDagViz(forJob) {
  * Output DOM hierarchy:
  *   div#dag-viz-graph >
  *   svg >
- *   g#cluster_stage_[stageId]
+ *   g.cluster_stage_[stageId]
  *
  * Note that the input metadata is populated by o.a.s.ui.UIUtils.showDagViz.
  * Any changes in the input format here must be reflected there.
@@ -137,7 +137,7 @@ function renderDagViz(forJob) {
   // Find cached RDDs and mark them as such
   metadataContainer().selectAll(".cached-rdd").each(function(v) {
     var nodeId = VizConstants.nodePrefix + d3.select(this).text();
-    svg.selectAll("#" + nodeId).classed("cached", true);
+    svg.selectAll("g." + nodeId).classed("cached", true);
   });
 
   resizeSvg(svg);
@@ -192,14 +192,10 @@ function renderDagVizForJob(svgContainer) {
     if (i > 0) {
       var existingStages = svgContainer
         .selectAll("g.cluster")
-        .filter("[id*=\"" + VizConstants.stageClusterPrefix + "\"]");
+        .filter("[class*=\"" + VizConstants.stageClusterPrefix + "\"]");
       if (!existingStages.empty()) {
         var lastStage = d3.select(existingStages[0].pop());
-        var lastStageId = lastStage.attr("id");
-        var lastStageWidth = toFloat(svgContainer
-          .select("#" + lastStageId)
-          .select("rect")
-          .attr("width"));
+        var lastStageWidth = toFloat(lastStage.select("rect").attr("width"));
         var lastStagePosition = getAbsolutePosition(lastStage);
         var offset = lastStagePosition.x + lastStageWidth + VizConstants.stageSep;
         container.attr("transform", "translate(" + offset + ", 0)");
@@ -372,14 +368,14 @@ function getAbsolutePosition(d3selection) {
 function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
   var fromNodeId = VizConstants.nodePrefix + fromRDDId;
   var toNodeId = VizConstants.nodePrefix + toRDDId;
-  var fromPos = getAbsolutePosition(svgContainer.select("#" + fromNodeId));
-  var toPos = getAbsolutePosition(svgContainer.select("#" + toNodeId));
+  var fromPos = getAbsolutePosition(svgContainer.select("g." + fromNodeId));
+  var toPos = getAbsolutePosition(svgContainer.select("g." + toNodeId));
 
   // On the job page, RDDs are rendered as dots (circles). When rendering the path,
   // we need to account for the radii of these circles. Otherwise the arrow heads
   // will bleed into the circle itself.
   var delta = toFloat(svgContainer
-    .select("g.node#" + toNodeId)
+    .select("g.node." + toNodeId)
     .select("circle")
     .attr("r"));
   if (fromPos.x < toPos.x) {
@@ -435,6 +431,7 @@ function addTooltipsForRDDs(svgContainer) {
     }
   });
   $("[data-toggle=tooltip]").tooltip({container: "body"});
+  // Trigger mouseover event for all of the same RDDs
 }
 
 /* Helper function to convert attributes to numeric values. */
