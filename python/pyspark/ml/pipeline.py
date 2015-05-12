@@ -60,7 +60,10 @@ class Estimator(Params):
         if isinstance(params, (list, tuple)):
             return [self.fit(dataset, paramMap) for paramMap in params]
         elif isinstance(params, dict):
-            return self.copy(params)._fit(dataset)
+            if params:
+                return self.copy(params)._fit(dataset)
+            else:
+                return self._fit(dataset)
         else:
             raise ValueError("Params must be either a param map or a list/tuple of param maps, "
                              "but got %s." % type(params))
@@ -97,7 +100,10 @@ class Transformer(Params):
         :returns: transformed dataset
         """
         if isinstance(params, dict):
-            return self.copy(params,)._transform(dataset)
+            if params:
+                return self.copy(params,)._transform(dataset)
+            else:
+                return self._transform(dataset)
         else:
             raise ValueError("Params must be either a param map but got %s." % type(params))
 
@@ -263,6 +269,9 @@ class Evaluator(Params):
         :return: metric
         """
         if isinstance(params, dict):
-            return self.copy(params)._evaluate(dataset)
+            if params:
+                return self.copy(params)._evaluate(dataset)
+            else:
+                return self._evaluate(dataset)
         else:
             raise ValueError("Params must be a param map but got %s." % type(params))

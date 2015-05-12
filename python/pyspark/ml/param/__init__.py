@@ -139,22 +139,19 @@ class Params(Identifiable):
         Tests whether this instance contains a param with a given
         (string) name.
         """
-        return self.params.count(paramName) != 0
+        param = self._resolveParam(paramName)
+        return param in self.params
 
     def getOrDefault(self, param):
         """
         Gets the value of a param in the user-supplied param map or its
         default value. Raises an error if either is set.
         """
-        if isinstance(param, Param):
-            if param in self._paramMap:
-                return self._paramMap[param]
-            else:
-                return self._defaultParamMap[param]
-        elif isinstance(param, str):
-            return self.getOrDefault(self.getParam(param))
+        param = self._resolveParam(param)
+        if param in self._paramMap:
+            return self._paramMap[param]
         else:
-            raise KeyError("Cannot recognize %r as a param." % param)
+            return self._defaultParamMap[param]
 
     def extractParamMap(self, extra={}):
         """

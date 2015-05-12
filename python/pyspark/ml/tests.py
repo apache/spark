@@ -32,7 +32,7 @@ else:
 
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 from pyspark.sql import DataFrame
-from pyspark.ml.param import Param
+from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol
 from pyspark.ml.pipeline import Estimator, Model, Pipeline, Transformer
 
@@ -43,44 +43,38 @@ class MockDataset(DataFrame):
         self.index = 0
 
 
-class MockTransformer(Transformer):
+class HasFake(Params):
+
+    def __init__(self):
+        super(HasFake, self).__init__()
+        self.fake = Param(self, "fake", "fake param")
+
+
+class MockTransformer(Transformer, HasFake):
 
     def __init__(self):
         super(MockTransformer, self).__init__()
-        self.fake = Param(self, "fake", "fake")
         self.dataset_index = None
-        self.fake_param_value = None
 
-    def transform(self, dataset, params={}):
+    def _transform(self, dataset):
         self.dataset_index = dataset.index
-        if self.fake in params:
-            self.fake_param_value = params[self.fake]
         dataset.index += 1
         return dataset
 
 
-class MockEstimator(Estimator):
+class MockEstimator(Estimator, HasFake):
 
     def __init__(self):
         super(MockEstimator, self).__init__()
-        self.fake = Param(self, "fake", "fake")
         self.dataset_index = None
-        self.fake_param_value = None
-        self.model = None
 
-    def fit(self, dataset, params={}):
+    def _fit(self, dataset):
         self.dataset_index = dataset.index
-        if self.fake in params:
-            self.fake_param_value = params[self.fake]
         model = MockModel()
-        self.model = model
         return model
 
 
-class MockModel(MockTransformer, Model):
-
-    def __init__(self):
-        super(MockModel, self).__init__()
+class MockModel(MockTransformer, Model, HasFake): pass
 
 
 class PipelineTests(PySparkTestCase):
@@ -94,16 +88,13 @@ class PipelineTests(PySparkTestCase):
         pipeline = Pipeline() \
             .setStages([estimator0, transformer1, estimator2, transformer3])
         pipeline_model = pipeline.fit(dataset, {estimator0.fake: 0, transformer1.fake: 1})
-        self.assertEqual(0, estimator0.dataset_index)
-        self.assertEqual(0, estimator0.fake_param_value)
-        model0 = estimator0.model
+        model0, transformer1, model2, transformer3 = pipeline_model.stages
         self.assertEqual(0, model0.dataset_index)
         self.assertEqual(1, transformer1.dataset_index)
-        self.assertEqual(1, transformer1.fake_param_value)
-        self.assertEqual(2, estimator2.dataset_index)
-        model2 = estimator2.model
-        self.assertIsNone(model2.dataset_index, "The model produced by the last estimator should "
-                                                "not be called during fit.")
+        self.assertEqual(2, dataset.index)
+        self.assertIsNone(model2.dataset_index, "The last model shouldn't be called in fit.")
+        self.assertIsNone(transformer3.dataset_index,
+                          "The last transformer shouldn't be called in fit.")
         dataset = pipeline_model.transform(dataset)
         self.assertEqual(2, model0.dataset_index)
         self.assertEqual(3, transformer1.dataset_index)
@@ -129,7 +120,7 @@ class ParamTests(PySparkTestCase):
         maxIter = testParams.maxIter
         self.assertEqual(maxIter.name, "maxIter")
         self.assertEqual(maxIter.doc, "max number of iterations (>= 0)")
-        self.assertTrue(maxIter.parent is testParams)
+        self.assertTrue(maxIter.parent == testParams.uid)
 
     def test_params(self):
         testParams = TestParams()
