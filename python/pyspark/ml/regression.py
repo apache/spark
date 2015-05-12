@@ -21,9 +21,9 @@ from pyspark.ml.param.shared import *
 from pyspark.mllib.common import inherit_doc
 
 
-__all__ = ['DecisionTreeRegressor', 'DecisionTreeRegressionModel', 'GBTRegressor', 'GBTModel',
-           'LinearRegression', 'LinearRegressionModel', 'RandomForestRegressor',
-           'RandomForestRegressionModel']
+__all__ = ['DecisionTreeRegressor', 'DecisionTreeRegressionModel', 'GBTRegressor',
+           'GBTRegressionModel', 'LinearRegression', 'LinearRegressionModel',
+           'RandomForestRegressor', 'RandomForestRegressionModel']
 
 
 @inherit_doc
@@ -61,9 +61,10 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     """
     _java_class = "org.apache.spark.ml.regression.LinearRegression"
     # a placeholder to make it appear in the generated doc
-    elasticNetParam = Param(Params._dummy(), "elasticNetParam",
-                            "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
-                            "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
+    elasticNetParam = \
+        Param(Params._dummy(), "elasticNetParam",
+              "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
+              "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -73,10 +74,12 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6)
         """
         super(LinearRegression, self).__init__()
-        self.elasticNetParam = Param(self, "elasticNetParam",
-                                     "the ElasticNet mixing parameter, in range [0, 1]. For " +
-                                     "alpha = 0, the penalty is an L2 penalty. For alpha = 1, " +
-                                     "it is an L1 penalty.")
+        #: param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty
+        #  is an L2 penalty. For alpha = 1, it is an L1 penalty.
+        self.elasticNetParam = \
+            Param(self, "elasticNetParam",
+                  "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty " +
+                  "is an L2 penalty. For alpha = 1, it is an L1 penalty.")
         self._setDefault(maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -115,21 +118,21 @@ class LinearRegressionModel(JavaModel):
     """
 
 
-class TreeRegressorParams():
+class TreeRegressorParams(object):
     """
     Private class to track supported impurity measures.
     """
     supportedImpurities = ["variance"]
 
 
-class RandomForestParams():
+class RandomForestParams(object):
     """
     Private class to track supported random forest parameters.
     """
     supportedFeatureSubsetStrategies = ["auto", "all", "onethird", "sqrt", "log2"]
 
 
-class GBTParams():
+class GBTParams(object):
     """
     Private class to track supported GBT params.
     """
@@ -174,10 +177,11 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance")
         """
         super(DecisionTreeRegressor, self).__init__()
-        self.impurity = Param(self, "impurity",
-                              "Criterion used for information gain calculation " +
-                              "(case-insensitive). Supported options: " +
-                              ", ".join(TreeRegressorParams.supportedImpurities))
+        #: param for Criterion used for information gain calculation (case-insensitive).
+        self.impurity = \
+            Param(self, "impurity",
+                  "Criterion used for information gain calculation (case-insensitive). " +
+                  "Supported options: " + ", ".join(TreeRegressorParams.supportedImpurities))
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="variance")
@@ -253,11 +257,10 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                             "Fraction of the training data used for learning each decision tree, " +
                             "in range (0, 1].")
     numTrees = Param(Params._dummy(), "numTrees", "Number of trees to train (>= 1)")
-    featureSubsetStrategy = Param(Params._dummy(), "featureSubsetStrategy",
-                                  "The number of features to consider for splits at each tree " +
-                                  "node. Supported options: " +
-
-                                  ", ".join(RandomForestParams.supportedFeatureSubsetStrategies))
+    featureSubsetStrategy = \
+        Param(Params._dummy(), "featureSubsetStrategy",
+              "The number of features to consider for splits at each tree node. Supported " +
+              "options: " + ", ".join(RandomForestParams.supportedFeatureSubsetStrategies))
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -271,19 +274,23 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                  numTrees=20, featureSubsetStrategy="auto", seed=42)
         """
         super(RandomForestRegressor, self).__init__()
-        self.impurity = Param(self, "impurity",
-                              "Criterion used for information gain calculation " +
-                              "(case-insensitive). Supported options: " +
-                              ", ".join(TreeRegressorParams.supportedImpurities))
+        #: param for Criterion used for information gain calculation (case-insensitive).
+        self.impurity = \
+            Param(self, "impurity",
+                  "Criterion used for information gain calculation (case-insensitive). " +
+                  "Supported options: " + ", ".join(TreeRegressorParams.supportedImpurities))
+        #: param for Fraction of the training data used for learning each decision tree,
+        #  in range (0, 1]
         self.subsamplingRate = Param(self, "subsamplingRate",
                                      "Fraction of the training data used for learning each " +
                                      "decision tree, in range (0, 1].")
+        #: param for Number of trees to train (>= 1)
         self.numTrees = Param(self, "numTrees", "Number of trees to train (>= 1)")
-        self.featureSubsetStrategy = Param(self, "featureSubsetStrategy",
-                                           "The number of features to consider for splits at " +
-                                           "each tree node. Supported options: " +
-                                           ", ".join(RandomForestParams
-                                                     .supportedFeatureSubsetStrategies))
+        #: param for The number of features to consider for splits at each tree node
+        self.featureSubsetStrategy = \
+            Param(self, "featureSubsetStrategy",
+                  "The number of features to consider for splits at each tree node. Supported " +
+                  "options: " + ", ".join(RandomForestParams.supportedFeatureSubsetStrategies))
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=42,
                          impurity="variance", numTrees=20, featureSubsetStrategy="auto")
@@ -413,12 +420,16 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                  maxIter=20, stepSize=0.1)
         """
         super(GBTRegressor, self).__init__()
+        #: param for Loss function which GBT tries to minimize (case-insensitive).
         self.lossType = Param(self, "lossType",
                               "Loss function which GBT tries to minimize (case-insensitive). " +
                               "Supported options: " + ", ".join(GBTParams.supportedLossTypes))
+        #: Fraction of the training data used for learning each decision tree, in range (0, 1].
         self.subsamplingRate = Param(self, "subsamplingRate",
                                      "Fraction of the training data used for learning each " +
                                      "decision tree, in range (0, 1].")
+        #: Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of
+        #  each estimator
         self.stepSize = Param(self, "stepSize",
                               "Step size (a.k.a. learning rate) in interval (0, 1] for shrinking " +
                               "the contribution of each estimator")
@@ -444,7 +455,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
-        return GBTModel(java_model)
+        return GBTRegressionModel(java_model)
 
     def setLossType(self, value):
         """
@@ -486,7 +497,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self.getOrDefault(self.stepSize)
 
 
-class GBTModel(JavaModel):
+class GBTRegressionModel(JavaModel):
     """
     Model fitted by GBTRegressor.
     """
