@@ -104,10 +104,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       TaskContext taskContext,
       SparkConf sparkConf) throws IOException {
     final int numPartitions = handle.dependency().partitioner().numPartitions();
-    if (numPartitions > PackedRecordPointer.MAXIMUM_PARTITION_ID) {
+    if (numPartitions > UnsafeShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS()) {
       throw new IllegalArgumentException(
         "UnsafeShuffleWriter can only be used for shuffles with at most " +
-          PackedRecordPointer.MAXIMUM_PARTITION_ID + " reduce partitions");
+          UnsafeShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS() + " reduce partitions");
     }
     this.blockManager = blockManager;
     this.shuffleBlockResolver = shuffleBlockResolver;
