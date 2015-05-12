@@ -47,7 +47,9 @@ final class UnsafeShuffleInMemorySorter {
 
   public void expandSortBuffer() {
     final long[] oldBuffer = sortBuffer;
-    sortBuffer = new long[oldBuffer.length * 2];
+    // Guard against overflow:
+    final int newLength = oldBuffer.length * 2 > 0 ? (oldBuffer.length * 2) : Integer.MAX_VALUE;
+    sortBuffer = new long[newLength];
     System.arraycopy(oldBuffer, 0, sortBuffer, 0, oldBuffer.length);
   }
 
@@ -71,7 +73,11 @@ final class UnsafeShuffleInMemorySorter {
    */
   public void insertRecord(long recordPointer, int partitionId) {
     if (!hasSpaceForAnotherRecord()) {
-      expandSortBuffer();
+      if (sortBuffer.length == Integer.MAX_VALUE) {
+        throw new IllegalStateException("Sort buffer has reached maximum size");
+      } else {
+        expandSortBuffer();
+      }
     }
     sortBuffer[sortBufferInsertPosition] =
         PackedRecordPointer.packPointer(recordPointer, partitionId);
