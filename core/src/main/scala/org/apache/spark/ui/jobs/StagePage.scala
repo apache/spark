@@ -70,8 +70,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     </div>
   }
 
+  // scalastyle:off
   // TODO: We should consider increasing the number of this parameter over time if we find that it's okey.
+  // scalastyle:on
   private val MAX_TIMELINE_TASKS = parent.conf.getInt("spark.ui.timeline.tasks.maximum", 1000)
+
 
   def render(request: HttpServletRequest): Seq[Node] = {
     progressListener.synchronized {
