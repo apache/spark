@@ -533,9 +533,8 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
       assert(StreamingContext.getActiveOrCreate(creatingFunc _) === ssc,
         "active context not returned")
       ssc.stop()
-      assert(StreamingContext.getActive().nonEmpty,
+      assert(StreamingContext.getActive().isEmpty,
         "inactive context returned")
-      newContextCreated = false
       assert(StreamingContext.getActiveOrCreate(creatingFunc _) !== ssc,
         "inactive context returned")
     }
@@ -543,7 +542,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     // getOrCreate and getActive should return independently created context after activating
     testGetActiveOrCreate {
       ssc = creatingFunc()  // Create
-      assert(ssc.state === ssc.StreamingContextState.Initialized)
+      assert(ssc.getState() === StreamingContextState.INITIALIZED)
       assert(StreamingContext.getActive().isEmpty,
         "new initialized context returned before starting")
       ssc.start()

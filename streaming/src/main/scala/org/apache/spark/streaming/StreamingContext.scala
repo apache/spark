@@ -690,9 +690,7 @@ object StreamingContext extends Logging {
   @Experimental
   def getActiveOrCreate(creatingFunc: () => StreamingContext): StreamingContext = {
     ACTIVATION_LOCK.synchronized {
-      getActive().getOrElse {
-        creatingFunc()
-      }
+      getActive().getOrElse { creatingFunc() }
     }
   }
 
@@ -718,11 +716,7 @@ object StreamingContext extends Logging {
       createOnError: Boolean = false
     ): StreamingContext = {
     ACTIVATION_LOCK.synchronized {
-      getActive().getOrElse {
-        val checkpointOption = CheckpointReader.read(
-          checkpointPath, new SparkConf(), hadoopConf, createOnError)
-        checkpointOption.map(new StreamingContext(null, _, null)).getOrElse(creatingFunc())
-      }
+      getActive().getOrElse { getOrCreate(checkpointPath, creatingFunc, hadoopConf, createOnError) }
     }
   }
 
