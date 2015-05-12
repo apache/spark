@@ -194,7 +194,8 @@ public class UnsafeShuffleWriterSuite {
     when(shuffleDep.partitioner()).thenReturn(hashPartitioner);
   }
 
-  private UnsafeShuffleWriter<Object, Object> createWriter(boolean transferToEnabled) {
+  private UnsafeShuffleWriter<Object, Object> createWriter(
+      boolean transferToEnabled) throws IOException {
     conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
     return new UnsafeShuffleWriter<Object, Object>(
       blockManager,
@@ -242,12 +243,12 @@ public class UnsafeShuffleWriterSuite {
   }
 
   @Test(expected=IllegalStateException.class)
-  public void mustCallWriteBeforeSuccessfulStop() {
+  public void mustCallWriteBeforeSuccessfulStop() throws IOException {
     createWriter(false).stop(true);
   }
 
   @Test
-  public void doNotNeedToCallWriteBeforeUnsuccessfulStop() {
+  public void doNotNeedToCallWriteBeforeUnsuccessfulStop() throws IOException {
     createWriter(false).stop(false);
   }
 
