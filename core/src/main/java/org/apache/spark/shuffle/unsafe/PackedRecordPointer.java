@@ -37,6 +37,9 @@ final class PackedRecordPointer {
 
   static final int MAXIMUM_PAGE_SIZE_BYTES = 1 << 27;  // 128 megabytes
 
+  /**
+   * The maximum partition identifier that can be encoded. Note that partition ids start from 0.
+   */
   static final int MAXIMUM_PARTITION_ID = (1 << 24) - 1;  // 16777215
 
   /** Bit mask for the lower 40 bits of a long. */

@@ -33,6 +33,12 @@ private class UnsafeShuffleHandle[K, V](
 }
 
 private[spark] object UnsafeShuffleManager extends Logging {
+
+  /**
+   * The maximum number of shuffle output partitions that UnsafeShuffleManager supports.
+   */
+  val MAX_SHUFFLE_OUTPUT_PARTITIONS = PackedRecordPointer.MAXIMUM_PARTITION_ID + 1
+
   /**
    * Helper method for determining whether a shuffle should use the optimized unsafe shuffle
    * path or whether it should fall back to the original sort-based shuffle.
@@ -50,9 +56,9 @@ private[spark] object UnsafeShuffleManager extends Logging {
     } else if (dependency.keyOrdering.isDefined) {
       log.debug(s"Can't use UnsafeShuffle for shuffle $shufId because a key ordering is defined")
       false
-    } else if (dependency.partitioner.numPartitions > PackedRecordPointer.MAXIMUM_PARTITION_ID) {
+    } else if (dependency.partitioner.numPartitions > MAX_SHUFFLE_OUTPUT_PARTITIONS) {
       log.debug(s"Can't use UnsafeShuffle for shuffle $shufId because it has more than " +
-        s"${PackedRecordPointer.MAXIMUM_PARTITION_ID} partitions")
+        s"$MAX_SHUFFLE_OUTPUT_PARTITIONS partitions")
       false
     } else {
       log.debug(s"Can use UnsafeShuffle for shuffle $shufId")

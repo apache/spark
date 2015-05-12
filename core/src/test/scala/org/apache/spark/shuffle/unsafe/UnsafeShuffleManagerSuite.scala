@@ -93,7 +93,7 @@ class UnsafeShuffleManagerSuite extends FunSuite with Matchers {
 
     // We do not support shuffles with more than 16 million output partitions
     assert(!canUseUnsafeShuffle(shuffleDep(
-      partitioner = new HashPartitioner(PackedRecordPointer.MAXIMUM_PARTITION_ID + 1),
+      partitioner = new HashPartitioner(UnsafeShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS + 1),
       serializer = kryo,
       keyOrdering = None,
       aggregator = None,
