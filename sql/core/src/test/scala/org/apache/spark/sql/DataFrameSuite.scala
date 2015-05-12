@@ -457,4 +457,39 @@ class DataFrameSuite extends QueryTest {
     assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
     assert(complexData.filter(complexData("s")("key") === 1).count() == 1)
   }
+
+  test("SPARK-7324 dropDuplicates") {
+    val testData = TestSQLContext.sparkContext.parallelize(
+      (2, 1, 2) :: (1, 1, 1) ::
+      (1, 2, 1) :: (2, 1, 2) ::
+      (2, 2, 2) :: (2, 2, 1) ::
+      (2, 1, 1) :: (1, 1, 2) ::
+      (1, 2, 2) :: (1, 2, 1) :: Nil).toDF("key", "value1", "value2")
+
+    checkAnswer(
+      testData.dropDuplicates(),
+      Seq(Row(2, 1, 2), Row(1, 1, 1), Row(1, 2, 1),
+        Row(2, 2, 2), Row(2, 1, 1), Row(2, 2, 1),
+        Row(1, 1, 2), Row(1, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("key", "value1")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value1", "value2")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("key")),
+      Seq(Row(2, 1, 2), Row(1, 1, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value1")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value2")),
+      Seq(Row(2, 1, 2), Row(1, 1, 1)))
+  }
 }

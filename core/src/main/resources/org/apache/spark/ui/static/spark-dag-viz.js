@@ -256,7 +256,7 @@ function metadataContainer() { return d3.select("#dag-viz-metadata"); }
 function preprocessGraphLayout(g, forJob) {
   var nodes = g.nodes();
   for (var i = 0; i < nodes.length; i++) {
-    var isCluster = g.children(nodes[i]).length > 0
+    var isCluster = g.children(nodes[i]).length > 0;
     if (!isCluster) {
       var node = g.node(nodes[i]);
       if (forJob) {
