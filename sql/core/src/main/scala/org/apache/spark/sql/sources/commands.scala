@@ -88,7 +88,7 @@ private[sql] case class InsertIntoFSBasedRelation(
     }
 
     if (doInsertion) {
-      val job = Job.getInstance(hadoopConf)
+      val job = new Job(hadoopConf)
       job.setOutputKeyClass(classOf[Void])
       job.setOutputValueClass(classOf[Row])
       FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
