@@ -542,6 +542,7 @@ class StreamingContext private[streaming] (
           state = StreamingContextState.ACTIVE
           setActiveContext(this)
         }
+        logInfo("StreamingContext started")
       case ACTIVE =>
         logWarning("StreamingContext has already been started")
       case STOPPED =>
