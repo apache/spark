@@ -307,7 +307,8 @@ class NaiveBayes private (
             values
         }
         if (!values.forall(v => v == 0.0 || v == 1.0)) {
-          throw new SparkException(s"Bernoulli Naive Bayes requires 0 or 1 feature values but found $v.")
+          throw new SparkException(
+            s"Bernoulli Naive Bayes requires 0 or 1 feature values but found $v.")
         }
       }
     }
