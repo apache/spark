@@ -137,9 +137,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     addInputStream(ssc).register()
     ssc.start()
     assert(ssc.getState() === StreamingContextState.ACTIVE)
-    intercept[SparkException] {
-      ssc.start()
-    }
+    ssc.start()
     assert(ssc.getState() === StreamingContextState.ACTIVE)
   }
 

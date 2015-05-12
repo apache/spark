@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.Dialect
+import org.apache.spark.sql.catalyst.ParserDialect
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, expressions}
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
@@ -49,7 +49,7 @@ import org.apache.spark.{Partition, SparkContext}
 
 /**
  * Currently we support the default dialect named "sql", associated with the class
- * [[DefaultDialect]]
+ * [[DefaultParserDialect]]
  *
  * And we can also provide custom SQL Dialect, for example in Spark SQL CLI:
  * {{{
@@ -74,7 +74,7 @@ import org.apache.spark.{Partition, SparkContext}
  *-- "hiveql" (for HiveContext)
  * }}}
  */
-private[spark] class DefaultDialect extends Dialect {
+private[spark] class DefaultParserDialect extends ParserDialect {
   @transient
   protected val sqlParser = new catalyst.SqlParser
 
@@ -176,10 +176,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect().parse(_))
 
-  protected[sql] def getSQLDialect(): Dialect = {
+  protected[sql] def getSQLDialect(): ParserDialect = {
     try {
       val clazz = Utils.classForName(dialectClassName)
-      clazz.newInstance().asInstanceOf[Dialect]
+      clazz.newInstance().asInstanceOf[ParserDialect]
     } catch {
       case NonFatal(e) =>
         // Since we didn't find the available SQL Dialect, it will fail even for SET command:
@@ -209,7 +209,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] val defaultSession = createSession()
 
   protected[sql] def dialectClassName = if (conf.dialect == "sql") {
-    classOf[DefaultDialect].getCanonicalName
+    classOf[DefaultParserDialect].getCanonicalName
   } else {
     conf.dialect
   }

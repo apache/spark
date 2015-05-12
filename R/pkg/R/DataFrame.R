@@ -150,7 +150,7 @@ setMethod("isLocal",
             callJMethod(x@sdf, "isLocal")
           })
 
-#' ShowDF
+#' showDF
 #'
 #' Print the first numRows rows of a DataFrame
 #'
@@ -170,7 +170,8 @@ setMethod("isLocal",
 setMethod("showDF",
           signature(x = "DataFrame"),
           function(x, numRows = 20) {
-            callJMethod(x@sdf, "showString", numToInt(numRows))
+            s <- callJMethod(x@sdf, "showString", numToInt(numRows))
+            cat(s)
           })
 
 #' show
@@ -187,7 +188,7 @@ setMethod("showDF",
 #' sqlCtx <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlCtx, path)
-#' show(df)
+#' df
 #'}
 setMethod("show", "DataFrame",
           function(object) {
