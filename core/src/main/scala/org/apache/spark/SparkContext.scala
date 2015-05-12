@@ -371,6 +371,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       throw new SparkException("An application name must be set in your configuration")
     }
 
+    // Thread name has been set to "Driver" if user code ran by AM on a YARN cluster
+    if (master == "yarn-cluster" &&
+        Thread.currentThread().getName != "Driver") {
+      throw new SparkException("Detected yarn-cluster mode, but isn't running on a cluster. " +
+        "Deployment to YARN is not supported directly by SparkContext. Please use spark-submit.")
+    }
+
     if (_conf.getBoolean("spark.logConf", false)) {
       logInfo("Spark configuration:\n" + _conf.toDebugString)
     }

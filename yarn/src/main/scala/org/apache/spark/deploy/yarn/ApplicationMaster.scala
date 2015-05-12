@@ -453,6 +453,7 @@ private[spark] class ApplicationMaster(
   private def startUserApplication(): Thread = {
     logInfo("Starting the user application in a separate Thread")
     System.setProperty("spark.executor.instances", args.numExecutors.toString)
+    // System.setProperty("spark.yarn.am.thread", "yarn-cluster")
 
     val classpath = Client.getUserClasspath(sparkConf)
     val urls = classpath.map { entry =>
@@ -573,13 +574,18 @@ object ApplicationMaster extends Logging {
   }
 
   private[spark] def sparkContextInitialized(sc: SparkContext): Unit = {
+    if (master == null){
+      throw new SparkException("ApplicationMaster is not initialized!")
+    }
     master.sparkContextInitialized(sc)
   }
 
   private[spark] def sparkContextStopped(sc: SparkContext): Boolean = {
+    if (master == null){
+      throw new SparkException("ApplicationMaster is not initialized!")
+    }
     master.sparkContextStopped(sc)
   }
-
 }
 
 /**
