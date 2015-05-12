@@ -814,7 +814,9 @@ class DAGSchedulerSuite
         } else {
           Thread.sleep(10000)
         }
-        Thread.sleep(500) // want to make sure plenty of these finish after task 0 fails
+        // want to make sure plenty of these finish after task 0 fails, and some even finish
+        // after the previous stage is retried and this stage retry is started
+        Thread.sleep((500 + math.random * 5000).toLong)
         itr.map{x => ((x._1 + 5) % 100) -> x._2 }
       }
       val shuffledAgain = shuffled.flatMap{ case(k,vs) => vs.map{k -> _}}.groupByKey(100)
@@ -828,7 +830,7 @@ class DAGSchedulerSuite
       // we should only get one failure from stage 2, everything else should be fine
       assert(stageFailureCount(2) === 1)
       assert(stageFailureCount.getOrElse(1, 0) === 0)
-      assert(stageFailureCount.getOrElse(3, 0) <= 2)  // TODO this should be 0, bug still exists
+      assert(stageFailureCount.getOrElse(3, 0) == 0)
     } finally {
       clusterSc.stop()
     }
