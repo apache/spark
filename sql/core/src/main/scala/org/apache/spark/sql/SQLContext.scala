@@ -1150,7 +1150,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     def codegenEnabled: Boolean = self.conf.codegenEnabled
 
-    def unsafeEnabled: Boolean = self.conf.unsafeEnabled
+    def managedMemoryEnabled: Boolean = self.conf.managedMemoryEnabled
 
     def numPartitions: Int = self.conf.numShufflePartitions
 

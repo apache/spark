@@ -21,7 +21,7 @@ import java.io.Serializable
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.unsafe.memory.TaskMemoryManager
+import org.apache.spark.managedmemory.memory.TaskMemoryManager
 import org.apache.spark.util.TaskCompletionListener
 
 

@@ -32,7 +32,7 @@ private[spark] object SQLConf {
   val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val CODEGEN_ENABLED = "spark.sql.codegen"
-  val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
+  val MANAGED_MEMORY_ENABLED = "spark.sql.managedMemory.enabled"
   val DIALECT = "spark.sql.dialect"
   val CASE_SENSITIVE = "spark.sql.caseSensitive"
 
@@ -179,7 +179,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
    *
    * Defaults to false as this feature is currently experimental.
    */
-  private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, "false").toBoolean
+  private[spark] def managedMemoryEnabled: Boolean =
+    getConf(MANAGED_MEMORY_ENABLED, "false").toBoolean
 
   private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2, "true").toBoolean
 

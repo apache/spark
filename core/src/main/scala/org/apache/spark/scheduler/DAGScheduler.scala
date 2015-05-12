@@ -33,10 +33,10 @@ import org.apache.commons.lang3.SerializationUtils
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.managedmemory.memory.TaskMemoryManager
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
-import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 
@@ -668,7 +668,7 @@ class DAGScheduler(
         // make sure to update both copies.
         val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
         if (freedMemory > 0) {
-          if (sc.getConf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false)) {
+          if (sc.getConf.getBoolean("spark.managedMemory.exceptionOnMemoryLeak", false)) {
             throw new SparkException(s"Managed memory leak detected; size = $freedMemory bytes")
           } else {
             logError(s"Managed memory leak detected; size = $freedMemory bytes")
