@@ -26,7 +26,6 @@ import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTable
 /** Extends QueryExecution with hive specific features. */
 protected[sql] class HiveQueryExecution(hiveContext: HiveContext, logicalPlan: LogicalPlan)
   extends QueryExecution(hiveContext, logicalPlan) {
-
   /**
    * Returns the result as a hive compatible sequence of strings.  For native commands, the
    * execution is simply passed back to Hive.

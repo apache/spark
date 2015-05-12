@@ -70,17 +70,13 @@ protected[sql] class QueryExecution(val sqlContext: SQLContext, val logical: Log
        |${stringOrError(executedPlan)}
       """.stripMargin.trim
 
-  override def toString: String = {
-    def output =
-      analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
-
-    // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
-    // however, the `toRdd` will cause the real execution, which is not what we want.
-    // We need to think about how to avoid the side effect.
+  override def toString: String =
+  // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
+  // however, the `toRdd` will cause the real execution, which is not what we want.
+  // We need to think about how to avoid the side effect.
     s"""== Parsed Logical Plan ==
        |${stringOrError(logical)}
         |== Analyzed Logical Plan ==
-        |${stringOrError(output)}
         |${stringOrError(analyzed)}
         |== Optimized Logical Plan ==
         |${stringOrError(optimizedPlan)}
@@ -89,5 +85,4 @@ protected[sql] class QueryExecution(val sqlContext: SQLContext, val logical: Log
         |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
         |== RDD ==
       """.stripMargin.trim
-  }
 }
