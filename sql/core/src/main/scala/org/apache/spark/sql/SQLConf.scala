@@ -66,6 +66,9 @@ private[spark] object SQLConf {
   // to its length exceeds the threshold.
   val SCHEMA_STRING_LENGTH_THRESHOLD = "spark.sql.sources.schemaStringLengthThreshold"
 
+  // Whether to perform partition discovery when loading external data sources.  Default to true.
+  val PARTITION_DISCOVERY_ENABLED = "spark.sql.sources.partitionDiscovery.enabled"
+
   // Whether to perform eager analysis when constructing a dataframe.
   // Set to false when debugging requires the ability to look at invalid query plans.
   val DATAFRAME_EAGER_ANALYSIS = "spark.sql.eagerAnalysis"
@@ -234,6 +237,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def defaultDataSourceName: String =
     getConf(DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.parquet")
+
+  private[spark] def partitionDiscoveryEnabled() =
+    getConf(SQLConf.PARTITION_DISCOVERY_ENABLED, "true").toBoolean
 
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.

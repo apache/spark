@@ -25,6 +25,22 @@ pyspark.ml.classification module
     :undoc-members:
     :inherited-members:
 
+pyspark.ml.recommendation module
+-------------------------
+
+.. automodule:: pyspark.ml.recommendation
+    :members:
+    :undoc-members:
+    :inherited-members:
+
+pyspark.ml.regression module
+-------------------------
+
+.. automodule:: pyspark.ml.regression
+    :members:
+    :undoc-members:
+    :inherited-members:
+
 pyspark.ml.tuning module
 --------------------------------
 
