@@ -98,7 +98,9 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
       os.write(bytes.array())
       os.close()
     } catch {
-      case e : Exception => os.cancel()
+      case e : Exception => 
+        logWarning(s"Failed to put byes of block $blockId into Tachyon", e)
+        os.cancel()
     }
   }
 
@@ -109,7 +111,9 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
       blockManager.dataSerializeStream(blockId, os, values)
       os.close()
     } catch {
-      case e : Exception =>  os.cancel()
+      case e : Exception => 
+        logWarning(s"Failed to put values of block $blockId into Tachyon", e)
+        os.cancel()
     }
   }
 
@@ -119,15 +123,17 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
       return None
     }
     val is = file.getInStream(ReadType.CACHE)
-    assert (is != null)
+    if (is == null) {
+      return None
+    }
     try {
       val size = file.length
       val bs = new Array[Byte](size.asInstanceOf[Int])
       ByteStreams.readFully(is, bs)
       Some(ByteBuffer.wrap(bs))
     } catch {
-      case ioe: IOException =>
-        logWarning(s"Failed to fetch the block $blockId from Tachyon", ioe)
+      case e: Exception =>
+        logWarning(s"Failed to get bytes of block $blockId from Tachyon", e)
         None
     } finally {
       is.close()
@@ -140,8 +146,10 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
       return None
     }
     val is = file.getInStream(ReadType.CACHE)
-    assert (is != null)
-    return Some(blockManager.dataDeserializeStream(blockId, is))
+    if (is == null) {
+      return None
+    }
+    Some(blockManager.dataDeserializeStream(blockId, is))
   }
 
   override def getSize(blockId: BlockId): Long = {
