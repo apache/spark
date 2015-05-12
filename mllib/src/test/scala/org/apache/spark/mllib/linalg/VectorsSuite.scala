@@ -86,6 +86,10 @@ class VectorsSuite extends FunSuite {
     val vec2 = Vectors.sparse(n,indices,values).asInstanceOf[SparseVector]
     val max = vec2.argmax
     assert(max === 3)
+
+    val vec3 = Vectors.sparse(5,Array(1,3,4),Array(1.0,.5,.7))
+    val max2 = vec3.argmax
+    assert(max2 === 1)
   }
 
   test("vector equals") {
