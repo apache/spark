@@ -24,7 +24,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark.Logging
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.{Clock, CompletionIterator, SystemClock, Utils}
 import WriteAheadLogManager._
 
 /**
@@ -112,7 +112,8 @@ private[streaming] class WriteAheadLogManager(
     logInfo("Reading from the logs: " + logFilesToRead.mkString("\n"))
     logFilesToRead.iterator.map { file =>
       logDebug(s"Creating log reader with $file")
-      new WriteAheadLogReader(file, hadoopConf)
+      val reader = new WriteAheadLogReader(file, hadoopConf)
+      CompletionIterator[ByteBuffer, Iterator[ByteBuffer]](reader, reader.close _)
     } flatMap { x => x }
   }
 
