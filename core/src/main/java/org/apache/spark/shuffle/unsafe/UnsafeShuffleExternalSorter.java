@@ -74,7 +74,7 @@ final class UnsafeShuffleExternalSorter {
   private final ShuffleWriteMetrics writeMetrics;
 
   /** The buffer size to use when writing spills using DiskBlockObjectWriter */
-  private final int fileBufferSize;
+  private final int fileBufferSizeBytes;
 
   /**
    * Memory pages that hold the records being sorted. The pages in this list are freed when
@@ -108,8 +108,9 @@ final class UnsafeShuffleExternalSorter {
     this.initialSize = initialSize;
     this.numPartitions = numPartitions;
     this.spillingEnabled = conf.getBoolean("spark.shuffle.spill", true);
-    // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
-    this.fileBufferSize = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
+    // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
+    this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
+
     this.writeMetrics = writeMetrics;
     initializeForWriting();
   }
@@ -182,7 +183,7 @@ final class UnsafeShuffleExternalSorter {
     // around this, we pass a dummy no-op serializer.
     final SerializerInstance ser = DummySerializerInstance.INSTANCE;
 
-    writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, writeMetricsToUse);
+    writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse);
 
     int currentPartition = -1;
     while (sortedRecords.hasNext()) {
@@ -196,7 +197,8 @@ final class UnsafeShuffleExternalSorter {
           spillInfo.partitionLengths[currentPartition] = writer.fileSegment().length();
         }
         currentPartition = partition;
-        writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, writeMetricsToUse);
+        writer =
+          blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse);
       }
 
       final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
