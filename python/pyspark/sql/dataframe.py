@@ -1461,6 +1461,19 @@ class Column(object):
         """
         return (self >= lowerBound) & (self <= upperBound)
 
+    @ignore_unicode_prefix
+    def when(self, whenExpr, thenExpr):
+        if isinstance(whenExpr, Column):
+            jc = self._jc.when(whenExpr._jc, thenExpr)
+        else:
+            raise TypeError("whenExpr should be Column")
+        return Column(jc)
+
+    @ignore_unicode_prefix
+    def otherwise(self, elseExpr):
+        jc = self._jc.otherwise(elseExpr)
+        return Column(jc)
+
     def __repr__(self):
         return 'Column<%s>' % self._jc.toString().encode('utf8')
 
