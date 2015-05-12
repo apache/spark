@@ -26,7 +26,7 @@ from numpy import array
 from pyspark import RDD
 from pyspark import SparkContext
 from pyspark.mllib.common import callMLlibFunc, callJavaFunc, _py2java, _java2py
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import SparseVector, Vectors, DenseMatrix, _convert_to_vector
 from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 
@@ -166,12 +166,39 @@ class GaussianMixtureModel(object):
     True
     >>> labels[3]==labels[4]
     True
+    >>> clusterdata_3 = sc.parallelize([[-5.1971], [-2.5359], [-3.8220],
+    ...                                 [-5.2211], [-5.0602],  [4.7118],
+    ...                                 [6.8989], [3.4592],  [4.6322],
+    ...                                 [5.7048],  [4.6567], [5.5026],
+    ...                                 [4.5605],  [5.2043],  [6.2734]])
+    >>> im = GaussianMixtureModel([0.5, 0.5],
+    ...      [MultivariateGaussian(Vectors.dense([-1.0]), DenseMatrix(1, 1, [1.0])),
+    ...      MultivariateGaussian(Vectors.dense([1.0]), DenseMatrix(1, 1, [1.0]))])
+    >>> model = GaussianMixture.train(clusterdata_3, 2, initialModel=im)
+    >>> model.weights
+    DenseVector([0.3333..., 0.6667...])
+    >>> model.gaussians[0].mu
+    DenseVector([-4.3673...])
+    >>> model.gaussians[0].sigma.toArray()
+    array([[ 1.1098...]])
     """
 
     def __init__(self, weights, gaussians):
-        self.weights = weights
-        self.gaussians = gaussians
-        self.k = len(self.weights)
+        self._weights = weights
+        self._gaussians = gaussians
+        self._k = len(self._weights)
+
+    @property
+    def weights(self):
+        return self._weights
+
+    @property
+    def gaussians(self):
+        return self._gaussians
+
+    @property
+    def k(self):
+        return self._k
 
     def predict(self, x):
         """
@@ -193,9 +220,9 @@ class GaussianMixtureModel(object):
         :return:     membership_matrix. RDD of array of double values.
         """
         if isinstance(x, RDD):
-            means, sigmas = zip(*[(g.mu, g.sigma) for g in self.gaussians])
+            means, sigmas = zip(*[(g.mu, g.sigma) for g in self._gaussians])
             membership_matrix = callMLlibFunc("predictSoftGMM", x.map(_convert_to_vector),
-                                              _convert_to_vector(self.weights), means, sigmas)
+                                              _convert_to_vector(self._weights), means, sigmas)
             return membership_matrix.map(lambda x: pyarray.array('d', x))
 
 
@@ -208,13 +235,21 @@ class GaussianMixture(object):
     :param convergenceTol:  Threshold value to check the convergence criteria. Defaults to 1e-3
     :param maxIterations:   Number of iterations. Default to 100
     :param seed:            Random Seed
+    :param initialModel:    The initial GMM starting point
     """
     @classmethod
-    def train(cls, rdd, k, convergenceTol=1e-3, maxIterations=100, seed=None):
+    def train(cls, rdd, k, convergenceTol=1e-3, maxIterations=100, seed=None, initialModel=None):
         """Train a Gaussian Mixture clustering model."""
-        weight, mu, sigma = callMLlibFunc("trainGaussianMixture",
-                                          rdd.map(_convert_to_vector), k,
-                                          convergenceTol, maxIterations, seed)
+        initialModelWeights = None
+        initialModelMu = None
+        initialModelSigma = None
+        if initialModel is not None:
+            initialModelWeights = initialModel.weights
+            initialModelMu = [initialModel.gaussians[i].mu for i in range(initialModel.k)]
+            initialModelSigma = [initialModel.gaussians[i].sigma for i in range(initialModel.k)]
+        weight, mu, sigma = callMLlibFunc("trainGaussianMixture", rdd.map(_convert_to_vector), k,
+                                          convergenceTol, maxIterations, seed, initialModelWeights,
+                                          initialModelMu, initialModelSigma)
         mvg_obj = [MultivariateGaussian(mu[i], sigma[i]) for i in range(k)]
         return GaussianMixtureModel(weight, mvg_obj)
 
