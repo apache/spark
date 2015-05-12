@@ -470,7 +470,7 @@ class DataFrameSuite extends QueryTest {
       val e = intercept[org.apache.spark.sql.AnalysisException] {
         testFun
       }
-      assert(e.getMessage.contains("wrong syntax for attribute name"))
+      assert(e.getMessage.contains("syntax error in attribute name:"))
     }
     checkError(df("`abc.`c`"))
     checkError(df("`abc`..d"))

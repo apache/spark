@@ -126,31 +126,42 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       throwErrors: Boolean = false): Option[NamedExpression] =
     resolve(nameParts, output, resolver, throwErrors)
 
+  /**
+   * Given an attribute name, split it to name parts by dot, but
+   * don't split the name parts quoted by backticks, for example,
+   * `ab.cd`.`efg` should be split into two parts "ab.cd" and "efg".
+   */
   def resolveQuoted(
       name: String,
       resolver: Resolver): Option[NamedExpression] = {
     resolve(parseAttributeName(name), resolver, true)
   }
 
+  /**
+   * Internal method, used to split attribute name by dot with backticks rule.
+   * Backticks must appear in pairs, and the quoted string must be a complete name part,
+   * which means `ab..c`e.f is not allowed.
+   * Escape character is not supported now, so we can't use backtick inside name part.
+   */
   private def parseAttributeName(name: String) = {
-    val e = new AnalysisException(s"wrong syntax for attribute name: $name")
+    val e = new AnalysisException(s"syntax error in attribute name: $name")
     val nameParts = scala.collection.mutable.ArrayBuffer.empty[String]
     val tmp = scala.collection.mutable.ArrayBuffer.empty[Char]
-    var hasBacktick = false
-    val it = name.iterator.buffered
-    while (it.hasNext) {
-      val char = it.next()
-      if (hasBacktick) {
+    var inBacktick = false
+    var i = 0
+    while (i < name.length) {
+      val char = name(i)
+      if (inBacktick) {
         if (char == '`') {
-          hasBacktick = false
-          if (it.hasNext && it.head != '.') throw e
+          inBacktick = false
+          if (i + 1 < name.length && name(i + 1) != '.') throw e
         } else {
           tmp += char
         }
       } else {
         if (char == '`') {
           if (tmp.nonEmpty) throw e
-          hasBacktick = true
+          inBacktick = true
         } else if (char == '.') {
           if (tmp.isEmpty) throw e
           nameParts += tmp.mkString
@@ -159,8 +170,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
           tmp += char
         }
       }
+      i += 1
     }
-    if (tmp.isEmpty || hasBacktick) throw e
+    if (tmp.isEmpty || inBacktick) throw e
     nameParts += tmp.mkString
     nameParts.toSeq
   }
