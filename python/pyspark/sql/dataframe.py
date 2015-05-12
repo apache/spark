@@ -755,8 +755,6 @@ class DataFrame(object):
         jdf = self._jdf.groupBy(self._jcols(*cols))
         return GroupedData(jdf, self.sql_ctx)
 
-    groupby = groupBy
-
     def agg(self, *exprs):
         """ Aggregate on the entire :class:`DataFrame` without groups
         (shorthand for ``df.groupBy.agg()``).
@@ -792,6 +790,36 @@ class DataFrame(object):
         This is equivalent to `EXCEPT` in SQL.
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
+
+    def dropDuplicates(self, subset=None):
+        """Return a new :class:`DataFrame` with duplicate rows removed,
+        optionally only considering certain columns.
+
+        >>> from pyspark.sql import Row
+        >>> df = sc.parallelize([ \
+            Row(name='Alice', age=5, height=80), \
+            Row(name='Alice', age=5, height=80), \
+            Row(name='Alice', age=10, height=80)]).toDF()
+        >>> df.dropDuplicates().show()
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        |  5|    80|Alice|
+        | 10|    80|Alice|
+        +---+------+-----+
+
+        >>> df.dropDuplicates(['name', 'height']).show()
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        |  5|    80|Alice|
+        +---+------+-----+
+        """
+        if subset is None:
+            jdf = self._jdf.dropDuplicates()
+        else:
+            jdf = self._jdf.dropDuplicates(self._jseq(subset))
+        return DataFrame(jdf, self.sql_ctx)
 
     def dropna(self, how='any', thresh=None, subset=None):
         """Returns a new :class:`DataFrame` omitting rows with null values.
@@ -986,7 +1014,7 @@ class DataFrame(object):
 
     @ignore_unicode_prefix
     def withColumnRenamed(self, existing, new):
-        """REturns a new :class:`DataFrame` by renaming an existing column.
+        """Returns a new :class:`DataFrame` by renaming an existing column.
 
         :param existing: string, name of the existing column to rename.
         :param col: string, new name of the column.
@@ -998,6 +1026,18 @@ class DataFrame(object):
                 if c == existing else c
                 for c in self.columns]
         return self.select(*cols)
+
+    @ignore_unicode_prefix
+    def drop(self, colName):
+        """Returns a new :class:`DataFrame` that drops the specified column.
+
+        :param colName: string, name of the column to drop.
+
+        >>> df.drop('age').collect()
+        [Row(name=u'Alice'), Row(name=u'Bob')]
+        """
+        jdf = self._jdf.drop(colName)
+        return DataFrame(jdf, self.sql_ctx)
 
     def toPandas(self):
         """Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
@@ -1011,6 +1051,10 @@ class DataFrame(object):
         """
         import pandas as pd
         return pd.DataFrame.from_records(self.collect(), columns=self.columns)
+
+    # Pandas compatibility
+    groupby = groupBy
+    drop_duplicates = dropDuplicates
 
 
 # Having SchemaRDD for backward compatibility (for docs)

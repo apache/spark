@@ -146,11 +146,21 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    *
    *   // Scala:
    *   import org.apache.spark.sql.functions._
-   *   df.groupBy("department").agg($"department", max($"age"), sum($"expense"))
+   *   df.groupBy("department").agg(max("age"), sum("expense"))
    *
    *   // Java:
    *   import static org.apache.spark.sql.functions.*;
-   *   df.groupBy("department").agg(col("department"), max(col("age")), sum(col("expense")));
+   *   df.groupBy("department").agg(max("age"), sum("expense"));
+   * }}}
+   *
+   * Note that before Spark 1.4, the default behavior is to NOT retain grouping columns. To change
+   * to that behavior, set config variable `spark.sql.retainGroupColumns` to `false`.
+   * {{{
+   *   // Scala, 1.3.x:
+   *   df.groupBy("department").agg($"department", max("age"), sum("expense"))
+   *
+   *   // Java, 1.3.x:
+   *   df.groupBy("department").agg(col("department"), max("age"), sum("expense"));
    * }}}
    */
   @scala.annotation.varargs
