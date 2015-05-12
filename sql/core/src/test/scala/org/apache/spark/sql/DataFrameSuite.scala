@@ -458,6 +458,26 @@ class DataFrameSuite extends QueryTest {
     assert(complexData.filter(complexData("s")("key") === 1).count() == 1)
   }
 
+  test("SPARK-7551: support backticks for DataFrame attribute resolution") {
+    val df = TestSQLContext.jsonRDD(TestSQLContext.sparkContext.makeRDD(
+      """{"a.b": {"c": {"d..e": {"f": 1}}}}""" :: Nil))
+    checkAnswer(
+      df.select(df("`a.b`.c.`d..e`.`f`")),
+      Row(1)
+    )
+
+    def checkError(testFun: => Unit): Unit = {
+      val e = intercept[org.apache.spark.sql.AnalysisException] {
+        testFun
+      }
+      assert(e.getMessage.contains("wrong syntax for attribute name"))
+    }
+    checkError(df("`abc.`c`"))
+    checkError(df("`abc`..d"))
+    checkError(df("`a`.b."))
+    checkError(df("`a.b`.c.`d"))
+  }
+
   test("SPARK-7324 dropDuplicates") {
     val testData = TestSQLContext.sparkContext.parallelize(
       (2, 1, 2) :: (1, 1, 1) ::

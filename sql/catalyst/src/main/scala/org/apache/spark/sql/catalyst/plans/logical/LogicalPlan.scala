@@ -105,7 +105,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   }
 
   /**
-   * Optionally resolves the given string to a [[NamedExpression]] using the input from all child
+   * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
    * nodes of this LogicalPlan. The attribute is expressed as
    * as string in the following form: `[scope].AttributeName.[nested].[fields]...`.
    */
@@ -116,7 +116,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     resolve(nameParts, children.flatMap(_.output), resolver, throwErrors)
 
   /**
-   * Optionally resolves the given string to a [[NamedExpression]] based on the output of this
+   * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
    * LogicalPlan. The attribute is expressed as string in the following form:
    * `[scope].AttributeName.[nested].[fields]...`.
    */
@@ -125,6 +125,45 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       resolver: Resolver,
       throwErrors: Boolean = false): Option[NamedExpression] =
     resolve(nameParts, output, resolver, throwErrors)
+
+  def resolveQuoted(
+      name: String,
+      resolver: Resolver): Option[NamedExpression] = {
+    resolve(parseAttributeName(name), resolver, true)
+  }
+
+  private def parseAttributeName(name: String) = {
+    val e = new AnalysisException(s"wrong syntax for attribute name: $name")
+    val nameParts = scala.collection.mutable.ArrayBuffer.empty[String]
+    val tmp = scala.collection.mutable.ArrayBuffer.empty[Char]
+    var hasBacktick = false
+    val it = name.iterator.buffered
+    while (it.hasNext) {
+      val char = it.next()
+      if (hasBacktick) {
+        if (char == '`') {
+          hasBacktick = false
+          if (it.hasNext && it.head != '.') throw e
+        } else {
+          tmp += char
+        }
+      } else {
+        if (char == '`') {
+          if (tmp.nonEmpty) throw e
+          hasBacktick = true
+        } else if (char == '.') {
+          if (tmp.isEmpty) throw e
+          nameParts += tmp.mkString
+          tmp.clear()
+        } else {
+          tmp += char
+        }
+      }
+    }
+    if (tmp.isEmpty || hasBacktick) throw e
+    nameParts += tmp.mkString
+    nameParts.toSeq
+  }
 
   /**
    * Resolve the given `name` string against the given attribute, returning either 0 or 1 match.
