@@ -163,23 +163,21 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, zo
 
   function setupTaskEventAction() {
     $(".item.range.task.task-assignment-timeline-object").each(function() {
-      var getTaskIdx = function(baseElem) {
-        var taskIdxText = $($(baseElem).find(".task-assignment-timeline-content")[0]).text();
+      var getSelectorForTaskEntry = function(baseElem) {
+        var taskIdxText = $(baseElem).find(".task-assignment-timeline-content").attr("data-title");
         var taskIdx = taskIdxText.match("Task (\\d+)\\(")[1];
-        return taskIdx;
+        return "#task-" + taskIdx;
       };
 
       $(this).click(function() {
-        window.location.href = "#task-" + getTaskIdx(this);
+        window.location.href = getSelectorForTaskEntry(this);
       });
 
       $(this).hover(
         function() {
-          var id = getTaskIdx(this);
           $($(this).find("div.task-assignment-timeline-content")[0]).tooltip("show");
         },
         function() {
-          var id = getTaskIdx(this);
           $($(this).find("div.task-assignment-timeline-content")[0])
           .tooltip("hide");
         }

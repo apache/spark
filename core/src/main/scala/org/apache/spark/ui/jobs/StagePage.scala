@@ -633,25 +633,25 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                 '<br>Getting Result Time: ${UIUtils.formatDuration(gettingResultTime)}">' +
            |    '<svg class="task-assignment-timeline-duration-bar">' +
            |    '<rect class="scheduler-delay-proportion" ' +
-           |      'x="${schedulerDelayProportionPos}%" y="0" height="24px"' +
+           |      'x="${schedulerDelayProportionPos}%" y="5px" height="14px"' +
            |      'width="${schedulerDelayProportion}%""></rect>' +
            |    '<rect class="deserialization-time-proportion" '+
-           |      'x="${deserializationTimeProportionPos}%" y="0" height="24px"' +
+           |      'x="${deserializationTimeProportionPos}%" y="5px" height="14px"' +
            |      'width="${deserializationTimeProportion}%"></rect>' +
            |    '<rect class="shuffle-read-time-proportion" ' +
-           |      'x="${shuffleReadTimeProportionPos}%" y="0" height="24px"' +
+           |      'x="${shuffleReadTimeProportionPos}%" y="5px" height="14px"' +
            |      'width="${shuffleReadTimeProportion}%"></rect>' +
            |    '<rect class="executor-runtime-proportion" ' +
-           |      'x="${executorRuntimeProportionPos}%" y="0" height="24px"' +
+           |      'x="${executorRuntimeProportionPos}%" y="5px" height="14px"' +
            |      'width="${executorComputingTimeProportion}%"></rect>' +
            |    '<rect class="shuffle-write-time-proportion" ' +
-           |      'x="${shuffleWriteTimeProportionPos}%" y="0" height="24px"' +
+           |      'x="${shuffleWriteTimeProportionPos}%" y="5px" height="14px"' +
            |      'width="${shuffleWriteTimeProportion}%"></rect>' +
            |    '<rect class="serialization-time-proportion" ' +
-           |      'x="${serializationTimeProportionPos}%" y="0" height="24px"' +
+           |      'x="${serializationTimeProportionPos}%" y="5px" height="14px"' +
            |      'width="${serializationTimeProportion}%"></rect>' +
            |    '<rect class="getting-result-time-proportion" ' +
-           |      'x="${gettingResultTimeProportionPos}%" y="0" height="24px"' +
+           |      'x="${gettingResultTimeProportionPos}%" y="5px" height="14px"' +
            |      'width="${gettingResultTimeProportion}%"></rect></svg>',
            |  'start': new Date(${launchTime}),
            |  'end': new Date(${finishTime})
@@ -678,7 +678,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         1000L / (tasksPerSecond / 100)
       }
       else {
-        24L * 60 * 60 * 1000
+        1000 * (100 / tasksPerSecond)
       }
     }
 

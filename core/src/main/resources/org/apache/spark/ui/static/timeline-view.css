@@ -45,23 +45,19 @@ div#application-timeline, div#job-timeline {
 #task-assignment-timeline div.item.range {
   padding: 0px;
   height: 26px;
-//  height: 40px;
 }
 
 .task-assignment-timeline-content {
   width: 100%;
-//  height: 22px;
-//  height: 19px;
 }
 
 .task-assignment-timeline-duration-bar {
   width: 100%;
- // height: 22px;
-//  height: 19px;
+  height: 24px;
 }
 
 rect.scheduler-delay-proportion {
-  fill: #F6D76B;
+  fill: #FFF9AD;
 }
 
 rect.deserialization-time-proportion {
