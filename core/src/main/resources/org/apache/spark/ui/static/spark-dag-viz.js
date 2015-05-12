@@ -427,11 +427,35 @@ function addTooltipsForRDDs(svgContainer) {
       node.select("circle")
         .attr("data-toggle", "tooltip")
         .attr("data-placement", "bottom")
-        .attr("title", tooltipText)
+        .attr("title", tooltipText);
     }
+    // Link tooltips for all nodes that belong to the same RDD
+    node.on("mouseenter", function() { triggerTooltipForRDD(node, true); });
+    node.on("mouseleave", function() { triggerTooltipForRDD(node, false); });
   });
-  $("[data-toggle=tooltip]").tooltip({container: "body"});
-  // Trigger mouseover event for all of the same RDDs
+
+  $("[data-toggle=tooltip]")
+    .filter("g.node circle")
+    .tooltip({ container: "body", trigger: "manual" });
+}
+
+/*
+ * (Job page only) Helper function to show or hide tooltips for all nodes
+ * in the graph that refer to the same RDD the specified node represents.
+ */
+function triggerTooltipForRDD(d3node, show) {
+  var classes = d3node.node().classList;
+  for (var i = 0; i < classes.length; i++) {
+    var clazz = classes[i];
+    var isRDDClass = clazz.indexOf(VizConstants.nodePrefix) == 0;
+    if (isRDDClass) {
+      graphContainer().selectAll("g." + clazz).each(function() {
+        var circle = d3.select(this).select("circle").node();
+        var showOrHide = show ? "show" : "hide";
+        $(circle).tooltip(showOrHide);
+      });
+    }
+  }
 }
 
 /* Helper function to convert attributes to numeric values. */
