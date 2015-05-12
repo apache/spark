@@ -40,15 +40,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   private val TIMELINE_LEGEND = {
     <div class="legend-area">
       <svg>
-        <rect class="succeeded-task-legend" x="5px" y="5px" width="20px"
-              height="15px" rx="2px"></rect>
-        <text x="35px" y="17px">Succeeded</text>
-        <rect class="failed-task-legend" x="215px" y="5px" width="20px"
-              height="15px" rx="2px"></rect>
-        <text x="245px" y="17px">Failed</text>
-        <rect class="running-task-legend" x="425px" y="5px" width="20px"
-              height="15px" rx="2px"></rect>
-        <text x="455px" y="17px">Running</text>
         {
           val legendPairs = List(("deserialization-time-proportion", "Task Deserialization Time"),
             ("shuffle-read-time-proportion", "Shuffle Read Time"),
@@ -60,10 +51,10 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
           legendPairs.zipWithIndex.map {
             case ((classAttr, name), index) =>
-              <rect x={5 + (index / 3) * 210 + "px"} y={35 + (index % 3) * 15 + "px"}
+              <rect x={5 + (index / 3) * 210 + "px"} y={10 + (index % 3) * 15 + "px"}
                 width="10px" height="10px" class={classAttr}></rect>
                 <text x={25 + (index / 3) * 210 + "px"}
-                  y={45 + (index % 3) * 15 + "px"}>{name}</text>
+                  y={20 + (index % 3) * 15 + "px"}>{name}</text>
           }
         }
       </svg>
@@ -633,25 +624,25 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                 '<br>Getting Result Time: ${UIUtils.formatDuration(gettingResultTime)}">' +
            |    '<svg class="task-assignment-timeline-duration-bar">' +
            |    '<rect class="scheduler-delay-proportion" ' +
-           |      'x="${schedulerDelayProportionPos}%" y="5px" height="14px"' +
+           |      'x="${schedulerDelayProportionPos}%" y="0px" height="26px"' +
            |      'width="${schedulerDelayProportion}%""></rect>' +
            |    '<rect class="deserialization-time-proportion" '+
-           |      'x="${deserializationTimeProportionPos}%" y="5px" height="14px"' +
+           |      'x="${deserializationTimeProportionPos}%" y="0px" height="26px"' +
            |      'width="${deserializationTimeProportion}%"></rect>' +
            |    '<rect class="shuffle-read-time-proportion" ' +
-           |      'x="${shuffleReadTimeProportionPos}%" y="5px" height="14px"' +
+           |      'x="${shuffleReadTimeProportionPos}%" y="0px" height="26px"' +
            |      'width="${shuffleReadTimeProportion}%"></rect>' +
            |    '<rect class="executor-runtime-proportion" ' +
-           |      'x="${executorRuntimeProportionPos}%" y="5px" height="14px"' +
+           |      'x="${executorRuntimeProportionPos}%" y="0px" height="26px"' +
            |      'width="${executorComputingTimeProportion}%"></rect>' +
            |    '<rect class="shuffle-write-time-proportion" ' +
-           |      'x="${shuffleWriteTimeProportionPos}%" y="5px" height="14px"' +
+           |      'x="${shuffleWriteTimeProportionPos}%" y="0px" height="26px"' +
            |      'width="${shuffleWriteTimeProportion}%"></rect>' +
            |    '<rect class="serialization-time-proportion" ' +
-           |      'x="${serializationTimeProportionPos}%" y="5px" height="14px"' +
+           |      'x="${serializationTimeProportionPos}%" y="0px" height="26px"' +
            |      'width="${serializationTimeProportion}%"></rect>' +
            |    '<rect class="getting-result-time-proportion" ' +
-           |      'x="${gettingResultTimeProportionPos}%" y="5px" height="14px"' +
+           |      'x="${gettingResultTimeProportionPos}%" y="0px" height="26px"' +
            |      'width="${gettingResultTimeProportion}%"></rect></svg>',
            |  'start': new Date(${launchTime}),
            |  'end': new Date(${finishTime})
@@ -686,7 +677,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
     <span class="expand-task-assignment-timeline">
       <span class="expand-task-assignment-timeline-arrow arrow-closed"></span>
-      <a>Event Timeline(Longest {numEffectiveTasks.min(MAX_TIMELINE_TASKS)} tasks)</a>
+      <a>Event Timeline (Longest {numEffectiveTasks.min(MAX_TIMELINE_TASKS)} tasks)</a>
     </span> ++
     <div id="task-assignment-timeline" class="collapsed">
       <div class="timeline-header">

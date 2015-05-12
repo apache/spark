@@ -31,7 +31,7 @@ div#application-timeline, div#job-timeline {
 
 #task-assignment-timeline .legend-area > svg {
   width: 600px;
-  height: 80px;
+  height: 55px;
 }
 
 #task-assignment-timeline > .timeline-header:after {
@@ -45,6 +45,7 @@ div#application-timeline, div#job-timeline {
 #task-assignment-timeline div.item.range {
   padding: 0px;
   height: 26px;
+  border-width: 0;
 }
 
 .task-assignment-timeline-content {
@@ -53,11 +54,11 @@ div#application-timeline, div#job-timeline {
 
 .task-assignment-timeline-duration-bar {
   width: 100%;
-  height: 24px;
+  height: 26px;
 }
 
 rect.scheduler-delay-proportion {
-  fill: #FFF9AD;
+  fill: #F6D76B;
 }
 
 rect.deserialization-time-proportion {
@@ -82,36 +83,6 @@ rect.serialization-time-proportion {
 
 rect.getting-result-time-proportion {
   fill: #FF9036;
-}
-
-.vis.timeline .item.task.succeeded {
-  background-color: #A0DFFF;
-  border-color: #3EC0FF;
-}
-
-.legend-area rect.succeeded-task-legend {
-  fill: #A0DFFF;
-  stroke: #97B0F8;
-}
-
-.vis.timeline .item.task.failed {
-  background-color: #FFA1B0;
-  border-color: #FF4D6D;
-}
-
-.legend-area rect.failed-task-legend {
-  fill: #FF5475;
-  stroke: #FFA1B0;
-}
-
-.vis.timeline .item.task.running {
-  background-color: #A2FCC0;
-  border-color: #36F572;
-}
-
-.legend-area rect.running-task-legend {
-  fill: #A2FCC0;
-  stroke: #97B0F8;
 }
 
 .vis.timeline {
