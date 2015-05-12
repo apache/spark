@@ -490,7 +490,15 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
         self.sqlCtx.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
 
+        tmpPath2 = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath2)
+        rdd = self.sc.parallelize(['{"obj": {"a": "hello"}}', '{"obj": {"b": "world"}}'])
+        df = self.sqlCtx.jsonRDD(rdd,
+            StructType([StructField("obj", MapType(StringType(), StringType()), True)]))
+        df.save(tmpPath2, 'org.apache.spark.sql.parquet', mode='overwrite')
+
         shutil.rmtree(tmpPath)
+        shutil.rmtree(tmpPath2)
 
     def test_help_command(self):
         # Regression test for SPARK-5464
