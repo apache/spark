@@ -724,15 +724,22 @@ class SparseVector(
     if (size == 0) {
       -1
     } else {
-      var maxIdx = 0
+      var maxIdx = indices(0)
       var maxValue = values(0)
-      var i = 1
-      foreachActive{ (i, v) =>
-        if(v > maxValue) {
+
+      foreachActive { (i, v) =>
+        if(values(i) > maxValue){
           maxIdx = i
           maxValue = v
         }
       }
+//      while(i < this.indices.size){
+//        if(values(i) > maxValue){
+//          maxIdx = indices(i)
+//          maxValue = values(i)
+//        }
+//        i += 1
+//      }
       maxIdx
     }
   }

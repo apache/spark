@@ -42,7 +42,6 @@ class VectorsSuite extends FunSuite {
    val vec = Vectors.dense(arr).asInstanceOf[DenseVector]
     assert(vec.size === arr.length)
     assert(vec.values.eq(arr))
-    vec.argmax
   }
 
   test("sparse vector construction") {
@@ -57,8 +56,6 @@ class VectorsSuite extends FunSuite {
     assert(vec.size === n)
     assert(vec.indices === indices)
     assert(vec.values === values)
-    val vec2 = Vectors.sparse(5,Array(0,3),values).asInstanceOf[SparseVector]
-    vec2.foreachActive( (i, v) => println(i,v))
   }
 
   test("dense to array") {
@@ -66,9 +63,29 @@ class VectorsSuite extends FunSuite {
     assert(vec.toArray.eq(arr))
   }
 
+  test("dense argmax"){
+    val vec = Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector]
+    val noMax = vec.argmax
+    assert(noMax === -1)
+
+    val vec2 = Vectors.dense(arr).asInstanceOf[DenseVector]
+    val max = vec2.argmax
+    assert(max === 3)
+  }
+
   test("sparse to array") {
     val vec = Vectors.sparse(n, indices, values).asInstanceOf[SparseVector]
     assert(vec.toArray === arr)
+  }
+
+  test("sparse argmax"){
+    val vec = Vectors.sparse(0,Array.empty[Int],Array.empty[Double]).asInstanceOf[SparseVector]
+    val noMax = vec.argmax
+    assert(noMax === -1)
+
+    val vec2 = Vectors.sparse(n,indices,values).asInstanceOf[SparseVector]
+    val max = vec2.argmax
+    assert(max === 3)
   }
 
   test("vector equals") {
