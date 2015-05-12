@@ -807,8 +807,8 @@ class DAGSchedulerSuite
           if (idx == 0) {
             throw new FetchFailedException(aBm, 0, 0, idx,
               cause = new RuntimeException("simulated fetch failure"))
-          } else if (idx > 0 && math.random < 0.1) {
-            Thread.sleep(10000)
+          } else if (idx > 0 && math.random < 0.2) {
+            Thread.sleep(5000)
             throw new FetchFailedException(aBm, 0, 0, idx,
               cause = new RuntimeException("simulated fetch failure"))
           } else {
