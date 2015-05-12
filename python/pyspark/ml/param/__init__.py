@@ -16,7 +16,6 @@
 #
 
 from abc import ABCMeta
-
 import copy
 
 from pyspark.ml.util import Identifiable
@@ -31,9 +30,9 @@ class Param(object):
     """
 
     def __init__(self, parent, name, doc):
-        if not isinstance(parent, Params):
-            raise TypeError("Parent must be a Params but got type %s." % type(parent))
-        self.parent = parent
+        if not isinstance(parent, Identifiable):
+            raise TypeError("Parent must be an Identifiable but got type %s." % type(parent))
+        self.parent = parent.uid
         self.name = str(name)
         self.doc = str(doc)
 
@@ -42,6 +41,13 @@ class Param(object):
 
     def __repr__(self):
         return "Param(parent=%r, name=%r, doc=%r)" % (self.parent, self.name, self.doc)
+
+    def __hash__(self):
+        return hash(str(self))
+
+    def __eq__(self, other):
+        if isinstance(other, Param):
+            return self.parent == other.parent and self.name == other.name
 
 
 class Params(Identifiable):
@@ -53,10 +59,10 @@ class Params(Identifiable):
     __metaclass__ = ABCMeta
 
     #: internal param map for user-supplied values param map
-    paramMap = {}
+    _paramMap = {}
 
     #: internal param map for default values
-    defaultParamMap = {}
+    _defaultParamMap = {}
 
     #: value returned by :py:func:`params`
     _params = None
@@ -73,7 +79,7 @@ class Params(Identifiable):
                                        [getattr(self, x) for x in dir(self) if x != "params"]))
         return self._params
 
-    def _explain(self, param):
+    def explainParam(self, param):
         """
         Explains a single param and returns its name, doc, and optional
         default value and user-supplied value in a string.
@@ -81,10 +87,10 @@ class Params(Identifiable):
         param = self._resolveParam(param)
         values = []
         if self.isDefined(param):
-            if param in self.defaultParamMap:
-                values.append("default: %s" % self.defaultParamMap[param])
-            if param in self.paramMap:
-                values.append("current: %s" % self.paramMap[param])
+            if param in self._defaultParamMap:
+                values.append("default: %s" % self._defaultParamMap[param])
+            if param in self._paramMap:
+                values.append("current: %s" % self._paramMap[param])
         else:
             values.append("undefined")
         valueStr = "(" + ", ".join(values) + ")"
@@ -95,7 +101,7 @@ class Params(Identifiable):
         Returns the documentation of all params with their optionally
         default values and user-supplied values.
         """
-        return "\n".join([self._explain(param) for param in self.params])
+        return "\n".join([self.explainParam(param) for param in self.params])
 
     def getParam(self, paramName):
         """
@@ -112,14 +118,14 @@ class Params(Identifiable):
         Checks whether a param is explicitly set by user.
         """
         param = self._resolveParam(param)
-        return param in self.paramMap
+        return param in self._paramMap
 
     def hasDefault(self, param):
         """
         Checks whether a param has a default value.
         """
         param = self._resolveParam(param)
-        return param in self.defaultParamMap
+        return param in self._defaultParamMap
 
     def isDefined(self, param):
         """
@@ -141,10 +147,10 @@ class Params(Identifiable):
         default value. Raises an error if either is set.
         """
         if isinstance(param, Param):
-            if param in self.paramMap:
-                return self.paramMap[param]
+            if param in self._paramMap:
+                return self._paramMap[param]
             else:
-                return self.defaultParamMap[param]
+                return self._defaultParamMap[param]
         elif isinstance(param, str):
             return self.getOrDefault(self.getParam(param))
         else:
@@ -160,8 +166,8 @@ class Params(Identifiable):
         :param extra: extra param values
         :return: merged param map
         """
-        paramMap = self.defaultParamMap.copy()
-        paramMap.update(self.paramMap)
+        paramMap = self._defaultParamMap.copy()
+        paramMap.update(self._paramMap)
         paramMap.update(extra)
         return paramMap
 
@@ -178,15 +184,14 @@ class Params(Identifiable):
         :return: Copy of this instance
         """
         that = copy.copy(self)
-        that.uid = that._generateUID()
-        that.paramMap = copy.deepcopy(self.paramMap)
-        return self._copyValues(that, extra)
+        that._paramMap = copy.deepcopy(self.extractParamMap(extra))
+        return that
 
     def _shouldOwn(self, param):
         """
         Validates that the input param belongs to this Params instance.
         """
-        if param.parent is not self:
+        if not (self.uid == param.parent and self.hasParam(param.name)):
             raise ValueError("Param %r does not belong to %r." % (param, self))
 
     def _resolveParam(self, param):
@@ -219,7 +224,7 @@ class Params(Identifiable):
         Sets user-supplied params.
         """
         for param, value in kwargs.items():
-            self.paramMap[getattr(self, param)] = value
+            self._paramMap[getattr(self, param)] = value
         return self
 
     def _setDefault(self, **kwargs):
@@ -227,7 +232,7 @@ class Params(Identifiable):
         Sets default params.
         """
         for param, value in kwargs.items():
-            self.defaultParamMap[getattr(self, param)] = value
+            self._defaultParamMap[getattr(self, param)] = value
         return self
 
     def _copyValues(self, to, extra={}):

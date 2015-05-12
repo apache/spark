@@ -133,7 +133,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`rank`.
         """
-        self.paramMap[self.rank] = value
+        self._paramMap[self.rank] = value
         return self
 
     def getRank(self):
@@ -146,7 +146,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`numUserBlocks`.
         """
-        self.paramMap[self.numUserBlocks] = value
+        self._paramMap[self.numUserBlocks] = value
         return self
 
     def getNumUserBlocks(self):
@@ -159,7 +159,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`numItemBlocks`.
         """
-        self.paramMap[self.numItemBlocks] = value
+        self._paramMap[self.numItemBlocks] = value
         return self
 
     def getNumItemBlocks(self):
@@ -172,14 +172,14 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets both :py:attr:`numUserBlocks` and :py:attr:`numItemBlocks` to the specific value.
         """
-        self.paramMap[self.numUserBlocks] = value
-        self.paramMap[self.numItemBlocks] = value
+        self._paramMap[self.numUserBlocks] = value
+        self._paramMap[self.numItemBlocks] = value
 
     def setImplicitPrefs(self, value):
         """
         Sets the value of :py:attr:`implicitPrefs`.
         """
-        self.paramMap[self.implicitPrefs] = value
+        self._paramMap[self.implicitPrefs] = value
         return self
 
     def getImplicitPrefs(self):
@@ -192,7 +192,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`alpha`.
         """
-        self.paramMap[self.alpha] = value
+        self._paramMap[self.alpha] = value
         return self
 
     def getAlpha(self):
@@ -205,7 +205,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`userCol`.
         """
-        self.paramMap[self.userCol] = value
+        self._paramMap[self.userCol] = value
         return self
 
     def getUserCol(self):
@@ -218,7 +218,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`itemCol`.
         """
-        self.paramMap[self.itemCol] = value
+        self._paramMap[self.itemCol] = value
         return self
 
     def getItemCol(self):
@@ -231,7 +231,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`ratingCol`.
         """
-        self.paramMap[self.ratingCol] = value
+        self._paramMap[self.ratingCol] = value
         return self
 
     def getRatingCol(self):
@@ -244,7 +244,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`nonnegative`.
         """
-        self.paramMap[self.nonnegative] = value
+        self._paramMap[self.nonnegative] = value
         return self
 
     def getNonnegative(self):

@@ -155,7 +155,7 @@ class CrossValidator(Estimator):
         """
         Sets the value of :py:attr:`estimator`.
         """
-        self.paramMap[self.estimator] = value
+        self._paramMap[self.estimator] = value
         return self
 
     def getEstimator(self):
@@ -168,7 +168,7 @@ class CrossValidator(Estimator):
         """
         Sets the value of :py:attr:`estimatorParamMaps`.
         """
-        self.paramMap[self.estimatorParamMaps] = value
+        self._paramMap[self.estimatorParamMaps] = value
         return self
 
     def getEstimatorParamMaps(self):
@@ -181,7 +181,7 @@ class CrossValidator(Estimator):
         """
         Sets the value of :py:attr:`evaluator`.
         """
-        self.paramMap[self.evaluator] = value
+        self._paramMap[self.evaluator] = value
         return self
 
     def getEvaluator(self):
@@ -194,7 +194,7 @@ class CrossValidator(Estimator):
         """
         Sets the value of :py:attr:`numFolds`.
         """
-        self.paramMap[self.numFolds] = value
+        self._paramMap[self.numFolds] = value
         return self
 
     def getNumFolds(self):
@@ -203,13 +203,12 @@ class CrossValidator(Estimator):
         """
         return self.getOrDefault(self.numFolds)
 
-    def fit(self, dataset, params={}):
-        paramMap = self.extractParamMap(params)
-        est = paramMap[self.estimator]
-        epm = paramMap[self.estimatorParamMaps]
+    def _fit(self, dataset):
+        est = self.getOrDefault(self.estimator)
+        epm = self.getOrDefault(self.estimatorParamMaps)
         numModels = len(epm)
-        eva = paramMap[self.evaluator]
-        nFolds = paramMap[self.numFolds]
+        eva = self.getOrDefault(self.evaluator)
+        nFolds = self.getOrDefault(self.numFolds)
         h = 1.0 / nFolds
         randCol = self.uid + "_rand"
         df = dataset.select("*", rand(0).alias(randCol))
@@ -259,8 +258,8 @@ class CrossValidatorModel(Model):
         #: best model from cross validation
         self.bestModel = bestModel
 
-    def transform(self, dataset, params={}):
-        return self.bestModel.transform(dataset, params)
+    def _transform(self, dataset):
+        return self.bestModel.transform(dataset)
 
     def copy(self, extra={}):
         """

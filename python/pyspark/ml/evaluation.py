@@ -68,7 +68,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         """
         Sets the value of :py:attr:`metricName`.
         """
-        self.paramMap[self.metricName] = value
+        self._paramMap[self.metricName] = value
         return self
 
     def getMetricName(self):

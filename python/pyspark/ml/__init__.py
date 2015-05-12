@@ -18,4 +18,4 @@
 from pyspark.ml.param import *
 from pyspark.ml.pipeline import *
 
-__all__ = ["Param", "Params", "Transformer", "Estimator", "Pipeline"]
+__all__ = ["Param", "Params", "Transformer", "Estimator", "Model", "Pipeline", "PipelineModel"]

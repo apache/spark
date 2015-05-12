@@ -39,7 +39,7 @@ class HasMaxIter(Params):
         """
         Sets the value of :py:attr:`maxIter`.
         """
-        self.paramMap[self.maxIter] = value
+        self._paramMap[self.maxIter] = value
         return self
 
     def getMaxIter(self):
@@ -68,7 +68,7 @@ class HasRegParam(Params):
         """
         Sets the value of :py:attr:`regParam`.
         """
-        self.paramMap[self.regParam] = value
+        self._paramMap[self.regParam] = value
         return self
 
     def getRegParam(self):
@@ -97,7 +97,7 @@ class HasFeaturesCol(Params):
         """
         Sets the value of :py:attr:`featuresCol`.
         """
-        self.paramMap[self.featuresCol] = value
+        self._paramMap[self.featuresCol] = value
         return self
 
     def getFeaturesCol(self):
@@ -126,7 +126,7 @@ class HasLabelCol(Params):
         """
         Sets the value of :py:attr:`labelCol`.
         """
-        self.paramMap[self.labelCol] = value
+        self._paramMap[self.labelCol] = value
         return self
 
     def getLabelCol(self):
@@ -155,7 +155,7 @@ class HasPredictionCol(Params):
         """
         Sets the value of :py:attr:`predictionCol`.
         """
-        self.paramMap[self.predictionCol] = value
+        self._paramMap[self.predictionCol] = value
         return self
 
     def getPredictionCol(self):
@@ -184,7 +184,7 @@ class HasRawPredictionCol(Params):
         """
         Sets the value of :py:attr:`rawPredictionCol`.
         """
-        self.paramMap[self.rawPredictionCol] = value
+        self._paramMap[self.rawPredictionCol] = value
         return self
 
     def getRawPredictionCol(self):
@@ -213,7 +213,7 @@ class HasInputCol(Params):
         """
         Sets the value of :py:attr:`inputCol`.
         """
-        self.paramMap[self.inputCol] = value
+        self._paramMap[self.inputCol] = value
         return self
 
     def getInputCol(self):
@@ -242,7 +242,7 @@ class HasInputCols(Params):
         """
         Sets the value of :py:attr:`inputCols`.
         """
-        self.paramMap[self.inputCols] = value
+        self._paramMap[self.inputCols] = value
         return self
 
     def getInputCols(self):
@@ -271,7 +271,7 @@ class HasOutputCol(Params):
         """
         Sets the value of :py:attr:`outputCol`.
         """
-        self.paramMap[self.outputCol] = value
+        self._paramMap[self.outputCol] = value
         return self
 
     def getOutputCol(self):
@@ -300,7 +300,7 @@ class HasNumFeatures(Params):
         """
         Sets the value of :py:attr:`numFeatures`.
         """
-        self.paramMap[self.numFeatures] = value
+        self._paramMap[self.numFeatures] = value
         return self
 
     def getNumFeatures(self):
@@ -329,7 +329,7 @@ class HasCheckpointInterval(Params):
         """
         Sets the value of :py:attr:`checkpointInterval`.
         """
-        self.paramMap[self.checkpointInterval] = value
+        self._paramMap[self.checkpointInterval] = value
         return self
 
     def getCheckpointInterval(self):
@@ -358,7 +358,7 @@ class HasSeed(Params):
         """
         Sets the value of :py:attr:`seed`.
         """
-        self.paramMap[self.seed] = value
+        self._paramMap[self.seed] = value
         return self
 
     def getSeed(self):
@@ -387,7 +387,7 @@ class HasTol(Params):
         """
         Sets the value of :py:attr:`tol`.
         """
-        self.paramMap[self.tol] = value
+        self._paramMap[self.tol] = value
         return self
 
     def getTol(self):
@@ -416,7 +416,7 @@ class HasStepSize(Params):
         """
         Sets the value of :py:attr:`stepSize`.
         """
-        self.paramMap[self.stepSize] = value
+        self._paramMap[self.stepSize] = value
         return self
 
     def getStepSize(self):

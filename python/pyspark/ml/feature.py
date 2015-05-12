@@ -73,7 +73,7 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         Sets the value of :py:attr:`threshold`.
         """
-        self.paramMap[self.threshold] = value
+        self._paramMap[self.threshold] = value
         return self
 
     def getThreshold(self):
@@ -171,7 +171,7 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
         """
         Sets the value of :py:attr:`minDocFreq`.
         """
-        self.paramMap[self.minDocFreq] = value
+        self._paramMap[self.minDocFreq] = value
         return self
 
     def getMinDocFreq(self):
@@ -234,7 +234,7 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         Sets the value of :py:attr:`p`.
         """
-        self.paramMap[self.p] = value
+        self._paramMap[self.p] = value
         return self
 
     def getP(self):
@@ -299,7 +299,7 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
         """
         Sets the value of :py:attr:`includeFirst`.
         """
-        self.paramMap[self.includeFirst] = value
+        self._paramMap[self.includeFirst] = value
         return self
 
     def getIncludeFirst(self):
@@ -356,7 +356,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
         """
         Sets the value of :py:attr:`degree`.
         """
-        self.paramMap[self.degree] = value
+        self._paramMap[self.degree] = value
         return self
 
     def getDegree(self):
@@ -430,7 +430,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         Sets the value of :py:attr:`minTokenLength`.
         """
-        self.paramMap[self.minTokenLength] = value
+        self._paramMap[self.minTokenLength] = value
         return self
 
     def getMinTokenLength(self):
@@ -443,7 +443,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         Sets the value of :py:attr:`gaps`.
         """
-        self.paramMap[self.gaps] = value
+        self._paramMap[self.gaps] = value
         return self
 
     def getGaps(self):
@@ -456,7 +456,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         Sets the value of :py:attr:`pattern`.
         """
-        self.paramMap[self.pattern] = value
+        self._paramMap[self.pattern] = value
         return self
 
     def getPattern(self):
@@ -511,7 +511,7 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
         """
         Sets the value of :py:attr:`withMean`.
         """
-        self.paramMap[self.withMean] = value
+        self._paramMap[self.withMean] = value
         return self
 
     def getWithMean(self):
@@ -524,7 +524,7 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
         """
         Sets the value of :py:attr:`withStd`.
         """
-        self.paramMap[self.withStd] = value
+        self._paramMap[self.withStd] = value
         return self
 
     def getWithStd(self):
@@ -754,7 +754,7 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
         """
         Sets the value of :py:attr:`maxCategories`.
         """
-        self.paramMap[self.maxCategories] = value
+        self._paramMap[self.maxCategories] = value
         return self
 
     def getMaxCategories(self):
@@ -823,7 +823,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         """
         Sets the value of :py:attr:`vectorSize`.
         """
-        self.paramMap[self.vectorSize] = value
+        self._paramMap[self.vectorSize] = value
         return self
 
     def getVectorSize(self):
@@ -836,7 +836,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         """
         Sets the value of :py:attr:`numPartitions`.
         """
-        self.paramMap[self.numPartitions] = value
+        self._paramMap[self.numPartitions] = value
         return self
 
     def getNumPartitions(self):
@@ -849,7 +849,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         """
         Sets the value of :py:attr:`minCount`.
         """
-        self.paramMap[self.minCount] = value
+        self._paramMap[self.minCount] = value
         return self
 
     def getMinCount(self):

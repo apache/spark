@@ -111,9 +111,7 @@ class JavaEstimator(Estimator, JavaWrapper):
         self._transfer_params_to_java(java_obj)
         return java_obj.fit(dataset._jdf, self._empty_java_param_map())
 
-    def fit(self, dataset, params={}):
-        if len(params) != 0:
-            return self.copy(params).fit(dataset)
+    def _fit(self, dataset):
         java_model = self._fit_java(dataset)
         return self._create_model(java_model)
 
@@ -127,9 +125,7 @@ class JavaTransformer(Transformer, JavaWrapper):
 
     __metaclass__ = ABCMeta
 
-    def transform(self, dataset, params={}):
-        if len(params) != 0:
-            return self.copy(params).transform(dataset)
+    def _transform(self, dataset):
         java_obj = self._java_obj()
         self._transfer_params_to_java(java_obj)
         return DataFrame(java_obj.transform(dataset._jdf), dataset.sql_ctx)
@@ -178,14 +174,12 @@ class JavaEvaluator(Evaluator, JavaWrapper):
 
     __metaclass__ = ABCMeta
 
-    def evaluate(self, dataset, params={}):
+    def _evaluate(self, dataset):
         """
         Evaluates the output.
         :param dataset: a dataset that contains labels/observations and predictions.
         :return: evaluation metric
         """
-        if len(params) != 0:
-            return self.copy(params).evaluate(dataset)
         java_obj = self._java_obj()
         self._transfer_params_to_java(java_obj)
         return java_obj.evaluate(dataset._jdf, self._empty_java_param_map())

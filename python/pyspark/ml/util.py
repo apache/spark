@@ -40,14 +40,15 @@ class Identifiable(object):
 
     def __init__(self):
         #: A unique id for the object.
-        self.uid = self._generateUID()
+        self.uid = self._randomUID()
 
     def __repr__(self):
         return self.uid
 
-    def _generateUID(self):
+    @classmethod
+    def _randomUID(self):
         """
         Generate a unique id for the object. The default implementation
-        concatenates the class name, "_", and 8 random hex chars.
+        concatenates the class name, "_", and 12 random hex chars.
         """
-        return type(self).__name__ + "_" + uuid.uuid4().hex[:8]
+        return type(self).__name__ + "_" + uuid.uuid4().hex[12:]

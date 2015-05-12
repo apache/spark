@@ -22,7 +22,7 @@ from pyspark.ml.util import keyword_only
 from pyspark.mllib.common import inherit_doc
 
 
-__all__ = ['Estimator', 'Transformer', 'Pipeline', 'PipelineModel', 'Evaluator', 'Model']
+__all__ = ['Estimator', 'Transformer', 'Model', 'Pipeline', 'PipelineModel', 'Evaluator']
 
 
 @inherit_doc
@@ -34,6 +34,17 @@ class Estimator(Params):
     __metaclass__ = ABCMeta
 
     @abstractmethod
+    def _fit(self, dataset):
+        """
+        Fits a model to the input dataset. This is called by the
+        default implementation of fit.
+
+        :param dataset: input dataset, which is an instance of
+                        :py:class:`pyspark.sql.DataFrame`
+        :returns: fitted model
+        """
+        raise NotImplementedError()
+
     def fit(self, dataset, params={}):
         """
         Fits a model to the input dataset with optional parameters.
@@ -41,14 +52,18 @@ class Estimator(Params):
         :param dataset: input dataset, which is an instance of
                         :py:class:`pyspark.sql.DataFrame`
         :param params: an optional param map that overrides embedded
-                       params
-        :returns: fitted model
+                       params. If a list/tuple of param maps is given,
+                       this calls fit on each param map and returns a
+                       list of models.
+        :returns: fitted model(s)
         """
-        # NOTE: Implementing classes should begin with the following
-        #       to handle params:
-        # if len(params) != 0:
-        #     return self.copy(params).fit(dataset)
-        raise NotImplementedError()
+        if isinstance(params, (list, tuple)):
+            return [self.fit(dataset, paramMap) for paramMap in params]
+        elif isinstance(params, dict):
+            return self.copy(params)._fit(dataset)
+        else:
+            raise ValueError("Params must be either a param map or a list/tuple of param maps, "
+                             "but got %s." % type(params))
 
 
 @inherit_doc
@@ -61,6 +76,16 @@ class Transformer(Params):
     __metaclass__ = ABCMeta
 
     @abstractmethod
+    def _transform(self, dataset):
+        """
+        Transforms the input dataset with optional parameters.
+
+        :param dataset: input dataset, which is an instance of
+                        :py:class:`pyspark.sql.DataFrame`
+        :returns: transformed dataset
+        """
+        raise NotImplementedError()
+
     def transform(self, dataset, params={}):
         """
         Transforms the input dataset with optional parameters.
@@ -68,14 +93,13 @@ class Transformer(Params):
         :param dataset: input dataset, which is an instance of
                         :py:class:`pyspark.sql.DataFrame`
         :param params: an optional param map that overrides embedded
-                       params
+                       params.
         :returns: transformed dataset
         """
-        # NOTE: Implementing classes should begin with the following
-        #       to handle params:
-        # if len(params) != 0:
-        #     return self.copy(params).transform(dataset)
-        raise NotImplementedError()
+        if isinstance(params, dict):
+            return self.copy(params,)._transform(dataset)
+        else:
+            raise ValueError("Params must be either a param map but got %s." % type(params))
 
 
 @inherit_doc
@@ -124,15 +148,15 @@ class Pipeline(Estimator):
         :param value: a list of transformers or estimators
         :return: the pipeline instance
         """
-        self.paramMap[self.stages] = value
+        self._paramMap[self.stages] = value
         return self
 
     def getStages(self):
         """
         Get pipeline stages.
         """
-        if self.stages in self.paramMap:
-            return self.paramMap[self.stages]
+        if self.stages in self._paramMap:
+            return self._paramMap[self.stages]
 
     @keyword_only
     def setParams(self, stages=[]):
@@ -143,9 +167,7 @@ class Pipeline(Estimator):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
-    def fit(self, dataset, params={}):
-        if len(params) != 0:
-            return self.copy(params).fit(dataset)
+    def _fit(self, dataset):
         stages = self.getStages()
         for stage in stages:
             if not (isinstance(stage, Estimator) or isinstance(stage, Transformer)):
@@ -180,7 +202,7 @@ class Pipeline(Estimator):
         :return: Copy of this instance
         """
         paramMap = self.extractParamMap(extra)
-        stages = map(lambda stage: stage.copy(extra), paramMap[self.stages])
+        stages = [stage.copy(extra) for stage in paramMap[self.stages]]
         return Pipeline().setStages(stages)
 
 
@@ -194,9 +216,7 @@ class PipelineModel(Model):
         super(PipelineModel, self).__init__()
         self.stages = stages
 
-    def transform(self, dataset, params={}):
-        if len(params) != 0:
-            return self.copy(params).transform(dataset)
+    def _transform(self, dataset):
         for t in self.stages:
             dataset = t.transform(dataset)
         return dataset
@@ -210,7 +230,7 @@ class PipelineModel(Model):
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """
-        stages = map(lambda stage: stage.copy(extra), self.stages)
+        stages = [stage.copy(extra) for stage in self.stages]
         return PipelineModel(stages)
 
 
@@ -222,9 +242,19 @@ class Evaluator(Params):
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def evaluate(self, dataset, params={}):
+    def _evaluate(self, dataset):
         """
         Evaluates the output.
+
+        :param dataset: a dataset that contains labels/observations and
+               predictions
+        :return: metric
+        """
+        raise NotImplementedError()
+
+    def evaluate(self, dataset, params={}):
+        """
+        Evaluates the output with optional parameters.
 
         :param dataset: a dataset that contains labels/observations and
                         predictions
@@ -232,8 +262,7 @@ class Evaluator(Params):
                        params
         :return: metric
         """
-        # NOTE: Implementing classes should begin with the following
-        #       to handle params:
-        # if len(params) != 0:
-        #     return self.copy(params).evaluate(dataset)
-        raise NotImplementedError()
+        if isinstance(params, dict):
+            return self.copy(params)._evaluate(dataset)
+        else:
+            raise ValueError("Params must be a param map but got %s." % type(params))
