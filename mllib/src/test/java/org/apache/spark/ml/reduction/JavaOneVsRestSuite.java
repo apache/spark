@@ -77,7 +77,7 @@ public class JavaOneVsRestSuite implements Serializable {
         Assert.assertEquals(ova.getLabelCol() , "label");
         Assert.assertEquals(ova.getPredictionCol() , "prediction");
         OneVsRestModel ovaModel = ova.fit(dataset);
-        DataFrame predictions = ovaModel.transform(dataset).select("label", "predictions");
+        DataFrame predictions = ovaModel.transform(dataset).select("label", "prediction");
         predictions.collectAsList();
         Assert.assertEquals(ovaModel.getLabelCol(), "label");
         Assert.assertEquals(ovaModel.getPredictionCol() , "prediction");
