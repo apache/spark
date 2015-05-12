@@ -933,10 +933,13 @@ class DataFrame(object):
 
         :param to_replace: int, long, float, string, or list.
             Value to be replaced.
-            The replacement value must be an int, long, float, or string.
+            If the value is a dict, then `value` is ignored and `to_replace` must be a
+            mapping from column name (string) to replacement value. The value to be
+            replaced must be an int, long, float, or string.
         :param value: int, long, float, string, or list.
             Value to use to replace holes.
-            The replacement value must be an int, long, float, or string.
+            The replacement value must be an int, long, float, or string. If `value` is a
+            list or tuple, `value` should be of the same length with `to_replace`.
         :param subset: optional list of column names to consider.
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
@@ -961,20 +964,17 @@ class DataFrame(object):
         |null|  null|null|
         +----+------+----+
         """
-        if not isinstance(to_replace, (float, int, long, basestring, list, tuple)):
-            raise ValueError("to_replace should be a float, int, long, string, list, or tuple")
+        if not isinstance(to_replace, (float, int, long, basestring, list, tuple, dict)):
+            raise ValueError(
+                "to_replace should be a float, int, long, string, list, tuple, or dict")
 
         if not isinstance(value, (float, int, long, basestring, list, tuple)):
             raise ValueError("value should be a float, int, long, string, list, or tuple")
 
-        if isinstance(to_replace, dict) and not isinstance(value, (list, tuple, dict)):
-            raise TypeError("")
+        rep_dict = dict()
 
         if isinstance(to_replace, (float, int, long, basestring)):
             to_replace = [to_replace]
-
-        if isinstance(value, (float, int, long, basestring)):
-            value = [value]
 
         if isinstance(to_replace, tuple):
             to_replace = list(to_replace)
@@ -985,8 +985,12 @@ class DataFrame(object):
         if isinstance(to_replace, list) and isinstance(value, list):
             if len(to_replace) != len(value):
                 raise ValueError("to_replace and value lists should be of the same length")
+            rep_dict = dict(zip(to_replace, value))
+        elif isinstance(to_replace, list) and isinstance(value, (float, int, long, basestring)):
+            rep_dict = {tr: value for tr in to_replace}
+        elif isinstance(to_replace, dict):
+            rep_dict = to_replace
 
-        rep_dict = dict(zip(to_replace, value))
         if subset is None:
             return DataFrame(self._jdf.na().replace('*', rep_dict), self.sql_ctx)
         elif isinstance(subset, basestring):
