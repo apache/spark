@@ -32,33 +32,38 @@ final class UnsafeShuffleInMemorySorter {
   }
   private static final SortComparator SORT_COMPARATOR = new SortComparator();
 
-  private long[] sortBuffer;
+  /**
+   * An array of record pointers and partition ids that have been encoded by
+   * {@link PackedRecordPointer}. The sort operates on this array instead of directly manipulating
+   * records.
+   */
+  private long[] pointerArray;
 
   /**
-   * The position in the sort buffer where new records can be inserted.
+   * The position in the pointer array where new records can be inserted.
    */
-  private int sortBufferInsertPosition = 0;
+  private int pointerArrayInsertPosition = 0;
 
   public UnsafeShuffleInMemorySorter(int initialSize) {
     assert (initialSize > 0);
-    this.sortBuffer = new long[initialSize];
+    this.pointerArray = new long[initialSize];
     this.sorter = new Sorter<PackedRecordPointer, long[]>(UnsafeShuffleSortDataFormat.INSTANCE);
   }
 
-  public void expandSortBuffer() {
-    final long[] oldBuffer = sortBuffer;
+  public void expandPointerArray() {
+    final long[] oldArray = pointerArray;
     // Guard against overflow:
-    final int newLength = oldBuffer.length * 2 > 0 ? (oldBuffer.length * 2) : Integer.MAX_VALUE;
-    sortBuffer = new long[newLength];
-    System.arraycopy(oldBuffer, 0, sortBuffer, 0, oldBuffer.length);
+    final int newLength = oldArray.length * 2 > 0 ? (oldArray.length * 2) : Integer.MAX_VALUE;
+    pointerArray = new long[newLength];
+    System.arraycopy(oldArray, 0, pointerArray, 0, oldArray.length);
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return sortBufferInsertPosition + 1 < sortBuffer.length;
+    return pointerArrayInsertPosition + 1 < pointerArray.length;
   }
 
   public long getMemoryUsage() {
-    return sortBuffer.length * 8L;
+    return pointerArray.length * 8L;
   }
 
   /**
@@ -73,15 +78,15 @@ final class UnsafeShuffleInMemorySorter {
    */
   public void insertRecord(long recordPointer, int partitionId) {
     if (!hasSpaceForAnotherRecord()) {
-      if (sortBuffer.length == Integer.MAX_VALUE) {
-        throw new IllegalStateException("Sort buffer has reached maximum size");
+      if (pointerArray.length == Integer.MAX_VALUE) {
+        throw new IllegalStateException("Sort pointer array has reached maximum size");
       } else {
-        expandSortBuffer();
+        expandPointerArray();
       }
     }
-    sortBuffer[sortBufferInsertPosition] =
+    pointerArray[pointerArrayInsertPosition] =
         PackedRecordPointer.packPointer(recordPointer, partitionId);
-    sortBufferInsertPosition++;
+    pointerArrayInsertPosition++;
   }
 
   /**
@@ -89,14 +94,14 @@ final class UnsafeShuffleInMemorySorter {
    */
   public static final class UnsafeShuffleSorterIterator {
 
-    private final long[] sortBuffer;
+    private final long[] pointerArray;
     private final int numRecords;
     final PackedRecordPointer packedRecordPointer = new PackedRecordPointer();
     private int position = 0;
 
-    public UnsafeShuffleSorterIterator(int numRecords, long[] sortBuffer) {
+    public UnsafeShuffleSorterIterator(int numRecords, long[] pointerArray) {
       this.numRecords = numRecords;
-      this.sortBuffer = sortBuffer;
+      this.pointerArray = pointerArray;
     }
 
     public boolean hasNext() {
@@ -104,7 +109,7 @@ final class UnsafeShuffleInMemorySorter {
     }
 
     public void loadNext() {
-      packedRecordPointer.set(sortBuffer[position]);
+      packedRecordPointer.set(pointerArray[position]);
       position++;
     }
   }
@@ -113,7 +118,7 @@ final class UnsafeShuffleInMemorySorter {
    * Return an iterator over record pointers in sorted order.
    */
   public UnsafeShuffleSorterIterator getSortedIterator() {
-    sorter.sort(sortBuffer, 0, sortBufferInsertPosition, SORT_COMPARATOR);
-    return new UnsafeShuffleSorterIterator(sortBufferInsertPosition, sortBuffer);
+    sorter.sort(pointerArray, 0, pointerArrayInsertPosition, SORT_COMPARATOR);
+    return new UnsafeShuffleSorterIterator(pointerArrayInsertPosition, pointerArray);
   }
 }

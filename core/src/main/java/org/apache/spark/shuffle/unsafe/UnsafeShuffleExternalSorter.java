@@ -316,16 +316,16 @@ final class UnsafeShuffleExternalSorter {
    */
   private void allocateSpaceForRecord(int requiredSpace) throws IOException {
     if (!sorter.hasSpaceForAnotherRecord()) {
-      logger.debug("Attempting to expand sort buffer");
-      final long oldSortBufferMemoryUsage = sorter.getMemoryUsage();
-      final long memoryToGrowSortBuffer = oldSortBufferMemoryUsage * 2;
-      final long memoryAcquired = shuffleMemoryManager.tryToAcquire(memoryToGrowSortBuffer);
-      if (memoryAcquired < memoryToGrowSortBuffer) {
+      logger.debug("Attempting to expand sort pointer array");
+      final long oldPointerArrayMemoryUsage = sorter.getMemoryUsage();
+      final long memoryToGrowPointerArray = oldPointerArrayMemoryUsage * 2;
+      final long memoryAcquired = shuffleMemoryManager.tryToAcquire(memoryToGrowPointerArray);
+      if (memoryAcquired < memoryToGrowPointerArray) {
         shuffleMemoryManager.release(memoryAcquired);
         spill();
       } else {
-        sorter.expandSortBuffer();
-        shuffleMemoryManager.release(oldSortBufferMemoryUsage);
+        sorter.expandPointerArray();
+        shuffleMemoryManager.release(oldPointerArrayMemoryUsage);
       }
     }
     if (requiredSpace > freeSpaceInCurrentPage) {
