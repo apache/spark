@@ -21,6 +21,7 @@ import java.io.Serializable;
 import java.util.List;
 
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -61,7 +62,6 @@ public class JavaOneVsRestSuite implements Serializable {
                 weights, xMean, xVariance, true, nPoints, 42));
         datasetRDD = jsc.parallelize(points, 2);
         dataset = jsql.createDataFrame(datasetRDD, LabeledPoint.class);
-        dataset.registerTempTable("dataset");
     }
 
     @After
@@ -74,13 +74,13 @@ public class JavaOneVsRestSuite implements Serializable {
     public void oneVsRestDefaultParams() {
         OneVsRest ova = new OneVsRest();
         ova.setClassifier(new LogisticRegression());
-        assert(ova.getLabelCol() == "label");
-        assert(ova.getPredictionCol() == "prediction");
+        Assert.assertEquals(ova.getLabelCol() , "label");
+        Assert.assertEquals(ova.getPredictionCol() , "prediction");
         OneVsRestModel ovaModel = ova.fit(dataset);
         ovaModel.transform(dataset).registerTempTable("prediction");
         DataFrame predictions = jsql.sql("SELECT label, prediction FROM prediction");
         predictions.collectAsList();
-        assert(ovaModel.getLabelCol() == "label");
-        assert(ovaModel.getPredictionCol() == "prediction");
+        Assert.assertEquals(ovaModel.getLabelCol(), "label");
+        Assert.assertEquals(ovaModel.getPredictionCol() , "prediction");
     }
 }

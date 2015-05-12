@@ -39,13 +39,13 @@ import org.apache.spark.storage.StorageLevel
 private[ml] trait OneVsRestParams extends PredictorParams {
 
   type ClassifierType = Classifier[F, E, M] forSome {
-    type F ;
-    type M <: ClassificationModel[F,M];
+    type F
+    type M <: ClassificationModel[F,M]
     type E <:  Classifier[F, E,M]
   }
 
   /**
-   * param for the base classifier that we reduce multiclass classification into.
+   * param for the base binary classifier that we reduce multiclass classification into.
    * @group param
    */
   val classifier: Param[ClassifierType]  =
@@ -58,9 +58,14 @@ private[ml] trait OneVsRestParams extends PredictorParams {
 
 /**
  * Model produced by [[OneVsRest]].
- *
+ * Stores the models resulting from training k different classifiers:
+ * one for each class.
+ * Each example is scored against all k models and the model with highest score
+ * is picked to label the example.
+ * TODO: API may need to change when we introduce a ClassificationModel trait as the public API
  * @param parent
  * @param models the binary classification models for reduction.
+ *               The i-th model is produced by testing the i-th class vs the rest.
  */
 @AlphaComponent
 class OneVsRestModel(
@@ -83,7 +88,7 @@ class OneVsRestModel(
     val accColName = "mbc$acc" + UUID.randomUUID().toString
     val init: () => Map[Int, Double] = () => {Map()}
     val mapType = MapType(IntegerType, DoubleType, false)
-    val newDataset = dataset.withColumn(accColName,callUDF(init, mapType))
+    val newDataset = dataset.withColumn(accColName, callUDF(init, mapType))
 
     // persist if underlying dataset is not persistent.
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
@@ -133,10 +138,9 @@ class OneVsRestModel(
  * For a multiclass classification with k classes, train k models (one per class).
  * Each example is scored against all k models and the model with highest score
  * is picked to label the example.
- *
  */
 @Experimental
-class OneVsRest extends Estimator[OneVsRestModel] with OneVsRestParams {
+final class OneVsRest extends Estimator[OneVsRestModel] with OneVsRestParams {
 
   /** @group setParam */
   // TODO: Find a better way to do this. Existential Types don't work with Java API so cast needed.
@@ -177,7 +181,6 @@ class OneVsRest extends Estimator[OneVsRestModel] with OneVsRestParams {
       // TODO: use when ... otherwise after SPARK-7321 is merged
       val labelUDF = callUDF(label, DoubleType, col($(labelCol)))
       val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
-      val skipFeatures: Any => Boolean = (name: Any) => name.toString.equals(featuresCol.name)
       val labelColName = "mc2b$" + index
       val labelUDFWithNewMeta = labelUDF.as(labelColName, newLabelMeta)
       val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDFWithNewMeta)

@@ -545,7 +545,7 @@ object BinaryAttribute extends AttributeFactory {
 /**
  * An unresolved attribute.
  */
-private[ml] object UnresolvedAttribute extends Attribute {
+object UnresolvedAttribute extends Attribute {
 
   override def attrType: AttributeType = AttributeType.Unresolved
 

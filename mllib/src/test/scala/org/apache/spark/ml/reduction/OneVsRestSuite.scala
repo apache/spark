@@ -40,7 +40,7 @@ class OneVsRestSuite extends FunSuite with MLlibTestSparkContext {
   override def beforeAll(): Unit = {
     super.beforeAll()
     sqlContext = new SQLContext(sc)
-    val nPoints = 10000
+    val nPoints = 1000
 
     /**
      * The following weights and xMean/xVariance are computed from iris dataset with lambda = 0.2.
@@ -61,13 +61,13 @@ class OneVsRestSuite extends FunSuite with MLlibTestSparkContext {
     val numClasses = 3
     val ova = new OneVsRest()
     ova.setClassifier(new LogisticRegression)
-    assert(ova.getLabelCol == "label")
-    assert(ova.getPredictionCol == "prediction")
+    assert(ova.getLabelCol === "label")
+    assert(ova.getPredictionCol === "prediction")
     val ovaModel = ova.fit(dataset)
-    assert(ovaModel.models.size == numClasses)
+    assert(ovaModel.models.size === numClasses)
     val ovaResults = ovaModel.transform(dataset)
       .select("prediction", "label")
-      .map(row => (row(0).asInstanceOf[Double], row(1).asInstanceOf[Double]))
+      .map(row => (row.getDouble(0), row.getDouble(1)))
 
     val lr = new LogisticRegressionWithLBFGS().setIntercept(true).setNumClasses(numClasses)
     lr.optimizer.setRegParam(0.1).setNumIterations(100)
@@ -94,12 +94,14 @@ class OneVsRestSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-class MockLogisticRegression extends LogisticRegression {
+private class MockLogisticRegression extends LogisticRegression {
+
+  setMaxIter(1)
 
   override protected def train(dataset: DataFrame): LogisticRegressionModel = {
     val labelSchema = dataset.schema($(labelCol))
     // check for label attribute propagation.
-    assert(MetadataUtils.getNumClasses(labelSchema).fold(false)(_ == 2))
+    assert(MetadataUtils.getNumClasses(labelSchema).forall(_ == 2))
     super.train(dataset)
   }
 }
