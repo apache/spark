@@ -495,7 +495,7 @@ trait Params extends Identifiable with Serializable {
 
   /** Validates that the input param belongs to this instance. */
   private def shouldOwn(param: Param[_]): Unit = {
-    require(param.parent == uid, s"Param $param does not belong to $this.")
+    require(param.parent == uid && hasParam(param.name), s"Param $param does not belong to $this.")
   }
 
   /**

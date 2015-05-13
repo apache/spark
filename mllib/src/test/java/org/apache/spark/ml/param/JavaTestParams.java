@@ -29,20 +29,20 @@ import org.apache.spark.ml.util.Identifiable$;
 public class JavaTestParams extends JavaParams {
 
   public JavaTestParams() {
-    this._uid = Identifiable$.MODULE$.randomUID("javaTestParams");
-    _init();
+    this.uid_ = Identifiable$.MODULE$.randomUID("javaTestParams");
+    init();
   }
 
   public JavaTestParams(String uid) {
-    this._uid = uid;
-    _init();
+    this.uid_ = uid;
+    init();
   }
 
-  private String _uid;
+  private String uid_;
 
   @Override
   public String uid() {
-    return _uid;
+    return uid_;
   }
 
   public IntParam myIntParam;
@@ -63,13 +63,13 @@ public class JavaTestParams extends JavaParams {
 
   public Param<String> myStringParam;
 
-  public String getMyStringParam() { return (String)getOrDefault(myStringParam); }
+  public String getMyStringParam() { return getOrDefault(myStringParam); }
 
   public JavaTestParams setMyStringParam(String value) {
     set(myStringParam, value); return this;
   }
 
-  private void _init() {
+  private void init() {
     myIntParam = new IntParam(this, "myIntParam", "this is an int param", ParamValidators.gt(0));
     myDoubleParam = new DoubleParam(this, "myDoubleParam", "this is a double param",
       ParamValidators.inRange(0.0, 1.0));

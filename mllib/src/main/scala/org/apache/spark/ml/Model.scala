@@ -34,6 +34,9 @@ abstract class Model[M <: Model[M]] extends Transformer {
    */
   var parent: Estimator[M] = _
 
+  /**
+   * Sets the parent of this model (Java API).
+   */
   def setParent(parent: Estimator[M]): M = {
     this.parent = parent
     this.asInstanceOf[M]
