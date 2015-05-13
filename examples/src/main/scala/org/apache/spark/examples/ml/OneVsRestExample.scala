@@ -142,11 +142,11 @@ object OneVsRestExample {
 
     val confusionMatrix = metrics.confusionMatrix
 
-    println(s" Training Time ${NANO.toSeconds(trainingDuration)}")
+    println(s" Training Time ${NANO.toSeconds(trainingDuration)} sec")
 
-    println(s" Prediction Time ${NANO.toSeconds(predictionDuration)}")
+    println(s" Prediction Time ${NANO.toSeconds(predictionDuration)} sec")
 
-    println(s" Confusion Matrix ${confusionMatrix.toString}")
+    println(s" Confusion Matrix\n ${confusionMatrix.toString}")
 
     // compute the false positive rate per label
     val predictionColSchema = predictions.schema("prediction")
@@ -156,6 +156,8 @@ object OneVsRestExample {
     println("label\tfpr")
 
     println(fprs.map {case (label, fpr) => label + "\t" + fpr}.mkString("\n"))
+
+    sc.stop();
   }
 
   private def time[R](block: => R): (Long, R) = {

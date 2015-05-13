@@ -47,11 +47,12 @@ public class JavaOneVsRestExample {
     static class Params {
         LogisticRegression classifier;
         String input;
-        String testInput;
+        String testInput = null;
         double fracTest;
 
-        public Params(LogisticRegression classifier) {
+        public Params(LogisticRegression classifier, String input) {
             this.classifier = classifier;
+            this.input = input;
         }
     }
 
@@ -65,8 +66,8 @@ public class JavaOneVsRestExample {
 
         String input = params.input;
         RDD<LabeledPoint> inputData = MLUtils.loadLibSVMFile(jsc.sc(), input);
-        RDD<LabeledPoint> train = null;
-        RDD<LabeledPoint> test = null;
+        RDD<LabeledPoint> train;
+        RDD<LabeledPoint> test;
         String testInput = params.testInput;
 
         // compute the train/test split: if testInput is not provided use part of input.
@@ -86,7 +87,7 @@ public class JavaOneVsRestExample {
 
         // score the model on test data.
         DataFrame testDataframe = jsql.createDataFrame(test, LabeledPoint.class);
-        DataFrame predictions = ovaModel.transform(testDataframe)
+        DataFrame predictions = ovaModel.transform(testDataframe.cache())
                 .select("prediction", "label");
 
         MulticlassMetrics metrics = new MulticlassMetrics(predictions);
@@ -103,9 +104,11 @@ public class JavaOneVsRestExample {
         for (int label = 0; label < numClasses ; label++) {
             results.append(label);
             results.append("\t");
-            results.append(metrics.falsePositiveRate(label));
+            results.append(metrics.falsePositiveRate((double)label));
             results.append("\n");
         }
+
+        jsc.stop();
     }
 
     private static Params parse(String[] args) {
@@ -132,7 +135,7 @@ public class JavaOneVsRestExample {
         double fracTest = 0.0;
         try {
             CommandLine cmd = parser.parse( options, remainingArgs);
-            String value = null;
+            String value;
             if ((value = cmd.getOptionValue("maxIter")) != null) {
                 classifier.setMaxIter(Integer.parseInt(value));
             }
@@ -157,8 +160,7 @@ public class JavaOneVsRestExample {
             formatter.printHelp( "JavaOneVsRestExample", options );
             System.exit(-1);
         }
-        Params params = new Params(classifier);
-        params.input = input;
+        Params params = new Params(classifier, input);
         params.testInput = testInput;
         params.fracTest = fracTest;
         return params;
