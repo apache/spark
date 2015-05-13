@@ -48,7 +48,8 @@ import org.apache.spark.sql.SQLContext
  */
 object OneVsRestExample {
 
-  case class Params private[ml] (input: String = null,
+  case class Params private[ml] (
+      input: String = null,
       testInput: Option[String] = None,
       maxIter: Int = 100,
       tol: Double = 1E-6,
@@ -74,16 +75,22 @@ object OneVsRestExample {
         .text("input path to test dataset.  If given, option fracTest is ignored")
         .action((x,c) => c.copy(testInput = Some(x)))
       opt[Int]("maxIter")
-        .text(s"maximum number of iterations. default: ${defaultParams.maxIter}")
+        .text(s"maximum number of iterations for Logistic Regression." +
+          s" default: ${defaultParams.maxIter}")
         .action((x, c) => c.copy(maxIter = x))
       opt[Double]("tol")
-        .text(s"the convergence tolerance of iterations. default: ${defaultParams.tol}")
+        .text(s"the convergence tolerance of iterations for Logistic Regression." +
+          s" default: ${defaultParams.tol}")
         .action((x, c) => c.copy(tol = x))
+      opt[Boolean]("fitIntercept")
+        .text(s"fit intercept for Logistic Regression." +
+        s" default: ${defaultParams.fitIntercept}")
+        .action((x, c) => c.copy(fitIntercept = x))
       opt[Double]("regParam")
-        .text(s"the regularization parameter")
+        .text(s"the regularization parameter for Logistic Regression.")
         .action((x,c) => c.copy(regParam = Some(x)))
       opt[Double]("elasticNetParam")
-        .text(s"the ElasticNet mixing parameter")
+        .text(s"the ElasticNet mixing parameter for Logistic Regression.")
         .action((x,c) => c.copy(elasticNetParam = Some(x)))
       checkConfig { params =>
         if (params.fracTest < 0 || params.fracTest >= 1) {
@@ -116,10 +123,14 @@ object OneVsRestExample {
       }
     }
     val Array(train, test) = data.map(_.toDF().cache())
+
     // instantiate the base classifier
     val classifier = new LogisticRegression()
-    classifier.setMaxIter(params.maxIter)
-    classifier.setTol(params.tol)
+      .setMaxIter(params.maxIter)
+      .setTol(params.tol)
+      .setFitIntercept(params.fitIntercept)
+
+    // Set regParam, elasticNetParam if specified in params
     params.regParam.foreach(classifier.setRegParam)
     params.elasticNetParam.foreach(classifier.setElasticNetParam)
 
@@ -142,9 +153,9 @@ object OneVsRestExample {
 
     val confusionMatrix = metrics.confusionMatrix
 
-    println(s" Training Time ${NANO.toSeconds(trainingDuration)} sec")
+    println(s" Training Time ${trainingDuration} sec")
 
-    println(s" Prediction Time ${NANO.toSeconds(predictionDuration)} sec")
+    println(s" Prediction Time ${predictionDuration} sec")
 
     println(s" Confusion Matrix\n ${confusionMatrix.toString}")
 
@@ -164,6 +175,6 @@ object OneVsRestExample {
     val t0 = System.nanoTime()
     val result = block    // call-by-name
     val t1 = System.nanoTime()
-    (t1 - t0, result)
+    (NANO.toSeconds(t1 - t0), result)
   }
 }

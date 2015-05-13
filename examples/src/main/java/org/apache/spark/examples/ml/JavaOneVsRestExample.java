@@ -33,8 +33,6 @@ import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.types.StructField;
 
-import java.util.Arrays;
-
 /**
  * An example runner for Multiclass to Binary Reduction with One Vs Rest.
  * The example uses Logistic Regression as the base classifier. All parameters in
@@ -46,137 +44,157 @@ import java.util.Arrays;
  */
 public class JavaOneVsRestExample {
 
-    private static class Params {
-        LogisticRegression classifier;
-        String input;
-        String testInput = null;
-        double fracTest;
+  private static class Params {
+    String input;
+    String testInput = null;
+    Integer maxIter = 100;
+    double tol = 1E-6;
+    boolean fitIntercept = true;
+    Double regParam = null;
+    Double elasticNetParam = null;
+    double fracTest = 0.2;
+  }
 
-        public Params(LogisticRegression classifier, String input) {
-            this.classifier = classifier;
-            this.input = input;
-        }
+  public static void main(String[] args) {
+    // parse the arguments
+    Params params = parse(args);
+    SparkConf conf = new SparkConf().setAppName("JavaOneVsRestExample");
+    JavaSparkContext jsc = new JavaSparkContext(conf);
+    SQLContext jsql = new SQLContext(jsc);
+
+    // configure the base classifier
+    LogisticRegression classifier = new LogisticRegression()
+      .setMaxIter(params.maxIter)
+      .setTol(params.tol)
+      .setFitIntercept(params.fitIntercept);
+
+    if (params.regParam != null) {
+      classifier.setRegParam(params.regParam);
+    }
+    if (params.elasticNetParam != null) {
+      classifier.setElasticNetParam(params.elasticNetParam);
     }
 
-    public static void main(String[] args) {
-        Params params = parse(args);
-        SparkConf conf = new SparkConf().setAppName("JavaOneVsRestExample");
-        JavaSparkContext jsc = new JavaSparkContext(conf);
-        SQLContext jsql = new SQLContext(jsc);
-        OneVsRest ova = new OneVsRest();
-        ova.setClassifier(params.classifier);
+    // instantiate the One Vs Rest Classifier
+    OneVsRest ova = new OneVsRest();
+    ova.setClassifier(classifier);
 
-        String input = params.input;
-        RDD<LabeledPoint> inputData = MLUtils.loadLibSVMFile(jsc.sc(), input);
-        RDD<LabeledPoint> train;
-        RDD<LabeledPoint> test;
-        String testInput = params.testInput;
+    String input = params.input;
+    RDD<LabeledPoint> inputData = MLUtils.loadLibSVMFile(jsc.sc(), input);
+    RDD<LabeledPoint> train;
+    RDD<LabeledPoint> test;
+    String testInput = params.testInput;
 
-        // compute the train/test split: if testInput is not provided use part of input.
-        double f = params.fracTest;
-        if (testInput != null) {
-            train = inputData;
-            test = MLUtils.loadLibSVMFile(jsc.sc(), testInput);
-        } else {
-            RDD<LabeledPoint>[] tmp = inputData.randomSplit(new double[]{1 - f, f}, 12345);
-            train = tmp[0];
-            test = tmp[1];
-        }
-
-        // train the multiclass model.
-        DataFrame trainingDataframe = jsql.createDataFrame(train, LabeledPoint.class);
-        OneVsRestModel ovaModel = ova.fit(trainingDataframe.cache());
-
-        // score the model on test data.
-        DataFrame testDataframe = jsql.createDataFrame(test, LabeledPoint.class);
-        DataFrame predictions = ovaModel.transform(testDataframe.cache())
-                .select("prediction", "label");
-
-        MulticlassMetrics metrics = new MulticlassMetrics(predictions);
-
-        // output the confusion matrix.
-        System.out.println("ConfusionMatrix");
-        System.out.println(metrics.confusionMatrix().toString());
-
-        StructField predictionColSchema = predictions.schema().apply("prediction");
-        Integer numClasses = (Integer)MetadataUtils.getNumClasses(predictionColSchema).get();
-
-        // compute the false positive rate per label
-        StringBuilder results = new StringBuilder();
-        results.append("label\tfpr\n");
-        for (int label = 0; label < numClasses ; label++) {
-            results.append(label);
-            results.append("\t");
-            results.append(metrics.falsePositiveRate((double)label));
-            results.append("\n");
-        }
-        System.out.println(results);
-
-        jsc.stop();
+    // compute the train/test split: if testInput is not provided use part of input.
+    double f = params.fracTest;
+    if (testInput != null) {
+      train = inputData;
+      test = MLUtils.loadLibSVMFile(jsc.sc(), testInput);
+    } else {
+      RDD<LabeledPoint>[] tmp = inputData.randomSplit(new double[]{1 - f, f}, 12345);
+      train = tmp[0];
+      test = tmp[1];
     }
 
-    private static Params parse(String[] args) {
-        String input = args[0];
-        String[] remainingArgs;
-        if (args.length > 1) {
-            remainingArgs = new String[args.length - 1];
-        } else {
-            remainingArgs = new String[0];
-        }
-        System.arraycopy(args, 1, remainingArgs, 0, remainingArgs.length);
-        Options options = new Options();
-        options.addOption("testInput", "testInput", true, "input path to labeled examples");
-        options.addOption("fracTest", "fracTest", true,
-                "fraction of data to hold out for testing. " +
-                "If given option testInput, this option is ignored. default: 0.2");
-        options.addOption("maxIter", "maxIter", true,
-                "maximum number of iterations. default:100");
-        options.addOption("tol", "tol", true,
-                "the convergence tolerance of iterations. default: 1E-6");
-        options.addOption("regParam", "regParam", true, "the regularization parameter");
-        options.addOption("elasticNetParam", "elasticNetParam",
-                true, "the ElasticNet mixing parameter");
-        CommandLineParser parser = new PosixParser();
+    // train the multiclass model.
+    DataFrame trainingDataframe = jsql.createDataFrame(train, LabeledPoint.class);
+    OneVsRestModel ovaModel = ova.fit(trainingDataframe.cache());
 
-        LogisticRegression classifier = new LogisticRegression();
-        String testInput = null;
-        double fracTest = 0.2;
-        try {
-            CommandLine cmd = parser.parse( options, remainingArgs);
-            String value;
-            if (cmd.hasOption("maxIter")) {
-                value = cmd.getOptionValue("maxIter");
-                classifier.setMaxIter(Integer.parseInt(value));
-            }
-            if (cmd.hasOption("tol")) {
-                value = cmd.getOptionValue("tol");
-                classifier.setTol(Double.parseDouble(value));
-            }
-            if (cmd.hasOption("regParam")) {
-                value = cmd.getOptionValue("regParam");
-                classifier.setRegParam(Double.parseDouble(value));
-            }
-            if (cmd.hasOption("elasticNetParam")) {
-                value = cmd.getOptionValue("elasticNetParam");
-                classifier.setElasticNetParam(Double.parseDouble(value));
-            }
-            if (cmd.hasOption("testInput")) {
-                value = cmd.getOptionValue("testInput");
-                testInput = value;
-            }
-            if (cmd.hasOption("fracTest")) {
-                value = cmd.getOptionValue("fracTest");
-                fracTest = Double.parseDouble(value);
-            }
+    // score the model on test data.
+    DataFrame testDataframe = jsql.createDataFrame(test, LabeledPoint.class);
+    DataFrame predictions = ovaModel.transform(testDataframe.cache())
+      .select("prediction", "label");
 
-        } catch (ParseException e) {
-            HelpFormatter formatter = new HelpFormatter();
-            formatter.printHelp( "JavaOneVsRestExample", options );
-            System.exit(-1);
-        }
-        Params params = new Params(classifier, input);
-        params.testInput = testInput;
-        params.fracTest = fracTest;
-        return params;
+    MulticlassMetrics metrics = new MulticlassMetrics(predictions);
+
+    // output the confusion matrix.
+    System.out.println("ConfusionMatrix");
+    System.out.println(metrics.confusionMatrix().toString());
+
+    StructField predictionColSchema = predictions.schema().apply("prediction");
+    Integer numClasses = (Integer) MetadataUtils.getNumClasses(predictionColSchema).get();
+
+    // compute the false positive rate per label
+    StringBuilder results = new StringBuilder();
+    results.append("label\tfpr\n");
+    for (int label = 0; label < numClasses; label++) {
+      results.append(label);
+      results.append("\t");
+      results.append(metrics.falsePositiveRate((double) label));
+      results.append("\n");
     }
+    System.out.println(results);
+
+    jsc.stop();
+  }
+
+  private static Params parse(String[] args) {
+    String input = args[0];
+    String[] remainingArgs;
+    if (args.length > 1) {
+        remainingArgs = new String[args.length - 1];
+    } else {
+      remainingArgs = new String[0];
+    }
+    System.arraycopy(args, 1, remainingArgs, 0, remainingArgs.length);
+    Options options = new Options();
+    options.addOption("testInput", "testInput", true, "input path to labeled examples");
+    options.addOption("fracTest", "fracTest", true,
+      "fraction of data to hold out for testing. " +
+      "If given option testInput, this option is ignored. default: 0.2");
+    options.addOption("maxIter", "maxIter", true,
+      "maximum number of iterations for Logistic Regression. default:100");
+    options.addOption("tol", "tol", true,
+      "the convergence tolerance of iterations. default: 1E-6");
+    options.addOption("fitIntercept","fitIntercept", true,
+      "fit intercept for logistic regression. default true");
+    options.addOption("regParam", "regParam", true,
+      "the regularization parameter for Logistic Regression.");
+    options.addOption("elasticNetParam", "elasticNetParam",
+      true, "the ElasticNet mixing parameter for Logistic Regression.");
+
+    CommandLineParser parser = new PosixParser();
+
+    Params params = new Params();
+    params.input = input;
+
+    try {
+      CommandLine cmd = parser.parse( options, remainingArgs);
+      String value;
+      if (cmd.hasOption("maxIter")) {
+        value = cmd.getOptionValue("maxIter");
+        params.maxIter = Integer.parseInt(value);
+      }
+      if (cmd.hasOption("tol")) {
+        value = cmd.getOptionValue("tol");
+        params.tol = Double.parseDouble(value);
+      }
+      if (cmd.hasOption("fitIntercept")) {
+        value = cmd.getOptionValue("fitIntercept");
+        params.fitIntercept = Boolean.parseBoolean(value);
+      }
+      if (cmd.hasOption("regParam")) {
+        value = cmd.getOptionValue("regParam");
+        params.regParam = Double.parseDouble(value);
+      }
+      if (cmd.hasOption("elasticNetParam")) {
+        value = cmd.getOptionValue("elasticNetParam");
+        params.elasticNetParam = Double.parseDouble(value);
+      }
+      if (cmd.hasOption("testInput")) {
+        value = cmd.getOptionValue("testInput");
+        params.testInput = value;
+      }
+      if (cmd.hasOption("fracTest")) {
+        value = cmd.getOptionValue("fracTest");
+        params.fracTest = Double.parseDouble(value);
+      }
+
+    } catch (ParseException e) {
+      HelpFormatter formatter = new HelpFormatter();
+      formatter.printHelp( "JavaOneVsRestExample", options );
+      System.exit(-1);
+    }
+    return params;
+  }
 }
