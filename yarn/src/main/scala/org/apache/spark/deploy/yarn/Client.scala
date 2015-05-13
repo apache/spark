@@ -93,7 +93,8 @@ private[spark] class Client(
   def submitApplication(): ApplicationId = {
     var appId: ApplicationId = null
     try {
-      // Setup the credentials before doing anything else, so we have don't have issues at any point.
+      // Setup the credentials before doing anything else,
+      // so we have don't have issues at any point.
       setupCredentials()
       yarnClient.init(yarnConf)
       yarnClient.start()
