@@ -104,22 +104,22 @@ public class JavaDeveloperApiExample {
  *       However, this should still compile and run successfully.
  */
 class MyJavaLogisticRegression
-    extends Classifier<Vector, MyJavaLogisticRegression, MyJavaLogisticRegressionModel> {
+  extends Classifier<Vector, MyJavaLogisticRegression, MyJavaLogisticRegressionModel> {
 
   public MyJavaLogisticRegression() {
-    _init();
+    init();
   }
 
   public MyJavaLogisticRegression(String uid) {
-    this._uid = uid;
-    _init();
+    this.uid_ = uid;
+    init();
   }
 
-  private String _uid = Identifiable$.MODULE$.randomUID("myJavaLogReg");
+  private String uid_ = Identifiable$.MODULE$.randomUID("myJavaLogReg");
 
   @Override
   public String uid() {
-    return _uid;
+    return uid_;
   }
 
   /**
@@ -134,7 +134,7 @@ class MyJavaLogisticRegression
 
   int getMaxIter() { return (Integer) getOrDefault(maxIter); }
 
-  private void _init() {
+  private void init() {
     setMaxIter(100);
   }
 
@@ -166,25 +166,21 @@ class MyJavaLogisticRegression
  *       However, this should still compile and run successfully.
  */
 class MyJavaLogisticRegressionModel
-    extends ClassificationModel<Vector, MyJavaLogisticRegressionModel> {
-
-  private MyJavaLogisticRegression parent_;
-  public MyJavaLogisticRegression parent() { return parent_; }
+  extends ClassificationModel<Vector, MyJavaLogisticRegressionModel> {
 
   private Vector weights_;
   public Vector weights() { return weights_; }
 
-  public MyJavaLogisticRegressionModel(String uid, Vector weights_) {
-    this._uid = uid;
-    this.parent_ = parent_;
-    this.weights_ = weights_;
+  public MyJavaLogisticRegressionModel(String uid, Vector weights) {
+    this.uid_ = uid;
+    this.weights_ = weights;
   }
 
-  private String _uid = Identifiable$.MODULE$.randomUID("myJavaLogReg");
+  private String uid_ = Identifiable$.MODULE$.randomUID("myJavaLogReg");
 
   @Override
   public String uid() {
-    return _uid;
+    return uid_;
   }
 
   // This uses the default implementation of transform(), which reads column "features" and outputs
