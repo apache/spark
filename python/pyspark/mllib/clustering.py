@@ -26,7 +26,7 @@ from numpy import array
 from pyspark import RDD
 from pyspark import SparkContext
 from pyspark.mllib.common import callMLlibFunc, callJavaFunc, _py2java, _java2py
-from pyspark.mllib.linalg import SparseVector, Vectors, DenseMatrix, _convert_to_vector
+from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 
@@ -142,6 +142,7 @@ class GaussianMixtureModel(object):
 
     """A clustering model derived from the Gaussian Mixture Model method.
 
+    >>> from pyspark.mllib.linalg import Vectors, DenseMatrix
     >>> clusterdata_1 =  sc.parallelize(array([-0.1,-0.05,-0.01,-0.1,
     ...                                         0.9,0.8,0.75,0.935,
     ...                                        -0.83,-0.68,-0.91,-0.76 ]).reshape(6, 2))
@@ -154,11 +155,12 @@ class GaussianMixtureModel(object):
     True
     >>> labels[4]==labels[5]
     True
-    >>> clusterdata_2 =  sc.parallelize(array([-5.1971, -2.5359, -3.8220,
-    ...                                        -5.2211, -5.0602,  4.7118,
-    ...                                         6.8989, 3.4592,  4.6322,
-    ...                                         5.7048,  4.6567, 5.5026,
-    ...                                         4.5605,  5.2043,  6.2734]).reshape(5, 3))
+    >>> data =  array([-5.1971, -2.5359, -3.8220,
+    ...                -5.2211, -5.0602,  4.7118,
+    ...                 6.8989, 3.4592,  4.6322,
+    ...                 5.7048,  4.6567, 5.5026,
+    ...                 4.5605,  5.2043,  6.2734])
+    >>> clusterdata_2 = sc.parallelize(data.reshape(5,3))
     >>> model = GaussianMixture.train(clusterdata_2, 2, convergenceTol=0.0001,
     ...                               maxIterations=150, seed=10)
     >>> labels = model.predict(clusterdata_2).collect()
@@ -166,21 +168,11 @@ class GaussianMixtureModel(object):
     True
     >>> labels[3]==labels[4]
     True
-    >>> clusterdata_3 = sc.parallelize([[-5.1971], [-2.5359], [-3.8220],
-    ...                                 [-5.2211], [-5.0602],  [4.7118],
-    ...                                 [6.8989], [3.4592],  [4.6322],
-    ...                                 [5.7048],  [4.6567], [5.5026],
-    ...                                 [4.5605],  [5.2043],  [6.2734]])
+    >>> clusterdata_3 = sc.parallelize(data.reshape(15, 1))
     >>> im = GaussianMixtureModel([0.5, 0.5],
     ...      [MultivariateGaussian(Vectors.dense([-1.0]), DenseMatrix(1, 1, [1.0])),
     ...      MultivariateGaussian(Vectors.dense([1.0]), DenseMatrix(1, 1, [1.0]))])
     >>> model = GaussianMixture.train(clusterdata_3, 2, initialModel=im)
-    >>> model.weights
-    DenseVector([0.3333..., 0.6667...])
-    >>> model.gaussians[0].mu
-    DenseVector([-4.3673...])
-    >>> model.gaussians[0].sigma.toArray()
-    array([[ 1.1098...]])
     """
 
     def __init__(self, weights, gaussians):
@@ -190,14 +182,23 @@ class GaussianMixtureModel(object):
 
     @property
     def weights(self):
+        """
+        Weights for each Gaussian distribution in the mixture, where weights(i) is
+        the weight for Gaussian i, and weight.sum == 1.
+        """
         return self._weights
 
     @property
     def gaussians(self):
+        """
+        Array of MultivariateGaussian where gaussians(i) represents
+        the Multivariate Gaussian (Normal) Distribution for Gaussian i.
+        """
         return self._gaussians
 
     @property
     def k(self):
+        """Number of gaussians in mixture."""
         return self._k
 
     def predict(self, x):
@@ -244,6 +245,8 @@ class GaussianMixture(object):
         initialModelMu = None
         initialModelSigma = None
         if initialModel is not None:
+            if initialModel.k != k:
+                raise Exception("Mismatched cluster count (initialModel.k != k)")
             initialModelWeights = initialModel.weights
             initialModelMu = [initialModel.gaussians[i].mu for i in range(initialModel.k)]
             initialModelSigma = [initialModel.gaussians[i].sigma for i in range(initialModel.k)]

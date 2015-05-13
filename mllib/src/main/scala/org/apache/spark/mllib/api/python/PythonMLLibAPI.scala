@@ -358,9 +358,10 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setConvergenceTol(convergenceTol)
       .setMaxIterations(maxIterations)
 
-    if (initialModelWeights != null && initialModelMu != null || initialModelSigma != null) {
+    if (initialModelWeights != null && initialModelMu != null && initialModelSigma != null) {
       val gaussians = initialModelMu.asScala.toSeq.zip(initialModelSigma.asScala.toSeq).map {
-        case (x, y) => new MultivariateGaussian(x.asInstanceOf[Vector],y.asInstanceOf[Matrix]) }
+        case (x, y) => new MultivariateGaussian(x.asInstanceOf[Vector], y.asInstanceOf[Matrix])
+      }
       val initialModel = new GaussianMixtureModel(
         initialModelWeights.asScala.toArray, gaussians.toArray)
       gmmAlg.setInitialModel(initialModel)
