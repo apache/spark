@@ -268,15 +268,20 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     rdd.count()
 
     // Delete one of the local shuffle blocks.
-    val hashFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleBlockId(0, 0, 0))
+    val shuffleBlockId = new ShuffleBlockId(0, 0, 0)
+    val hashFile = sc.env.blockManager.diskBlockManager.getFile(shuffleBlockId)
     val sortFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleDataBlockId(0, 0, 0))
-    assert(hashFile.exists() || sortFile.exists())
+    val memoryBlock = sc.env.blockManager.memoryStore.getBytes(shuffleBlockId)
+    assert(hashFile.exists() || sortFile.exists() || memoryBlock.isDefined)
 
     if (hashFile.exists()) {
       hashFile.delete()
     }
     if (sortFile.exists()) {
       sortFile.delete()
+    }
+    if (memoryBlock.isDefined) {
+      sc.env.blockManager.memoryStore.remove(shuffleBlockId)
     }
 
     // This count should retry the execution of the previous stage and rerun shuffle.
