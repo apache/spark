@@ -164,7 +164,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
           inBacktick = true
         } else if (char == '.') {
           if (tmp.isEmpty) throw e
-          if (name(i - 1) != '`' && tmp.contains(' ')) throw e
           nameParts += tmp.mkString
           tmp.clear()
         } else {
