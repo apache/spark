@@ -157,7 +157,7 @@ object OneVsRestExample {
 
     println(fprs.map {case (label, fpr) => label + "\t" + fpr}.mkString("\n"))
 
-    sc.stop();
+    sc.stop()
   }
 
   private def time[R](block: => R): (Long, R) = {
