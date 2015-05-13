@@ -35,6 +35,7 @@ class ConstantFoldingSuite extends PlanTest {
       Batch("AnalysisNodes", Once,
         EliminateSubQueries) ::
       Batch("ConstantFolding", Once,
+        OptimizeIn,
         ConstantFolding,
         BooleanSimplification) :: Nil
   }
@@ -244,6 +245,38 @@ class ConstantFoldingSuite extends PlanTest {
           Literal.create(null, BooleanType) as 'c19,
           Literal.create(null, BooleanType) as 'c20
         ).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+  
+  test("Constant folding test: Fold In(v, list) into true or false") {
+    var originalQuery =
+      testRelation
+        .select('a)
+        .where(In(Literal(1), Seq(Literal(1), Literal(2))))
+
+    var optimized = Optimize.execute(originalQuery.analyze)
+
+    var correctAnswer =
+      testRelation
+        .select('a)
+        .where(Literal(true))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+
+    originalQuery =
+      testRelation
+        .select('a)
+        .where(In(Literal(1), Seq(Literal(1), 'a.attr)))
+
+    optimized = Optimize.execute(originalQuery.analyze)
+
+    correctAnswer =
+      testRelation
+        .select('a)
+        .where(Literal(true))
+        .analyze
 
     comparePlans(optimized, correctAnswer)
   }

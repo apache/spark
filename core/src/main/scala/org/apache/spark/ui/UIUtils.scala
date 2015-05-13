@@ -194,11 +194,7 @@ private[spark] object UIUtils extends Logging {
         <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
       </li>
     }
-    val helpButton: Seq[Node] = helpText.map { helpText =>
-      <sup>
-        (<a data-toggle="tooltip" data-placement="bottom" title={helpText}>?</a>)
-      </sup>
-    }.getOrElse(Seq.empty)
+    val helpButton: Seq[Node] = helpText.map(tooltip(_, "bottom")).getOrElse(Seq.empty)
 
     <html>
       <head>
@@ -360,7 +356,7 @@ private[spark] object UIUtils extends Logging {
         {
           graphs.map { g =>
             <div class="stage-metadata" stage-id={g.rootCluster.id} style="display:none">
-              <div class="dot-file">{RDDOperationGraph.makeDotFile(g, forJob)}</div>
+              <div class="dot-file">{RDDOperationGraph.makeDotFile(g)}</div>
               { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
               { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }
               {
@@ -373,6 +369,12 @@ private[spark] object UIUtils extends Logging {
         }
       </div>
     </div>
+  }
+
+  def tooltip(text: String, position: String): Seq[Node] = {
+    <sup>
+      (<a data-toggle="tooltip" data-placement={position} title={text}>?</a>)
+    </sup>
   }
 
   /** Return a script element that automatically expands the DAG visualization on page load. */

@@ -204,7 +204,7 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
         StructField("lowerCase", StringType),
         StructField("UPPERCase", DoubleType, nullable = false)))) {
 
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      FSBasedParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("lowercase", StringType),
           StructField("uppercase", DoubleType, nullable = false))),
@@ -219,7 +219,7 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
       StructType(Seq(
         StructField("UPPERCase", DoubleType, nullable = false)))) {
 
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      FSBasedParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("uppercase", DoubleType, nullable = false))),
 
@@ -230,7 +230,7 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
 
     // Metastore schema contains additional non-nullable fields.
     assert(intercept[Throwable] {
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      FSBasedParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("uppercase", DoubleType, nullable = false),
           StructField("lowerCase", BinaryType, nullable = false))),
@@ -241,7 +241,7 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
 
     // Conflicting non-nullable field names
     intercept[Throwable] {
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      FSBasedParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(StructField("lower", StringType, nullable = false))),
         StructType(Seq(StructField("lowerCase", BinaryType))))
     }
@@ -255,7 +255,7 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
         StructField("firstField", StringType, nullable = true),
         StructField("secondField", StringType, nullable = true),
         StructField("thirdfield", StringType, nullable = true)))) {
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      FSBasedParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("firstfield", StringType, nullable = true),
           StructField("secondfield", StringType, nullable = true),
@@ -268,7 +268,7 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
     // Merge should fail if the Metastore contains any additional fields that are not
     // nullable.
     assert(intercept[Throwable] {
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      FSBasedParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("firstfield", StringType, nullable = true),
           StructField("secondfield", StringType, nullable = true),

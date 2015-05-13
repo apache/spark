@@ -456,19 +456,19 @@ setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 #' @export
 setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
 
-#' @rdname sampleDF
+#' @rdname sample
+#' @export
+setGeneric("sample",
+           function(x, withReplacement, fraction, seed) {
+             standardGeneric("sample")
+           })
+
+#' @rdname sample
 #' @export
 setGeneric("sample_frac",
            function(x, withReplacement, fraction, seed) {
              standardGeneric("sample_frac")
-          })
-
-#' @rdname sampleDF
-#' @export
-setGeneric("sampleDF",
-           function(x, withReplacement, fraction, seed) {
-             standardGeneric("sampleDF")
-          })
+           })
 
 #' @rdname saveAsParquetFile
 #' @export
@@ -480,7 +480,11 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
   standardGeneric("saveAsTable")
 })
 
-#' @rdname saveAsTable
+#' @rdname write.df
+#' @export
+setGeneric("write.df", function(df, path, source, mode, ...) { standardGeneric("write.df") })
+
+#' @rdname write.df
 #' @export
 setGeneric("saveDF", function(df, path, source, mode, ...) { standardGeneric("saveDF") })
 

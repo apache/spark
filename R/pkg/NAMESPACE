@@ -37,7 +37,7 @@ exportMethods("arrange",
               "registerTempTable",
               "rename",
               "repartition",
-              "sampleDF",
+              "sample",
               "sample_frac",
               "saveAsParquetFile",
               "saveAsTable",
@@ -53,7 +53,8 @@ exportMethods("arrange",
               "unpersist",
               "where",
               "withColumn",
-              "withColumnRenamed")
+              "withColumnRenamed",
+              "write.df")
 
 exportClasses("Column")
 
@@ -101,6 +102,7 @@ export("cacheTable",
        "jsonFile",
        "loadDF",
        "parquetFile",
+       "read.df",
        "sql",
        "table",
        "tableNames",
