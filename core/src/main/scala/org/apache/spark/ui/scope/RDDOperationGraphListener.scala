@@ -29,9 +29,14 @@ import org.apache.spark.ui.SparkUI
 private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListener {
   private val jobIdToStageIds = new mutable.HashMap[Int, Seq[Int]]
   private val stageIdToGraph = new mutable.HashMap[Int, RDDOperationGraph]
+
+  // Keep track of the order in which these are inserted so we can remove old ones
+  private val jobIds = new mutable.ArrayBuffer[Int]
   private val stageIds = new mutable.ArrayBuffer[Int]
 
   // How many jobs or stages to retain graph metadata for
+  private val retainedJobs =
+    conf.getInt("spark.ui.retainedJobs", SparkUI.DEFAULT_RETAINED_JOBS)
   private val retainedStages =
     conf.getInt("spark.ui.retainedStages", SparkUI.DEFAULT_RETAINED_STAGES)
 
@@ -58,7 +63,16 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
     }
     jobIdToStageIds(jobId) = stageInfos.map(_.stageId).sorted
 
-    // Remove graph metadata for old stages
+    // Remove state for old jobs
+    if (jobIds.size >= retainedJobs) {
+      val toRemove = math.max(retainedJobs / 10, 1)
+      jobIds.take(toRemove).foreach { id => jobIdToStageIds.remove(id) }
+      jobIds.trimStart(toRemove)
+    }
+  }
+
+  /** Remove graph metadata for old stages */
+  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
     if (stageIds.size >= retainedStages) {
       val toRemove = math.max(retainedStages / 10, 1)
       stageIds.take(toRemove).foreach { id => stageIdToGraph.remove(id) }
