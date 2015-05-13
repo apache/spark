@@ -46,10 +46,10 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
  * @param modelType The type of NB model to fit  can be "Multinomial" or "Bernoulli"
  */
 class NaiveBayesModel private[mllib] (
-                                       val labels: Array[Double],
-                                       val pi: Array[Double],
-                                       val theta: Array[Array[Double]],
-                                       val modelType: String)
+    val labels: Array[Double],
+    val pi: Array[Double],
+    val theta: Array[Array[Double]],
+    val modelType: String)
   extends ClassificationModel with Serializable with Saveable {
 
   private[mllib] def this(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]]) =
@@ -57,9 +57,9 @@ class NaiveBayesModel private[mllib] (
 
   /** A Java-friendly constructor that takes three Iterable parameters. */
   private[mllib] def this(
-                           labels: JIterable[Double],
-                           pi: JIterable[Double],
-                           theta: JIterable[JIterable[Double]]) =
+      labels: JIterable[Double],
+      pi: JIterable[Double],
+      theta: JIterable[JIterable[Double]]) =
     this(labels.asScala.toArray, pi.asScala.toArray, theta.asScala.toArray.map(_.asScala.toArray))
 
   private val brzPi = new BDV[Double](pi)
@@ -125,10 +125,10 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
     /** Model data for model import/export */
     case class Data(
-                     labels: Array[Double],
-                     pi: Array[Double],
-                     theta: Array[Array[Double]],
-                     modelType: String)
+        labels: Array[Double],
+        pi: Array[Double],
+        theta: Array[Array[Double]],
+        modelType: String)
 
     def save(sc: SparkContext, path: String, data: Data): Unit = {
       val sqlContext = new SQLContext(sc)
@@ -172,9 +172,9 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
     /** Model data for model import/export */
     case class Data(
-                     labels: Array[Double],
-                     pi: Array[Double],
-                     theta: Array[Array[Double]])
+        labels: Array[Double],
+        pi: Array[Double],
+        theta: Array[Array[Double]])
 
     def save(sc: SparkContext, path: String, data: Data): Unit = {
       val sqlContext = new SQLContext(sc)
@@ -222,8 +222,8 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
         (model, numFeatures, numClasses)
       case _ => throw new Exception(
         s"NaiveBayesModel.load did not recognize model with (className, format version):" +
-          s"($loadedClassName, $version).  Supported:\n" +
-          s"  ($classNameV1_0, 1.0)")
+        s"($loadedClassName, $version).  Supported:\n" +
+        s"  ($classNameV1_0, 1.0)")
     }
     assert(model.pi.size == numClasses,
       s"NaiveBayesModel.load expected $numClasses classes," +
@@ -249,8 +249,8 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
  */
 
 class NaiveBayes private (
-                           private var lambda: Double,
-                           private var modelType: String) extends Serializable with Logging {
+    private var lambda: Double,
+    private var modelType: String) extends Serializable with Logging {
 
   def this(lambda: Double) = this(lambda, "Multinomial")
 
