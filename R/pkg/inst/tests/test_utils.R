@@ -116,10 +116,11 @@ test_that("cleanClosure on R functions", {
   
   # Test for function (and variable) definitions and package private functions.
   z <- c(1, 2)
+  miss <- .Call("getMissingArg")  # simulate a missing arg passing in by enclosing call.
   f <- function(x, y) {
     privateCallRes <- unlist(joinTaggedList(x, y))
-    g <- function(y, ...) { 
-      list(...) 
+    g <- function(y) { 
+      miss  # access to missing arg.
       y * 2 
     }
     z <- z * 2  # Write after read.
@@ -127,9 +128,10 @@ test_that("cleanClosure on R functions", {
   }
   newF <- cleanClosure(f)
   env <- environment(newF)
-  expect_equal(length(ls(env)), 2)  # "z" and "joinTaggedList". No y" or "g".
+  expect_equal(length(ls(env)), 3)  # "miss", z" and "joinTaggedList". No y" or "g".
   expect_true("joinTaggedList" %in% ls(env))
   expect_true("z" %in% ls(env))
+  expect_true("miss" %in% ls(env))
   actual <- get("joinTaggedList", envir = env, inherits = FALSE)
   expect_equal(actual, joinTaggedList)
   env <- environment(actual)
