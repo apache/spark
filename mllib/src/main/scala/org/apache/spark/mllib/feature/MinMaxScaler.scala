@@ -98,6 +98,7 @@ class MinMaxScalerModel (
    */
   override def transform(vector: Vector): Vector = {
 
+    val scale = upperBound - lowerBound
     vector match {
       case DenseVector(vs) =>
         val values = vs.clone()
@@ -106,7 +107,7 @@ class MinMaxScalerModel (
         while(i < size) {
           val range = max(i) - min(i)
           val raw = if(range != 0) (values(i) - min(i)) / range else 0.5
-          values(i) =  raw * (upperBound - lowerBound) + lowerBound
+          values(i) =  raw * scale + lowerBound
           i += 1
         }
         Vectors.dense(values)
@@ -120,7 +121,7 @@ class MinMaxScalerModel (
           val index = indices(i)
           val range = max(index) - min(index)
           val raw = if(range != 0) (values(i) - min(index)) / range else 0.5
-          values(i) = raw  * (upperBound - lowerBound) + lowerBound
+          values(i) = raw  * scale + lowerBound
           i += 1
         }
         Vectors.sparse(size, indices, values)
