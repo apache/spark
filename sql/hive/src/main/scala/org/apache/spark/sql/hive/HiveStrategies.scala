@@ -35,9 +35,7 @@ import org.apache.spark.sql.sources.{CreateTableUsing, CreateTableUsingAsSelect,
 import org.apache.spark.sql.types.StringType
 
 
-private[hive] trait HiveStrategies {
-  // Possibly being too clever with types here... or not clever enough.
-  self: SQLContext#SparkPlanner =>
+private[hive] trait HiveStrategies extends SparkPlanner {
 
   val hiveContext: HiveContext
 
