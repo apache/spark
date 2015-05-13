@@ -420,6 +420,30 @@ object functions {
   def not(e: Column): Column = !e
 
   /**
+   * Evaluates a list of conditions and returns one of multiple possible result expressions.
+   * If otherwise is not defined at the end, null is returned for unmatched conditions.
+   *
+   * {{{
+   *   // Example: encoding gender string column into integer.
+   *
+   *   // Scala:
+   *   people.select(when(people("gender") === "male", 0)
+   *     .when(people("gender") === "female", 1)
+   *     .otherwise(2))
+   *
+   *   // Java:
+   *   people.select(when(col("gender").equalTo("male"), 0)
+   *     .when(col("gender").equalTo("female"), 1)
+   *     .otherwise(2))
+   * }}}
+   *
+   * @group normal_funcs
+   */
+  def when(condition: Column, value: Any): Column = {
+    CaseWhen(Seq(condition.expr, lit(value).expr))
+  }
+
+  /**
    * Generate a random column with i.i.d. samples from U[0.0, 1.0].
    *
    * @group normal_funcs
