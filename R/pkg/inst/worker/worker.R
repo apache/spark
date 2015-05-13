@@ -61,12 +61,7 @@ for (pkg in packageNames) {
 funcLen <- SparkR:::readInt(inputCon)
 computeFunc <- unserialize(SparkR:::readRawLen(inputCon, funcLen))
 env <- environment(computeFunc)
-# parent.env(env) <- .GlobalEnv  # Attach under global environment.
-if (length(packageNames) > 0) {
-  parent.env(env) <- getNamespace(packageNames[1])  # Attach under package namespace environment.
-} else {
-  parent.env(env) <- .GlobalEnv  # Attach under global environment.
-}
+parent.env(env) <- .GlobalEnv  # Attach under global environment.
 
 # Timing init envs for computing
 initElap <- elapsedSecs()

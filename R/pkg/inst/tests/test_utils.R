@@ -118,9 +118,12 @@ test_that("cleanClosure on R functions", {
   z <- c(1, 2)
   f <- function(x, y) {
     privateCallRes <- unlist(joinTaggedList(x, y))
-    g <- function(y) { y * 2 }
+    g <- function(y, ...) { 
+      list(...) 
+      y * 2 
+    }
     z <- z * 2  # Write after read.
-    g(privateCallRes)  # Calls "g()" in enclosure, not local var "g".
+    g(privateCallRes)  # Missing arg.
   }
   newF <- cleanClosure(f)
   env <- environment(newF)
