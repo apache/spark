@@ -509,8 +509,6 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
         path.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
       }
 
-      println(df.queryExecution)
-
       val actualPaths = df.queryExecution.analyzed.collectFirst {
         case LogicalRelation(relation: FSBasedRelation) =>
           relation.paths.toSet
