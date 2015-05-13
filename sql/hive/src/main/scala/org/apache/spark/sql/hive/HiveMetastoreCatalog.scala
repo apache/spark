@@ -734,9 +734,13 @@ private[hive] case class MetastoreRelation
         var size: Long = 0
         refParts.foreach { refPart =>
           // get size of the partition
-          val partParams = refPart.getParameters
+          val partParams = Option(refPart.getParameters)
+          // If any of the parameters of referred partitions is not defined, skip BroadCastJoin
+          if (partParams.isEmpty) {
+            return sqlContext.conf.defaultSizeInBytes  
+          }
           val partSize =
-            Option(partParams.get(HiveShim.getStatsSetupConstTotalSize))
+            Option(partParams.get.get(HiveShim.getStatsSetupConstTotalSize))
               .map(_.toLong)
               .getOrElse(0L)
 
