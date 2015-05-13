@@ -537,8 +537,8 @@ import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 
 // Create some vector data; also works for sparse vectors
-JavaRDD<Vector> data = sc.parallelize(Arrays.asList(Vectors.dense(1.0, 2.0, 3.0),Vectors.dense(4.0, 5.0, 6.0)));
-
+JavaRDD<Vector> data = sc.parallelize(Arrays.asList(
+  Vectors.dense(1.0, 2.0, 3.0), Vectors.dense(4.0, 5.0, 6.0)));
 Vector transformingVector = Vectors.dense(0.0, 1.0, 2.0);
 ElementwiseProduct transformer = new ElementwiseProduct(transformingVector);
 
