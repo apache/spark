@@ -159,7 +159,8 @@ class SparkContextSchedulerCreationSuite
       assert(sched.backend.getClass === expectedClass)
     } catch {
       case e: UnsatisfiedLinkError =>
-        assert(e.getMessage.contains("no mesos in") || e.getMessage.contains("mesos (Not found in java.library.path)"))
+        assert(e.getMessage.contains("no mesos in") ||
+          e.getMessage.contains("mesos (Not found in java.library.path)"))
         logWarning("Mesos not available, could not test actual Mesos scheduler creation")
       case e: Throwable => fail(e)
     }
