@@ -237,6 +237,21 @@ def monotonicallyIncreasingId():
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.monotonicallyIncreasingId())
 
+def when(whenExpr, thenExpr):
+    """ A case when otherwise expression.
+    >>> df.select(when(df.age == 2, 3).otherwise(4).alias("age")).collect()
+    [Row(age=3), Row(age=4)]
+    >>> df.select(when(df.age == 2, 3).alias("age")).collect()
+    [Row(age=3), Row(age=None)]
+    >>> df.select(when(df.age == 2, 3==3).alias("age")).collect()
+    [Row(age=True), Row(age=None)]
+    """
+    sc = SparkContext._active_spark_context
+    if isinstance(whenExpr, Column):
+        jc = sc._jvm.functions.when(whenExpr._jc, thenExpr)
+    else:
+        raise TypeError("whenExpr should be Column")
+    return Column(jc)
 
 def rand(seed=None):
     """Generates a random column with i.i.d. samples from U[0.0, 1.0].

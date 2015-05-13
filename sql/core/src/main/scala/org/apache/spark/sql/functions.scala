@@ -420,6 +420,18 @@ object functions {
   def not(e: Column): Column = !e
 
   /**
+   * Case When Otherwise.
+   * {{{
+   *   people.select( when(people("age") === 18, "SELECTED").other("IGNORED") )
+   * }}}
+   *
+   * @group normal_funcs
+   */
+  def when(whenExpr: Any, thenExpr: Any): Column = {
+    CaseWhen(Seq(lit(whenExpr).expr, lit(thenExpr).expr))
+  }
+
+  /**
    * Generate a random column with i.i.d. samples from U[0.0, 1.0].
    *
    * @group normal_funcs

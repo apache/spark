@@ -328,6 +328,32 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def eqNullSafe(other: Any): Column = this <=> other
 
   /**
+   * Case When Otherwise.
+   * {{{
+   *   people.select( when(people("age") === 18, "SELECTED").other("IGNORED") )
+   * }}}
+   *
+   * @group expr_ops
+   */
+  def when(whenExpr: Any, thenExpr: Any):Column =  {
+    this.expr match {
+      case CaseWhen(branches: Seq[Expression]) =>
+        CaseWhen(branches ++ Seq(lit(whenExpr).expr, lit(thenExpr).expr))
+      case _ =>
+        CaseWhen(Seq(lit(whenExpr).expr, lit(thenExpr).expr))
+    }
+  }
+
+  def otherwise(elseExpr: Any):Column =  {
+    this.expr match {
+      case CaseWhen(branches: Seq[Expression]) =>
+        CaseWhen(branches :+ lit(elseExpr).expr)
+      case _ =>
+        CaseWhen(Seq(lit(true).expr, lit(elseExpr).expr))
+    }
+  }
+
+  /**
    * True if the current column is between the lower bound and upper bound, inclusive.
    *
    * @group java_expr_ops
