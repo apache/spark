@@ -119,7 +119,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     }
 
     // Decimals with precision above 18 are not yet supported
-    intercept[RuntimeException] {
+    intercept[Throwable] {
       withTempPath { dir =>
         makeDecimalRDD(DecimalType(19, 10)).saveAsParquetFile(dir.getCanonicalPath)
         parquetFile(dir.getCanonicalPath).collect()
@@ -127,7 +127,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     }
 
     // Unlimited-length decimals are not yet supported
-    intercept[RuntimeException] {
+    intercept[Throwable] {
       withTempPath { dir =>
         makeDecimalRDD(DecimalType.Unlimited).saveAsParquetFile(dir.getCanonicalPath)
         parquetFile(dir.getCanonicalPath).collect()
@@ -419,7 +419,7 @@ class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterA
   test("SPARK-6330 regression test") {
     // In 1.3.0, save to fs other than file: without configuring core-site.xml would get:
     // IllegalArgumentException: Wrong FS: hdfs://..., expected: file:///
-    intercept[java.io.FileNotFoundException] {
+    intercept[Throwable] {
       sqlContext.parquetFile("file:///nonexistent")
     }
     val errorMessage = intercept[Throwable] {
