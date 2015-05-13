@@ -64,7 +64,7 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns true if  all the children of this expression have been resolved to a specific schema
    * and false if any still contains any unresolved placeholders.
    */
-  def childrenResolved: Boolean = !children.exists(!_.resolved)
+  def childrenResolved: Boolean = children.forall(_.resolved)
 
   /**
    * Returns a string representation of this expression that does not have developer centric

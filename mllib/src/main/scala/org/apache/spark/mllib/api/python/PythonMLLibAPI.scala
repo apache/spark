@@ -32,6 +32,7 @@ import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
+import org.apache.spark.mllib.evaluation.RankingMetrics
 import org.apache.spark.mllib.feature._
 import org.apache.spark.mllib.fpm.{FPGrowth, FPGrowthModel}
 import org.apache.spark.mllib.linalg._
@@ -50,6 +51,7 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTree
 import org.apache.spark.mllib.tree.{DecisionTree, GradientBoostedTrees, RandomForest}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -495,6 +497,16 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for ChiSqSelector.fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitChiSqSelector(numTopFeatures: Int, data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
+    new ChiSqSelector(numTopFeatures).fit(data.rdd)
+  }
+
+  /**
    * Java stub for IDF.fit(). This stub returns a
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on
@@ -911,6 +923,14 @@ private[python] class PythonMLLibAPI extends Serializable {
     val parts = getNumPartitionsOrDefault(numPartitions, jsc)
     val s = getSeedOrDefault(seed)
     RG.gammaVectorRDD(jsc.sc, shape, scale, numRows, numCols, parts, s)
+  }
+
+  /**
+   * Java stub for the constructor of Python mllib RankingMetrics
+   */
+  def newRankingMetrics(predictionAndLabels: DataFrame): RankingMetrics[Any] = {
+    new RankingMetrics(predictionAndLabels.map(
+      r => (r.getSeq(0).toArray[Any], r.getSeq(1).toArray[Any])))
   }
 
 

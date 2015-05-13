@@ -481,7 +481,7 @@
       <dependency>
         <groupId>com.ning</groupId>
         <artifactId>compress-lzf</artifactId>
-        <version>1.0.0</version>
+        <version>1.0.3</version>
       </dependency>
       <dependency>
         <groupId>org.xerial.snappy</groupId>
@@ -622,6 +622,18 @@
             <artifactId>guava</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.sun.jersey</groupId>
+        <artifactId>jersey-server</artifactId>
+        <version>1.9</version>
+        <scope>${hadoop.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.sun.jersey</groupId>
+        <artifactId>jersey-core</artifactId>
+        <version>1.9</version>
+        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>

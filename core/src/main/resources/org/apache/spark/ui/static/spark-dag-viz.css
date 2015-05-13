@@ -16,40 +16,51 @@
  */
 
 #dag-viz-graph svg path {
-  stroke: #444444;
+  stroke: #444;
   stroke-width: 1.5px;
 }
 
 #dag-viz-graph svg g.cluster rect {
-  stroke-width: 4px;
-  stroke-opacity: 0.5;
+  stroke-width: 1px;
 }
 
-#dag-viz-graph svg g.node circle,
+#dag-viz-graph svg g.node circle {
+  fill: #444;
+}
+
 #dag-viz-graph svg g.node rect {
-  fill: #444444;
+  fill: #C3EBFF;
+  stroke: #3EC0FF;
+  stroke-width: 1px;
 }
 
-#dag-viz-graph svg g.node.cached circle,
+#dag-viz-graph svg g.node.cached circle {
+  fill: #444;
+}
+
 #dag-viz-graph svg g.node.cached rect {
-  fill: #FF0000;
+  fill: #B3F5C5;
+  stroke: #56F578;
+  stroke-width: 1px;
 }
 
 /* Job page specific styles */
 
 #dag-viz-graph svg.job marker#marker-arrow path {
-  fill: #444444;
+  fill: #333;
   stroke-width: 0px;
 }
 
 #dag-viz-graph svg.job g.cluster rect {
-  fill: #FFFFFF;
-  stroke: #AADFFF;
+  fill: #A0DFFF;
+  stroke: #3EC0FF;
+  stroke-width: 1px;
 }
 
 #dag-viz-graph svg.job g.cluster[id*="stage"] rect {
-  stroke: #FFDDEE;
-  stroke-width: 6px;
+  fill: #FFFFFF;
+  stroke: #FF99AC;
+  stroke-width: 1px;
 }
 
 #dag-viz-graph svg.job g#cross-stage-edges path {
@@ -57,27 +68,36 @@
 }
 
 #dag-viz-graph svg.job g.cluster text {
-  fill: #AAAAAA;
+  fill: #333;
 }
 
 /* Stage page specific styles */
 
 #dag-viz-graph svg.stage g.cluster rect {
-  fill: #F0F8FF;
-  stroke: #AADFFF;
+  fill: #A0DFFF;
+  stroke: #3EC0FF;
+  stroke-width: 1px;
 }
 
 #dag-viz-graph svg.stage g.cluster[id*="stage"] rect {
   fill: #FFFFFF;
-  stroke: #FFDDEE;
-  stroke-width: 6px;
+  stroke: #FFA6B6;
+  stroke-width: 1px;
 }
 
 #dag-viz-graph svg.stage g.node g.label text tspan {
-  fill: #FFFFFF;
+  fill: #333;
 }
 
 #dag-viz-graph svg.stage g.cluster text {
-  fill: #444444;
-  font-weight: bold;
+  fill: #333;
+}
+
+#dag-viz-graph a, #dag-viz-graph a:hover {
+  text-decoration: none;
+}
+
+#dag-viz-graph .label {
+  font-weight: normal;
+  text-shadow: none;
 }

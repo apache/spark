@@ -717,7 +717,8 @@ abstract class RDD[T: ClassTag](
   def mapPartitionsWithContext[U: ClassTag](
       f: (TaskContext, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false): RDD[U] = withScope {
-    val func = (context: TaskContext, index: Int, iter: Iterator[T]) => f(context, iter)
+    val cleanF = sc.clean(f)
+    val func = (context: TaskContext, index: Int, iter: Iterator[T]) => cleanF(context, iter)
     new MapPartitionsRDD(this, sc.clean(func), preservesPartitioning)
   }
 
@@ -741,9 +742,11 @@ abstract class RDD[T: ClassTag](
   def mapWith[A, U: ClassTag]
       (constructA: Int => A, preservesPartitioning: Boolean = false)
       (f: (T, A) => U): RDD[U] = withScope {
+    val cleanF = sc.clean(f)
+    val cleanA = sc.clean(constructA)
     mapPartitionsWithIndex((index, iter) => {
-      val a = constructA(index)
-      iter.map(t => f(t, a))
+      val a = cleanA(index)
+      iter.map(t => cleanF(t, a))
     }, preservesPartitioning)
   }
 
@@ -756,9 +759,11 @@ abstract class RDD[T: ClassTag](
   def flatMapWith[A, U: ClassTag]
       (constructA: Int => A, preservesPartitioning: Boolean = false)
       (f: (T, A) => Seq[U]): RDD[U] = withScope {
+    val cleanF = sc.clean(f)
+    val cleanA = sc.clean(constructA)
     mapPartitionsWithIndex((index, iter) => {
-      val a = constructA(index)
-      iter.flatMap(t => f(t, a))
+      val a = cleanA(index)
+      iter.flatMap(t => cleanF(t, a))
     }, preservesPartitioning)
   }
 
@@ -769,9 +774,11 @@ abstract class RDD[T: ClassTag](
    */
   @deprecated("use mapPartitionsWithIndex and foreach", "1.0.0")
   def foreachWith[A](constructA: Int => A)(f: (T, A) => Unit): Unit = withScope {
+    val cleanF = sc.clean(f)
+    val cleanA = sc.clean(constructA)
     mapPartitionsWithIndex { (index, iter) =>
-      val a = constructA(index)
-      iter.map(t => {f(t, a); t})
+      val a = cleanA(index)
+      iter.map(t => {cleanF(t, a); t})
     }
   }
 
@@ -782,9 +789,11 @@ abstract class RDD[T: ClassTag](
    */
   @deprecated("use mapPartitionsWithIndex and filter", "1.0.0")
   def filterWith[A](constructA: Int => A)(p: (T, A) => Boolean): RDD[T] = withScope {
+    val cleanP = sc.clean(p)
+    val cleanA = sc.clean(constructA)
     mapPartitionsWithIndex((index, iter) => {
-      val a = constructA(index)
-      iter.filter(t => p(t, a))
+      val a = cleanA(index)
+      iter.filter(t => cleanP(t, a))
     }, preservesPartitioning = true)
   }
 
@@ -901,7 +910,8 @@ abstract class RDD[T: ClassTag](
    * Return an RDD that contains all matching values by applying `f`.
    */
   def collect[U: ClassTag](f: PartialFunction[T, U]): RDD[U] = withScope {
-    filter(f.isDefinedAt).map(f)
+    val cleanF = sc.clean(f)
+    filter(cleanF.isDefinedAt).map(cleanF)
   }
 
   /**
@@ -1151,8 +1161,8 @@ abstract class RDD[T: ClassTag](
    */
   @Experimental
   def countApproxDistinct(p: Int, sp: Int): Long = withScope {
-    require(p >= 4, s"p ($p) must be at least 4")
-    require(sp <= 32, s"sp ($sp) cannot be greater than 32")
+    require(p >= 4, s"p ($p) must be >= 4")
+    require(sp <= 32, s"sp ($sp) must be <= 32")
     require(sp == 0 || p <= sp, s"p ($p) cannot be greater than sp ($sp)")
     val zeroCounter = new HyperLogLogPlus(p, sp)
     aggregate(zeroCounter)(
@@ -1177,8 +1187,9 @@ abstract class RDD[T: ClassTag](
    *                   It must be greater than 0.000017.
    */
   def countApproxDistinct(relativeSD: Double = 0.05): Long = withScope {
+    require(relativeSD > 0.000017, s"accuracy ($relativeSD) must be greater than 0.000017")
     val p = math.ceil(2.0 * math.log(1.054 / relativeSD) / math.log(2)).toInt
-    countApproxDistinct(p, 0)
+    countApproxDistinct(if (p < 4) 4 else p, 0)
   }
 
   /**
@@ -1512,13 +1523,15 @@ abstract class RDD[T: ClassTag](
    * has completed (therefore the RDD has been materialized and potentially stored in memory).
    * doCheckpoint() is called recursively on the parent RDDs.
    */
-  private[spark] def doCheckpoint() {
-    if (!doCheckpointCalled) {
-      doCheckpointCalled = true
-      if (checkpointData.isDefined) {
-        checkpointData.get.doCheckpoint()
-      } else {
-        dependencies.foreach(_.rdd.doCheckpoint())
+  private[spark] def doCheckpoint(): Unit = {
+    RDDOperationScope.withScope(sc, "checkpoint", false, true) {
+      if (!doCheckpointCalled) {
+        doCheckpointCalled = true
+        if (checkpointData.isDefined) {
+          checkpointData.get.doCheckpoint()
+        } else {
+          dependencies.foreach(_.rdd.doCheckpoint())
+        }
       }
     }
   }

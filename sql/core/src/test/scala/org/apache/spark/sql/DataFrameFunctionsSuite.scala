@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
@@ -80,5 +81,11 @@ class DataFrameFunctionsSuite extends QueryTest {
     intercept[IllegalArgumentException] {
       struct(col("a") * 2)
     }
+  }
+
+  test("bitwiseNOT") {
+    checkAnswer(
+      testData2.select(bitwiseNOT($"a")),
+      testData2.collect().toSeq.map(r => Row(~r.getInt(0))))
   }
 }

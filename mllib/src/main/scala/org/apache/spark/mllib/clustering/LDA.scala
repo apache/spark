@@ -18,8 +18,9 @@
 package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseVector => BDV}
+
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.graphx._
 import org.apache.spark.mllib.linalg.Vector
@@ -197,12 +198,20 @@ class LDA private (
   }
 
 
-  /** LDAOptimizer used to perform the actual calculation */
+  /**
+   * :: DeveloperApi ::
+   *
+   * LDAOptimizer used to perform the actual calculation
+   */
+  @DeveloperApi
   def getOptimizer: LDAOptimizer = ldaOptimizer
 
   /**
+   * :: DeveloperApi ::
+   *
    * LDAOptimizer used to perform the actual calculation (default = EMLDAOptimizer)
    */
+  @DeveloperApi
   def setOptimizer(optimizer: LDAOptimizer): this.type = {
     this.ldaOptimizer = optimizer
     this
@@ -210,7 +219,7 @@ class LDA private (
 
   /**
    * Set the LDAOptimizer used to perform the actual calculation by algorithm name.
-   * Currently "em", "online" is supported.
+   * Currently "em", "online" are supported.
    */
   def setOptimizer(optimizerName: String): this.type = {
     this.ldaOptimizer =
