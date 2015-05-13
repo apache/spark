@@ -89,6 +89,9 @@ Examples:
 
 {% highlight bash %}
 
+# Apache Hadoop 2.2.X
+mvn -Pyarn -Phadoop-2.2 -DskipTests clean package
+
 # Apache Hadoop 2.3.X
 mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
 

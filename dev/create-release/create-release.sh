@@ -119,7 +119,7 @@ if [[ ! "$@" =~ --skip-publish ]]; then
   rm -rf $SPARK_REPO
 
   build/mvn -DskipTests -Pyarn -Phive \
-    -Phive-thriftserver -Pspark-ganglia-lgpl -Pkinesis-asl \
+    -Phive-thriftserver -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
 
   ./dev/change-version-to-2.11.sh
