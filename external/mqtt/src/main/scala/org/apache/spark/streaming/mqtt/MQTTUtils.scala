@@ -21,8 +21,8 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext, JavaDStream}
-import org.apache.spark.streaming.dstream.{ReceiverInputDStream, DStream}
+import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext}
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
 object MQTTUtils {
   /**
@@ -37,7 +37,7 @@ object MQTTUtils {
       brokerUrl: String,
       topic: String,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): ReceiverInputDStream[String] = {
+    ): ReceiverInputDStream[String] = ssc.withScope {
     new MQTTInputDStream(ssc, brokerUrl, topic, storageLevel)
   }
 
@@ -52,7 +52,7 @@ object MQTTUtils {
       jssc: JavaStreamingContext,
       brokerUrl: String,
       topic: String
-    ): JavaReceiverInputDStream[String] = {
+    ): JavaReceiverInputDStream[String] = jssc.ssc.withScope {
     implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
     createStream(jssc.ssc, brokerUrl, topic)
   }
@@ -69,7 +69,7 @@ object MQTTUtils {
       brokerUrl: String,
       topic: String,
       storageLevel: StorageLevel
-    ): JavaReceiverInputDStream[String] = {
+    ): JavaReceiverInputDStream[String] = jssc.ssc.withScope {
     implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
     createStream(jssc.ssc, brokerUrl, topic, storageLevel)
   }

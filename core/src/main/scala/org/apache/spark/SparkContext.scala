@@ -670,7 +670,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *
    * Note: Return statements are NOT allowed in the given body.
    */
-  private def withScope[U](body: => U): U = RDDOperationScope.withScope[U](this)(body)
+  private[spark] def withScope[U](body: => U): U = RDDOperationScope.withScope[U](this)(body)
 
   // Methods for creating RDDs
 

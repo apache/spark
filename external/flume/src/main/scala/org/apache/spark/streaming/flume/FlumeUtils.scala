@@ -41,7 +41,7 @@ object FlumeUtils {
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): ReceiverInputDStream[SparkFlumeEvent] = {
+    ): ReceiverInputDStream[SparkFlumeEvent] = ssc.withScope {
     createStream(ssc, hostname, port, storageLevel, false)
   }
 
@@ -59,11 +59,8 @@ object FlumeUtils {
       port: Int,
       storageLevel: StorageLevel,
       enableDecompression: Boolean
-    ): ReceiverInputDStream[SparkFlumeEvent] = {
-    val inputStream = new FlumeInputDStream[SparkFlumeEvent](
-        ssc, hostname, port, storageLevel, enableDecompression)
-
-    inputStream
+    ): ReceiverInputDStream[SparkFlumeEvent] = ssc.withScope {
+    new FlumeInputDStream[SparkFlumeEvent](ssc, hostname, port, storageLevel, enableDecompression)
   }
 
   /**
@@ -76,7 +73,7 @@ object FlumeUtils {
       jssc: JavaStreamingContext,
       hostname: String,
       port: Int
-    ): JavaReceiverInputDStream[SparkFlumeEvent] = {
+    ): JavaReceiverInputDStream[SparkFlumeEvent] = jssc.ssc.withScope {
     createStream(jssc.ssc, hostname, port)
   }
 
@@ -91,7 +88,7 @@ object FlumeUtils {
       hostname: String,
       port: Int,
       storageLevel: StorageLevel
-    ): JavaReceiverInputDStream[SparkFlumeEvent] = {
+    ): JavaReceiverInputDStream[SparkFlumeEvent] = jssc.ssc.withScope {
     createStream(jssc.ssc, hostname, port, storageLevel, false)
   }
 
@@ -108,7 +105,7 @@ object FlumeUtils {
       port: Int,
       storageLevel: StorageLevel,
       enableDecompression: Boolean
-    ): JavaReceiverInputDStream[SparkFlumeEvent] = {
+    ): JavaReceiverInputDStream[SparkFlumeEvent] = jssc.ssc.withScope {
     createStream(jssc.ssc, hostname, port, storageLevel, enableDecompression)
   }
 
@@ -125,7 +122,7 @@ object FlumeUtils {
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): ReceiverInputDStream[SparkFlumeEvent] = {
+    ): ReceiverInputDStream[SparkFlumeEvent] = ssc.withScope {
     createPollingStream(ssc, Seq(new InetSocketAddress(hostname, port)), storageLevel)
   }
 
@@ -140,7 +137,7 @@ object FlumeUtils {
       ssc: StreamingContext,
       addresses: Seq[InetSocketAddress],
       storageLevel: StorageLevel
-    ): ReceiverInputDStream[SparkFlumeEvent] = {
+    ): ReceiverInputDStream[SparkFlumeEvent] = ssc.withScope {
     createPollingStream(ssc, addresses, storageLevel,
       DEFAULT_POLLING_BATCH_SIZE, DEFAULT_POLLING_PARALLELISM)
   }
@@ -162,7 +159,7 @@ object FlumeUtils {
       storageLevel: StorageLevel,
       maxBatchSize: Int,
       parallelism: Int
-    ): ReceiverInputDStream[SparkFlumeEvent] = {
+    ): ReceiverInputDStream[SparkFlumeEvent] = ssc.withScope {
     new FlumePollingInputDStream[SparkFlumeEvent](ssc, addresses, maxBatchSize,
       parallelism, storageLevel)
   }
@@ -178,7 +175,7 @@ object FlumeUtils {
       jssc: JavaStreamingContext,
       hostname: String,
       port: Int
-    ): JavaReceiverInputDStream[SparkFlumeEvent] = {
+    ): JavaReceiverInputDStream[SparkFlumeEvent] = jssc.ssc.withScope {
     createPollingStream(jssc, hostname, port, StorageLevel.MEMORY_AND_DISK_SER_2)
   }
 
@@ -195,7 +192,7 @@ object FlumeUtils {
       hostname: String,
       port: Int,
       storageLevel: StorageLevel
-    ): JavaReceiverInputDStream[SparkFlumeEvent] = {
+    ): JavaReceiverInputDStream[SparkFlumeEvent] = jssc.ssc.withScope {
     createPollingStream(jssc, Array(new InetSocketAddress(hostname, port)), storageLevel)
   }
 
@@ -210,7 +207,7 @@ object FlumeUtils {
       jssc: JavaStreamingContext,
       addresses: Array[InetSocketAddress],
       storageLevel: StorageLevel
-    ): JavaReceiverInputDStream[SparkFlumeEvent] = {
+    ): JavaReceiverInputDStream[SparkFlumeEvent] = jssc.ssc.withScope {
     createPollingStream(jssc, addresses, storageLevel,
       DEFAULT_POLLING_BATCH_SIZE, DEFAULT_POLLING_PARALLELISM)
   }
@@ -232,7 +229,7 @@ object FlumeUtils {
       storageLevel: StorageLevel,
       maxBatchSize: Int,
       parallelism: Int
-    ): JavaReceiverInputDStream[SparkFlumeEvent] = {
+    ): JavaReceiverInputDStream[SparkFlumeEvent] = jssc.ssc.withScope {
     createPollingStream(jssc.ssc, addresses, storageLevel, maxBatchSize, parallelism)
   }
 }

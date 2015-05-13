@@ -242,13 +242,21 @@ class StreamingContext private[streaming] (
   private[streaming] def getNewInputStreamId() = nextInputStreamId.getAndIncrement()
 
   /**
+   * Execute a block of code in a scope such that all new DStreams created in this body will
+   * be part of the same scope. For more detail, see the comments in `doCompute`.
+   *
+   * Note: Return statements are NOT allowed in the given body. Also, this currently does
+   * not handle multiple StreamingContexts sharing the same SparkContext gracefully.
+   */
+  private[streaming] def withScope[U](body: => U): U = sparkContext.withScope(body)
+
+  /**
    * Create an input stream with any arbitrary user implemented receiver.
    * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param receiver Custom implementation of Receiver
    */
   @deprecated("Use receiverStream", "1.0.0")
-  def networkStream[T: ClassTag](
-    receiver: Receiver[T]): ReceiverInputDStream[T] = {
+  def networkStream[T: ClassTag](receiver: Receiver[T]): ReceiverInputDStream[T] = withScope {
     receiverStream(receiver)
   }
 
@@ -257,8 +265,7 @@ class StreamingContext private[streaming] (
    * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param receiver Custom implementation of Receiver
    */
-  def receiverStream[T: ClassTag](
-    receiver: Receiver[T]): ReceiverInputDStream[T] = {
+  def receiverStream[T: ClassTag](receiver: Receiver[T]): ReceiverInputDStream[T] = withScope {
     new PluggableInputDStream[T](this, receiver)
   }
 
@@ -279,7 +286,7 @@ class StreamingContext private[streaming] (
       name: String,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
       supervisorStrategy: SupervisorStrategy = ActorSupervisorStrategy.defaultStrategy
-    ): ReceiverInputDStream[T] = {
+    ): ReceiverInputDStream[T] = withScope {
     receiverStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
   }
 
@@ -296,7 +303,7 @@ class StreamingContext private[streaming] (
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): ReceiverInputDStream[String] = {
+    ): ReceiverInputDStream[String] = withScope {
     socketStream[String](hostname, port, SocketReceiver.bytesToLines, storageLevel)
   }
 
@@ -315,7 +322,7 @@ class StreamingContext private[streaming] (
       port: Int,
       converter: (InputStream) => Iterator[T],
       storageLevel: StorageLevel
-    ): ReceiverInputDStream[T] = {
+    ): ReceiverInputDStream[T] = withScope {
     new SocketInputDStream[T](this, hostname, port, converter, storageLevel)
   }
 
@@ -334,7 +341,7 @@ class StreamingContext private[streaming] (
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): ReceiverInputDStream[T] = {
+    ): ReceiverInputDStream[T] = withScope {
     new RawInputDStream[T](this, hostname, port, storageLevel)
   }
 
@@ -352,7 +359,7 @@ class StreamingContext private[streaming] (
     K: ClassTag,
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
-  ] (directory: String): InputDStream[(K, V)] = {
+  ] (directory: String): InputDStream[(K, V)] = withScope {
     new FileInputDStream[K, V, F](this, directory)
   }
 
@@ -373,7 +380,9 @@ class StreamingContext private[streaming] (
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
   ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean): InputDStream[(K, V)] = {
-    new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly)
+    withScope {
+      new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly)
+    }
   }
 
   /**
@@ -396,7 +405,7 @@ class StreamingContext private[streaming] (
   ] (directory: String,
      filter: Path => Boolean,
      newFilesOnly: Boolean,
-     conf: Configuration): InputDStream[(K, V)] = {
+     conf: Configuration): InputDStream[(K, V)] = withScope {
     new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly, Option(conf))
   }
 
@@ -408,7 +417,7 @@ class StreamingContext private[streaming] (
    * file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    */
-  def textFileStream(directory: String): DStream[String] = {
+  def textFileStream(directory: String): DStream[String] = withScope {
     fileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
   }
 
@@ -430,7 +439,7 @@ class StreamingContext private[streaming] (
   @Experimental
   def binaryRecordsStream(
       directory: String,
-      recordLength: Int): DStream[Array[Byte]] = {
+      recordLength: Int): DStream[Array[Byte]] = withScope {
     val conf = sc_.hadoopConfiguration
     conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
     val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](
@@ -453,7 +462,7 @@ class StreamingContext private[streaming] (
   def queueStream[T: ClassTag](
       queue: Queue[RDD[T]],
       oneAtATime: Boolean = true
-    ): InputDStream[T] = {
+    ): InputDStream[T] = withScope {
     queueStream(queue, oneAtATime, sc.makeRDD(Seq[T](), 1))
   }
 
@@ -470,14 +479,14 @@ class StreamingContext private[streaming] (
       queue: Queue[RDD[T]],
       oneAtATime: Boolean,
       defaultRDD: RDD[T]
-    ): InputDStream[T] = {
+    ): InputDStream[T] = withScope {
     new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
   }
 
   /**
    * Create a unified DStream from multiple DStreams of the same type and same slide duration.
    */
-  def union[T: ClassTag](streams: Seq[DStream[T]]): DStream[T] = {
+  def union[T: ClassTag](streams: Seq[DStream[T]]): DStream[T] = withScope {
     new UnionDStream[T](streams.toArray)
   }
 
@@ -488,7 +497,7 @@ class StreamingContext private[streaming] (
   def transform[T: ClassTag](
       dstreams: Seq[DStream[_]],
       transformFunc: (Seq[RDD[_]], Time) => RDD[T]
-    ): DStream[T] = {
+    ): DStream[T] = withScope {
     new TransformedDStream[T](dstreams, sparkContext.clean(transformFunc))
   }
 
