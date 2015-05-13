@@ -175,7 +175,7 @@ class LogisticRegression
        * }}}
        */
       initialWeightsWithIntercept.toArray(numFeatures)
-        = Math.log(histogram(1).toDouble / histogram(0).toDouble)
+        = math.log(histogram(1).toDouble / histogram(0).toDouble)
     }
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
@@ -285,7 +285,7 @@ class LogisticRegressionModel private[ml] (
     } else if (t == 1.0) {
       Double.PositiveInfinity
     } else {
-      Math.log(t / (1.0 - t))
+      math.log(t / (1.0 - t))
     }
     if (rawPrediction(1) > rawThreshold) 1 else 0
   }

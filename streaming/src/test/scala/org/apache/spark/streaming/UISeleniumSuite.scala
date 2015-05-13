@@ -116,12 +116,12 @@ class UISeleniumSuite
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
         findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time",
+          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
             "Status")
         }
         findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time",
-            "Total Delay")
+          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
+            "Total Delay (?)")
         }
 
         val batchLinks =

@@ -27,6 +27,8 @@ import org.apache.spark.annotation.Experimental
  * {{{
  *   sqlContext.experimental.extraStrategies += ...
  * }}}
+ *
+ * @since 1.3.0
  */
 @Experimental
 class ExperimentalMethods protected[sql](sqlContext: SQLContext) {
@@ -34,6 +36,8 @@ class ExperimentalMethods protected[sql](sqlContext: SQLContext) {
   /**
    * Allows extra strategies to be injected into the query planner at runtime.  Note this API
    * should be consider experimental and is not intended to be stable across releases.
+   *
+   * @since 1.3.0
    */
   @Experimental
   var extraStrategies: Seq[Strategy] = Nil

@@ -72,6 +72,20 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @SuppressWarnings("unchecked")
   @Test
+  public void testContextState() {
+    List<List<Integer>> inputData = Arrays.asList(Arrays.asList(1, 2, 3, 4));
+    Assert.assertTrue(ssc.getState() == StreamingContextState.INITIALIZED);
+    JavaDStream<Integer> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaTestUtils.attachTestOutputStream(stream);
+    Assert.assertTrue(ssc.getState() == StreamingContextState.INITIALIZED);
+    ssc.start();
+    Assert.assertTrue(ssc.getState() == StreamingContextState.ACTIVE);
+    ssc.stop();
+    Assert.assertTrue(ssc.getState() == StreamingContextState.STOPPED);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
   public void testCount() {
     List<List<Integer>> inputData = Arrays.asList(
         Arrays.asList(1,2,3,4),

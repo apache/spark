@@ -128,7 +128,7 @@ class ParamTests(PySparkTestCase):
         testParams = TestParams()
         maxIter = testParams.maxIter
         self.assertEqual(maxIter.name, "maxIter")
-        self.assertEqual(maxIter.doc, "max number of iterations")
+        self.assertEqual(maxIter.doc, "max number of iterations (>= 0)")
         self.assertTrue(maxIter.parent is testParams)
 
     def test_params(self):
@@ -156,7 +156,7 @@ class ParamTests(PySparkTestCase):
         self.assertEquals(
             testParams.explainParams(),
             "\n".join(["inputCol: input column name (undefined)",
-                       "maxIter: max number of iterations (default: 10, current: 100)"]))
+                       "maxIter: max number of iterations (>= 0) (default: 10, current: 100)"]))
 
 
 if __name__ == "__main__":
