@@ -54,7 +54,7 @@ final class Bucketizer(override val uid: String)
       "bucket, which also includes y. The splits should be strictly increasing. " +
       "Values at -inf, inf must be explicitly provided to cover all Double values; " +
       "otherwise, values outside the splits specified will be treated as errors.",
-    Bucketizer.checkSplits)
+    Bucketizer.checkSplits _)
 
   /** @group getParam */
   def getSplits: Array[Double] = $(splits)

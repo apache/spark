@@ -25,7 +25,7 @@ import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.Param
-import org.apache.spark.ml.util.MetadataUtils
+import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
@@ -40,7 +40,7 @@ private[ml] trait OneVsRestParams extends PredictorParams {
   type ClassifierType = Classifier[F, E, M] forSome {
     type F
     type M <: ClassificationModel[F, M]
-    type E <:  Classifier[F, E, M]
+    type E <: Classifier[F, E, M]
   }
 
   /**
@@ -71,9 +71,9 @@ private[ml] trait OneVsRestParams extends PredictorParams {
  */
 @AlphaComponent
 class OneVsRestModel private[ml] (
-      override val parent: OneVsRest,
-      labelMetadata: Metadata,
-      val models: Array[_ <: ClassificationModel[_,_]])
+    override val uid: String,
+    labelMetadata: Metadata,
+    val models: Array[_ <: ClassificationModel[_,_]])
   extends Model[OneVsRestModel] with OneVsRestParams {
 
   override def transformSchema(schema: StructType): StructType = {
@@ -145,7 +145,10 @@ class OneVsRestModel private[ml] (
  * is picked to label the example.
  */
 @Experimental
-final class OneVsRest extends Estimator[OneVsRestModel] with OneVsRestParams {
+final class OneVsRest(override val uid: String)
+  extends Estimator[OneVsRestModel] with OneVsRestParams {
+
+  def this() = this(Identifiable.randomUID("oneVsRest"))
 
   /** @group setParam */
   def setClassifier(value: Classifier[_,_,_]): this.type = {
@@ -204,6 +207,7 @@ final class OneVsRest extends Estimator[OneVsRestModel] with OneVsRestParams {
         NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses)
       case attr: Attribute => attr
     }
-    copyValues(new OneVsRestModel(this, labelAttribute.toMetadata(), models))
+    val model = new OneVsRestModel(uid, labelAttribute.toMetadata(), models).setParent(this)
+    copyValues(model)
   }
 }
