@@ -322,13 +322,18 @@ class Analyzer(
           case oldVersion @ Aggregate(_, aggregateExpressions, _)
               if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
             (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
+
+          case oldVersion @ Window(_, windowExpressions, _, child)
+              if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
+                .nonEmpty =>
+            (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
         }.headOption.getOrElse { // Only handle first case, others will be fixed on the next pass.
           sys.error(
             s"""
-              |Failure when resolving conflicting references in Join:
-              |$plan
-              |
-              |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+               |Failure when resolving conflicting references in Join:
+               |$plan
+               |
+               |Conflicting attributes: ${conflictingAttributes.mkString(",")}
               """.stripMargin)
         }
 
