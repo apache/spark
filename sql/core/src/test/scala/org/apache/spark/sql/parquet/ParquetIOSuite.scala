@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.parquet
 
-import org.apache.spark.sql.catalyst.util.DateUtils
-
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -37,6 +35,7 @@ import parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.implicits._

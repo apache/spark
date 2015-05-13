@@ -20,14 +20,13 @@ package org.apache.spark.sql.json
 import java.io.ByteArrayOutputStream
 import java.sql.Timestamp
 
-import org.apache.spark.sql.catalyst.util.DateUtils
-
 import scala.collection.Map
 
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
 

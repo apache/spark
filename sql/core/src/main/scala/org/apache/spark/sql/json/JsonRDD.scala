@@ -19,8 +19,6 @@ package org.apache.spark.sql.json
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.catalyst.util.DateUtils
-
 import scala.collection.Map
 import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
 
@@ -31,6 +29,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.Logging
 
