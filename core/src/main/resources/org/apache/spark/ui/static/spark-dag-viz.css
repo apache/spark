@@ -57,7 +57,7 @@
   stroke-width: 1px;
 }
 
-#dag-viz-graph svg.job g.cluster[id*="stage"] rect {
+#dag-viz-graph svg.job g.cluster[class*="stage"] rect {
   fill: #FFFFFF;
   stroke: #FF99AC;
   stroke-width: 1px;
@@ -79,7 +79,7 @@
   stroke-width: 1px;
 }
 
-#dag-viz-graph svg.stage g.cluster[id*="stage"] rect {
+#dag-viz-graph svg.stage g.cluster[class*="stage"] rect {
   fill: #FFFFFF;
   stroke: #FFA6B6;
   stroke-width: 1px;
