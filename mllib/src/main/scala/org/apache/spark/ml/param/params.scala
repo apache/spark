@@ -27,6 +27,8 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.util.Identifiable
 
+import scala.util.Try
+
 /**
  * :: AlphaComponent ::
  * A param with self-contained documentation and optionally default value. Primitive-typed param
@@ -274,6 +276,9 @@ trait Params extends Identifiable with Serializable {
   /**
    * Returns all params sorted by their names. The default implementation uses Java reflection to
    * list all public methods that have no arguments and return [[Param]].
+   *
+   * Note: Developer should not use this method in constructor because we cannot guarantee that
+   * this variable gets initialized before other params.
    */
   lazy val params: Array[Param[_]] = {
     val methods = this.getClass.getMethods
@@ -308,7 +313,7 @@ trait Params extends Identifiable with Serializable {
    * those are checked during schema validation.
    */
   def validateParams(): Unit = {
-    params.filter(isDefined _).foreach { param =>
+    params.filter(isDefined).foreach { param =>
       param.asInstanceOf[Param[Any]].validate($(param))
     }
   }
@@ -352,15 +357,16 @@ trait Params extends Identifiable with Serializable {
   }
 
   /** Tests whether this instance contains a param with a given name. */
-  def hasParam(paramName: String): Boolean = {
-    params.exists(_.name == paramName)
-  }
+  def hasParam(paramName: String): Boolean = Try(getParam(paramName)).isSuccess
 
   /** Gets a param by its name. */
   def getParam(paramName: String): Param[Any] = {
-    params.find(_.name == paramName).getOrElse {
-      throw new NoSuchElementException(s"Param $paramName does not exist.")
-    }.asInstanceOf[Param[Any]]
+    val m = this.getClass.getMethod(paramName)
+    if (Modifier.isPublic(m.getModifiers) && classOf[Param[_]].isAssignableFrom(m.getReturnType)) {
+      m.invoke(this).asInstanceOf[Param[Any]]
+    } else {
+      throw new NoSuchMethodException(s"Param $paramName does not exist.")
+    }
   }
 
   /**

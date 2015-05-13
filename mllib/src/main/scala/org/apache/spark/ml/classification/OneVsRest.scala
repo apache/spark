@@ -47,12 +47,10 @@ private[ml] trait OneVsRestParams extends PredictorParams {
    * param for the base binary classifier that we reduce multiclass classification into.
    * @group param
    */
-  val classifier: Param[ClassifierType]  =
-    new Param(this, "classifier", "base binary classifier ")
+  val classifier: Param[ClassifierType] = new Param(this, "classifier", "base binary classifier")
 
   /** @group getParam */
   def getClassifier: ClassifierType = $(classifier)
-
 }
 
 /**
@@ -70,7 +68,7 @@ private[ml] trait OneVsRestParams extends PredictorParams {
  *               (taking label 0).
  */
 @AlphaComponent
-class OneVsRestModel private[ml] (
+final class OneVsRestModel private[ml] (
     override val uid: String,
     labelMetadata: Metadata,
     val models: Array[_ <: ClassificationModel[_,_]])
@@ -151,8 +149,7 @@ final class OneVsRest(override val uid: String)
   def this() = this(Identifiable.randomUID("oneVsRest"))
 
   /** @group setParam */
-  def setClassifier(value: Classifier[_,_,_]): this.type = {
-    // TODO: Find a better way to do this. Existential Types don't work with Java API so cast needed
+  def setClassifier(value: Classifier[_, _, _]): this.type = {
     set(classifier, value.asInstanceOf[ClassifierType])
   }
 
