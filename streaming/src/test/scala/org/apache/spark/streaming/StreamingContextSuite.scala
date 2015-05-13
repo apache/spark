@@ -651,6 +651,45 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     testPackage.test()
   }
 
+  test("throw exception on using active or stopped context") {
+    val conf = new SparkConf()
+      .setMaster(master)
+      .setAppName(appName)
+      .set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
+    ssc = new StreamingContext(conf, batchDuration)
+    require(ssc.getState() === StreamingContextState.INITIALIZED)
+    val input = addInputStream(ssc)
+    val transformed = input.map { x => x}
+    transformed.foreachRDD { rdd => rdd.count }
+
+    def testForException(clue: String, expectedErrorMsg: String)(body: => Unit): Unit = {
+      withClue(clue) {
+        val ex = intercept[SparkException] {
+          body
+        }
+        assert(ex.getMessage.toLowerCase().contains(expectedErrorMsg))
+      }
+    }
+
+    ssc.start()
+    require(ssc.getState() === StreamingContextState.ACTIVE)
+    testForException("no error on adding input after start", "start") {
+      addInputStream(ssc) }
+    testForException("no error on adding transformation after start", "start") {
+      input.map { x => x * 2 } }
+    testForException("no error on adding output operation after start", "start") {
+      transformed.foreachRDD { rdd => rdd.collect() } }
+
+    ssc.stop()
+    require(ssc.getState() === StreamingContextState.STOPPED)
+    testForException("no error on adding input after stop", "stop") {
+      addInputStream(ssc) }
+    testForException("no error on adding transformation after stop", "stop") {
+      input.map { x => x * 2 } }
+    testForException("no error on adding output operation after stop", "stop") {
+      transformed.foreachRDD { rdd => rdd.collect() } }
+  }
+
   def addInputStream(s: StreamingContext): DStream[Int] = {
     val input = (1 to 100).map(i => 1 to i)
     val inputStream = new TestInputStream(s, input, 1)
