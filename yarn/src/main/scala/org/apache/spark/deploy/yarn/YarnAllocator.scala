@@ -117,6 +117,24 @@ private[yarn] class YarnAllocator(
   // For testing
   private val launchContainers = sparkConf.getBoolean("spark.yarn.launchContainers", true)
 
+  private val labelExpression = sparkConf.getOption("spark.yarn.executor.nodeLabelExpression")
+
+  // ContainerRequest constructor that can take a node label expression. We grab it through
+  // reflection because it's only available in later versions of YARN.
+  private val nodeLabelConstructor = labelExpression.flatMap { expr =>
+    try {
+      Some(classOf[ContainerRequest].getConstructor(classOf[Resource],
+        classOf[Array[String]], classOf[Array[String]], classOf[Priority], classOf[Boolean],
+        classOf[String]))
+    } catch {
+      case e: NoSuchMethodException => {
+        logWarning(s"Node label expression $expr will be ignored because YARN version on" +
+          " classpath does not support it.")
+        None
+      }
+    }
+  }
+
   def getNumExecutorsRunning: Int = numExecutorsRunning
 
   def getNumExecutorsFailed: Int = numExecutorsFailed
@@ -211,7 +229,7 @@ private[yarn] class YarnAllocator(
         s"cores and ${resource.getMemory} MB memory including $memoryOverhead MB overhead")
 
       for (i <- 0 until missing) {
-        val request = new ContainerRequest(resource, null, null, RM_REQUEST_PRIORITY)
+        val request = createContainerRequest(resource)
         amClient.addContainerRequest(request)
         val nodes = request.getNodes
         val hostStr = if (nodes == null || nodes.isEmpty) "Any" else nodes.last
@@ -228,6 +246,17 @@ private[yarn] class YarnAllocator(
         logWarning("Expected to find pending requests, but found none.")
       }
     }
+  }
+
+  /**
+   * Creates a container request, handling the reflection required to use YARN features that were
+   * added in recent versions.
+   */
+  private def createContainerRequest(resource: Resource): ContainerRequest = {
+    nodeLabelConstructor.map { constructor =>
+      constructor.newInstance(resource, null, null, RM_REQUEST_PRIORITY, true: java.lang.Boolean,
+        labelExpression.orNull)
+    }.getOrElse(new ContainerRequest(resource, null, null, RM_REQUEST_PRIORITY))
   }
 
   /**
@@ -373,7 +402,9 @@ private[yarn] class YarnAllocator(
         // Hadoop 2.2.X added a ContainerExitStatus we should switch to use
         // there are some exit status' we shouldn't necessarily count against us, but for
         // now I think its ok as none of the containers are expected to exit
-        if (completedContainer.getExitStatus == -103) { // vmem limit exceeded
+        if (completedContainer.getExitStatus == ContainerExitStatus.PREEMPTED) {
+          logInfo("Container preempted: " + containerId)
+        } else if (completedContainer.getExitStatus == -103) { // vmem limit exceeded
           logWarning(memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
             VMEM_EXCEEDED_PATTERN))

@@ -25,15 +25,49 @@ import scala.util.Try
  */
 private[streaming]
 class Job(val time: Time, func: () => _) {
-  var id: String = _
-  var result: Try[_] = null
+  private var _id: String = _
+  private var _outputOpId: Int = _
+  private var isSet = false
+  private var _result: Try[_] = null
 
   def run() {
-    result = Try(func())
+    _result = Try(func())
   }
 
-  def setId(number: Int) {
-    id = "streaming job " + time + "." + number
+  def result: Try[_] = {
+    if (_result == null) {
+      throw new IllegalStateException("Cannot access result before job finishes")
+    }
+    _result
+  }
+
+  /**
+   * @return the global unique id of this Job.
+   */
+  def id: String = {
+    if (!isSet) {
+      throw new IllegalStateException("Cannot access id before calling setId")
+    }
+    _id
+  }
+
+  /**
+   * @return the output op id of this Job. Each Job has a unique output op id in the same JobSet.
+   */
+  def outputOpId: Int = {
+    if (!isSet) {
+      throw new IllegalStateException("Cannot access number before calling setId")
+    }
+    _outputOpId
+  }
+
+  def setOutputOpId(outputOpId: Int) {
+    if (isSet) {
+      throw new IllegalStateException("Cannot call setOutputOpId more than once")
+    }
+    isSet = true
+    _id = s"streaming job $time.$outputOpId"
+    _outputOpId = outputOpId
   }
 
   override def toString: String = id

@@ -35,9 +35,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.Logging
 import org.apache.spark.SparkConf
 
-class UtilsSuite extends FunSuite with ResetSystemProperties {
+class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
 
   test("timeConversion") {
     // Test -1
@@ -68,7 +69,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     intercept[NumberFormatException] {
       Utils.timeStringAsMs("600l")
     }
-    
+
     intercept[NumberFormatException] {
       Utils.timeStringAsMs("This breaks 600s")
     }
@@ -99,7 +100,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.byteStringAsGb("1k") === 0)
     assert(Utils.byteStringAsGb("1t") === ByteUnit.TiB.toGiB(1))
     assert(Utils.byteStringAsGb("1p") === ByteUnit.PiB.toGiB(1))
-    
+
     assert(Utils.byteStringAsMb("1") === 1)
     assert(Utils.byteStringAsMb("1m") === 1)
     assert(Utils.byteStringAsMb("1048575b") === 0)
@@ -118,7 +119,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.byteStringAsKb("1g") === ByteUnit.GiB.toKiB(1))
     assert(Utils.byteStringAsKb("1t") === ByteUnit.TiB.toKiB(1))
     assert(Utils.byteStringAsKb("1p") === ByteUnit.PiB.toKiB(1))
-    
+
     assert(Utils.byteStringAsBytes("1") === 1)
     assert(Utils.byteStringAsBytes("1k") === ByteUnit.KiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1m") === ByteUnit.MiB.toBytes(1))
@@ -127,17 +128,17 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.byteStringAsBytes("1p") === ByteUnit.PiB.toBytes(1))
 
     // Overflow handling, 1073741824p exceeds Long.MAX_VALUE if converted straight to Bytes
-    // This demonstrates that we can have e.g 1024^3 PB without overflowing. 
+    // This demonstrates that we can have e.g 1024^3 PB without overflowing.
     assert(Utils.byteStringAsGb("1073741824p") === ByteUnit.PiB.toGiB(1073741824))
     assert(Utils.byteStringAsMb("1073741824p") === ByteUnit.PiB.toMiB(1073741824))
-    
+
     // Run this to confirm it doesn't throw an exception
-    assert(Utils.byteStringAsBytes("9223372036854775807") === 9223372036854775807L) 
+    assert(Utils.byteStringAsBytes("9223372036854775807") === 9223372036854775807L)
     assert(ByteUnit.PiB.toPiB(9223372036854775807L) === 9223372036854775807L)
-    
+
     // Test overflow exception
     intercept[IllegalArgumentException] {
-      // This value exceeds Long.MAX when converted to bytes 
+      // This value exceeds Long.MAX when converted to bytes
       Utils.byteStringAsBytes("9223372036854775808")
     }
 
@@ -146,22 +147,22 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
       // This value exceeds Long.MAX when converted to TB
       ByteUnit.PiB.toTiB(9223372036854775807L)
     }
-    
+
     // Test fractional string
     intercept[NumberFormatException] {
       Utils.byteStringAsMb("0.064")
     }
-    
+
     // Test fractional string
     intercept[NumberFormatException] {
       Utils.byteStringAsMb("0.064m")
     }
-    
+
     // Test invalid strings
     intercept[NumberFormatException] {
       Utils.byteStringAsBytes("500ub")
     }
-    
+
     // Test invalid strings
     intercept[NumberFormatException] {
       Utils.byteStringAsBytes("This breaks 600b")
@@ -174,12 +175,12 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     intercept[NumberFormatException] {
       Utils.byteStringAsBytes("600gb This breaks")
     }
-    
+
     intercept[NumberFormatException] {
       Utils.byteStringAsBytes("This 123mb breaks")
     }
   }
-  
+
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")
     assert(Utils.bytesToString(1500) === "1500.0 B")
@@ -366,51 +367,58 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
   }
 
   test("resolveURI") {
-    def assertResolves(before: String, after: String, testWindows: Boolean = false): Unit = {
+    def assertResolves(before: String, after: String): Unit = {
       // This should test only single paths
       assume(before.split(",").length === 1)
       // Repeated invocations of resolveURI should yield the same result
-      def resolve(uri: String): String = Utils.resolveURI(uri, testWindows).toString
+      def resolve(uri: String): String = Utils.resolveURI(uri).toString
       assert(resolve(after) === after)
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
       // Also test resolveURIs with single paths
-      assert(new URI(Utils.resolveURIs(before, testWindows)) === new URI(after))
-      assert(new URI(Utils.resolveURIs(after, testWindows)) === new URI(after))
+      assert(new URI(Utils.resolveURIs(before)) === new URI(after))
+      assert(new URI(Utils.resolveURIs(after)) === new URI(after))
     }
-    val cwd = System.getProperty("user.dir")
+    val rawCwd = System.getProperty("user.dir")
+    val cwd = if (Utils.isWindows) s"/$rawCwd".replace("\\", "/") else rawCwd
     assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
     assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:/root/spark.jar#app.jar")
     assertResolves("spark.jar", s"file:$cwd/spark.jar")
-    assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar#app.jar")
-    assertResolves("C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt", testWindows = true)
-    intercept[IllegalArgumentException] { Utils.resolveURI("file:foo") }
-    intercept[IllegalArgumentException] { Utils.resolveURI("file:foo:baby") }
+    assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar%23app.jar")
+    assertResolves("path to/file.txt", s"file:$cwd/path%20to/file.txt")
+    if (Utils.isWindows) {
+      assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt")
+      assertResolves("C:\\path to\\file.txt", "file:/C:/path%20to/file.txt")
+    }
+    assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt")
+    assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt")
+    assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt")
+    assertResolves("file:foo", s"file:foo")
+    assertResolves("file:foo:baby", s"file:foo:baby")
   }
 
   test("resolveURIs with multiple paths") {
-    def assertResolves(before: String, after: String, testWindows: Boolean = false): Unit = {
+    def assertResolves(before: String, after: String): Unit = {
       assume(before.split(",").length > 1)
-      assert(Utils.resolveURIs(before, testWindows) === after)
-      assert(Utils.resolveURIs(after, testWindows) === after)
+      assert(Utils.resolveURIs(before) === after)
+      assert(Utils.resolveURIs(after) === after)
       // Repeated invocations of resolveURIs should yield the same result
-      def resolve(uri: String): String = Utils.resolveURIs(uri, testWindows)
+      def resolve(uri: String): String = Utils.resolveURIs(uri)
       assert(resolve(after) === after)
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
     }
-    val cwd = System.getProperty("user.dir")
+    val rawCwd = System.getProperty("user.dir")
+    val cwd = if (Utils.isWindows) s"/$rawCwd".replace("\\", "/") else rawCwd
     assertResolves("jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
     assertResolves("file:/jar1,file:/jar2", "file:/jar1,file:/jar2")
     assertResolves("hdfs:/jar1,file:/jar2,jar3", s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
-    assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5",
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5")
-    assertResolves("hdfs:/jar1,file:/jar2,jar3,C:\\pi.py#py.pi",
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi", testWindows = true)
+    assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5,path to/jar6",
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4%23jar5,file:$cwd/path%20to/jar6")
+    if (Utils.isWindows) {
+      assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
+        s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
+    }
   }
 
   test("nonLocalPaths") {
@@ -424,6 +432,8 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.nonLocalPaths("file:/spark.jar,local:/smart.jar,family.py") === Array.empty)
     assert(Utils.nonLocalPaths("local:/spark.jar,file:/smart.jar,family.py") === Array.empty)
     assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar") ===
+      Array("hdfs:/spark.jar", "s3:/smart.jar"))
+    assert(Utils.nonLocalPaths("hdfs:/spark.jar,path to/a.jar,s3:/smart.jar") ===
       Array("hdfs:/spark.jar", "s3:/smart.jar"))
     assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar,local.py,file:/hello/pi.py") ===
       Array("hdfs:/spark.jar", "s3:/smart.jar"))
@@ -473,6 +483,15 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
       Option(server1).foreach(_.close())
       Option(server2).foreach(_.close())
     }
+  }
+
+  // Test for using the util function to change our log levels.
+  test("log4j log level change") {
+    Utils.setLogLevel(org.apache.log4j.Level.ALL)
+    assert(log.isInfoEnabled())
+    Utils.setLogLevel(org.apache.log4j.Level.ERROR)
+    assert(!log.isInfoEnabled())
+    assert(log.isErrorEnabled())
   }
 
   test("deleteRecursively") {
@@ -537,7 +556,12 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     val targetDir = new File(tempDir, "target-dir")
     Files.write("some text", sourceFile, UTF_8)
 
-    val path = new Path("file://" + sourceDir.getAbsolutePath)
+    val path =
+      if (Utils.isWindows) {
+        new Path("file:/" + sourceDir.getAbsolutePath.replace("\\", "/"))
+      } else {
+        new Path("file://" + sourceDir.getAbsolutePath)
+      }
     val conf = new Configuration()
     val fs = Utils.getHadoopFileSystem(path.toString, conf)
 
@@ -557,7 +581,12 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     val destInnerFile = new File(destInnerDir, sourceFile.getName)
     assert(destInnerFile.isFile())
 
-    val filePath = new Path("file://" + sourceFile.getAbsolutePath)
+    val filePath =
+      if (Utils.isWindows) {
+        new Path("file:/" + sourceFile.getAbsolutePath.replace("\\", "/"))
+      } else {
+        new Path("file://" + sourceFile.getAbsolutePath)
+      }
     val testFileDir = new File(tempDir, "test-filename")
     val testFileName = "testFName"
     val testFilefs = Utils.getHadoopFileSystem(filePath.toString, conf)

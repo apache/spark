@@ -21,11 +21,12 @@ import java.beans.Introspector
 import java.lang.{Iterable => JIterable}
 import java.util.{Iterator => JIterator, Map => JMap}
 
+import scala.language.existentials
+
 import com.google.common.reflect.TypeToken
 
 import org.apache.spark.sql.types._
 
-import scala.language.existentials
 
 /**
  * Type-inference utilities for POJOs and Java collections.

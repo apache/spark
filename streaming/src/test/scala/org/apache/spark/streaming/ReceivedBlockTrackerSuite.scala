@@ -32,7 +32,7 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.util.WriteAheadLogReader
+import org.apache.spark.streaming.util.{WriteAheadLogUtils, FileBasedWriteAheadLogReader}
 import org.apache.spark.streaming.util.WriteAheadLogSuite._
 import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
@@ -59,7 +59,7 @@ class ReceivedBlockTrackerSuite
 
   test("block addition, and block to batch allocation") {
     val receivedBlockTracker = createTracker(setCheckpointDir = false)
-    receivedBlockTracker.isLogManagerEnabled should be (false)  // should be disable by default
+    receivedBlockTracker.isWriteAheadLogEnabled should be (false)  // should be disable by default
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual Seq.empty
 
     val blockInfos = generateBlockInfos()
@@ -67,15 +67,20 @@ class ReceivedBlockTrackerSuite
 
     // Verify added blocks are unallocated blocks
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual blockInfos
+    receivedBlockTracker.hasUnallocatedReceivedBlocks should be (true)
+
 
     // Allocate the blocks to a batch and verify that all of them have been allocated
     receivedBlockTracker.allocateBlocksToBatch(1)
     receivedBlockTracker.getBlocksOfBatchAndStream(1, streamId) shouldEqual blockInfos
+    receivedBlockTracker.getBlocksOfBatch(1) shouldEqual Map(streamId -> blockInfos)
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldBe empty
+    receivedBlockTracker.hasUnallocatedReceivedBlocks should be (false)
 
     // Allocate no blocks to another batch
     receivedBlockTracker.allocateBlocksToBatch(2)
     receivedBlockTracker.getBlocksOfBatchAndStream(2, streamId) shouldBe empty
+    receivedBlockTracker.getBlocksOfBatch(2) shouldEqual Map(streamId -> Seq.empty)
 
     // Verify that older batches have no operation on batch allocation,
     // will return the same blocks as previously allocated.
@@ -88,7 +93,7 @@ class ReceivedBlockTrackerSuite
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual blockInfos
   }
 
-  test("block addition, block to batch allocation and cleanup with write ahead log") {
+  test("recovery and cleanup with write ahead logs") {
     val manualClock = new ManualClock
     // Set the time increment level to twice the rotation interval so that every increment creates
     // a new log file
@@ -113,11 +118,13 @@ class ReceivedBlockTrackerSuite
       logInfo(s"\n\n=====================\n$message\n$fileContents\n=====================\n")
     }
 
+    // Set WAL configuration
+    conf.set("spark.streaming.driver.writeAheadLog.rollingIntervalSecs", "1")
+    require(WriteAheadLogUtils.getRollingIntervalSecs(conf, isDriver = true) === 1)
+
     // Start tracker and add blocks
-    conf.set("spark.streaming.receiver.writeAheadLog.enable", "true")
-    conf.set("spark.streaming.receivedBlockTracker.writeAheadLog.rotationIntervalSecs", "1")
     val tracker1 = createTracker(clock = manualClock)
-    tracker1.isLogManagerEnabled should be (true)
+    tracker1.isWriteAheadLogEnabled should be (true)
 
     val blockInfos1 = addBlockInfos(tracker1)
     tracker1.getUnallocatedBlocks(streamId).toList shouldEqual blockInfos1
@@ -127,15 +134,27 @@ class ReceivedBlockTrackerSuite
     getWrittenLogData() shouldEqual expectedWrittenData1
     getWriteAheadLogFiles() should have size 1
 
-    // Restart tracker and verify recovered list of unallocated blocks
     incrementTime()
-    val tracker2 = createTracker(clock = manualClock)
-    tracker2.getUnallocatedBlocks(streamId).toList shouldEqual blockInfos1
+
+    // Recovery without recovery from WAL and verify list of unallocated blocks is empty
+    val tracker1_ = createTracker(clock = manualClock, recoverFromWriteAheadLog = false)
+    tracker1_.getUnallocatedBlocks(streamId) shouldBe empty
+    tracker1_.hasUnallocatedReceivedBlocks should be (false)
+
+    // Restart tracker and verify recovered list of unallocated blocks
+    val tracker2 = createTracker(clock = manualClock, recoverFromWriteAheadLog = true)
+    val unallocatedBlocks = tracker2.getUnallocatedBlocks(streamId).toList
+    unallocatedBlocks shouldEqual blockInfos1
+    unallocatedBlocks.foreach { block =>
+      block.isBlockIdValid() should be (false)
+    }
+
 
     // Allocate blocks to batch and verify whether the unallocated blocks got allocated
     val batchTime1 = manualClock.getTimeMillis()
     tracker2.allocateBlocksToBatch(batchTime1)
     tracker2.getBlocksOfBatchAndStream(batchTime1, streamId) shouldEqual blockInfos1
+    tracker2.getBlocksOfBatch(batchTime1) shouldEqual Map(streamId -> blockInfos1)
 
     // Add more blocks and allocate to another batch
     incrementTime()
@@ -153,7 +172,7 @@ class ReceivedBlockTrackerSuite
 
     // Restart tracker and verify recovered state
     incrementTime()
-    val tracker3 = createTracker(clock = manualClock)
+    val tracker3 = createTracker(clock = manualClock, recoverFromWriteAheadLog = true)
     tracker3.getBlocksOfBatchAndStream(batchTime1, streamId) shouldEqual blockInfos1
     tracker3.getBlocksOfBatchAndStream(batchTime2, streamId) shouldEqual blockInfos2
     tracker3.getUnallocatedBlocks(streamId) shouldBe empty
@@ -171,51 +190,41 @@ class ReceivedBlockTrackerSuite
     eventually(timeout(10 seconds), interval(10 millisecond)) {
       getWriteAheadLogFiles() should not contain oldestLogFile
     }
-    printLogFiles("After cleanup")
+    printLogFiles("After clean")
 
     // Restart tracker and verify recovered state, specifically whether info about the first
     // batch has been removed, but not the second batch
     incrementTime()
-    val tracker4 = createTracker(clock = manualClock)
+    val tracker4 = createTracker(clock = manualClock, recoverFromWriteAheadLog = true)
     tracker4.getUnallocatedBlocks(streamId) shouldBe empty
     tracker4.getBlocksOfBatchAndStream(batchTime1, streamId) shouldBe empty  // should be cleaned
     tracker4.getBlocksOfBatchAndStream(batchTime2, streamId) shouldEqual blockInfos2
   }
 
-  test("enabling write ahead log but not setting checkpoint dir") {
-    conf.set("spark.streaming.receiver.writeAheadLog.enable", "true")
-    intercept[SparkException] {
-      createTracker(setCheckpointDir = false)
-    }
-  }
-
-  test("setting checkpoint dir but not enabling write ahead log") {
-    // When WAL config is not set, log manager should not be enabled
-    val tracker1 = createTracker(setCheckpointDir = true)
-    tracker1.isLogManagerEnabled should be (false)
-
-    // When WAL is explicitly disabled, log manager should not be enabled
-    conf.set("spark.streaming.receiver.writeAheadLog.enable", "false")
-    val tracker2 = createTracker(setCheckpointDir = true)
-    tracker2.isLogManagerEnabled should be(false)
+  test("disable write ahead log when checkpoint directory is not set") {
+    // When checkpoint is disabled, then the write ahead log is disabled
+    val tracker1 = createTracker(setCheckpointDir = false)
+    tracker1.isWriteAheadLogEnabled should be (false)
   }
 
   /**
    * Create tracker object with the optional provided clock. Use fake clock if you
-   * want to control time by manually incrementing it to test log cleanup.
+   * want to control time by manually incrementing it to test log clean.
    */
   def createTracker(
       setCheckpointDir: Boolean = true,
+      recoverFromWriteAheadLog: Boolean = false,
       clock: Clock = new SystemClock): ReceivedBlockTracker = {
     val cpDirOption = if (setCheckpointDir) Some(checkpointDirectory.toString) else None
-    val tracker = new ReceivedBlockTracker(conf, hadoopConf, Seq(streamId), clock, cpDirOption)
+    val tracker = new ReceivedBlockTracker(
+      conf, hadoopConf, Seq(streamId), clock, recoverFromWriteAheadLog, cpDirOption)
     allReceivedBlockTrackers += tracker
     tracker
   }
 
   /** Generate blocks infos using random ids */
   def generateBlockInfos(): Seq[ReceivedBlockInfo] = {
-    List.fill(5)(ReceivedBlockInfo(streamId, 0,
+    List.fill(5)(ReceivedBlockInfo(streamId, 0, None,
       BlockManagerBasedStoreResult(StreamBlockId(streamId, math.abs(Random.nextInt)))))
   }
 
@@ -231,7 +240,7 @@ class ReceivedBlockTrackerSuite
   def getWrittenLogData(logFiles: Seq[String] = getWriteAheadLogFiles)
     : Seq[ReceivedBlockTrackerLogEvent] = {
     logFiles.flatMap {
-      file => new WriteAheadLogReader(file, hadoopConf).toSeq
+      file => new FileBasedWriteAheadLogReader(file, hadoopConf).toSeq
     }.map { byteBuffer =>
       Utils.deserialize[ReceivedBlockTrackerLogEvent](byteBuffer.array)
     }.toList
@@ -250,7 +259,7 @@ class ReceivedBlockTrackerSuite
     BatchAllocationEvent(time, AllocatedBlocks(Map((streamId -> blockInfos))))
   }
 
-  /** Create batch cleanup object from the given info */
+  /** Create batch clean object from the given info */
   def createBatchCleanup(time: Long, moreTimes: Long*): BatchCleanupEvent = {
     BatchCleanupEvent((Seq(time) ++ moreTimes).map(Time.apply))
   }

@@ -303,8 +303,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Expand(projections, output, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
         execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
-      case logical.Sample(fraction, withReplacement, seed, child) =>
-        execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
+      case logical.Window(projectList, windowExpressions, spec, child) =>
+        execution.Window(projectList, windowExpressions, spec, planLater(child)) :: Nil
+      case logical.Sample(lb, ub, withReplacement, seed, child) =>
+        execution.Sample(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         LocalTableScan(output, data) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
@@ -341,9 +343,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case c: CreateTableUsing if c.temporary && c.allowExisting =>
         sys.error("allowExisting should be set to false when creating a temporary table.")
 
-      case CreateTableUsingAsSelect(tableName, provider, true, mode, opts, query) =>
-        val cmd =
-          CreateTempTableUsingAsSelect(tableName, provider, mode, opts, query)
+      case CreateTableUsingAsSelect(tableName, provider, true, partitionsCols, mode, opts, query)
+          if partitionsCols.nonEmpty =>
+        sys.error("Cannot create temporary partitioned table.")
+
+      case CreateTableUsingAsSelect(tableName, provider, true, _, mode, opts, query) =>
+        val cmd = CreateTempTableUsingAsSelect(
+          tableName, provider, Array.empty[String], mode, opts, query)
         ExecutedCommand(cmd) :: Nil
       case c: CreateTableUsingAsSelect if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")

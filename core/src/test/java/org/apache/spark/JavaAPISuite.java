@@ -157,11 +157,11 @@ public class JavaAPISuite implements Serializable {
   public void randomSplit() {
     List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
     JavaRDD<Integer> rdd = sc.parallelize(ints);
-    JavaRDD<Integer>[] splits = rdd.randomSplit(new double[] { 0.4, 0.6, 1.0 }, 11);
+    JavaRDD<Integer>[] splits = rdd.randomSplit(new double[] { 0.4, 0.6, 1.0 }, 31);
     Assert.assertEquals(3, splits.length);
-    Assert.assertEquals(2, splits[0].count());
-    Assert.assertEquals(3, splits[1].count());
-    Assert.assertEquals(5, splits[2].count());
+    Assert.assertEquals(1, splits[0].count());
+    Assert.assertEquals(2, splits[1].count());
+    Assert.assertEquals(7, splits[2].count());
   }
 
   @Test

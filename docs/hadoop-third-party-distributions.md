@@ -29,9 +29,6 @@ the _exact_ Hadoop version you are running to avoid any compatibility errors.
         <tr><th>Release</th><th>Version code</th></tr>
         <tr><td>CDH 4.X.X (YARN mode)</td><td>2.0.0-cdh4.X.X</td></tr>
         <tr><td>CDH 4.X.X</td><td>2.0.0-mr1-cdh4.X.X</td></tr>
-        <tr><td>CDH 3u6</td><td>0.20.2-cdh3u6</td></tr>
-        <tr><td>CDH 3u5</td><td>0.20.2-cdh3u5</td></tr>
-        <tr><td>CDH 3u4</td><td>0.20.2-cdh3u4</td></tr>
       </table>
     </td>
     <td>

@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.{IntParam, ParamMap}
+import org.apache.spark.ml.param.{IntParam, ParamValidators}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.types.DataType
 
@@ -31,27 +31,29 @@ import org.apache.spark.sql.types.DataType
  * which is available at [[http://en.wikipedia.org/wiki/Polynomial_expansion]], "In mathematics, an
  * expansion of a product of sums expresses it as a sum of products by using the fact that
  * multiplication distributes over addition". Take a 2-variable feature vector as an example:
- * `(x, y)`, if we want to expand it with degree 2, then we get `(x, y, x * x, x * y, y * y)`.
+ * `(x, y)`, if we want to expand it with degree 2, then we get `(x, x * x, y, x * y, y * y)`.
  */
 @AlphaComponent
 class PolynomialExpansion extends UnaryTransformer[Vector, Vector, PolynomialExpansion] {
 
   /**
-   * The polynomial degree to expand, which should be larger than 1.
+   * The polynomial degree to expand, which should be >= 1.  A value of 1 means no expansion.
+   * Default: 2
    * @group param
    */
-  val degree = new IntParam(this, "degree", "the polynomial degree to expand")
+  val degree = new IntParam(this, "degree", "the polynomial degree to expand (>= 1)",
+    ParamValidators.gt(1))
+
   setDefault(degree -> 2)
 
   /** @group getParam */
-  def getDegree: Int = getOrDefault(degree)
+  def getDegree: Int = $(degree)
 
   /** @group setParam */
   def setDegree(value: Int): this.type = set(degree, value)
 
-  override protected def createTransformFunc(paramMap: ParamMap): Vector => Vector = { v =>
-    val d = paramMap(degree)
-    PolynomialExpansion.expand(v, d)
+  override protected def createTransformFunc: Vector => Vector = { v =>
+    PolynomialExpansion.expand(v, $(degree))
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
