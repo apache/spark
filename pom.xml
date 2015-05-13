@@ -481,7 +481,7 @@
       <dependency>
         <groupId>com.ning</groupId>
         <artifactId>compress-lzf</artifactId>
-        <version>1.0.0</version>
+        <version>1.0.3</version>
       </dependency>
       <dependency>
         <groupId>org.xerial.snappy</groupId>

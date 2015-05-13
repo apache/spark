@@ -22,7 +22,7 @@ import java.sql.Timestamp
 import java.util.{ArrayList => JArrayList}
 
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
-import org.apache.spark.sql.catalyst.Dialect
+import org.apache.spark.sql.catalyst.ParserDialect
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
@@ -54,7 +54,7 @@ import org.apache.spark.util.Utils
 /**
  * This is the HiveQL Dialect, this dialect is strongly bind with HiveContext
  */
-private[hive] class HiveQLDialect extends Dialect {
+private[hive] class HiveQLDialect extends ParserDialect {
   override def parse(sqlText: String): LogicalPlan = {
     HiveQl.parseSql(sqlText)
   }

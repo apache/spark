@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.CharArrayWriter
 import java.sql.DriverManager
-
+import java.util.Properties
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
@@ -28,23 +28,23 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonFactory
-
 import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation, ResolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
+import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
 import org.apache.spark.sql.jdbc.JDBCWriteDetails
-import org.apache.spark.sql.json.{JacksonGenerator, JsonRDD}
+import org.apache.spark.sql.json.JacksonGenerator
+import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, ResolvedDataSource}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 
@@ -401,7 +401,9 @@ class DataFrame private[sql](
         joined.left,
         joined.right,
         joinType = Inner,
-        Some(EqualTo(joined.left.resolve(usingColumn), joined.right.resolve(usingColumn))))
+        Some(expressions.EqualTo(
+          joined.left.resolve(usingColumn),
+          joined.right.resolve(usingColumn))))
     )
   }
 
@@ -433,7 +435,7 @@ class DataFrame private[sql](
    *
    * @param right Right side of the join.
    * @param joinExprs Join expression.
-   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
+   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
    * @group dfops
    */
   def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame = {
@@ -466,8 +468,8 @@ class DataFrame private[sql](
     // By the time we get here, since we have already run analysis, all attributes should've been
     // resolved and become AttributeReference.
     val cond = plan.condition.map { _.transform {
-      case EqualTo(a: AttributeReference, b: AttributeReference) if a.sameRef(b) =>
-        EqualTo(plan.left.resolve(a.name), plan.right.resolve(b.name))
+      case expressions.EqualTo(a: AttributeReference, b: AttributeReference) if a.sameRef(b) =>
+        expressions.EqualTo(plan.left.resolve(a.name), plan.right.resolve(b.name))
     }}
     plan.copy(condition = cond)
   }
@@ -566,7 +568,9 @@ class DataFrame private[sql](
       case Column(expr: NamedExpression) => expr
       case Column(expr: Expression) => Alias(expr, expr.prettyString)()
     }
-    Project(namedExpressions.toSeq, logicalPlan)
+    // When user continuously call `select`, speed up analysis by collapsing `Project`
+    import org.apache.spark.sql.catalyst.optimizer.ProjectCollapsing
+    Project(namedExpressions.toSeq, ProjectCollapsing(logicalPlan))
   }
 
   /**
@@ -933,6 +937,40 @@ class DataFrame private[sql](
   }
 
   /**
+   * Returns a new [[DataFrame]] that contains only the unique rows from this [[DataFrame]].
+   * This is an alias for `distinct`.
+   * @group dfops
+   */
+  def dropDuplicates(): DataFrame = dropDuplicates(this.columns)
+
+  /**
+   * (Scala-specific) Returns a new [[DataFrame]] with duplicate rows removed, considering only
+   * the subset of columns.
+   *
+   * @group dfops
+   */
+  def dropDuplicates(colNames: Seq[String]): DataFrame = {
+    val groupCols = colNames.map(resolve)
+    val groupColExprIds = groupCols.map(_.exprId)
+    val aggCols = logicalPlan.output.map { attr =>
+      if (groupColExprIds.contains(attr.exprId)) {
+        attr
+      } else {
+        Alias(First(attr), attr.name)()
+      }
+    }
+    Aggregate(groupCols, aggCols, logicalPlan)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] with duplicate rows removed, considering only
+   * the subset of columns.
+   *
+   * @group dfops
+   */
+  def dropDuplicates(colNames: Array[String]): DataFrame = dropDuplicates(colNames.toSeq)
+
+  /**
    * Computes statistics for numeric columns, including count, mean, stddev, min, and max.
    * If no columns are given, this function computes statistics for all numerical columns.
    *
@@ -1089,6 +1127,7 @@ class DataFrame private[sql](
 
   /**
    * Returns a new [[DataFrame]] that contains only the unique rows from this [[DataFrame]].
+   * This is an alias for `dropDuplicates`.
    * @group dfops
    */
   override def distinct: DataFrame = Distinct(logicalPlan)
@@ -1192,6 +1231,9 @@ class DataFrame private[sql](
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
    */
   @Experimental
@@ -1208,6 +1250,9 @@ class DataFrame private[sql](
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
    */
   @Experimental
@@ -1232,6 +1277,9 @@ class DataFrame private[sql](
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
    */
   @Experimental
@@ -1248,6 +1296,9 @@ class DataFrame private[sql](
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
    */
   @Experimental
@@ -1264,6 +1315,9 @@ class DataFrame private[sql](
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
    */
   @Experimental
@@ -1277,6 +1331,28 @@ class DataFrame private[sql](
 
   /**
    * :: Experimental ::
+   * Creates a table at the given path from the the contents of this DataFrame
+   * based on a given data source, [[SaveMode]] specified by mode, a set of options, and a list of
+   * partition columns.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   * @group output
+   */
+  @Experimental
+  def saveAsTable(
+      tableName: String,
+      source: String,
+      mode: SaveMode,
+      options: java.util.Map[String, String],
+      partitionColumns: java.util.List[String]): Unit = {
+    saveAsTable(tableName, source, mode, options.toMap, partitionColumns)
+  }
+
+  /**
+   * :: Experimental ::
    * (Scala-specific)
    * Creates a table from the the contents of this DataFrame based on a given data source,
    * [[SaveMode]] specified by mode, and a set of options.
@@ -1285,6 +1361,9 @@ class DataFrame private[sql](
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
    */
   @Experimental
@@ -1298,11 +1377,42 @@ class DataFrame private[sql](
         tableName,
         source,
         temporary = false,
+        Array.empty[String],
         mode,
         options,
         logicalPlan)
 
     sqlContext.executePlan(cmd).toRdd
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a table at the given path from the the contents of this DataFrame
+   * based on a given data source, [[SaveMode]] specified by mode, a set of options, and a list of
+   * partition columns.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   * @group output
+   */
+  @Experimental
+  def saveAsTable(
+      tableName: String,
+      source: String,
+      mode: SaveMode,
+      options: Map[String, String],
+      partitionColumns: Seq[String]): Unit = {
+    sqlContext.executePlan(
+      CreateTableUsingAsSelect(
+        tableName,
+        source,
+        temporary = false,
+        partitionColumns.toArray,
+        mode,
+        options,
+        logicalPlan)).toRdd
   }
 
   /**
@@ -1367,6 +1477,21 @@ class DataFrame private[sql](
 
   /**
    * :: Experimental ::
+   * Saves the contents of this DataFrame to the given path based on the given data source,
+   * [[SaveMode]] specified by mode, and partition columns specified by `partitionColumns`.
+   * @group output
+   */
+  @Experimental
+  def save(
+      source: String,
+      mode: SaveMode,
+      options: java.util.Map[String, String],
+      partitionColumns: java.util.List[String]): Unit = {
+    save(source, mode, options.toMap, partitionColumns)
+  }
+
+  /**
+   * :: Experimental ::
    * (Scala-specific)
    * Saves the contents of this DataFrame based on the given data source,
    * [[SaveMode]] specified by mode, and a set of options
@@ -1377,7 +1502,22 @@ class DataFrame private[sql](
       source: String,
       mode: SaveMode,
       options: Map[String, String]): Unit = {
-    ResolvedDataSource(sqlContext, source, mode, options, this)
+    ResolvedDataSource(sqlContext, source, Array.empty[String], mode, options, this)
+  }
+
+  /**
+   * :: Experimental ::
+   * Saves the contents of this DataFrame to the given path based on the given data source,
+   * [[SaveMode]] specified by mode, and partition columns specified by `partitionColumns`.
+   * @group output
+   */
+  @Experimental
+  def save(
+      source: String,
+      mode: SaveMode,
+      options: Map[String, String],
+      partitionColumns: Seq[String]): Unit = {
+    ResolvedDataSource(sqlContext, source, partitionColumns.toArray, mode, options, this)
   }
 
   /**
@@ -1443,7 +1583,24 @@ class DataFrame private[sql](
    * @group output
    */
   def createJDBCTable(url: String, table: String, allowExisting: Boolean): Unit = {
-    val conn = DriverManager.getConnection(url)
+    createJDBCTable(url, table, allowExisting, new Properties())
+  }
+    
+  /**
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`
+   * using connection properties defined in `properties`.
+   * This will run a `CREATE TABLE` and a bunch of `INSERT INTO` statements.
+   * If you pass `true` for `allowExisting`, it will drop any table with the
+   * given name; if you pass `false`, it will throw if the table already
+   * exists.
+   * @group output
+   */
+  def createJDBCTable(
+      url: String,
+      table: String,
+      allowExisting: Boolean,
+      properties: Properties): Unit = {
+    val conn = DriverManager.getConnection(url, properties)
     try {
       if (allowExisting) {
         val sql = s"DROP TABLE IF EXISTS $table"
@@ -1455,7 +1612,7 @@ class DataFrame private[sql](
     } finally {
       conn.close()
     }
-    JDBCWriteDetails.saveTable(this, url, table)
+    JDBCWriteDetails.saveTable(this, url, table, properties)
   }
 
   /**
@@ -1471,8 +1628,29 @@ class DataFrame private[sql](
    * @group output
    */
   def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
+    insertIntoJDBC(url, table, overwrite, new Properties())
+  }
+
+  /**
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`
+   * using connection properties defined in `properties`.
+   * Assumes the table already exists and has a compatible schema.  If you
+   * pass `true` for `overwrite`, it will `TRUNCATE` the table before
+   * performing the `INSERT`s.
+   *
+   * The table must already exist on the database.  It must have a schema
+   * that is compatible with the schema of this RDD; inserting the rows of
+   * the RDD in order via the simple statement
+   * `INSERT INTO table VALUES (?, ?, ..., ?)` should not fail.
+   * @group output
+   */
+  def insertIntoJDBC(
+      url: String,
+      table: String,
+      overwrite: Boolean,
+      properties: Properties): Unit = {
     if (overwrite) {
-      val conn = DriverManager.getConnection(url)
+      val conn = DriverManager.getConnection(url, properties)
       try {
         val sql = s"TRUNCATE TABLE $table"
         conn.prepareStatement(sql).executeUpdate()
@@ -1480,9 +1658,8 @@ class DataFrame private[sql](
         conn.close()
       }
     }
-    JDBCWriteDetails.saveTable(this, url, table)
+    JDBCWriteDetails.saveTable(this, url, table, properties)
   }
-
   ////////////////////////////////////////////////////////////////////////////
   // for Python API
   ////////////////////////////////////////////////////////////////////////////

@@ -26,7 +26,7 @@ import org.apache.spark.util.Utils
 class IsotonicRegressionSuite extends FunSuite with MLlibTestSparkContext with Matchers {
 
   private def round(d: Double) = {
-    Math.round(d * 100).toDouble / 100
+    math.round(d * 100).toDouble / 100
   }
 
   private def generateIsotonicInput(labels: Seq[Double]): Seq[(Double, Double, Double)] = {
