@@ -905,9 +905,12 @@ class VertexRDD[VD] extends RDD[(VertexID, VD)] {
   def diff(other: VertexRDD[VD]): VertexRDD[VD]
   // Join operators that take advantage of the internal indexing to accelerate joins (substantially)
   def leftJoin[VD2, VD3](other: RDD[(VertexId, VD2)])(f: (VertexId, VD, Option[VD2]) => VD3): VertexRDD[VD3]
+  def leftJoinWithFold[VD2, VD3](other: RDD[(VertexId, VD2)], initVal: A)(f: (A, VertexId, VD, Option[VD2]) => VD3): VertexRDD[VD3]
   def innerJoin[U, VD2](other: RDD[(VertexId, U)])(f: (VertexId, VD, U) => VD2): VertexRDD[VD2]
+  def innerJoinWithFold[U, VD2](other: RDD[(VertexId, U)], initVal: A)(f: (A, VertexId, VD, U) => VD2): VertexRDD[VD2]
   // Use the index on this RDD to accelerate a `reduceByKey` operation on the input RDD.
   def aggregateUsingIndex[VD2](other: RDD[(VertexId, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2]
+  def aggregateUsingIndexWithFold[VD2](other: RDD[(VertexId, VD2)], initVal: A)(foldFunc: (A, VD2, VD2) => VD2): VertexRDD[VD2]
 }
 {% endhighlight %}
 

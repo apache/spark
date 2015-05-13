@@ -20,7 +20,6 @@ package org.apache.spark.graphx.impl
 import scala.reflect.ClassTag
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
 
@@ -180,7 +179,8 @@ class VertexRDDImpl[VD] private[graphx] (
     }
   }
 
-  override def innerZipJoin[U: ClassTag, VD2: ClassTag](other: VertexRDD[U])
+  override def innerZipJoin[U: ClassTag, VD2: ClassTag]
+      (other: VertexRDD[U])
       (f: (VertexId, VD, U) => VD2): VertexRDD[VD2] = {
     val newPartitionsRDD = partitionsRDD.zipPartitions(
       other.partitionsRDD, preservesPartitioning = true
@@ -192,7 +192,8 @@ class VertexRDDImpl[VD] private[graphx] (
     this.withPartitionsRDD(newPartitionsRDD)
   }
 
-  override def innerJoin[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
+  override def innerJoin[U: ClassTag, VD2: ClassTag]
+      (other: RDD[(VertexId, U)])
       (f: (VertexId, VD, U) => VD2): VertexRDD[VD2] = {
     // Test if the other vertex is a VertexRDD to choose the optimal join strategy.
     // If the other set is a VertexRDD then we use the much more efficient innerZipJoin
@@ -209,13 +210,23 @@ class VertexRDDImpl[VD] private[graphx] (
     }
   }
 
-  override def aggregateUsingIndex[VD2: ClassTag](
-      messages: RDD[(VertexId, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2] = {
+  override def aggregateUsingIndex[VD2: ClassTag]
+      (messages: RDD[(VertexId, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2] = {
     val shuffled = messages.partitionBy(this.partitioner.get)
     val parts = partitionsRDD.zipPartitions(shuffled, true) { (thisIter, msgIter) =>
       thisIter.map(_.aggregateUsingIndex(msgIter, reduceFunc))
     }
     this.withPartitionsRDD[VD2](parts)
+  }
+
+  override def aggregateWithFold[VD2: ClassTag, VD3: ClassTag]
+      (messages: RDD[(VertexId, VD2)], initVal: () => VD3, foldFunc: (VD3, VD2) => VD3)
+    : VertexRDD[VD3] = {
+    val shuffled = messages.partitionBy(this.partitioner.get)
+    val parts = partitionsRDD.zipPartitions(shuffled, true) { (thisIter, msgIter) =>
+      thisIter.map(_.aggregateWithFold(msgIter, initVal, foldFunc))
+    }
+    this.withPartitionsRDD[VD3](parts)
   }
 
   override def reverseRoutingTables(): VertexRDD[VD] =

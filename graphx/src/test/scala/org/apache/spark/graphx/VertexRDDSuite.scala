@@ -23,6 +23,8 @@ import org.apache.spark.{HashPartitioner, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
+import scala.collection.mutable.ArrayBuffer
+
 class VertexRDDSuite extends FunSuite with LocalSparkContext {
 
   private def vertices(sc: SparkContext, n: Int) = {
@@ -172,6 +174,49 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val messageTargets = (0 to n) ++ (0 to n by 2)
       val messages = sc.parallelize(messageTargets.map(x => (x.toLong, 1)))
       assert(verts.aggregateUsingIndex[Int](messages, _ + _).collect().toSet ===
+        (0 to n).map(x => (x.toLong, if (x % 2 == 0) 2 else 1)).toSet)
+    }
+  }
+
+  test("aggregateWithFold") {
+    withSpark { sc =>
+      val n = 100
+      val verts = vertices(sc, n)
+      val messageTargets = (0 to n) ++ (0 to n by 2)
+      val messages = sc.parallelize(messageTargets.map(x => (x.toLong, 1)))
+      assert(verts.aggregateWithFold(messages, { () => new ArrayBuffer[Int]() },
+        (buf: Any, v: Int) => {
+          buf.asInstanceOf[ArrayBuffer[Int]] :+ v
+        })
+        .collect.map { case (vid, arr) =>
+          (vid,
+            if (arr.isInstanceOf[ArrayBuffer[Int]]) {
+              arr.asInstanceOf[ArrayBuffer[Int]].reduce(_ + _)
+            } else {
+              1
+            })
+        }.toSet ===
+        (0 to n).map(x => (x.toLong, if (x % 2 == 0) 2 else 1)).toSet)
+    }
+  }
+
+  test("createWithFold") {
+    withSpark { sc =>
+      val n = 100
+      val messageTargets = (0 to n) ++ (0 to n by 2)
+      val messages = sc.parallelize(messageTargets.map(x => (x.toLong, 1)))
+      assert(VertexRDD.createWithFold(messages, { () => new ArrayBuffer[Int]() },
+      (buf: Any, v: Int) => {
+        buf.asInstanceOf[ArrayBuffer[Int]] :+ v
+      })
+        .collect.map { case (vid, arr) =>
+        (vid,
+          if (arr.isInstanceOf[ArrayBuffer[Int]]) {
+            arr.asInstanceOf[ArrayBuffer[Int]].reduce(_ + _)
+          } else {
+            1
+          })
+      }.toSet ===
         (0 to n).map(x => (x.toLong, if (x % 2 == 0) 2 else 1)).toSet)
     }
   }
