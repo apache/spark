@@ -86,7 +86,7 @@ function toggleDagViz(forJob) {
   $(arrowSelector).toggleClass('arrow-open');
   var shouldShow = $(arrowSelector).hasClass("arrow-open");
   if (shouldShow) {
-    var shouldRender = graphContainer().select("svg").empty();
+    var shouldRender = graphContainer().select("*").empty();
     if (shouldRender) {
       renderDagViz(forJob);
     }
@@ -117,10 +117,18 @@ function renderDagViz(forJob) {
 
   // If there is not a dot file to render, fail fast and report error
   var jobOrStage = forJob ? "job" : "stage";
-  if (metadataContainer().empty()) {
-    graphContainer()
-      .append("div")
-      .text("No visualization information available for this " + jobOrStage);
+  if (metadataContainer().empty() ||
+      metadataContainer().selectAll("div").empty()) {
+    var message =
+      "<b>No visualization information available for this " + jobOrStage + "!</b><br/>" +
+      "If this is an old " + jobOrStage + ", its visualization metadata may have been " +
+      "cleaned up over time.<br/> You may consider increasing the value of ";
+    if (forJob) {
+      message += "<i>spark.ui.retainedJobs</i> and <i>spark.ui.retainedStages</i>.";
+    } else {
+      message += "<i>spark.ui.retainedStages</i>";
+    }
+    graphContainer().append("div").attr("id", "empty-dag-viz-message").html(message);
     return;
   }
 

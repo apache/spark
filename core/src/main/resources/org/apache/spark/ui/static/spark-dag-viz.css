@@ -44,6 +44,10 @@
   stroke-width: 1px;
 }
 
+#dag-viz-graph div#empty-dag-viz-message {
+  margin: 15px;
+}
+
 /* Job page specific styles */
 
 #dag-viz-graph svg.job marker#marker-arrow path {
