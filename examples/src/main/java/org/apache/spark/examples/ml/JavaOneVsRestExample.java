@@ -33,6 +33,8 @@ import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.types.StructField;
 
+import java.util.Arrays;
+
 /**
  * An example runner for Multiclass to Binary Reduction with One Vs Rest.
  * The example uses Logistic Regression as the base classifier. All parameters in
@@ -115,7 +117,7 @@ public class JavaOneVsRestExample {
 
     private static Params parse(String[] args) {
         String input = args[0];
-        String[] remainingArgs = null;
+        String[] remainingArgs;
         if (args.length > 1) {
             remainingArgs = new String[args.length - 1];
         } else {
@@ -123,14 +125,18 @@ public class JavaOneVsRestExample {
         }
         System.arraycopy(args, 1, remainingArgs, 0, remainingArgs.length);
         Options options = new Options();
-        options.addOption("testInput", false, "input path to labeled examples");
-        options.addOption("fracTest", false, "fraction of data to hold out for testing. " +
+        options.addOption("testInput", "testInput", true, "input path to labeled examples");
+        options.addOption("fracTest", "fracTest", true,
+                "fraction of data to hold out for testing. " +
                 "If given option testInput, this option is ignored. default: 0.2");
-        options.addOption("maxIter", false, "maximum number of iterations. default:100");
-        options.addOption("tol", false, "the convergence tolerance of iterations. default: 1E-6");
-        options.addOption("regParam", false, "the regularization parameter");
-        options.addOption("elasticNetParam", false, "the ElasticNet mixing parameter");
-        CommandLineParser parser = new GnuParser();
+        options.addOption("maxIter", "maxIter", true,
+                "maximum number of iterations. default:100");
+        options.addOption("tol", "tol", true,
+                "the convergence tolerance of iterations. default: 1E-6");
+        options.addOption("regParam", "regParam", true, "the regularization parameter");
+        options.addOption("elasticNetParam", "elasticNetParam",
+                true, "the ElasticNet mixing parameter");
+        CommandLineParser parser = new PosixParser();
 
         LogisticRegression classifier = new LogisticRegression();
         String testInput = null;
@@ -138,22 +144,28 @@ public class JavaOneVsRestExample {
         try {
             CommandLine cmd = parser.parse( options, remainingArgs);
             String value;
-            if ((value = cmd.getOptionValue("maxIter")) != null) {
+            if (cmd.hasOption("maxIter")) {
+                value = cmd.getOptionValue("maxIter");
                 classifier.setMaxIter(Integer.parseInt(value));
             }
-            if ((value = cmd.getOptionValue("tol")) != null) {
+            if (cmd.hasOption("tol")) {
+                value = cmd.getOptionValue("tol");
                 classifier.setTol(Double.parseDouble(value));
             }
-            if ((value = cmd.getOptionValue("regParam")) != null) {
+            if (cmd.hasOption("regParam")) {
+                value = cmd.getOptionValue("regParam");
                 classifier.setRegParam(Double.parseDouble(value));
             }
-            if ((value = cmd.getOptionValue("elasticNetParam")) != null) {
+            if (cmd.hasOption("elasticNetParam")) {
+                value = cmd.getOptionValue("elasticNetParam");
                 classifier.setElasticNetParam(Double.parseDouble(value));
             }
-            if ((value = cmd.getOptionValue("testInput")) != null) {
+            if (cmd.hasOption("testInput")) {
+                value = cmd.getOptionValue("testInput");
                 testInput = value;
             }
-            if ((value = cmd.getOptionValue("fracTest")) != null) {
+            if (cmd.hasOption("fracTest")) {
+                value = cmd.getOptionValue("fracTest");
                 fracTest = Double.parseDouble(value);
             }
 
