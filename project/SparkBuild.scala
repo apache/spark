@@ -168,7 +168,7 @@ object SparkBuild extends PomBuild {
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
 
-  /* Package pyspark artifacts in the main assembly. */
+  /* Package pyspark artifacts in a separate zip file for YARN. */
   enable(PySparkAssembly.settings)(assembly)
 
   /* Enable unidoc only for the root spark project */
@@ -373,22 +373,15 @@ object PySparkAssembly {
   import java.util.zip.{ZipOutputStream, ZipEntry}
 
   lazy val settings = Seq(
-    unmanagedJars in Compile += { BuildCommons.sparkHome / "python/lib/py4j-0.8.2.1-src.zip" },
     // Use a resource generator to copy all .py files from python/pyspark into a managed directory
     // to be included in the assembly. We can't just add "python/" to the assembly's resource dir
     // list since that will copy unneeded / unwanted files.
     resourceGenerators in Compile <+= resourceManaged in Compile map { outDir: File =>
       val src = new File(BuildCommons.sparkHome, "python/pyspark")
-
       val zipFile = new File(BuildCommons.sparkHome , "python/lib/pyspark.zip")
       zipFile.delete()
       zipRecursive(src, zipFile)
-
-      val dst = new File(outDir, "pyspark")
-      if (!dst.isDirectory()) {
-        require(dst.mkdirs())
-      }
-      copy(src, dst)
+      Seq[File]()
     }
   )
 
@@ -416,42 +409,11 @@ object PySparkAssembly {
           output.write(buf, 0, n)
         }
       }
+      output.closeEntry()
       in.close()
     }
   }
 
-  private def copy(src: File, dst: File): Seq[File] = {
-    src.listFiles().flatMap { f =>
-      val child = new File(dst, f.getName())
-      if (f.isDirectory()) {
-        child.mkdir()
-        copy(f, child)
-      } else if (f.getName().endsWith(".py")) {
-        var in: Option[FileInputStream] = None
-        var out: Option[FileOutputStream] = None
-        try {
-          in = Some(new FileInputStream(f))
-          out = Some(new FileOutputStream(child))
-
-          val bytes = new Array[Byte](1024)
-          var read = 0
-          while (read >= 0) {
-            read = in.get.read(bytes)
-            if (read > 0) {
-              out.get.write(bytes, 0, read)
-            }
-          }
-
-          Some(child)
-        } finally {
-          in.foreach(_.close())
-          out.foreach(_.close())
-        }
-      } else {
-        None
-      }
-    }
-  }
 }
 
 object Unidoc {

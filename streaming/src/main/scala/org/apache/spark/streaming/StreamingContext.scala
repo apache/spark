@@ -32,10 +32,11 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark._
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.input.FixedLengthBinaryInputFormat
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
@@ -195,14 +196,7 @@ class StreamingContext private[streaming] (
   assert(env.metricsSystem != null)
   env.metricsSystem.registerSource(streamingSource)
 
-  /** Enumeration to identify current state of the StreamingContext */
-  private[streaming] object StreamingContextState extends Enumeration {
-    type CheckpointState = Value
-    val Initialized, Started, Stopped = Value
-  }
-
-  import StreamingContextState._
-  private[streaming] var state = Initialized
+  private var state: StreamingContextState = INITIALIZED
 
   private val startSite = new AtomicReference[CallSite](null)
 
@@ -517,27 +511,43 @@ class StreamingContext private[streaming] (
   }
 
   /**
+   * :: DeveloperApi ::
+   *
+   * Return the current state of the context. The context can be in three possible states -
+   * - StreamingContextState.INTIALIZED - The context has been created, but not been started yet.
+   *   Input DStreams, transformations and output operations can be created on the context.
+   * - StreamingContextState.ACTIVE - The context has been started, and been not stopped.
+   *   Input DStreams, transformations and output operations cannot be created on the context.
+   * - StreamingContextState.STOPPED - The context has been stopped and cannot be used any more.
+   */
+  @DeveloperApi
+  def getState(): StreamingContextState = synchronized {
+    state
+  }
+
+  /**
    * Start the execution of the streams.
    *
-   * @throws SparkException if the context has already been started or stopped.
+   * @throws SparkException if the StreamingContext is already stopped.
    */
   def start(): Unit = synchronized {
-    import StreamingContext._
-    if (state == Started) {
-      throw new SparkException("StreamingContext has already been started")
-    }
-    if (state == Stopped) {
-      throw new SparkException("StreamingContext has already been stopped")
-    }
-    validate()
-    startSite.set(DStream.getCreationSite())
-    sparkContext.setCallSite(startSite.get)
-    ACTIVATION_LOCK.synchronized {
-      assertNoOtherContextIsActive()
-      scheduler.start()
-      uiTab.foreach(_.attach())
-      state = Started
-      setActiveContext(this)
+    state match {
+      case INITIALIZED =>
+        validate()
+        startSite.set(DStream.getCreationSite())
+        sparkContext.setCallSite(startSite.get)
+        StreamingContext.ACTIVATION_LOCK.synchronized {
+          StreamingContext.assertNoOtherContextIsActive()
+          scheduler.start()
+          uiTab.foreach(_.attach())
+          state = StreamingContextState.ACTIVE
+          StreamingContext.setActiveContext(this)
+        }
+        logInfo("StreamingContext started")
+      case ACTIVE =>
+        logWarning("StreamingContext has already been started")
+      case STOPPED =>
+        throw new SparkException("StreamingContext has already been stopped")
     }
   }
 
@@ -598,22 +608,26 @@ class StreamingContext private[streaming] (
    *                       received data to be completed
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = synchronized {
-    state match {
-      case Initialized => logWarning("StreamingContext has not been started yet")
-      case Stopped => logWarning("StreamingContext has already been stopped")
-      case Started =>
-        scheduler.stop(stopGracefully)
-        logInfo("StreamingContext stopped successfully")
-        waiter.notifyStop()
+    try {
+      state match {
+        case INITIALIZED =>
+          logWarning("StreamingContext has not been started yet")
+        case STOPPED =>
+          logWarning("StreamingContext has already been stopped")
+        case ACTIVE =>
+          scheduler.stop(stopGracefully)
+          uiTab.foreach(_.detach())
+          StreamingContext.setActiveContext(null)
+          waiter.notifyStop()
+          logInfo("StreamingContext stopped successfully")
+      }
+      // Even if we have already stopped, we still need to attempt to stop the SparkContext because
+      // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
+      if (stopSparkContext) sc.stop()
+    } finally {
+      // The state should always be Stopped after calling `stop()`, even if we haven't started yet
+      state = STOPPED
     }
-    // Even if the streaming context has not been started, we still need to stop the SparkContext.
-    // Even if we have already stopped, we still need to attempt to stop the SparkContext because
-    // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
-    if (stopSparkContext) sc.stop()
-    uiTab.foreach(_.detach())
-    // The state should always be Stopped after calling `stop()`, even if we haven't started yet:
-    state = Stopped
-    StreamingContext.setActiveContext(null)
   }
 }
 
@@ -623,8 +637,10 @@ class StreamingContext private[streaming] (
  */
 
 object StreamingContext extends Logging {
+
   /**
-   * Lock that guards access to global variables that track active StreamingContext.
+   * Lock that guards activation of a StreamingContext as well as access to the singleton active
+   * StreamingContext in getActiveOrCreate().
    */
   private val ACTIVATION_LOCK = new Object()
 
@@ -647,12 +663,66 @@ object StreamingContext extends Logging {
     }
   }
 
+  /**
+   * :: Experimental ::
+   *
+   * Get the currently active context, if there is one. Active means started but not stopped.
+   */
+  @Experimental
+  def getActive(): Option[StreamingContext] = {
+    ACTIVATION_LOCK.synchronized {
+      Option(activeContext.get())
+    }
+  }
+
   @deprecated("Replaced by implicit functions in the DStream companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
   def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
       (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null)
     : PairDStreamFunctions[K, V] = {
     DStream.toPairDStreamFunctions(stream)(kt, vt, ord)
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Either return the "active" StreamingContext (that is, started but not stopped), or create a
+   * new StreamingContext that is
+   * @param creatingFunc   Function to create a new StreamingContext
+   */
+  @Experimental
+  def getActiveOrCreate(creatingFunc: () => StreamingContext): StreamingContext = {
+    ACTIVATION_LOCK.synchronized {
+      getActive().getOrElse { creatingFunc() }
+    }
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Either get the currently active StreamingContext (that is, started but not stopped),
+   * OR recreate a StreamingContext from checkpoint data in the given path. If checkpoint data
+   * does not exist in the provided, then create a new StreamingContext by calling the provided
+   * `creatingFunc`.
+   *
+   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
+   * @param creatingFunc   Function to create a new StreamingContext
+   * @param hadoopConf     Optional Hadoop configuration if necessary for reading from the
+   *                       file system
+   * @param createOnError  Optional, whether to create a new StreamingContext if there is an
+   *                       error in reading checkpoint data. By default, an exception will be
+   *                       thrown on error.
+   */
+  @Experimental
+  def getActiveOrCreate(
+      checkpointPath: String,
+      creatingFunc: () => StreamingContext,
+      hadoopConf: Configuration = new Configuration(),
+      createOnError: Boolean = false
+    ): StreamingContext = {
+    ACTIVATION_LOCK.synchronized {
+      getActive().getOrElse { getOrCreate(checkpointPath, creatingFunc, hadoopConf, createOnError) }
+    }
   }
 
   /**
@@ -679,7 +749,6 @@ object StreamingContext extends Logging {
       checkpointPath, new SparkConf(), hadoopConf, createOnError)
     checkpointOption.map(new StreamingContext(null, _, null)).getOrElse(creatingFunc())
   }
-
 
   /**
    * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
@@ -747,7 +816,7 @@ object StreamingContext extends Logging {
     ): SparkContext = {
     val conf = SparkContext.updatedConf(
       new SparkConf(), master, appName, sparkHome, jars, environment)
-    createNewSparkContext(conf)
+    new SparkContext(conf)
   }
 
   private[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {

@@ -91,7 +91,7 @@ if __name__ == "__main__":
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    sc = SparkContext("local[2]", "ml.feature tests")
+    sc = SparkContext("local[2]", "ml.classification tests")
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext

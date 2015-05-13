@@ -377,11 +377,11 @@ LDA can be thought of as a clustering algorithm as follows:
  on a statistical model of how text documents are generated.
 
 LDA takes in a collection of documents as vectors of word counts.
-It learns clustering using [expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
-on the likelihood function. After fitting on the documents, LDA provides:
+It supports different inference algorithms via `setOptimizer` function. EMLDAOptimizer learns clustering using [expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
+on the likelihood function and yields comprehensive results, while OnlineLDAOptimizer uses iterative mini-batch sampling for [online variational inference](https://www.cs.princeton.edu/~blei/papers/HoffmanBleiBach2010b.pdf) and is generally memory friendly. After fitting on the documents, LDA provides:
 
 * Topics: Inferred topics, each of which is a probability distribution over terms (words).
-* Topic distributions for documents: For each document in the training set, LDA gives a probability distribution over topics.
+* Topic distributions for documents: For each document in the training set, LDA gives a probability distribution over topics. (EM only)
 
 LDA takes the following parameters:
 

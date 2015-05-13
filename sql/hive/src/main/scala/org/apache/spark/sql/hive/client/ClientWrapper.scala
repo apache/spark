@@ -225,6 +225,12 @@ private[hive] class ClientWrapper(
       table.partitionColumns.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
     table.properties.foreach { case (k, v) => qlTable.setProperty(k, v) }
     table.serdeProperties.foreach { case (k, v) => qlTable.setSerdeParam(k, v) }
+
+    // set owner
+    qlTable.setOwner(conf.getUser)
+    // set create time
+    qlTable.setCreateTime((System.currentTimeMillis() / 1000).asInstanceOf[Int])
+
     version match {
       case hive.v12 =>
         table.location.map(new URI(_)).foreach(u => qlTable.call[URI, Unit]("setDataLocation", u))

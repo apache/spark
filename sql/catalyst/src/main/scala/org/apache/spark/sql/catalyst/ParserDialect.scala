@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  *
  */
 @DeveloperApi
-abstract class Dialect {
+abstract class ParserDialect {
   // this is the main function that will be implemented by sql parser.
   def parse(sqlText: String): LogicalPlan
 }
