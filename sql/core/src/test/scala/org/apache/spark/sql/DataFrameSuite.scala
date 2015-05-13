@@ -466,6 +466,13 @@ class DataFrameSuite extends QueryTest {
       Row(1)
     )
 
+    val df2 = TestSQLContext.jsonRDD(TestSQLContext.sparkContext.makeRDD(
+      """{"a  b": {"c": {"d  e": {"f": 1}}}}""" :: Nil))
+    checkAnswer(
+      df2.select(df2("`a  b`.c.`d  e`.f")),
+      Row(1)
+    )
+
     def checkError(testFun: => Unit): Unit = {
       val e = intercept[org.apache.spark.sql.AnalysisException] {
         testFun
@@ -476,6 +483,8 @@ class DataFrameSuite extends QueryTest {
     checkError(df("`abc`..d"))
     checkError(df("`a`.b."))
     checkError(df("`a.b`.c.`d"))
+    checkError(df2("`a  b`.c.d  e.f"))
+    checkError(df2("a  b.c.`d  e`.f"))
   }
 
   test("SPARK-7324 dropDuplicates") {

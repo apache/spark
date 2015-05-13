@@ -143,7 +143,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * which means `ab..c`e.f is not allowed.
    * Escape character is not supported now, so we can't use backtick inside name part.
    */
-  private def parseAttributeName(name: String) = {
+  private def parseAttributeName(name: String): Seq[String] = {
     val e = new AnalysisException(s"syntax error in attribute name: $name")
     val nameParts = scala.collection.mutable.ArrayBuffer.empty[String]
     val tmp = scala.collection.mutable.ArrayBuffer.empty[Char]
@@ -164,6 +164,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
           inBacktick = true
         } else if (char == '.') {
           if (tmp.isEmpty) throw e
+          if (name(i - 1) != '`' && tmp.contains(' ')) throw e
           nameParts += tmp.mkString
           tmp.clear()
         } else {
