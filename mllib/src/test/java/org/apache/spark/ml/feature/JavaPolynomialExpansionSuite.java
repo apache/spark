@@ -79,8 +79,8 @@ public class JavaPolynomialExpansionSuite {
           3.3, 1.98, -3.63, 9.0, 5.4, -9.9, -27.0)
       ),
       RowFactory.create(
-              Vectors.sparse(3, Lists.<Tuple2<Integer, Double>>newArrayList()),
-              Vectors.sparse(19, Lists.<Tuple2<Integer, Double>>newArrayList())
+        Vectors.sparse(3, Lists.<Tuple2<Integer, Double>>newArrayList()),
+        Vectors.sparse(19, Lists.<Tuple2<Integer, Double>>newArrayList())
       )
     ));
 

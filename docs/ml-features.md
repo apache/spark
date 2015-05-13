@@ -183,6 +183,78 @@ for words_label in wordsDataFrame.select("words", "label").take(3):
 </div>
 </div>
 
+## PolynomialExpansion
+
+[Polynomial expansion](http://en.wikipedia.org/wiki/Polynomial_expansion) is the process of expanding your features into a polynomial space, which is formulated by an n-degree combination of original dimensions. A [PolynomialExpansion](api/scala/index.html#org.apache.spark.ml.feature.PolynomialExpansion) class provides this functionality.  The example below shows how to expand your features into a 3-degree polynomial space.
+
+Note: We do not provide Python API for `PolynomialExpansion` in this version.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+import org.apache.spark.ml.feature.PolynomialExpansion
+
+val data = Array(
+  Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
+  Vectors.dense(-2.0, 2.3),
+  Vectors.dense(0.0, 0.0, 0.0),
+  Vectors.dense(0.6, -1.1, -3.0),
+  Vectors.sparse(3, Seq())
+)
+val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+val polynomialExpansion = new PolynomialExpansion()
+  .setInputCol("features")
+  .setOutputCol("polyFeatures")
+  .setDegree(3)
+val expandedFeatures = polynomialExpansion.transform(df)
+expandedFeatures.select("polyFeatures").take(3).foreach(println)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+import scala.Tuple2;
+
+import com.google.common.collect.Lists;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.VectorUDT;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+JavaSparkContext jsc = new JavaSparkContext("local", "JavaPolynomialExpansionSuite");
+SQLContext jsql = new SQLContext(jsc);
+PolynomialExpansion polyExpansion = new PolynomialExpansion()
+  .setInputCol("features")
+  .setOutputCol("polyFeatures")
+  .setDegree(3);
+JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
+  RowFactory.create(Vectors.sparse(3, Lists.newArrayList(
+    new Tuple2<Integer, Double>(0, -2.0), new Tuple2<Integer, Double>(1, 2.3)))),
+  RowFactory.create(Vectors.dense(-2.0, 2.3)),
+  RowFactory.create(Vectors.dense(0.0, 0.0, 0.0)),
+  RowFactory.create(Vectors.dense(0.6, -1.1, -3.0)),
+  RowFactory.create(Vectors.sparse(3, Lists.<Tuple2<Integer, Double>>newArrayList()))
+));
+StructType schema = new StructType(new StructField[] {
+  new StructField("features", new VectorUDT(), false, Metadata.empty()),
+});
+DataFrame dataset = jsql.createDataFrame(data, schema);
+Row[] row = polyExpansion.transform(dataset).select("polyFeatures").take(3);
+for (Row r : row) {
+  System.out.println((((Vector)r.get(0)).toString()));
+}
+{% endhighlight %}
+</div>
+</div>
 
 # Feature Selectors
 
