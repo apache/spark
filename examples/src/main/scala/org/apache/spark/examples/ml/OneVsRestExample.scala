@@ -101,7 +101,7 @@ object OneVsRestExample {
   }
 
   private def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"DecisionTreeExample with $params")
+    val conf = new SparkConf().setAppName(s"OneVsRestExample with $params")
     val sc = new SparkContext(conf)
     val inputData = MLUtils.loadLibSVMFile(sc, params.input)
     val sqlContext = new SQLContext(sc)
