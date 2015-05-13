@@ -80,12 +80,13 @@ class StringVectorizer extends Estimator[StringVectorizerModel] with StringVecto
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  private val indexer = new StringIndexer()
+
   override def fit(dataset: DataFrame): StringVectorizerModel = {
-    val counts = dataset.select(col($(inputCol)).cast(StringType))
-      .map(_.getString(0))
-      .countByValue()
-    val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
-    copyValues(new StringVectorizerModel(this, labels))
+    val model = indexer.setInputCol($(inputCol))
+      .setOutputCol("_" + $(outputCol))
+      .fit(dataset)
+    copyValues(new StringVectorizerModel(this, model))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -100,20 +101,9 @@ class StringVectorizer extends Estimator[StringVectorizerModel] with StringVecto
 @AlphaComponent
 class StringVectorizerModel private[ml] (
     override val parent: StringVectorizer,
-    labels: Array[String]) extends Model[StringVectorizerModel] with StringVectorizerBase {
+    indexModel: StringIndexerModel) extends Model[StringVectorizerModel] with StringVectorizerBase {
 
-  val categories: Array[String] = labels
-
-  private val labelToIndex: OpenHashMap[String, Double] = {
-    val n = labels.length
-    val map = new OpenHashMap[String, Double](n)
-    var i = 0
-    while (i < n) {
-      map.update(labels(i), i)
-      i += 1
-    }
-    map
-  }
+  val encoder = new OneHotEncoder()
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -121,39 +111,16 @@ class StringVectorizerModel private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  private def vectorize(label: Double): Vector = {
-    val first = $(includeFirst)
-    val vecLen = if (first) categories.length else categories.length - 1
-    val oneValue = Array(1.0)
-    val emptyValues = Array[Double]()
-    val emptyIndices = Array[Int]()
-
-    val values = if (first || label != 0.0) oneValue else emptyValues
-    val indices = if (first) {
-      Array(label.toInt)
-    } else if (label != 0.0) {
-      Array(label.toInt - 1)
-    } else {
-      emptyIndices
-    }
-    Vectors.sparse(vecLen, indices, values)
-  }
-
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema)
-    val vectorizer = udf { label: String =>
-      if (labelToIndex.contains(label)) {
-        vectorize(labelToIndex(label))
-      } else {
-        throw new SparkException(s"Unseen label: $label.")
-      }
-    }
     val outputColName = $(outputCol)
-    val attrValues = (if ($(includeFirst)) categories else categories.drop(1)).toArray
-    val metadata = NominalAttribute.defaultAttr.withName(outputColName).withValues(attrValues)
-      .toMetadata()
-    dataset.select(col("*"),
-      vectorizer(dataset($(inputCol)).cast(StringType)).as(outputColName, metadata))
+    encoder.setInputCol("_" + outputColName)
+      .setOutputCol(outputColName)
+      .setIncludeFirst($(includeFirst))
+
+    val indexed = indexModel.transform(dataset)
+    val encoded = encoder.transform(indexed)
+    encoded.drop("_" + outputColName)
   }
 
   /**
