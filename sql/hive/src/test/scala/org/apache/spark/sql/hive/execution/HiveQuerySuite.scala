@@ -20,6 +20,9 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.util.{Locale, TimeZone}
 
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDTF
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorFactory, StructObjectInspector, ObjectInspector}
 import org.scalatest.BeforeAndAfter
 
 import scala.util.Try
@@ -51,13 +54,31 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
+    sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
+    // The function source code can be found at:
+    // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
+    sql(
+      """
+        |CREATE TEMPORARY FUNCTION udtf_count2 
+        |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+      """.stripMargin)
   }
 
   override def afterAll() {
     TestHive.cacheTables = false
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
+    sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
+
+  createQueryTest("Test UDTF.close in Lateral Views",
+     """
+       |SELECT key, cc
+       |FROM src LATERAL VIEW udtf_count2(value) dd AS cc
+     """.stripMargin, false) // false mean we have to keep the temp function in registry
+
+  createQueryTest("Test UDTF.close in SELECT",
+     "SELECT udtf_count2(a) FROM (SELECT 1 AS a FROM src LIMIT 3) table", false)
 
   test("SPARK-4908: concurrent hive native commands") {
     (1 to 100).par.map { _ =>
