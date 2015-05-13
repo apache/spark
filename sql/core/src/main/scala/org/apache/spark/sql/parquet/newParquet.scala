@@ -311,32 +311,28 @@ private[sql] case class ParquetRelation2(
       }
 
       // To get the schema. We first try to get the schema defined in maybeSchema.
-      // If maybeSchema is not defined, we will try to get the schema from existing parquet data
-      // (through readSchema). If data does not exist, we will try to get the schema defined in
+      // If maybeSchema is not defined, we will try to get the schema defined in
       // maybeMetastoreSchema (defined in the options of the data source).
-      // Finally, if we still could not get the schema. We throw an error.
+      // If that is not supplied, we will try to get the schema from existing parquet data
+      // (through readSchema). If data does not exist and we still could not get the schema, 
+      // We throw an error.
       parquetSchema =
         maybeSchema
-          .orElse(readSchema())
           .orElse(maybeMetastoreSchema)
+          .orElse(readSchema())
           .getOrElse(sys.error("Failed to get the schema."))
 
       partitionKeysIncludedInParquetSchema =
         isPartitioned &&
           partitionColumns.forall(f => parquetSchema.fieldNames.contains(f.name))
 
+      // Reconcile the schema later
       schema = {
-        val fullRelationSchema = if (partitionKeysIncludedInParquetSchema) {
+        if (partitionKeysIncludedInParquetSchema) {
           parquetSchema
         } else {
           StructType(parquetSchema.fields ++ partitionColumns.fields)
         }
-
-        // If this Parquet relation is converted from a Hive Metastore table, must reconcile case
-        // insensitivity issue and possible schema mismatch.
-        maybeMetastoreSchema
-          .map(ParquetRelation2.mergeMetastoreParquetSchema(_, fullRelationSchema))
-          .getOrElse(fullRelationSchema)
       }
     }
 

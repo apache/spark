@@ -219,7 +219,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
   }
 
   private def convertToParquetRelation(metastoreRelation: MetastoreRelation): LogicalRelation = {
-    val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
+    // We want to pass schema without partition attributes as these are passed separately
+    val metastoreSchema = StructType.fromAttributes(metastoreRelation.attributes)
     val mergeSchema = hive.convertMetastoreParquetWithSchemaMerging
 
     // NOTE: Instead of passing Metastore schema directly to `ParquetRelation2`, we have to

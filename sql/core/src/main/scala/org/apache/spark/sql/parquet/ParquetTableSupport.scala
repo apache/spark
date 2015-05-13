@@ -98,12 +98,32 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
     val metadata = new JHashMap[String, String]()
     val requestedAttributes = RowReadSupport.getRequestedSchema(configuration)
 
+    // convert fileSchema to attributes
+    val fileAttributes = ParquetTypesConverter.convertToAttributes(fileSchema, true, true)
+    val fileAttMap = fileAttributes.map(f => f.name.toLowerCase -> f.name).toMap
+
     if (requestedAttributes != null) {
+      // reconcile names of requested Attributes
+      val modRequestedAttributes = requestedAttributes.map(attr => {
+      val lName = attr.name.toLowerCase
+      if (fileAttMap.contains(lName)) {
+        attr.withName(fileAttMap(lName))
+      } else {
+        if (attr.nullable) {
+          attr
+        } else {
+          // field is not nullable but not present in the parquet file schema!!
+          // this is just a safety check since in hive all columns are nullable
+          // throw exception here
+          throw new RuntimeException(s"""Field ${attr.name} is non-nullable, 
+            but not found in parquet file schema: ${fileSchema}""".stripMargin)
+        }}})
+
       // If the parquet file is thrift derived, there is a good chance that
       // it will have the thrift class in metadata.
       val isThriftDerived = keyValueMetaData.keySet().contains("thrift.class")
       parquetSchema = ParquetTypesConverter
-        .convertFromAttributes(requestedAttributes, isThriftDerived)
+        .convertFromAttributes(modRequestedAttributes, isThriftDerived)
       metadata.put(
         RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
         ParquetTypesConverter.convertToString(requestedAttributes))
