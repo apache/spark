@@ -639,6 +639,11 @@ private[sql] case class ParquetRelation2(
       }
 
     ParquetOutputFormat.setWriteSupportClass(job, writeSupport)
+    ParquetOutputFormat.setCompression(job,
+      ParquetRelation.shortParquetCompressionCodecNames.getOrElse(
+        sqlContext.conf.parquetCompressionCodec.toUpperCase, CompressionCodecName.UNCOMPRESSED))
+    ParquetOutputFormat.setBlockSize(job, sqlContext.conf.parquetBlockSize)
+    ParquetOutputFormat.setPageSize(job, sqlContext.conf.parquetPageSize)
 
     val conf = ContextUtil.getConfiguration(job)
     RowWriteSupport.setSchema(data.schema.toAttributes, conf)

@@ -40,6 +40,8 @@ private[spark] object SQLConf {
   val PARQUET_INT96_AS_TIMESTAMP = "spark.sql.parquet.int96AsTimestamp"
   val PARQUET_CACHE_METADATA = "spark.sql.parquet.cacheMetadata"
   val PARQUET_COMPRESSION = "spark.sql.parquet.compression.codec"
+  val PARQUET_BLOCK_SIZE = "spark.sql.parquet.blocksize"
+  val PARQUET_PAGE_SIZE = "spark.sql.parquet.pagesize"
   val PARQUET_FILTER_PUSHDOWN_ENABLED = "spark.sql.parquet.filterPushdown"
   val PARQUET_USE_DATA_SOURCE_API = "spark.sql.parquet.useDataSourceApi"
 
@@ -128,6 +130,12 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   /** The compression codec for writing to a Parquetfile */
   private[spark] def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION, "gzip")
+
+  /** The block size in parquet file 128 MB (128 * 1024 * 1024) by default */
+  private[spark] def parquetBlockSize: Int = getConf(PARQUET_BLOCK_SIZE, "134217728").toInt
+
+  /** The page size in parquet file 1 MB (1 * 1024 * 1024) by default */
+  private[spark] def parquetPageSize: Int = getConf(PARQUET_PAGE_SIZE, "1048576").toInt
 
   /** The number of rows that will be  */
   private[spark] def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE, "10000").toInt
