@@ -1,0 +1,166 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.examples.ml
+
+import java.util.concurrent.TimeUnit.{NANOSECONDS => NANO}
+
+import org.apache.spark.ml.util.MetadataUtils
+import scopt.OptionParser
+
+import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.examples.mllib.AbstractParams
+import org.apache.spark.ml.classification.{OneVsRest, LogisticRegression}
+import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
+
+/**
+ * An example runner for Multiclass to Binary Reduction with One Vs Rest.
+ * The example uses Logistic Regression as the base classifier. All parameters that
+ * can be specified on the base classifier can be passed in to the runner options.
+ * Run with
+ * {{{
+ * ./bin/run-example ml.OneVsRestExample [options]
+ * }}}
+ * For local mode, run
+ * {{{
+ * ./bin/spark-submit --class org.apache.spark.examples.ml.OneVsRestExample --driver-memory 1g
+ *   [examples JAR path] [options]
+ * }}}
+ * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
+ */
+object OneVsRestExample {
+
+  case class Params(input: String = null,
+      testInput: Option[String] = None,
+      maxIter: Int = 100,
+      tol: Double = 1E-6,
+      fitIntercept: Boolean = true,
+      regParam: Option[Double] = None,
+      elasticNetParam: Option[Double] = None,
+      fracTest: Double = 0.2) extends AbstractParams[Params]
+
+  def main(args: Array[String]) {
+    val defaultParams = Params()
+
+    val parser = new OptionParser[Params]("OneVsRest Example") {
+      head("OneVsRest Example: multiclass to binary reduction using OneVsRest")
+      arg[String]("<input>")
+        .text("input path to labeled examples")
+        .required()
+        .action((x, c) => c.copy(input = x))
+      opt[Double]("fracTest")
+        .text(s"fraction of data to hold out for testing.  If given option testInput, " +
+        s"this option is ignored. default: ${defaultParams.fracTest}")
+        .action((x, c) => c.copy(fracTest = x))
+      opt[String]("testInput")
+        .text("input path to test dataset.  If given, option fracTest is ignored")
+        .action((x,c) => c.copy(testInput = Some(x)))
+      opt[Int]("maxIter")
+        .text(s"maximum number of iterations. default: ${defaultParams.maxIter}")
+        .action((x, c) => c.copy(maxIter = x))
+      opt[Double]("tol")
+        .text(s"the convergence tolerance of iterations. default: ${defaultParams.tol}")
+        .action((x, c) => c.copy(tol = x))
+      opt[Double]("regParam")
+        .text(s"the regularization parameter")
+        .action((x,c) => c.copy(regParam = Some(x)))
+      opt[Double]("elasticNetParam")
+        .text(s"the ElasticNet mixing parameter")
+        .action((x,c) => c.copy(elasticNetParam = Some(x)))
+      checkConfig { params =>
+        if (params.fracTest < 0 || params.fracTest >= 1) {
+          failure(s"fracTest ${params.fracTest} value incorrect; should be in [0,1).")
+        } else {
+          success
+        }
+      }
+    }
+    parser.parse(args, defaultParams).map { params =>
+      run(params)
+    }.getOrElse {
+      sys.exit(1)
+    }
+  }
+
+  private def run(params: Params) {
+    val conf = new SparkConf().setAppName(s"DecisionTreeExample with $params")
+    val sc = new SparkContext(conf)
+    val inputData = MLUtils.loadLibSVMFile(sc, params.input)
+    val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+
+    // compute the train/test split: if testInput is not provided use part of input.
+    val data = params.testInput match {
+      case Some(t) => Array[RDD[LabeledPoint]](inputData, MLUtils.loadLibSVMFile(sc, t))
+      case None => {
+        val f = params.fracTest
+        inputData.randomSplit(Array(1 - f, f), seed = 12345)
+      }
+    }
+    val Array(train, test) = data.map(_.toDF().cache())
+    // instantiate the base classifier
+    val classifier = new LogisticRegression()
+    classifier.setMaxIter(params.maxIter)
+    classifier.setTol(params.tol)
+    params.regParam.foreach(classifier.setRegParam)
+    params.elasticNetParam.foreach(classifier.setElasticNetParam)
+
+    // instantiate the One Vs Rest Classifier.
+
+    val ovr = new OneVsRest()
+    ovr.setClassifier(classifier)
+
+    // train the multiclass model.
+    val (trainingDuration, ovrModel) = time(ovr.fit(train))
+
+    // score the model on test data.
+    val (predictionDuration, predictions) = time(ovrModel.transform(test))
+
+    // evaluate the model
+    val predictionsAndLabels = predictions.select("prediction", "label")
+      .map(row => (row.getDouble(0), row.getDouble(1)))
+
+    val metrics = new MulticlassMetrics(predictionsAndLabels)
+
+    val confusionMatrix = metrics.confusionMatrix
+
+    println(s" Training Time ${NANO.toSeconds(trainingDuration)}")
+
+    println(s" Prediction Time ${NANO.toSeconds(predictionDuration)}")
+
+    println(s" Confusion Matrix ${confusionMatrix.toString}")
+
+    // compute the false positive rate per label
+    val predictionColSchema = predictions.schema("prediction")
+    val numClasses = MetadataUtils.getNumClasses(predictionColSchema).get;
+    val fprs = Range(0, numClasses).map(p => (p, metrics.falsePositiveRate(p.toDouble)))
+
+    println("label\tfpr");
+    println(fprs.map {case (label, fpr) => label + "\t" + fpr}.mkString("\n"));
+  }
+
+  private def time[R](block: => R): (Long, R) = {
+    val t0 = System.nanoTime()
+    val result = block    // call-by-name
+    val t1 = System.nanoTime()
+    (t1 - t0, result)
+  }
+}
