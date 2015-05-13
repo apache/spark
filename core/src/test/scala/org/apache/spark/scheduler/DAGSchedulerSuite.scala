@@ -536,7 +536,7 @@ class DAGSchedulerSuite
     // should be ignored for being too old
     runEvent(CompletionEvent(
       taskSet.tasks(0), Success, makeMapStatus("hostA", 1), null, createFakeTaskInfo(), null))
-    // should work because it's a non-failed host
+    // its a non-failed host, but we can't be sure if the results were clobbered
     runEvent(CompletionEvent(
       taskSet.tasks(0), Success, makeMapStatus("hostB", 1), null, createFakeTaskInfo(), null))
     // should be ignored for being too old
@@ -546,9 +546,21 @@ class DAGSchedulerSuite
     taskSet.tasks(1).epoch = newEpoch
     runEvent(CompletionEvent(
       taskSet.tasks(1), Success, makeMapStatus("hostA", 1), null, createFakeTaskInfo(), null))
+
+    //now we should have a new taskSet for stage 0, which has us retry partition 0
+    assert(taskSets.size === 2)
+    val newTaskSet = taskSets(1)
+    assert(newTaskSet.stageId === 0)
+    assert(newTaskSet.attempt === 1)
+    assert(newTaskSet.tasks.size === 1)
+    val newTask = newTaskSet.tasks(0)
+    assert(newTask.epoch === newEpoch + 1)
+    runEvent(CompletionEvent(
+      newTask, Success, makeMapStatus("hostB", 1), null, createFakeTaskInfo(), null))
+
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
            Array(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
-    complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+    complete(taskSets(2), Seq((Success, 42), (Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty()
   }
