@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle.unsafe
 
+import java.io.File
+
 import scala.collection.JavaConverters._
 
 import org.apache.commons.io.FileUtils
@@ -51,7 +53,7 @@ class UnsafeShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
         .setSerializer(new KryoSerializer(myConf))
       val shuffleDep = shuffledRdd.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]]
       assert(UnsafeShuffleManager.canUseUnsafeShuffle(shuffleDep))
-      def getAllFiles =
+      def getAllFiles: Set[File] =
         FileUtils.listFiles(tmpDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
       val filesBeforeShuffle = getAllFiles
       // Force the shuffle to be performed
@@ -82,7 +84,7 @@ class UnsafeShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
         .setSerializer(new JavaSerializer(myConf))
       val shuffleDep = shuffledRdd.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]]
       assert(!UnsafeShuffleManager.canUseUnsafeShuffle(shuffleDep))
-      def getAllFiles =
+      def getAllFiles: Set[File] =
         FileUtils.listFiles(tmpDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
       val filesBeforeShuffle = getAllFiles
       // Force the shuffle to be performed
