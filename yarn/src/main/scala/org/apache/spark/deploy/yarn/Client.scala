@@ -91,30 +91,51 @@ private[spark] class Client(
    * available in the alpha API.
    */
   def submitApplication(): ApplicationId = {
-    // Setup the credentials before doing anything else, so we have don't have issues at any point.
-    setupCredentials()
-    yarnClient.init(yarnConf)
-    yarnClient.start()
+    var appId: ApplicationId = null
+    try {
+      // Setup the credentials before doing anything else, so we have don't have issues at any point.
+      setupCredentials()
+      yarnClient.init(yarnConf)
+      yarnClient.start()
 
-    logInfo("Requesting a new application from cluster with %d NodeManagers"
-      .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
+      logInfo("Requesting a new application from cluster with %d NodeManagers"
+        .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
 
-    // Get a new application from our RM
-    val newApp = yarnClient.createApplication()
-    val newAppResponse = newApp.getNewApplicationResponse()
-    val appId = newAppResponse.getApplicationId()
+      // Get a new application from our RM
+      val newApp = yarnClient.createApplication()
+      val newAppResponse = newApp.getNewApplicationResponse()
+      appId = newAppResponse.getApplicationId()
 
-    // Verify whether the cluster has enough resources for our AM
-    verifyClusterResources(newAppResponse)
+      // Verify whether the cluster has enough resources for our AM
+      verifyClusterResources(newAppResponse)
 
-    // Set up the appropriate contexts to launch our AM
-    val containerContext = createContainerLaunchContext(newAppResponse)
-    val appContext = createApplicationSubmissionContext(newApp, containerContext)
+      // Set up the appropriate contexts to launch our AM
+      val containerContext = createContainerLaunchContext(newAppResponse)
+      val appContext = createApplicationSubmissionContext(newApp, containerContext)
 
-    // Finally, submit and monitor the application
-    logInfo(s"Submitting application ${appId.getId} to ResourceManager")
-    yarnClient.submitApplication(appContext)
-    appId
+      // Finally, submit and monitor the application
+      logInfo(s"Submitting application ${appId.getId} to ResourceManager")
+      yarnClient.submitApplication(appContext)
+      appId
+    } catch {
+      case e: Throwable =>
+        if (appId != null) {
+          val appStagingDir = getAppStagingDir(appId)
+          try {
+            val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
+            val stagingDirPath = new Path(appStagingDir)
+            val fs = FileSystem.get(hadoopConf)
+            if (!preserveFiles && fs.exists(stagingDirPath)) {
+              logInfo("Deleting staging directory " + stagingDirPath)
+              fs.delete(stagingDirPath, true)
+            }
+          } catch {
+            case ioe: IOException =>
+              logWarning("Failed to cleanup staging dir " + appStagingDir, ioe)
+          }
+        }
+        throw e
+    }
   }
 
   /**
@@ -526,28 +547,7 @@ private[spark] class Client(
     logInfo("Setting up container launch context for our AM")
     val appId = newAppResponse.getApplicationId
     val appStagingDir = getAppStagingDir(appId)
-    var localResources: Map[String, LocalResource] = null
-    try {
-      localResources = prepareLocalResources(appStagingDir)
-    } catch {
-      case e: Throwable =>
-        var stagingDirPath: Path = null
-        try {
-          val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
-          if (!preserveFiles) {
-            stagingDirPath = new Path(appStagingDir)
-            logInfo("Deleting staging directory " + stagingDirPath)
-            val fs = FileSystem.get(hadoopConf)
-            fs.delete(stagingDirPath, true)
-          }
-        } catch {
-          case ioe: IOException =>
-            logError("Failed to cleanup staging dir " + stagingDirPath, ioe)
-        } finally {
-          throw e
-        }
-    }
-
+    val localResources = prepareLocalResources(appStagingDir)
     val launchEnv = setupLaunchEnv(appStagingDir)
     val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
     amContainer.setLocalResources(localResources)
