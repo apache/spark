@@ -126,7 +126,7 @@ object DecisionTreeRunner {
         .text(s"input path to test dataset.  If given, option fracTest is ignored." +
           s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
-      opt[String]("<dataFormat>")
+      opt[String]("dataFormat")
         .text("data format: libsvm (default), dense (deprecated in Spark v1.1)")
         .action((x, c) => c.copy(dataFormat = x))
       arg[String]("<input>")
