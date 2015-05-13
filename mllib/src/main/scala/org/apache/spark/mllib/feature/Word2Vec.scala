@@ -445,19 +445,22 @@ class Word2VecModel private[mllib] (
   // wordVectors: Array of length numWords * vectorSize, vector corresponding to the word
   //              mapped with index i can be retrieved by the slice
   //              (ind * vectorSize, ind * vectorSize + vectorSize)
-  // wordVecNorms: Array of length numWords, each value being the Euclidean norm
-  //               of the wordVector.
-  private val (wordVectors: Array[Float], wordVecNorms: Array[Double]) = {
+  lazy private val wordVectors: Array[Float] = {
     val wordVectors = new Array[Float](vectorSize * numWords)
-    val wordVecNorms = new Array[Double](numWords)
-    var i = 0
-    while (i < numWords) {
-      val vec = model.get(wordList(i)).get
-      Array.copy(vec, 0, wordVectors, i * vectorSize, vectorSize)
-      wordVecNorms(i) = blas.snrm2(vectorSize, vec, 1)
-      i += 1
+    for (i <- 0 until numWords) {
+      Array.copy(model.get(wordList(i)).get, 0, wordVectors, i * vectorSize, vectorSize)
     }
-    (wordVectors, wordVecNorms)
+    wordVectors
+  }
+
+  // wordVecNorms: Array of length numWords * vectorSize, each value being Euclidean normalized
+  //               of the wordVector.
+  lazy private val wordVectorsNormalized: Array[Float] = {
+    val wordVectorsNormalized = new Array[Float](vectorSize * numWords)
+    for (i <- 0 until numWords) {
+      Array.copy(euclideanNormalize(model.get(wordList(i)).get), 0, wordVectorsNormalized, i * vectorSize, vectorSize)
+    }
+    wordVectorsNormalized
   }
 
   private def cosineSimilarity(v1: Array[Float], v2: Array[Float]): Double = {
@@ -509,22 +512,15 @@ class Word2VecModel private[mllib] (
   def findSynonyms(vector: Vector, num: Int): Array[(String, Double)] = {
     require(num > 0, "Number of similar words should > 0")
 
-    val fVector = vector.toArray.map(_.toFloat)
+    val fVectorNormalized = euclideanNormalize(vector.toArray.map(_.toFloat))
     val cosineVec = Array.fill[Float](numWords)(0)
     val alpha: Float = 1
     val beta: Float = 0
 
     blas.sgemv(
-      "T", vectorSize, numWords, alpha, wordVectors, vectorSize, fVector, 1, beta, cosineVec, 1)
+      "T", vectorSize, numWords, alpha, wordVectorsNormalized, vectorSize, fVectorNormalized, 1, beta, cosineVec, 1)
 
-    // Need not divide with the norm of the given vector since it is constant.
-    val updatedCosines = new Array[Double](numWords)
-    var ind = 0
-    while (ind < numWords) {
-      updatedCosines(ind) = cosineVec(ind) / wordVecNorms(ind)
-      ind += 1
-    }
-    wordList.zip(updatedCosines)
+    wordList.zip(cosineVec.map(_.toDouble))
       .toSeq
       .sortBy(- _._2)
       .take(num + 1)
@@ -538,6 +534,21 @@ class Word2VecModel private[mllib] (
   def getVectors: Map[String, Array[Float]] = {
     wordIndex.map { case (word, ind) =>
       (word, wordVectors.slice(vectorSize * ind, vectorSize * ind + vectorSize))
+    }
+  }
+
+  /**
+   * Euclidean Normalization for a vector
+   * @param vector An array to be normalized
+   * @return a new normalized array
+   */
+  def euclideanNormalize(vector: Array[Float]):Array[Float] = {
+    val norm = blas.snrm2(vector.size, vector, 1)
+
+    if (norm == 0) {
+      Array.fill[Float](vector.size)(0)
+    } else {
+      vector.map(v => v/norm)
     }
   }
 }
