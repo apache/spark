@@ -35,11 +35,8 @@ import org.apache.spark.sql.sources.{CreateTableUsing, CreateTableUsingAsSelect,
 import org.apache.spark.sql.types.StringType
 
 
-private[hive] trait HiveStrategies {
-  // Possibly being too clever with types here... or not clever enough.
-  self: SQLContext#SparkPlanner =>
-
-  val hiveContext: HiveContext
+private[hive] trait HiveStrategies extends SparkStrategies {
+  def hiveContext: HiveContext
 
   /**
    * :: Experimental ::
@@ -137,7 +134,7 @@ private[hive] trait HiveStrategies {
             val partitionLocations = partitions.map(_.getLocation)
 
             if (partitionLocations.isEmpty) {
-              PhysicalRDD(plan.output, sparkContext.emptyRDD[Row]) :: Nil
+              PhysicalRDD(plan.output, hiveContext.sparkContext.emptyRDD[Row]) :: Nil
             } else {
               hiveContext
                 .parquetFile(partitionLocations: _*)
@@ -165,7 +162,7 @@ private[hive] trait HiveStrategies {
           // TODO: Remove this hack for Spark 1.3.
           case iae: java.lang.IllegalArgumentException
               if iae.getMessage.contains("Can not create a Path from an empty string") =>
-            PhysicalRDD(plan.output, sparkContext.emptyRDD[Row]) :: Nil
+            PhysicalRDD(plan.output, hiveContext.sparkContext.emptyRDD[Row]) :: Nil
         }
       case _ => Nil
     }

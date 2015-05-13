@@ -119,7 +119,7 @@ private[sql] object DataFrame {
 @Experimental
 class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
-    @DeveloperApi @transient val queryExecution: SQLContext#QueryExecution)
+    @DeveloperApi @transient val queryExecution: QueryExecution)
   extends RDDApi[Row] with Serializable {
 
   /**
