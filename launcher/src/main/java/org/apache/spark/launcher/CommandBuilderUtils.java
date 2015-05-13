@@ -113,22 +113,20 @@ class CommandBuilderUtils {
     return os.startsWith("Windows");
   }
 
-  /**  Returns an enum value indicating whose JVM is being used. */
-  static JavaVendor getJavaVendor() {
-    String vendorString = System.getProperty("java.vendor");
-    if (vendorString.contains("Oracle")) {
-      return JavaVendor.Oracle;
-    } else {
-      if (vendorString.contains("IBM")) {
-        return JavaVendor.IBM;
-      } else {
-        if (vendorString.contains("OpenJDK")) {
-          return JavaVendor.OpenJDK;
-        }
-      }
-    }
-    return JavaVendor.Unknown;
-  }
+	/** Returns an enum value indicating whose JVM is being used. */
+	static JavaVendor getJavaVendor() {
+		String vendorString = System.getProperty("java.vendor");
+		if (vendorString.contains("Oracle")) {
+			return JavaVendor.Oracle;
+		}
+		if (vendorString.contains("IBM")) {
+			return JavaVendor.IBM;
+		}
+		if (vendorString.contains("OpenJDK")) {
+			return JavaVendor.OpenJDK;
+		}
+		return JavaVendor.Unknown;
+	}
 
   /**
    * Updates the user environment, appending the given pathList to the existing value of the given
