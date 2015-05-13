@@ -316,8 +316,11 @@ class NaiveBayes private (
     // TODO: similar to reduceByKeyLocally to save one stage.
     val aggregated = data.map(p => (p.label, p.features)).combineByKey[(Long, BDV[Double])](
       createCombiner = (v: Vector) => {
-        requireNonnegativeValues(v)
-        if (modelType == "Bernoulli") requireZeroOneBernoulliValues(v)
+        if (modelType == "Bernoulli") {
+          requireZeroOneBernoulliValues(v)
+        } else {
+          requireNonnegativeValues(v)
+        }
         (1L, v.toBreeze.toDenseVector)
       },
       mergeValue = (c: (Long, BDV[Double]), v: Vector) => {
