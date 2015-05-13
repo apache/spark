@@ -53,7 +53,12 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
    */
   def serialize(obj: Any): Any
 
-  /** Convert a SQL datum to the user type */
+  /**
+   * Convert a SQL datum to the user type
+   *
+   * This method may be called with an already deserialized datum, so it should be able to
+   * handle values of UserType too.
+   */
   def deserialize(datum: Any): UserType
 
   override private[sql] def jsonValue: JValue = {
