@@ -48,10 +48,18 @@ public final class TaskMemoryManager {
 
   private final Logger logger = LoggerFactory.getLogger(TaskMemoryManager.class);
 
-  /**
-   * The number of entries in the page table.
-   */
-  private static final int PAGE_TABLE_SIZE = 1 << 13;
+  /** The number of bits used to address the page table. */
+  private static final int PAGE_NUMBER_BITS = 13;
+
+  /** The number of bits used to encode offsets in data pages. */
+  @VisibleForTesting
+  static final int OFFSET_BITS = 64 - PAGE_NUMBER_BITS;  // 51
+
+  /** The number of entries in the page table. */
+  private static final int PAGE_TABLE_SIZE = 1 << PAGE_NUMBER_BITS;
+
+  /** Maximum supported data page size */
+  private static final long MAXIMUM_PAGE_SIZE = (1L << OFFSET_BITS);
 
   /** Bit mask for the lower 51 bits of a long. */
   private static final long MASK_LONG_LOWER_51_BITS = 0x7FFFFFFFFFFFFL;
@@ -102,8 +110,9 @@ public final class TaskMemoryManager {
    * intended for allocating large blocks of memory that will be shared between operators.
    */
   public MemoryBlock allocatePage(long size) {
-    if (size >= (1L << 51)) {
-      throw new IllegalArgumentException("Cannot allocate a page with more than 2^51 bytes");
+    if (size > MAXIMUM_PAGE_SIZE) {
+      throw new IllegalArgumentException(
+        "Cannot allocate a page with more than " + MAXIMUM_PAGE_SIZE + " bytes");
     }
 
     final int pageNumber;
@@ -168,15 +177,36 @@ public final class TaskMemoryManager {
   /**
    * Given a memory page and offset within that page, encode this address into a 64-bit long.
    * This address will remain valid as long as the corresponding page has not been freed.
+   *
+   * @param page a data page allocated by {@link TaskMemoryManager#allocate(long)}.
+   * @param offsetInPage an offset in this page which incorporates the base offset. In other words,
+   *                     this should be the value that you would pass as the base offset into an
+   *                     UNSAFE call (e.g. page.baseOffset() + something).
+   * @return an encoded page address.
    */
   public long encodePageNumberAndOffset(MemoryBlock page, long offsetInPage) {
+    if (!inHeap) {
+      // In off-heap mode, an offset is an absolute address that may require a full 64 bits to
+      // encode. Due to our page size limitation, though, we can convert this into an offset that's
+      // relative to the page's base offset; this relative offset will fit in 51 bits.
+      offsetInPage -= page.getBaseOffset();
+    }
     return encodePageNumberAndOffset(page.pageNumber, offsetInPage);
   }
 
   @VisibleForTesting
   public static long encodePageNumberAndOffset(int pageNumber, long offsetInPage) {
     assert (pageNumber != -1) : "encodePageNumberAndOffset called with invalid page";
-    return (((long) pageNumber) << 51) | (offsetInPage & MASK_LONG_LOWER_51_BITS);
+    return (((long) pageNumber) << OFFSET_BITS) | (offsetInPage & MASK_LONG_LOWER_51_BITS);
+  }
+
+  @VisibleForTesting
+  public static int decodePageNumber(long pagePlusOffsetAddress) {
+    return (int) ((pagePlusOffsetAddress & MASK_LONG_UPPER_13_BITS) >>> OFFSET_BITS);
+  }
+
+  private static long decodeOffset(long pagePlusOffsetAddress) {
+    return (pagePlusOffsetAddress & MASK_LONG_LOWER_51_BITS);
   }
 
   /**
@@ -185,7 +215,7 @@ public final class TaskMemoryManager {
    */
   public Object getPage(long pagePlusOffsetAddress) {
     if (inHeap) {
-      final int pageNumber = (int) ((pagePlusOffsetAddress & MASK_LONG_UPPER_13_BITS) >>> 51);
+      final int pageNumber = decodePageNumber(pagePlusOffsetAddress);
       assert (pageNumber >= 0 && pageNumber < PAGE_TABLE_SIZE);
       final Object page = pageTable[pageNumber].getBaseObject();
       assert (page != null);
@@ -200,11 +230,13 @@ public final class TaskMemoryManager {
    * {@link TaskMemoryManager#encodePageNumberAndOffset(MemoryBlock, long)}
    */
   public long getOffsetInPage(long pagePlusOffsetAddress) {
-    final long offsetInPage = (pagePlusOffsetAddress & MASK_LONG_LOWER_51_BITS);
+    final long offsetInPage = decodeOffset(pagePlusOffsetAddress);
     if (inHeap) {
       return offsetInPage;
     } else {
-      final int pageNumber = (int) ((pagePlusOffsetAddress & MASK_LONG_UPPER_13_BITS) >>> 51);
+      // In off-heap mode, an offset is an absolute address. In encodePageNumberAndOffset, we
+      // converted the absolute address into a relative address. Here, we invert that operation:
+      final int pageNumber = decodePageNumber(pagePlusOffsetAddress);
       assert (pageNumber >= 0 && pageNumber < PAGE_TABLE_SIZE);
       return pageTable[pageNumber].getBaseOffset() + offsetInPage;
     }

@@ -34,11 +34,15 @@ public class PackedRecordPointerSuite {
       new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP));
     final MemoryBlock page0 = memoryManager.allocatePage(100);
     final MemoryBlock page1 = memoryManager.allocatePage(100);
-    final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1, 42);
+    final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1,
+      page1.getBaseOffset() + 42);
     PackedRecordPointer packedPointer = new PackedRecordPointer();
     packedPointer.set(PackedRecordPointer.packPointer(addressInPage1, 360));
     assertEquals(360, packedPointer.getPartitionId());
-    assertEquals(addressInPage1, packedPointer.getRecordPointer());
+    final long recordPointer = packedPointer.getRecordPointer();
+    assertEquals(1, TaskMemoryManager.decodePageNumber(recordPointer));
+    assertEquals(page1.getBaseOffset() + 42, memoryManager.getOffsetInPage(recordPointer));
+    assertEquals(addressInPage1, recordPointer);
     memoryManager.cleanUpAllAllocatedMemory();
   }
 
@@ -48,11 +52,15 @@ public class PackedRecordPointerSuite {
       new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.UNSAFE));
     final MemoryBlock page0 = memoryManager.allocatePage(100);
     final MemoryBlock page1 = memoryManager.allocatePage(100);
-    final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1, 42);
+    final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1,
+      page1.getBaseOffset() + 42);
     PackedRecordPointer packedPointer = new PackedRecordPointer();
     packedPointer.set(PackedRecordPointer.packPointer(addressInPage1, 360));
     assertEquals(360, packedPointer.getPartitionId());
-    assertEquals(addressInPage1, packedPointer.getRecordPointer());
+    final long recordPointer = packedPointer.getRecordPointer();
+    assertEquals(1, TaskMemoryManager.decodePageNumber(recordPointer));
+    assertEquals(page1.getBaseOffset() + 42, memoryManager.getOffsetInPage(recordPointer));
+    assertEquals(addressInPage1, recordPointer);
     memoryManager.cleanUpAllAllocatedMemory();
   }
 

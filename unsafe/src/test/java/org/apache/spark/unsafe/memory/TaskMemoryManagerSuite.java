@@ -43,9 +43,12 @@ public class TaskMemoryManagerSuite {
     final TaskMemoryManager manager =
       new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.UNSAFE));
     final MemoryBlock dataPage = manager.allocatePage(256);
-    final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, 64);
+    // In off-heap mode, an offset is an absolute address that may require more than 51 bits to
+    // encode. This test exercises that corner-case:
+    final long offset = ((1L << TaskMemoryManager.OFFSET_BITS) + 10);
+    final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, offset);
     Assert.assertEquals(null, manager.getPage(encodedAddress));
-    Assert.assertEquals(dataPage.getBaseOffset() + 64, manager.getOffsetInPage(encodedAddress));
+    Assert.assertEquals(offset, manager.getOffsetInPage(encodedAddress));
   }
 
   @Test

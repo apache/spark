@@ -68,9 +68,8 @@ final class PackedRecordPointer {
     assert (partitionId <= MAXIMUM_PARTITION_ID);
     // Note that without word alignment we can address 2^27 bytes = 128 megabytes per page.
     // Also note that this relies on some internals of how TaskMemoryManager encodes its addresses.
-    final int pageNumber = (int) ((recordPointer & MASK_LONG_UPPER_13_BITS) >>> 51);
-    final long compressedAddress =
-      (((long) pageNumber) << 27) | (recordPointer & MASK_LONG_LOWER_27_BITS);
+    final long pageNumber = (recordPointer & MASK_LONG_UPPER_13_BITS) >>> 24;
+    final long compressedAddress = pageNumber | (recordPointer & MASK_LONG_LOWER_27_BITS);
     return (((long) partitionId) << 40) | compressedAddress;
   }
 
@@ -85,9 +84,8 @@ final class PackedRecordPointer {
   }
 
   public long getRecordPointer() {
-    final long compressedAddress = packedRecordPointer & MASK_LONG_LOWER_40_BITS;
-    final long pageNumber = (compressedAddress << 24) & MASK_LONG_UPPER_13_BITS;
-    final long offsetInPage = compressedAddress & MASK_LONG_LOWER_27_BITS;
+    final long pageNumber = (packedRecordPointer << 24) & MASK_LONG_UPPER_13_BITS;
+    final long offsetInPage = packedRecordPointer & MASK_LONG_LOWER_27_BITS;
     return pageNumber | offsetInPage;
   }
 
