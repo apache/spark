@@ -196,9 +196,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
 
-  protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
+  protected[sql] def executeSql(sql: String): QueryExecution = executePlan(parseSql(sql))
 
-  protected[sql] def executePlan(plan: LogicalPlan) = new this.QueryExecution(plan)
+  protected[sql] def executePlan(plan: LogicalPlan) = new QueryExecution(plan)
 
   @transient
   protected[sql] val tlSession = new ThreadLocal[SQLSession]() {
