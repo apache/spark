@@ -63,6 +63,8 @@ private[hive] class HiveQLDialect extends ParserDialect {
 /**
  * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
  * Configuration for Hive is read from hive-site.xml on the classpath.
+ *
+ * @since 1.0.0
  */
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
@@ -225,6 +227,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * Spark SQL or the external data source library it uses might cache certain metadata about a
    * table, such as the location of blocks. When those change outside of Spark SQL, users should
    * call this function to invalidate the cache.
+   *
+   * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
     // TODO: Database support...
@@ -242,6 +246,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    *
    * Right now, it only supports Hive tables and it only updates the size of a Hive table
    * in the Hive metastore.
+   *
+   * @since 1.2.0
    */
   @Experimental
   def analyze(tableName: String) {
