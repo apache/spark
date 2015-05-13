@@ -121,6 +121,7 @@ private[sql] case class InsertIntoFSBasedRelation(
       writerContainer.commitJob()
       relation.refresh()
     } catch { case cause: Throwable =>
+      logError("Aborting job.", cause)
       writerContainer.abortJob()
       throw new SparkException("Job aborted.", cause)
     }
@@ -143,6 +144,7 @@ private[sql] case class InsertIntoFSBasedRelation(
         }
         writerContainer.commitTask()
       } catch { case cause: Throwable =>
+        logError("Aborting task.", cause)
         writerContainer.abortTask()
         throw new SparkException("Task failed while writing rows.", cause)
       }
