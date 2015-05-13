@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.parquet
 
+import org.apache.spark.sql.catalyst.util.DateUtils
+
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag

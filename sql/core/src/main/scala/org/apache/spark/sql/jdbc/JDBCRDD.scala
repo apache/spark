@@ -21,6 +21,7 @@ import java.sql.{Connection, DriverManager, ResultSet, ResultSetMetaData, SQLExc
 import java.util.Properties
 
 import org.apache.commons.lang3.StringUtils
+import org.apache.spark.sql.catalyst.util.DateUtils
 
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD

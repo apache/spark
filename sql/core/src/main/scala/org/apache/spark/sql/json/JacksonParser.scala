@@ -20,6 +20,8 @@ package org.apache.spark.sql.json
 import java.io.ByteArrayOutputStream
 import java.sql.Timestamp
 
+import org.apache.spark.sql.catalyst.util.DateUtils
+
 import scala.collection.Map
 
 import com.fasterxml.jackson.core._
