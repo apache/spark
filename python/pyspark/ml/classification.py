@@ -165,7 +165,7 @@ class GBTParams(object):
 
 @inherit_doc
 class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                            DecisionTreeParams, HasCheckpointInterval):
+                             DecisionTreeParams, HasCheckpointInterval):
     """
     `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
     learning algorithm for classification.
@@ -257,7 +257,7 @@ class DecisionTreeClassificationModel(JavaModel):
 
 @inherit_doc
 class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasSeed,
-                            DecisionTreeParams, HasCheckpointInterval):
+                             DecisionTreeParams, HasCheckpointInterval):
     """
     `http://en.wikipedia.org/wiki/Random_forest  Random Forest`
     learning algorithm for classification.
@@ -410,7 +410,7 @@ class RandomForestClassificationModel(JavaModel):
 
 @inherit_doc
 class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                   DecisionTreeParams, HasCheckpointInterval):
+                    DecisionTreeParams, HasCheckpointInterval):
     """
     `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
     learning algorithm for classification.
