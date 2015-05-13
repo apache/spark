@@ -63,7 +63,7 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
         }.flatten.reduceOption(_ && _)
 
         val forParquetDataSource = query.queryExecution.optimizedPlan.collect {
-          case PhysicalOperation(_, filters, LogicalRelation(_: ParquetRelation2)) => filters
+          case PhysicalOperation(_, filters, LogicalRelation(_: FSBasedParquetRelation)) => filters
         }.flatten.reduceOption(_ && _)
 
         forParquetTableScan.orElse(forParquetDataSource)
