@@ -17,6 +17,7 @@
 
 package org.apache.spark.graphx
 
+import scala.reflect.{classTag, ClassTag}
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -25,6 +26,9 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 
 import org.apache.spark.graphx.lib._
+import org.apache.spark.graphx.impl.GraphImpl
+import org.apache.spark.graphx.impl.EdgePartitionBuilder
+import org.apache.spark.HashPartitioner
 
 /**
  * Contains additional functionality for [[Graph]]. All operations are expressed in terms of the
@@ -183,6 +187,55 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
         throw new SparkException("collectEdges does not support EdgeDirection.Both. Use" +
           "EdgeDirection.Either instead.")
     }
+  }
+
+  /**
+   * Direct all edges from the lower vertex id to the higher vertex id and aggregate
+   * duplicate edges.
+   *
+   * This function is relatively costly as it requires shuffling all the so that edges between the
+   * same pair of vertices are on the same machine.
+   *
+   * @param merge the function used to merge duplicate edges.  The default function takes one of
+   * the edge values an discards the rest.
+   *
+   * @return the graph with all edges canonicalized.
+   */
+  def canonicalizeEdges(merge: (ED, ED) => ED = (a,b) => a): Graph[VD, ED] = {
+    val numPartitions = graph.edges.partitions.length
+    val edTag = classTag[ED]
+    val vdTag = classTag[VD]
+    // Canonicalize the edge directions and then repartition
+    val canonicalEdges = graph.edges.withPartitionsRDD(graph.edges.map { e =>
+      var srcId = e.srcId
+      var dstId = e.dstId
+      if (e.srcId > e.dstId) {
+        srcId = e.dstId
+        dstId = e.srcId
+      }
+      val part = PartitionStrategy.EdgePartition2D.getPartition(srcId, dstId, numPartitions)
+      (part, (srcId, dstId, e.attr))
+    }.partitionBy(new HashPartitioner(numPartitions)).mapPartitionsWithIndex( { (pid, iter) =>
+      val builder = new EdgePartitionBuilder[ED, VD]()(edTag, vdTag)
+      iter.foreach { message =>
+        val data = message._2
+        builder.add(data._1, data._2, data._3)
+      }
+      val edgePartition = builder.toEdgePartition
+      Iterator((pid, edgePartition))
+    }, preservesPartitioning = true)).cache()
+    // Build a new graph reusing the old vertex rdd and group the edges
+    GraphImpl.fromExistingRDDs(graph.vertices.withEdges(canonicalEdges), canonicalEdges)
+      .groupEdges(merge)
+  }
+
+  /**
+   * Remove self edges.
+   *
+   * @return a graph with all self edges removed
+   */
+  def removeSelfEdges(): Graph[VD, ED] = {
+    graph.subgraph(epred = e => e.srcId != e.dstId)
   }
 
   /**
