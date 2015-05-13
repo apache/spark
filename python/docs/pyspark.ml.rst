@@ -1,10 +1,18 @@
 pyspark.ml package
 =====================
 
-Module Context
+ML Pipeline APIs
 --------------
 
 .. automodule:: pyspark.ml
+    :members:
+    :undoc-members:
+    :inherited-members:
+
+pyspark.ml.param module
+-------------------------
+
+.. automodule:: pyspark.ml.param
     :members:
     :undoc-members:
     :inherited-members:
