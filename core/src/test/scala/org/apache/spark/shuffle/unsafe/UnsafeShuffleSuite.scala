@@ -25,7 +25,7 @@ class UnsafeShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
   // This test suite should run all tests in ShuffleSuite with unsafe-based shuffle.
 
   override def beforeAll() {
-    conf.set("spark.shuffle.manager", "unsafe")
+    conf.set("spark.shuffle.manager", "tungsten-sort")
     // UnsafeShuffleManager requires at least 128 MB of memory per task in order to be able to sort
     // shuffle records.
     conf.set("spark.shuffle.memoryFraction", "0.5")

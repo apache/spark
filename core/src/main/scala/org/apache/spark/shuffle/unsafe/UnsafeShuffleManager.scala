@@ -117,8 +117,8 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
 
   if (!conf.getBoolean("spark.shuffle.spill", true)) {
     logWarning(
-      "spark.shuffle.spill was set to false, but this is ignored by UnsafeShuffleManager; " +
-      "its optimized shuffles will continue to spill to disk when necessary.")
+      "spark.shuffle.spill was set to false, but this is ignored by the tungsten-sort shuffle " +
+      "manager; its optimized shuffles will continue to spill to disk when necessary.")
   }
 
 
