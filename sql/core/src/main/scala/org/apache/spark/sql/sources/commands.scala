@@ -294,7 +294,7 @@ private[sql] abstract class BaseWriterContainer(
 
   private def newOutputCommitter(context: TaskAttemptContext): OutputCommitter = {
     val committerClass = context.getConfiguration.getClass(
-      "mapred.output.committer.class", null, classOf[FileOutputCommitter])
+      "mapred.output.committer.class", null, classOf[OutputCommitter])
 
     Option(committerClass).map { clazz =>
       val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
