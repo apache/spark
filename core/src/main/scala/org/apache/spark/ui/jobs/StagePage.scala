@@ -582,19 +582,15 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
         val index = taskInfo.index
         val attempt = taskInfo.attempt
-        val indexAndAttempt = index + "-" + attempt
         val timelineObject =
           s"""
              {
                'className': 'task task-assignment-timeline-object ${classNameByStatus}',
                'group': '${executorId}',
-               'content': '<div id="task-event-${indexAndAttempt}"' +
-                 'onmouseover="setupTaskEventActionOnMouseOver(\\'${indexAndAttempt}\\')"' +
-                 'onmouseout="setupTaskEventActionOnMouseOut(\\'${indexAndAttempt}\\')"' +
-                 'class="task-assignment-timeline-content"' +
+               'content': '<div class="task-assignment-timeline-content"' +
                  'data-toggle="tooltip" data-placement="top"' +
                  'data-html="true" data-container="body"' +
-                 'data-title="${s"Task" + index + "(attempt " + attempt + ")"}<br>' +
+                 'data-title="${s"Task " + index + " (attempt " + attempt + ")"}<br>' +
                  'Status: ${taskInfo.status}<br>' +
                  'Launch Time: ${UIUtils.formatDate(new Date(launchTime))}' +
                  '${

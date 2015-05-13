@@ -159,6 +159,40 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, zo
     curEnd = minLaunchTime + zoomMax;
   }
   taskTimeline.setWindow(minLaunchTime, curEnd);
+  taskTimeline.on("rangechange", function(prop) {
+    if (currentDisplayedTooltip !== null) {
+      $(currentDisplayedTooltip).tooltip("hide");
+    }
+  });
+
+  function getTaskIdxAndAttempt(selector) {
+    var taskIdxText = $(selector).attr("data-title");
+    var taskIdxAndAttempt = taskIdxText.match("Task (\\d+) \\(attempt (\\d+)");
+    var taskIdx = taskIdxAndAttempt[1];
+    var taskAttempt = taskIdxAndAttempt[2];
+    return taskIdx + "-" + taskAttempt;
+  }
+
+  // If we zoom up and a box moves away when the corresponding tooltip is shown,
+  // the tooltip can be remain.
+  // So, we need to hide tooltips using another mechanism.
+  var currentDisplayedTooltip = null;
+
+  $("#task-assignment-timeline").on({
+    "mouseenter": function() {
+      var taskIdxAndAttempt = getTaskIdxAndAttempt(this);
+      $("#task-" + taskIdxAndAttempt).addClass("corresponding-item-hover");
+      $(this).tooltip("show");
+      currentDisplayedTooltip = this;
+    },
+    "mouseleave" : function() {
+      var taskIdxAndAttempt = getTaskIdxAndAttempt(this);
+      $("#task-" + taskIdxAndAttempt).removeClass("corresponding-item-hover");
+      $(this).tooltip("hide");
+      currentDisplayedTooltip = null;
+    }
+  }, ".task-assignment-timeline-content");
+
   setupZoomable('#task-assignment-timeline-zoom-lock', taskTimeline);
 
   $("span.expand-task-assignment-timeline").click(function() {
@@ -168,16 +202,6 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, zo
     $(this).find('.expand-task-assignment-timeline-arrow').toggleClass('arrow-open');
     $(this).find('.expand-task-assignment-timeline-arrow').toggleClass('arrow-closed');
   });
-}
-
-function setupTaskEventActionOnMouseOver(taskIdAndAttempt) {
-  $("#task-" + taskIdAndAttempt).addClass("corresponding-item-hover");
-  $("#task-event-" + taskIdAndAttempt).tooltip("show");
-}
-
-function setupTaskEventActionOnMouseOut(taskIdAndAttempt) {
-  $("#task-" + taskIdAndAttempt).removeClass("corresponding-item-hover");
-  $("#task-" + taskIdAndAttempt).tooltip("hide");
 }
 
 function setupExecutorEventAction() {
