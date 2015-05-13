@@ -381,7 +381,7 @@ processClosure <- function(node, newEnv, oldEnv = environment(), defVars = initA
       } else if (nodeChar == "$") {  # Skip the field.
         processClosure(node[[2]], newEnv, oldEnv, defVars, checkedFuncs)
       } else if (nodeChar == "::" || nodeChar == ":::") {
-        processClosure(node[[3]], newEnv, oldEnv, defVars, checkedFuncs)
+        # No need to process. Ignore.
       } else {
         for (i in 1:nodeLen) {
           processClosure(node[[i]], newEnv, oldEnv, defVars, checkedFuncs)
