@@ -102,4 +102,12 @@ public final class BitSet {
   public int nextSetBit(int fromIndex) {
     return BitSetMethods.nextSetBit(baseObject, baseOffset, fromIndex, numWords);
   }
+
+  /**
+   * Returns {@code true} if any bit is set.
+   */
+  public boolean anySet() {
+    return BitSetMethods.anySet(baseObject, baseOffset, numWords);
+  }
+
 }

@@ -26,7 +26,7 @@ private[ui] case class OutputOpIdAndSparkJobId(outputOpId: OutputOpId, sparkJobI
 
 private[ui] case class BatchUIData(
     val batchTime: Time,
-    val receiverNumRecords: Map[Int, Long],
+    val streamIdToNumRecords: Map[Int, Long],
     val submissionTime: Long,
     val processingStartTime: Option[Long],
     val processingEndTime: Option[Long],
@@ -58,7 +58,7 @@ private[ui] case class BatchUIData(
   /**
    * The number of recorders received by the receivers in this batch.
    */
-  def numRecords: Long = receiverNumRecords.map(_._2).sum
+  def numRecords: Long = streamIdToNumRecords.values.sum
 }
 
 private[ui] object BatchUIData {
@@ -66,7 +66,7 @@ private[ui] object BatchUIData {
   def apply(batchInfo: BatchInfo): BatchUIData = {
     new BatchUIData(
       batchInfo.batchTime,
-      batchInfo.receivedBlockInfo.mapValues(_.map(_.numRecords).sum),
+      batchInfo.streamIdToNumRecords,
       batchInfo.submissionTime,
       batchInfo.processingStartTime,
       batchInfo.processingEndTime

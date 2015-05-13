@@ -53,7 +53,7 @@ private[spark] class MesosRestServer(
     new MesosStatusRequestServlet(scheduler, masterConf)
 }
 
-private[deploy] class MesosSubmitRequestServlet(
+private[mesos] class MesosSubmitRequestServlet(
     scheduler: MesosClusterScheduler,
     conf: SparkConf)
   extends SubmitRequestServlet {
@@ -139,7 +139,7 @@ private[deploy] class MesosSubmitRequestServlet(
   }
 }
 
-private[deploy] class MesosKillRequestServlet(scheduler: MesosClusterScheduler, conf: SparkConf)
+private[mesos] class MesosKillRequestServlet(scheduler: MesosClusterScheduler, conf: SparkConf)
   extends KillRequestServlet {
   protected override def handleKill(submissionId: String): KillSubmissionResponse = {
     val k = scheduler.killDriver(submissionId)
@@ -148,7 +148,7 @@ private[deploy] class MesosKillRequestServlet(scheduler: MesosClusterScheduler, 
   }
 }
 
-private[deploy] class MesosStatusRequestServlet(scheduler: MesosClusterScheduler, conf: SparkConf)
+private[mesos] class MesosStatusRequestServlet(scheduler: MesosClusterScheduler, conf: SparkConf)
   extends StatusRequestServlet {
   protected override def handleStatus(submissionId: String): SubmissionStatusResponse = {
     val d = scheduler.getDriverStatus(submissionId)

@@ -78,6 +78,9 @@ private[spark] object JettyUtils extends Logging {
         } catch {
           case e: IllegalArgumentException =>
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage)
+          case e: Exception =>
+            logWarning(s"GET ${request.getRequestURI} failed: $e", e)
+            throw e
         }
       }
       // SPARK-5983 ensure TRACE is not supported
@@ -115,19 +118,21 @@ private[spark] object JettyUtils extends Logging {
       destPath: String,
       beforeRedirect: HttpServletRequest => Unit = x => (),
       basePath: String = "",
-      httpMethod: String = "GET"): ServletContextHandler = {
+      httpMethods: Set[String] = Set("GET")): ServletContextHandler = {
     val prefixedDestPath = attachPrefix(basePath, destPath)
     val servlet = new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse): Unit = {
-        httpMethod match {
-          case "GET" => doRequest(request, response)
-          case _ => response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
+        if (httpMethods.contains("GET")) {
+          doRequest(request, response)
+        } else {
+          response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
         }
       }
       override def doPost(request: HttpServletRequest, response: HttpServletResponse): Unit = {
-        httpMethod match {
-          case "POST" => doRequest(request, response)
-          case _ => response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
+        if (httpMethods.contains("POST")) {
+          doRequest(request, response)
+        } else {
+          response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
         }
       }
       private def doRequest(request: HttpServletRequest, response: HttpServletResponse): Unit = {
@@ -215,6 +220,9 @@ private[spark] object JettyUtils extends Logging {
       val pool = new QueuedThreadPool
       pool.setDaemon(true)
       server.setThreadPool(pool)
+      val errorHandler = new ErrorHandler()
+      errorHandler.setShowStacks(true)
+      server.addBean(errorHandler)
       server.setHandler(collection)
       try {
         server.start()

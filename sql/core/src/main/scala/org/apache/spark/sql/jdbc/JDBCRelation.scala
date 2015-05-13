@@ -100,7 +100,7 @@ private[sql] class DefaultSource extends RelationProvider {
     val upperBound = parameters.getOrElse("upperBound", null)
     val numPartitions = parameters.getOrElse("numPartitions", null)
 
-    if (driver != null) Utils.getContextOrSparkClassLoader.loadClass(driver)
+    if (driver != null) DriverRegistry.register(driver)
 
     if (partitionColumn != null
         && (lowerBound == null || upperBound == null || numPartitions == null)) {
@@ -136,7 +136,7 @@ private[sql] case class JDBCRelation(
   override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-    val driver: String = DriverManager.getDriver(url).getClass.getCanonicalName
+    val driver: String = DriverRegistry.getDriverClassName(url)
     JDBCRDD.scanTable(
       sqlContext.sparkContext,
       schema,

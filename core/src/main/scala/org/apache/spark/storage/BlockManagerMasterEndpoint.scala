@@ -60,9 +60,9 @@ class BlockManagerMasterEndpoint(
       context.reply(true)
 
     case UpdateBlockInfo(
-      blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize) =>
+      blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize) =>
       context.reply(updateBlockInfo(
-        blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize))
+        blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize))
 
     case GetLocations(blockId) =>
       context.reply(getLocations(blockId))
@@ -314,7 +314,7 @@ class BlockManagerMasterEndpoint(
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long,
-      tachyonSize: Long): Boolean = {
+      externalBlockStoreSize: Long): Boolean = {
 
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.isDriver && !isLocal) {
@@ -332,7 +332,7 @@ class BlockManagerMasterEndpoint(
     }
 
     blockManagerInfo(blockManagerId).updateBlockInfo(
-      blockId, storageLevel, memSize, diskSize, tachyonSize)
+      blockId, storageLevel, memSize, diskSize, externalBlockStoreSize)
 
     var locations: mutable.HashSet[BlockManagerId] = null
     if (blockLocations.containsKey(blockId)) {
@@ -396,8 +396,8 @@ case class BlockStatus(
     storageLevel: StorageLevel,
     memSize: Long,
     diskSize: Long,
-    tachyonSize: Long) {
-  def isCached: Boolean = memSize + diskSize + tachyonSize > 0
+    externalBlockStoreSize: Long) {
+  def isCached: Boolean = memSize + diskSize + externalBlockStoreSize > 0
 }
 
 @DeveloperApi
@@ -429,7 +429,7 @@ private[spark] class BlockManagerInfo(
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long,
-      tachyonSize: Long) {
+      externalBlockStoreSize: Long) {
 
     updateLastSeenMs()
 
@@ -445,9 +445,9 @@ private[spark] class BlockManagerInfo(
     }
 
     if (storageLevel.isValid) {
-      /* isValid means it is either stored in-memory, on-disk or on-Tachyon.
+      /* isValid means it is either stored in-memory, on-disk or on-externalBlockStore.
        * The memSize here indicates the data size in or dropped from memory,
-       * tachyonSize here indicates the data size in or dropped from Tachyon,
+       * externalBlockStoreSize here indicates the data size in or dropped from externalBlockStore,
        * and the diskSize here indicates the data size in or dropped to disk.
        * They can be both larger than 0, when a block is dropped from memory to disk.
        * Therefore, a safe way to set BlockStatus is to set its info in accurate modes. */
@@ -464,9 +464,9 @@ private[spark] class BlockManagerInfo(
           blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
       }
       if (storageLevel.useOffHeap) {
-        _blocks.put(blockId, BlockStatus(storageLevel, 0, 0, tachyonSize))
-        logInfo("Added %s on tachyon on %s (size: %s)".format(
-          blockId, blockManagerId.hostPort, Utils.bytesToString(tachyonSize)))
+        _blocks.put(blockId, BlockStatus(storageLevel, 0, 0, externalBlockStoreSize))
+        logInfo("Added %s on ExternalBlockStore on %s (size: %s)".format(
+          blockId, blockManagerId.hostPort, Utils.bytesToString(externalBlockStoreSize)))
       }
     } else if (_blocks.containsKey(blockId)) {
       // If isValid is not true, drop the block.
@@ -482,8 +482,9 @@ private[spark] class BlockManagerInfo(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.diskSize)))
       }
       if (blockStatus.storageLevel.useOffHeap) {
-        logInfo("Removed %s on %s on tachyon (size: %s)".format(
-          blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.tachyonSize)))
+        logInfo("Removed %s on %s on externalBlockStore (size: %s)".format(
+          blockId, blockManagerId.hostPort,
+          Utils.bytesToString(blockStatus.externalBlockStoreSize)))
       }
     }
   }
