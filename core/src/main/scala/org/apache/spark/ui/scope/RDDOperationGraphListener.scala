@@ -27,12 +27,12 @@ import org.apache.spark.ui.SparkUI
  * A SparkListener that constructs a DAG of RDD operations.
  */
 private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListener {
-  private val jobIdToStageIds = new mutable.HashMap[Int, Seq[Int]]
-  private val stageIdToGraph = new mutable.HashMap[Int, RDDOperationGraph]
+  private[ui] val jobIdToStageIds = new mutable.HashMap[Int, Seq[Int]]
+  private[ui] val stageIdToGraph = new mutable.HashMap[Int, RDDOperationGraph]
 
   // Keep track of the order in which these are inserted so we can remove old ones
-  private val jobIds = new mutable.ArrayBuffer[Int]
-  private val stageIds = new mutable.ArrayBuffer[Int]
+  private[ui] val jobIds = new mutable.ArrayBuffer[Int]
+  private[ui] val stageIds = new mutable.ArrayBuffer[Int]
 
   // How many jobs or stages to retain graph metadata for
   private val retainedJobs =
@@ -55,13 +55,8 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
   /** On job start, construct a RDDOperationGraph for each stage in the job for display later. */
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
     val jobId = jobStart.jobId
-    val stageInfos = jobStart.stageInfos
-
-    stageInfos.foreach { stageInfo =>
-      stageIds += stageInfo.stageId
-      stageIdToGraph(stageInfo.stageId) = RDDOperationGraph.makeOperationGraph(stageInfo)
-    }
-    jobIdToStageIds(jobId) = stageInfos.map(_.stageId).sorted
+    jobIds += jobId
+    jobIdToStageIds(jobId) = jobStart.stageInfos.map(_.stageId).sorted
 
     // Remove state for old jobs
     if (jobIds.size >= retainedJobs) {
@@ -73,6 +68,9 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
 
   /** Remove graph metadata for old stages */
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
+    val stageInfo = stageSubmitted.stageInfo
+    stageIds += stageInfo.stageId
+    stageIdToGraph(stageInfo.stageId) = RDDOperationGraph.makeOperationGraph(stageInfo)
     if (stageIds.size >= retainedStages) {
       val toRemove = math.max(retainedStages / 10, 1)
       stageIds.take(toRemove).foreach { id => stageIdToGraph.remove(id) }
