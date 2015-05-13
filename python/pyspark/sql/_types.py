@@ -1228,12 +1228,14 @@ class Row(tuple):
             raise AttributeError(item)
 
     def __reduce__(self):
+        """Returns a tuple so Python knows how to pickle Row."""
         if hasattr(self, "__fields__"):
             return (_create_row, (self.__fields__, tuple(self)))
         else:
             return tuple.__reduce__(self)
 
     def __repr__(self):
+        """Printable representation of Row used in Python REPL."""
         if hasattr(self, "__fields__"):
             return "Row(%s)" % ", ".join("%s=%r" % (k, v)
                                          for k, v in zip(self.__fields__, tuple(self)))

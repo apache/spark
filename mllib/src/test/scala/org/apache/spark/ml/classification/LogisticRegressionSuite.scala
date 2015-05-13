@@ -489,7 +489,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
      * b = \log{P(1) / P(0)} = \log{count_1 / count_0}
      * }}}
      */
-    val interceptTheory = Math.log(histogram(1).toDouble / histogram(0).toDouble)
+    val interceptTheory = math.log(histogram(1).toDouble / histogram(0).toDouble)
     val weightsTheory = Array(0.0, 0.0, 0.0, 0.0)
 
     assert(model.intercept ~== interceptTheory relTol 1E-5)

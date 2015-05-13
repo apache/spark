@@ -60,6 +60,8 @@ abstract class DStream[T: ClassTag] (
     @transient private[streaming] var ssc: StreamingContext
   ) extends Serializable with Logging {
 
+  validateAtInit()
+
   // =======================================================================
   // Methods that should be implemented by subclasses of DStream
   // =======================================================================
@@ -171,7 +173,22 @@ abstract class DStream[T: ClassTag] (
     dependencies.foreach(_.initialize(zeroTime))
   }
 
-  private[streaming] def validate() {
+  private def validateAtInit(): Unit = {
+    ssc.getState() match {
+      case StreamingContextState.INITIALIZED =>
+        // good to go
+      case StreamingContextState.ACTIVE =>
+        throw new SparkException(
+          "Adding new inputs, transformations, and output operations after " +
+            "starting a context is not supported")
+      case StreamingContextState.STOPPED =>
+        throw new SparkException(
+          "Adding new inputs, transformations, and output operations after " +
+            "stopping a context is not supported")
+    }
+  }
+
+  private[streaming] def validateAtStart() {
     assert(rememberDuration != null, "Remember duration is set to null")
 
     assert(
@@ -226,7 +243,7 @@ abstract class DStream[T: ClassTag] (
         math.ceil(rememberDuration.milliseconds / 1000.0).toInt + " seconds."
     )
 
-    dependencies.foreach(_.validate())
+    dependencies.foreach(_.validateAtStart())
 
     logInfo("Slide time = " + slideDuration)
     logInfo("Storage level = " + storageLevel)
