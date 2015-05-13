@@ -91,7 +91,8 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
       val tempDir = getTempFilePath("orcTest").getCanonicalPath
       val range = (0 to 255)
       val data = sparkContext.parallelize(range)
-        .map(x => AllDataTypes(s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0))
+        .map(x =>
+        AllDataTypes(s"$x", x, x.toLong, x.toFloat,x.toDouble, x.toShort, x.toByte, x % 2 == 0))
       data.toDF().saveAsOrcFile(tempDir)
       checkAnswer(
         TestHive.orcFile(tempDir),
@@ -101,7 +102,8 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
 
     test("read/write binary data") {
       val tempDir = getTempFilePath("orcTest").getCanonicalPath
-      sparkContext.parallelize(BinaryData("test".getBytes("utf8")) :: Nil).toDF().saveAsOrcFile(tempDir)
+      sparkContext.parallelize(BinaryData("test".getBytes("utf8")) :: Nil)
+        .toDF().saveAsOrcFile(tempDir)
       TestHive.orcFile(tempDir)
         .map(r => new String(r(0).asInstanceOf[Array[Byte]], "utf8"))
         .collect().toSeq == Seq("test")
@@ -136,7 +138,8 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
       rdd.foreach {
         // '===' does not like string comparison?
         row: Row => {
-          assert(row.getString(1).equals(s"val_$counter"), s"row $counter value ${row.getString(1)} does not match val_$counter")
+          assert(row.getString(1).equals(s"val_$counter"),
+            s"row $counter value ${row.getString(1)} does not match val_$counter")
           counter = counter + 1
         }
       }
@@ -173,7 +176,7 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
 
     //  We only support zlib in hive0.12.0 now
     test("Default Compression options for writing to an Orcfile") {
-      //TODO: support other compress codec
+      // TODO: support other compress codec
       var tempDir = getTempFilePath("orcTest").getCanonicalPath
       val rdd = sparkContext.parallelize((1 to 100))
         .map(i => TestRDDEntry(i, s"val_$i"))
@@ -184,7 +187,7 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
     }
 
     // Following codec is supported in hive-0.13.1, ignore it now
-    ignore("Other Compression options for writing to an Orcfile only supported in hive 0.13.1 and above") {
+    ignore("Other Compression options for writing to an Orcfile - 0.13.1 and above") {
       TestHive.sparkContext.hadoopConfiguration.set(orcDefaultCompressVar, "SNAPPY")
       var tempDir = getTempFilePath("orcTest").getCanonicalPath
       val rdd = sparkContext.parallelize((1 to 100))
