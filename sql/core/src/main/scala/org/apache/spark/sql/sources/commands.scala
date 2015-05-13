@@ -397,7 +397,7 @@ private[sql] class DynamicPartitionWriterContainer(
     }.mkString.stripPrefix(Path.SEPARATOR)
 
     outputWriters.getOrElseUpdate(partitionPath, {
-      val path = new Path(outputCommitter.getWorkPath, partitionPath)
+      val path = new Path(getWorkPath, partitionPath)
       val writer = outputWriterClass.newInstance()
       taskAttemptContext.getConfiguration.set(
         "spark.sql.sources.output.path",
