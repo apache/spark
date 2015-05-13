@@ -45,38 +45,41 @@ public class JavaTestParams extends JavaParams {
     return uid_;
   }
 
-  public IntParam myIntParam;
+  private IntParam myIntParam_;
+  public IntParam myIntParam() { return myIntParam_; }
 
-  public int getMyIntParam() { return (Integer)getOrDefault(myIntParam); }
+  public int getMyIntParam() { return (Integer)getOrDefault(myIntParam_); }
 
   public JavaTestParams setMyIntParam(int value) {
-    set(myIntParam, value); return this;
+    set(myIntParam_, value); return this;
   }
 
-  public DoubleParam myDoubleParam;
+  private DoubleParam myDoubleParam_;
+  public DoubleParam myDoubleParam() { return myDoubleParam_; }
 
-  public double getMyDoubleParam() { return (Double)getOrDefault(myDoubleParam); }
+  public double getMyDoubleParam() { return (Double)getOrDefault(myDoubleParam_); }
 
   public JavaTestParams setMyDoubleParam(double value) {
-    set(myDoubleParam, value); return this;
+    set(myDoubleParam_, value); return this;
   }
 
-  public Param<String> myStringParam;
+  private Param<String> myStringParam_;
+  public Param<String> myStringParam() { return myStringParam_; }
 
-  public String getMyStringParam() { return getOrDefault(myStringParam); }
+  public String getMyStringParam() { return getOrDefault(myStringParam_); }
 
   public JavaTestParams setMyStringParam(String value) {
-    set(myStringParam, value); return this;
+    set(myStringParam_, value); return this;
   }
 
   private void init() {
-    myIntParam = new IntParam(this, "myIntParam", "this is an int param", ParamValidators.gt(0));
-    myDoubleParam = new DoubleParam(this, "myDoubleParam", "this is a double param",
+    myIntParam_ = new IntParam(this, "myIntParam", "this is an int param", ParamValidators.gt(0));
+    myDoubleParam_ = new DoubleParam(this, "myDoubleParam", "this is a double param",
       ParamValidators.inRange(0.0, 1.0));
     List<String> validStrings = Lists.newArrayList("a", "b");
-    myStringParam = new Param<String>(this, "myStringParam", "this is a string param",
+    myStringParam_ = new Param<String>(this, "myStringParam", "this is a string param",
       ParamValidators.inArray(validStrings));
-    setDefault(myIntParam, 1);
-    setDefault(myDoubleParam, 0.5);
+    setDefault(myIntParam_, 1);
+    setDefault(myDoubleParam_, 0.5);
   }
 }

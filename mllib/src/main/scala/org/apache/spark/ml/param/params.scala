@@ -357,16 +357,15 @@ trait Params extends Identifiable with Serializable {
   }
 
   /** Tests whether this instance contains a param with a given name. */
-  def hasParam(paramName: String): Boolean = Try(getParam(paramName)).isSuccess
+  def hasParam(paramName: String): Boolean = {
+    params.exists(_.name == paramName)
+  }
 
   /** Gets a param by its name. */
   def getParam(paramName: String): Param[Any] = {
-    val m = this.getClass.getMethod(paramName)
-    if (Modifier.isPublic(m.getModifiers) && classOf[Param[_]].isAssignableFrom(m.getReturnType)) {
-      m.invoke(this).asInstanceOf[Param[Any]]
-    } else {
-      throw new NoSuchMethodException(s"Param $paramName does not exist.")
-    }
+    params.find(_.name == paramName).getOrElse {
+      throw new NoSuchElementException(s"Param $paramName does not exist.")
+    }.asInstanceOf[Param[Any]]
   }
 
   /**
@@ -428,7 +427,6 @@ trait Params extends Identifiable with Serializable {
    * @param value  the default value
    */
   protected final def setDefault[T](param: Param[T], value: T): this.type = {
-    shouldOwn(param)
     defaultParamMap.put(param, value)
     this
   }
