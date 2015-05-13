@@ -33,6 +33,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.errors.DialectException
@@ -40,7 +41,6 @@ import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.ParserDialect
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, expressions}
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.json._
@@ -49,42 +49,6 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.{Partition, SparkContext}
-
-/**
- * Currently we support the default dialect named "sql", associated with the class
- * [[DefaultParserDialect]]
- *
- * And we can also provide custom SQL Dialect, for example in Spark SQL CLI:
- * {{{
- *-- switch to "hiveql" dialect
- *   spark-sql>SET spark.sql.dialect=hiveql;
- *   spark-sql>SELECT * FROM src LIMIT 1;
- *
- *-- switch to "sql" dialect
- *   spark-sql>SET spark.sql.dialect=sql;
- *   spark-sql>SELECT * FROM src LIMIT 1;
- *
- *-- register the new SQL dialect
- *   spark-sql> SET spark.sql.dialect=com.xxx.xxx.SQL99Dialect;
- *   spark-sql> SELECT * FROM src LIMIT 1;
- *
- *-- register the non-exist SQL dialect
- *   spark-sql> SET spark.sql.dialect=NotExistedClass;
- *   spark-sql> SELECT * FROM src LIMIT 1;
- *
- *-- Exception will be thrown and switch to dialect
- *-- "sql" (for SQLContext) or
- *-- "hiveql" (for HiveContext)
- * }}}
- */
-private[spark] class DefaultParserDialect extends ParserDialect {
-  @transient
-  protected val sqlParser = new catalyst.SqlParser
-
-  override def parse(sqlText: String): LogicalPlan = {
-    sqlParser.parse(sqlText)
-  }
-}
 
 /**
  * The entry point for working with structured data (rows and columns) in Spark.  Allows the
@@ -1276,7 +1240,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       val projectSet = AttributeSet(projectList.flatMap(_.references))
       val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
       val filterCondition =
-        prunePushedDownFilters(filterPredicates).reduceLeftOption(expressions.And)
+        prunePushedDownFilters(filterPredicates).reduceLeftOption(catalyst.expressions.And)
 
       // Right now we still use a projection even if the only evaluation is applying an alias
       // to a column.  Since this is a no-op, it could be avoided. However, using this

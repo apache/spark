@@ -123,7 +123,10 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.parquet.ParquetTestData$"),
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.TestGroupWriteSupport")
+              "org.apache.spark.sql.parquet.TestGroupWriteSupport"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CachedData"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CachedData$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CacheManager")
           ) ++ Seq(
             // SPARK-7530 Added StreamingContext.getState()
             ProblemFilters.exclude[MissingMethodProblem](

@@ -35,7 +35,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.Logging
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.DateUtils
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.util.Utils
 
 /**
