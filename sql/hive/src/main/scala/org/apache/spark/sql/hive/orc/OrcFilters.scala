@@ -99,6 +99,10 @@ private[sql] object OrcFilters extends Logging {
         Some(b1)
       }
       case p@IsNull(attribute: String) => {
+        val b1 = builder.isNull(attribute)
+        Some(b1)
+      }
+      case p@IsNotNull(attribute: String) => {
         val b1 = builder.startNot().isNull(attribute).end()
         Some(b1)
       }
