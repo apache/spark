@@ -547,7 +547,7 @@ class DAGSchedulerSuite
     runEvent(CompletionEvent(
       taskSet.tasks(1), Success, makeMapStatus("hostA", 1), null, createFakeTaskInfo(), null))
 
-    //now we should have a new taskSet for stage 0, which has us retry partition 0
+    // now we should have a new taskSet for stage 0, which has us retry partition 0
     assert(taskSets.size === 2)
     val newTaskSet = taskSets(1)
     assert(newTaskSet.stageId === 0)
