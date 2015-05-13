@@ -515,15 +515,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     }.sortWith { (uiDataL, uiDataR) =>
       val taskInfoL = uiDataL.taskInfo
       val launchTimeL = taskInfoL.launchTime
-      val finishTimeL = if (!taskInfoL.running) taskInfoL.finishTime else currentTime
-      val totalExecutionTimeL = finishTimeL - launchTimeL
 
       val taskInfoR = uiDataR.taskInfo
       val launchTimeR = taskInfoR.launchTime
-      val finishTimeR = if (!taskInfoR.running) taskInfoR.finishTime else currentTime
-      val totalExecutionTimeR = finishTimeR - launchTimeR
 
-      totalExecutionTimeL > totalExecutionTimeR
+      launchTimeL > launchTimeR
     }.take(MAX_TIMELINE_TASKS).map { taskUIData =>
       val taskInfo = taskUIData.taskInfo
       val executorId = taskInfo.executorId
@@ -677,18 +673,16 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
     <span class="expand-task-assignment-timeline">
       <span class="expand-task-assignment-timeline-arrow arrow-closed"></span>
-      <a>Event Timeline (Longest {numEffectiveTasks.min(MAX_TIMELINE_TASKS)} tasks)</a>
+      <a>Event Timeline (Most recent {numEffectiveTasks.min(MAX_TIMELINE_TASKS)} tasks)</a>
     </span> ++
     <div id="task-assignment-timeline" class="collapsed">
-      <div class="timeline-header">
-        <div class="control-panel">
-          <div id="task-assignment-timeline-zoom-lock">
-            <input type="checkbox"></input>
-            <span>Enable zooming</span>
-          </div>
+      <div class="control-panel">
+        <div id="task-assignment-timeline-zoom-lock">
+          <input type="checkbox"></input>
+          <span>Enable zooming</span>
         </div>
-        {TIMELINE_LEGEND}
       </div>
+      {TIMELINE_LEGEND}
     </div> ++
     <script type="text/javascript">
       {Unparsed(s"drawTaskAssignmentTimeline(" +
@@ -769,7 +763,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val diskBytesSpilledSortable = maybeDiskBytesSpilled.map(_.toString).getOrElse("")
       val diskBytesSpilledReadable = maybeDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
 
-      <tr id={"task-" + info.index}>
+      <tr id={"task-" + info.taskId}>
         <td>{info.index}</td>
         <td>{info.taskId}</td>
         <td sorttable_customkey={info.attempt.toString}>{

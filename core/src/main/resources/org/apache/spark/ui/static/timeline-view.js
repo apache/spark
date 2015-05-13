@@ -169,15 +169,13 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, zo
         return "#task-" + taskIdx;
       };
 
-      $(this).click(function() {
-        window.location.href = getSelectorForTaskEntry(this);
-      });
-
       $(this).hover(
         function() {
+          $(getSelectorForTaskEntry(this)).addClass("corresponding-item-hover");
           $($(this).find("div.task-assignment-timeline-content")[0]).tooltip("show");
         },
         function() {
+          $(getSelectorForTaskEntry(this)).removeClass("corresponding-item-hover");
           $($(this).find("div.task-assignment-timeline-content")[0])
           .tooltip("hide");
         }
