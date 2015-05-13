@@ -21,21 +21,18 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapred.InvalidInputException
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.metastore.TableType
-import org.apache.hadoop.hive.ql.metadata.Table
-import org.apache.hadoop.mapred.InvalidInputException
-
 import org.apache.spark.sql._
-import org.apache.spark.util.Utils
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.parquet.ParquetRelation2
+import org.apache.spark.sql.parquet.FSBasedParquetRelation
 import org.apache.spark.sql.sources.LogicalRelation
+import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
@@ -582,11 +579,11 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       )
 
       table("test_parquet_ctas").queryExecution.optimizedPlan match {
-        case LogicalRelation(p: ParquetRelation2) => // OK
+        case LogicalRelation(p: FSBasedParquetRelation) => // OK
         case _ =>
           fail(
             "test_parquet_ctas should be converted to " +
-            s"${classOf[ParquetRelation2].getCanonicalName}")
+            s"${classOf[FSBasedParquetRelation].getCanonicalName}")
       }
 
       // Clenup and reset confs.

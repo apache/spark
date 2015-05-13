@@ -28,11 +28,13 @@ import org.apache.spark.sql.types._
 // TODO Don't extend ParquetTest
 // This test suite extends ParquetTest for some convenient utility methods. These methods should be
 // moved to some more general places, maybe QueryTest.
-class FSBasedRelationSuite extends QueryTest with ParquetTest {
+class FSBasedRelationTest extends QueryTest with ParquetTest {
   override val sqlContext: SQLContext = TestHive
 
   import sqlContext._
   import sqlContext.implicits._
+
+  val dataSourceName = classOf[SimpleTextSource].getCanonicalName
 
   val dataSchema =
     StructType(
@@ -92,17 +94,17 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
     withTempPath { file =>
       testDF.save(
         path = file.getCanonicalPath,
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Overwrite)
 
       testDF.save(
         path = file.getCanonicalPath,
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Overwrite)
 
       checkAnswer(
         load(
-          source = classOf[SimpleTextSource].getCanonicalName,
+          source = dataSourceName,
           options = Map(
             "path" -> file.getCanonicalPath,
             "dataSchema" -> dataSchema.json)),
@@ -114,17 +116,17 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
     withTempPath { file =>
       testDF.save(
         path = file.getCanonicalPath,
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Overwrite)
 
       testDF.save(
         path = file.getCanonicalPath,
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Append)
 
       checkAnswer(
         load(
-          source = classOf[SimpleTextSource].getCanonicalName,
+          source = dataSourceName,
           options = Map(
             "path" -> file.getCanonicalPath,
             "dataSchema" -> dataSchema.json)).orderBy("a"),
@@ -137,7 +139,7 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
       intercept[RuntimeException] {
         testDF.save(
           path = file.getCanonicalPath,
-          source = classOf[SimpleTextSource].getCanonicalName,
+          source = dataSourceName,
           mode = SaveMode.ErrorIfExists)
       }
     }
@@ -147,7 +149,7 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
     withTempDir { file =>
       testDF.save(
         path = file.getCanonicalPath,
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Ignore)
 
       val path = new Path(file.getCanonicalPath)
@@ -159,62 +161,37 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
   test("save()/load() - partitioned table - simple queries") {
     withTempPath { file =>
       partitionedTestDF.save(
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.ErrorIfExists,
         options = Map("path" -> file.getCanonicalPath),
         partitionColumns = Seq("p1", "p2"))
 
       checkQueries(
         load(
-          source = classOf[SimpleTextSource].getCanonicalName,
+          source = dataSourceName,
           options = Map(
             "path" -> file.getCanonicalPath,
             "dataSchema" -> dataSchema.json)))
     }
   }
 
-  test("save()/load() - partitioned table - simple queries - partition columns in data") {
-    withTempDir { file =>
-      val basePath = new Path(file.getCanonicalPath)
-      val fs = basePath.getFileSystem(SparkHadoopUtil.get.conf)
-      val qualifiedBasePath = fs.makeQualified(basePath)
-
-      for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
-        val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
-        sparkContext
-          .parallelize(for (i <- 1 to 3) yield s"$i,val_$i,$p1")
-          .saveAsTextFile(partitionDir.toString)
-      }
-
-      val dataSchemaWithPartition =
-        StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
-
-      checkQueries(
-        load(
-          source = classOf[SimpleTextSource].getCanonicalName,
-          options = Map(
-            "path" -> file.getCanonicalPath,
-            "dataSchema" -> dataSchemaWithPartition.json)))
-    }
-  }
-
   test("save()/load() - partitioned table - Overwrite") {
     withTempPath { file =>
       partitionedTestDF.save(
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Overwrite,
         options = Map("path" -> file.getCanonicalPath),
         partitionColumns = Seq("p1", "p2"))
 
       partitionedTestDF.save(
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Overwrite,
         options = Map("path" -> file.getCanonicalPath),
         partitionColumns = Seq("p1", "p2"))
 
       checkAnswer(
         load(
-          source = classOf[SimpleTextSource].getCanonicalName,
+          source = dataSourceName,
           options = Map(
             "path" -> file.getCanonicalPath,
             "dataSchema" -> dataSchema.json)),
@@ -225,20 +202,20 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
   test("save()/load() - partitioned table - Append") {
     withTempPath { file =>
       partitionedTestDF.save(
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Overwrite,
         options = Map("path" -> file.getCanonicalPath),
         partitionColumns = Seq("p1", "p2"))
 
       partitionedTestDF.save(
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Append,
         options = Map("path" -> file.getCanonicalPath),
         partitionColumns = Seq("p1", "p2"))
 
       checkAnswer(
         load(
-          source = classOf[SimpleTextSource].getCanonicalName,
+          source = dataSourceName,
           options = Map(
             "path" -> file.getCanonicalPath,
             "dataSchema" -> dataSchema.json)),
@@ -249,20 +226,20 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
   test("save()/load() - partitioned table - Append - new partition values") {
     withTempPath { file =>
       partitionedTestDF1.save(
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Overwrite,
         options = Map("path" -> file.getCanonicalPath),
         partitionColumns = Seq("p1", "p2"))
 
       partitionedTestDF2.save(
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Append,
         options = Map("path" -> file.getCanonicalPath),
         partitionColumns = Seq("p1", "p2"))
 
       checkAnswer(
         load(
-          source = classOf[SimpleTextSource].getCanonicalName,
+          source = dataSourceName,
           options = Map(
             "path" -> file.getCanonicalPath,
             "dataSchema" -> dataSchema.json)),
@@ -274,7 +251,7 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
     withTempDir { file =>
       intercept[RuntimeException] {
         partitionedTestDF.save(
-          source = classOf[SimpleTextSource].getCanonicalName,
+          source = dataSourceName,
           mode = SaveMode.ErrorIfExists,
           options = Map("path" -> file.getCanonicalPath),
           partitionColumns = Seq("p1", "p2"))
@@ -286,7 +263,7 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
     withTempDir { file =>
       partitionedTestDF.save(
         path = file.getCanonicalPath,
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Ignore)
 
       val path = new Path(file.getCanonicalPath)
@@ -302,7 +279,7 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
   test("saveAsTable()/load() - non-partitioned table - Overwrite") {
     testDF.saveAsTable(
       tableName = "t",
-      source = classOf[SimpleTextSource].getCanonicalName,
+      source = dataSourceName,
       mode = SaveMode.Overwrite,
       Map("dataSchema" -> dataSchema.json))
 
@@ -314,12 +291,12 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
   test("saveAsTable()/load() - non-partitioned table - Append") {
     testDF.saveAsTable(
       tableName = "t",
-      source = classOf[SimpleTextSource].getCanonicalName,
+      source = dataSourceName,
       mode = SaveMode.Overwrite)
 
     testDF.saveAsTable(
       tableName = "t",
-      source = classOf[SimpleTextSource].getCanonicalName,
+      source = dataSourceName,
       mode = SaveMode.Append)
 
     withTable("t") {
@@ -334,7 +311,7 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
       intercept[AnalysisException] {
         testDF.saveAsTable(
           tableName = "t",
-          source = classOf[SimpleTextSource].getCanonicalName,
+          source = dataSourceName,
           mode = SaveMode.ErrorIfExists)
       }
     }
@@ -346,7 +323,7 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
     withTempTable("t") {
       testDF.saveAsTable(
         tableName = "t",
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Ignore)
 
       assert(table("t").collect().isEmpty)
@@ -356,7 +333,7 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
   test("saveAsTable()/load() - partitioned table - simple queries") {
     partitionedTestDF.saveAsTable(
       tableName = "t",
-      source = classOf[SimpleTextSource].getCanonicalName,
+      source = dataSourceName,
       mode = SaveMode.Overwrite,
       Map("dataSchema" -> dataSchema.json))
 
@@ -368,14 +345,14 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
   test("saveAsTable()/load() - partitioned table - Overwrite") {
     partitionedTestDF.saveAsTable(
       tableName = "t",
-      source = classOf[SimpleTextSource].getCanonicalName,
+      source = dataSourceName,
       mode = SaveMode.Overwrite,
       options = Map("dataSchema" -> dataSchema.json),
       partitionColumns = Seq("p1", "p2"))
 
     partitionedTestDF.saveAsTable(
       tableName = "t",
-      source = classOf[SimpleTextSource].getCanonicalName,
+      source = dataSourceName,
       mode = SaveMode.Overwrite,
       options = Map("dataSchema" -> dataSchema.json),
       partitionColumns = Seq("p1", "p2"))
@@ -388,14 +365,14 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
   test("saveAsTable()/load() - partitioned table - Append") {
     partitionedTestDF.saveAsTable(
       tableName = "t",
-      source = classOf[SimpleTextSource].getCanonicalName,
+      source = dataSourceName,
       mode = SaveMode.Overwrite,
       options = Map("dataSchema" -> dataSchema.json),
       partitionColumns = Seq("p1", "p2"))
 
     partitionedTestDF.saveAsTable(
       tableName = "t",
-      source = classOf[SimpleTextSource].getCanonicalName,
+      source = dataSourceName,
       mode = SaveMode.Append,
       options = Map("dataSchema" -> dataSchema.json),
       partitionColumns = Seq("p1", "p2"))
@@ -408,14 +385,14 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
   test("saveAsTable()/load() - partitioned table - Append - new partition values") {
     partitionedTestDF1.saveAsTable(
       tableName = "t",
-      source = classOf[SimpleTextSource].getCanonicalName,
+      source = dataSourceName,
       mode = SaveMode.Overwrite,
       options = Map("dataSchema" -> dataSchema.json),
       partitionColumns = Seq("p1", "p2"))
 
     partitionedTestDF2.saveAsTable(
       tableName = "t",
-      source = classOf[SimpleTextSource].getCanonicalName,
+      source = dataSourceName,
       mode = SaveMode.Append,
       options = Map("dataSchema" -> dataSchema.json),
       partitionColumns = Seq("p1", "p2"))
@@ -428,7 +405,7 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
   test("saveAsTable()/load() - partitioned table - Append - mismatched partition columns") {
     partitionedTestDF1.saveAsTable(
       tableName = "t",
-      source = classOf[SimpleTextSource].getCanonicalName,
+      source = dataSourceName,
       mode = SaveMode.Overwrite,
       options = Map("dataSchema" -> dataSchema.json),
       partitionColumns = Seq("p1", "p2"))
@@ -437,7 +414,7 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
     intercept[Throwable] {
       partitionedTestDF2.saveAsTable(
         tableName = "t",
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Append,
         options = Map("dataSchema" -> dataSchema.json),
         partitionColumns = Seq("p1"))
@@ -447,7 +424,7 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
     intercept[Throwable] {
       partitionedTestDF2.saveAsTable(
         tableName = "t",
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Append,
         options = Map("dataSchema" -> dataSchema.json),
         partitionColumns = Seq("p2", "p1"))
@@ -461,7 +438,7 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
       intercept[AnalysisException] {
         partitionedTestDF.saveAsTable(
           tableName = "t",
-          source = classOf[SimpleTextSource].getCanonicalName,
+          source = dataSourceName,
           mode = SaveMode.ErrorIfExists,
           options = Map("dataSchema" -> dataSchema.json),
           partitionColumns = Seq("p1", "p2"))
@@ -475,7 +452,7 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
     withTempTable("t") {
       partitionedTestDF.saveAsTable(
         tableName = "t",
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Ignore,
         options = Map("dataSchema" -> dataSchema.json),
         partitionColumns = Seq("p1", "p2"))
@@ -487,13 +464,13 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
   test("Hadoop style globbing") {
     withTempPath { file =>
       partitionedTestDF.save(
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         mode = SaveMode.Overwrite,
         options = Map("path" -> file.getCanonicalPath),
         partitionColumns = Seq("p1", "p2"))
 
       val df = load(
-        source = classOf[SimpleTextSource].getCanonicalName,
+        source = dataSourceName,
         options = Map(
           "path" -> s"${file.getCanonicalPath}/p1=*/p2=???",
           "dataSchema" -> dataSchema.json))
@@ -518,6 +495,70 @@ class FSBasedRelationSuite extends QueryTest with ParquetTest {
 
       assert(actualPaths === expectedPaths)
       checkAnswer(df, partitionedTestDF.collect())
+    }
+  }
+}
+
+class SimpleTextRelationSuite extends FSBasedRelationTest {
+  override val dataSourceName: String = classOf[SimpleTextSource].getCanonicalName
+
+  import sqlContext._
+
+  test("save()/load() - partitioned table - simple queries - partition columns in data") {
+    withTempDir { file =>
+      val basePath = new Path(file.getCanonicalPath)
+      val fs = basePath.getFileSystem(SparkHadoopUtil.get.conf)
+      val qualifiedBasePath = fs.makeQualified(basePath)
+
+      for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
+        val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
+        sparkContext
+          .parallelize(for (i <- 1 to 3) yield s"$i,val_$i,$p1")
+          .saveAsTextFile(partitionDir.toString)
+      }
+
+      val dataSchemaWithPartition =
+        StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
+
+      checkQueries(
+        load(
+          source = dataSourceName,
+          options = Map(
+            "path" -> file.getCanonicalPath,
+            "dataSchema" -> dataSchemaWithPartition.json)))
+    }
+  }
+}
+
+class FSBasedParquetRelationSuite extends FSBasedRelationTest {
+  override val dataSourceName: String = classOf[parquet.DefaultSource].getCanonicalName
+
+  import sqlContext._
+  import sqlContext.implicits._
+
+  test("save()/load() - partitioned table - simple queries - partition columns in data") {
+    withTempDir { file =>
+      val basePath = new Path(file.getCanonicalPath)
+      val fs = basePath.getFileSystem(SparkHadoopUtil.get.conf)
+      val qualifiedBasePath = fs.makeQualified(basePath)
+
+      for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
+        val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
+        sparkContext
+          .parallelize(for (i <- 1 to 3) yield (i, s"val_$i", p1))
+          .toDF("a", "b", "p1")
+          .saveAsParquetFile(partitionDir.toString)
+      }
+
+      val dataSchemaWithPartition =
+        StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
+
+      checkQueries(
+        load(
+          source = dataSourceName,
+          options = Map(
+            "path" -> file.getCanonicalPath,
+            "dataSchema" -> dataSchemaWithPartition.json)))
     }
   }
 }
