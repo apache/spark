@@ -17,6 +17,9 @@
 
 package org.apache.spark.shuffle.unsafe
 
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
+
 import org.apache.spark._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle._
@@ -25,7 +28,7 @@ import org.apache.spark.shuffle.sort.SortShuffleManager
 /**
  * Subclass of [[BaseShuffleHandle]], used to identify when we've chosen to use the new shuffle.
  */
-private class UnsafeShuffleHandle[K, V](
+private[spark] class UnsafeShuffleHandle[K, V](
     shuffleId: Int,
     numMaps: Int,
     dependency: ShuffleDependency[K, V, V])
@@ -121,8 +124,10 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
       "manager; its optimized shuffles will continue to spill to disk when necessary.")
   }
 
-
   private[this] val sortShuffleManager: SortShuffleManager = new SortShuffleManager(conf)
+  private[this] val shufflesThatFellBackToSortShuffle =
+    Collections.newSetFromMap(new ConcurrentHashMap[Int, java.lang.Boolean]())
+  private[this] val numMapsForShufflesThatUsedNewPath = new ConcurrentHashMap[Int, Int]()
 
   /**
    * Register a shuffle with the manager and obtain a handle for it to pass to tasks.
@@ -158,8 +163,8 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
       context: TaskContext): ShuffleWriter[K, V] = {
     handle match {
       case unsafeShuffleHandle: UnsafeShuffleHandle[K, V] =>
+        numMapsForShufflesThatUsedNewPath.putIfAbsent(handle.shuffleId, unsafeShuffleHandle.numMaps)
         val env = SparkEnv.get
-        // TODO: do we need to do anything to register the shuffle here?
         new UnsafeShuffleWriter(
           env.blockManager,
           shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver],
@@ -170,17 +175,26 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
           context,
           env.conf)
       case other =>
+        shufflesThatFellBackToSortShuffle.add(handle.shuffleId)
         sortShuffleManager.getWriter(handle, mapId, context)
     }
   }
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
-    // TODO: need to do something here for our unsafe path
-    sortShuffleManager.unregisterShuffle(shuffleId)
+    if (shufflesThatFellBackToSortShuffle.remove(shuffleId)) {
+      sortShuffleManager.unregisterShuffle(shuffleId)
+    } else {
+      Option(numMapsForShufflesThatUsedNewPath.remove(shuffleId)).foreach { numMaps =>
+        (0 until numMaps).foreach { mapId =>
+          shuffleBlockResolver.removeDataByMap(shuffleId, mapId)
+        }
+      }
+      true
+    }
   }
 
-  override def shuffleBlockResolver: ShuffleBlockResolver = {
+  override val shuffleBlockResolver: IndexShuffleBlockResolver = {
     sortShuffleManager.shuffleBlockResolver
   }
 
