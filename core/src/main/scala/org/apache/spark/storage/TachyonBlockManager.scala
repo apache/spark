@@ -96,11 +96,12 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     val os = file.getOutStream(WriteType.TRY_CACHE)
     try {
       os.write(bytes.array())
-      os.close()
     } catch {
       case e : Exception => 
         logWarning(s"Failed to put byes of block $blockId into Tachyon", e)
         os.cancel()
+    } finally {
+      os.close()
     }
   }
 
@@ -109,11 +110,12 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     val os = file.getOutStream(WriteType.TRY_CACHE)
     try {
       blockManager.dataSerializeStream(blockId, os, values)
-      os.close()
     } catch {
       case e : Exception => 
         logWarning(s"Failed to put values of block $blockId into Tachyon", e)
         os.cancel()
+    } finally {
+      os.close()
     }
   }
 
