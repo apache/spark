@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.errors.DialectException
-import org.apache.spark.sql.DefaultDialect
+import org.apache.spark.sql.DefaultParserDialect
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
 import org.apache.spark.sql.hive.MetastoreRelation
 import org.apache.spark.sql.hive.test.TestHive
@@ -53,7 +53,7 @@ case class WindowData(
     area: String,
     product: Int)
 /** A SQL Dialect for testing purpose, and it can not be nested type */
-class MyDialect extends DefaultDialect
+class MyDialect extends DefaultParserDialect
 
 /**
  * A collection of hive query tests where we generate the answers ourselves instead of depending on
@@ -201,7 +201,7 @@ class SQLQuerySuite extends QueryTest {
     var message = intercept[AnalysisException] {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
     }.getMessage
-    assert(message.contains("Table ctas1 already exists"))
+    assert(message.contains("ctas1 already exists"))
     checkRelation("ctas1", true)
     sql("DROP TABLE ctas1")
 
@@ -247,7 +247,7 @@ class SQLQuerySuite extends QueryTest {
 
     // set the dialect back to the DefaultSQLDialect
     sql("SET spark.sql.dialect=sql")
-    assert(getSQLDialect().getClass === classOf[DefaultDialect])
+    assert(getSQLDialect().getClass === classOf[DefaultParserDialect])
     sql("SET spark.sql.dialect=hiveql")
     assert(getSQLDialect().getClass === classOf[HiveQLDialect])
 
@@ -314,7 +314,7 @@ class SQLQuerySuite extends QueryTest {
           SELECT key, value
           FROM src
           ORDER BY key, value""").collect().toSeq)
-    intercept[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] {
+    intercept[AnalysisException] {
       sql(
         """CREATE TABLE ctas4 AS
           | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
@@ -491,6 +491,12 @@ class SQLQuerySuite extends QueryTest {
         sql("SELECT * FROM sampled WHERE key % 2 = 1"),
         Seq.empty[Row])
     }
+  }
+
+  test("SPARK-4699 HiveContext should be case insensitive by default") {
+    checkAnswer(
+      sql("SELECT KEY FROM Src ORDER BY value"),
+      sql("SELECT key FROM src ORDER BY value").collect().toSeq)
   }
 
   test("SPARK-5284 Insert into Hive throws NPE when a inner complex type field has a null value") {
@@ -750,5 +756,12 @@ class SQLQuerySuite extends QueryTest {
         (5, "c", 1, 5),
         (6, "c", 0, 6)
       ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("test case key when") {
+    (1 to 5).map(i => (i, i.toString)).toDF("k", "v").registerTempTable("t")
+    checkAnswer(
+      sql("SELECT CASE k WHEN 2 THEN 22 WHEN 4 THEN 44 ELSE 0 END, v FROM t"),
+      Row(0, "1") :: Row(22, "2") :: Row(0, "3") :: Row(44, "4") :: Row(0, "5") :: Nil)
   }
 }

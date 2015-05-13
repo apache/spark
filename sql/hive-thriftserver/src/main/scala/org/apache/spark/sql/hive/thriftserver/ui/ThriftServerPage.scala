@@ -29,7 +29,7 @@ import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui._
 
 
-/** Page for Spark Web UI that shows statistics of a streaming job */
+/** Page for Spark Web UI that shows statistics of a thrift server */
 private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage("") with Logging {
 
   private val listener = parent.listener
@@ -42,7 +42,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       generateBasicStats() ++
       <br/> ++
       <h4>
-        {listener.sessionList.size} session(s) are online,
+        {listener.onlineSessionNum} session(s) are online,
         running {listener.totalRunning} SQL statement(s)
       </h4> ++
       generateSessionStatsTable() ++
@@ -50,12 +50,12 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     UIUtils.headerSparkPage("ThriftServer", content, parent, Some(5000))
   }
 
-  /** Generate basic stats of the streaming program */
+  /** Generate basic stats of the thrift server program */
   private def generateBasicStats(): Seq[Node] = {
     val timeSinceStart = System.currentTimeMillis() - startTime.getTime
     <ul class ="unstyled">
       <li>
-        <strong>Started at: </strong> {startTime.toString}
+        <strong>Started at: </strong> {formatDate(startTime)}
       </li>
       <li>
         <strong>Time since start: </strong>{formatDurationVerbose(timeSinceStart)}
@@ -148,7 +148,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
         <tr>
           <td> {session.userName} </td>
           <td> {session.ip} </td>
-          <td> <a href={sessionLink}> {session.sessionId} </a> </td>,
+          <td> <a href={sessionLink}> {session.sessionId} </a> </td>
           <td> {formatDate(session.startTimestamp)} </td>
           <td> {if(session.finishTimestamp > 0) formatDate(session.finishTimestamp)} </td>
           <td> {formatDurationOption(Some(session.totalTime))} </td>

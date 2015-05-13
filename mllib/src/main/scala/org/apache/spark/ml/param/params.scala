@@ -22,6 +22,7 @@ import java.util.NoSuchElementException
 
 import scala.annotation.varargs
 import scala.collection.mutable
+import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.util.Identifiable
@@ -218,6 +219,19 @@ class BooleanParam(parent: Params, name: String, doc: String) // No need for isV
   override def w(value: Boolean): ParamPair[Boolean] = super.w(value)
 }
 
+/** Specialized version of [[Param[Array[T]]]] for Java. */
+class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array[String] => Boolean)
+  extends Param[Array[String]](parent, name, doc, isValid) {
+
+  def this(parent: Params, name: String, doc: String) =
+    this(parent, name, doc, ParamValidators.alwaysTrue)
+
+  override def w(value: Array[String]): ParamPair[Array[String]] = super.w(value)
+
+  /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
+  def w(value: java.util.List[String]): ParamPair[Array[String]] = w(value.asScala.toArray)
+}
+
 /**
  * A param amd its value.
  */
@@ -310,9 +324,7 @@ trait Params extends Identifiable with Serializable {
    * Sets a parameter in the embedded param map.
    */
   protected final def set[T](param: Param[T], value: T): this.type = {
-    shouldOwn(param)
-    paramMap.put(param.asInstanceOf[Param[Any]], value)
-    this
+    set(param -> value)
   }
 
   /**
@@ -320,6 +332,15 @@ trait Params extends Identifiable with Serializable {
    */
   protected final def set(param: String, value: Any): this.type = {
     set(getParam(param), value)
+  }
+
+  /**
+   * Sets a parameter in the embedded param map.
+   */
+  protected final def set(paramPair: ParamPair[_]): this.type = {
+    shouldOwn(paramPair.param)
+    paramMap.put(paramPair)
+    this
   }
 
   /**
@@ -367,8 +388,7 @@ trait Params extends Identifiable with Serializable {
    * Sets default values for a list of params.
    *
    * Note: Java developers should use the single-parameter [[setDefault()]].
-   *       Annotating this with varargs causes compilation failures.
-   *
+   *       Annotating this with varargs causes compilation failures. See SPARK-7498.
    * @param paramPairs  a list of param pairs that specify params and their default values to set
    *                    respectively. Make sure that the params are initialized before this method
    *                    gets called.

@@ -121,10 +121,23 @@ private[ui] class StageTableBase(
     <div>{stageDesc.getOrElse("")} {killLink} {nameLink} {details}</div>
   }
 
+  protected def missingStageRow(stageId: Int): Seq[Node] = {
+    <td>{stageId}</td> ++
+    {if (isFairScheduler) {<td>-</td>} else Seq.empty} ++
+    <td>No data available for this stage</td> ++ // Description
+    <td></td> ++ // Submitted
+    <td></td> ++ // Duration
+    <td></td> ++ // Tasks: Succeeded/Total
+    <td></td> ++ // Input
+    <td></td> ++ // Output
+    <td></td> ++ // Shuffle Read
+    <td></td> // Shuffle Write
+  }
+
   protected def stageRow(s: StageInfo): Seq[Node] = {
     val stageDataOption = listener.stageIdToData.get((s.stageId, s.attemptId))
     if (stageDataOption.isEmpty) {
-      return <td>{s.stageId}</td><td>No data available for this stage</td>
+      return missingStageRow(s.stageId)
     }
 
     val stageData = stageDataOption.get

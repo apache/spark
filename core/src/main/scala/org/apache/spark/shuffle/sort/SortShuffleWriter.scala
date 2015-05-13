@@ -20,12 +20,12 @@ package org.apache.spark.shuffle.sort
 import org.apache.spark.{MapOutputTracker, SparkEnv, Logging, TaskContext}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.shuffle.{IndexShuffleBlockManager, ShuffleWriter, BaseShuffleHandle}
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleWriter, BaseShuffleHandle}
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.ExternalSorter
 
 private[spark] class SortShuffleWriter[K, V, C](
-    shuffleBlockManager: IndexShuffleBlockManager,
+    shuffleBlockResolver: IndexShuffleBlockResolver,
     handle: BaseShuffleHandle[K, V, C],
     mapId: Int,
     context: TaskContext)
@@ -65,13 +65,13 @@ private[spark] class SortShuffleWriter[K, V, C](
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately
     // (see SPARK-3570).
-    val outputFile = shuffleBlockManager.getDataFile(dep.shuffleId, mapId)
+    val outputFile = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
     // Because we append to the data file, we need the index file to know the current size of the
     // data file as a starting point
     val initialFileLength = outputFile.length()
-    val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockManager.NOOP_REDUCE_ID)
+    val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
     val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile)
-    shuffleBlockManager.writeIndexFile(dep.shuffleId, mapId, partitionLengths, initialFileLength)
+    shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths, initialFileLength)
 
     mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
   }
@@ -87,7 +87,7 @@ private[spark] class SortShuffleWriter[K, V, C](
         return Option(mapStatus)
       } else {
         // The map task failed, so delete our output data.
-        shuffleBlockManager.removeDataByMap(dep.shuffleId, mapId)
+        shuffleBlockResolver.removeDataByMap(dep.shuffleId, mapId)
         return None
       }
     } finally {

@@ -85,6 +85,7 @@ private[shared] object SharedParamsCodeGen {
         case _ if c == classOf[Float] => "FloatParam"
         case _ if c == classOf[Double] => "DoubleParam"
         case _ if c == classOf[Boolean] => "BooleanParam"
+        case _ if c.isArray && c.getComponentType == classOf[String] => s"StringArrayParam"
         case _ => s"Param[${getTypeString(c)}]"
       }
     }

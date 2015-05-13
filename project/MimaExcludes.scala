@@ -89,14 +89,28 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Vector.numActives")
           ) ++ Seq(
+            // Execution should never be included as its always internal.
+            MimaBuild.excludeSparkPackage("sql.execution"),
             // This `protected[sql]` method was removed in 1.3.1
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.sql.SQLContext.checkAnalysis"),
-            // This `private[sql]` class was removed in 1.4.0:
+            // These `private[sql]` class were removed in 1.4.0:
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.execution.AddExchange"),
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.execution.AddExchange$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.PartitionSpec"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.PartitionSpec$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.Partition"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.Partition$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetRelation2$PartitionValues"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetRelation2$PartitionValues$"),
             // These test support classes were moved out of src/main and into src/test:
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.parquet.ParquetTestData"),
@@ -104,6 +118,10 @@ object MimaExcludes {
               "org.apache.spark.sql.parquet.ParquetTestData$"),
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.parquet.TestGroupWriteSupport")
+          ) ++ Seq(
+            // SPARK-7530 Added StreamingContext.getState()
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.StreamingContext.state_=")
           )
 
         case v if v.startsWith("1.3") =>

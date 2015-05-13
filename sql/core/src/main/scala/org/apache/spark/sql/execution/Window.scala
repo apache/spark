@@ -112,7 +112,7 @@ case class Window(
     }
   }
 
-  def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[Row] = {
     child.execute().mapPartitions { iter =>
       new Iterator[Row] {
 
