@@ -19,12 +19,12 @@ package org.apache.spark.examples.ml
 
 import java.util.concurrent.TimeUnit.{NANOSECONDS => NANO}
 
-import org.apache.spark.ml.util.MetadataUtils
 import scopt.OptionParser
 
 import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.classification.{OneVsRest, LogisticRegression}
+import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
@@ -150,11 +150,12 @@ object OneVsRestExample {
 
     // compute the false positive rate per label
     val predictionColSchema = predictions.schema("prediction")
-    val numClasses = MetadataUtils.getNumClasses(predictionColSchema).get;
+    val numClasses = MetadataUtils.getNumClasses(predictionColSchema).get
     val fprs = Range(0, numClasses).map(p => (p, metrics.falsePositiveRate(p.toDouble)))
 
-    println("label\tfpr");
-    println(fprs.map {case (label, fpr) => label + "\t" + fpr}.mkString("\n"));
+    println("label\tfpr")
+
+    println(fprs.map {case (label, fpr) => label + "\t" + fpr}.mkString("\n"))
   }
 
   private def time[R](block: => R): (Long, R) = {
