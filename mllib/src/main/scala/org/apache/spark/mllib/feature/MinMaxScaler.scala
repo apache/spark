@@ -25,27 +25,25 @@ import org.apache.spark.rdd.RDD
 
 /**
  * :: Experimental ::
- * Performs a linear transformation on the original data values using column summary
- * statistics, to scale each feature to a given range, which is commonly known as min-max
- * normalization or Rescaling.
+ * Rescale original data values to a new range [lowerBound, upperBound] linearly using column
+ * summary statistics (minimum and maximum), which is also known as min-max normalization or
+ * Rescaling. The rescaled value for feature E is calculated as,
  *
- *  Normalized(x) = (x - min) / (max - min) * scale + newBase
+ * Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (upperBound - lowerBound) + lowerBound
  *
- * With default parameters (newBase = 0 and scale = 1), MinMaxScaler is handy to normalize input
- * to range [0, 1].
- * @param newBase minimum value after transformation, shared by all features
- * @param scale parameter for vector scaling, shared by all features
+ * @param lowerBound minimum value after transformation, shared by all features
+ * @param upperBound maximum value after transformation, shared by all features
  */
 
 @Experimental
-class MinMaxScaler(newBase: Double, scale: Double) extends Logging {
+class MinMaxScaler(lowerBound: Double, upperBound: Double) extends Logging {
 
-  def this() = this(newBase = 0.0, scale = 1.0)
+  def this() = this(lowerBound = 0.0, upperBound = 1.0)
   /**
    * Computes the min and max and stores as a model to be used for later scaling.
    *
-   * @param data The data used to compute the min and max to build the transformation model.
-   * @return a MinMaxScalerModel
+   * @param data The data used to collect the min and max for each feature.
+   * @return a MinMaxScalerModel containing statistics and can be used to perform rescaling
    */
   def fit(data: RDD[Vector]): MinMaxScalerModel = {
 
@@ -53,41 +51,41 @@ class MinMaxScaler(newBase: Double, scale: Double) extends Logging {
       (aggregator, data) => aggregator.add(data),
       (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
 
-    new MinMaxScalerModel(summary.min, summary.max, newBase, scale)
+    new MinMaxScalerModel(summary.min, summary.max, lowerBound, upperBound)
   }
 }
 
 /**
  * :: Experimental ::
- * Represents a MinMaxScaler model that can transform vectors.
+ * Represents a MinMaxScaler model that can rescale vectors to a new range [lowerBound, upperBound]
  *
  * @param min column min values
  * @param max column max values
- * @param newBase new minimum value after transformation, shared by all features
- * @param scale controls the range after transformation, shared by all features
+ * @param lowerBound new minimum value after transformation, shared by all features
+ * @param upperBound new maximum value after transformation, shared by all features
  */
 @Experimental
 class MinMaxScalerModel (
     val min: Vector,
     val max: Vector,
-    var newBase: Double,
-    var scale: Double) extends VectorTransformer {
+    var lowerBound: Double,
+    var upperBound: Double) extends VectorTransformer {
 
   def this(min: Vector, max: Vector) {
-    this(min, max, newBase = 0, scale = 1.0)
+    this(min, max, lowerBound = 0, upperBound = 1.0)
     require(min.size == max.size,
         "min and max vectors must have equal size if both are provided")
   }
 
   @DeveloperApi
-  def setNewBase(newBase: Double): this.type = {
-    this.newBase = newBase
+  def setLowerBound(lowerBound: Double): this.type = {
+    this.lowerBound = lowerBound
     this
   }
 
   @DeveloperApi
-  def setScale(scale: Double): this.type = {
-    this.scale = scale
+  def setUpperBound(upperBound: Double): this.type = {
+    this.upperBound = upperBound
     this
   }
 
@@ -95,7 +93,8 @@ class MinMaxScalerModel (
    * Applies MinMax normalization transformation on a vector.
    *
    * @param vector Vector to be Rescaled (normalized).
-   * @return Rescaled vector. If min == max for a feature, it will return 0.5 * scale + base
+   * @return Rescaled vector. If min == max for a feature, it will return 0.5 * (lowerBound +
+   *         upperBound)
    */
   override def transform(vector: Vector): Vector = {
 
@@ -107,7 +106,7 @@ class MinMaxScalerModel (
         while(i < size) {
           val range = max(i) - min(i)
           val raw = if(range != 0) (values(i) - min(i)) / range else 0.5
-          values(i) =  raw * scale + newBase
+          values(i) =  raw * (upperBound - lowerBound) + lowerBound
           i += 1
         }
         Vectors.dense(values)
@@ -121,7 +120,7 @@ class MinMaxScalerModel (
           val index = indices(i)
           val range = max(index) - min(index)
           val raw = if(range != 0) (values(i) - min(index)) / range else 0.5
-          values(i) = raw  * scale + newBase
+          values(i) = raw  * (upperBound - lowerBound) + lowerBound
           i += 1
         }
         Vectors.sparse(size, indices, values)
