@@ -240,3 +240,19 @@ object SVMWithSGD {
     train(input, numIterations, 1.0, 0.01, 1.0)
   }
 }
+
+/**
+ * Train a classification model for SVM using Limited-memory BFGS.
+ * NOTE: Labels used in SVM should be {0, 1}
+ */
+class SVMWithLBFGS
+  extends GeneralizedLinearAlgorithm[SVMModel] with Serializable {
+
+  override val optimizer = new LBFGS(new HingeGradient(), new SquaredL2Updater())
+
+  override protected val validators = List(DataValidators.binaryLabelValidator)
+
+  override protected def createModel(weights: Vector, intercept: Double) = {
+    new SVMModel(weights, intercept)
+  }
+}
