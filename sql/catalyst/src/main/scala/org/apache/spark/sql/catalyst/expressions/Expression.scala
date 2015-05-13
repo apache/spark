@@ -112,6 +112,19 @@ case class GroupExpression(children: Seq[Expression]) extends Expression {
 }
 
 /**
+ * The output expression probably will be invalid, and this is ONLY
+ * for expression equality checking purpose.
+ */
+object ExpressionEquality {
+  def apply(expr: Expression): Expression = expr.transformUp {
+    case n: AttributeReference =>
+      // This is a hack way to simplify the expression, as we don't care about
+      // the `name` for AttributeReference in semantic equality for an expression
+      new AttributeReference(null, n.dataType, n.nullable, n.metadata)(n.exprId, n.qualifiers)
+  }
+}
+
+/**
  * Expressions that require a specific `DataType` as input should implement this trait
  * so that the proper type conversions can be performed in the analyzer.
  */
