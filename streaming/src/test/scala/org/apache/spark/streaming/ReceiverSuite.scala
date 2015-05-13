@@ -256,8 +256,8 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     }
 
     withStreamingContext(new StreamingContext(sparkConf, batchDuration)) { ssc =>
-      val receiver1 = ssc.sparkContext.clean(new FakeReceiver(sendData = true))
-      val receiver2 = ssc.sparkContext.clean(new FakeReceiver(sendData = true))
+      val receiver1 = new FakeReceiver(sendData = true)
+      val receiver2 = new FakeReceiver(sendData = true)
       val receiverStream1 = ssc.receiverStream(receiver1)
       val receiverStream2 = ssc.receiverStream(receiver2)
       receiverStream1.register()

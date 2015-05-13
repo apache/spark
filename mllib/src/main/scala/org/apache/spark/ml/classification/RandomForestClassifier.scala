@@ -20,10 +20,9 @@ package org.apache.spark.ml.classification
 import scala.collection.mutable
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
-import org.apache.spark.ml.impl.tree._
+import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
+import org.apache.spark.ml.tree.{RandomForestParams, TreeClassifierParams, DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint

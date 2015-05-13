@@ -25,6 +25,7 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS,
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.{HasElasticNetParam, HasMaxIter, HasRegParam, HasTol}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -39,7 +40,7 @@ import org.apache.spark.util.StatCounter
 /**
  * Params for linear regression.
  */
-private[regression] trait LinearRegressionParams extends RegressorParams
+private[regression] trait LinearRegressionParams extends PredictorParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
 
 /**
@@ -105,14 +106,16 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (summarizer, statCounter) = instances.treeAggregate(
-      (new MultivariateOnlineSummarizer, new StatCounter))( {
-        case ((summarizer: MultivariateOnlineSummarizer, statCounter: StatCounter),
-        (label: Double, features: Vector)) =>
-          (summarizer.add(features), statCounter.merge(label))
-      }, {
-        case ((summarizer1: MultivariateOnlineSummarizer, statCounter1: StatCounter),
-        (summarizer2: MultivariateOnlineSummarizer, statCounter2: StatCounter)) =>
-          (summarizer1.merge(summarizer2), statCounter1.merge(statCounter2))
+      (new MultivariateOnlineSummarizer, new StatCounter))(
+        seqOp = (c, v) => (c, v) match {
+          case ((summarizer: MultivariateOnlineSummarizer, statCounter: StatCounter),
+          (label: Double, features: Vector)) =>
+            (summarizer.add(features), statCounter.merge(label))
+      },
+        combOp = (c1, c2) => (c1, c2) match {
+          case ((summarizer1: MultivariateOnlineSummarizer, statCounter1: StatCounter),
+          (summarizer2: MultivariateOnlineSummarizer, statCounter2: StatCounter)) =>
+            (summarizer1.merge(summarizer2), statCounter1.merge(statCounter2))
       })
 
     val numFeatures = summarizer.mean.size
@@ -240,7 +243,7 @@ class LinearRegressionModel private[ml] (
  *     + \bar{y} / \hat{y}||^2
  *   = 1/2n ||\sum_i w_i^\prime x_i - y / \hat{y} + offset||^2 = 1/2n diff^2
  * }}}
- * where w_i^\prime is the effective weights defined by w_i/\hat{x_i}, offset is
+ * where w_i^\prime^ is the effective weights defined by w_i/\hat{x_i}, offset is
  * {{{
  * - \sum_i (w_i/\hat{x_i})\bar{x_i} + \bar{y} / \hat{y}.
  * }}}, and diff is

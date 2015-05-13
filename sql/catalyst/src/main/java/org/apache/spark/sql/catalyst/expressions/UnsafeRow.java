@@ -145,7 +145,7 @@ public final class UnsafeRow implements MutableRow {
 
   private void assertIndexIsValid(int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
-    assert index < numFields : "index (" + index + ") should <= " + numFields;
+    assert index < numFields : "index (" + index + ") should < " + numFields;
   }
 
   @Override

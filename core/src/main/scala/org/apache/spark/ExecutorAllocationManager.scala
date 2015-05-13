@@ -21,7 +21,10 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
+import com.codahale.metrics.{Gauge, MetricRegistry}
+
 import org.apache.spark.scheduler._
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.util.{ThreadUtils, Clock, SystemClock, Utils}
 
 /**
@@ -143,6 +146,9 @@ private[spark] class ExecutorAllocationManager(
   // Executor that handles the scheduling task.
   private val executor =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("spark-dynamic-executor-allocation")
+
+  // Metric source for ExecutorAllocationManager to expose internal status to MetricsSystem.
+  val executorAllocationManagerSource = new ExecutorAllocationManagerSource
 
   /**
    * Verify that the settings specified through the config are valid.
@@ -579,6 +585,29 @@ private[spark] class ExecutorAllocationManager(
     }
   }
 
+  /**
+   * Metric source for ExecutorAllocationManager to expose its internal executor allocation
+   * status to MetricsSystem.
+   * Note: These metrics heavily rely on the internal implementation of
+   * ExecutorAllocationManager, metrics or value of metrics will be changed when internal
+   * implementation is changed, so these metrics are not stable across Spark version.
+   */
+  private[spark] class ExecutorAllocationManagerSource extends Source {
+    val sourceName = "ExecutorAllocationManager"
+    val metricRegistry = new MetricRegistry()
+
+    private def registerGauge[T](name: String, value: => T, defaultValue: T): Unit = {
+      metricRegistry.register(MetricRegistry.name("executors", name), new Gauge[T] {
+        override def getValue: T = synchronized { Option(value).getOrElse(defaultValue) }
+      })
+    }
+
+    registerGauge("numberExecutorsToAdd", numExecutorsToAdd, 0)
+    registerGauge("numberExecutorsPendingToRemove", executorsPendingToRemove.size, 0)
+    registerGauge("numberAllExecutors", executorIds.size, 0)
+    registerGauge("numberTargetExecutors", numExecutorsTarget, 0)
+    registerGauge("numberMaxNeededExecutors", maxNumExecutorsNeeded(), 0)
+  }
 }
 
 private object ExecutorAllocationManager {
