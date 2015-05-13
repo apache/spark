@@ -121,6 +121,11 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
         __init__(self, splits=None, inputCol=None, outputCol=None)
         """
         super(Bucketizer, self).__init__()
+        #: param for Splitting points for mapping continuous features into buckets. With n+1 splits,
+        #  there are n buckets. A bucket defined by splits x,y holds values in the range [x,y)
+        #  except the last bucket, which also includes y. The splits should be strictly increasing.
+        #  Values at -inf, inf must be explicitly provided to cover all Double values; otherwise,
+        #  values outside the splits specified will be treated as errors.
         self.splits = \
             Param(self, "splits",
                   "Split points for mapping continuous features into buckets. With n+1 splits, " +
