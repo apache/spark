@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.Dialect
+import org.apache.spark.sql.catalyst.ParserDialect
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, expressions}
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
@@ -49,7 +49,7 @@ import org.apache.spark.{Partition, SparkContext}
 
 /**
  * Currently we support the default dialect named "sql", associated with the class
- * [[DefaultDialect]]
+ * [[DefaultParserDialect]]
  *
  * And we can also provide custom SQL Dialect, for example in Spark SQL CLI:
  * {{{
@@ -74,7 +74,7 @@ import org.apache.spark.{Partition, SparkContext}
  *-- "hiveql" (for HiveContext)
  * }}}
  */
-private[spark] class DefaultDialect extends Dialect {
+private[spark] class DefaultParserDialect extends ParserDialect {
   @transient
   protected val sqlParser = new catalyst.SqlParser
 
@@ -95,6 +95,8 @@ private[spark] class DefaultDialect extends Dialect {
  * @groupname config Configuration
  * @groupname dataframes Custom DataFrame Creation
  * @groupname Ungrouped Support functions for language integrated queries.
+ *
+ * @since 1.0.0
  */
 class SQLContext(@transient val sparkContext: SparkContext)
   extends org.apache.spark.Logging
@@ -113,6 +115,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Set Spark SQL configuration properties.
    *
    * @group config
+   * @since 1.0.0
    */
   def setConf(props: Properties): Unit = conf.setConf(props)
 
@@ -120,6 +123,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Set the given Spark SQL configuration property.
    *
    * @group config
+   * @since 1.0.0
    */
   def setConf(key: String, value: String): Unit = conf.setConf(key, value)
 
@@ -127,6 +131,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Return the value of Spark SQL configuration property for the given key.
    *
    * @group config
+   * @since 1.0.0
    */
   def getConf(key: String): String = conf.getConf(key)
 
@@ -135,6 +140,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * yet, return `defaultValue`.
    *
    * @group config
+   * @since 1.0.0
    */
   def getConf(key: String, defaultValue: String): String = conf.getConf(key, defaultValue)
 
@@ -143,6 +149,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * This creates a new copy of the config properties in the form of a Map.
    *
    * @group config
+   * @since 1.0.0
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
@@ -176,10 +183,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect().parse(_))
 
-  protected[sql] def getSQLDialect(): Dialect = {
+  protected[sql] def getSQLDialect(): ParserDialect = {
     try {
       val clazz = Utils.classForName(dialectClassName)
-      clazz.newInstance().asInstanceOf[Dialect]
+      clazz.newInstance().asInstanceOf[ParserDialect]
     } catch {
       case NonFatal(e) =>
         // Since we didn't find the available SQL Dialect, it will fail even for SET command:
@@ -209,7 +216,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] val defaultSession = createSession()
 
   protected[sql] def dialectClassName = if (conf.dialect == "sql") {
-    classOf[DefaultDialect].getCanonicalName
+    classOf[DefaultParserDialect].getCanonicalName
   } else {
     conf.dialect
   }
@@ -228,6 +235,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * the query planner for advanced functionality.
    *
    * @group basic
+   * @since 1.3.0
    */
   @Experimental
   @transient
@@ -238,6 +246,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns a [[DataFrame]] with no rows or columns.
    *
    * @group basic
+   * @since 1.3.0
    */
   @Experimental
   @transient
@@ -270,6 +279,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * }}}
    *
    * @group basic
+   * @since 1.3.0
    * TODO move to SQLSession?
    */
   @transient
@@ -278,23 +288,27 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * Returns true if the table is currently cached in-memory.
    * @group cachemgmt
+   * @since 1.3.0
    */
   def isCached(tableName: String): Boolean = cacheManager.isCached(tableName)
 
   /**
    * Caches the specified table in-memory.
    * @group cachemgmt
+   * @since 1.3.0
    */
   def cacheTable(tableName: String): Unit = cacheManager.cacheTable(tableName)
 
   /**
    * Removes the specified table from the in-memory cache.
    * @group cachemgmt
+   * @since 1.3.0
    */
   def uncacheTable(tableName: String): Unit = cacheManager.uncacheTable(tableName)
 
   /**
    * Removes all cached tables from the in-memory cache.
+   * @since 1.3.0
    */
   def clearCache(): Unit = cacheManager.clearCache()
 
@@ -311,27 +325,40 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * }}}
    *
    * @group basic
+   * @since 1.3.0
    */
   @Experimental
   object implicits extends Serializable {
     // scalastyle:on
 
-    /** Converts $"col name" into an [[Column]]. */
+    /**
+     * Converts $"col name" into an [[Column]].
+     * @since 1.3.0
+     */
     implicit class StringToColumn(val sc: StringContext) {
       def $(args: Any*): ColumnName = {
         new ColumnName(sc.s(args :_*))
       }
     }
 
-    /** An implicit conversion that turns a Scala `Symbol` into a [[Column]]. */
+    /**
+     * An implicit conversion that turns a Scala `Symbol` into a [[Column]].
+     * @since 1.3.0
+     */
     implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 
-    /** Creates a DataFrame from an RDD of case classes or tuples. */
+    /**
+     * Creates a DataFrame from an RDD of case classes or tuples.
+     * @since 1.3.0
+     */
     implicit def rddToDataFrameHolder[A <: Product : TypeTag](rdd: RDD[A]): DataFrameHolder = {
       DataFrameHolder(self.createDataFrame(rdd))
     }
 
-    /** Creates a DataFrame from a local Seq of Product. */
+    /**
+     * Creates a DataFrame from a local Seq of Product.
+     * @since 1.3.0
+     */
     implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder =
     {
       DataFrameHolder(self.createDataFrame(data))
@@ -341,7 +368,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // making existing implicit conversions ambiguous. In particular, RDD[Double] is dangerous
     // because of [[DoubleRDDFunctions]].
 
-    /** Creates a single column DataFrame from an RDD[Int]. */
+    /**
+     * Creates a single column DataFrame from an RDD[Int].
+     * @since 1.3.0
+     */
     implicit def intRddToDataFrameHolder(data: RDD[Int]): DataFrameHolder = {
       val dataType = IntegerType
       val rows = data.mapPartitions { iter =>
@@ -354,7 +384,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       DataFrameHolder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
     }
 
-    /** Creates a single column DataFrame from an RDD[Long]. */
+    /**
+     * Creates a single column DataFrame from an RDD[Long].
+     * @since 1.3.0
+     */
     implicit def longRddToDataFrameHolder(data: RDD[Long]): DataFrameHolder = {
       val dataType = LongType
       val rows = data.mapPartitions { iter =>
@@ -367,7 +400,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       DataFrameHolder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
     }
 
-    /** Creates a single column DataFrame from an RDD[String]. */
+    /**
+     * Creates a single column DataFrame from an RDD[String].
+     * @since 1.3.0
+     */
     implicit def stringRddToDataFrameHolder(data: RDD[String]): DataFrameHolder = {
       val dataType = StringType
       val rows = data.mapPartitions { iter =>
@@ -386,6 +422,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Creates a DataFrame from an RDD of case classes.
    *
    * @group dataframes
+   * @since 1.3.0
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
@@ -401,6 +438,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Creates a DataFrame from a local Seq of Product.
    *
    * @group dataframes
+   * @since 1.3.0
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
@@ -414,6 +452,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Convert a [[BaseRelation]] created for external data sources into a [[DataFrame]].
    *
    * @group dataframes
+   * @since 1.3.0
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
     DataFrame(this, LogicalRelation(baseRelation))
@@ -449,6 +488,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * }}}
    *
    * @group dataframes
+   * @since 1.3.0
    */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
@@ -480,6 +520,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * the provided schema. Otherwise, there will be runtime exception.
    *
    * @group dataframes
+   * @since 1.3.0
    */
   @DeveloperApi
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
@@ -492,6 +533,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
    * @group dataframes
+   * @since 1.3.0
    */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
     val attributeSeq = getSchema(beanClass)
@@ -520,6 +562,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
    * @group dataframes
+   * @since 1.3.0
    */
   def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
     createDataFrame(rdd.rdd, beanClass)
@@ -591,6 +634,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * [[DataFrame]] if no paths are passed in.
    *
    * @group specificdata
+   * @since 1.3.0
    */
   @scala.annotation.varargs
   def parquetFile(paths: String*): DataFrame = {
@@ -609,6 +653,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
+   * @since 1.3.0
    */
   def jsonFile(path: String): DataFrame = jsonFile(path, 1.0)
 
@@ -618,6 +663,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @since 1.3.0
    */
   @Experimental
   def jsonFile(path: String, schema: StructType): DataFrame =
@@ -626,6 +672,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * @group specificdata
+   * @since 1.3.0
    */
   @Experimental
   def jsonFile(path: String, samplingRatio: Double): DataFrame =
@@ -637,6 +684,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
+   * @since 1.3.0
    */
   def jsonRDD(json: RDD[String]): DataFrame = jsonRDD(json, 1.0)
 
@@ -647,6 +695,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
+   * @since 1.3.0
    */
   def jsonRDD(json: JavaRDD[String]): DataFrame = jsonRDD(json.rdd, 1.0)
 
@@ -656,6 +705,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @since 1.3.0
    */
   @Experimental
   def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
@@ -678,6 +728,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * schema, returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @since 1.3.0
    */
   @Experimental
   def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
@@ -690,6 +741,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * schema, returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @since 1.3.0
    */
   @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
@@ -711,6 +763,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * schema, returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @since 1.3.0
    */
   @Experimental
   def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
@@ -723,6 +776,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * using the default data source configured by spark.sql.sources.default.
    *
    * @group genericdata
+   * @since 1.3.0
    */
   @Experimental
   def load(path: String): DataFrame = {
@@ -735,6 +789,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns the dataset stored at path as a DataFrame, using the given data source.
    *
    * @group genericdata
+   * @since 1.3.0
    */
   @Experimental
   def load(path: String, source: String): DataFrame = {
@@ -747,6 +802,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * a set of options as a DataFrame.
    *
    * @group genericdata
+   * @since 1.3.0
    */
   @Experimental
   def load(source: String, options: java.util.Map[String, String]): DataFrame = {
@@ -759,10 +815,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * a set of options as a DataFrame.
    *
    * @group genericdata
+   * @since 1.3.0
    */
   @Experimental
   def load(source: String, options: Map[String, String]): DataFrame = {
-    val resolved = ResolvedDataSource(this, None, source, options)
+    val resolved = ResolvedDataSource(this, None, Array.empty[String], source, options)
     DataFrame(this, LogicalRelation(resolved.relation))
   }
 
@@ -772,6 +829,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
    *
    * @group genericdata
+   * @since 1.3.0
    */
   @Experimental
   def load(
@@ -783,16 +841,51 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * :: Experimental ::
+   * (Java-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
+   *
+   * @group genericdata
+   * @since 1.3.0
+   */
+  @Experimental
+  def load(
+      source: String,
+      schema: StructType,
+      partitionColumns: Array[String],
+      options: java.util.Map[String, String]): DataFrame = {
+    load(source, schema, partitionColumns, options.toMap)
+  }
+
+  /**
+   * :: Experimental ::
    * (Scala-specific) Returns the dataset specified by the given data source and
    * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
    * @group genericdata
+   * @since 1.3.0
    */
   @Experimental
   def load(
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val resolved = ResolvedDataSource(this, Some(schema), source, options)
+    val resolved = ResolvedDataSource(this, Some(schema), Array.empty[String], source, options)
+    DataFrame(this, LogicalRelation(resolved.relation))
+  }
+
+  /**
+   * :: Experimental ::
+   * (Scala-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
+   * @group genericdata
+   * @since 1.3.0
+   */
+  @Experimental
+  def load(
+      source: String,
+      schema: StructType,
+      partitionColumns: Array[String],
+      options: Map[String, String]): DataFrame = {
+    val resolved = ResolvedDataSource(this, Some(schema), partitionColumns, source, options)
     DataFrame(this, LogicalRelation(resolved.relation))
   }
 
@@ -802,6 +895,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * It will use the default data source configured by spark.sql.sources.default.
    *
    * @group ddl_ops
+   * @since 1.3.0
    */
   @Experimental
   def createExternalTable(tableName: String, path: String): DataFrame = {
@@ -815,6 +909,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * and returns the corresponding DataFrame.
    *
    * @group ddl_ops
+   * @since 1.3.0
    */
   @Experimental
   def createExternalTable(
@@ -830,6 +925,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
+   * @since 1.3.0
    */
   @Experimental
   def createExternalTable(
@@ -846,6 +942,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
+   * @since 1.3.0
    */
   @Experimental
   def createExternalTable(
@@ -871,6 +968,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * a set of options. Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
+   * @since 1.3.0
    */
   @Experimental
   def createExternalTable(
@@ -888,6 +986,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * a set of options. Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
+   * @since 1.3.0
    */
   @Experimental
   def createExternalTable(
@@ -914,10 +1013,49 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * url named table.
    *
    * @group specificdata
+   * @since 1.3.0
    */
   @Experimental
   def jdbc(url: String, table: String): DataFrame = {
-    jdbc(url, table, JDBCRelation.columnPartition(null))
+    jdbc(url, table, JDBCRelation.columnPartition(null), new Properties())
+  }
+  
+  /**
+   * :: Experimental ::
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table and connection properties.
+   *
+   * @group specificdata
+   * @since 1.4.0
+   */
+  @Experimental
+  def jdbc(url: String, table: String, properties: Properties): DataFrame = {
+    jdbc(url, table, JDBCRelation.columnPartition(null), properties)
+  }
+  
+  /**
+   * :: Experimental ::
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table.  Partitions of the table will be retrieved in parallel based on the parameters
+   * passed to this function.
+   *
+   * @param columnName the name of a column of integral type that will be used for partitioning.
+   * @param lowerBound the minimum value of `columnName` used to decide partition stride
+   * @param upperBound the maximum value of `columnName` used to decide partition stride
+   * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
+   *                      evenly into this many partitions
+   * @group specificdata
+   * @since 1.3.0
+   */
+  @Experimental
+  def jdbc(
+      url: String,
+      table: String,  
+      columnName: String,
+      lowerBound: Long,
+      upperBound: Long,
+      numPartitions: Int): DataFrame = {
+    jdbc(url, table, columnName, lowerBound, upperBound, numPartitions, new Properties())
   }
 
   /**
@@ -931,8 +1069,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @param upperBound the maximum value of `columnName` used to decide partition stride
    * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
    *                      evenly into this many partitions
-   *
+   * @param properties connection properties
    * @group specificdata
+   * @since 1.4.0
    */
   @Experimental
   def jdbc(
@@ -941,31 +1080,56 @@ class SQLContext(@transient val sparkContext: SparkContext)
       columnName: String,
       lowerBound: Long,
       upperBound: Long,
-      numPartitions: Int): DataFrame = {
+      numPartitions: Int,
+      properties: Properties): DataFrame = {
     val partitioning = JDBCPartitioningInfo(columnName, lowerBound, upperBound, numPartitions)
     val parts = JDBCRelation.columnPartition(partitioning)
-    jdbc(url, table, parts)
+    jdbc(url, table, parts, properties)
+  }
+  
+  /**
+   * :: Experimental ::
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table. The theParts parameter gives a list expressions
+   * suitable for inclusion in WHERE clauses; each one defines one partition
+   * of the [[DataFrame]].
+   *
+   * @group specificdata
+   * @since 1.3.0
+   */
+  @Experimental
+  def jdbc(url: String, table: String, theParts: Array[String]): DataFrame = {
+    jdbc(url, table, theParts, new Properties())
   }
 
   /**
    * :: Experimental ::
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
-   * url named table.  The theParts parameter gives a list expressions
+   * url named table using connection properties. The theParts parameter gives a list expressions
    * suitable for inclusion in WHERE clauses; each one defines one partition
    * of the [[DataFrame]].
    *
    * @group specificdata
+   * @since 1.4.0
    */
   @Experimental
-  def jdbc(url: String, table: String, theParts: Array[String]): DataFrame = {
+  def jdbc(
+      url: String,
+      table: String,
+      theParts: Array[String],
+      properties: Properties): DataFrame = {
     val parts: Array[Partition] = theParts.zipWithIndex.map { case (part, i) =>
       JDBCPartition(part, i) : Partition
     }
-    jdbc(url, table, parts)
+    jdbc(url, table, parts, properties)
   }
-
-  private def jdbc(url: String, table: String, parts: Array[Partition]): DataFrame = {
-    val relation = JDBCRelation(url, table, parts)(this)
+  
+  private def jdbc(
+      url: String,
+      table: String,
+      parts: Array[Partition],
+      properties: Properties): DataFrame = {
+    val relation = JDBCRelation(url, table, parts, properties)(this)
     baseRelationToDataFrame(relation)
   }
 
@@ -984,6 +1148,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @param tableName the name of the table to be unregistered.
    *
    * @group basic
+   * @since 1.3.0
    */
   def dropTempTable(tableName: String): Unit = {
     cacheManager.tryUncacheQuery(table(tableName))
@@ -995,6 +1160,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * used for SQL parsing can be configured with 'spark.sql.dialect'.
    *
    * @group basic
+   * @since 1.3.0
    */
   def sql(sqlText: String): DataFrame = {
     DataFrame(this, parseSql(sqlText))
@@ -1004,6 +1170,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns the specified table as a [[DataFrame]].
    *
    * @group ddl_ops
+   * @since 1.3.0
    */
   def table(tableName: String): DataFrame =
     DataFrame(this, catalog.lookupRelation(Seq(tableName)))
@@ -1014,6 +1181,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * indicating if a table is a temporary one or not).
    *
    * @group ddl_ops
+   * @since 1.3.0
    */
   def tables(): DataFrame = {
     DataFrame(this, ShowTablesCommand(None))
@@ -1025,6 +1193,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * indicating if a table is a temporary one or not).
    *
    * @group ddl_ops
+   * @since 1.3.0
    */
   def tables(databaseName: String): DataFrame = {
     DataFrame(this, ShowTablesCommand(Some(databaseName)))
@@ -1034,6 +1203,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns the names of tables in the current database as an array.
    *
    * @group ddl_ops
+   * @since 1.3.0
    */
   def tableNames(): Array[String] = {
     catalog.getTables(None).map {
@@ -1045,6 +1215,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns the names of tables in the given database as an array.
    *
    * @group ddl_ops
+   * @since 1.3.0
    */
   def tableNames(databaseName: String): Array[String] = {
     catalog.getTables(Some(databaseName)).map {
