@@ -446,7 +446,6 @@ dropTempTable <- function(sqlCtx, tableName) {
 #' @param source the name of external data source
 #' @return DataFrame
 #' @export
-#' @aliases loadDF
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -454,13 +453,20 @@ dropTempTable <- function(sqlCtx, tableName) {
 #' df <- read.df(sqlCtx, "path/to/file.json", source = "json")
 #' }
 
-read.df <- loadDF <- function(sqlCtx, path = NULL, source = NULL, ...) {
+read.df <- function(sqlCtx, path = NULL, source = NULL, ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
     options[['path']] <- path
   }
   sdf <- callJMethod(sqlCtx, "load", source, options)
   dataFrame(sdf)
+}
+
+#' @aliases loadDF
+#' @export
+
+loadDF <- function(sqlCtx, path = NULL, source = NULL, ...) {
+  read.df(sqlCtx, path, source, ...)
 }
 
 #' Create an external table
