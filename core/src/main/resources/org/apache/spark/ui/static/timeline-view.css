@@ -50,31 +50,38 @@ div#application-timeline, div#job-timeline {
 }
 
 rect.scheduler-delay-proportion {
-  fill: #F6D76B;
+  fill: #80B1D3;
+  stroke: #6B94B0;
 }
 
 rect.deserialization-time-proportion {
-  fill: #FFBDD8;
+  fill: #FB8072;
+  stroke: #D26B5F;
 }
 
 rect.shuffle-read-time-proportion {
-  fill: #8AC7DE;
+  fill: #FDB462;
+  stroke: #D39651;
 }
 
 rect.executor-runtime-proportion {
-  fill: #D9EB52;
+  fill: #B3DE69;
+  stroke: #95B957;
 }
 
 rect.shuffle-write-time-proportion {
-  fill: #87796F;
+  fill: #FFED6F;
+  stroke: #D5C65C;
 }
 
 rect.serialization-time-proportion {
-  fill: #93DFB8;
+  fill: #BC80BD;
+  stroke: #9D6B9E;
 }
 
 rect.getting-result-time-proportion {
-  fill: #FF9036;
+  fill: #8DD3C7;
+  stroke: #75B0A6;
 }
 
 .vis.timeline {

@@ -161,33 +161,6 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, zo
   taskTimeline.setWindow(minLaunchTime, curEnd);
   setupZoomable('#task-assignment-timeline-zoom-lock', taskTimeline);
 
-  function setupTaskEventAction() {
-    $(".item.range.task.task-assignment-timeline-object").each(function() {
-      var getSelectorForTaskEntry = function(baseElem) {
-        var taskIdxText = $(baseElem).find(".task-assignment-timeline-content").attr("data-title");
-        var taskIdx = taskIdxText.match("Task (\\d+)\\(")[1];
-        return "#task-" + taskIdx;
-      };
-
-      $(this).hover(
-        function() {
-          $(getSelectorForTaskEntry(this)).addClass("corresponding-item-hover");
-          $($(this).find("div.task-assignment-timeline-content")[0]).tooltip("show");
-        },
-        function() {
-          $(getSelectorForTaskEntry(this)).removeClass("corresponding-item-hover");
-          $($(this).find("div.task-assignment-timeline-content")[0])
-          .tooltip("hide");
-        }
-      );
-    });
-  }
-
-  setupTaskEventAction();
-  taskTimeline.on("rangechanged", function(properties) {
-    setupTaskEventAction();
-  });
-
   $("span.expand-task-assignment-timeline").click(function() {
     $("#task-assignment-timeline").toggleClass('collapsed');
 
@@ -195,6 +168,16 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, zo
     $(this).find('.expand-task-assignment-timeline-arrow').toggleClass('arrow-open');
     $(this).find('.expand-task-assignment-timeline-arrow').toggleClass('arrow-closed');
   });
+}
+
+function setupTaskEventActionOnMouseOver(taskIdAndAttempt) {
+  $("#task-" + taskIdAndAttempt).addClass("corresponding-item-hover");
+  $("#task-event-" + taskIdAndAttempt).tooltip("show");
+}
+
+function setupTaskEventActionOnMouseOut(taskIdAndAttempt) {
+  $("#task-" + taskIdAndAttempt).removeClass("corresponding-item-hover");
+  $("#task-" + taskIdAndAttempt).tooltip("hide");
 }
 
 function setupExecutorEventAction() {
@@ -211,7 +194,7 @@ function setupExecutorEventAction() {
 }
 
 function setupZoomable(id, timeline) {
-  $(id + '>input[type="checkbox"]').click(function() {
+  $(id + '> input[type="checkbox"]').click(function() {
     if (this.checked) {
       timeline.setOptions({zoomable: true});
     } else {
@@ -219,7 +202,7 @@ function setupZoomable(id, timeline) {
     }
   });
 
-  $(id + ">span").click(function() {
+  $(id + "> span").click(function() {
     $(this).parent().find('input:checkbox').trigger('click');
   });
 }
