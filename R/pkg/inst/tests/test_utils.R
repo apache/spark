@@ -92,13 +92,10 @@ test_that("cleanClosure on R functions", {
     f(res)  # Test for recursive calls.
     h(res)  # f should be examined again in h's env. More recursive call f -> h -> f ...
   }
-  newF <- SparkR:::cleanClosure(f)
+  newF <- cleanClosure(f)
   env <- environment(newF)
-  expect_equal(length(ls(env)), 4)  # "g", "l", "f" and "h". No "base", "field" or "defUse".
-  # TODO(shivaram): length(ls(env)) is 4 here for some reason and `lapply` is included in `env`.
-  # Disabling this test till we debug this.
-  #
-  # expect_equal(length(ls(env)), 3)  # Only "g", "l" and "f". No "base", "field" or "defUse".
+  # "g", "l", "f", "h" and "lapply" (private in SparkR). No "base", "field" or "defUse".
+  expect_equal(length(ls(env)), 5)
   expect_true("g" %in% ls(env))
   expect_true("l" %in% ls(env))
   expect_true("f" %in% ls(env))
@@ -117,17 +114,29 @@ test_that("cleanClosure on R functions", {
   actual <- get("f", envir = env, inherits = FALSE)
   expect_equal(actual, f)
   
-  # Test for function (and variable) definitions.
+  # Test for function (and variable) definitions and package private functions.
   z <- c(1, 2)
-  f <- function(x) {
+  f <- function(x, y) {
+    privateCallRes <- unlist(joinTaggedList(x, y))
     g <- function(y) { y * 2 }
     z <- z * 2  # Write after read.
-    g(x)
+    g(privateCallRes)  # Calls "g()" in enclosure, not local var "g".
   }
   newF <- cleanClosure(f)
   env <- environment(newF)
-  expect_equal(length(ls(env)), 1)  # "z". No y" or "g".
+  expect_equal(length(ls(env)), 2)  # "z" and "joinTaggedList". No y" or "g".
+  expect_true("joinTaggedList" %in% ls(env))
   expect_true("z" %in% ls(env))
+  actual <- get("joinTaggedList", envir = env, inherits = FALSE)
+  expect_equal(actual, joinTaggedList)
+  env <- environment(actual)
+  # Private "genCompactLists" and "mergeCompactLists" are called by "joinTaggedList".
+  expect_true("genCompactLists" %in% ls(env))
+  expect_true("mergeCompactLists" %in% ls(env))
+  actual <- get("genCompactLists", envir = env, inherits = FALSE)
+  expect_equal(actual, genCompactLists)
+  actual <- get("mergeCompactLists", envir = env, inherits = FALSE)
+  expect_equal(actual, mergeCompactLists)
   
   # Test for overriding variables in base namespace (Issue: SparkR-196).
   nums <- as.list(1:10)
