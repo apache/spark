@@ -48,7 +48,7 @@ import org.apache.spark.sql.SQLContext
  */
 object OneVsRestExample {
 
-  case class Params(input: String = null,
+  case class Params private[ml] (input: String = null,
       testInput: Option[String] = None,
       maxIter: Int = 100,
       tol: Double = 1E-6,

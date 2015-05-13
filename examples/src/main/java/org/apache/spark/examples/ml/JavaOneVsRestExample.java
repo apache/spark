@@ -44,7 +44,7 @@ import org.apache.spark.sql.types.StructField;
  */
 public class JavaOneVsRestExample {
 
-    static class Params {
+    private static class Params {
         LogisticRegression classifier;
         String input;
         String testInput = null;
@@ -93,6 +93,7 @@ public class JavaOneVsRestExample {
         MulticlassMetrics metrics = new MulticlassMetrics(predictions);
 
         // output the confusion matrix.
+        System.out.println("ConfusionMatrix");
         System.out.println(metrics.confusionMatrix().toString());
 
         StructField predictionColSchema = predictions.schema().apply("prediction");
@@ -107,6 +108,7 @@ public class JavaOneVsRestExample {
             results.append(metrics.falsePositiveRate((double)label));
             results.append("\n");
         }
+        System.out.println(results);
 
         jsc.stop();
     }
@@ -128,11 +130,11 @@ public class JavaOneVsRestExample {
         options.addOption("tol", false, "the convergence tolerance of iterations. default: 1E-6");
         options.addOption("regParam", false, "the regularization parameter");
         options.addOption("elasticNetParam", false, "the ElasticNet mixing parameter");
-        CommandLineParser parser = new BasicParser();
+        CommandLineParser parser = new GnuParser();
 
         LogisticRegression classifier = new LogisticRegression();
         String testInput = null;
-        double fracTest = 0.0;
+        double fracTest = 0.2;
         try {
             CommandLine cmd = parser.parse( options, remainingArgs);
             String value;
