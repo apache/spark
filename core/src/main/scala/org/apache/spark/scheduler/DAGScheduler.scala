@@ -1042,8 +1042,8 @@ class DAGScheduler(
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
             if (computeCount > 1) {
-              // REVIEWERS: do I need to worry about speculation here, when multiple completion events
-              // are normal?
+              // REVIEWERS: do I need to worry about speculation here, when multiple completion
+              // events are normal?
 
               // REVIEWERS: is this really only a problem on a ShuffleMapTask?? does it also cause
               // problems for ResultTask?

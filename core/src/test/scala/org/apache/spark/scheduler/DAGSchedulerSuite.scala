@@ -785,9 +785,10 @@ class DAGSchedulerSuite
     val bms = ArrayBuffer[BlockManagerId]()
     val stageFailureCount = HashMap[Int, Int]()
     clusterSc.addSparkListener(new SparkListener {
-      override def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded): Unit = {
-        bms += blockManagerAdded.blockManagerId
+      override def onBlockManagerAdded(bmAdded: SparkListenerBlockManagerAdded): Unit = {
+        bms += bmAdded.blockManagerId
       }
+
       override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
         if (stageCompleted.stageInfo.failureReason.isDefined) {
           val stage = stageCompleted.stageInfo.stageId
@@ -797,10 +798,10 @@ class DAGSchedulerSuite
       }
     })
     try {
-      val rawData = clusterSc.parallelize(1 to 1e6.toInt, 20).map{x => (x % 100) -> x}.cache()
+      val rawData = clusterSc.parallelize(1 to 1e6.toInt, 20).map { x => (x % 100) -> x }.cache()
       rawData.count()
       val aBm = bms(0)
-      val shuffled = rawData.groupByKey(100).mapPartitionsWithIndex{ case (idx, itr) =>
+      val shuffled = rawData.groupByKey(100).mapPartitionsWithIndex { case (idx, itr) =>
         // we want one failure quickly, and more failures after stage 0 has finished its
         // second attempt
         if (TaskContext.get().asInstanceOf[TaskContextImpl].stageAttemptId == 0) {
@@ -817,9 +818,9 @@ class DAGSchedulerSuite
             Thread.sleep((500 + math.random * 5000).toLong)
           }
         }
-        itr.map{x => ((x._1 + 5) % 100) -> x._2 }
+        itr.map { x => ((x._1 + 5) % 100) -> x._2 }
       }
-      val shuffledAgain = shuffled.flatMap{ case(k,vs) => vs.map(k -> _) }.groupByKey(100)
+      val shuffledAgain = shuffled.flatMap { case (k, vs) => vs.map(k -> _) }.groupByKey(100)
       val data = shuffledAgain.mapPartitions { itr => itr.flatMap(_._2) }.cache().collect()
       val count = data.size
       assert(count === 1e6.toInt)
