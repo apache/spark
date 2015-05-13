@@ -426,6 +426,7 @@ private[sql] object JsonRDD extends Logging {
         case struct: StructType => asRow(value.asInstanceOf[Map[String, Any]], struct)
         case DateType => toDate(value)
         case TimestampType => toTimestamp(value)
+        case udt: UserDefinedType[_] => udt.deserialize(value)
       }
     }
   }
