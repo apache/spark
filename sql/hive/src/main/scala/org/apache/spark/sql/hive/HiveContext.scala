@@ -386,7 +386,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   @transient
   private val hivePlanner = new SparkPlanner(this) with HiveStrategies {
-    val hiveContext = sqlContext
+    val hiveContext = sqlContext.asInstanceOf[HiveContext]
 
     override def strategies: Seq[Strategy] = experimental.extraStrategies ++ Seq(
       DataSourceStrategy,
