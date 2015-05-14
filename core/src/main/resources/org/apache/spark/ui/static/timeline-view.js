@@ -154,11 +154,7 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, zo
   taskTimeline.setOptions(options);
   taskTimeline.setGroups(groups);
   taskTimeline.setItems(items);
-  var curEnd = taskTimeline.getWindow()["end"].getTime();
-  if (curEnd - minLaunchTime > zoomMax) {
-    curEnd = minLaunchTime + zoomMax;
-  }
-  taskTimeline.setWindow(minLaunchTime, curEnd);
+
   taskTimeline.on("rangechange", function(prop) {
     if (currentDisplayedTooltip !== null) {
       $(currentDisplayedTooltip).tooltip("hide");

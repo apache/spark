@@ -646,20 +646,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           """
     }.mkString("[", ",", "]")
 
-    var maxWindowInSec = ((maxFinishTime - minLaunchTime) / 1000.0).round
-    if (maxWindowInSec <= 0) maxWindowInSec = 1
-    val tasksPerSecond = numEffectiveTasks / maxWindowInSec
-    var maxZoom = {
-      if (tasksPerSecond > 100) {
-        1000L / (tasksPerSecond / 100)
-      }
-      else {
-        1000 * (100 / tasksPerSecond)
-      }
-    }
-
-    if (maxZoom < 0) maxZoom = 1
-
+    val maxZoom = maxFinishTime - minLaunchTime
     <span class="expand-task-assignment-timeline">
       <span class="expand-task-assignment-timeline-arrow arrow-closed"></span>
       <a>Event Timeline {
