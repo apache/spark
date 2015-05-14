@@ -271,7 +271,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance",
-                 numTrees=20, featureSubsetStrategy="auto", seed=42)
+                 numTrees=20, featureSubsetStrategy="auto", seed=None)
         """
         super(RandomForestRegressor, self).__init__()
         #: param for Criterion used for information gain calculation (case-insensitive).
@@ -292,7 +292,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                   "The number of features to consider for splits at each tree node. Supported " +
                   "options: " + ", ".join(RandomForestParams.supportedFeatureSubsetStrategies))
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=42,
+                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
                          impurity="variance", numTrees=20, featureSubsetStrategy="auto")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -305,7 +305,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=42,
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
                   impurity="variance", numTrees=20, featureSubsetStrategy="auto")
         Sets params for linear regression.
         """
