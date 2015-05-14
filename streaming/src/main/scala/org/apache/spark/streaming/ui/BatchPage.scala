@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.ui
 
+import java.text.SimpleDateFormat
+import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{NodeSeq, Node, Text}
@@ -288,7 +290,14 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     val batchTime = Option(request.getParameter("id")).map(id => Time(id.toLong)).getOrElse {
       throw new IllegalArgumentException(s"Missing id parameter")
     }
-    val formattedBatchTime = SparkUIUtils.formatDate(batchTime.milliseconds)
+    val batchTimeFormat =
+      if (streamingListener.batchDuration < 1000) {
+        new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS")
+      } else {
+        // If batchInterval >= 1 second, don't show milliseconds
+        new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+      }
+    val formattedBatchTime = batchTimeFormat.format(new Date(batchTime.milliseconds))
 
     val batchUIData = streamingListener.getBatchUIData(batchTime).getOrElse {
       throw new IllegalArgumentException(s"Batch $formattedBatchTime does not exist")

@@ -186,6 +186,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
       <strong>
         {SparkUIUtils.formatDate(startTime)}
       </strong>
+      (<strong>{listener.numTotalCompletedBatches}</strong>
+      completed batches, <strong>{listener.numTotalReceivedRecords}</strong> records)
     </div>
     <br />
   }
@@ -199,7 +201,13 @@ private[ui] class StreamingPage(parent: StreamingTab)
    * @param times all time values that will be used in the graphs.
    */
   private def generateTimeMap(times: Seq[Long]): Seq[Node] = {
-    val dateFormat = new SimpleDateFormat("HH:mm:ss")
+    val dateFormat =
+      if (listener.batchDuration < 1000) {
+        new SimpleDateFormat("HH:mm:ss.SSS")
+      } else {
+        // If batchInterval >= 1 second, don't show milliseconds
+        new SimpleDateFormat("HH:mm:ss")
+      }
     val js = "var timeFormat = {};\n" + times.map { time =>
       val formattedTime = dateFormat.format(new Date(time))
       s"timeFormat[$time] = '$formattedTime';"
@@ -472,14 +480,14 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     val activeBatchesContent = {
       <h4 id="active">Active Batches ({runningBatches.size + waitingBatches.size})</h4> ++
-        new ActiveBatchTable(runningBatches, waitingBatches).toNodeSeq
+        new ActiveBatchTable(runningBatches, waitingBatches, listener.batchDuration).toNodeSeq
     }
 
     val completedBatchesContent = {
       <h4 id="completed">
         Completed Batches (last {completedBatches.size} out of {listener.numTotalCompletedBatches})
       </h4> ++
-        new CompletedBatchTable(completedBatches).toNodeSeq
+        new CompletedBatchTable(completedBatches, listener.batchDuration).toNodeSeq
     }
 
     activeBatchesContent ++ completedBatchesContent

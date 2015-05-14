@@ -98,7 +98,16 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
     var x = d3.scale.linear().domain([minX, maxX]).range([0, width]);
     var y = d3.scale.linear().domain([minY, maxY]).range([height, 0]);
 
-    var xAxis = d3.svg.axis().scale(x).orient("bottom").tickFormat(function(d) { return timeFormat[d]; });
+    var xAxis = d3.svg.axis().scale(x).orient("bottom").tickFormat(function(d) {
+        var formattedDate = timeFormat[d];
+        var dotIndex = formattedDate.indexOf('.');
+        if (dotIndex >= 0) {
+            // Remove milliseconds
+            return formattedDate.substring(0, dotIndex);
+        } else {
+            return formattedDate;
+        }
+    });
     var formatYValue = d3.format(",.2f");
     var yAxis = d3.svg.axis().scale(y).orient("left").ticks(5).tickFormat(formatYValue);
 
