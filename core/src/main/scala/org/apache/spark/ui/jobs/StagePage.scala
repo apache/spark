@@ -41,13 +41,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     <div class="legend-area">
       <svg>
         {
-          val legendPairs = List(("deserialization-time-proportion", "Task Deserialization Time"),
+          val legendPairs = List(("scheduler-delay-proportion", "Scheduler Delay"),
+            ("deserialization-time-proportion", "Task Deserialization Time"),
             ("shuffle-read-time-proportion", "Shuffle Read Time"),
             ("executor-runtime-proportion", "Executor Computing Time"),
             ("shuffle-write-time-proportion", "Shuffle Write Time"),
             ("serialization-time-proportion", "Result Serialization TIme"),
-            ("getting-result-time-proportion", "Getting Result Time"),
-            ("scheduler-delay-proportion", "Scheduler Delay"))
+            ("getting-result-time-proportion", "Getting Result Time"))
 
           legendPairs.zipWithIndex.map {
             case ((classAttr, name), index) =>
