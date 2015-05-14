@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
@@ -34,6 +35,32 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
 
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
+
+  /**
+   * Attempt to resolve an ambiguous attribute resolution.
+   * e.g. df1.join(df2, df1("key") === df2("key")).select("key")
+   *
+   * @param name name of the attribute which is ambiguous
+   * @param resolver resolver for comparing attributes
+   * @param ambiguousReferences the references which matched the name
+   * @return Some([[NamedExpression]]) if the ambiguity can be resolved, otherwise None
+   */
+  override protected def resolveAmbiguous(
+    name: String,
+    resolver: Resolver,
+    ambiguousReferences: Seq[(Attribute, List[String])]): Option[NamedExpression] =
+      this.child match {
+
+        // case where select is from an inner join where join keys resolve to the same string
+        case _ @ Join(_,_,Inner,Some(EqualTo(leftExpr:NamedExpression, rightExpr:NamedExpression)))
+          if resolver(leftExpr.name, rightExpr.name) =>
+
+            // check if all ambiguous references resolve to the same value as the join key
+            ambiguousReferences.foldLeft(Option(leftExpr))((a:Option[NamedExpression],b) =>
+              if (resolver(a.map(_.name).orNull, b._1.name)) a else None)
+
+        case _ => None
+      }
 }
 
 /**

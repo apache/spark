@@ -83,4 +83,17 @@ class DataFrameJoinSuite extends QueryTest {
       left.join(right, left("key") === right("key")),
       Row(1, 1, 1, 1) :: Row(2, 1, 2, 2) :: Nil)
   }
+
+  test("[SPARK-6380] Resolution of equi-join key in post-join projection") {
+    val df1 = testData2.select(testData2("a"))
+    val df2 = testData3.select(testData3("a"))
+
+    checkAnswer(
+      df1.join(df2, df1("a") === df2("a")).select("a"),
+      sql("SELECT a FROM testData2 td2 JOIN testData3 td3 ON td2.a = td3.a").collect().toSeq)
+
+    intercept[Exception] {
+      df1.join(df2, df1("a") === df2("a"), "leftOuter").select("a")
+    }
+  }
 }
