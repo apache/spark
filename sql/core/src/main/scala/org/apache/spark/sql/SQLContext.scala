@@ -1321,7 +1321,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // TODO: Don't just pick the first one...
     lazy val sparkPlan: SparkPlan = {
       SparkPlan.currentContext.set(self)
-      planner(optimizedPlan).next()
+      planner.execute(optimizedPlan).next()
     }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.
