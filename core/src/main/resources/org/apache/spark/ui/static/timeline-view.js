@@ -218,7 +218,7 @@ function setupExecutorEventAction() {
 }
 
 function setupZoomable(id, timeline) {
-  $(id + '> input[type="checkbox"]').click(function() {
+  $(id + ' > input[type="checkbox"]').click(function() {
     if (this.checked) {
       timeline.setOptions({zoomable: true});
     } else {
@@ -226,7 +226,7 @@ function setupZoomable(id, timeline) {
     }
   });
 
-  $(id + "> span").click(function() {
+  $(id + " > span").click(function() {
     $(this).parent().find('input:checkbox').trigger('click');
   });
 }
