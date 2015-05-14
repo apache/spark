@@ -40,11 +40,11 @@ function handle_error () {
 {
   if [ -n "$AMPLAB_JENKINS_BUILD_PROFILE" ]; then
     if [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop1.0" ]; then
-      export SBT_MAVEN_PROFILES_ARGS="-Dhadoop.version=1.0.4"
+      export SBT_MAVEN_PROFILES_ARGS="-Phadoop-1 -Dhadoop.version=1.0.4"
     elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.0" ]; then
-      export SBT_MAVEN_PROFILES_ARGS="-Dhadoop.version=2.0.0-mr1-cdh4.1.1"
+      export SBT_MAVEN_PROFILES_ARGS="-Phadoop-1 -Dhadoop.version=2.0.0-mr1-cdh4.1.1"
     elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.2" ]; then
-      export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0"
+      export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Phadoop-2.2"
     elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.3" ]; then
       export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
     fi
