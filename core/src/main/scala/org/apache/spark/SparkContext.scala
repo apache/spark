@@ -693,8 +693,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Creates a new RDD[Long] containing elements from `start` to `end`(exclusive), increased by
    * `step` every element.
    *
-   * @note if we need to cache this RDD, we should make sure each partition contains no more than
-   *       2 billion element.
+   * @note if we need to cache this RDD, we should make sure each partition does not exceed limit.
    *
    * @param start the start value.
    * @param end the end value.
@@ -712,20 +711,22 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       // when step is 0, range will run infinite
       throw new IllegalArgumentException("`step` cannot be 0")
     }
-    val length =
-      if ((end - start) % step == 0) {
-        (end - start) / step
+    val length: BigInt = {
+      val safeStart = BigInt(start)
+      val safeEnd = BigInt(end)
+      if (((safeEnd - safeStart) % step).toInt == 0) {
+        (safeEnd - safeStart) / step
       } else {
-        (end - start) / step + 1
+        (safeEnd - safeStart) / step + 1
       }
-    parallelize(0 to numSlices).mapPartitions(iter => {
+    }
+    parallelize(0 until numSlices, numSlices).mapPartitions(iter => {
       val i = iter.next()
-      val partitionStart = (i * length) / numSlices * step + start
-      val partitionEnd = ((i + 1) * length) / numSlices * step + start
+      val partitionStart = ((i * length) / numSlices * step + start).toLong
+      val partitionEnd = (((i + 1) * length) / numSlices * step + start).toLong
 
       new Iterator[Long] {
-        var number: Long = _
-        initialize()
+        var number: Long = partitionStart
 
         override def hasNext =
           if (step > 0) {
@@ -738,10 +739,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
           val ret = number
           number += step
           ret
-        }
-
-        private def initialize() = {
-          number = partitionStart
         }
       }
     })
