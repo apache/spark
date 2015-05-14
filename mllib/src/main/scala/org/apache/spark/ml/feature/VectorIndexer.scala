@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, BinaryAttribute, NominalAttribute, NumericAttribute}
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.{IntParam, ParamValidators, Params}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
@@ -189,7 +189,8 @@ private object VectorIndexer {
 
     private def addDenseVector(dv: DenseVector): Unit = {
       var i = 0
-      while (i < dv.size) {
+      val size = dv.size
+      while (i < size) {
         if (featureValueSets(i).size <= maxCategories) {
           featureValueSets(i).add(dv(i))
         }
@@ -201,7 +202,8 @@ private object VectorIndexer {
       // TODO: This might be able to handle 0's more efficiently.
       var vecIndex = 0 // index into vector
       var k = 0 // index into non-zero elements
-      while (vecIndex < sv.size) {
+      val size = sv.size
+      while (vecIndex < size) {
         val featureValue = if (k < sv.indices.length && vecIndex == sv.indices(k)) {
           k += 1
           sv.values(k - 1)
@@ -375,6 +377,8 @@ class VectorIndexerModel private[ml] (
           }
         case (origAttr: Attribute, featAttr: NumericAttribute) =>
           origAttr.withIndex(featAttr.index.get)
+        case (origAttr: Attribute, _) =>
+          origAttr
       }
     } else {
       partialFeatureAttributes

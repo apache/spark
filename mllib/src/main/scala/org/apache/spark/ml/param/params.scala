@@ -219,7 +219,7 @@ class BooleanParam(parent: Params, name: String, doc: String) // No need for isV
   override def w(value: Boolean): ParamPair[Boolean] = super.w(value)
 }
 
-/** Specialized version of [[Param[Array[T]]]] for Java. */
+/** Specialized version of [[Param[Array[String]]]] for Java. */
 class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array[String] => Boolean)
   extends Param[Array[String]](parent, name, doc, isValid) {
 
@@ -230,6 +230,19 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
 
   /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
   def w(value: java.util.List[String]): ParamPair[Array[String]] = w(value.asScala.toArray)
+}
+
+/** Specialized version of [[Param[Array[Double]]]] for Java. */
+class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array[Double] => Boolean)
+  extends Param[Array[Double]](parent, name, doc, isValid) {
+
+  def this(parent: Params, name: String, doc: String) =
+    this(parent, name, doc, ParamValidators.alwaysTrue)
+
+  override def w(value: Array[Double]): ParamPair[Array[Double]] = super.w(value)
+
+  /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
+  def w(value: java.util.List[Double]): ParamPair[Array[Double]] = w(value.asScala.toArray)
 }
 
 /**
@@ -387,11 +400,12 @@ trait Params extends Identifiable with Serializable {
   /**
    * Sets default values for a list of params.
    *
+   * Note: Java developers should use the single-parameter [[setDefault()]].
+   *       Annotating this with varargs causes compilation failures. See SPARK-7498.
    * @param paramPairs  a list of param pairs that specify params and their default values to set
    *                    respectively. Make sure that the params are initialized before this method
    *                    gets called.
    */
-  @varargs
   protected final def setDefault(paramPairs: ParamPair[_]*): this.type = {
     paramPairs.foreach { p =>
       setDefault(p.param.asInstanceOf[Param[Any]], p.value)

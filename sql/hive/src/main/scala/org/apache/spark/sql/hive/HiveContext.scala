@@ -22,7 +22,7 @@ import java.sql.Timestamp
 import java.util.{ArrayList => JArrayList}
 
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
-import org.apache.spark.sql.catalyst.Dialect
+import org.apache.spark.sql.catalyst.ParserDialect
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
@@ -46,6 +46,7 @@ import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, Query
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.sources.{DDLParser, DataSourceStrategy}
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -53,7 +54,7 @@ import org.apache.spark.util.Utils
 /**
  * This is the HiveQL Dialect, this dialect is strongly bind with HiveContext
  */
-private[hive] class HiveQLDialect extends Dialect {
+private[hive] class HiveQLDialect extends ParserDialect {
   override def parse(sqlText: String): LogicalPlan = {
     HiveQl.parseSql(sqlText)
   }
@@ -62,6 +63,8 @@ private[hive] class HiveQLDialect extends Dialect {
 /**
  * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
  * Configuration for Hive is read from hive-site.xml on the classpath.
+ *
+ * @since 1.0.0
  */
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
@@ -224,6 +227,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * Spark SQL or the external data source library it uses might cache certain metadata about a
    * table, such as the location of blocks. When those change outside of Spark SQL, users should
    * call this function to invalidate the cache.
+   *
+   * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
     // TODO: Database support...
@@ -241,6 +246,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    *
    * Right now, it only supports Hive tables and it only updates the size of a Hive table
    * in the Hive metastore.
+   *
+   * @since 1.2.0
    */
   @Experimental
   def analyze(tableName: String) {
@@ -328,8 +335,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /* An analyzer that uses the Hive metastore. */
   @transient
-  override protected[sql] lazy val analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = false) {
+  override protected[sql] lazy val analyzer: Analyzer =
+    new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
         catalog.CreateTables ::
@@ -350,6 +357,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[hive] class SQLSession extends super.SQLSession {
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+      override def caseSensitiveAnalysis: Boolean =
+        getConf(SQLConf.CASE_SENSITIVE, "false").toBoolean
     }
 
     /**

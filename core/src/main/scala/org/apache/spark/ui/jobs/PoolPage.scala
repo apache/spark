@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.scheduler.{Schedulable, StageInfo}
+import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 /** Page showing specific pool details */
