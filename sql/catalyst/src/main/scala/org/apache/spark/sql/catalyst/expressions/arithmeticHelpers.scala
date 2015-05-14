@@ -47,7 +47,7 @@ trait TypeEqualConstraint {
   def right: Expression
 
   final override lazy val resolved =
-    left.resolved && right.resolved &&
+    childrenResolved &&
     left.dataType == right.dataType &&
     typeChecker(left.dataType)
 }

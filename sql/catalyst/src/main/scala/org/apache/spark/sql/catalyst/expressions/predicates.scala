@@ -123,7 +123,7 @@ case class InSet(value: Expression, hset: Set[Any])
 case class And(left: Expression, right: Expression) extends BinaryExpression
   with Predicate with ExpectsInputTypes with TypeEqualConstraint {
 
-  override def typeChecker = BooleanTypeChecker
+  override protected def typeChecker = BooleanTypeChecker
 
   override def expectedChildTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
 
@@ -151,7 +151,7 @@ case class And(left: Expression, right: Expression) extends BinaryExpression
 case class Or(left: Expression, right: Expression) extends BinaryExpression
   with Predicate with ExpectsInputTypes with TypeEqualConstraint {
 
-  override def typeChecker = BooleanTypeChecker
+  override protected def typeChecker = BooleanTypeChecker
 
   override def expectedChildTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
 
@@ -306,8 +306,8 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def children: Seq[Expression] = predicate :: trueValue :: falseValue :: Nil
   override def nullable: Boolean = trueValue.nullable || falseValue.nullable
 
-  def left = trueValue
-  def right = falseValue
+  def left: Expression = trueValue
+  def right: Expression = falseValue
 
   override def eval(input: Row): Any = {
     if (true == predicate.eval(input)) {
