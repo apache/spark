@@ -184,7 +184,7 @@ class HasProbabilityCol(Params):
         """
         Sets the value of :py:attr:`probabilityCol`.
         """
-        self.paramMap[self.probabilityCol] = value
+        self._paramMap[self.probabilityCol] = value
         return self
 
     def getProbabilityCol(self):
@@ -487,7 +487,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`maxDepth`.
         """
-        self.paramMap[self.maxDepth] = value
+        self._paramMap[self.maxDepth] = value
         return self
 
     def getMaxDepth(self):
@@ -500,7 +500,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`maxBins`.
         """
-        self.paramMap[self.maxBins] = value
+        self._paramMap[self.maxBins] = value
         return self
 
     def getMaxBins(self):
@@ -513,7 +513,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`minInstancesPerNode`.
         """
-        self.paramMap[self.minInstancesPerNode] = value
+        self._paramMap[self.minInstancesPerNode] = value
         return self
 
     def getMinInstancesPerNode(self):
@@ -526,7 +526,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`minInfoGain`.
         """
-        self.paramMap[self.minInfoGain] = value
+        self._paramMap[self.minInfoGain] = value
         return self
 
     def getMinInfoGain(self):
@@ -539,7 +539,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`maxMemoryInMB`.
         """
-        self.paramMap[self.maxMemoryInMB] = value
+        self._paramMap[self.maxMemoryInMB] = value
         return self
 
     def getMaxMemoryInMB(self):
@@ -552,7 +552,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`cacheNodeIds`.
         """
-        self.paramMap[self.cacheNodeIds] = value
+        self._paramMap[self.cacheNodeIds] = value
         return self
 
     def getCacheNodeIds(self):

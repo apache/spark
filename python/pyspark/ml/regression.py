@@ -102,7 +102,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         """
         Sets the value of :py:attr:`elasticNetParam`.
         """
-        self.paramMap[self.elasticNetParam] = value
+        self._paramMap[self.elasticNetParam] = value
         return self
 
     def getElasticNetParam(self):
@@ -210,7 +210,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`impurity`.
         """
-        self.paramMap[self.impurity] = value
+        self._paramMap[self.impurity] = value
         return self
 
     def getImpurity(self):
@@ -319,7 +319,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`impurity`.
         """
-        self.paramMap[self.impurity] = value
+        self._paramMap[self.impurity] = value
         return self
 
     def getImpurity(self):
@@ -332,7 +332,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`subsamplingRate`.
         """
-        self.paramMap[self.subsamplingRate] = value
+        self._paramMap[self.subsamplingRate] = value
         return self
 
     def getSubsamplingRate(self):
@@ -345,7 +345,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`numTrees`.
         """
-        self.paramMap[self.numTrees] = value
+        self._paramMap[self.numTrees] = value
         return self
 
     def getNumTrees(self):
@@ -358,7 +358,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`featureSubsetStrategy`.
         """
-        self.paramMap[self.featureSubsetStrategy] = value
+        self._paramMap[self.featureSubsetStrategy] = value
         return self
 
     def getFeatureSubsetStrategy(self):
@@ -461,7 +461,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         """
         Sets the value of :py:attr:`lossType`.
         """
-        self.paramMap[self.lossType] = value
+        self._paramMap[self.lossType] = value
         return self
 
     def getLossType(self):
@@ -474,7 +474,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         """
         Sets the value of :py:attr:`subsamplingRate`.
         """
-        self.paramMap[self.subsamplingRate] = value
+        self._paramMap[self.subsamplingRate] = value
         return self
 
     def getSubsamplingRate(self):
@@ -487,7 +487,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         """
         Sets the value of :py:attr:`stepSize`.
         """
-        self.paramMap[self.stepSize] = value
+        self._paramMap[self.stepSize] = value
         return self
 
     def getStepSize(self):

@@ -150,7 +150,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         Sets the value of :py:attr:`splits`.
         """
-        self.paramMap[self.splits] = value
+        self._paramMap[self.splits] = value
         return self
 
     def getSplits(self):
