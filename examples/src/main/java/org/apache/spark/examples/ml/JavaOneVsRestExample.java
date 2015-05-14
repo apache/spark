@@ -35,8 +35,8 @@ import org.apache.spark.sql.types.StructField;
 
 /**
  * An example runner for Multiclass to Binary Reduction with One Vs Rest.
- * The example uses Logistic Regression as the base classifier. All parameters in
- * the base classifier are set as default values.
+ * The example uses Logistic Regression as the base classifier. All parameters that
+ * can be specified on the base classifier can be passed in to the runner options.
  * Run with
  * <pre>
  * bin/run-example ml.JavaOneVsRestExample [options]
@@ -139,34 +139,34 @@ public class JavaOneVsRestExample {
     System.arraycopy(args, 1, remainingArgs, 0, remainingArgs.length);
 
     Option testInput = OptionBuilder.withArgName( "testInput" )
-      .hasArg()
-      .withDescription("input path to labeled examples")
+            .hasArg()
+            .withDescription("input path to labeled examples")
       .create("testInput");
     Option fracTest = OptionBuilder.withArgName( "testInput" )
-      .hasArg()
-      .withDescription("fraction of data to hold out for testing." +
-      " If given option testInput, this option is ignored. default: 0.2")
+            .hasArg()
+            .withDescription("fraction of data to hold out for testing." +
+                    " If given option testInput, this option is ignored. default: 0.2")
       .create("fracTest");
     Option maxIter = OptionBuilder.withArgName( "maxIter" )
-      .hasArg()
-      .withDescription("maximum number of iterations for Logistic Regression. default:100")
+            .hasArg()
+            .withDescription("maximum number of iterations for Logistic Regression. default:100")
       .create("maxIter");
     Option tol = OptionBuilder.withArgName( "tol" )
-      .hasArg()
-      .withDescription("the convergence tolerance of iterations " +
-      "for Logistic Regression. default: 1E-6")
+            .hasArg()
+            .withDescription("the convergence tolerance of iterations " +
+                    "for Logistic Regression. default: 1E-6")
       .create("tol");
     Option fitIntercept = OptionBuilder.withArgName( "fitIntercept" )
-      .hasArg()
-      .withDescription("fit intercept for logistic regression. default true")
+            .hasArg()
+            .withDescription("fit intercept for logistic regression. default true")
       .create("fitIntercept");
     Option regParam = OptionBuilder.withArgName( "regParam" )
-      .hasArg()
-      .withDescription("the regularization parameter for Logistic Regression.")
+            .hasArg()
+            .withDescription("the regularization parameter for Logistic Regression.")
       .create("regParam");
-    Option elasticNetParam = OptionBuilder.withArgName( "elasticNetParam" )
-      .hasArg()
-      .withDescription("the ElasticNet mixing parameter for Logistic Regression.")
+    Option elasticNetParam = OptionBuilder.withArgName("elasticNetParam" )
+            .hasArg()
+            .withDescription("the ElasticNet mixing parameter for Logistic Regression.")
       .create("elasticNetParam");
 
     Options options = new Options()
