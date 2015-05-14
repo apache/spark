@@ -254,25 +254,5 @@ class OrcPartitionDiscoverySuite extends QueryTest with FunSuiteLike with Before
       }
     }
   }
-
-  ignore("read partitioned table - merging compatible schemas: not supported yet") {
-    withTempDir { base =>
-      makeOrcFile(
-        (1 to 10).map(i => Tuple1(i)).toDF("intField"),
-        makePartitionDir(base, defaultPartitionName, "pi" -> 1))
-
-      makeOrcFile(
-        (1 to 10).map(i => (i, i.toString)).toDF("intField", "stringField"),
-        makePartitionDir(base, defaultPartitionName, "pi" -> 2))
-
-      load(base.getCanonicalPath, "org.apache.spark.sql.hive.orc").registerTempTable("t")
-
-      withTempTable("t") {
-        checkAnswer(
-          sql("SELECT * FROM t"),
-          (1 to 10).map(i => Row(i, null, 1)) ++ (1 to 10).map(i => Row(i, i.toString, 2)))
-      }
-    }
-  }
 }
 
