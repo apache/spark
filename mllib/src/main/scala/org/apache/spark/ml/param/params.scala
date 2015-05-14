@@ -241,7 +241,7 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
   override def w(value: Boolean): ParamPair[Boolean] = super.w(value)
 }
 
-/** Specialized version of [[Param[Array[T]]]] for Java. */
+/** Specialized version of [[Param[Array[String]]]] for Java. */
 class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array[String] => Boolean)
   extends Param[Array[String]](parent, name, doc, isValid) {
 
@@ -252,6 +252,19 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
 
   /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
   def w(value: java.util.List[String]): ParamPair[Array[String]] = w(value.asScala.toArray)
+}
+
+/** Specialized version of [[Param[Array[Double]]]] for Java. */
+class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array[Double] => Boolean)
+  extends Param[Array[Double]](parent, name, doc, isValid) {
+
+  def this(parent: Params, name: String, doc: String) =
+    this(parent, name, doc, ParamValidators.alwaysTrue)
+
+  override def w(value: Array[Double]): ParamPair[Array[Double]] = super.w(value)
+
+  /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
+  def w(value: java.util.List[Double]): ParamPair[Array[Double]] = w(value.asScala.toArray)
 }
 
 /**

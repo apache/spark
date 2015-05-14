@@ -261,7 +261,8 @@ class LogisticRegressionModel private[ml] (
     rawPrediction match {
       case dv: DenseVector =>
         var i = 0
-        while (i < dv.size) {
+        val size = dv.size
+        while (i < size) {
           dv.values(i) = 1.0 / (1.0 + math.exp(-dv.values(i)))
           i += 1
         }
@@ -360,7 +361,8 @@ private[classification] class MultiClassSummarizer extends Serializable {
   def histogram: Array[Long] = {
     val result = Array.ofDim[Long](numClasses)
     var i = 0
-    while (i < result.length) {
+    val len = result.length
+    while (i < len) {
       result(i) = distinctMap.getOrElse(i, 0L)
       i += 1
     }
@@ -483,7 +485,8 @@ private class LogisticAggregator(
       var i = 0
       val localThisGradientSumArray = this.gradientSumArray
       val localOtherGradientSumArray = other.gradientSumArray
-      while (i < localThisGradientSumArray.length) {
+      val len = localThisGradientSumArray.length
+      while (i < len) {
         localThisGradientSumArray(i) += localOtherGradientSumArray(i)
         i += 1
       }

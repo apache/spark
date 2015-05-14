@@ -255,6 +255,27 @@ class ColumnExpressionSuite extends QueryTest {
       Row(false, true) :: Row(true, false) :: Row(true, true) :: Nil)
   }
 
+  test("SPARK-7321 when conditional statements") {
+    val testData = (1 to 3).map(i => (i, i.toString)).toDF("key", "value")
+
+    checkAnswer(
+      testData.select(when($"key" === 1, -1).when($"key" === 2, -2).otherwise(0)),
+      Seq(Row(-1), Row(-2), Row(0))
+    )
+
+    // Without the ending otherwise, return null for unmatched conditions.
+    // Also test putting a non-literal value in the expression.
+    checkAnswer(
+      testData.select(when($"key" === 1, lit(0) - $"key").when($"key" === 2, -2)),
+      Seq(Row(-1), Row(-2), Row(null))
+    )
+
+    // Test error handling for invalid expressions.
+    intercept[IllegalArgumentException] { $"key".when($"key" === 1, -1) }
+    intercept[IllegalArgumentException] { $"key".otherwise(-1) }
+    intercept[IllegalArgumentException] { when($"key" === 1, -1).otherwise(-1).otherwise(-1) }
+  }
+
   test("sqrt") {
     checkAnswer(
       testData.select(sqrt('key)).orderBy('key.asc),

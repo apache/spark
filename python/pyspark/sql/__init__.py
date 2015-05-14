@@ -32,6 +32,8 @@ Important classes of Spark SQL and DataFrames:
       Aggregation methods, returned by :func:`DataFrame.groupBy`.
     - L{DataFrameNaFunctions}
       Methods for handling missing data (null values).
+    - L{DataFrameStatFunctions}
+      Methods for statistics functionality.
     - L{functions}
       List of built-in functions available for :class:`DataFrame`.
     - L{types}

@@ -45,6 +45,10 @@ class DummyClass6 extends DummyClass5 {
   val y: Boolean = true
 }
 
+class DummyClass7 {
+  val x: DummyClass1 = new DummyClass1
+}
+
 object DummyString {
   def apply(str: String) : DummyString = new DummyString(str.toArray)
 }
@@ -196,5 +200,13 @@ class SizeEstimatorSuite
   test("class field blocks rounding on 64-bit VM without useCompressedOops") {
     assertResult(24)(SizeEstimator.estimate(new DummyClass5))
     assertResult(32)(SizeEstimator.estimate(new DummyClass6))
+  }
+
+  test("check 64-bit detection for s390x arch") {
+    System.setProperty("os.arch", "s390x")
+    val initialize = PrivateMethod[Unit]('initialize)
+    SizeEstimator invokePrivate initialize()
+    // Class should be 32 bytes on s390x if recognised as 64 bit platform
+    assertResult(32)(SizeEstimator.estimate(new DummyClass7))
   }
 }
