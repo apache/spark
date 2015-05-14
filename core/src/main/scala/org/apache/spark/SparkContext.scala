@@ -689,6 +689,64 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     new ParallelCollectionRDD[T](this, seq, numSlices, Map[Int, Seq[String]]())
   }
 
+  /**
+   * Creates a new RDD[Long] containing elements from `start` to `end`(exclusive), increased by
+   * `step` every element.
+   *
+   * @note if we need to cache this RDD, we should make sure each partition contains no more than
+   *       2 billion element.
+   *
+   * @param start the start value.
+   * @param end the end value.
+   * @param step the
+   * @param numSlices the partition number of the new RDD.
+   * @return
+   */
+  def range(
+      start: Long,
+      end: Long,
+      step: Long = 1,
+      numSlices: Int = defaultParallelism): RDD[Long] = withScope {
+    assertNotStopped()
+    if (step == 0) {
+      // when step is 0, range will run infinite
+      throw new IllegalArgumentException("`step` cannot be 0")
+    }
+    val length =
+      if ((end - start) % step == 0) {
+        (end - start) / step
+      } else {
+        (end - start) / step + 1
+      }
+    parallelize(0 to numSlices).mapPartitions(iter => {
+      val i = iter.next()
+      val partitionStart = (i * length) / numSlices * step + start
+      val partitionEnd = ((i + 1) * length) / numSlices * step + start
+
+      new Iterator[Long] {
+        var number: Long = _
+        initialize()
+
+        override def hasNext =
+          if (step > 0) {
+            number < partitionEnd
+          } else {
+            number > partitionEnd
+          }
+
+        override def next() = {
+          val ret = number
+          number += step
+          ret
+        }
+
+        private def initialize() = {
+          number = partitionStart
+        }
+      }
+    })
+  }
+
   /** Distribute a local Scala collection to form an RDD.
    *
    * This method is identical to `parallelize`.

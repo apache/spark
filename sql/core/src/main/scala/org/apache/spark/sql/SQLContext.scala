@@ -1126,6 +1126,37 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * :: Experimental ::
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from `start` to `end`(exclusive) with step value 1.
+   *
+   * @since 1.4.0
+   * @group dataframe
+   */
+  @Experimental
+  def range(start: Long, end: Long, step: Long = 1): DataFrame = {
+    createDataFrame(
+      sparkContext.range(start, end, step).map(Row(_)),
+      StructType(StructField("id", LongType, nullable = false) :: Nil))
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from `start` to `end`(exclusive) with step value 1, with partition numbers
+   * specified.
+   *
+   * @since 1.4.0
+   * @group dataframe
+   */
+  @Experimental
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
+    createDataFrame(
+      sparkContext.range(start, end, step, numPartitions).map(Row(_)),
+      StructType(StructField("id", LongType, nullable = false) :: Nil))
+  }
+
+  /**
    * Executes a SQL query using Spark, returning the result as a [[DataFrame]]. The dialect that is
    * used for SQL parsing can be configured with 'spark.sql.dialect'.
    *
