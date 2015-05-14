@@ -167,7 +167,8 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     val weights = {
       val rawWeights = state.x.toArray.clone()
       var i = 0
-      while (i < rawWeights.length) {
+      val len = rawWeights.length
+      while (i < len) {
         rawWeights(i) *= { if (featuresStd(i) != 0.0) yStd / featuresStd(i) else 0.0 }
         i += 1
       }
@@ -307,7 +308,8 @@ private class LeastSquaresAggregator(
     val weightsArray = weights.toArray.clone()
     var sum = 0.0
     var i = 0
-    while (i < weightsArray.length) {
+    val len = weightsArray.length
+    while (i < len) {
       if (featuresStd(i) != 0.0) {
         weightsArray(i) /=  featuresStd(i)
         sum += weightsArray(i) * featuresMean(i)

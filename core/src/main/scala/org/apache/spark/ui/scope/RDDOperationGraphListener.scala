@@ -27,23 +27,33 @@ import org.apache.spark.ui.SparkUI
  * A SparkListener that constructs a DAG of RDD operations.
  */
 private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListener {
-  private val jobIdToStageIds = new mutable.HashMap[Int, Seq[Int]]
-  private val stageIdToGraph = new mutable.HashMap[Int, RDDOperationGraph]
-  private val stageIds = new mutable.ArrayBuffer[Int]
+  private[ui] val jobIdToStageIds = new mutable.HashMap[Int, Seq[Int]]
+  private[ui] val stageIdToGraph = new mutable.HashMap[Int, RDDOperationGraph]
+
+  // Keep track of the order in which these are inserted so we can remove old ones
+  private[ui] val jobIds = new mutable.ArrayBuffer[Int]
+  private[ui] val stageIds = new mutable.ArrayBuffer[Int]
 
   // How many jobs or stages to retain graph metadata for
+  private val retainedJobs =
+    conf.getInt("spark.ui.retainedJobs", SparkUI.DEFAULT_RETAINED_JOBS)
   private val retainedStages =
     conf.getInt("spark.ui.retainedStages", SparkUI.DEFAULT_RETAINED_STAGES)
 
   /** Return the graph metadata for the given stage, or None if no such information exists. */
-  def getOperationGraphForJob(jobId: Int): Seq[RDDOperationGraph] = {
-    jobIdToStageIds.get(jobId)
-      .map { sids => sids.flatMap { sid => stageIdToGraph.get(sid) } }
-      .getOrElse { Seq.empty }
+  def getOperationGraphForJob(jobId: Int): Seq[RDDOperationGraph] = synchronized {
+    val _stageIds = jobIdToStageIds.get(jobId).getOrElse { Seq.empty }
+    val graphs = _stageIds.flatMap { sid => stageIdToGraph.get(sid) }
+    // If the metadata for some stages have been removed, do not bother rendering this job
+    if (_stageIds.size != graphs.size) {
+      Seq.empty
+    } else {
+      graphs
+    }
   }
 
   /** Return the graph metadata for the given stage, or None if no such information exists. */
-  def getOperationGraphForStage(stageId: Int): Option[RDDOperationGraph] = {
+  def getOperationGraphForStage(stageId: Int): Option[RDDOperationGraph] = synchronized {
     stageIdToGraph.get(stageId)
   }
 
@@ -52,17 +62,26 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
     val jobId = jobStart.jobId
     val stageInfos = jobStart.stageInfos
 
+    jobIds += jobId
+    jobIdToStageIds(jobId) = jobStart.stageInfos.map(_.stageId).sorted
+
     stageInfos.foreach { stageInfo =>
       stageIds += stageInfo.stageId
       stageIdToGraph(stageInfo.stageId) = RDDOperationGraph.makeOperationGraph(stageInfo)
+      // Remove state for old stages
+      if (stageIds.size >= retainedStages) {
+        val toRemove = math.max(retainedStages / 10, 1)
+        stageIds.take(toRemove).foreach { id => stageIdToGraph.remove(id) }
+        stageIds.trimStart(toRemove)
+      }
     }
-    jobIdToStageIds(jobId) = stageInfos.map(_.stageId).sorted
 
-    // Remove graph metadata for old stages
-    if (stageIds.size >= retainedStages) {
-      val toRemove = math.max(retainedStages / 10, 1)
-      stageIds.take(toRemove).foreach { id => stageIdToGraph.remove(id) }
-      stageIds.trimStart(toRemove)
+    // Remove state for old jobs
+    if (jobIds.size >= retainedJobs) {
+      val toRemove = math.max(retainedJobs / 10, 1)
+      jobIds.take(toRemove).foreach { id => jobIdToStageIds.remove(id) }
+      jobIds.trimStart(toRemove)
     }
   }
+
 }

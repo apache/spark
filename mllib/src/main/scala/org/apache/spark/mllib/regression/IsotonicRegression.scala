@@ -69,7 +69,8 @@ class IsotonicRegressionModel (
   /** Asserts the input array is monotone with the given ordering. */
   private def assertOrdered(xs: Array[Double])(implicit ord: Ordering[Double]): Unit = {
     var i = 1
-    while (i < xs.length) {
+    val len = xs.length
+    while (i < len) {
       require(ord.compare(xs(i - 1), xs(i)) <= 0,
         s"Elements (${xs(i - 1)}, ${xs(i)}) are not ordered.")
       i += 1
@@ -329,11 +330,12 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     }
 
     var i = 0
-    while (i < input.length) {
+    val len = input.length
+    while (i < len) {
       var j = i
 
       // Find monotonicity violating sequence, if any.
-      while (j < input.length - 1 && input(j)._1 > input(j + 1)._1) {
+      while (j < len - 1 && input(j)._1 > input(j + 1)._1) {
         j = j + 1
       }
 
