@@ -306,8 +306,7 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
       alpha = $(alpha), nonnegative = $(nonnegative),
       checkpointInterval = $(checkpointInterval), seed = $(seed))
-    val model = new ALSModel(uid, $(rank), userFactors, itemFactors)
-      .setParent(this)
+    val model = new ALSModel(uid, $(rank), userFactors, itemFactors).setParent(this)
     copyValues(model)
   }
 

@@ -174,7 +174,7 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] {
  */
 @AlphaComponent
 class PipelineModel private[ml] (
-    val uid: String,
+    override val uid: String,
     val stages: Array[Transformer])
   extends Model[PipelineModel] with Logging {
 

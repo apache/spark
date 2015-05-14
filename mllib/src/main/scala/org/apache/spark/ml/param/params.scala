@@ -27,8 +27,6 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.util.Identifiable
 
-import scala.util.Try
-
 /**
  * :: AlphaComponent ::
  * A param with self-contained documentation and optionally default value. Primitive-typed param

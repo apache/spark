@@ -19,11 +19,11 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{NumericType, StringType, StructType}
