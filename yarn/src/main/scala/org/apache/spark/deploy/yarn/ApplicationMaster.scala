@@ -301,7 +301,7 @@ private[spark] class ApplicationMaster(
 
     // we want to be reasonably responsive without causing too many requests to RM.
     val heartbeatInterval = math.max(0, math.min(expiryInterval / 2,
-      sparkConf.getTimeAsMs("spark.yarn.scheduler.heartbeat.interval-ms", "5s")))
+      sparkConf.getTimeAsMs("spark.yarn.scheduler.heartbeat.interval-ms", "3s")))
 
     // we want to check more frequently for pending containers
     val initialAllocationInterval = math.min(heartbeatInterval,

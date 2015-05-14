@@ -71,7 +71,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 </tr>
 <tr>
   <td><code>spark.yarn.scheduler.heartbeat.interval-ms</code></td>
-  <td>5000</td>
+  <td>3000</td>
   <td>
     The interval in ms in which the Spark application master heartbeats into the YARN ResourceManager.
     The value is capped at half the value of YARN's configuration for the expiry interval
