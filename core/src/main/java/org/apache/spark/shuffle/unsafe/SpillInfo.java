@@ -15,20 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.shuffle.unsafe;
 
-import java.io.IOException
+import java.io.File;
 
-import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.storage.TempShuffleBlockId;
 
 /**
- * Obtained inside a map task to write out records to the shuffle system.
+ * Metadata for a block of data written by {@link UnsafeShuffleExternalSorter}.
  */
-private[spark] abstract class ShuffleWriter[K, V] {
-  /** Write a sequence of records to this task's output */
-  @throws[IOException]
-  def write(records: Iterator[Product2[K, V]]): Unit
+final class SpillInfo {
+  final long[] partitionLengths;
+  final File file;
+  final TempShuffleBlockId blockId;
 
-  /** Close this writer, passing along whether the map completed */
-  def stop(success: Boolean): Option[MapStatus]
+  public SpillInfo(int numPartitions, File file, TempShuffleBlockId blockId) {
+    this.partitionLengths = new long[numPartitions];
+    this.file = file;
+    this.blockId = blockId;
+  }
 }
