@@ -29,6 +29,8 @@ import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources._
 
+import scala.collection.JavaConverters._
+
 private[sql] object JDBCRDD extends Logging {
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
@@ -303,6 +305,8 @@ private[sql] class JDBCRDD(
   case object StringConversion extends JDBCConversion
   case object TimestampConversion extends JDBCConversion
   case object BinaryConversion extends JDBCConversion
+  case object ArrayConversion extends JDBCConversion
+  case object MapConversion extends JDBCConversion
 
   /**
    * Maps a StructType to a type tag list.
@@ -321,6 +325,8 @@ private[sql] class JDBCRDD(
       case StringType            => StringConversion
       case TimestampType         => TimestampConversion
       case BinaryType            => BinaryConversion
+      case ArrayType(_,_)        => ArrayConversion
+      case MapType(_,_,_)        => MapConversion
       case _                     => throw new IllegalArgumentException(s"Unsupported field $sf")
     }).toArray
   }
@@ -393,6 +399,24 @@ private[sql] class JDBCRDD(
                 j = j + 1;
               }
               mutableRow.setLong(i, ans)
+            }
+            case ArrayConversion      => {
+              val sqlArray = rs.getArray(pos)
+              val array = if (sqlArray == null) {
+                null
+              } else {
+                sqlArray.getArray.asInstanceOf[Array[_]].toSeq
+              }
+              mutableRow.update(i, array)
+            }
+            case MapConversion        => {
+              val sqlMap = rs.getObject(pos)
+              val map = if (sqlMap == null) {
+                null
+              } else {
+                sqlMap.asInstanceOf[java.util.Map[String,String]].asScala
+              }
+              mutableRow.update(i, map)
             }
           }
           if (rs.wasNull) mutableRow.setNullAt(i)
