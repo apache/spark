@@ -698,7 +698,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *
    * @param start the start value.
    * @param end the end value.
-   * @param step the
+   * @param step the incremental step
    * @param numSlices the partition number of the new RDD.
    * @return
    */
