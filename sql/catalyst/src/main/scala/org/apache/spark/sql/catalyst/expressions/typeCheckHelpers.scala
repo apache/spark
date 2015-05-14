@@ -25,8 +25,10 @@ trait NumericHolder {
 
   protected def baseType: DataType = dataType
 
-  lazy val numeric =
-    baseType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+  lazy val numeric = baseType match {
+    case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
+    case NullType => UnresolvedNumeric
+  }
 }
 
 trait OrderingHolder {
@@ -34,8 +36,10 @@ trait OrderingHolder {
 
   protected def baseType: DataType = dataType
 
-  lazy val ordering =
-    baseType.asInstanceOf[AtomicType].ordering.asInstanceOf[Ordering[Any]]
+  lazy val ordering = baseType match {
+    case a: AtomicType => a.ordering.asInstanceOf[Ordering[Any]]
+    case NullType => UnresolvedOrdering
+  }
 }
 
 trait TypeEqualConstraint {
@@ -82,4 +86,69 @@ object OrderingTypeChecker extends (DataType => Boolean) {
 object BooleanTypeChecker extends (DataType => Boolean) {
   override def apply(t: DataType): Boolean =
     t == BooleanType || t.isInstanceOf[NullType]
+}
+
+object UnresolvedOrdering extends Ordering[Any] {
+  override def compare(x: Any, y: Any): Int = sys.error(s"Type does not support ordered operations")
+}
+
+object UnresolvedNumeric extends Numeric[Any] {
+  override def plus(x: Any, y: Any): Any = error
+
+  override def toDouble(x: Any): Double = error
+
+  override def toFloat(x: Any): Float = error
+
+  override def toInt(x: Any): Int = error
+
+  override def negate(x: Any): Any = error
+
+  override def fromInt(x: Int): Any = error
+
+  override def toLong(x: Any): Long = error
+
+  override def times(x: Any, y: Any): Any = error
+
+  override def minus(x: Any, y: Any): Any = error
+
+  override def compare(x: Any, y: Any): Int = UnresolvedOrdering.compare(x, y)
+
+  private[this] def error = sys.error(s"Type does not support numeric operations")
+}
+
+object UnresolvedIntegral extends Integral[Any] {
+  override def quot(x: Any, y: Any): Any = error
+
+  override def rem(x: Any, y: Any): Any = error
+
+  override def toDouble(x: Any): Double = error
+
+  override def plus(x: Any, y: Any): Any = error
+
+  override def toFloat(x: Any): Float = error
+
+  override def toInt(x: Any): Int = error
+
+  override def negate(x: Any): Any = error
+
+  override def fromInt(x: Int): Any = error
+
+  override def toLong(x: Any): Long = error
+
+  override def times(x: Any, y: Any): Any = error
+
+  override def minus(x: Any, y: Any): Any = error
+
+  override def compare(x: Any, y: Any): Int = UnresolvedOrdering.compare(x, y)
+
+  def bitwiseAnd(x: Any, y: Any): Any = error("&")
+
+  def bitwiseOr(x: Any, y: Any): Any = error("|")
+
+  def bitwiseXor(x: Any, y: Any): Any = error("^")
+
+  def bitwiseNot(x: Any): Any = error("~")
+
+  private[this] def error = sys.error(s"Type does not support numeric operations")
+  private[this] def error(op: String) = sys.error(s"Type does not support bitwise $op operation")
 }

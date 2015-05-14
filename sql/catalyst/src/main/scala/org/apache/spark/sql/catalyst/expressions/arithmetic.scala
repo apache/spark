@@ -177,6 +177,7 @@ case class Divide(left: Expression, right: Expression) extends NumericBinaryArit
   lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
     case it: IntegralType => it.integral.asInstanceOf[Integral[Any]].quot
+    case NullType => UnresolvedIntegral.quot
   }
   
   override def eval(input: Row): Any = {
@@ -202,6 +203,7 @@ case class Remainder(left: Expression, right: Expression) extends NumericBinaryA
   lazy val integral = dataType match {
     case i: IntegralType => i.integral.asInstanceOf[Integral[Any]]
     case i: FractionalType => i.asIntegral.asInstanceOf[Integral[Any]]
+    case NullType => UnresolvedIntegral
   }
 
   override def eval(input: Row): Any = {
@@ -240,6 +242,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BitwiseBinary
       ((evalE1: Int, evalE2: Int) => evalE1 & evalE2).asInstanceOf[(Any, Any) => Any]
     case LongType =>
       ((evalE1: Long, evalE2: Long) => evalE1 & evalE2).asInstanceOf[(Any, Any) => Any]
+    case NullType => UnresolvedIntegral.bitwiseAnd
   }
 
   override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = and(evalE1, evalE2)
@@ -260,6 +263,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BitwiseBinaryA
       ((evalE1: Int, evalE2: Int) => evalE1 | evalE2).asInstanceOf[(Any, Any) => Any]
     case LongType =>
       ((evalE1: Long, evalE2: Long) => evalE1 | evalE2).asInstanceOf[(Any, Any) => Any]
+    case NullType => UnresolvedIntegral.bitwiseOr
   }
 
   override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = or(evalE1, evalE2)
@@ -280,6 +284,7 @@ case class BitwiseXor(left: Expression, right: Expression) extends BitwiseBinary
       ((evalE1: Int, evalE2: Int) => evalE1 ^ evalE2).asInstanceOf[(Any, Any) => Any]
     case LongType =>
       ((evalE1: Long, evalE2: Long) => evalE1 ^ evalE2).asInstanceOf[(Any, Any) => Any]
+    case NullType => UnresolvedIntegral.bitwiseXor
   }
 
   override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = xor(evalE1, evalE2)
@@ -307,6 +312,7 @@ case class BitwiseNot(child: Expression) extends UnaryExpression {
       ((evalE: Int) => ~evalE).asInstanceOf[(Any) => Any]
     case LongType =>
       ((evalE: Long) => ~evalE).asInstanceOf[(Any) => Any]
+    case NullType => UnresolvedIntegral.bitwiseNot
   }
 
   override def eval(input: Row): Any = {
