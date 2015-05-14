@@ -296,6 +296,9 @@ trait HiveTypeCoercion {
    */
   object InConversion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e 
+      
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
         i.makeCopy(Array(a, b.map(Cast(_, a.dataType))))
     }
