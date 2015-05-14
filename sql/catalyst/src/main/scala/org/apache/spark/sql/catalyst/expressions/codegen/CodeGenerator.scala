@@ -660,6 +660,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case FloatType => "Float"
     case BooleanType => "Boolean"
     case StringType => "org.apache.spark.sql.types.UTF8String"
+    case DateType => "Int"
   }
 
   protected def defaultPrimitive(dt: DataType) = dt match {
@@ -685,7 +686,16 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * List of data types that have special accessors and setters in [[Row]].
    */
   protected val nativeTypes =
-    Seq(IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
+    Seq(
+      IntegerType,
+      BooleanType,
+      LongType,
+      DoubleType,
+      FloatType,
+      ShortType,
+      ByteType,
+      StringType,
+      DateType)
 
   /**
    * Returns true if the data type has a special accessor and setter in [[Row]].

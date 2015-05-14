@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.test.TestSQLContext.implicits._
@@ -173,6 +173,15 @@ object TestData {
       "2, B2, false, null" ::
       "3, C3, true, null" ::
       "4, D4, true, 2147483644" :: Nil)
+
+  case class DateField(date: java.sql.Date)
+  val dates = TestSQLContext.sparkContext.parallelize(
+    Seq(
+      Date.valueOf("1970-01-01"),
+      Date.valueOf("1970-01-02"),
+      Date.valueOf("1970-01-03")).map(DateField(_))
+  )
+  dates.toDF().registerTempTable("dates")
 
   case class TimestampField(time: Timestamp)
   val timestamps = TestSQLContext.sparkContext.parallelize((1 to 3).map { i =>

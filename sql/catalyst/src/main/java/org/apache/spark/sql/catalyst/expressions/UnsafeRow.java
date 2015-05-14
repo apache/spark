@@ -28,6 +28,7 @@ import java.util.*;
 
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.DateUtils;
 import static org.apache.spark.sql.types.DataTypes.*;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.UTF8String;
@@ -215,6 +216,12 @@ public final class UnsafeRow implements MutableRow {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
     PlatformDependent.UNSAFE.putFloat(baseObject, getFieldOffset(ordinal), value);
+  }
+
+
+  @Override
+  public void setDate(int ordinal, Date value) {
+    setInt(ordinal, DateUtils.fromJavaDate(value));
   }
 
   @Override

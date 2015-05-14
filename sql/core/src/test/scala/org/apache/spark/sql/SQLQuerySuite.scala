@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.sql.Date
+
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.catalyst.DefaultParserDialect
@@ -499,6 +501,45 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       """select cast("2015-01-28" as date) from testData limit 1"""),
       Row(java.sql.Date.valueOf("2015-01-28"))
     )
+  }
+
+  test("date support") {
+    checkAnswer(sql(
+      "SELECT date FROM dates"),
+      Seq(
+        Row(Date.valueOf("1970-01-01")),
+        Row(Date.valueOf("1970-01-02")),
+        Row(Date.valueOf("1970-01-03"))))
+
+    checkAnswer(sql(
+      "SELECT date FROM dates WHERE date=CAST('1970-01-01' AS date)"),
+      Row(Date.valueOf("1970-01-01")))
+
+    checkAnswer(sql(
+      "SELECT date FROM dates WHERE date='1970-01-01'"),
+      Row(Date.valueOf("1970-01-01")))
+
+    checkAnswer(sql(
+      "SELECT date FROM dates WHERE '1970-01-01'=date"),
+      Row(Date.valueOf("1970-01-01")))
+
+    checkAnswer(sql(
+      """SELECT date FROM dates WHERE date<'1970-01-03'
+          AND date>'1970-01-01'"""),
+      Row(Date.valueOf("1970-01-02")))
+
+    checkAnswer(sql(
+      """
+        |SELECT date FROM dates
+        |WHERE date IN ('1970-01-01','1970-01-02')
+      """.stripMargin),
+      Seq(
+        Row(Date.valueOf("1970-01-01")),
+        Row(Date.valueOf("1970-01-02"))))
+
+    checkAnswer(sql(
+      "SELECT date FROM dates WHERE date='123'"),
+      Nil)
   }
 
   test("from follow multiple brackets") {
