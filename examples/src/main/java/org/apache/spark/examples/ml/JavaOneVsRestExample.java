@@ -86,11 +86,11 @@ public class JavaOneVsRestExample {
     String testInput = params.testInput;
 
     // compute the train/test split: if testInput is not provided use part of input.
-    double f = params.fracTest;
     if (testInput != null) {
       train = inputData;
       test = MLUtils.loadLibSVMFile(jsc.sc(), testInput);
     } else {
+      double f = params.fracTest;
       RDD<LabeledPoint>[] tmp = inputData.randomSplit(new double[]{1 - f, f}, 12345);
       train = tmp[0];
       test = tmp[1];
@@ -137,21 +137,46 @@ public class JavaOneVsRestExample {
       remainingArgs = new String[0];
     }
     System.arraycopy(args, 1, remainingArgs, 0, remainingArgs.length);
-    Options options = new Options();
-    options.addOption("testInput", "testInput", true, "input path to labeled examples");
-    options.addOption("fracTest", "fracTest", true,
-      "fraction of data to hold out for testing. " +
-      "If given option testInput, this option is ignored. default: 0.2");
-    options.addOption("maxIter", "maxIter", true,
-      "maximum number of iterations for Logistic Regression. default:100");
-    options.addOption("tol", "tol", true,
-      "the convergence tolerance of iterations. default: 1E-6");
-    options.addOption("fitIntercept","fitIntercept", true,
-      "fit intercept for logistic regression. default true");
-    options.addOption("regParam", "regParam", true,
-      "the regularization parameter for Logistic Regression.");
-    options.addOption("elasticNetParam", "elasticNetParam",
-      true, "the ElasticNet mixing parameter for Logistic Regression.");
+
+    Option testInput = OptionBuilder.withArgName( "testInput" )
+      .hasArg()
+      .withDescription("input path to labeled examples")
+      .create("testInput");
+    Option fracTest = OptionBuilder.withArgName( "testInput" )
+      .hasArg()
+      .withDescription("fraction of data to hold out for testing." +
+      " If given option testInput, this option is ignored. default: 0.2")
+      .create("fracTest");
+    Option maxIter = OptionBuilder.withArgName( "maxIter" )
+      .hasArg()
+      .withDescription("maximum number of iterations for Logistic Regression. default:100")
+      .create("maxIter");
+    Option tol = OptionBuilder.withArgName( "tol" )
+      .hasArg()
+      .withDescription("the convergence tolerance of iterations " +
+      "for Logistic Regression. default: 1E-6")
+      .create("tol");
+    Option fitIntercept = OptionBuilder.withArgName( "fitIntercept" )
+      .hasArg()
+      .withDescription("fit intercept for logistic regression. default true")
+      .create("fitIntercept");
+    Option regParam = OptionBuilder.withArgName( "regParam" )
+      .hasArg()
+      .withDescription("the regularization parameter for Logistic Regression.")
+      .create("regParam");
+    Option elasticNetParam = OptionBuilder.withArgName( "elasticNetParam" )
+      .hasArg()
+      .withDescription("the ElasticNet mixing parameter for Logistic Regression.")
+      .create("elasticNetParam");
+
+    Options options = new Options()
+      .addOption(testInput)
+      .addOption(fracTest)
+      .addOption(maxIter)
+      .addOption(tol)
+      .addOption(fitIntercept)
+      .addOption(regParam)
+      .addOption(elasticNetParam);
 
     CommandLineParser parser = new PosixParser();
 
@@ -159,7 +184,7 @@ public class JavaOneVsRestExample {
     params.input = input;
 
     try {
-      CommandLine cmd = parser.parse( options, remainingArgs);
+      CommandLine cmd = parser.parse(options, remainingArgs);
       String value;
       if (cmd.hasOption("maxIter")) {
         value = cmd.getOptionValue("maxIter");
