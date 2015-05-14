@@ -1199,7 +1199,12 @@ class DataFrame private[sql](
    * @group basic
    */
   def registerTempTable(tableName: String): Unit = {
-    sqlContext.registerDataFrameAsTable(this, tableName)
+    if( !sqlContext.catalog.tableExists(Seq(tableName)) ){
+      sqlContext.registerDataFrameAsTable(this, tableName)
+    }
+    else{
+      sys.error(s"Table $tableName already exists")
+    }
   }
 
   /**
