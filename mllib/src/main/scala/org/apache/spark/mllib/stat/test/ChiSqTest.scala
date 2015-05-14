@@ -200,12 +200,13 @@ private[stat] object ChiSqTest extends Logging {
     val method = methodFromString(methodName)
     val numRows = counts.numRows
     val numCols = counts.numCols
-    val colMajorArrLen = colMajorArr.length
 
     // get row and column sums
     val colSums = new Array[Double](numCols)
     val rowSums = new Array[Double](numRows)
     val colMajorArr = counts.toArray
+    val colMajorArrLen = colMajorArr.length
+
     var i = 0
     while (i < colMajorArrLen) {
       val elem = colMajorArr(i)
