@@ -323,7 +323,7 @@ class Analyzer(
             (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
 
           case oldVersion: Generate
-              if AttributeSet(oldVersion.generatorOutput).intersect(conflictingAttributes).nonEmpty =>
+              if oldVersion.generatedSet.intersect(conflictingAttributes).nonEmpty =>
             val newOutput = oldVersion.generatorOutput.map(_.newInstance())
             (oldVersion, oldVersion.copy(generatorOutput = newOutput))
         }.headOption.getOrElse { // Only handle first case, others will be fixed on the next pass.
