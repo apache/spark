@@ -38,7 +38,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   def unsafeEnabled: Boolean
   def numPartitions: Int
 
-
+  lazy val planner = sqlContext.planner
+  
   /**
    * Used to build table scan operators where complex projection and filtering are done using
    * separate physical operators.  This function returns the given scan operator with Project and
@@ -181,7 +182,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              if canBeCodeGened(
                   allAggregates(partialComputation) ++
                   allAggregates(rewrittenAggregateExpressions)) &&
-               sqlContext.planner.codegenEnabled =>
+               planner.codegenEnabled =>
           execution.GeneratedAggregate(
             partial = false,
             namedGroupingAttributes,
@@ -300,7 +301,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           } else {
             identity[Seq[Expression]] _
           }
-        sqlContext.planner.pruneFilterProject(
+        planner.pruneFilterProject(
           projectList,
           filters,
           prunePushedDownFilters,
@@ -316,7 +317,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object InMemoryScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, filters, mem: InMemoryRelation) =>
-        sqlContext.planner.pruneFilterProject(
+        planner.pruneFilterProject(
           projectList,
           filters,
           identity[Seq[Expression]], // All filters still need to be evaluated.
@@ -327,7 +328,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
-    def numPartitions: Int = sqlContext.planner.numPartitions
+    def numPartitions: Int = planner.numPartitions
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
