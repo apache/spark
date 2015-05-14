@@ -513,7 +513,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     val executorsSet = new HashSet[(String, String)]
     var minLaunchTime = Long.MaxValue
     var maxFinishTime = Long.MinValue
-    var numEffectiveTasks = 0
 
     val executorsArrayStr =
       tasks.sortBy(-_.taskInfo.launchTime).take(MAX_TIMELINE_TASKS).map { taskUIData =>
@@ -537,7 +536,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         val totalExecutionTime = finishTime - launchTime
         minLaunchTime = launchTime.min(minLaunchTime)
         maxFinishTime = launchTime.max(maxFinishTime)
-        numEffectiveTasks += 1
 
         def toProportion(time: Long) = (time.toDouble / totalExecutionTime * 100).toLong
 
@@ -653,11 +651,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     </span> ++
     <div id="task-assignment-timeline" class="collapsed">
       {
-        if (MAX_TIMELINE_TASKS < numEffectiveTasks) {
+        if (MAX_TIMELINE_TASKS < tasks.size) {
           <strong>
             This stage has more than the maximum number of tasks that can be shown in the
-            visualization! Only the first {MAX_TIMELINE_TASKS} tasks
-            (of {numEffectiveTasks} total) are shown.
+            visualization! Only the most recent {MAX_TIMELINE_TASKS} tasks
+            (of {tasks.size} total) are shown.
           </strong>
         } else {
           Seq.empty
