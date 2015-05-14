@@ -35,6 +35,8 @@ import org.apache.spark.sql.hive.HiveMetastoreTypes
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.sources._
+
+/* Implicit conversions */
 import scala.collection.JavaConversions._
 
 
