@@ -63,6 +63,7 @@ import org.apache.spark.util.StatCounter;
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
 // see http://stackoverflow.com/questions/758570/.
+@SuppressWarnings("serial")
 public class JavaAPISuite implements Serializable {
   private transient JavaSparkContext sc;
   private transient File tempDir;

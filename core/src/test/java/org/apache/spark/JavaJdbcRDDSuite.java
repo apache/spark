@@ -34,6 +34,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+@SuppressWarnings("serial")
 public class JavaJdbcRDDSuite implements Serializable {
   private transient JavaSparkContext sc;
 
