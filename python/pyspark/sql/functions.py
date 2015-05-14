@@ -77,6 +77,9 @@ _functions = {
     'sqrt': 'Computes the square root of the specified float value.',
     'abs': 'Computes the absolute value.',
 
+    # table generating functions
+    'explode': 'Returns a new row for each element in the given array or map.',
+
     # unary math functions
     'acos': 'Computes the cosine inverse of the given value; the returned angle is in the range' +
             '0.0 through pi.',

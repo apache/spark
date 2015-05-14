@@ -1511,13 +1511,17 @@ class Column(object):
     isNull = _unary_op("isNull", "True if the current expression is null.")
     isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
 
-    def alias(self, alias):
+    def alias(self, *alias):
         """Return a alias for this column
 
         >>> df.select(df.age.alias("age2")).collect()
         [Row(age2=2), Row(age2=5)]
         """
-        return Column(getattr(self._jc, "as")(alias))
+
+        if len(alias) == 1:
+            return Column(getattr(self._jc, "as")(alias[0]))
+        else:
+            return Column(getattr(self._jc, "as")(alias))
 
     @ignore_unicode_prefix
     def cast(self, dataType):

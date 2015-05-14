@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import scala.language.implicitConversions
+import scala.collection.JavaConversions._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
@@ -616,7 +617,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def as(alias: String): Column = Alias(expr, alias)()
 
   /**
-   * Assigns the given aliases to the results of a table generating function.
+   * (Scala-specific) Assigns the given aliases to the results of a table generating function.
    * {{{
    *   // Renames colA to colB in select output.
    *   df.select(explode($"myMap").as("key" :: "value" :: Nil))
@@ -625,6 +626,20 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    */
   def as(aliases: Seq[String]): Column = MultiAlias(expr, aliases)
+
+  /**
+   * Assigns the given aliases to the results of a table generating function.
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select(explode($"myMap").as("key" :: "value" :: Nil))
+   * }}}
+   *
+   * @group expr_ops
+   */
+  def as(aliases: Array[String]): Column = MultiAlias(expr, aliases)
+
+  /** Used for multi aliases from python. */
+  protected def as(aliases: java.util.List[String]): Column = MultiAlias(expr, aliases)
 
   /**
    * Gives the column an alias.
