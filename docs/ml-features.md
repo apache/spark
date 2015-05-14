@@ -207,8 +207,9 @@ val binarizer: Binarizer = new Binarizer()
   .setOutputCol("binarized_feature")
   .setThreshold(0.5)
 
-val binarizedDataFrame = binarizer.transform(dataFrame).select("binarized_feature")
-binarizedDataFrame.collect().foreach(println)
+val binarizedDataFrame = binarizer.transform(dataFrame)
+val binarizedFeatures = binarizedDataFrame.select("binarized_feature")
+binarizedFeatures.collect().foreach(println)
 {% endhighlight %}
 </div>
 
@@ -241,7 +242,8 @@ Binarizer binarizer = new Binarizer()
   .setOutputCol("binarized_feature")
   .setThreshold(0.5);
 DataFrame binarizedDataFrame = binarizer.transform(continuousDataFrame);
-for (Row r : binarizedDataFrame.select("binarized_feature").collect()) {
+DataFrame binarizedFeatures = binarizedDataFrame.select("binarized_feature");
+for (Row r : binarizedFeatures.collect()) {
   Double binarized_value = r.getDouble(0);
   System.out.println(binarized_value);
 }
@@ -259,7 +261,8 @@ continuousDataFrame = sqlContext.createDataFrame([
 ], ["label", "feature"])
 binarizer = Binarizer(threshold=0.5, inputCol="feature", outputCol="binarized_feature")
 binarizedDataFrame = binarizer.transform(continuousDataFrame)
-for binarized_feature in binarizedDataFrame.select("binarized_feature").collect():
+binarizedFeatures = binarizedDataFrame.select("binarized_feature")
+for binarized_feature in binarizedFeatures.collect():
   print binarized_feature
 {% endhighlight %}
 </div>
