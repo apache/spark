@@ -17,26 +17,24 @@
 
 package org.apache.spark.ml.util
 
-import java.util.UUID
+import org.scalatest.FunSuite
 
+class IdentifiableSuite extends FunSuite {
 
-/**
- * Trait for an object with an immutable unique ID that identifies itself and its derivatives.
- */
-trait Identifiable {
+  import IdentifiableSuite.Test
 
-  /**
-   * An immutable unique ID for the object and its derivatives.
-   */
-  val uid: String
+  test("Identifiable") {
+    val test0 = new Test("test_0")
+    assert(test0.uid === "test_0")
+
+    val test1 = new Test
+    assert(test1.uid.startsWith("test_"))
+  }
 }
 
-object Identifiable {
+object IdentifiableSuite {
 
-  /**
-   * Returns a random UID that concatenates the given prefix, "_", and 12 random hex chars.
-   */
-  def randomUID(prefix: String): String = {
-    prefix + "_" + UUID.randomUUID().toString.takeRight(12)
+  class Test(override val uid: String) extends Identifiable {
+    def this() = this(Identifiable.randomUID("test"))
   }
 }
