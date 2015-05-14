@@ -19,10 +19,10 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}

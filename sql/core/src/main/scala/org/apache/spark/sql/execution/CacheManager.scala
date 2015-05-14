@@ -15,18 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.columnar.InMemoryRelation
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
 /** Holds a cached logical plan and its data */
-private case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
+private[sql] case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
 
 /**
  * Provides support in a SQLContext for caching query results and automatically using these cached

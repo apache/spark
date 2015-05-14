@@ -134,7 +134,7 @@ class StreamingContext private[streaming] (
     if (sc_ != null) {
       sc_
     } else if (isCheckpointPresent) {
-      new SparkContext(cp_.createSparkConf())
+      SparkContext.getOrCreate(cp_.createSparkConf())
     } else {
       throw new SparkException("Cannot create StreamingContext without a SparkContext")
     }
@@ -637,8 +637,10 @@ class StreamingContext private[streaming] (
  */
 
 object StreamingContext extends Logging {
+
   /**
-   * Lock that guards access to global variables that track active StreamingContext.
+   * Lock that guards activation of a StreamingContext as well as access to the singleton active
+   * StreamingContext in getActiveOrCreate().
    */
   private val ACTIVATION_LOCK = new Object()
 
@@ -661,12 +663,66 @@ object StreamingContext extends Logging {
     }
   }
 
+  /**
+   * :: Experimental ::
+   *
+   * Get the currently active context, if there is one. Active means started but not stopped.
+   */
+  @Experimental
+  def getActive(): Option[StreamingContext] = {
+    ACTIVATION_LOCK.synchronized {
+      Option(activeContext.get())
+    }
+  }
+
   @deprecated("Replaced by implicit functions in the DStream companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
   def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
       (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null)
     : PairDStreamFunctions[K, V] = {
     DStream.toPairDStreamFunctions(stream)(kt, vt, ord)
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Either return the "active" StreamingContext (that is, started but not stopped), or create a
+   * new StreamingContext that is
+   * @param creatingFunc   Function to create a new StreamingContext
+   */
+  @Experimental
+  def getActiveOrCreate(creatingFunc: () => StreamingContext): StreamingContext = {
+    ACTIVATION_LOCK.synchronized {
+      getActive().getOrElse { creatingFunc() }
+    }
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Either get the currently active StreamingContext (that is, started but not stopped),
+   * OR recreate a StreamingContext from checkpoint data in the given path. If checkpoint data
+   * does not exist in the provided, then create a new StreamingContext by calling the provided
+   * `creatingFunc`.
+   *
+   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
+   * @param creatingFunc   Function to create a new StreamingContext
+   * @param hadoopConf     Optional Hadoop configuration if necessary for reading from the
+   *                       file system
+   * @param createOnError  Optional, whether to create a new StreamingContext if there is an
+   *                       error in reading checkpoint data. By default, an exception will be
+   *                       thrown on error.
+   */
+  @Experimental
+  def getActiveOrCreate(
+      checkpointPath: String,
+      creatingFunc: () => StreamingContext,
+      hadoopConf: Configuration = new Configuration(),
+      createOnError: Boolean = false
+    ): StreamingContext = {
+    ACTIVATION_LOCK.synchronized {
+      getActive().getOrElse { getOrCreate(checkpointPath, creatingFunc, hadoopConf, createOnError) }
+    }
   }
 
   /**
@@ -694,54 +750,6 @@ object StreamingContext extends Logging {
     checkpointOption.map(new StreamingContext(null, _, null)).getOrElse(creatingFunc())
   }
 
-
-  /**
-   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
-   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
-   * recreated from the checkpoint data. If the data does not exist, then the StreamingContext
-   * will be created by called the provided `creatingFunc` on the provided `sparkContext`. Note
-   * that the SparkConf configuration in the checkpoint data will not be restored as the
-   * SparkContext has already been created.
-   *
-   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
-   * @param creatingFunc   Function to create a new StreamingContext using the given SparkContext
-   * @param sparkContext   SparkContext using which the StreamingContext will be created
-   */
-  def getOrCreate(
-      checkpointPath: String,
-      creatingFunc: SparkContext => StreamingContext,
-      sparkContext: SparkContext
-    ): StreamingContext = {
-    getOrCreate(checkpointPath, creatingFunc, sparkContext, createOnError = false)
-  }
-
-  /**
-   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
-   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
-   * recreated from the checkpoint data. If the data does not exist, then the StreamingContext
-   * will be created by called the provided `creatingFunc` on the provided `sparkContext`. Note
-   * that the SparkConf configuration in the checkpoint data will not be restored as the
-   * SparkContext has already been created.
-   *
-   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
-   * @param creatingFunc   Function to create a new StreamingContext using the given SparkContext
-   * @param sparkContext   SparkContext using which the StreamingContext will be created
-   * @param createOnError  Whether to create a new StreamingContext if there is an
-   *                       error in reading checkpoint data. By default, an exception will be
-   *                       thrown on error.
-   */
-  def getOrCreate(
-      checkpointPath: String,
-      creatingFunc: SparkContext => StreamingContext,
-      sparkContext: SparkContext,
-      createOnError: Boolean
-    ): StreamingContext = {
-    val checkpointOption = CheckpointReader.read(
-      checkpointPath, sparkContext.conf, sparkContext.hadoopConfiguration, createOnError)
-    checkpointOption.map(new StreamingContext(sparkContext, _, null))
-                    .getOrElse(creatingFunc(sparkContext))
-  }
-
   /**
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
    * their JARs to StreamingContext.
@@ -761,7 +769,7 @@ object StreamingContext extends Logging {
     ): SparkContext = {
     val conf = SparkContext.updatedConf(
       new SparkConf(), master, appName, sparkHome, jars, environment)
-    createNewSparkContext(conf)
+    new SparkContext(conf)
   }
 
   private[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {

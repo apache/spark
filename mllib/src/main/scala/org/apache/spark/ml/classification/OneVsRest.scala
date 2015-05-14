@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.reduction
+package org.apache.spark.ml.classification
 
 import java.util.UUID
 
@@ -24,7 +24,6 @@ import scala.language.existentials
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.classification.{ClassificationModel, Classifier}
 import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
@@ -57,20 +56,21 @@ private[ml] trait OneVsRestParams extends PredictorParams {
 }
 
 /**
+ * :: AlphaComponent ::
+ *
  * Model produced by [[OneVsRest]].
- * Stores the models resulting from training k different classifiers:
- * one for each class.
- * Each example is scored against all k models and the model with highest score
+ * This stores the models resulting from training k binary classifiers: one for each class.
+ * Each example is scored against all k models, and the model with the highest score
  * is picked to label the example.
- * TODO: API may need to change when we introduce a ClassificationModel trait as the public API
- * @param parent
+ *
  * @param labelMetadata Metadata of label column if it exists, or Nominal attribute
  *                      representing the number of classes in training dataset otherwise.
- * @param models the binary classification models for reduction.
- *               The i-th model is produced by testing the i-th class vs the rest.
+ * @param models The binary classification models for the reduction.
+ *               The i-th model is produced by testing the i-th class (taking label 1) vs the rest
+ *               (taking label 0).
  */
 @AlphaComponent
-class OneVsRestModel(
+class OneVsRestModel private[ml] (
       override val parent: OneVsRest,
       labelMetadata: Metadata,
       val models: Array[_ <: ClassificationModel[_,_]])
@@ -90,7 +90,7 @@ class OneVsRestModel(
     // add an accumulator column to store predictions of all the models
     val accColName = "mbc$acc" + UUID.randomUUID().toString
     val init: () => Map[Int, Double] = () => {Map()}
-    val mapType = MapType(IntegerType, DoubleType, false)
+    val mapType = MapType(IntegerType, DoubleType, valueContainsNull = false)
     val newDataset = dataset.withColumn(accColName, callUDF(init, mapType))
 
     // persist if underlying dataset is not persistent.
@@ -101,7 +101,7 @@ class OneVsRestModel(
 
     // update the accumulator column with the result of prediction of models
     val aggregatedDataset = models.zipWithIndex.foldLeft[DataFrame](newDataset) {
-      case (df, (model, index)) => {
+      case (df, (model, index)) =>
         val rawPredictionCol = model.getRawPredictionCol
         val columns = origCols ++ List(col(rawPredictionCol), col(accColName))
 
@@ -110,7 +110,7 @@ class OneVsRestModel(
         val update: (Map[Int, Double], Vector) => Map[Int, Double]  =
           (predictions: Map[Int, Double], prediction: Vector) => {
             predictions + ((index, prediction(1)))
-        }
+          }
         val updateUdf = callUDF(update, mapType, col(accColName), col(rawPredictionCol))
         val transformedDataset = model.transform(df).select(columns:_*)
         val updatedDataset = transformedDataset.withColumn(tmpColName, updateUdf)
@@ -118,7 +118,6 @@ class OneVsRestModel(
 
         // switch out the intermediate column with the accumulator column
         updatedDataset.select(newColumns:_*).withColumnRenamed(tmpColName, accColName)
-      }
     }
 
     if (handlePersistence) {
@@ -149,8 +148,8 @@ class OneVsRestModel(
 final class OneVsRest extends Estimator[OneVsRestModel] with OneVsRestParams {
 
   /** @group setParam */
-  // TODO: Find a better way to do this. Existential Types don't work with Java API so cast needed.
   def setClassifier(value: Classifier[_,_,_]): this.type = {
+    // TODO: Find a better way to do this. Existential Types don't work with Java API so cast needed
     set(classifier, value.asInstanceOf[ClassifierType])
   }
 
@@ -201,9 +200,8 @@ final class OneVsRest extends Estimator[OneVsRestModel] with OneVsRestParams {
     // extract label metadata from label column if present, or create a nominal attribute
     // to output the number of labels
     val labelAttribute = Attribute.fromStructField(labelSchema) match {
-      case _: NumericAttribute | UnresolvedAttribute => {
+      case _: NumericAttribute | UnresolvedAttribute =>
         NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses)
-      }
       case attr: Attribute => attr
     }
     copyValues(new OneVsRestModel(this, labelAttribute.toMetadata(), models))
