@@ -481,7 +481,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     def __init__(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+",
                  inputCol=None, outputCol=None):
         """
-        __init__(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+",
+        __init__(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+", \
                  inputCol=None, outputCol=None)
         """
         super(RegexTokenizer, self).__init__()
@@ -496,7 +496,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     def setParams(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+",
                   inputCol=None, outputCol=None):
         """
-        setParams(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+",
+        setParams(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+", \
                   inputCol="input", outputCol="output")
         Sets params for this RegexTokenizer.
         """
@@ -869,7 +869,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     def __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
                  seed=42, inputCol=None, outputCol=None):
         """
-        __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
+        __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, \
                  seed=42, inputCol=None, outputCol=None)
         """
         super(Word2Vec, self).__init__()
@@ -889,7 +889,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     def setParams(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
                   seed=42, inputCol=None, outputCol=None):
         """
-        setParams(self, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, seed=42,
+        setParams(self, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, seed=42, \
                  inputCol=None, outputCol=None)
         Sets params for this Word2Vec.
         """
