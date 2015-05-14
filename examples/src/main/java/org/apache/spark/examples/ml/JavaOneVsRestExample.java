@@ -86,11 +86,11 @@ public class JavaOneVsRestExample {
     String testInput = params.testInput;
 
     // compute the train/test split: if testInput is not provided use part of input.
-    double f = params.fracTest;
     if (testInput != null) {
       train = inputData;
       test = MLUtils.loadLibSVMFile(jsc.sc(), testInput);
     } else {
+      double f = params.fracTest;
       RDD<LabeledPoint>[] tmp = inputData.randomSplit(new double[]{1 - f, f}, 12345);
       train = tmp[0];
       test = tmp[1];
@@ -145,7 +145,8 @@ public class JavaOneVsRestExample {
     options.addOption("maxIter", "maxIter", true,
       "maximum number of iterations for Logistic Regression. default:100");
     options.addOption("tol", "tol", true,
-      "the convergence tolerance of iterations. default: 1E-6");
+      "the convergence tolerance of iterations " +
+      "for Logistic Regression. default: 1E-6");
     options.addOption("fitIntercept","fitIntercept", true,
       "fit intercept for logistic regression. default true");
     options.addOption("regParam", "regParam", true,
