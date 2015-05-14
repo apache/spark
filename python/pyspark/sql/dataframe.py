@@ -1521,7 +1521,8 @@ class Column(object):
         if len(alias) == 1:
             return Column(getattr(self._jc, "as")(alias[0]))
         else:
-            return Column(getattr(self._jc, "as")(alias))
+            sc = SparkContext._active_spark_context
+            return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
     @ignore_unicode_prefix
     def cast(self, dataType):

@@ -78,9 +78,6 @@ _functions = {
     'sqrt': 'Computes the square root of the specified float value.',
     'abs': 'Computes the absolute value.',
 
-    # table generating functions
-    'explode': 'Returns a new row for each element in the given array or map.',
-
     # unary math functions
     'acos': 'Computes the cosine inverse of the given value; the returned angle is in the range' +
             '0.0 through pi.',
@@ -169,6 +166,26 @@ def approxCountDistinct(col, rsd=None):
         jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col))
     else:
         jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col), rsd)
+    return Column(jc)
+
+
+def explode(col):
+    """Returns a new row for each element in the given array or map.
+
+    >>> from pyspark.sql import Row
+    >>> eDF = sqlContext.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
+    >>> eDF.select(explode(eDF.intlist).alias("anInt")).collect()
+    [Row(anInt=1), Row(anInt=2), Row(anInt=3)]
+
+    >>> eDF.select(explode(eDF.mapfield).alias("key", "value")).show()
+    +---+-----+
+    |key|value|
+    +---+-----+
+    |  a|    b|
+    +---+-----+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.explode(_to_java_column(col))
     return Column(jc)
 
 

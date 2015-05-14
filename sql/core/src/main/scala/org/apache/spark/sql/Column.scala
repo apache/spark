@@ -736,6 +736,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.4.0
    */
   def as(aliases: Seq[String]): Column = MultiAlias(expr, aliases)
 
@@ -747,11 +748,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.4.0
    */
   def as(aliases: Array[String]): Column = MultiAlias(expr, aliases)
-
-  /** Used for multi aliases from python. */
-  protected def as(aliases: java.util.List[String]): Column = MultiAlias(expr, aliases)
 
   /**
    * Gives the column an alias.

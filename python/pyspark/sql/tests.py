@@ -119,7 +119,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_explode(self):
         from pyspark.sql.functions import explode
-        d = [Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})]
+        d = [Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"})]
         rdd = self.sc.parallelize(d)
         data = self.sqlCtx.createDataFrame(rdd)
 
