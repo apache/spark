@@ -25,7 +25,6 @@ div#application-timeline, div#job-timeline {
 }
 
 #task-assignment-timeline div.legend-area {
-  border: 1px solid #000000;
   width: 554px;
 }
 
