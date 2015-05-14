@@ -17,9 +17,16 @@
 
 package org.apache.spark.streaming.ui
 
+import java.text.SimpleDateFormat
 import java.util.concurrent.TimeUnit
+import java.util.Date
 
 private[streaming] object UIUtils {
+
+  private val batchDateFormat = new SimpleDateFormat("HH:mm:ss")
+
+  /** Format the given batch time in a human readable format. */
+  def formatBatchTime(time: Long): String = batchDateFormat.format(new Date(time))
 
   /**
    * Return the short string for a `TimeUnit`.

@@ -110,8 +110,8 @@ private[ui] object RDDOperationGraph extends Logging {
         // which may be nested inside of other clusters
         val rddScopes = rdd.scope.map { scope => scope.getAllScopes }.getOrElse(Seq.empty)
         val rddClusters = rddScopes.map { scope =>
-          val clusterId = scope.name + "_" + scope.id
-          val clusterName = scope.name
+          val clusterId = scope.id
+          val clusterName = scope.name.replaceAll("\\n", "\\\\n")
           clusters.getOrElseUpdate(clusterId, new RDDOperationCluster(clusterId, clusterName))
         }
         // Build the cluster hierarchy for this RDD
