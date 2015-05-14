@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Logging
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, trees}
 import org.apache.spark.sql.catalyst.expressions._
@@ -79,14 +79,25 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   /**
-   * Runs this query returning the result as an RDD.
+   * Returns the result of this query as an RDD[Row] by delegating to doExecute
+   * after adding query plan information to created RDDs for visualization.
+   * Concrete implementations of SparkPlan should override doExecute instead.
    */
-  def execute(): RDD[Row]
+  final def execute(): RDD[Row] = {
+    RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+      doExecute()
+    }
+  }
+
+  /**
+   * Overridden by concrete implementations of SparkPlan.
+   * Produces the result of the query as an RDD[Row]
+   */
+  protected def doExecute(): RDD[Row]
 
   /**
    * Runs this query returning the result as an array.
    */
-
   def executeCollect(): Array[Row] = {
     execute().mapPartitions { iter =>
       val converter = CatalystTypeConverters.createToScalaConverter(schema)
@@ -144,7 +155,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if (codegenEnabled) {
-      GenerateProjection(expressions, inputSchema)
+      GenerateProjection.generate(expressions, inputSchema)
     } else {
       new InterpretedProjection(expressions, inputSchema)
     }
@@ -156,7 +167,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     log.debug(
       s"Creating MutableProj: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if(codegenEnabled) {
-      GenerateMutableProjection(expressions, inputSchema)
+      GenerateMutableProjection.generate(expressions, inputSchema)
     } else {
       () => new InterpretedMutableProjection(expressions, inputSchema)
     }
@@ -166,15 +177,15 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def newPredicate(
       expression: Expression, inputSchema: Seq[Attribute]): (Row) => Boolean = {
     if (codegenEnabled) {
-      GeneratePredicate(expression, inputSchema)
+      GeneratePredicate.generate(expression, inputSchema)
     } else {
-      InterpretedPredicate(expression, inputSchema)
+      InterpretedPredicate.create(expression, inputSchema)
     }
   }
 
   protected def newOrdering(order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[Row] = {
     if (codegenEnabled) {
-      GenerateOrdering(order, inputSchema)
+      GenerateOrdering.generate(order, inputSchema)
     } else {
       new RowOrdering(order, inputSchema)
     }

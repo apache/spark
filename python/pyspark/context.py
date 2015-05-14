@@ -23,8 +23,6 @@ import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
 
-from py4j.java_collections import ListConverter
-
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast
@@ -268,6 +266,13 @@ class SparkContext(object):
         Specifically stop the context on exit of the with block.
         """
         self.stop()
+
+    def setLogLevel(self, logLevel):
+        """
+        Control our logLevel. This overrides any user-defined log settings.
+        Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
+        """
+        self._jsc.setLogLevel(logLevel)
 
     @classmethod
     def setSystemProperty(cls, key, value):
@@ -643,7 +648,6 @@ class SparkContext(object):
             rdds = [x._reserialize() for x in rdds]
         first = rdds[0]._jrdd
         rest = [x._jrdd for x in rdds[1:]]
-        rest = ListConverter().convert(rest, self._gateway._gateway_client)
         return RDD(self._jsc.union(first, rest), self, rdds[0]._jrdd_deserializer)
 
     def broadcast(self, value):
@@ -671,7 +675,7 @@ class SparkContext(object):
             elif isinstance(value, complex):
                 accum_param = accumulators.COMPLEX_ACCUMULATOR_PARAM
             else:
-                raise Exception("No default accumulator param for type %s" % type(value))
+                raise TypeError("No default accumulator param for type %s" % type(value))
         SparkContext._next_accum_id += 1
         return Accumulator(SparkContext._next_accum_id - 1, value, accum_param)
 
@@ -846,13 +850,12 @@ class SparkContext(object):
         """
         if partitions is None:
             partitions = range(rdd._jrdd.partitions().size())
-        javaPartitions = ListConverter().convert(partitions, self._gateway._gateway_client)
 
         # Implementation note: This is implemented as a mapPartitions followed
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
-        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions,
+        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions,
                                           allowLocal)
         return list(_load_from_socket(port, mappedRDD._jrdd_deserializer))
 

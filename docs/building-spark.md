@@ -66,7 +66,6 @@ Because HDFS is not protocol-compatible across versions, if you want to read fro
     <tr><th>Hadoop version</th><th>Profile required</th></tr>
   </thead>
   <tbody>
-    <tr><td>0.23.x</td><td>hadoop-0.23</td></tr>
     <tr><td>1.x to 2.1.x</td><td>(none)</td></tr>
     <tr><td>2.2.x</td><td>hadoop-2.2</td></tr>
     <tr><td>2.3.x</td><td>hadoop-2.3</td></tr>
@@ -82,9 +81,6 @@ mvn -Dhadoop.version=1.2.1 -DskipTests clean package
 
 # Cloudera CDH 4.2.0 with MapReduce v1
 mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -DskipTests clean package
-
-# Apache Hadoop 0.23.x
-mvn -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
 {% endhighlight %}
 
 You can enable the "yarn" profile and optionally set the "yarn.version" property if it is different from "hadoop.version". Spark only supports YARN versions 2.2.0 and later.

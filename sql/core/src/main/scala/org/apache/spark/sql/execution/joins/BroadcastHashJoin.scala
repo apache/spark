@@ -66,7 +66,7 @@ case class BroadcastHashJoin(
     sparkContext.broadcast(hashed)
   }
 
-  override def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[Row] = {
     val broadcastRelation = Await.result(broadcastFuture, timeout)
 
     streamedPlan.execute().mapPartitions { streamedIter =>

@@ -23,6 +23,7 @@ import java.security.AccessController
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
 
@@ -35,8 +36,15 @@ private[serializer] object SerializationDebugger extends Logging {
    */
   def improveException(obj: Any, e: NotSerializableException): NotSerializableException = {
     if (enableDebugging && reflect != null) {
-      new NotSerializableException(
-        e.getMessage + "\nSerialization stack:\n" + find(obj).map("\t- " + _).mkString("\n"))
+      try {
+        new NotSerializableException(
+          e.getMessage + "\nSerialization stack:\n" + find(obj).map("\t- " + _).mkString("\n"))
+      } catch {
+        case NonFatal(t) =>
+          // Fall back to old exception
+          logWarning("Exception in serialization debugger", t)
+          e
+      }
     } else {
       e
     }

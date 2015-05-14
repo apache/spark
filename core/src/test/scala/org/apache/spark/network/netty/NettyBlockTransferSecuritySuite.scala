@@ -17,14 +17,16 @@
 
 package org.apache.spark.network.netty
 
+import java.io.InputStreamReader
 import java.nio._
+import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
 import scala.util.{Failure, Success, Try}
 
-import org.apache.commons.io.IOUtils
+import com.google.common.io.CharStreams
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
@@ -32,7 +34,7 @@ import org.apache.spark.storage.{BlockId, ShuffleBlockId}
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.mockito.Mockito._
 import org.scalatest.mock.MockitoSugar
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite, ShouldMatchers}
+import org.scalatest.{FunSuite, ShouldMatchers}
 
 class NettyBlockTransferSecuritySuite extends FunSuite with MockitoSugar with ShouldMatchers {
   test("security default off") {
@@ -113,7 +115,9 @@ class NettyBlockTransferSecuritySuite extends FunSuite with MockitoSugar with Sh
 
     val result = fetchBlock(exec0, exec1, "1", blockId) match {
       case Success(buf) =>
-        IOUtils.toString(buf.createInputStream()) should equal(blockString)
+        val actualString = CharStreams.toString(
+          new InputStreamReader(buf.createInputStream(), Charset.forName("UTF-8")))
+        actualString should equal(blockString)
         buf.release()
         Success()
       case Failure(t) =>

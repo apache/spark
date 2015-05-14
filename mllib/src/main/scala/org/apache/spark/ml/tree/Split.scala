@@ -38,13 +38,13 @@ sealed trait Split extends Serializable {
   private[tree] def toOld: OldSplit
 }
 
-private[ml] object Split {
+private[tree] object Split {
 
   def fromOld(oldSplit: OldSplit, categoricalFeatures: Map[Int, Int]): Split = {
     oldSplit.featureType match {
       case OldFeatureType.Categorical =>
         new CategoricalSplit(featureIndex = oldSplit.feature,
-          leftCategories = oldSplit.categories.toArray, categoricalFeatures(oldSplit.feature))
+          _leftCategories = oldSplit.categories.toArray, categoricalFeatures(oldSplit.feature))
       case OldFeatureType.Continuous =>
         new ContinuousSplit(featureIndex = oldSplit.feature, threshold = oldSplit.threshold)
     }
@@ -54,30 +54,30 @@ private[ml] object Split {
 /**
  * Split which tests a categorical feature.
  * @param featureIndex  Index of the feature to test
- * @param leftCategories  If the feature value is in this set of categories, then the split goes
- *                        left. Otherwise, it goes right.
+ * @param _leftCategories  If the feature value is in this set of categories, then the split goes
+ *                         left. Otherwise, it goes right.
  * @param numCategories  Number of categories for this feature.
  */
-final class CategoricalSplit(
+final class CategoricalSplit private[ml] (
     override val featureIndex: Int,
-    leftCategories: Array[Double],
+    _leftCategories: Array[Double],
     private val numCategories: Int)
   extends Split {
 
-  require(leftCategories.forall(cat => 0 <= cat && cat < numCategories), "Invalid leftCategories" +
-    s" (should be in range [0, $numCategories)): ${leftCategories.mkString(",")}")
+  require(_leftCategories.forall(cat => 0 <= cat && cat < numCategories), "Invalid leftCategories" +
+    s" (should be in range [0, $numCategories)): ${_leftCategories.mkString(",")}")
 
   /**
    * If true, then "categories" is the set of categories for splitting to the left, and vice versa.
    */
-  private val isLeft: Boolean = leftCategories.length <= numCategories / 2
+  private val isLeft: Boolean = _leftCategories.length <= numCategories / 2
 
   /** Set of categories determining the splitting rule, along with [[isLeft]]. */
   private val categories: Set[Double] = {
     if (isLeft) {
-      leftCategories.toSet
+      _leftCategories.toSet
     } else {
-      setComplement(leftCategories.toSet)
+      setComplement(_leftCategories.toSet)
     }
   }
 
@@ -107,13 +107,13 @@ final class CategoricalSplit(
   }
 
   /** Get sorted categories which split to the left */
-  def getLeftCategories: Array[Double] = {
+  def leftCategories: Array[Double] = {
     val cats = if (isLeft) categories else setComplement(categories)
     cats.toArray.sorted
   }
 
   /** Get sorted categories which split to the right */
-  def getRightCategories: Array[Double] = {
+  def rightCategories: Array[Double] = {
     val cats = if (isLeft) setComplement(categories) else categories
     cats.toArray.sorted
   }
@@ -130,7 +130,8 @@ final class CategoricalSplit(
  * @param threshold  If the feature value is <= this threshold, then the split goes left.
  *                    Otherwise, it goes right.
  */
-final class ContinuousSplit(override val featureIndex: Int, val threshold: Double) extends Split {
+final class ContinuousSplit private[ml] (override val featureIndex: Int, val threshold: Double)
+  extends Split {
 
   override private[ml] def shouldGoLeft(features: Vector): Boolean = {
     features(featureIndex) <= threshold

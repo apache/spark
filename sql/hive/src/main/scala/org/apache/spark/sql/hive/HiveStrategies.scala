@@ -119,9 +119,9 @@ private[hive] trait HiveStrategies {
             val inputData = new GenericMutableRow(relation.partitionKeys.size)
             val pruningCondition =
               if (codegenEnabled) {
-                GeneratePredicate(castedPredicate)
+                GeneratePredicate.generate(castedPredicate)
               } else {
-                InterpretedPredicate(castedPredicate)
+                InterpretedPredicate.create(castedPredicate)
               }
 
             val partitions = relation.hiveQlPartitions.filter { part =>
@@ -221,14 +221,14 @@ private[hive] trait HiveStrategies {
   object HiveDDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case CreateTableUsing(
-      tableName, userSpecifiedSchema, provider, false, opts, allowExisting, managedIfNoPath) =>
+          tableName, userSpecifiedSchema, provider, false, opts, allowExisting, managedIfNoPath) =>
         ExecutedCommand(
           CreateMetastoreDataSource(
             tableName, userSpecifiedSchema, provider, opts, allowExisting, managedIfNoPath)) :: Nil
 
-      case CreateTableUsingAsSelect(tableName, provider, false, mode, opts, query) =>
+      case CreateTableUsingAsSelect(tableName, provider, false, partitionCols, mode, opts, query) =>
         val cmd =
-          CreateMetastoreDataSourceAsSelect(tableName, provider, mode, opts, query)
+          CreateMetastoreDataSourceAsSelect(tableName, provider, partitionCols, mode, opts, query)
         ExecutedCommand(cmd) :: Nil
 
       case _ => Nil

@@ -46,7 +46,8 @@ object StoragePerfTester {
     val totalRecords = dataSizeMb * 1000
     val recordsPerMap = totalRecords / numMaps
 
-    val writeData = "1" * recordLength
+    val writeKey = "1" * (recordLength / 2)
+    val writeValue = "1" * (recordLength / 2)
     val executor = Executors.newFixedThreadPool(numMaps)
 
     val conf = new SparkConf()
@@ -63,7 +64,7 @@ object StoragePerfTester {
         new KryoSerializer(sc.conf), new ShuffleWriteMetrics())
       val writers = shuffle.writers
       for (i <- 1 to recordsPerMap) {
-        writers(i % numOutputSplits).write(writeData)
+        writers(i % numOutputSplits).write(writeKey, writeValue)
       }
       writers.map { w =>
         w.commitAndClose()

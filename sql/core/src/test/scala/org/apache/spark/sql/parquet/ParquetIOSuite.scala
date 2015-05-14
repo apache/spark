@@ -35,6 +35,7 @@ import parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
@@ -119,7 +120,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     }
 
     // Decimals with precision above 18 are not yet supported
-    intercept[RuntimeException] {
+    intercept[Throwable] {
       withTempPath { dir =>
         makeDecimalRDD(DecimalType(19, 10)).saveAsParquetFile(dir.getCanonicalPath)
         parquetFile(dir.getCanonicalPath).collect()
@@ -127,7 +128,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     }
 
     // Unlimited-length decimals are not yet supported
-    intercept[RuntimeException] {
+    intercept[Throwable] {
       withTempPath { dir =>
         makeDecimalRDD(DecimalType.Unlimited).saveAsParquetFile(dir.getCanonicalPath)
         parquetFile(dir.getCanonicalPath).collect()
@@ -381,6 +382,28 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       }
     }
   }
+
+  test("SPARK-6352 DirectParquetOutputCommitter") {
+    // Write to a parquet file and let it fail.
+    // _temporary should be missing if direct output committer works.
+    try {
+      configuration.set("spark.sql.parquet.output.committer.class",
+        "org.apache.spark.sql.parquet.DirectParquetOutputCommitter")
+      sqlContext.udf.register("div0", (x: Int) => x / 0)
+      withTempPath { dir =>
+        intercept[org.apache.spark.SparkException] {
+          sqlContext.sql("select div0(1)").saveAsParquetFile(dir.getCanonicalPath)
+        }
+        val path = new Path(dir.getCanonicalPath, "_temporary")
+        val fs = path.getFileSystem(configuration)
+        assert(!fs.exists(path))
+      }
+    }
+    finally {
+      configuration.set("spark.sql.parquet.output.committer.class",
+        "parquet.hadoop.ParquetOutputCommitter")
+    }
+  }
 }
 
 class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterAll {
@@ -397,7 +420,7 @@ class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterA
   test("SPARK-6330 regression test") {
     // In 1.3.0, save to fs other than file: without configuring core-site.xml would get:
     // IllegalArgumentException: Wrong FS: hdfs://..., expected: file:///
-    intercept[java.io.FileNotFoundException] {
+    intercept[Throwable] {
       sqlContext.parquetFile("file:///nonexistent")
     }
     val errorMessage = intercept[Throwable] {

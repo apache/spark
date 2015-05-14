@@ -196,12 +196,12 @@ class ColumnTypeSuite extends FunSuite with Logging {
     }
   }
 
-  def testNativeColumnType[T <: NativeType](
+  def testNativeColumnType[T <: AtomicType](
       columnType: NativeColumnType[T],
-      putter: (ByteBuffer, T#JvmType) => Unit,
-      getter: (ByteBuffer) => T#JvmType): Unit = {
+      putter: (ByteBuffer, T#InternalType) => Unit,
+      getter: (ByteBuffer) => T#InternalType): Unit = {
 
-    testColumnType[T, T#JvmType](columnType, putter, getter)
+    testColumnType[T, T#InternalType](columnType, putter, getter)
   }
 
   def testColumnType[T <: DataType, JvmType](

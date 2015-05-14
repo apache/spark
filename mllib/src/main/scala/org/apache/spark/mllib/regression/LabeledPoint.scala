@@ -32,7 +32,7 @@ import org.apache.spark.SparkException
 @BeanInfo
 case class LabeledPoint(label: Double, features: Vector) {
   override def toString: String = {
-    "(%s,%s)".format(label, features)
+    s"($label,$features)"
   }
 }
 

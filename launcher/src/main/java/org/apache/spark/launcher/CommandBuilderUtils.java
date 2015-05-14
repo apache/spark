@@ -32,6 +32,11 @@ class CommandBuilderUtils {
   static final String ENV_SPARK_HOME = "SPARK_HOME";
   static final String ENV_SPARK_ASSEMBLY = "_SPARK_ASSEMBLY";
 
+  /** The set of known JVM vendors. */
+  static enum JavaVendor {
+    Oracle, IBM, OpenJDK, Unknown
+  };
+
   /** Returns whether the given string is null or empty. */
   static boolean isEmpty(String s) {
     return s == null || s.isEmpty();
@@ -106,6 +111,21 @@ class CommandBuilderUtils {
   static boolean isWindows() {
     String os = System.getProperty("os.name");
     return os.startsWith("Windows");
+  }
+
+  /** Returns an enum value indicating whose JVM is being used. */
+  static JavaVendor getJavaVendor() {
+    String vendorString = System.getProperty("java.vendor");
+    if (vendorString.contains("Oracle")) {
+      return JavaVendor.Oracle;
+    }
+    if (vendorString.contains("IBM")) {
+      return JavaVendor.IBM;
+    }
+    if (vendorString.contains("OpenJDK")) {
+      return JavaVendor.OpenJDK;
+    }
+    return JavaVendor.Unknown;
   }
 
   /**
@@ -244,7 +264,7 @@ class CommandBuilderUtils {
     boolean needsQuotes = false;
     for (int i = 0; i < arg.length(); i++) {
       int c = arg.codePointAt(i);
-      if (Character.isWhitespace(c) || c == '"' || c == '=') {
+      if (Character.isWhitespace(c) || c == '"' || c == '=' || c == ',' || c == ';') {
         needsQuotes = true;
         break;
       }
@@ -261,14 +281,13 @@ class CommandBuilderUtils {
         quoted.append('"');
         break;
 
-      case '=':
-        quoted.append('^');
-        break;
-
       default:
         break;
       }
       quoted.appendCodePoint(cp);
+    }
+    if (arg.codePointAt(arg.length() - 1) == '\\') {
+      quoted.append("\\");
     }
     quoted.append("\"");
     return quoted.toString();

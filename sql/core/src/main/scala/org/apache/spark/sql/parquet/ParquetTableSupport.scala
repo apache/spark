@@ -189,7 +189,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
         case t @ StructType(_) => writeStruct(
           t,
           value.asInstanceOf[CatalystConverter.StructScalaType[_]])
-        case _ => writePrimitive(schema.asInstanceOf[NativeType], value)
+        case _ => writePrimitive(schema.asInstanceOf[AtomicType], value)
       }
     }
   }

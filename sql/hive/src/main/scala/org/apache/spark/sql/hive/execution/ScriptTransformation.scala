@@ -54,7 +54,7 @@ case class ScriptTransformation(
 
   override def otherCopyArgs: Seq[HiveContext] = sc :: Nil
 
-  def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[Row] = {
     child.execute().mapPartitions { iter =>
       val cmd = List("/bin/bash", "-c", script)
       val builder = new ProcessBuilder(cmd)
@@ -145,20 +145,29 @@ case class ScriptTransformation(
       val dataOutputStream = new DataOutputStream(outputStream)
       val outputProjection = new InterpretedProjection(input, child.output)
 
-      iter
-        .map(outputProjection)
-        .foreach { row =>
-          if (inputSerde == null) {
-            val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
-            ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
- 
-            outputStream.write(data)
-          } else {
-            val writable = inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
-            prepareWritable(writable).write(dataOutputStream)
+      // Put the write(output to the pipeline) into a single thread
+      // and keep the collector as remain in the main thread.
+      // otherwise it will causes deadlock if the data size greater than
+      // the pipeline / buffer capacity.
+      new Thread(new Runnable() {
+        override def run(): Unit = {
+          iter
+            .map(outputProjection)
+            .foreach { row =>
+            if (inputSerde == null) {
+              val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
+                ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
+
+              outputStream.write(data)
+            } else {
+              val writable = inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
+              prepareWritable(writable).write(dataOutputStream)
+            }
           }
+          outputStream.close()
         }
-      outputStream.close()
+      }).start()
+
       iterator
     }
   }

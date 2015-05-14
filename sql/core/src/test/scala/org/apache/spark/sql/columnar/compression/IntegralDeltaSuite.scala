@@ -33,7 +33,7 @@ class IntegralDeltaSuite extends FunSuite {
       columnType: NativeColumnType[I],
       scheme: CompressionScheme) {
 
-    def skeleton(input: Seq[I#JvmType]) {
+    def skeleton(input: Seq[I#InternalType]) {
       // -------------
       // Tests encoder
       // -------------
@@ -120,13 +120,13 @@ class IntegralDeltaSuite extends FunSuite {
         case LONG => Seq(2: Long, 1: Long, 2: Long, 130: Long)
       }
 
-      skeleton(input.map(_.asInstanceOf[I#JvmType]))
+      skeleton(input.map(_.asInstanceOf[I#InternalType]))
     }
 
     test(s"$scheme: long random series") {
       // Have to workaround with `Any` since no `ClassTag[I#JvmType]` available here.
       val input = Array.fill[Any](10000)(makeRandomValue(columnType))
-      skeleton(input.map(_.asInstanceOf[I#JvmType]))
+      skeleton(input.map(_.asInstanceOf[I#InternalType]))
     }
   }
 }

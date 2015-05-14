@@ -21,7 +21,7 @@ import java.io.{File, FileWriter, PrintWriter}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.commons.lang.math.RandomUtils
+import org.apache.commons.lang3.RandomUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -60,7 +60,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
     tmpFile = new File(testTempDir, getClass.getSimpleName + ".txt")
     val pw = new PrintWriter(new FileWriter(tmpFile))
     for (x <- 1 to numRecords) {
-      pw.println(RandomUtils.nextInt(numBuckets))
+      pw.println(RandomUtils.nextInt(0, numBuckets))
     }
     pw.close()
 

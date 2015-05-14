@@ -48,8 +48,10 @@ private[parquet] case class ParquetTypeInfo(
   length: Option[Int] = None)
 
 private[parquet] object ParquetTypesConverter extends Logging {
-  def isPrimitiveType(ctype: DataType): Boolean =
-    classOf[PrimitiveType] isAssignableFrom ctype.getClass
+  def isPrimitiveType(ctype: DataType): Boolean = ctype match {
+    case _: NumericType | BooleanType | StringType | BinaryType => true
+    case _: DataType => false
+  }
 
   def toPrimitiveDataType(
       parquetType: ParquetPrimitiveType,

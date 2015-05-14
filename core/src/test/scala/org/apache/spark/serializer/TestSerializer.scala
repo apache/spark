@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 
 
 /**
- * A serializer implementation that always return a single element in a deserialization stream.
+ * A serializer implementation that always returns two elements in a deserialization stream.
  */
 class TestSerializer extends Serializer {
   override def newInstance(): TestSerializerInstance = new TestSerializerInstance
@@ -51,7 +51,7 @@ class TestDeserializationStream extends DeserializationStream {
 
   override def readObject[T: ClassTag](): T = {
     count += 1
-    if (count == 2) {
+    if (count == 3) {
       throw new EOFException
     }
     new Object().asInstanceOf[T]

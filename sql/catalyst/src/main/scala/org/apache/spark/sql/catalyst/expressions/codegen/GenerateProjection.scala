@@ -31,7 +31,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
   import scala.reflect.runtime.universe._
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
-    in.map(ExpressionCanonicalizer(_))
+    in.map(ExpressionCanonicalizer.execute)
 
   protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
     in.map(BindReferences.bindReference(_, inputSchema))
@@ -109,7 +109,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       q"override def update(i: Int, value: Any): Unit = { ..$cases; $accessorFailure }"
     }
 
-    val specificAccessorFunctions = NativeType.all.map { dataType =>
+    val specificAccessorFunctions = nativeTypes.map { dataType =>
       val ifStatements = expressions.zipWithIndex.flatMap {
         // getString() is not used by expressions
         case (e, i) if e.dataType == dataType && dataType != StringType =>
@@ -135,7 +135,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
     }
 
-    val specificMutatorFunctions = NativeType.all.map { dataType =>
+    val specificMutatorFunctions = nativeTypes.map { dataType =>
       val ifStatements = expressions.zipWithIndex.flatMap {
         // setString() is not used by expressions
         case (e, i) if e.dataType == dataType && dataType != StringType =>

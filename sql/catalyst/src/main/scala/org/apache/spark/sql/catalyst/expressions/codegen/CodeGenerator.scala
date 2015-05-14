@@ -98,11 +98,11 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       })
 
   /** Generates the requested evaluator binding the given expression(s) to the inputSchema. */
-  def apply(expressions: InType, inputSchema: Seq[Attribute]): OutType =
-    apply(bind(expressions, inputSchema))
+  def generate(expressions: InType, inputSchema: Seq[Attribute]): OutType =
+    generate(bind(expressions, inputSchema))
 
   /** Generates the requested evaluator given already bound expression(s). */
-  def apply(expressions: InType): OutType = cache.get(canonicalize(expressions))
+  def generate(expressions: InType): OutType = cache.get(canonicalize(expressions))
 
   /**
    * Returns a term name that is unique within this instance of a `CodeGenerator`.
@@ -250,7 +250,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       case Cast(child @ DateType(), StringType) =>
         child.castOrNull(c =>
           q"""org.apache.spark.sql.types.UTF8String(
-                org.apache.spark.sql.types.DateUtils.toString($c))""",
+                org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""",
           StringType)
 
       case Cast(child @ NumericType(), IntegerType) =>
@@ -279,7 +279,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
               org.apache.spark.sql.types.UTF8String(${eval.primitiveTerm}.toString)
         """.children
 
-      case EqualTo(e1: BinaryType, e2: BinaryType) =>
+      case EqualTo(e1 @ BinaryType(), e2 @ BinaryType()) =>
         (e1, e2).evaluateAs (BooleanType) {
           case (eval1, eval2) =>
             q"""
@@ -623,7 +623,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected def getColumn(inputRow: TermName, dataType: DataType, ordinal: Int) = {
     dataType match {
       case StringType => q"$inputRow($ordinal).asInstanceOf[org.apache.spark.sql.types.UTF8String]"
-      case dt @ NativeType() => q"$inputRow.${accessorForType(dt)}($ordinal)"
+      case dt: DataType if isNativeType(dt) => q"$inputRow.${accessorForType(dt)}($ordinal)"
       case _ => q"$inputRow.apply($ordinal).asInstanceOf[${termForType(dataType)}]"
     }
   }
@@ -635,7 +635,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       value: TermName) = {
     dataType match {
       case StringType => q"$destinationRow.update($ordinal, $value)"
-      case dt @ NativeType() => q"$destinationRow.${mutatorForType(dt)}($ordinal, $value)"
+      case dt: DataType if isNativeType(dt) =>
+        q"$destinationRow.${mutatorForType(dt)}($ordinal, $value)"
       case _ => q"$destinationRow.update($ordinal, $value)"
     }
   }
@@ -671,11 +672,23 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case DoubleType => ru.Literal(Constant(-1.toDouble))
     case DecimalType() => q"org.apache.spark.sql.types.Decimal(-1)"
     case IntegerType => ru.Literal(Constant(-1))
+    case DateType => ru.Literal(Constant(-1))
     case _ => ru.Literal(Constant(null))
   }
 
   protected def termForType(dt: DataType) = dt match {
-    case n: NativeType => n.tag
+    case n: AtomicType => n.tag
     case _ => typeTag[Any]
   }
+
+  /**
+   * List of data types that have special accessors and setters in [[Row]].
+   */
+  protected val nativeTypes =
+    Seq(IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
+
+  /**
+   * Returns true if the data type has a special accessor and setter in [[Row]].
+   */
+  protected def isNativeType(dt: DataType) = nativeTypes.contains(dt)
 }

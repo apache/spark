@@ -45,7 +45,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       startTime = time
       outputStreams.foreach(_.initialize(zeroTime))
       outputStreams.foreach(_.remember(rememberDuration))
-      outputStreams.foreach(_.validate)
+      outputStreams.foreach(_.validateAtStart)
       inputStreams.par.foreach(_.start())
     }
   }
@@ -108,6 +108,10 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     inputStreams.filter(_.isInstanceOf[ReceiverInputDStream[_]])
       .map(_.asInstanceOf[ReceiverInputDStream[_]])
       .toArray
+  }
+
+  def getInputStreamName(streamId: Int): Option[String] = synchronized {
+    inputStreams.find(_.id == streamId).map(_.name)
   }
 
   def generateJobs(time: Time): Seq[Job] = {

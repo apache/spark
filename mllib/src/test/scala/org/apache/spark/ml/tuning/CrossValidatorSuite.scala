@@ -49,8 +49,8 @@ class CrossValidatorSuite extends FunSuite with MLlibTestSparkContext {
       .setEvaluator(eval)
       .setNumFolds(3)
     val cvModel = cv.fit(dataset)
-    val bestParamMap = cvModel.bestModel.fittingParamMap
-    assert(bestParamMap(lr.regParam) === 0.001)
-    assert(bestParamMap(lr.maxIter) === 10)
+    val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
+    assert(parent.getRegParam === 0.001)
+    assert(parent.getMaxIter === 10)
   }
 }

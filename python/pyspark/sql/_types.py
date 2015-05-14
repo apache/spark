@@ -17,6 +17,7 @@
 
 import sys
 import decimal
+import time
 import datetime
 import keyword
 import warnings
@@ -29,6 +30,9 @@ from operator import itemgetter
 if sys.version >= "3":
     long = int
     unicode = str
+
+from py4j.protocol import register_input_converter
+from py4j.java_gateway import JavaClass
 
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
@@ -562,8 +566,8 @@ def _infer_type(obj):
     else:
         try:
             return _infer_schema(obj)
-        except ValueError:
-            raise ValueError("not supported type: %s" % type(obj))
+        except TypeError:
+            raise TypeError("not supported type: %s" % type(obj))
 
 
 def _infer_schema(row):
@@ -584,7 +588,7 @@ def _infer_schema(row):
         items = sorted(row.__dict__.items())
 
     else:
-        raise ValueError("Can not infer schema for type: %s" % type(row))
+        raise TypeError("Can not infer schema for type: %s" % type(row))
 
     fields = [StructField(k, _infer_type(v), True) for k, v in items]
     return StructType(fields)
@@ -648,7 +652,7 @@ def _python_to_sql_converter(dataType):
 
     if isinstance(dataType, StructType):
         names, types = zip(*[(f.name, f.dataType) for f in dataType.fields])
-        converters = map(_python_to_sql_converter, types)
+        converters = [_python_to_sql_converter(t) for t in types]
 
         def converter(obj):
             if isinstance(obj, dict):
@@ -696,7 +700,7 @@ def _merge_type(a, b):
         return a
     elif type(a) is not type(b):
         # TODO: type cast (such as int -> long)
-        raise TypeError("Can not merge type %s and %s" % (a, b))
+        raise TypeError("Can not merge type %s and %s" % (type(a), type(b)))
 
     # same type
     if isinstance(a, StructType):
@@ -773,7 +777,7 @@ def _create_converter(dataType):
         elif hasattr(obj, "__dict__"):  # object
             d = obj.__dict__
         else:
-            raise ValueError("Unexpected obj: %s" % obj)
+            raise TypeError("Unexpected obj type: %s" % type(obj))
 
         if convert_fields:
             return tuple([conv(d.get(name)) for name, conv in zip(names, converters)])
@@ -912,7 +916,7 @@ def _infer_schema_type(obj, dataType):
         return StructType(fields)
 
     else:
-        raise ValueError("Unexpected dataType: %s" % dataType)
+        raise TypeError("Unexpected dataType: %s" % type(dataType))
 
 
 _acceptable_types = {
@@ -1224,17 +1228,42 @@ class Row(tuple):
             raise AttributeError(item)
 
     def __reduce__(self):
+        """Returns a tuple so Python knows how to pickle Row."""
         if hasattr(self, "__fields__"):
             return (_create_row, (self.__fields__, tuple(self)))
         else:
             return tuple.__reduce__(self)
 
     def __repr__(self):
+        """Printable representation of Row used in Python REPL."""
         if hasattr(self, "__fields__"):
             return "Row(%s)" % ", ".join("%s=%r" % (k, v)
                                          for k, v in zip(self.__fields__, tuple(self)))
         else:
             return "<Row(%s)>" % ", ".join(self)
+
+
+class DateConverter(object):
+    def can_convert(self, obj):
+        return isinstance(obj, datetime.date)
+
+    def convert(self, obj, gateway_client):
+        Date = JavaClass("java.sql.Date", gateway_client)
+        return Date.valueOf(obj.strftime("%Y-%m-%d"))
+
+
+class DatetimeConverter(object):
+    def can_convert(self, obj):
+        return isinstance(obj, datetime.datetime)
+
+    def convert(self, obj, gateway_client):
+        Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
+        return Timestamp(int(time.mktime(obj.timetuple())) * 1000 + obj.microsecond // 1000)
+
+
+# datetime is a subclass of date, we should register DatetimeConverter first
+register_input_converter(DatetimeConverter())
+register_input_converter(DateConverter())
 
 
 def _test():

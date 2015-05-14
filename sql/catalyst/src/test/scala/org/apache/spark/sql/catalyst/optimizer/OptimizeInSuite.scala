@@ -49,7 +49,7 @@ class OptimizeInSuite extends PlanTest {
         .where(In(UnresolvedAttribute("a"), Seq(Literal(1),Literal(2))))
         .analyze
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .where(InSet(UnresolvedAttribute("a"), HashSet[Any]() + 1 + 2))
@@ -64,7 +64,7 @@ class OptimizeInSuite extends PlanTest {
         .where(In(UnresolvedAttribute("a"), Seq(Literal(1),Literal(2), UnresolvedAttribute("b"))))
         .analyze
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .where(In(UnresolvedAttribute("a"), Seq(Literal(1),Literal(2), UnresolvedAttribute("b"))))

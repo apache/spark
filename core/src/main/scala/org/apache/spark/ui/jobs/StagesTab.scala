@@ -26,19 +26,20 @@ import org.apache.spark.ui.{SparkUI, SparkUITab}
 private[ui] class StagesTab(parent: SparkUI) extends SparkUITab(parent, "stages") {
   val sc = parent.sc
   val killEnabled = parent.killEnabled
-  val listener = parent.jobProgressListener
+  val progressListener = parent.jobProgressListener
+  val operationGraphListener = parent.operationGraphListener
 
   attachPage(new AllStagesPage(this))
   attachPage(new StagePage(this))
   attachPage(new PoolPage(this))
 
-  def isFairScheduler: Boolean = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
+  def isFairScheduler: Boolean = progressListener.schedulingMode.exists(_ == SchedulingMode.FAIR)
 
   def handleKillRequest(request: HttpServletRequest): Unit = {
     if (killEnabled && parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {
       val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
       val stageId = Option(request.getParameter("id")).getOrElse("-1").toInt
-      if (stageId >= 0 && killFlag && listener.activeStages.contains(stageId)) {
+      if (stageId >= 0 && killFlag && progressListener.activeStages.contains(stageId)) {
         sc.get.cancelStage(stageId)
       }
       // Do a quick pause here to give Spark time to kill the stage so it shows up as

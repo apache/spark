@@ -132,11 +132,7 @@ object QueryTest {
       val errorMessage =
         s"""
         |Results do not match for query:
-        |${df.logicalPlan}
-        |== Analyzed Plan ==
-        |${df.queryExecution.analyzed}
-        |== Physical Plan ==
-        |${df.queryExecution.executedPlan}
+        |${df.queryExecution}
         |== Results ==
         |${sideBySide(
           s"== Correct Answer - ${expectedAnswer.size} ==" +:

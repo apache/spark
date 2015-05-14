@@ -2239,8 +2239,6 @@ class RDD(object):
         """
         if relativeSD < 0.000017:
             raise ValueError("relativeSD should be greater than 0.000017")
-        if relativeSD > 0.37:
-            raise ValueError("relativeSD should be smaller than 0.37")
         # the hash space in Java is 2^32
         hashRDD = self.map(lambda x: portable_hash(x) & 0xFFFFFFFF)
         return hashRDD._to_java_object_rdd().countApproxDistinct(relativeSD)
@@ -2267,6 +2265,9 @@ def _prepare_for_python_RDD(sc, command, obj=None):
         # The broadcast will have same life cycle as created PythonRDD
         broadcast = sc.broadcast(pickled_command)
         pickled_command = ser.dumps(broadcast)
+    # There is a bug in py4j.java_gateway.JavaClass with auto_convert
+    # https://github.com/bartdag/py4j/issues/161
+    # TODO: use auto_convert once py4j fix the bug
     broadcast_vars = ListConverter().convert(
         [x._jbroadcast for x in sc._pickled_broadcast_vars],
         sc._gateway._gateway_client)
