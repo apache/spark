@@ -1,1 +1,1 @@
--Phadoop-2.4 -Dhadoop.version=2.5.0 -Pyarn -Phive
+-Phadoop-2.4 -Dhadoop.version=2.6.0 -Pyarn -Phive
