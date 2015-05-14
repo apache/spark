@@ -56,10 +56,10 @@ def _gen_param_header(name, doc, defaultValueStr):
     def __init__(self):
         super(Has$Name, self).__init__()
         #: param for $doc
-        self.$name = Param(self, "$name", "$doc")
-        x = $defaultValueStr
-        if x is not None:
-            self._setDefault($name=x)'''
+        self.$name = Param(self, "$name", "$doc")'''
+    if defaultValueStr is not None:
+        template += '''
+        self._setDefault($name=$defaultValueStr)'''
 
     Name = name[0].upper() + name[1:]
     return template \
