@@ -61,11 +61,11 @@ class RDDOperationScopeSuite extends FunSuite with BeforeAndAfter {
     var rdd1: MyCoolRDD = null
     var rdd2: MyCoolRDD = null
     var rdd3: MyCoolRDD = null
-    RDDOperationScope.withScope(sc, "scope1", allowNesting = false) {
+    RDDOperationScope.withScope(sc, "scope1", allowNesting = false, ignoreParent = false) {
       rdd1 = new MyCoolRDD(sc)
-      RDDOperationScope.withScope(sc, "scope2", allowNesting = false) {
+      RDDOperationScope.withScope(sc, "scope2", allowNesting = false, ignoreParent = false) {
         rdd2 = new MyCoolRDD(sc)
-        RDDOperationScope.withScope(sc, "scope3", allowNesting = false) {
+        RDDOperationScope.withScope(sc, "scope3", allowNesting = false, ignoreParent = false) {
           rdd3 = new MyCoolRDD(sc)
         }
       }
@@ -84,11 +84,13 @@ class RDDOperationScopeSuite extends FunSuite with BeforeAndAfter {
     var rdd1: MyCoolRDD = null
     var rdd2: MyCoolRDD = null
     var rdd3: MyCoolRDD = null
-    RDDOperationScope.withScope(sc, "scope1", allowNesting = true) { // allow nesting here
+    // allow nesting here
+    RDDOperationScope.withScope(sc, "scope1", allowNesting = true, ignoreParent = false) {
       rdd1 = new MyCoolRDD(sc)
-      RDDOperationScope.withScope(sc, "scope2", allowNesting = false) { // stop nesting here
+      // stop nesting here
+      RDDOperationScope.withScope(sc, "scope2", allowNesting = false, ignoreParent = false) {
         rdd2 = new MyCoolRDD(sc)
-        RDDOperationScope.withScope(sc, "scope3", allowNesting = false) {
+        RDDOperationScope.withScope(sc, "scope3", allowNesting = false, ignoreParent = false) {
           rdd3 = new MyCoolRDD(sc)
         }
       }
@@ -107,11 +109,11 @@ class RDDOperationScopeSuite extends FunSuite with BeforeAndAfter {
     var rdd1: MyCoolRDD = null
     var rdd2: MyCoolRDD = null
     var rdd3: MyCoolRDD = null
-    RDDOperationScope.withScope(sc, "scope1", allowNesting = true) {
+    RDDOperationScope.withScope(sc, "scope1", allowNesting = true, ignoreParent = false) {
       rdd1 = new MyCoolRDD(sc)
-      RDDOperationScope.withScope(sc, "scope2", allowNesting = true) {
+      RDDOperationScope.withScope(sc, "scope2", allowNesting = true, ignoreParent = false) {
         rdd2 = new MyCoolRDD(sc)
-        RDDOperationScope.withScope(sc, "scope3", allowNesting = true) {
+        RDDOperationScope.withScope(sc, "scope3", allowNesting = true, ignoreParent = false) {
           rdd3 = new MyCoolRDD(sc)
         }
       }

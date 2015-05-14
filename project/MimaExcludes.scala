@@ -123,11 +123,20 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.parquet.ParquetTestData$"),
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.TestGroupWriteSupport")
+              "org.apache.spark.sql.parquet.TestGroupWriteSupport"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CachedData"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CachedData$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CacheManager")
           ) ++ Seq(
             // SPARK-7530 Added StreamingContext.getState()
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.StreamingContext.state_=")
+          ) ++ Seq(
+            // SPARK-7081 changed ShuffleWriter from a trait to an abstract class and removed some
+            // unnecessary type bounds in order to fix some compiler warnings that occurred when
+            // implementing this interface in Java. Note that ShuffleWriter is private[spark].
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.shuffle.ShuffleWriter")
           )
 
         case v if v.startsWith("1.3") =>

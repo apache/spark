@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.sources._
@@ -129,7 +130,8 @@ private[sql] case class JDBCRelation(
     parts: Array[Partition],
     properties: Properties = new Properties())(@transient val sqlContext: SQLContext)
   extends BaseRelation
-  with PrunedFilteredScan {
+  with PrunedFilteredScan
+  with InsertableRelation {
 
   override val needConversion: Boolean = false
 
@@ -148,4 +150,8 @@ private[sql] case class JDBCRelation(
       filters,
       parts)
   }
+  
+  override def insert(data: DataFrame, overwrite: Boolean): Unit = {
+    data.insertIntoJDBC(url, table, overwrite, properties)
+  }  
 }
