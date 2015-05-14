@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.io.IOException
-
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.orc.{OrcFile, Reader}
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
+
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.hive.HiveMetastoreTypes
@@ -31,7 +30,7 @@ import org.apache.spark.sql.types.StructType
 private[orc] object OrcFileOperator extends Logging{
 
   def getFileReader(pathStr: String, config: Option[Configuration] = None ): Reader = {
-    var conf = config.getOrElse(new Configuration)
+    val conf = config.getOrElse(new Configuration)
     val fspath = new Path(pathStr)
     val fs = fspath.getFileSystem(conf)
     val orcFiles = listOrcFiles(pathStr, conf)
@@ -53,19 +52,6 @@ private[orc] object OrcFileOperator extends Logging{
     readerInspector
   }
 
-  def deletePath(pathStr: String, conf: Configuration): Unit = {
-    val fspath = new Path(pathStr)
-    val fs = fspath.getFileSystem(conf)
-    try {
-      fs.delete(fspath, true)
-    } catch {
-      case e: IOException =>
-        throw new IOException(
-          s"Unable to clear output directory ${fspath.toString} prior"
-            + s" to InsertIntoOrcTable:\n${e.toString}")
-    }
-  }
-
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
@@ -80,8 +66,6 @@ private[orc] object OrcFileOperator extends Logging{
       throw new IllegalArgumentException(
         s"orcFileOperator: path $path does not have valid orc files matching the pattern")
     }
-    logInfo("Qualified file list: ")
-    paths.foreach{x=>logInfo(x.toString)}
     paths
   }
 }

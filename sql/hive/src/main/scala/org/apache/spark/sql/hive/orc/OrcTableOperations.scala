@@ -20,50 +20,52 @@ package org.apache.spark.sql.hive.orc
 import java.util._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc._
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-import org.apache.spark.rdd.RDD
+
+import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.{Logging, SerializableWritable}
+
+/* Implicit conversions */
 import scala.collection.JavaConversions._
 
-case class OrcTableScan(attributes: Seq[Attribute],
+private[orc] case class OrcTableScan(attributes: Seq[Attribute],
     @transient relation: OrcRelation,
     filters: Array[Filter],
     inputPaths: Array[String]) extends Logging {
-  @transient val sqlContext = relation.sqlContext
-  val path = relation.paths(0)
+  @transient private val sqlContext = relation.sqlContext
 
-  def addColumnIds(output: Seq[Attribute],
-                   relation: OrcRelation, conf: Configuration) {
-    val ids =
-      output.map(a =>
-        relation.dataSchema.toAttributes.indexWhere(_.name == a.name): Integer)
-        .filter(_ >= 0)
-    val names = attributes.map(_.name)
-    val sorted = ids.zip(names).sorted
-    HiveShim.appendReadColumns(conf, sorted.map(_._1), sorted.map(_._2))
+  private def addColumnIds(
+      output: Seq[Attribute],
+      relation: OrcRelation,
+      conf: Configuration): Unit = {
+    val ids = output.map(a => relation.dataSchema.fieldIndex(a.name): Integer)
+    val (sortedIds, sortedNames) = ids.zip(attributes.map(_.name)).sorted.unzip
+    HiveShim.appendReadColumns(conf, sortedIds, sortedNames)
   }
 
-  def buildFilter(job: Job, filters: Array[Filter]): Unit = {
+  private def buildFilter(job: Job, filters: Array[Filter]): Unit = {
     if (ORC_FILTER_PUSHDOWN_ENABLED) {
       val conf: Configuration = job.getConfiguration
-      val recordFilter = OrcFilters.createFilter(filters)
-      if (recordFilter.isDefined) {
-        conf.set(SARG_PUSHDOWN, toKryo(recordFilter.get))
-        conf.setBoolean(INDEX_FILTER, true)
+      OrcFilters.createFilter(filters).foreach { f =>
+        conf.set(SARG_PUSHDOWN, toKryo(f))
+        conf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
       }
     }
   }
 
   // Transform all given raw `Writable`s into `Row`s.
-  def fillObject(conf: Configuration,
+  private def fillObject(
+      path: String,
+      conf: Configuration,
       iterator: Iterator[org.apache.hadoop.io.Writable],
       nonPartitionKeyAttrs: Seq[(Attribute, Int)],
       mutableRow: MutableRow): Iterator[Row] = {
@@ -77,7 +79,6 @@ case class OrcTableScan(attributes: Seq[Attribute],
     // Map each tuple to a row object
     iterator.map { value =>
       val raw = deserializer.deserialize(value)
-      logDebug("Raw data: " + raw)
       var i = 0
       while (i < fieldRefs.length) {
         val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
@@ -105,11 +106,13 @@ case class OrcTableScan(attributes: Seq[Attribute],
       Class[_ <: org.apache.hadoop.mapred.InputFormat[NullWritable, Writable]]]
 
     val rdd = sc.hadoopRDD(conf.asInstanceOf[JobConf],
-      inputClass, classOf[NullWritable], classOf[Writable]).map(_._2)
-    val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
+      inputClass, classOf[NullWritable], classOf[Writable])
+      .asInstanceOf[HadoopRDD[NullWritable, Writable]]
     val wrappedConf = new SerializableWritable(conf)
-    val rowRdd: RDD[Row] = rdd.mapPartitions { iter =>
-      fillObject(wrappedConf.value, iter, attributes.zipWithIndex, mutableRow)
+    val rowRdd: RDD[Row] = rdd.mapPartitionsWithInputSplit { case (split: OrcSplit, iter) =>
+      val pathStr = split.getPath.toString
+      val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
+      fillObject(pathStr, wrappedConf.value, iter.map(_._2), attributes.zipWithIndex, mutableRow)
     }
     rowRdd
   }
