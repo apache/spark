@@ -116,7 +116,7 @@ private object RandomForestRegressorSuite extends FunSuite {
     val newModel = rf.fit(newData)
     // Use parent, fittingParamMap from newTree since these are not checked anyways.
     val oldModelAsNew = RandomForestRegressionModel.fromOld(
-      oldModel, newModel.parent, categoricalFeatures)
+      oldModel, newModel.parent.asInstanceOf[RandomForestRegressor], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
   }
 }

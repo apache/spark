@@ -226,7 +226,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
       def accumulableRow(acc: AccumulableInfo): Elem =
         <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
-      val accumulableTable = UIUtils.listingTable(accumulableHeaders, accumulableRow,
+      val accumulableTable = UIUtils.listingTable(
+        accumulableHeaders,
+        accumulableRow,
         accumulables.values.toSeq)
 
       val taskHeadersAndCssClasses: Seq[(String, String)] =
@@ -265,9 +267,14 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val currentTime = System.currentTimeMillis()
       val taskTable = UIUtils.listingTable(
         unzipped._1,
-        taskRow(hasAccumulators, stageData.hasInput, stageData.hasOutput,
-          stageData.hasShuffleRead, stageData.hasShuffleWrite,
-          stageData.hasBytesSpilled, currentTime),
+        taskRow(
+          hasAccumulators,
+          stageData.hasInput,
+          stageData.hasOutput,
+          stageData.hasShuffleRead,
+          stageData.hasShuffleWrite,
+          stageData.hasBytesSpilled,
+          currentTime),
         tasks,
         headerClasses = unzipped._2)
       // Excludes tasks which failed and have incomplete metrics
@@ -515,49 +522,42 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         val host = taskInfo.host
         executorsSet += ((executorId, host))
 
-        val isSucceeded = taskInfo.successful
-        val isFailed = taskInfo.failed
-        val isRunning = taskInfo.running
         val classNameByStatus = {
-          if (isSucceeded) {
+          if (taskInfo.successful) {
             "succeeded"
-          } else if (isFailed) {
+          } else if (taskInfo.failed) {
             "failed"
-          } else if (isRunning) {
+          } else if (taskInfo.running) {
             "running"
           }
         }
 
         val launchTime = taskInfo.launchTime
-        val finishTime = if (!isRunning) taskInfo.finishTime else currentTime
+        val finishTime = if (!taskInfo.running) taskInfo.finishTime else currentTime
         val totalExecutionTime = finishTime - launchTime
         minLaunchTime = launchTime.min(minLaunchTime)
         maxFinishTime = launchTime.max(maxFinishTime)
         numEffectiveTasks += 1
 
+        def toProportion(time: Long) = (time.toDouble / totalExecutionTime * 100).toLong
+
         val metricsOpt = taskUIData.taskMetrics
         val shuffleReadTime =
           metricsOpt.flatMap(_.shuffleReadMetrics.map(_.fetchWaitTime)).getOrElse(0L)
-        val shuffleReadTimeProportion =
-          (shuffleReadTime.toDouble / totalExecutionTime * 100).toLong
+        val shuffleReadTimeProportion = toProportion(shuffleReadTime)
         val shuffleWriteTime =
           (metricsOpt.flatMap(_.shuffleWriteMetrics
             .map(_.shuffleWriteTime)).getOrElse(0L) / 1e6).toLong
-        val shuffleWriteTimeProportion =
-          (shuffleWriteTime.toDouble / totalExecutionTime * 100).toLong
+        val shuffleWriteTimeProportion = toProportion(shuffleWriteTime)
         val executorComputingTime = metricsOpt.map(_.executorRunTime).getOrElse(0L) -
           shuffleReadTime - shuffleWriteTime
-        val executorComputingTimeProportion =
-          (executorComputingTime.toDouble / totalExecutionTime * 100).toLong
+        val executorComputingTimeProportion = toProportion(executorComputingTime)
         val serializationTime = metricsOpt.map(_.resultSerializationTime).getOrElse(0L)
-        val serializationTimeProportion =
-          (serializationTime.toDouble / totalExecutionTime * 100).toLong
+        val serializationTimeProportion = toProportion(serializationTime)
         val deserializationTime = metricsOpt.map(_.executorDeserializeTime).getOrElse(0L)
-        val deserializationTimeProportion =
-          (deserializationTime.toDouble / totalExecutionTime * 100).toLong
+        val deserializationTimeProportion = toProportion(deserializationTime)
         val gettingResultTime = getGettingResultTime(taskUIData.taskInfo)
-        val gettingResultTimeProportion =
-          (gettingResultTime.toDouble / totalExecutionTime * 100).toLong
+        val gettingResultTimeProportion = toProportion(gettingResultTime)
         val schedulerDelay = totalExecutionTime -
           (executorComputingTime + shuffleReadTime + shuffleWriteTime +
             serializationTime + deserializationTime + gettingResultTime)
@@ -585,8 +585,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         val timelineObject =
           s"""
              {
-               'className': 'task task-assignment-timeline-object ${classNameByStatus}',
-               'group': '${executorId}',
+               'className': 'task task-assignment-timeline-object $classNameByStatus',
+               'group': '$executorId',
                'content': '<div class="task-assignment-timeline-content"' +
                  'data-toggle="tooltip" data-placement="top"' +
                  'data-html="true" data-container="body"' +
@@ -594,13 +594,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                  'Status: ${taskInfo.status}<br>' +
                  'Launch Time: ${UIUtils.formatDate(new Date(launchTime))}' +
                  '${
-                     if (!isRunning) {
+                     if (!taskInfo.running) {
                        s"""<br>Finish Time: ${UIUtils.formatDate(new Date(finishTime))}"""
                      } else {
                         ""
                       }
                    }' +
-                 '<br>Scheduler Delay: ${schedulerDelay} ms' +
+                 '<br>Scheduler Delay: $schedulerDelay ms' +
                  '<br>Task Deserialization Time: ${UIUtils.formatDuration(deserializationTime)}' +
                  '<br>Shuffle Read Time: ${UIUtils.formatDuration(shuffleReadTime)}' +
                  '<br>Executor Computing Time: ${UIUtils.formatDuration(executorComputingTime)}' +
@@ -609,28 +609,28 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                  '<br>Getting Result Time: ${UIUtils.formatDuration(gettingResultTime)}">' +
                  '<svg class="task-assignment-timeline-duration-bar">' +
                  '<rect class="scheduler-delay-proportion" ' +
-                   'x="${schedulerDelayProportionPos}%" y="0px" height="26px"' +
-                   'width="${schedulerDelayProportion}%""></rect>' +
+                   'x="$schedulerDelayProportionPos%" y="0px" height="26px"' +
+                   'width="$schedulerDelayProportion%""></rect>' +
                  '<rect class="deserialization-time-proportion" '+
-                   'x="${deserializationTimeProportionPos}%" y="0px" height="26px"' +
-                   'width="${deserializationTimeProportion}%"></rect>' +
+                   'x="$deserializationTimeProportionPos%" y="0px" height="26px"' +
+                   'width="$deserializationTimeProportion%"></rect>' +
                  '<rect class="shuffle-read-time-proportion" ' +
-                   'x="${shuffleReadTimeProportionPos}%" y="0px" height="26px"' +
-                   'width="${shuffleReadTimeProportion}%"></rect>' +
+                   'x="$shuffleReadTimeProportionPos%" y="0px" height="26px"' +
+                   'width="$shuffleReadTimeProportion%"></rect>' +
                  '<rect class="executor-runtime-proportion" ' +
-                   'x="${executorRuntimeProportionPos}%" y="0px" height="26px"' +
-                   'width="${executorComputingTimeProportion}%"></rect>' +
+                   'x="$executorRuntimeProportionPos%" y="0px" height="26px"' +
+                   'width="$executorComputingTimeProportion%"></rect>' +
                  '<rect class="shuffle-write-time-proportion" ' +
-                   'x="${shuffleWriteTimeProportionPos}%" y="0px" height="26px"' +
-                   'width="${shuffleWriteTimeProportion}%"></rect>' +
+                   'x="$shuffleWriteTimeProportionPos%" y="0px" height="26px"' +
+                   'width="$shuffleWriteTimeProportion%"></rect>' +
                  '<rect class="serialization-time-proportion" ' +
-                   'x="${serializationTimeProportionPos}%" y="0px" height="26px"' +
-                   'width="${serializationTimeProportion}%"></rect>' +
+                   'x="$serializationTimeProportionPos%" y="0px" height="26px"' +
+                   'width="$serializationTimeProportion%"></rect>' +
                  '<rect class="getting-result-time-proportion" ' +
-                   'x="${gettingResultTimeProportionPos}%" y="0px" height="26px"' +
-                   'width="${gettingResultTimeProportion}%"></rect></svg>',
-               'start': new Date(${launchTime}),
-               'end': new Date(${finishTime})
+                   'x="$gettingResultTimeProportionPos%" y="0px" height="26px"' +
+                   'width="$gettingResultTimeProportion%"></rect></svg>',
+               'start': new Date($launchTime),
+               'end': new Date($finishTime)
              }
            """
         timelineObject
@@ -640,8 +640,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       case (executorId, host) =>
         s"""
             {
-              'id': '${executorId}',
-              'content': '${executorId} / ${host}',
+              'id': '$executorId',
+              'content': '$executorId / $host',
             }
           """
     }.mkString("[", ",", "]")
@@ -649,14 +649,20 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     val maxZoom = maxFinishTime - minLaunchTime
     <span class="expand-task-assignment-timeline">
       <span class="expand-task-assignment-timeline-arrow arrow-closed"></span>
-      <a>Event Timeline {
-        if (MAX_TIMELINE_TASKS <= numEffectiveTasks) {
-          s"(Most recent ${MAX_TIMELINE_TASKS})"
-        }
-      }
-      </a>
+      <a>Event Timeline</a>
     </span> ++
     <div id="task-assignment-timeline" class="collapsed">
+      {
+        if (MAX_TIMELINE_TASKS < numEffectiveTasks) {
+          <strong>
+            This stage has more than the maximum number of tasks that can be shown in the
+            visualization! Only the first {MAX_TIMELINE_TASKS} tasks
+            (of {numEffectiveTasks} total) are shown.
+          </strong>
+        } else {
+          Seq.empty
+        }
+      }
       <div class="control-panel">
         <div id="task-assignment-timeline-zoom-lock">
           <input type="checkbox"></input>
@@ -667,7 +673,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     </div> ++
     <script type="text/javascript">
       {Unparsed(s"drawTaskAssignmentTimeline(" +
-      s"${groupArrayStr}, ${executorsArrayStr}, ${minLaunchTime}, ${maxZoom})")}
+      s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxZoom)")}
     </script>
   }
 

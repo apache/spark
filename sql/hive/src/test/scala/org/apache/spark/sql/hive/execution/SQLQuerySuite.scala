@@ -763,4 +763,14 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT CASE k WHEN 2 THEN 22 WHEN 4 THEN 44 ELSE 0 END, v FROM t"),
       Row(0, "1") :: Row(22, "2") :: Row(0, "3") :: Row(44, "4") :: Row(0, "5") :: Nil)
   }
+
+  test("SPARK-7595: Window will cause resolve failed with self join") {
+    checkAnswer(sql(
+      """
+        |with
+        | v1 as (select key, count(value) over (partition by key) cnt_val from src),
+        | v2 as (select v1.key, v1_lag.cnt_val from v1, v1 v1_lag where v1.key = v1_lag.key)
+        | select * from v2 order by key limit 1
+      """.stripMargin), Row(0, 3))
+  }
 }

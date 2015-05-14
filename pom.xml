@@ -122,9 +122,9 @@
     <slf4j.version>1.7.10</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>2.2.0</hadoop.version>
-    <protobuf.version>2.4.1</protobuf.version>
+    <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
-    <hbase.version>0.98.7-hadoop1</hbase.version>
+    <hbase.version>0.98.7-hadoop2</hbase.version>
     <hbase.artifact>hbase</hbase.artifact>
     <flume.version>1.4.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
@@ -143,7 +143,7 @@
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>3.1.0</codahale.metrics.version>
     <avro.version>1.7.7</avro.version>
-    <avro.mapred.classifier></avro.mapred.classifier>
+    <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <jets3t.version>0.7.1</jets3t.version>
     <aws.java.sdk.version>1.8.3</aws.java.sdk.version>
     <aws.kinesis.client.version>1.1.0</aws.kinesis.client.version>
@@ -155,7 +155,7 @@
     <jline.version>${scala.version}</jline.version>
     <jline.groupid>org.scala-lang</jline.groupid>
     <jodd.version>3.6.3</jodd.version>
-    <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
+    <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
     <snappy.version>1.1.1.7</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
@@ -1644,26 +1644,27 @@
     -->
 
     <profile>
-      <id>hadoop-2.2</id>
+      <id>hadoop-1</id>
       <properties>
-        <hadoop.version>2.2.0</hadoop.version>
-        <protobuf.version>2.5.0</protobuf.version>
-        <hbase.version>0.98.7-hadoop2</hbase.version>
-        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
-        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
+        <hadoop.version>1.0.4</hadoop.version>
+        <protobuf.version>2.4.1</protobuf.version>
+        <hbase.version>0.98.7-hadoop1</hbase.version>
+        <avro.mapred.classifier>hadoop1</avro.mapred.classifier>
+        <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
       </properties>
+    </profile>
+
+    <profile>
+      <id>hadoop-2.2</id>
+    <!-- SPARK-7249: Default hadoop profile. Uses global properties. -->
     </profile>
 
     <profile>
       <id>hadoop-2.3</id>
       <properties>
         <hadoop.version>2.3.0</hadoop.version>
-        <protobuf.version>2.5.0</protobuf.version>
         <jets3t.version>0.9.3</jets3t.version>
-        <hbase.version>0.98.7-hadoop2</hbase.version>
         <commons.math3.version>3.1.1</commons.math3.version>
-        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
-        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
       </properties>
     </profile>
 
@@ -1671,12 +1672,8 @@
       <id>hadoop-2.4</id>
       <properties>
         <hadoop.version>2.4.0</hadoop.version>
-        <protobuf.version>2.5.0</protobuf.version>
         <jets3t.version>0.9.3</jets3t.version>
-        <hbase.version>0.98.7-hadoop2</hbase.version>
         <commons.math3.version>3.1.1</commons.math3.version>
-        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
-        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
       </properties>
     </profile>
 
