@@ -187,12 +187,13 @@ for words_label in wordsDataFrame.select("words", "label").take(3):
 
 Binarization is the process of thresholding numerical features to binary features. As some probabilistic estimators make assumption that the input data is distributed according to [Bernoulli distribution](http://en.wikipedia.org/wiki/Bernoulli_distribution), a binarizer is useful for pre-processing the input data with continuous numerical features.
 
-A simple [Binarizer](api/scala/index.html#org.apache.spark.ml.feature.Binarizer) class provides this functionality. Besides the common parameters of `InputCol` and `OutputCol`, `Binarizer` has the parameter `Threshold` used for binarizing continuous numerical features. The features greater than the threshold, will be binarized to 1.0. The features equal to or less than the threshold, will be binarized to 0.0. The example below shows how to binarize numerical features.
+A simple [Binarizer](api/scala/index.html#org.apache.spark.ml.feature.Binarizer) class provides this functionality. Besides the common parameters of `inputCol` and `outputCol`, `Binarizer` has the parameter `threshold` used for binarizing continuous numerical features. The features greater than the threshold, will be binarized to 1.0. The features equal to or less than the threshold, will be binarized to 0.0. The example below shows how to binarize numerical features.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 import org.apache.spark.ml.feature.Binarizer
+import org.apache.spark.sql.DataFrame
 
 val data = Array(
   (0, 0.1),
@@ -206,7 +207,8 @@ val binarizer: Binarizer = new Binarizer()
   .setOutputCol("binarized_feature")
   .setThreshold(0.5)
 
-binarizer.transform(dataFrame).select("binarized_feature").collect().foreach(println)
+val binarizedDataFrame = binarizer.transform(dataFrame).select("binarized_feature")
+binarizedDataFrame.collect().foreach(println)
 {% endhighlight %}
 </div>
 
@@ -234,8 +236,10 @@ StructType schema = new StructType(new StructField[]{
   new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
 });
 DataFrame continuousDataFrame = jsql.createDataFrame(jrdd, schema);
-Binarizer binarizer = new Binarizer().setInputCol("feature")
-  .setOutputCol("binarized_feature").setThreshold(0.5);
+Binarizer binarizer = new Binarizer()
+  .setInputCol("feature")
+  .setOutputCol("binarized_feature")
+  .setThreshold(0.5);
 DataFrame binarizedDataFrame = binarizer.transform(continuousDataFrame);
 for (Row r : binarizedDataFrame.select("binarized_feature").collect()) {
   Double binarized_value = r.getDouble(0);
