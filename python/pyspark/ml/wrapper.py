@@ -69,19 +69,12 @@ class JavaWrapper(Params):
                 java_param = java_obj.getParam(param.name)
                 java_obj.set(java_param.w(value))
 
-    def _empty_java_param_map(self):
+    @staticmethod
+    def _empty_java_param_map():
         """
         Returns an empty Java ParamMap reference.
         """
         return _jvm().org.apache.spark.ml.param.ParamMap()
-
-    def _create_java_param_map(self, params, java_obj):
-        paramMap = self._empty_java_param_map()
-        for param, value in params.items():
-            if param.parent is self:
-                java_param = java_obj.getParam(param.name)
-                paramMap.put(java_param.w(value))
-        return paramMap
 
 
 @inherit_doc
@@ -109,7 +102,7 @@ class JavaEstimator(Estimator, JavaWrapper):
         """
         java_obj = self._java_obj()
         self._transfer_params_to_java(java_obj)
-        return java_obj.fit(dataset._jdf, self._empty_java_param_map())
+        return java_obj.fit(dataset._jdf)
 
     def _fit(self, dataset):
         java_model = self._fit_java(dataset)
@@ -161,7 +154,7 @@ class JavaModel(Model, JavaTransformer):
         :return: Copy of this instance
         """
         that = Params.copy(self, extra)
-        that._java_model = that._java_model.copy()
+        that._java_model = self._java_model.copy(self._empty_java_param_map())
         return that
 
 
@@ -182,4 +175,4 @@ class JavaEvaluator(Evaluator, JavaWrapper):
         """
         java_obj = self._java_obj()
         self._transfer_params_to_java(java_obj)
-        return java_obj.evaluate(dataset._jdf, self._empty_java_param_map())
+        return java_obj.evaluate(dataset._jdf)
