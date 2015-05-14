@@ -15,20 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.serializer
 
-import java.io.IOException
+import org.apache.spark.SparkConf
+import org.scalatest.FunSuite
 
-import org.apache.spark.scheduler.MapStatus
-
-/**
- * Obtained inside a map task to write out records to the shuffle system.
- */
-private[spark] abstract class ShuffleWriter[K, V] {
-  /** Write a sequence of records to this task's output */
-  @throws[IOException]
-  def write(records: Iterator[Product2[K, V]]): Unit
-
-  /** Close this writer, passing along whether the map completed */
-  def stop(success: Boolean): Option[MapStatus]
+class JavaSerializerSuite extends FunSuite {
+  test("JavaSerializer instances are serializable") {
+    val serializer = new JavaSerializer(new SparkConf())
+    val instance = serializer.newInstance()
+    instance.deserialize[JavaSerializer](instance.serialize(serializer))
+  }
 }
