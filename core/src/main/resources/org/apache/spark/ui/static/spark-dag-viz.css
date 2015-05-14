@@ -35,13 +35,15 @@
 }
 
 #dag-viz-graph svg g.node.cached circle {
-  fill: #444;
+  fill: #A3F545;
+  stroke: #52C366;
+  stroke-width: 2px;
 }
 
 #dag-viz-graph svg g.node.cached rect {
   fill: #B3F5C5;
-  stroke: #56F578;
-  stroke-width: 1px;
+  stroke: #52C366;
+  stroke-width: 2px;
 }
 
 #dag-viz-graph div#empty-dag-viz-message {
