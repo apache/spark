@@ -78,6 +78,15 @@ class ColumnExpressionSuite extends QueryTest {
       Row("a", "b"))
   }
 
+  test("self join explode") {
+    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    val exploded = df.select(explode('intList).as('i))
+
+    checkAnswer(
+      exploded.join(exploded, exploded("i") === exploded("i")).agg(count("*")),
+      Row(3) :: Nil)
+  }
+
   test("collect on column produced by a binary operator") {
     val df = Seq((1, 2, 3)).toDF("a", "b", "c")
     checkAnswer(df.select(df("a") + df("b")), Seq(Row(3)))

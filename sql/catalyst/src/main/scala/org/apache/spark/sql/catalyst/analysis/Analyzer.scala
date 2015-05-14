@@ -321,6 +321,11 @@ class Analyzer(
           case oldVersion @ Aggregate(_, aggregateExpressions, _)
               if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
             (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
+
+          case oldVersion: Generate
+              if AttributeSet(oldVersion.generatorOutput).intersect(conflictingAttributes).nonEmpty =>
+            val newOutput = oldVersion.generatorOutput.map(_.newInstance())
+            (oldVersion, oldVersion.copy(generatorOutput = newOutput))
         }.headOption.getOrElse { // Only handle first case, others will be fixed on the next pass.
           sys.error(
             s"""
