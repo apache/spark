@@ -182,7 +182,7 @@ private[sql] class ParquetRelation2(
   // Parquet data source always uses Catalyst internal representations.
   override val needConversion: Boolean = false
 
-  override def sizeInBytes = metadataCache.dataStatuses.map(_.getLen).sum
+  override def sizeInBytes: Long = metadataCache.dataStatuses.map(_.getLen).sum
 
   override def userDefinedPartitionColumns: Option[StructType] =
     maybePartitionSpec.map(_.partitionColumns)
