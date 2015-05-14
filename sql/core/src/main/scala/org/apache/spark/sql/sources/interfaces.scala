@@ -350,43 +350,17 @@ abstract class OutputWriter {
  *
  * @constructor This constructor is for internal uses only. The [[PartitionSpec]] argument is for
  *              implementing metastore table conversion.
- * @param paths Base paths of this relation.  For partitioned relations, it should be the root
- *        directories of all partition directories.
+ *
  * @param maybePartitionSpec An [[HadoopFsRelation]] can be created with an optional
  *        [[PartitionSpec]], so that partition discovery can be skipped.
  *
  * @since 1.4.0
  */
 @Experimental
-abstract class HadoopFsRelation private[sql](
-    val paths: Array[String],
-    maybePartitionSpec: Option[PartitionSpec])
+abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
   extends BaseRelation {
 
-  /**
-   * Constructs an [[HadoopFsRelation]].
-   *
-   * @param paths Base paths of this relation.  For partitioned relations, it should be either root
-   *        directories of all partition directories.
-   * @param partitionColumns Partition columns of this relation.
-   *
-   * @since 1.4.0
-   */
-  def this(paths: Array[String], partitionColumns: StructType) =
-    this(paths, {
-      if (partitionColumns.isEmpty) None
-      else Some(PartitionSpec(partitionColumns, Array.empty[Partition]))
-    })
-
-  /**
-   * Constructs an [[HadoopFsRelation]].
-   *
-   * @param paths Base paths of this relation.  For partitioned relations, it should be root
-   *        directories of all partition directories.
-   *
-   * @since 1.4.0
-   */
-  def this(paths: Array[String]) = this(paths, None)
+  def this() = this(None)
 
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
@@ -402,14 +376,31 @@ abstract class HadoopFsRelation private[sql](
     }
   }
 
-  private[sql] def partitionSpec: PartitionSpec = _partitionSpec
+  final private[sql] def partitionSpec: PartitionSpec = _partitionSpec
 
   /**
-   * Partition columns. Note that they are always nullable.
+   * Base paths of this relation.  For partitioned relations, it should be either root directories
+   * of all partition directories.
    *
    * @since 1.4.0
    */
-  def partitionColumns: StructType = partitionSpec.partitionColumns
+  def paths: Array[String]
+
+  /**
+   * Partition columns.  Can be either defined by [[userDefinedPartitionColumns]] or automatically
+   * discovered.  Note that they should always be nullable.
+   *
+   * @since 1.4.0
+   */
+  final def partitionColumns: StructType =
+    userDefinedPartitionColumns.getOrElse(partitionSpec.partitionColumns)
+
+  /**
+   * Optional user defined partition columns.
+   *
+   * @since 1.4.0
+   */
+  def userDefinedPartitionColumns: Option[StructType] = None
 
   private[sql] def refresh(): Unit = {
     if (sqlContext.conf.partitionDiscoveryEnabled()) {

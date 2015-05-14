@@ -115,12 +115,12 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
 }
 
 private[sql] class ParquetRelation2(
-    paths: Array[String],
+    val paths: Array[String],
     private val maybeDataSchema: Option[StructType],
     private val maybePartitionSpec: Option[PartitionSpec],
     parameters: Map[String, String])(
     val sqlContext: SQLContext)
-  extends HadoopFsRelation(paths, maybePartitionSpec)
+  extends HadoopFsRelation(maybePartitionSpec)
   with Logging {
 
   // Should we merge schemas from all Parquet part-files?
@@ -131,8 +131,11 @@ private[sql] class ParquetRelation2(
     .get(ParquetRelation2.METASTORE_SCHEMA)
     .map(DataType.fromJson(_).asInstanceOf[StructType])
 
-  private val metadataCache = new MetadataCache
-  metadataCache.refresh()
+  private lazy val metadataCache: MetadataCache = {
+    val meta = new MetadataCache
+    meta.refresh()
+    meta
+  }
 
   override def equals(other: scala.Any): Boolean = other match {
     case that: ParquetRelation2 =>
@@ -179,7 +182,10 @@ private[sql] class ParquetRelation2(
   // Parquet data source always uses Catalyst internal representations.
   override val needConversion: Boolean = false
 
-  override val sizeInBytes = metadataCache.dataStatuses.map(_.getLen).sum
+  override def sizeInBytes = metadataCache.dataStatuses.map(_.getLen).sum
+
+  override def userDefinedPartitionColumns: Option[StructType] =
+    maybePartitionSpec.map(_.partitionColumns)
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     val conf = ContextUtil.getConfiguration(job)

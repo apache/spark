@@ -77,14 +77,16 @@ class SimpleTextOutputWriter(path: String, context: TaskAttemptContext) extends 
  * option `"dataSchema"`.
  */
 class SimpleTextRelation(
-    paths: Array[String],
+    val paths: Array[String],
     val maybeDataSchema: Option[StructType],
     partitionsSchema: StructType,
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
-  extends HadoopFsRelation(paths, partitionsSchema) {
+  extends HadoopFsRelation {
 
   import sqlContext.sparkContext
+
+  override def userDefinedPartitionColumns: Option[StructType] = Some(partitionsSchema)
 
   override val dataSchema: StructType =
     maybeDataSchema.getOrElse(DataType.fromJson(parameters("dataSchema")).asInstanceOf[StructType])
