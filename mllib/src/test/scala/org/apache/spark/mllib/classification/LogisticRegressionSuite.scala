@@ -101,7 +101,8 @@ object LogisticRegressionSuite {
       // This doesn't work if `vector` is a sparse vector.
       val vectorArray = vector.toArray
       var i = 0
-      while (i < vectorArray.length) {
+      val len = vectorArray.length
+      while (i < len) {
         vectorArray(i) = vectorArray(i) * math.sqrt(xVariance(i)) + xMean(i)
         i += 1
       }
