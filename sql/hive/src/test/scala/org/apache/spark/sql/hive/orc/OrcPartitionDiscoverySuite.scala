@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.orc
 
 import java.io.File
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.hive.test.TestHive
@@ -37,7 +38,7 @@ case class OrcParData(intField: Int, stringField: String)
 case class OrcParDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
 
 class OrcPartitionDiscoverySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
-  val defaultPartitionName = "__HIVE_DEFAULT_PARTITION__"
+  val defaultPartitionName = ConfVars.DEFAULTPARTITIONNAME.defaultVal
 
   def withTempDir(f: File => Unit): Unit = {
     val dir = Utils.createTempDir().getCanonicalFile
@@ -187,7 +188,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with FunSuiteLike with Before
         "org.apache.spark.sql.hive.orc.DefaultSource",
         Map(
           "path" -> base.getCanonicalPath,
-          OrcRelation.DEFAULT_PARTITION_NAME -> defaultPartitionName))
+          ConfVars.DEFAULTPARTITIONNAME.varname -> defaultPartitionName))
 
       orcRelation.registerTempTable("t")
 
@@ -232,7 +233,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with FunSuiteLike with Before
         "org.apache.spark.sql.hive.orc.DefaultSource",
         Map(
           "path" -> base.getCanonicalPath,
-          OrcRelation.DEFAULT_PARTITION_NAME -> defaultPartitionName))
+          ConfVars.DEFAULTPARTITIONNAME.varname -> defaultPartitionName))
 
       orcRelation.registerTempTable("t")
 

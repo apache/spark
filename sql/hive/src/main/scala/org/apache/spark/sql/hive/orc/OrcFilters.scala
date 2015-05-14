@@ -22,100 +22,55 @@ import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 import org.apache.spark.Logging
 import org.apache.spark.sql.sources._
 
-private[sql] object OrcFilters extends Logging {
-
+/**
+ * It may be optimized by push down partial filters. But we are conservative here.
+ * Because if some filters fail to be parsed, the tree may be corrupted,
+ * and cannot be used anymore.
+ */
+private[orc] object OrcFilters extends Logging {
   def createFilter(expr: Array[Filter]): Option[SearchArgument] = {
-    if (expr == null || expr.size == 0) return None
-    var sarg: Option[Builder] = Some(SearchArgument.FACTORY.newBuilder())
-    sarg.get.startAnd()
-    expr.foreach {
-      x => {
-        sarg match {
-          case Some(s1) => sarg = createFilter(x, s1)
-          case _ => None
-        }
-      }
-    }
-    sarg match {
-      case Some(b) => Some(b.end.build)
-      case _ => None
+    if (expr.nonEmpty) {
+      expr.foldLeft(Some(SearchArgument.FACTORY.newBuilder().startAnd()): Option[Builder]) {
+        (maybeBuilder, e) => createFilter(e, maybeBuilder)
+      }.map(_.end().build())
+    } else {
+      None
     }
   }
 
-  def createFilter(expression: Filter, builder: Builder): Option[Builder] = {
-    expression match {
-      case p@And(left: Filter, right: Filter) => {
-        val b1 = builder.startAnd()
-        val b2 = createFilter(left, b1)
-        b2 match {
-          case Some(b) => val b3 = createFilter(right, b)
-            if (b3.isDefined) {
-              Some(b3.get.end)
-            } else {
-              None
-            }
-          case _ => None
-        }
+  private def createFilter(expression: Filter, maybeBuilder: Option[Builder]): Option[Builder] = {
+    maybeBuilder.flatMap { builder =>
+      expression match {
+        case p@And(left, right) =>
+          for {
+            lhs <- createFilter(left, Some(builder.startAnd()))
+            rhs <- createFilter(right, Some(lhs))
+          } yield rhs.end()
+        case p@Or(left, right) =>
+          for {
+            lhs <- createFilter(left, Some(builder.startOr()))
+            rhs <- createFilter(right, Some(lhs))
+          } yield rhs.end()
+        case p@Not(child) =>
+          createFilter(child, Some(builder.startNot())).map(_.end())
+        case p@EqualTo(attribute, value) =>
+          Some(builder.equals(attribute, value))
+        case p@LessThan(attribute, value) =>
+          Some(builder.lessThan(attribute, value))
+        case p@LessThanOrEqual(attribute, value) =>
+          Some(builder.lessThanEquals(attribute, value))
+        case p@GreaterThan(attribute, value) =>
+          Some(builder.startNot().lessThanEquals(attribute, value).end())
+        case p@GreaterThanOrEqual(attribute, value) =>
+          Some(builder.startNot().lessThan(attribute, value).end())
+        case p@IsNull(attribute) =>
+          Some(builder.isNull(attribute))
+        case p@IsNotNull(attribute) =>
+          Some(builder.startNot().isNull(attribute).end())
+        case p@In(attribute, values) =>
+          Some(builder.in(attribute, values))
+        case _ => None
       }
-      case p@Or(left: Filter, right: Filter) => {
-        val b1 = builder.startOr()
-        val b2 = createFilter(left, b1)
-        b2 match {
-          case Some(b) => val b3 = createFilter(right, b)
-            if (b3.isDefined) {
-              Some(b3.get.end)
-            } else {
-              None
-            }
-          case _ => None
-        }
-      }
-      case p@Not(child: Filter) => {
-        val b1 = builder.startNot()
-        val b2 = createFilter(child, b1)
-        b2 match {
-          case Some(b) => Some(b.end)
-          case _ => None
-        }
-      }
-      case p@EqualTo(attribute: String, value: Any) => {
-        val b1 = builder.equals(attribute, value)
-        Some(b1)
-      }
-      case p@LessThan(attribute: String, value: Any) => {
-        val b1 = builder.lessThan(attribute ,value)
-        Some(b1)
-      }
-      case p@LessThanOrEqual(attribute: String, value: Any) => {
-        val b1 = builder.lessThanEquals(attribute, value)
-        Some(b1)
-      }
-      case p@GreaterThan(attribute: String, value: Any) => {
-        val b1 = builder.startNot().lessThanEquals(attribute, value).end()
-        Some(b1)
-      }
-      case p@GreaterThanOrEqual(attribute: String, value: Any) => {
-        val b1 = builder.startNot().lessThan(attribute, value).end()
-        Some(b1)
-      }
-      case p@IsNull(attribute: String) => {
-        val b1 = builder.isNull(attribute)
-        Some(b1)
-      }
-      case p@IsNotNull(attribute: String) => {
-        val b1 = builder.startNot().isNull(attribute).end()
-        Some(b1)
-      }
-      case p@In(attribute: String, values: Array[Any]) => {
-        val b1 = builder.in(attribute, values)
-        Some(b1)
-      }
-      // not supported in filter
-      // case p@EqualNullSafe(left: String, right: String) => {
-      //  val b1 = builder.nullSafeEquals(left, right)
-      //  Some(b1)
-      // }
-      case _ => None
     }
   }
 }

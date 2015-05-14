@@ -153,13 +153,40 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
       data.toDF().saveAsOrcFile(tempDir)
       val f = TestHive.orcFile(tempDir)
       f.registerTempTable("tmp")
+
+      // ppd:
+      // leaf-0 = (LESS_THAN_EQUALS age 5)
+      // expr = leaf-0
       var rdd = sql("SELECT name FROM tmp where age <= 5")
       assert(rdd.count() == 5)
 
+      // ppd:
+      // leaf-0 = (LESS_THAN_EQUALS age 5)
+      // expr = (not leaf-0)
       rdd = sql("SELECT name, contacts FROM tmp where age > 5")
       assert(rdd.count() == 5)
-      val contacts = rdd.flatMap(t=>t(1).asInstanceOf[Seq[_]])
+      var contacts = rdd.flatMap(t=>t(1).asInstanceOf[Seq[_]])
       assert(contacts.count() == 10)
+
+      // ppd:
+      // leaf-0 = (LESS_THAN_EQUALS age 5)
+      // leaf-1 = (LESS_THAN age 8)
+      // expr = (and (not leaf-0) leaf-1)
+      rdd = sql("SELECT name, contacts FROM tmp where age > 5 and age < 8")
+      assert(rdd.count() == 2)
+      contacts = rdd.flatMap(t=>t(1).asInstanceOf[Seq[_]])
+      assert(contacts.count() == 4)
+
+      // ppd:
+      // leaf-0 = (LESS_THAN age 2)
+      // leaf-1 = (LESS_THAN_EQUALS age 8)
+      // expr = (or leaf-0 (not leaf-1))
+      rdd = sql("SELECT name, contacts FROM tmp where age < 2 or age > 8")
+      assert(rdd.count() == 3)
+      contacts = rdd.flatMap(t=>t(1).asInstanceOf[Seq[_]])
+      assert(contacts.count() == 6)
+
+
       Utils.deleteRecursively(new File(tempDir))
     }
 
