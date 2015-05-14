@@ -41,7 +41,7 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
     conf.getInt("spark.ui.retainedStages", SparkUI.DEFAULT_RETAINED_STAGES)
 
   /** Return the graph metadata for the given stage, or None if no such information exists. */
-  def getOperationGraphForJob(jobId: Int): Seq[RDDOperationGraph] = {
+  def getOperationGraphForJob(jobId: Int): Seq[RDDOperationGraph] = synchronized {
     val _stageIds = jobIdToStageIds.get(jobId).getOrElse { Seq.empty }
     val graphs = _stageIds.flatMap { sid => stageIdToGraph.get(sid) }
     // If the metadata for some stages have been removed, do not bother rendering this job
@@ -53,7 +53,7 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
   }
 
   /** Return the graph metadata for the given stage, or None if no such information exists. */
-  def getOperationGraphForStage(stageId: Int): Option[RDDOperationGraph] = {
+  def getOperationGraphForStage(stageId: Int): Option[RDDOperationGraph] = synchronized {
     stageIdToGraph.get(stageId)
   }
 
