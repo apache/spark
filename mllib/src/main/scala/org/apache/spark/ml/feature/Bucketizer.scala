@@ -21,11 +21,11 @@ import java.{util => ju}
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.ml.Model
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
@@ -35,10 +35,10 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
  * `Bucketizer` maps a column of continuous features to a column of feature buckets.
  */
 @AlphaComponent
-final class Bucketizer private[ml] (override val parent: Estimator[Bucketizer])
+final class Bucketizer(override val uid: String)
   extends Model[Bucketizer] with HasInputCol with HasOutputCol {
 
-  def this() = this(null)
+  def this() = this(Identifiable.randomUID("bucketizer"))
 
   /**
    * Parameter for mapping continuous features into buckets. With n+1 splits, there are n buckets.
@@ -98,7 +98,8 @@ private[feature] object Bucketizer {
       false
     } else {
       var i = 0
-      while (i < splits.length - 1) {
+      val n = splits.length - 1
+      while (i < n) {
         if (splits(i) >= splits(i + 1)) return false
         i += 1
       }

@@ -41,11 +41,11 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
     conf.getInt("spark.ui.retainedStages", SparkUI.DEFAULT_RETAINED_STAGES)
 
   /** Return the graph metadata for the given stage, or None if no such information exists. */
-  def getOperationGraphForJob(jobId: Int): Seq[RDDOperationGraph] = {
-    val stageIds = jobIdToStageIds.get(jobId).getOrElse { Seq.empty }
-    val graphs = stageIds.flatMap { sid => stageIdToGraph.get(sid) }
+  def getOperationGraphForJob(jobId: Int): Seq[RDDOperationGraph] = synchronized {
+    val _stageIds = jobIdToStageIds.get(jobId).getOrElse { Seq.empty }
+    val graphs = _stageIds.flatMap { sid => stageIdToGraph.get(sid) }
     // If the metadata for some stages have been removed, do not bother rendering this job
-    if (stageIds.size != graphs.size) {
+    if (_stageIds.size != graphs.size) {
       Seq.empty
     } else {
       graphs
@@ -53,15 +53,28 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
   }
 
   /** Return the graph metadata for the given stage, or None if no such information exists. */
-  def getOperationGraphForStage(stageId: Int): Option[RDDOperationGraph] = {
+  def getOperationGraphForStage(stageId: Int): Option[RDDOperationGraph] = synchronized {
     stageIdToGraph.get(stageId)
   }
 
   /** On job start, construct a RDDOperationGraph for each stage in the job for display later. */
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
     val jobId = jobStart.jobId
+    val stageInfos = jobStart.stageInfos
+
     jobIds += jobId
     jobIdToStageIds(jobId) = jobStart.stageInfos.map(_.stageId).sorted
+
+    stageInfos.foreach { stageInfo =>
+      stageIds += stageInfo.stageId
+      stageIdToGraph(stageInfo.stageId) = RDDOperationGraph.makeOperationGraph(stageInfo)
+      // Remove state for old stages
+      if (stageIds.size >= retainedStages) {
+        val toRemove = math.max(retainedStages / 10, 1)
+        stageIds.take(toRemove).foreach { id => stageIdToGraph.remove(id) }
+        stageIds.trimStart(toRemove)
+      }
+    }
 
     // Remove state for old jobs
     if (jobIds.size >= retainedJobs) {
@@ -71,15 +84,4 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
     }
   }
 
-  /** Remove graph metadata for old stages */
-  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
-    val stageInfo = stageSubmitted.stageInfo
-    stageIds += stageInfo.stageId
-    stageIdToGraph(stageInfo.stageId) = RDDOperationGraph.makeOperationGraph(stageInfo)
-    if (stageIds.size >= retainedStages) {
-      val toRemove = math.max(retainedStages / 10, 1)
-      stageIds.take(toRemove).foreach { id => stageIdToGraph.remove(id) }
-      stageIds.trimStart(toRemove)
-    }
-  }
 }

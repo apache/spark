@@ -31,7 +31,6 @@ class RDDOperationGraphListenerSuite extends FunSuite {
     assert(numStages > 0, "I will not run a job with 0 stages for you.")
     val stageInfos = (0 until numStages).map { _ =>
       val stageInfo = new StageInfo(stageIdCounter, 0, "s", 0, Seq.empty, Seq.empty, "d")
-      listener.onStageSubmitted(new SparkListenerStageSubmitted(stageInfo))
       stageIdCounter += 1
       stageInfo
     }
