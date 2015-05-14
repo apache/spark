@@ -1,7 +1,7 @@
 TODO
 -----
 #### UI
-* Run / backfill wizard
+* Run button / backfill wizard
 * Add templating to adhoc queries
 * Charts: better error handling
 
@@ -15,6 +15,7 @@ TODO
 * Merge Cascading
 
 #### Backend
+* Add a run_only_latest flag to BaseOperator, runs only most recent task instance where deps are met
 * Pickle all the THINGS!
 * Master auto dag refresh at time intervals
 * Prevent timezone chagne on import

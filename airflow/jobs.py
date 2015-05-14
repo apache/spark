@@ -337,10 +337,17 @@ class SchedulerJob(BaseJob):
         i = 0
         while (not self.test_mode) or i < 1:
             i += 1
-            if i % self.refresh_dags_every == 0:
-                dagbag = models.DagBag(self.subdir, sync_to_db=True)
-            else:
-                dagbag.collect_dags(only_if_updated=True)
+            try:
+                if i % self.refresh_dags_every == 0:
+                    dagbag = models.DagBag(self.subdir, sync_to_db=True)
+                else:
+                    dagbag.collect_dags(only_if_updated=True)
+            except:
+                logging.error("Failed at reloading the dagbag")
+                if statsd:
+                    statsd.incr('dag_refresh_error', 1, 1)
+                sleep(5)
+
             if dag_id:
                 dags = [dagbag.dags[dag_id]]
             else:

@@ -181,6 +181,7 @@ def dag_link(v, c, m, p):
 class DagModelView(SuperUserMixin, ModelView):
     column_list = ('dag_id', 'owners')
     column_editable_list = ('is_paused',)
+    form_excluded_columns = ('is_subdag', 'is_active')
     column_searchable_list = ('dag_id',)
     column_filters = (
         'dag_id', 'owners', 'is_paused', 'is_active', 'is_subdag',
@@ -193,8 +194,6 @@ class DagModelView(SuperUserMixin, ModelView):
         'last_loaded': {'disabled': True},
         'last_expired': {'disabled': True},
         'pickle_size': {'disabled': True},
-        'is_subdag': {'disabled': True},
-        'is_active': {'disabled': True},
         'scheduler_lock': {'disabled': True},
         'owners': {'disabled': True},
     }
