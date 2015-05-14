@@ -122,6 +122,7 @@ class TestParams(HasMaxIter, HasInputCol, HasSeed):
         self._setDefault(maxIter=10)
         self._set(seed=seed)
 
+
 class ParamTests(PySparkTestCase):
 
     def test_param(self):
@@ -166,7 +167,7 @@ class ParamTests(PySparkTestCase):
 
     def test_hasseed(self):
         noSeedSpecd = TestParams()
-        withSeedSpecd = TestParams(seed = 42)
+        withSeedSpecd = TestParams(seed=42)
         # Check that we no longer use 42 as the magic number
         self.assertNotEqual(noSeedSpecd.getSeed(), 42)
         origSeed = noSeedSpecd.getSeed()

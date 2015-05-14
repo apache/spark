@@ -135,7 +135,6 @@ class Params(Identifiable):
         else:
             raise KeyError("Cannot recognize %r as a param." % param)
 
-
     def extractParamMap(self, extraParamMap={}):
         """
         Extracts the embedded default param values and user-supplied
