@@ -57,6 +57,8 @@ class MQTTInputDStream(
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[String](ssc_) {
 
+  protected override val customScopeName: Option[String] = Some(s"MQTT stream [$id]")
+
   def getReceiver(): Receiver[String] = {
     new MQTTReceiver(brokerUrl, topic, storageLevel)
   }

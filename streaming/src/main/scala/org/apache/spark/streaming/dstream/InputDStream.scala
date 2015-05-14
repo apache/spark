@@ -17,9 +17,9 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.{Time, Duration, StreamingContext}
-
 import scala.reflect.ClassTag
+
+import org.apache.spark.streaming.{Time, Duration, StreamingContext}
 
 /**
  * This is the abstract base class for all input streams. This class provides methods
@@ -48,6 +48,9 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
    * The name of this InputDStream. By default, it's the class name with its id.
    */
   private[streaming] def name: String = s"${getClass.getSimpleName}-$id"
+
+  /** Human-friendly scope name to use in place of generic operation names (e.g. createStream). */
+  protected override val customScopeName: Option[String] = Some(s"input stream [$id]")
 
   /**
    * Checks whether the 'time' is valid wrt slideDuration for generating RDD.

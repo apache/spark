@@ -45,6 +45,8 @@ class TwitterInputDStream(
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[Status](ssc_)  {
 
+  protected override val customScopeName: Option[String] = Some(s"twitter stream [$id]")
+
   private def createOAuthAuthorization(): Authorization = {
     new OAuthAuthorization(new ConfigurationBuilder().build())
   }

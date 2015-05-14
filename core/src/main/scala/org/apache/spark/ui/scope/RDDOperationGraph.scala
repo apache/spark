@@ -171,7 +171,7 @@ private[ui] object RDDOperationGraph extends Logging {
 
   /** Return the dot representation of a node in an RDDOperationGraph. */
   private def makeDotNode(node: RDDOperationNode): String = {
-    s"""${node.id} [label="${node.name} (${node.id})"]"""
+    s"""${node.id} [label="${node.name} [${node.id}]"]"""
   }
 
   /** Return the dot representation of a subgraph in an RDDOperationGraph. */

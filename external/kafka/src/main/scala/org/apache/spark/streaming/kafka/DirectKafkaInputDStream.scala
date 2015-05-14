@@ -62,8 +62,11 @@ class DirectKafkaInputDStream[
     val fromOffsets: Map[TopicAndPartition, Long],
     messageHandler: MessageAndMetadata[K, V] => R
 ) extends InputDStream[R](ssc_) with Logging {
-  val maxRetries = context.sparkContext.getConf.getInt(
+
+  private val maxRetries = context.sparkContext.getConf.getInt(
     "spark.streaming.kafka.maxRetries", 1)
+
+  protected override val customScopeName: Option[String] = Some(s"kafka direct stream [$id]")
 
   protected[streaming] override val checkpointData =
     new DirectKafkaInputDStreamCheckpointData
