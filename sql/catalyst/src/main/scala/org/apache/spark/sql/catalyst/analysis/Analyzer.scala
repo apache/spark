@@ -330,10 +330,10 @@ class Analyzer(
         }.headOption.getOrElse { // Only handle first case, others will be fixed on the next pass.
           sys.error(
             s"""
-               |Failure when resolving conflicting references in Join:
-               |$plan
-               |
-               |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+              |Failure when resolving conflicting references in Join:
+              |$plan
+              |
+              |Conflicting attributes: ${conflictingAttributes.mkString(",")}
               """.stripMargin)
         }
 
