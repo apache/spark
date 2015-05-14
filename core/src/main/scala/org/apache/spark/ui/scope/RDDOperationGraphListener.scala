@@ -60,8 +60,21 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
   /** On job start, construct a RDDOperationGraph for each stage in the job for display later. */
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
     val jobId = jobStart.jobId
+    val stageInfos = jobStart.stageInfos
+
     jobIds += jobId
     jobIdToStageIds(jobId) = jobStart.stageInfos.map(_.stageId).sorted
+
+    stageInfos.foreach { stageInfo =>
+      stageIds += stageInfo.stageId
+      stageIdToGraph(stageInfo.stageId) = RDDOperationGraph.makeOperationGraph(stageInfo)
+      // Remove state for old stages
+      if (stageIds.size >= retainedStages) {
+        val toRemove = math.max(retainedStages / 10, 1)
+        stageIds.take(toRemove).foreach { id => stageIdToGraph.remove(id) }
+        stageIds.trimStart(toRemove)
+      }
+    }
 
     // Remove state for old jobs
     if (jobIds.size >= retainedJobs) {
@@ -71,15 +84,4 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
     }
   }
 
-  /** Remove graph metadata for old stages */
-  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
-    val stageInfo = stageSubmitted.stageInfo
-    stageIds += stageInfo.stageId
-    stageIdToGraph(stageInfo.stageId) = RDDOperationGraph.makeOperationGraph(stageInfo)
-    if (stageIds.size >= retainedStages) {
-      val toRemove = math.max(retainedStages / 10, 1)
-      stageIds.take(toRemove).foreach { id => stageIdToGraph.remove(id) }
-      stageIds.trimStart(toRemove)
-    }
-  }
 }
