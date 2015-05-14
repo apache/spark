@@ -1705,11 +1705,6 @@ private[spark] object Utils extends Logging {
   val windowsDrive = "([a-zA-Z])".r
 
   /**
-   * Format a Windows path such that it can be safely passed to a URI.
-   */
-  def formatWindowsPath(path: String): String = path.replace("\\", "/")
-
-  /**
    * Indicates whether Spark is currently running unit tests.
    */
   def isTesting: Boolean = {
@@ -1806,37 +1801,24 @@ private[spark] object Utils extends Logging {
    * If the supplied path does not contain a scheme, or is a relative path, it will be
    * converted into an absolute path with a file:// scheme.
    */
-  def resolveURI(path: String, testWindows: Boolean = false): URI = {
-
-    // In Windows, the file separator is a backslash, but this is inconsistent with the URI format
-    val windows = isWindows || testWindows
-    val formattedPath = if (windows) formatWindowsPath(path) else path
-
-    val uri = new URI(formattedPath)
-    if (uri.getPath == null) {
-      throw new IllegalArgumentException(s"Given path is malformed: $uri")
+  def resolveURI(path: String): URI = {
+    try {
+      val uri = new URI(path)
+      if (uri.getScheme() != null) {
+        return uri
+      }
+    } catch {
+      case e: URISyntaxException =>
     }
-
-    Option(uri.getScheme) match {
-      case Some(windowsDrive(d)) if windows =>
-        new URI("file:/" + uri.toString.stripPrefix("/"))
-      case None =>
-        // Preserve fragments for HDFS file name substitution (denoted by "#")
-        // For instance, in "abc.py#xyz.py", "xyz.py" is the name observed by the application
-        val fragment = uri.getFragment
-        val part = new File(uri.getPath).toURI
-        new URI(part.getScheme, part.getPath, fragment)
-      case Some(other) =>
-        uri
-    }
+    new File(path).getAbsoluteFile().toURI()
   }
 
   /** Resolve a comma-separated list of paths. */
-  def resolveURIs(paths: String, testWindows: Boolean = false): String = {
+  def resolveURIs(paths: String): String = {
     if (paths == null || paths.trim.isEmpty) {
       ""
     } else {
-      paths.split(",").map { p => Utils.resolveURI(p, testWindows) }.mkString(",")
+      paths.split(",").map { p => Utils.resolveURI(p) }.mkString(",")
     }
   }
 
@@ -1847,8 +1829,7 @@ private[spark] object Utils extends Logging {
       Array.empty
     } else {
       paths.split(",").filter { p =>
-        val formattedPath = if (windows) formatWindowsPath(p) else p
-        val uri = new URI(formattedPath)
+        val uri = resolveURI(p)
         Option(uri.getScheme).getOrElse("file") match {
           case windowsDrive(d) if windows => false
           case "local" | "file" => false
@@ -1971,13 +1952,14 @@ private[spark] object Utils extends Logging {
       startService: Int => (T, Int),
       conf: SparkConf,
       serviceName: String = ""): (T, Int) = {
-    val maxRetries = portMaxRetries(conf)
     val ports = port.split(":", 2)
-    val (minPort, maxPort) = if (ports.length == 2) {
-      (ports(0).toInt, ports(1).toInt)
+    val (minPort, maxPort, maxRetries) = if (ports.length == 2) {
+      val _minPort = ports(0).toInt
+      val _maxPort = ports(1).toInt
+      (_minPort, _maxPort, _maxPort - _minPort)
     } else {
       val _minPort = ports(0).toInt
-      (_minPort, math.min(65535, _minPort + maxRetries))
+      (_minPort, 65535, portMaxRetries(conf))
     }
     require(minPort == 0 || (1024 <= minPort && minPort <= 65535),
       s"Minimum port ${minPort} should be between 1024 and 65535 (inclusive)," +

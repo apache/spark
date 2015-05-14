@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{BufferedReader, InputStreamReader, File, PrintStream}
 import java.net.URI
-import java.util.{ArrayList => JArrayList}
+import java.util.{ArrayList => JArrayList, Map => JMap, List => JList, Set => JSet}
 
 import scala.collection.JavaConversions._
 import scala.language.reflectiveCalls
@@ -27,6 +27,7 @@ import scala.language.reflectiveCalls
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.metastore.api.Database
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.metastore.TableType
 import org.apache.hadoop.hive.metastore.api
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata
@@ -54,18 +55,12 @@ import org.apache.spark.sql.execution.QueryExecutionException
  * @param config  a collection of configuration options that will be added to the hive conf before
  *                opening the hive client.
  */
-class ClientWrapper(
+private[hive] class ClientWrapper(
     version: HiveVersion,
     config: Map[String, String])
   extends ClientInterface
   with Logging
   with ReflectionMagic {
-
-  private val conf = new HiveConf(classOf[SessionState])
-  config.foreach { case (k, v) =>
-    logDebug(s"Hive Config: $k=$v")
-    conf.set(k, v)
-  }
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   private val outputBuffer = new java.io.OutputStream {
@@ -99,17 +94,31 @@ class ClientWrapper(
     val original = Thread.currentThread().getContextClassLoader
     Thread.currentThread().setContextClassLoader(getClass.getClassLoader)
     val ret = try {
-      val newState = new SessionState(conf)
-      SessionState.start(newState)
-      newState.out = new PrintStream(outputBuffer, true, "UTF-8")
-      newState.err = new PrintStream(outputBuffer, true, "UTF-8")
-      newState
+      val oldState = SessionState.get()
+      if (oldState == null) {
+        val initialConf = new HiveConf(classOf[SessionState])
+        config.foreach { case (k, v) =>
+          logDebug(s"Hive Config: $k=$v")
+          initialConf.set(k, v)
+        }
+        val newState = new SessionState(initialConf)
+        SessionState.start(newState)
+        newState.out = new PrintStream(outputBuffer, true, "UTF-8")
+        newState.err = new PrintStream(outputBuffer, true, "UTF-8")
+        newState
+      } else {
+        oldState
+      }
     } finally {
       Thread.currentThread().setContextClassLoader(original)
     }
     ret
   }
 
+  /** Returns the configuration for the current session. */
+  def conf: HiveConf = SessionState.get().getConf
+
+  // TODO: should be a def?s
   private val client = Hive.get(conf)
 
   /**
@@ -131,6 +140,18 @@ class ClientWrapper(
       Thread.currentThread().setContextClassLoader(original)
     }
     ret
+  }
+
+  def setOut(stream: PrintStream): Unit = withHiveState {
+    state.out = stream
+  }
+
+  def setInfo(stream: PrintStream): Unit = withHiveState {
+    state.info = stream
+  }
+
+  def setError(stream: PrintStream): Unit = withHiveState {
+    state.err = stream
   }
 
   override def currentDatabase: String = withHiveState {
@@ -171,14 +192,20 @@ class ClientWrapper(
         partitionColumns = h.getPartCols.map(f => HiveColumn(f.getName, f.getType, f.getComment)),
         properties = h.getParameters.toMap,
         serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.toMap,
-        tableType = ManagedTable, // TODO
+        tableType = h.getTableType match {
+          case TableType.MANAGED_TABLE => ManagedTable
+          case TableType.EXTERNAL_TABLE => ExternalTable
+          case TableType.VIRTUAL_VIEW => VirtualView
+          case TableType.INDEX_TABLE => IndexTable
+        },
         location = version match {
           case hive.v12 => Option(h.call[URI]("getDataLocation")).map(_.toString)
           case hive.v13 => Option(h.call[Path]("getDataLocation")).map(_.toString)
         },
         inputFormat = Option(h.getInputFormatClass).map(_.getName),
         outputFormat = Option(h.getOutputFormatClass).map(_.getName),
-        serde = Option(h.getSerializationLib)).withClient(this)
+        serde = Option(h.getSerializationLib),
+        viewText = Option(h.getViewExpandedText)).withClient(this)
     }
     converted
   }
@@ -198,6 +225,12 @@ class ClientWrapper(
       table.partitionColumns.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
     table.properties.foreach { case (k, v) => qlTable.setProperty(k, v) }
     table.serdeProperties.foreach { case (k, v) => qlTable.setSerdeParam(k, v) }
+
+    // set owner
+    qlTable.setOwner(conf.getUser)
+    // set create time
+    qlTable.setCreateTime((System.currentTimeMillis() / 1000).asInstanceOf[Int])
+
     version match {
       case hive.v12 =>
         table.location.map(new URI(_)).foreach(u => qlTable.call[URI, Unit]("setDataLocation", u))
@@ -223,27 +256,40 @@ class ClientWrapper(
     client.alterTable(table.qualifiedName, qlTable)
   }
 
+  private def toHivePartition(partition: metadata.Partition): HivePartition = {
+    val apiPartition = partition.getTPartition
+    HivePartition(
+      values = Option(apiPartition.getValues).map(_.toSeq).getOrElse(Seq.empty),
+      storage = HiveStorageDescriptor(
+        location = apiPartition.getSd.getLocation,
+        inputFormat = apiPartition.getSd.getInputFormat,
+        outputFormat = apiPartition.getSd.getOutputFormat,
+        serde = apiPartition.getSd.getSerdeInfo.getSerializationLib,
+        serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.toMap))
+  }
+
+  override def getPartitionOption(
+      table: HiveTable,
+      partitionSpec: JMap[String, String]): Option[HivePartition] = withHiveState {
+
+    val qlTable = toQlTable(table)
+    val qlPartition = client.getPartition(qlTable, partitionSpec, false)
+    Option(qlPartition).map(toHivePartition)
+  }
+
   override def getAllPartitions(hTable: HiveTable): Seq[HivePartition] = withHiveState {
     val qlTable = toQlTable(hTable)
     val qlPartitions = version match {
       case hive.v12 =>
-        client.call[metadata.Table, Set[metadata.Partition]]("getAllPartitionsForPruner", qlTable)
+        client.call[metadata.Table, JSet[metadata.Partition]]("getAllPartitionsForPruner", qlTable)
       case hive.v13 =>
-        client.call[metadata.Table, Set[metadata.Partition]]("getAllPartitionsOf", qlTable)
+        client.call[metadata.Table, JSet[metadata.Partition]]("getAllPartitionsOf", qlTable)
     }
-    qlPartitions.map(_.getTPartition).map { p =>
-      HivePartition(
-        values = Option(p.getValues).map(_.toSeq).getOrElse(Seq.empty),
-        storage = HiveStorageDescriptor(
-          location = p.getSd.getLocation,
-          inputFormat = p.getSd.getInputFormat,
-          outputFormat = p.getSd.getOutputFormat,
-          serde = p.getSd.getSerdeInfo.getSerializationLib))
-    }.toSeq
+    qlPartitions.toSeq.map(toHivePartition)
   }
 
   override def listTables(dbName: String): Seq[String] = withHiveState {
-    client.getAllTables
+    client.getAllTables(dbName)
   }
 
   /**
@@ -267,11 +313,12 @@ class ClientWrapper(
     try {
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
+      // The remainder of the command.
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
       val proc: CommandProcessor = version match {
         case hive.v12 =>
           classOf[CommandProcessorFactory]
-            .callStatic[String, HiveConf, CommandProcessor]("get", cmd_1, conf)
+            .callStatic[String, HiveConf, CommandProcessor]("get", tokens(0), conf)
         case hive.v13 =>
           classOf[CommandProcessorFactory]
             .callStatic[Array[String], HiveConf, CommandProcessor]("get", Array(tokens(0)), conf)
@@ -294,7 +341,7 @@ class ClientWrapper(
               res.toSeq
             case hive.v13 =>
               val res = new JArrayList[Object]
-              driver.call[JArrayList[Object], Boolean]("getResults", res)
+              driver.call[JList[Object], Boolean]("getResults", res)
               res.map { r =>
                 r match {
                   case s: String => s

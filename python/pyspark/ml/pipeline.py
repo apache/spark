@@ -22,9 +22,6 @@ from pyspark.ml.util import keyword_only
 from pyspark.mllib.common import inherit_doc
 
 
-__all__ = ['Estimator', 'Transformer', 'Pipeline', 'PipelineModel', 'Evaluator']
-
-
 @inherit_doc
 class Estimator(Params):
     """
@@ -68,6 +65,15 @@ class Transformer(Params):
         :returns: transformed dataset
         """
         raise NotImplementedError()
+
+
+@inherit_doc
+class Model(Transformer):
+    """
+    Abstract class for models that are fitted by estimators.
+    """
+
+    __metaclass__ = ABCMeta
 
 
 @inherit_doc
@@ -154,7 +160,7 @@ class Pipeline(Estimator):
 
 
 @inherit_doc
-class PipelineModel(Transformer):
+class PipelineModel(Model):
     """
     Represents a compiled pipeline with transformers and fitted models.
     """
@@ -170,7 +176,7 @@ class PipelineModel(Transformer):
         return dataset
 
 
-class Evaluator(object):
+class Evaluator(Params):
     """
     Base class for evaluators that compute metrics from predictions.
     """

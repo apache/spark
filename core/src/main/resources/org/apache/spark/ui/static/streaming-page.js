@@ -266,9 +266,19 @@ $(function() {
         }
     }
 
-    if (getParameterFromURL("show-streams-detail") == "true") {
-        // Show the details for all InputDStream
-        $('#inputs-table').toggle('collapsed');
-        $('#triangle').html('&#9660;');
+    var status = getParameterFromURL("show-streams-detail") == "true";
+
+    $("span.expand-input-rate").click(function() {
+        status = !status;
+        $("#inputs-table").toggle('collapsed');
+        // Toggle the class of the arrow between open and closed
+        $(this).find('.expand-input-rate-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
+        window.history.pushState('', document.title, window.location.pathname + '?show-streams-detail=' + status);
+    });
+
+    if (status) {
+        $("#inputs-table").toggle('collapsed');
+        // Toggle the class of the arrow between open and closed
+        $(this).find('.expand-input-rate-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
     }
 });

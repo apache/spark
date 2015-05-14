@@ -407,14 +407,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
 
+    // "_jobProgressListener" should be set up before creating SparkEnv because when creating
+    // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
+    _jobProgressListener = new JobProgressListener(_conf)
+    listenerBus.addListener(jobProgressListener)
+
     // Create the Spark execution environment (cache, map output tracker, etc)
     _env = createSparkEnv(_conf, isLocal, listenerBus)
     SparkEnv.set(_env)
 
     _metadataCleaner = new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, _conf)
-
-    _jobProgressListener = new JobProgressListener(_conf)
-    listenerBus.addListener(jobProgressListener)
 
     _statusTracker = new SparkStatusTracker(this)
 
@@ -428,7 +430,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _ui =
       if (conf.getBoolean("spark.ui.enabled", true)) {
         Some(SparkUI.createLiveUI(this, _conf, listenerBus, _jobProgressListener,
-          _env.securityManager,appName))
+          _env.securityManager,appName, startTime = startTime))
       } else {
         // For tests, do not enable the UI
         None
