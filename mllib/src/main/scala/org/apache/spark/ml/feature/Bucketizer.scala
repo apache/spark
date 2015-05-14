@@ -98,7 +98,8 @@ private[feature] object Bucketizer {
       false
     } else {
       var i = 0
-      while (i < splits.length - 1) {
+      val n = splits.length - 1
+      while (i < n) {
         if (splits(i) >= splits(i + 1)) return false
         i += 1
       }
