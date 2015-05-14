@@ -79,6 +79,7 @@ class Word2Vec extends Serializable with Logging {
   private var numIterations = 1
   private var seed = Utils.random.nextLong()
   private var minCount = 5
+  private var sample = 0.0
   
   /**
    * Sets vector size (default: 100).
@@ -130,7 +131,16 @@ class Word2Vec extends Serializable with Logging {
     this.minCount = minCount
     this
   }
-  
+
+  /** 
+   * Sets the threshold for randomly downsampling higher-frequency words, default is 0.0 (off),
+   * useful value is 1e-5 (default: 0.0).
+   */
+  def setSample(sample: Double): this.type = {
+    this.sample = sample
+    this
+  }
+
   private val EXP_TABLE_SIZE = 1000
   private val MAX_EXP = 6
   private val MAX_CODE_LENGTH = 40
@@ -278,6 +288,11 @@ class Word2Vec extends Serializable with Logging {
       new Iterator[Array[Int]] {
         def hasNext: Boolean = iter.hasNext
 
+        def sampling(freq: Double): Boolean = {
+          val p = math.max(0.0, 1.0 - math.sqrt(sample / freq))
+          Utils.random.nextDouble() > p
+        }
+
         def next(): Array[Int] = {
           val sentence = ArrayBuilder.make[Int]
           var sentenceLength = 0
@@ -285,8 +300,10 @@ class Word2Vec extends Serializable with Logging {
             val word = bcVocabHash.value.get(iter.next())
             word match {
               case Some(w) =>
-                sentence += w
-                sentenceLength += 1
+                if (sample == 0.0 || sampling(bcVocab.value(w).cn / trainWordsCount.toDouble)) {
+                  sentence += w
+                  sentenceLength += 1
+                }
               case None =>
             }
           }

@@ -38,6 +38,12 @@ class Word2VecSuite extends FunSuite with MLlibTestSparkContext {
     assert(syms.length == 2)
     assert(syms(0)._1 == "b")
     assert(syms(1)._1 == "c")
+
+    val model2 = new Word2Vec().setVectorSize(10).setSeed(42L).setSample(1e-1).fit(doc)
+    val syms2 = model2.findSynonyms("a", 2)
+    assert(syms2.length == 2)
+    assert(syms2(0)._1 == "b")
+    assert(syms2(1)._1 == "c")
   }
 
   test("Word2VecModel") {
