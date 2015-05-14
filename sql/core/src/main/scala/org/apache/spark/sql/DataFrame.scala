@@ -1193,9 +1193,11 @@ class DataFrame private[sql](
   def javaRDD: JavaRDD[Row] = toJavaRDD
 
   /**
-   * Registers this [[DataFrame]] as a temporary table using the given name.  The lifetime of this
-   * temporary table is tied to the [[SQLContext]] that was used to create this DataFrame.
-   *
+   * Check if the table name already exists
+   * Registers this [[DataFrame]] as a temporary table using the given name if no such table name present.  
+   * The lifetime of this temporary table is tied to the [[SQLContext]] 
+   * that was used to create this DataFrame.
+   * 
    * @group basic
    */
   def registerTempTable(tableName: String): Unit = {
