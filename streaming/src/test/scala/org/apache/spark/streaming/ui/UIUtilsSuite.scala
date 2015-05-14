@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.ui
 
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 import org.scalatest.FunSuite
@@ -63,5 +64,15 @@ class UIUtilsSuite extends FunSuite with Matchers{
       expectedTime: Double, milliseconds: Long, unit: TimeUnit): Unit = {
     val convertedTime = UIUtils.convertToTimeUnit(milliseconds, unit)
     convertedTime should be (expectedTime +- 1E-6)
+  }
+
+  test("formatBatchTime") {
+    val tzForTest = TimeZone.getTimeZone("America/Los_Angeles")
+    val batchTime = 1431637480452L // Thu May 14 14:04:40 PDT 2015
+    assert("2015/05/14 14:04:40" === UIUtils.formatBatchTime(batchTime, 1000, timezone = tzForTest))
+    assert("2015/05/14 14:04:40.452" ===
+      UIUtils.formatBatchTime(batchTime, 999, timezone = tzForTest))
+    assert("14:04:40" === UIUtils.formatBatchTime(batchTime, 1000, false, timezone = tzForTest))
+    assert("14:04:40.452" === UIUtils.formatBatchTime(batchTime, 999, false, timezone = tzForTest))
   }
 }
