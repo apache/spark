@@ -231,7 +231,7 @@ private[sql] class FSBasedParquetRelation(
       filters: Array[Filter],
       inputPaths: Array[String]): RDD[Row] = {
 
-    val job = Job.getInstance(SparkHadoopUtil.get.conf)
+    val job = new Job(SparkHadoopUtil.get.conf)
     val conf = ContextUtil.getConfiguration(job)
 
     ParquetInputFormat.setReadSupportClass(job, classOf[RowReadSupport])
