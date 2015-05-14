@@ -261,7 +261,7 @@ private[sql] abstract class BaseWriterContainer(
 
   protected val dataSchema = relation.dataSchema
 
-  protected val outputWriterClass: Class[_ <: OutputWriter] = relation.outputWriterClass
+  protected var outputWriterFactory: OutputWriterFactory = _
 
   private var outputFormatClass: Class[_ <: OutputFormat[_, _]] = _
 
@@ -269,7 +269,7 @@ private[sql] abstract class BaseWriterContainer(
     setupIDs(0, 0, 0)
     setupConf()
     taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
-    relation.prepareJobForWrite(job)
+    outputWriterFactory = relation.prepareJobForWrite(job)
     outputFormatClass = job.getOutputFormatClass
     outputCommitter = newOutputCommitter(taskAttemptContext)
     outputCommitter.setupJob(jobContext)
@@ -353,9 +353,8 @@ private[sql] class DefaultWriterContainer(
   @transient private var writer: OutputWriter = _
 
   override protected def initWriters(): Unit = {
-    writer = outputWriterClass.newInstance()
     taskAttemptContext.getConfiguration.set("spark.sql.sources.output.path", outputPath)
-    writer.init(getWorkPath, dataSchema, taskAttemptContext)
+    writer = outputWriterFactory.newInstance(getWorkPath, dataSchema, taskAttemptContext)
   }
 
   override def outputWriterForRow(row: Row): OutputWriter = writer
@@ -398,12 +397,10 @@ private[sql] class DynamicPartitionWriterContainer(
 
     outputWriters.getOrElseUpdate(partitionPath, {
       val path = new Path(getWorkPath, partitionPath)
-      val writer = outputWriterClass.newInstance()
       taskAttemptContext.getConfiguration.set(
         "spark.sql.sources.output.path",
         new Path(outputPath, partitionPath).toString)
-      writer.init(path.toString, dataSchema, taskAttemptContext)
-      writer
+      outputWriterFactory.newInstance(path.toString, dataSchema, taskAttemptContext)
     })
   }
 

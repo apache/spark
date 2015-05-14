@@ -280,6 +280,33 @@ trait CatalystScan {
 
 /**
  * ::Experimental::
+ * A factory that produces [[OutputWriter]]s.  A new [[OutputWriterFactory]] is created on driver
+ * side for each write job issued when writing to a [[HadoopFsRelation]], and then gets serialized
+ * to executor side to create actual [[OutputWriter]]s on the fly.
+ *
+ * @since 1.4.0
+ */
+@Experimental
+trait OutputWriterFactory extends Serializable {
+  /**
+   * When writing to a [[HadoopFsRelation]], this method gets called by each task on executor side
+   * to instantiate new [[OutputWriter]]s.
+   *
+   * @param path Path of the file to which this [[OutputWriter]] is supposed to write.  Note that
+   *        this may not point to the final output file.  For example, `FileOutputFormat` writes to
+   *        temporary directories and then merge written files back to the final destination.  In
+   *        this case, `path` points to a temporary output file under the temporary directory.
+   * @param dataSchema Schema of the rows to be written. Partition columns are not included in the
+   *        schema if the relation being written is partitioned.
+   * @param context The Hadoop MapReduce task context.
+   *
+   * @since 1.4.0
+   */
+  def newInstance(path: String, dataSchema: StructType, context: TaskAttemptContext): OutputWriter
+}
+
+/**
+ * ::Experimental::
  * [[OutputWriter]] is used together with [[HadoopFsRelation]] for persisting rows to the
  * underlying file system.  Subclasses of [[OutputWriter]] must provide a zero-argument constructor.
  * An [[OutputWriter]] instance is created and initialized when a new output file is opened on
@@ -289,24 +316,6 @@ trait CatalystScan {
  */
 @Experimental
 abstract class OutputWriter {
-  /**
-   * Initializes this [[OutputWriter]] before any rows are persisted.
-   *
-   * @param path Path of the file to which this [[OutputWriter]] is supposed to write.  Note that
-   *        this may not point to the final output file.  For example, `FileOutputFormat` writes to
-   *        temporary directories and then merge written files back to the final destination.  In
-   *        this case, `path` points to a temporary output file under the temporary directory.
-   * @param dataSchema Schema of the rows to be written. Partition columns are not included in the
-   *        schema if the corresponding relation is partitioned.
-   * @param context The Hadoop MapReduce task context.
-   *
-   * @since 1.4.0
-   */
-  def init(
-      path: String,
-      dataSchema: StructType,
-      context: TaskAttemptContext): Unit = ()
-
   /**
    * Persists a single row.  Invoked on the executor side.  When writing to dynamically partitioned
    * tables, dynamic partition columns are not included in rows to be written.
@@ -333,8 +342,8 @@ abstract class OutputWriter {
  * filter using selected predicates before producing an RDD containing all matching tuples as
  * [[Row]] objects. In addition, when reading from Hive style partitioned tables stored in file
  * systems, it's able to discover partitioning information from the paths of input directories, and
- * perform partition pruning before start reading the data. Subclasses of [[HadoopFsRelation()]] must
- * override one of the three `buildScan` methods to implement the read path.
+ * perform partition pruning before start reading the data. Subclasses of [[HadoopFsRelation()]]
+ * must override one of the three `buildScan` methods to implement the read path.
  *
  * For the write path, it provides the ability to write to both non-partitioned and partitioned
  * tables.  Directory layout of the partitioned tables is compatible with Hive.
@@ -520,8 +529,8 @@ abstract class HadoopFsRelation private[sql](
   }
 
   /**
-   * Client side preparation for data writing can be put here.  For example, user defined output
-   * committer can be configured here.
+   * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
+   * be put here.  For example, user defined output committer can be configured here.
    *
    * Note that the only side effect expected here is mutating `job` via its setters.  Especially,
    * Spark SQL caches [[BaseRelation]] instances for performance, mutating relation internal states
@@ -529,13 +538,5 @@ abstract class HadoopFsRelation private[sql](
    *
    * @since 1.4.0
    */
-  def prepareJobForWrite(job: Job): Unit = ()
-
-  /**
-   * This method is responsible for producing a new [[OutputWriter]] for each newly opened output
-   * file on the executor side.
-   *
-   * @since 1.4.0
-   */
-  def outputWriterClass: Class[_ <: OutputWriter]
+  def prepareJobForWrite(job: Job): OutputWriterFactory
 }

@@ -24,7 +24,7 @@ import com.google.common.base.Objects
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
-import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
@@ -59,24 +59,16 @@ class AppendingTextOutputFormat(outputFile: Path) extends TextOutputFormat[NullW
   }
 }
 
-class SimpleTextOutputWriter extends OutputWriter {
-  private var recordWriter: RecordWriter[NullWritable, Text] = _
-  private var taskAttemptContext: TaskAttemptContext = _
-
-  override def init(
-      path: String,
-      dataSchema: StructType,
-      context: TaskAttemptContext): Unit = {
-    recordWriter = new AppendingTextOutputFormat(new Path(path)).getRecordWriter(context)
-    taskAttemptContext = context
-  }
+class SimpleTextOutputWriter(path: String, context: TaskAttemptContext) extends OutputWriter {
+  private val recordWriter: RecordWriter[NullWritable, Text] =
+    new AppendingTextOutputFormat(new Path(path)).getRecordWriter(context)
 
   override def write(row: Row): Unit = {
     val serialized = row.toSeq.map(_.toString).mkString(",")
     recordWriter.write(null, new Text(serialized))
   }
 
-  override def close(): Unit = recordWriter.close(taskAttemptContext)
+  override def close(): Unit = recordWriter.close(context)
 }
 
 /**
@@ -110,9 +102,6 @@ class SimpleTextRelation(
   override def hashCode(): Int =
     Objects.hashCode(paths, maybeDataSchema, dataSchema)
 
-  override def outputWriterClass: Class[_ <: OutputWriter] =
-    classOf[SimpleTextOutputWriter]
-
   override def buildScan(inputPaths: Array[String]): RDD[Row] = {
     val fields = dataSchema.map(_.dataType)
 
@@ -120,6 +109,15 @@ class SimpleTextRelation(
       Row(record.split(",").zip(fields).map { case (value, dataType) =>
         Cast(Literal(value), dataType).eval()
       }: _*)
+    }
+  }
+
+  override def prepareJobForWrite(job: Job): OutputWriterFactory = new OutputWriterFactory {
+    override def newInstance(
+        path: String,
+        dataSchema: StructType,
+        context: TaskAttemptContext): OutputWriter = {
+      new SimpleTextOutputWriter(path, context)
     }
   }
 }

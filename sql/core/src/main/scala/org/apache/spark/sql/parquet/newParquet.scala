@@ -54,14 +54,10 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider {
 }
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
-private[sql] class ParquetOutputWriter extends OutputWriter {
-  private var recordWriter: RecordWriter[Void, Row] = _
-  private var taskAttemptContext: TaskAttemptContext = _
+private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext)
+  extends OutputWriter {
 
-  override def init(
-      path: String,
-      dataSchema: StructType,
-      context: TaskAttemptContext): Unit = {
+  private val recordWriter: RecordWriter[Void, Row] = {
     val conf = context.getConfiguration
     val outputFormat = {
       // When appending new Parquet files to an existing Parquet file directory, to avoid
@@ -86,9 +82,8 @@ private[sql] class ParquetOutputWriter extends OutputWriter {
             case name if name.startsWith("_") => 0
             case name if name.startsWith(".") => 0
             case name => sys.error(
-              s"""Trying to write Parquet files to directory $outputPath,
-                 |but found items with illegal name "$name"
-               """.stripMargin.replace('\n', ' ').trim)
+              s"Trying to write Parquet files to directory $outputPath, " +
+                s"but found items with illegal name '$name'.")
           }.reduceOption(_ max _).getOrElse(0)
         } else {
           0
@@ -111,13 +106,12 @@ private[sql] class ParquetOutputWriter extends OutputWriter {
       }
     }
 
-    recordWriter = outputFormat.getRecordWriter(context)
-    taskAttemptContext = context
+    outputFormat.getRecordWriter(context)
   }
 
   override def write(row: Row): Unit = recordWriter.write(null, row)
 
-  override def close(): Unit = recordWriter.close(taskAttemptContext)
+  override def close(): Unit = recordWriter.close(context)
 }
 
 private[sql] class ParquetRelation2(
@@ -175,8 +169,6 @@ private[sql] class ParquetRelation2(
     }
   }
 
-  override def outputWriterClass: Class[_ <: OutputWriter] = classOf[ParquetOutputWriter]
-
   override def dataSchema: StructType = metadataCache.dataSchema
 
   override private[sql] def refresh(): Unit = {
@@ -189,7 +181,7 @@ private[sql] class ParquetRelation2(
 
   override val sizeInBytes = metadataCache.dataStatuses.map(_.getLen).sum
 
-  override def prepareJobForWrite(job: Job): Unit = {
+  override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     val conf = ContextUtil.getConfiguration(job)
 
     val committerClass =
@@ -224,6 +216,13 @@ private[sql] class ParquetRelation2(
         .getOrElse(
           sqlContext.conf.parquetCompressionCodec.toUpperCase,
           CompressionCodecName.UNCOMPRESSED).name())
+
+    new OutputWriterFactory {
+      override def newInstance(
+          path: String, dataSchema: StructType, context: TaskAttemptContext): OutputWriter = {
+        new ParquetOutputWriter(path, context)
+      }
+    }
   }
 
   override def buildScan(
