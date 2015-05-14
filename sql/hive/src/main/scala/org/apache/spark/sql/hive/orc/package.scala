@@ -42,7 +42,7 @@ package object orc {
       dataFrame.save(
           path,
           source = classOf[DefaultSource].getCanonicalName,
-          mode = SaveMode.Overwrite)
+          mode)
     }
   }
 
