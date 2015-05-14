@@ -707,11 +707,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       step: Long = 1,
       numSlices: Int = defaultParallelism): RDD[Long] = withScope {
     assertNotStopped()
-    if (step == 0) {
-      // when step is 0, range will run infinite
-      throw new IllegalArgumentException("`step` cannot be 0")
-    }
-    val length: BigInt = {
+    // when step is 0, range will run infinitely
+    require(step != 0, "step cannot be 0")
+    val numElements: BigInt = {
       val safeStart = BigInt(start)
       val safeEnd = BigInt(end)
       if (((safeEnd - safeStart) % step).toInt == 0) {
@@ -720,13 +718,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         (safeEnd - safeStart) / step + 1
       }
     }
-    parallelize(0 until numSlices, numSlices).mapPartitions(iter => {
-      val i = iter.next()
-      val partitionStart = ((i * length) / numSlices * step + start).toLong
-      val partitionEnd = (((i + 1) * length) / numSlices * step + start).toLong
+    parallelize(0 until numSlices, numSlices).mapPartitionsWithIndex((i, _) => {
+      val partitionStart = ((i * numElements) / numSlices * step + start).toLong
+      val partitionEnd = (((i + 1) * numElements) / numSlices * step + start).toLong
 
       new Iterator[Long] {
-        var number: Long = partitionStart
+        private[this] var number: Long = partitionStart
 
         override def hasNext =
           if (step > 0) {
