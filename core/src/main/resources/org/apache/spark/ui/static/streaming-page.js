@@ -146,6 +146,14 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
         .attr("class", "line")
         .attr("d", line);
 
+    // If a mouse is on one point of a batch, highlight the corresponding batch row.
+    // If the user click one point of a batch, scroll down to the corresponding batch row and
+    // highlight it. And recovery the batch row after 5 seconds if necessary.
+    var clickedBatch = null;
+    var mouseoveredBatch = null;
+    var highlightBatch = null;
+    var lastTimeout = null;
+
     // Add points to the line. However, we make it invisible at first. But when the user moves mouse
     // over a point, it will be displayed with its detail.
     svg.selectAll(".point")
@@ -154,10 +162,21 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
             .attr("stroke", "white") // white and opacity = 0 make it invisible
             .attr("fill", "white")
             .attr("opacity", "0")
+            .style("cursor", "pointer")
             .attr("cx", function(d) { return x(d.x); })
             .attr("cy", function(d) { return y(d.y); })
             .attr("r", function(d) { return 3; })
             .on('mouseover', function(d) {
+                mouseoveredBatch = d.x;
+                if (mouseoveredBatch != highlightBatch) {
+                    if (highlightBatch != null) {
+                        clearBatchRow(mouseoveredBatch);
+                        highlightBatch = null
+                    }
+                    highlightBatchRow(mouseoveredBatch);
+                    highlightBatch = mouseoveredBatch
+                }
+
                 var tip = formatYValue(d.y) + " " + unitY + " at " + timeFormat[d.x];
                 showBootstrapTooltip(d3.select(this).node(), tip);
                 // show the point
@@ -166,7 +185,16 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
                     .attr("fill", "steelblue")
                     .attr("opacity", "1");
             })
-            .on('mouseout',  function() {
+            .on('mouseout',  function(d) {
+                if (clickedBatch == d.x) {
+                    // We are leaving because it's clicked, so don't clear the background color
+                } else {
+                   clearBatchRow(mouseoveredBatch);
+                   highlightBatch = null;
+                }
+                mouseoveredBatch = null;
+                clickedBatch = null;
+
                 hideBootstrapTooltip(d3.select(this).node());
                 // hide the point
                 d3.select(this)
@@ -175,7 +203,34 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
                     .attr("opacity", "0");
             })
             .on("click", function(d) {
-                window.location.href = "batch/?id=" + d.x;
+                if (lastTimeout != null) {
+                    window.clearTimeout(lastTimeout);
+                }
+                clickedBatch = d.x;
+                // the bach row has already been highlighted because of "mouseover"
+
+                lastTimeout = window.setTimeout(function () {
+                    lastTimeout = null;
+                    if (mouseoveredBatch == null) {
+                        // If the mouse is not on any batch, and this batch is highlighted, just clear it.
+                        if (highlightBatch == d.x) {
+                            clearBatchRow(highlightBatch);
+                            highlightBatch = null;
+                        }
+                    }
+                    if (clickedBatch == d.x) {
+                        // The mouse is still on this batch, so clear clickedBatch. Then
+                        // "clearBatchRow" will be called when "mouseout".
+                        clickedBatch = null;
+                    }
+                }, 5000); // Clean up after 5 seconds
+
+                var batchSelector = $("#batch-" + d.x);
+                var topOffset = batchSelector.offset().top - 15;
+                if (topOffset < 0) {
+                    topOffset = 0;
+                }
+                $('html,body').animate({scrollTop: topOffset}, 200);
             });
 }
 
@@ -218,6 +273,9 @@ function drawHistogram(id, values, minY, maxY, unitY, batchInterval) {
     svg.append("g")
         .attr("class", "x axis")
         .call(xAxis)
+        .append("text")
+            .attr("transform", "translate(" + (margin.left + width - 40) + ", 15)")
+            .text("#batches");
 
     svg.append("g")
         .attr("class", "y axis")
@@ -279,3 +337,11 @@ $(function() {
         $(this).find('.expand-input-rate-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
     }
 });
+
+function highlightBatchRow(batch) {
+    $("#batch-" + batch).parent().addClass("batch-table-cell-highlight");
+}
+
+function clearBatchRow(batch) {
+    $("#batch-" + batch).parent().removeClass("batch-table-cell-highlight");
+}
