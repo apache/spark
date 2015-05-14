@@ -233,7 +233,8 @@ object KafkaUtils {
         case (tp: TopicAndPartition, Broker(host, port)) => (tp, (host, port))
       }.toMap
     }
-    new KafkaRDD[K, V, KD, VD, R](sc, kafkaParams, offsetRanges, leaderMap, messageHandler)
+    val cleanedHandler = sc.clean(messageHandler)
+    new KafkaRDD[K, V, KD, VD, R](sc, kafkaParams, offsetRanges, leaderMap, cleanedHandler)
   }
 
   /**
