@@ -125,7 +125,7 @@ if [[ ! "$@" =~ --skip-publish ]]; then
   ./dev/change-version-to-2.11.sh
   
   build/mvn -DskipTests -Pyarn -Phive \
-    -Dscala-2.11 -Pspark-ganglia-lgpl -Pkinesis-asl \
+    -Dscala-2.11 -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
 
   ./dev/change-version-to-2.10.sh
