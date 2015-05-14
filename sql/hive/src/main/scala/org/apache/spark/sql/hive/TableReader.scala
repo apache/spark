@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import scala.collection.JavaConversions._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.hive.conf.HiveConf
@@ -332,47 +334,60 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
 
     logDebug(soi.toString)
 
+    val allStructFieldNames = soi.getAllStructFieldRefs().toList
+      .map(fieldRef => fieldRef.getFieldName())
+
     val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map { case (attr, ordinal) =>
-      soi.getStructFieldRef(attr.name) -> ordinal
+      // If the partition contain this attribute or not
+      if (allStructFieldNames.contains(attr.name)) {
+        soi.getStructFieldRef(attr.name) -> ordinal
+      } else {
+        (null, ordinal)
+      }
     }.unzip
 
     /**
      * Builds specific unwrappers ahead of time according to object inspector
      * types to avoid pattern matching and branching costs per row.
      */
-    val unwrappers: Seq[(Any, MutableRow, Int) => Unit] = fieldRefs.map {
-      _.getFieldObjectInspector match {
-        case oi: BooleanObjectInspector =>
-          (value: Any, row: MutableRow, ordinal: Int) => row.setBoolean(ordinal, oi.get(value))
-        case oi: ByteObjectInspector =>
-          (value: Any, row: MutableRow, ordinal: Int) => row.setByte(ordinal, oi.get(value))
-        case oi: ShortObjectInspector =>
-          (value: Any, row: MutableRow, ordinal: Int) => row.setShort(ordinal, oi.get(value))
-        case oi: IntObjectInspector =>
-          (value: Any, row: MutableRow, ordinal: Int) => row.setInt(ordinal, oi.get(value))
-        case oi: LongObjectInspector =>
-          (value: Any, row: MutableRow, ordinal: Int) => row.setLong(ordinal, oi.get(value))
-        case oi: FloatObjectInspector =>
-          (value: Any, row: MutableRow, ordinal: Int) => row.setFloat(ordinal, oi.get(value))
-        case oi: DoubleObjectInspector =>
-          (value: Any, row: MutableRow, ordinal: Int) => row.setDouble(ordinal, oi.get(value))
-        case oi: HiveVarcharObjectInspector =>
-          (value: Any, row: MutableRow, ordinal: Int) =>
-            row.setString(ordinal, oi.getPrimitiveJavaObject(value).getValue)
-        case oi: HiveDecimalObjectInspector =>
-          (value: Any, row: MutableRow, ordinal: Int) =>
-            row.update(ordinal, HiveShim.toCatalystDecimal(oi, value))
-        case oi: TimestampObjectInspector =>
-          (value: Any, row: MutableRow, ordinal: Int) =>
-            row.update(ordinal, oi.getPrimitiveJavaObject(value).clone())
-        case oi: DateObjectInspector =>
-          (value: Any, row: MutableRow, ordinal: Int) =>
-            row.update(ordinal, DateUtils.fromJavaDate(oi.getPrimitiveJavaObject(value)))
-        case oi: BinaryObjectInspector =>
-          (value: Any, row: MutableRow, ordinal: Int) =>
-            row.update(ordinal, oi.getPrimitiveJavaObject(value))
-        case oi =>
-          (value: Any, row: MutableRow, ordinal: Int) => row(ordinal) = unwrap(value, oi)
+    val unwrappers: Seq[(Any, MutableRow, Int) => Unit] = fieldRefs.map { ref =>
+      if (ref == null) {
+          // Placeholder, never used
+          (value: Any, row: MutableRow, ordinal: Int) => row.setNullAt(ordinal)
+      } else {
+        ref.getFieldObjectInspector match {
+          case oi: BooleanObjectInspector =>
+            (value: Any, row: MutableRow, ordinal: Int) => row.setBoolean(ordinal, oi.get(value))
+          case oi: ByteObjectInspector =>
+            (value: Any, row: MutableRow, ordinal: Int) => row.setByte(ordinal, oi.get(value))
+          case oi: ShortObjectInspector =>
+            (value: Any, row: MutableRow, ordinal: Int) => row.setShort(ordinal, oi.get(value))
+          case oi: IntObjectInspector =>
+            (value: Any, row: MutableRow, ordinal: Int) => row.setInt(ordinal, oi.get(value))
+          case oi: LongObjectInspector =>
+            (value: Any, row: MutableRow, ordinal: Int) => row.setLong(ordinal, oi.get(value))
+          case oi: FloatObjectInspector =>
+            (value: Any, row: MutableRow, ordinal: Int) => row.setFloat(ordinal, oi.get(value))
+          case oi: DoubleObjectInspector =>
+            (value: Any, row: MutableRow, ordinal: Int) => row.setDouble(ordinal, oi.get(value))
+          case oi: HiveVarcharObjectInspector =>
+            (value: Any, row: MutableRow, ordinal: Int) =>
+              row.setString(ordinal, oi.getPrimitiveJavaObject(value).getValue)
+          case oi: HiveDecimalObjectInspector =>
+            (value: Any, row: MutableRow, ordinal: Int) =>
+              row.update(ordinal, HiveShim.toCatalystDecimal(oi, value))
+          case oi: TimestampObjectInspector =>
+            (value: Any, row: MutableRow, ordinal: Int) =>
+              row.update(ordinal, oi.getPrimitiveJavaObject(value).clone())
+          case oi: DateObjectInspector =>
+            (value: Any, row: MutableRow, ordinal: Int) =>
+              row.update(ordinal, DateUtils.fromJavaDate(oi.getPrimitiveJavaObject(value)))
+          case oi: BinaryObjectInspector =>
+            (value: Any, row: MutableRow, ordinal: Int) =>
+              row.update(ordinal, oi.getPrimitiveJavaObject(value))
+          case oi =>
+            (value: Any, row: MutableRow, ordinal: Int) => row(ordinal) = unwrap(value, oi)
+        }
       }
     }
 
@@ -383,11 +398,15 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
       val raw = converter.convert(rawDeser.deserialize(value))
       var i = 0
       while (i < fieldRefs.length) {
-        val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
-        if (fieldValue == null) {
+        if (fieldRefs(i) == null) {
           mutableRow.setNullAt(fieldOrdinals(i))
         } else {
-          unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+          val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
+          if (fieldValue == null) {
+            mutableRow.setNullAt(fieldOrdinals(i))
+          } else {
+            unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+          }
         }
         i += 1
       }
