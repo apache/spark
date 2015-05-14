@@ -26,6 +26,7 @@ import org.apache.spark.ml.classification.OneVsRest;
 import org.apache.spark.ml.classification.OneVsRestModel;
 import org.apache.spark.ml.util.MetadataUtils;
 import org.apache.spark.mllib.evaluation.MulticlassMetrics;
+import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.rdd.RDD;
@@ -76,19 +77,20 @@ public class JavaOneVsRestExample {
     }
 
     // instantiate the One Vs Rest Classifier
-    OneVsRest ova = new OneVsRest();
-    ova.setClassifier(classifier);
+    OneVsRest ovr = new OneVsRest().setClassifier(classifier);
 
     String input = params.input;
     RDD<LabeledPoint> inputData = MLUtils.loadLibSVMFile(jsc.sc(), input);
     RDD<LabeledPoint> train;
     RDD<LabeledPoint> test;
-    String testInput = params.testInput;
 
-    // compute the train/test split: if testInput is not provided use part of input.
+    // compute the train/ test split: if testInput is not provided use part of input
+    String testInput = params.testInput;
     if (testInput != null) {
       train = inputData;
-      test = MLUtils.loadLibSVMFile(jsc.sc(), testInput);
+      // compute the number of features in the training set.
+      int numFeatures = inputData.first().features().size();
+      test = MLUtils.loadLibSVMFile(jsc.sc(), testInput, numFeatures);
     } else {
       double f = params.fracTest;
       RDD<LabeledPoint>[] tmp = inputData.randomSplit(new double[]{1 - f, f}, 12345);
@@ -96,20 +98,17 @@ public class JavaOneVsRestExample {
       test = tmp[1];
     }
 
-    // train the multiclass model.
-    DataFrame trainingDataframe = jsql.createDataFrame(train, LabeledPoint.class);
-    OneVsRestModel ovaModel = ova.fit(trainingDataframe.cache());
+    // train the multiclass model
+    DataFrame trainingDataFrame = jsql.createDataFrame(train, LabeledPoint.class);
+    OneVsRestModel ovrModel = ovr.fit(trainingDataFrame.cache());
 
-    // score the model on test data.
-    DataFrame testDataframe = jsql.createDataFrame(test, LabeledPoint.class);
-    DataFrame predictions = ovaModel.transform(testDataframe.cache())
-      .select("prediction", "label");
+    // score the model on test data
+    DataFrame testDataFrame = jsql.createDataFrame(test, LabeledPoint.class);
+    DataFrame predictions = ovrModel.transform(testDataFrame.cache())
+            .select("prediction", "label");
 
     MulticlassMetrics metrics = new MulticlassMetrics(predictions);
 
-    // output the confusion matrix.
-    System.out.println("ConfusionMatrix");
-    System.out.println(metrics.confusionMatrix().toString());
 
     StructField predictionColSchema = predictions.schema().apply("prediction");
     Integer numClasses = (Integer) MetadataUtils.getNumClasses(predictionColSchema).get();
@@ -123,69 +122,32 @@ public class JavaOneVsRestExample {
       results.append(metrics.falsePositiveRate((double) label));
       results.append("\n");
     }
+
+    Matrix confusionMatrix = metrics.confusionMatrix();
+    // output the Confusion Matrix
+    System.out.println("Confusion Matrix");
+    System.out.println(confusionMatrix);
+    System.out.println();
     System.out.println(results);
 
     jsc.stop();
   }
 
   private static Params parse(String[] args) {
-    String input = args[0];
-    String[] remainingArgs;
-    if (args.length > 1) {
-        remainingArgs = new String[args.length - 1];
-    } else {
-      remainingArgs = new String[0];
-    }
-    System.arraycopy(args, 1, remainingArgs, 0, remainingArgs.length);
+    Options options = generateCommandlineOptions();
+    if (args == null || args.length == 0) printHelpAndQuit(options);
 
-    Option testInput = OptionBuilder.withArgName( "testInput" )
-            .hasArg()
-            .withDescription("input path to labeled examples")
-      .create("testInput");
-    Option fracTest = OptionBuilder.withArgName( "testInput" )
-            .hasArg()
-            .withDescription("fraction of data to hold out for testing." +
-                    " If given option testInput, this option is ignored. default: 0.2")
-      .create("fracTest");
-    Option maxIter = OptionBuilder.withArgName( "maxIter" )
-            .hasArg()
-            .withDescription("maximum number of iterations for Logistic Regression. default:100")
-      .create("maxIter");
-    Option tol = OptionBuilder.withArgName( "tol" )
-            .hasArg()
-            .withDescription("the convergence tolerance of iterations " +
-                    "for Logistic Regression. default: 1E-6")
-      .create("tol");
-    Option fitIntercept = OptionBuilder.withArgName( "fitIntercept" )
-            .hasArg()
-            .withDescription("fit intercept for logistic regression. default true")
-      .create("fitIntercept");
-    Option regParam = OptionBuilder.withArgName( "regParam" )
-            .hasArg()
-            .withDescription("the regularization parameter for Logistic Regression.")
-      .create("regParam");
-    Option elasticNetParam = OptionBuilder.withArgName("elasticNetParam" )
-            .hasArg()
-            .withDescription("the ElasticNet mixing parameter for Logistic Regression.")
-      .create("elasticNetParam");
-
-    Options options = new Options()
-      .addOption(testInput)
-      .addOption(fracTest)
-      .addOption(maxIter)
-      .addOption(tol)
-      .addOption(fitIntercept)
-      .addOption(regParam)
-      .addOption(elasticNetParam);
-
+    // handle the command line options
     CommandLineParser parser = new PosixParser();
 
     Params params = new Params();
-    params.input = input;
 
     try {
-      CommandLine cmd = parser.parse(options, remainingArgs);
+      CommandLine cmd = parser.parse(options, args);
       String value;
+      if (cmd.hasOption("input")) {
+        params.input = cmd.getOptionValue("input");
+      }
       if (cmd.hasOption("maxIter")) {
         value = cmd.getOptionValue("maxIter");
         params.maxIter = Integer.parseInt(value);
@@ -216,10 +178,65 @@ public class JavaOneVsRestExample {
       }
 
     } catch (ParseException e) {
-      HelpFormatter formatter = new HelpFormatter();
-      formatter.printHelp( "JavaOneVsRestExample", options );
-      System.exit(-1);
+      printHelpAndQuit(options);
     }
     return params;
+  }
+
+  private static Options generateCommandlineOptions() {
+
+    Option input = OptionBuilder.withArgName("input")
+            .hasArg()
+      .isRequired()
+      .withDescription("input path to labeled examples. This path must be specified")
+      .create("input");
+    Option testInput = OptionBuilder.withArgName("testInput")
+      .hasArg()
+      .withDescription("input path to test examples")
+      .create("testInput");
+    Option fracTest = OptionBuilder.withArgName("testInput")
+      .hasArg()
+      .withDescription("fraction of data to hold out for testing." +
+              " If given option testInput, this option is ignored. default: 0.2")
+      .create("fracTest");
+    Option maxIter = OptionBuilder.withArgName("maxIter")
+      .hasArg()
+      .withDescription("maximum number of iterations for Logistic Regression. default:100")
+      .create("maxIter");
+    Option tol = OptionBuilder.withArgName("tol")
+      .hasArg()
+      .withDescription("the convergence tolerance of iterations " +
+              "for Logistic Regression. default: 1E-6")
+      .create("tol");
+    Option fitIntercept = OptionBuilder.withArgName("fitIntercept")
+      .hasArg()
+      .withDescription("fit intercept for logistic regression. default true")
+      .create("fitIntercept");
+    Option regParam = OptionBuilder.withArgName( "regParam" )
+      .hasArg()
+      .withDescription("the regularization parameter for Logistic Regression.")
+      .create("regParam");
+    Option elasticNetParam = OptionBuilder.withArgName("elasticNetParam" )
+      .hasArg()
+      .withDescription("the ElasticNet mixing parameter for Logistic Regression.")
+      .create("elasticNetParam");
+
+    Options options = new Options()
+      .addOption(input)
+      .addOption(testInput)
+      .addOption(fracTest)
+      .addOption(maxIter)
+      .addOption(tol)
+      .addOption(fitIntercept)
+      .addOption(regParam)
+      .addOption(elasticNetParam);
+
+    return options;
+  }
+
+  private static void printHelpAndQuit(Options options) {
+    HelpFormatter formatter = new HelpFormatter();
+    formatter.printHelp( "JavaOneVsRestExample", options );
+    System.exit(-1);
   }
 }

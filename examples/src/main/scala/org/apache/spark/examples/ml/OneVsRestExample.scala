@@ -63,8 +63,8 @@ object OneVsRestExample {
 
     val parser = new OptionParser[Params]("OneVsRest Example") {
       head("OneVsRest Example: multiclass to binary reduction using OneVsRest")
-      arg[String]("<input>")
-        .text("input path to labeled examples")
+      opt[String]("input")
+        .text("input path to labeled examples. This path must be specified")
         .required()
         .action((x, c) => c.copy(input = x))
       opt[Double]("fracTest")
@@ -116,7 +116,12 @@ object OneVsRestExample {
 
     // compute the train/test split: if testInput is not provided use part of input.
     val data = params.testInput match {
-      case Some(t) => Array[RDD[LabeledPoint]](inputData, MLUtils.loadLibSVMFile(sc, t))
+      case Some(t) => {
+        // compute the number of features in the training set.
+        val numFeatures = inputData.first().features.size
+        val testData = MLUtils.loadLibSVMFile(sc, t, numFeatures)
+        Array[RDD[LabeledPoint]](inputData, testData)
+      }
       case None => {
         val f = params.fracTest
         inputData.randomSplit(Array(1 - f, f), seed = 12345)
@@ -153,16 +158,16 @@ object OneVsRestExample {
 
     val confusionMatrix = metrics.confusionMatrix
 
-    println(s" Training Time ${trainingDuration} sec")
-
-    println(s" Prediction Time ${predictionDuration} sec")
-
-    println(s" Confusion Matrix\n ${confusionMatrix.toString}")
-
     // compute the false positive rate per label
     val predictionColSchema = predictions.schema("prediction")
     val numClasses = MetadataUtils.getNumClasses(predictionColSchema).get
     val fprs = Range(0, numClasses).map(p => (p, metrics.falsePositiveRate(p.toDouble)))
+
+    println(s" Training Time ${trainingDuration} sec\n")
+
+    println(s" Prediction Time ${predictionDuration} sec\n")
+
+    println(s" Confusion Matrix\n ${confusionMatrix.toString}\n")
 
     println("label\tfpr")
 
