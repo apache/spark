@@ -45,7 +45,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       startTime = time
       outputStreams.foreach(_.initialize(zeroTime))
       outputStreams.foreach(_.remember(rememberDuration))
-      outputStreams.foreach(_.validate)
+      outputStreams.foreach(_.validateAtStart)
       inputStreams.par.foreach(_.start())
     }
   }
