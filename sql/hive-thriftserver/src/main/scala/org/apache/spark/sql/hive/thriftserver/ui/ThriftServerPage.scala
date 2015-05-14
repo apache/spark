@@ -45,7 +45,13 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
         {listener.onlineSessionNum} session(s) are online,
         running {listener.totalRunning} SQL statement(s)
       </h4> ++
-      generateSessionStatsTable() ++
+      generateSessionStatsTable(true) ++
+      <br/> ++
+      <h4>
+        {listener.sessionList.size - listener.onlineSessionNum} session(s) are offline
+      </h4> ++
+      generateSessionStatsTable(false) ++
+      <br/> ++
       generateSQLStatsTable()
     UIUtils.headerSparkPage("ThriftServer", content, parent, Some(5000))
   }
@@ -135,11 +141,15 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
   }
 
   /** Generate stats of batch sessions of the thrift server program */
-  private def generateSessionStatsTable(): Seq[Node] = {
-    val numBatches = listener.sessionList.size
+  private def generateSessionStatsTable(online: Boolean): Seq[Node] = {
+    val numBatches = if(online) listener.onlineSessionNum else (listener.sessionList.size-listener.onlineSessionNum)
     val table = if (numBatches > 0) {
-      val dataRows =
-        listener.sessionList.values
+      val dataRowsTmp = listener.sessionList.values.toSeq
+      val dataRows = if(online) {
+        dataRowsTmp.filter(_.finishTimestamp == 0).sortBy(_.startTimestamp).reverse
+      } else {
+        dataRowsTmp.filter(_.finishTimestamp != 0).sortBy(_.startTimestamp).reverse
+      }
       val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
         "Total Execute")
       def generateDataRow(session: SessionInfo): Seq[Node] = {
