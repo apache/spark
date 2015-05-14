@@ -42,10 +42,10 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
 
   /** Return the graph metadata for the given stage, or None if no such information exists. */
   def getOperationGraphForJob(jobId: Int): Seq[RDDOperationGraph] = {
-    val stageIds = jobIdToStageIds.get(jobId).getOrElse { Seq.empty }
-    val graphs = stageIds.flatMap { sid => stageIdToGraph.get(sid) }
+    val _stageIds = jobIdToStageIds.get(jobId).getOrElse { Seq.empty }
+    val graphs = _stageIds.flatMap { sid => stageIdToGraph.get(sid) }
     // If the metadata for some stages have been removed, do not bother rendering this job
-    if (stageIds.size != graphs.size) {
+    if (_stageIds.size != graphs.size) {
       Seq.empty
     } else {
       graphs
