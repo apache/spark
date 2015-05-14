@@ -187,8 +187,6 @@ for words_label in wordsDataFrame.select("words", "label").take(3):
 
 [Polynomial expansion](http://en.wikipedia.org/wiki/Polynomial_expansion) is the process of expanding your features into a polynomial space, which is formulated by an n-degree combination of original dimensions. A [PolynomialExpansion](api/scala/index.html#org.apache.spark.ml.feature.PolynomialExpansion) class provides this functionality.  The example below shows how to expand your features into a 3-degree polynomial space.
 
-Note: We do not provide Python API for `PolynomialExpansion` in this version.
-
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
