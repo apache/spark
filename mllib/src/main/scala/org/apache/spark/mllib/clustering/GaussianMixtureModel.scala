@@ -39,7 +39,7 @@ import org.apache.spark.sql.{SQLContext, Row}
  * the respective mean and covariance for each Gaussian distribution i=1..k. 
  * 
  * @param weights Weights for each Gaussian distribution in the mixture, where weights(i) is
- *                the weight for Gaussian i, and weight.sum == 1
+ *                the weight for Gaussian i, and weights.sum == 1
  * @param gaussians Array of MultivariateGaussian where gaussians(i) represents
  *                  the Multivariate Gaussian (Normal) Distribution for Gaussian i
  */

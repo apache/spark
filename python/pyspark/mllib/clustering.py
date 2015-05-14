@@ -183,15 +183,15 @@ class GaussianMixtureModel(object):
     @property
     def weights(self):
         """
-        Weights for each Gaussian distribution in the mixture, where weights(i) is
-        the weight for Gaussian i, and weight.sum == 1.
+        Weights for each Gaussian distribution in the mixture, where weights[i]() is
+        the weight for Gaussian i, and weights.sum == 1.
         """
         return self._weights
 
     @property
     def gaussians(self):
         """
-        Array of MultivariateGaussian where gaussians(i) represents
+        Array of MultivariateGaussian where gaussians[i]() represents
         the Multivariate Gaussian (Normal) Distribution for Gaussian i.
         """
         return self._gaussians
@@ -236,7 +236,7 @@ class GaussianMixture(object):
     :param convergenceTol:  Threshold value to check the convergence criteria. Defaults to 1e-3
     :param maxIterations:   Number of iterations. Default to 100
     :param seed:            Random Seed
-    :param initialModel:    The initial GMM starting point
+    :param initialModel:    GaussianMixtureModel for initializing learning
     """
     @classmethod
     def train(cls, rdd, k, convergenceTol=1e-3, maxIterations=100, seed=None, initialModel=None):
@@ -246,7 +246,8 @@ class GaussianMixture(object):
         initialModelSigma = None
         if initialModel is not None:
             if initialModel.k != k:
-                raise Exception("Mismatched cluster count (initialModel.k != k)")
+                raise Exception("Mismatched cluster count, initialModel.k = %s, however k = %s"
+                                % (initialModel.k, k))
             initialModelWeights = initialModel.weights
             initialModelMu = [initialModel.gaussians[i].mu for i in range(initialModel.k)]
             initialModelSigma = [initialModel.gaussians[i].sigma for i in range(initialModel.k)]
