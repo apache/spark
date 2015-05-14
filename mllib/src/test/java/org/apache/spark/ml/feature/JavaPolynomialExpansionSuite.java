@@ -63,24 +63,13 @@ public class JavaPolynomialExpansionSuite {
 
     JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
       RowFactory.create(
-        Vectors.sparse(3, Lists.newArrayList(
-          new Tuple2<Integer, Double>(0, -2.0), new Tuple2<Integer, Double>(1, 2.3))),
-        Vectors.sparse(19, new int[]{0, 1, 2, 3, 4, 5, 6, 7, 8},
-          new double[]{-2.0, 4.0, -8.0, 2.3, -4.6, 9.2, 5.29, -10.58, 12.17})
-      ),
-      RowFactory.create(
         Vectors.dense(-2.0, 2.3),
         Vectors.dense(-2.0, 4.0, -8.0, 2.3, -4.6, 9.2, 5.29, -10.58, 12.17)
       ),
-      RowFactory.create(Vectors.dense(0.0, 0.0, 0.0), Vectors.dense(new double[19])),
+      RowFactory.create(Vectors.dense(0.0, 0.0), Vectors.dense(new double[9])),
       RowFactory.create(
-        Vectors.dense(0.6, -1.1, -3.0),
-        Vectors.dense(0.6, 0.36, 0.216, -1.1, -0.66, -0.396, 1.21, 0.726, -1.331, -3.0, -1.8, -1.08,
-          3.3, 1.98, -3.63, 9.0, 5.4, -9.9, -27.0)
-      ),
-      RowFactory.create(
-        Vectors.sparse(3, Lists.<Tuple2<Integer, Double>>newArrayList()),
-        Vectors.sparse(19, Lists.<Tuple2<Integer, Double>>newArrayList())
+        Vectors.dense(0.6, -1.1),
+        Vectors.dense(0.6, 0.36, 0.216, -1.1, -0.66, -0.396, 1.21, 0.726, -1.331)
       )
     ));
 

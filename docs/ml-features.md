@@ -195,11 +195,9 @@ Note: We do not provide Python API for `PolynomialExpansion` in this version.
 import org.apache.spark.ml.feature.PolynomialExpansion
 
 val data = Array(
-  Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
   Vectors.dense(-2.0, 2.3),
-  Vectors.dense(0.0, 0.0, 0.0),
-  Vectors.dense(0.6, -1.1, -3.0),
-  Vectors.sparse(3, Seq())
+  Vectors.dense(0.0, 0.0),
+  Vectors.dense(0.6, -1.1)
 )
 val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
 val polynomialExpansion = new PolynomialExpansion()
@@ -230,28 +228,40 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-JavaSparkContext jsc = new JavaSparkContext("local", "JavaPolynomialExpansionSuite");
-SQLContext jsql = new SQLContext(jsc);
+JavaSparkContext jsc = ...
+SQLContext jsql = ...
 PolynomialExpansion polyExpansion = new PolynomialExpansion()
   .setInputCol("features")
   .setOutputCol("polyFeatures")
   .setDegree(3);
 JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
-  RowFactory.create(Vectors.sparse(3, Lists.newArrayList(
-    new Tuple2<Integer, Double>(0, -2.0), new Tuple2<Integer, Double>(1, 2.3)))),
   RowFactory.create(Vectors.dense(-2.0, 2.3)),
-  RowFactory.create(Vectors.dense(0.0, 0.0, 0.0)),
-  RowFactory.create(Vectors.dense(0.6, -1.1, -3.0)),
-  RowFactory.create(Vectors.sparse(3, Lists.<Tuple2<Integer, Double>>newArrayList()))
+  RowFactory.create(Vectors.dense(0.0, 0.0)),
+  RowFactory.create(Vectors.dense(0.6, -1.1))
 ));
 StructType schema = new StructType(new StructField[] {
   new StructField("features", new VectorUDT(), false, Metadata.empty()),
 });
 DataFrame dataset = jsql.createDataFrame(data, schema);
-Row[] row = polyExpansion.transform(dataset).select("polyFeatures").take(3);
+DataFrame polyDF = polyExpansion.transform(dataset);
+Row[] row = polyDF.select("polyFeatures").take(3);
 for (Row r : row) {
-  System.out.println((((Vector)r.get(0)).toString()));
+  System.out.println((((Vector)r.get(0))));
 }
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+from pyspark.mllib.linalg import Vectors
+from pyspark.ml.feature import PolynomialExpansion
+df = sqlContext.createDataFrame(
+  [(Vectors.dense([-2.0, 2.3]), ), (Vectors.dense([0.0, 0.0]), ), (Vectors.dense([0.6, -1.1]), )],
+  ["dense"])
+px = PolynomialExpansion(degree=2, inputCol="dense", outputCol="expanded")
+polyDF = px.transform(df)
+for expanded in polyDF.select("expanded").take(3):
+  print expanded
 {% endhighlight %}
 </div>
 </div>
