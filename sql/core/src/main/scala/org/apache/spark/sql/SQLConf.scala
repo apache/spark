@@ -69,6 +69,10 @@ private[spark] object SQLConf {
   // Whether to perform partition discovery when loading external data sources.  Default to true.
   val PARTITION_DISCOVERY_ENABLED = "spark.sql.sources.partitionDiscovery.enabled"
 
+  // The output committer class used by FSBasedRelation. The specified class needs to be a
+  // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
+  val OUTPUT_COMMITTER_CLASS = "spark.sql.sources.outputCommitterClass"
+
   // Whether to perform eager analysis when constructing a dataframe.
   // Set to false when debugging requires the ability to look at invalid query plans.
   val DATAFRAME_EAGER_ANALYSIS = "spark.sql.eagerAnalysis"
