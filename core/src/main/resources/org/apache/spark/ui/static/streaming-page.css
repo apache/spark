@@ -56,3 +56,7 @@
 .histogram {
   width: auto;
 }
+
+span.expand-input-rate {
+  cursor: pointer;
+}

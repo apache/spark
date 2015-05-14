@@ -19,7 +19,7 @@ package org.apache.spark.streaming.ui
 
 import java.util.concurrent.TimeUnit
 
-object UIUtils {
+private[streaming] object UIUtils {
 
   /**
    * Return the short string for a `TimeUnit`.

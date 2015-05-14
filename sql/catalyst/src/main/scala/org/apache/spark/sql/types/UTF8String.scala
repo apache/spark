@@ -19,15 +19,18 @@ package org.apache.spark.sql.types
 
 import java.util.Arrays
 
-/**
- *  A UTF-8 String, as internal representation of StringType in SparkSQL
- *
- *  A String encoded in UTF-8 as an Array[Byte], which can be used for comparison,
- *  search, see http://en.wikipedia.org/wiki/UTF-8 for details.
- *
- *  Note: This is not designed for general use cases, should not be used outside SQL.
- */
+import org.apache.spark.annotation.DeveloperApi
 
+/**
+ * :: DeveloperApi ::
+ * A UTF-8 String, as internal representation of StringType in SparkSQL
+ *
+ * A String encoded in UTF-8 as an Array[Byte], which can be used for comparison,
+ * search, see http://en.wikipedia.org/wiki/UTF-8 for details.
+ *
+ * Note: This is not designed for general use cases, should not be used outside SQL.
+ */
+@DeveloperApi
 final class UTF8String extends Ordered[UTF8String] with Serializable {
 
   private[this] var bytes: Array[Byte] = _
@@ -180,6 +183,10 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 object UTF8String {
   // number of tailing bytes in a UTF8 sequence for a code point
   // see http://en.wikipedia.org/wiki/UTF-8, 192-256 of Byte 1

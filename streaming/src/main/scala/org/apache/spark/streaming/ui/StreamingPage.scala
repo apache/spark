@@ -244,17 +244,6 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val maxEventRate = eventRateForAllStreams.max.map(_.ceil.toLong).getOrElse(0L)
     val minEventRate = 0L
 
-    // JavaScript to show/hide the InputDStreams sub table.
-    val triangleJs =
-      s"""$$('#inputs-table').toggle('collapsed');
-         |var status = false;
-         |if ($$(this).html() == '$BLACK_RIGHT_TRIANGLE_HTML') {
-         |$$(this).html('$BLACK_DOWN_TRIANGLE_HTML');status = true;}
-         |else {$$(this).html('$BLACK_RIGHT_TRIANGLE_HTML');status  = false;}
-         |window.history.pushState('',
-         |    document.title, window.location.pathname + '?show-streams-detail=' + status);"""
-        .stripMargin.replaceAll("\\n", "") // it must be only one single line
-
     val batchInterval = UIUtils.convertToTimeUnit(listener.batchDuration, normalizedUnit)
 
     val jsCollector = new JsCollector
@@ -326,10 +315,18 @@ private[ui] class StreamingPage(parent: StreamingTab)
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
               <div>
-              {if (hasStream) {
-                <span id="triangle" onclick={Unparsed(triangleJs)}>{Unparsed(BLACK_RIGHT_TRIANGLE_HTML)}</span>
-              }}
-                <strong>Input Rate</strong>
+              {
+                if (hasStream) {
+                  <span class="expand-input-rate">
+                    <span class="expand-input-rate-arrow arrow-closed"></span>
+                    <a data-toggle="tooltip" title="Show/hide details of each receiver" data-placement="right">
+                      <strong>Input Rate</strong>
+                    </a>
+                  </span>
+                } else {
+                  <strong>Input Rate</strong>
+                }
+              }
               </div>
               <div>Avg: {eventRateForAllStreams.formattedAvg} events/sec</div>
             </div>

@@ -48,7 +48,7 @@ final class Bucketizer private[ml] (override val parent: Estimator[Bucketizer])
    * otherwise, values outside the splits specified will be treated as errors.
    * @group param
    */
-  val splits: Param[Array[Double]] = new Param[Array[Double]](this, "splits",
+  val splits: DoubleArrayParam = new DoubleArrayParam(this, "splits",
     "Split points for mapping continuous features into buckets. With n+1 splits, there are n " +
       "buckets. A bucket defined by splits x,y holds values in the range [x,y) except the last " +
       "bucket, which also includes y. The splits should be strictly increasing. " +
@@ -98,7 +98,8 @@ private[feature] object Bucketizer {
       false
     } else {
       var i = 0
-      while (i < splits.length - 1) {
+      val n = splits.length - 1
+      while (i < n) {
         if (splits(i) >= splits(i + 1)) return false
         i += 1
       }

@@ -86,7 +86,7 @@ function toggleDagViz(forJob) {
   $(arrowSelector).toggleClass('arrow-open');
   var shouldShow = $(arrowSelector).hasClass("arrow-open");
   if (shouldShow) {
-    var shouldRender = graphContainer().select("svg").empty();
+    var shouldRender = graphContainer().select("*").empty();
     if (shouldRender) {
       renderDagViz(forJob);
     }
@@ -108,7 +108,7 @@ function toggleDagViz(forJob) {
  * Output DOM hierarchy:
  *   div#dag-viz-graph >
  *   svg >
- *   g#cluster_stage_[stageId]
+ *   g.cluster_stage_[stageId]
  *
  * Note that the input metadata is populated by o.a.s.ui.UIUtils.showDagViz.
  * Any changes in the input format here must be reflected there.
@@ -117,10 +117,18 @@ function renderDagViz(forJob) {
 
   // If there is not a dot file to render, fail fast and report error
   var jobOrStage = forJob ? "job" : "stage";
-  if (metadataContainer().empty()) {
-    graphContainer()
-      .append("div")
-      .text("No visualization information available for this " + jobOrStage);
+  if (metadataContainer().empty() ||
+      metadataContainer().selectAll("div").empty()) {
+    var message =
+      "<b>No visualization information available for this " + jobOrStage + "!</b><br/>" +
+      "If this is an old " + jobOrStage + ", its visualization metadata may have been " +
+      "cleaned up over time.<br/> You may consider increasing the value of ";
+    if (forJob) {
+      message += "<i>spark.ui.retainedJobs</i> and <i>spark.ui.retainedStages</i>.";
+    } else {
+      message += "<i>spark.ui.retainedStages</i>";
+    }
+    graphContainer().append("div").attr("id", "empty-dag-viz-message").html(message);
     return;
   }
 
@@ -137,7 +145,7 @@ function renderDagViz(forJob) {
   // Find cached RDDs and mark them as such
   metadataContainer().selectAll(".cached-rdd").each(function(v) {
     var nodeId = VizConstants.nodePrefix + d3.select(this).text();
-    svg.selectAll("#" + nodeId).classed("cached", true);
+    svg.selectAll("g." + nodeId).classed("cached", true);
   });
 
   resizeSvg(svg);
@@ -192,14 +200,10 @@ function renderDagVizForJob(svgContainer) {
     if (i > 0) {
       var existingStages = svgContainer
         .selectAll("g.cluster")
-        .filter("[id*=\"" + VizConstants.stageClusterPrefix + "\"]");
+        .filter("[class*=\"" + VizConstants.stageClusterPrefix + "\"]");
       if (!existingStages.empty()) {
         var lastStage = d3.select(existingStages[0].pop());
-        var lastStageId = lastStage.attr("id");
-        var lastStageWidth = toFloat(svgContainer
-          .select("#" + lastStageId)
-          .select("rect")
-          .attr("width"));
+        var lastStageWidth = toFloat(lastStage.select("rect").attr("width"));
         var lastStagePosition = getAbsolutePosition(lastStage);
         var offset = lastStagePosition.x + lastStageWidth + VizConstants.stageSep;
         container.attr("transform", "translate(" + offset + ", 0)");
@@ -372,14 +376,14 @@ function getAbsolutePosition(d3selection) {
 function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
   var fromNodeId = VizConstants.nodePrefix + fromRDDId;
   var toNodeId = VizConstants.nodePrefix + toRDDId;
-  var fromPos = getAbsolutePosition(svgContainer.select("#" + fromNodeId));
-  var toPos = getAbsolutePosition(svgContainer.select("#" + toNodeId));
+  var fromPos = getAbsolutePosition(svgContainer.select("g." + fromNodeId));
+  var toPos = getAbsolutePosition(svgContainer.select("g." + toNodeId));
 
   // On the job page, RDDs are rendered as dots (circles). When rendering the path,
   // we need to account for the radii of these circles. Otherwise the arrow heads
   // will bleed into the circle itself.
   var delta = toFloat(svgContainer
-    .select("g.node#" + toNodeId)
+    .select("g.node." + toNodeId)
     .select("circle")
     .attr("r"));
   if (fromPos.x < toPos.x) {
@@ -431,10 +435,35 @@ function addTooltipsForRDDs(svgContainer) {
       node.select("circle")
         .attr("data-toggle", "tooltip")
         .attr("data-placement", "bottom")
-        .attr("title", tooltipText)
+        .attr("title", tooltipText);
     }
+    // Link tooltips for all nodes that belong to the same RDD
+    node.on("mouseenter", function() { triggerTooltipForRDD(node, true); });
+    node.on("mouseleave", function() { triggerTooltipForRDD(node, false); });
   });
-  $("[data-toggle=tooltip]").tooltip({container: "body"});
+
+  $("[data-toggle=tooltip]")
+    .filter("g.node circle")
+    .tooltip({ container: "body", trigger: "manual" });
+}
+
+/*
+ * (Job page only) Helper function to show or hide tooltips for all nodes
+ * in the graph that refer to the same RDD the specified node represents.
+ */
+function triggerTooltipForRDD(d3node, show) {
+  var classes = d3node.node().classList;
+  for (var i = 0; i < classes.length; i++) {
+    var clazz = classes[i];
+    var isRDDClass = clazz.indexOf(VizConstants.nodePrefix) == 0;
+    if (isRDDClass) {
+      graphContainer().selectAll("g." + clazz).each(function() {
+        var circle = d3.select(this).select("circle").node();
+        var showOrHide = show ? "show" : "hide";
+        $(circle).tooltip(showOrHide);
+      });
+    }
+  }
 }
 
 /* Helper function to convert attributes to numeric values. */
