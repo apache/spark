@@ -52,10 +52,10 @@ trait TypeEqualConstraint {
     typeChecker(left.dataType)
 }
 
-trait TypeEqualConstraintWithDataType extends TypeEqualConstraint {
-  self: Expression =>
+trait DataTypeMerger {
+  self: Expression with TypeEqualConstraint =>
 
-  override def dataType: DataType = {
+  final override def dataType: DataType = {
     if (!resolved) {
       throw new UnresolvedException(this,
         s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")

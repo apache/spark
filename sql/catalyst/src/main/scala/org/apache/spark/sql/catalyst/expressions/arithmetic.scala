@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.types._
 
 abstract class UnaryNumeric extends UnaryExpression with NumericHolder {
@@ -80,8 +79,8 @@ case class Abs(child: Expression) extends UnaryNumeric {
   }
 }
 
-abstract class BinaryArithmetic extends BinaryExpression with TypeEqualConstraintWithDataType {
-  self: Product =>
+abstract class BinaryArithmetic extends BinaryExpression
+  with TypeEqualConstraint with DataTypeMerger { self: Product =>
 
   type EvaluatedType = Any
 

@@ -299,7 +299,7 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
 }
 
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
-  extends Expression with TypeEqualConstraintWithDataType {
+  extends Expression with TypeEqualConstraint with DataTypeMerger {
 
   type EvaluatedType = Any
 

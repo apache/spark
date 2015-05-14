@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.mathfuncs
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -31,7 +30,8 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   extends BinaryExpression
   with Serializable
   with ExpectsInputTypes
-  with TypeEqualConstraintWithDataType { self: Product =>
+  with TypeEqualConstraint
+  with DataTypeMerger { self: Product =>
 
   type EvaluatedType = Any
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
