@@ -26,7 +26,7 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, _}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -94,7 +94,7 @@ trait SchemaRelationProvider {
  * ::DeveloperApi::
  * Implemented by objects that produce relations for a specific kind of data source
  * with a given schema and partitioned columns.  When Spark SQL is given a DDL operation with a
- * USING clause specified (to specify the implemented [[FSBasedRelationProvider]]), a user defined
+ * USING clause specified (to specify the implemented [[HadoopFsRelationProvider]]), a user defined
  * schema, and an optional list of partition columns, this interface is used to pass in the
  * parameters specified by a user.
  *
@@ -105,15 +105,15 @@ trait SchemaRelationProvider {
  *
  * A new instance of this class with be instantiated each time a DDL call is made.
  *
- * The difference between a [[RelationProvider]] and a [[FSBasedRelationProvider]] is
+ * The difference between a [[RelationProvider]] and a [[HadoopFsRelationProvider]] is
  * that users need to provide a schema and a (possibly empty) list of partition columns when
  * using a SchemaRelationProvider. A relation provider can inherits both [[RelationProvider]],
- * and [[FSBasedRelationProvider]] if it can support schema inference, user-specified
+ * and [[HadoopFsRelationProvider]] if it can support schema inference, user-specified
  * schemas, and accessing partitioned relations.
  *
  * @since 1.4.0
  */
-trait FSBasedRelationProvider {
+trait HadoopFsRelationProvider {
   /**
    * Returns a new base relation with the given parameters, a user defined schema, and a list of
    * partition columns. Note: the parameters' keywords are case insensitive and this insensitivity
@@ -124,7 +124,7 @@ trait FSBasedRelationProvider {
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
-      parameters: Map[String, String]): FSBasedRelation
+      parameters: Map[String, String]): HadoopFsRelation
 }
 
 /**
@@ -280,7 +280,7 @@ trait CatalystScan {
 
 /**
  * ::Experimental::
- * [[OutputWriter]] is used together with [[FSBasedRelation]] for persisting rows to the
+ * [[OutputWriter]] is used together with [[HadoopFsRelation]] for persisting rows to the
  * underlying file system.  Subclasses of [[OutputWriter]] must provide a zero-argument constructor.
  * An [[OutputWriter]] instance is created and initialized when a new output file is opened on
  * executor side.  This instance is used to persist rows to this single output file.
@@ -333,7 +333,7 @@ abstract class OutputWriter {
  * filter using selected predicates before producing an RDD containing all matching tuples as
  * [[Row]] objects. In addition, when reading from Hive style partitioned tables stored in file
  * systems, it's able to discover partitioning information from the paths of input directories, and
- * perform partition pruning before start reading the data. Subclasses of [[FSBasedRelation()]] must
+ * perform partition pruning before start reading the data. Subclasses of [[HadoopFsRelation()]] must
  * override one of the three `buildScan` methods to implement the read path.
  *
  * For the write path, it provides the ability to write to both non-partitioned and partitioned
@@ -343,19 +343,19 @@ abstract class OutputWriter {
  *              implementing metastore table conversion.
  * @param paths Base paths of this relation.  For partitioned relations, it should be the root
  *        directories of all partition directories.
- * @param maybePartitionSpec An [[FSBasedRelation]] can be created with an optional
+ * @param maybePartitionSpec An [[HadoopFsRelation]] can be created with an optional
  *        [[PartitionSpec]], so that partition discovery can be skipped.
  *
  * @since 1.4.0
  */
 @Experimental
-abstract class FSBasedRelation private[sql](
+abstract class HadoopFsRelation private[sql](
     val paths: Array[String],
     maybePartitionSpec: Option[PartitionSpec])
   extends BaseRelation {
 
   /**
-   * Constructs an [[FSBasedRelation]].
+   * Constructs an [[HadoopFsRelation]].
    *
    * @param paths Base paths of this relation.  For partitioned relations, it should be either root
    *        directories of all partition directories.
@@ -370,7 +370,7 @@ abstract class FSBasedRelation private[sql](
     })
 
   /**
-   * Constructs an [[FSBasedRelation]].
+   * Constructs an [[HadoopFsRelation]].
    *
    * @param paths Base paths of this relation.  For partitioned relations, it should be root
    *        directories of all partition directories.
@@ -419,7 +419,7 @@ abstract class FSBasedRelation private[sql](
     }.map(_.getPath)
 
     if (leafDirs.nonEmpty) {
-      PartitioningUtils.parsePartitions(leafDirs, "__HIVE_DEFAULT_PARTITION__")
+      PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME)
     } else {
       PartitionSpec(StructType(Array.empty[StructField]), Array.empty[Partition])
     }
@@ -458,7 +458,7 @@ abstract class FSBasedRelation private[sql](
    * @since 1.4.0
    */
   def buildScan(inputPaths: Array[String]): RDD[Row] = {
-    throw new RuntimeException(
+    throw new UnsupportedOperationException(
       "At least one buildScan() method should be overridden to read the relation.")
   }
 
@@ -529,7 +529,7 @@ abstract class FSBasedRelation private[sql](
    *
    * @since 1.4.0
    */
-  def prepareForWrite(job: Job): Unit = ()
+  def prepareJobForWrite(job: Job): Unit = ()
 
   /**
    * This method is responsible for producing a new [[OutputWriter]] for each newly opened output

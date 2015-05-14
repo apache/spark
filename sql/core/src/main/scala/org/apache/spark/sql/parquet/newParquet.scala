@@ -41,15 +41,15 @@ import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{Row, SQLConf, SQLContext}
 import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
 
-private[sql] class DefaultSource extends FSBasedRelationProvider {
+private[sql] class DefaultSource extends HadoopFsRelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
-      parameters: Map[String, String]): FSBasedRelation = {
+      parameters: Map[String, String]): HadoopFsRelation = {
     val partitionSpec = partitionColumns.map(PartitionSpec(_, Seq.empty))
-    new FSBasedParquetRelation(paths, schema, partitionSpec, parameters)(sqlContext)
+    new ParquetRelation2(paths, schema, partitionSpec, parameters)(sqlContext)
   }
 }
 
@@ -77,7 +77,7 @@ private[sql] class ParquetOutputWriter extends OutputWriter {
         if (fs.exists(outputPath)) {
           // Pattern used to match task ID in part file names, e.g.:
           //
-          //   part-r-00001.gz.part
+          //   part-r-00001.gz.parquet
           //          ^~~~~
           val partFilePattern = """part-.-(\d{1,}).*""".r
 
@@ -120,28 +120,28 @@ private[sql] class ParquetOutputWriter extends OutputWriter {
   override def close(): Unit = recordWriter.close(taskAttemptContext)
 }
 
-private[sql] class FSBasedParquetRelation(
+private[sql] class ParquetRelation2(
     paths: Array[String],
     private val maybeDataSchema: Option[StructType],
     private val maybePartitionSpec: Option[PartitionSpec],
     parameters: Map[String, String])(
     val sqlContext: SQLContext)
-  extends FSBasedRelation(paths, maybePartitionSpec)
+  extends HadoopFsRelation(paths, maybePartitionSpec)
   with Logging {
 
   // Should we merge schemas from all Parquet part-files?
   private val shouldMergeSchemas =
-    parameters.getOrElse(FSBasedParquetRelation.MERGE_SCHEMA, "true").toBoolean
+    parameters.getOrElse(ParquetRelation2.MERGE_SCHEMA, "true").toBoolean
 
   private val maybeMetastoreSchema = parameters
-    .get(FSBasedParquetRelation.METASTORE_SCHEMA)
+    .get(ParquetRelation2.METASTORE_SCHEMA)
     .map(DataType.fromJson(_).asInstanceOf[StructType])
 
   private val metadataCache = new MetadataCache
   metadataCache.refresh()
 
   override def equals(other: scala.Any): Boolean = other match {
-    case that: FSBasedParquetRelation =>
+    case that: ParquetRelation2 =>
       val schemaEquality = if (shouldMergeSchemas) {
         this.shouldMergeSchemas == that.shouldMergeSchemas
       } else {
@@ -189,7 +189,7 @@ private[sql] class FSBasedParquetRelation(
 
   override val sizeInBytes = metadataCache.dataStatuses.map(_.getLen).sum
 
-  override def prepareForWrite(job: Job): Unit = {
+  override def prepareJobForWrite(job: Job): Unit = {
     val conf = ContextUtil.getConfiguration(job)
 
     val committerClass =
@@ -385,7 +385,7 @@ private[sql] class FSBasedParquetRelation(
         // case insensitivity issue and possible schema mismatch (probably caused by schema
         // evolution).
         maybeMetastoreSchema
-          .map(FSBasedParquetRelation.mergeMetastoreParquetSchema(_, dataSchema0))
+          .map(ParquetRelation2.mergeMetastoreParquetSchema(_, dataSchema0))
           .getOrElse(dataSchema0)
       }
     }
@@ -439,12 +439,12 @@ private[sql] class FSBasedParquetRelation(
         "No schema defined, " +
           s"and no Parquet data file or summary file found under ${paths.mkString(", ")}.")
 
-      FSBasedParquetRelation.readSchema(filesToTouch.map(footers.apply), sqlContext)
+      ParquetRelation2.readSchema(filesToTouch.map(footers.apply), sqlContext)
     }
   }
 }
 
-private[sql] object FSBasedParquetRelation extends Logging {
+private[sql] object ParquetRelation2 extends Logging {
   // Whether we should merge schemas collected from all Parquet part-files.
   private[sql] val MERGE_SCHEMA = "mergeSchema"
 

@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
 // TODO Don't extend ParquetTest
 // This test suite extends ParquetTest for some convenient utility methods. These methods should be
 // moved to some more general places, maybe QueryTest.
-class FSBasedRelationTest extends QueryTest with ParquetTest {
+class HadoopFsRelationTest extends QueryTest with ParquetTest {
   override val sqlContext: SQLContext = TestHive
 
   import sqlContext._
@@ -487,7 +487,7 @@ class FSBasedRelationTest extends QueryTest with ParquetTest {
       }
 
       val actualPaths = df.queryExecution.analyzed.collectFirst {
-        case LogicalRelation(relation: FSBasedRelation) =>
+        case LogicalRelation(relation: HadoopFsRelation) =>
           relation.paths.toSet
       }.getOrElse {
         fail("Expect an FSBasedRelation, but none could be found")
@@ -499,7 +499,7 @@ class FSBasedRelationTest extends QueryTest with ParquetTest {
   }
 }
 
-class SimpleTextRelationSuite extends FSBasedRelationTest {
+class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
   override val dataSourceName: String = classOf[SimpleTextSource].getCanonicalName
 
   import sqlContext._
@@ -530,7 +530,7 @@ class SimpleTextRelationSuite extends FSBasedRelationTest {
   }
 }
 
-class FSBasedParquetRelationSuite extends FSBasedRelationTest {
+class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   override val dataSourceName: String = classOf[parquet.DefaultSource].getCanonicalName
 
   import sqlContext._

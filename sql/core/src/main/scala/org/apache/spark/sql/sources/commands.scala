@@ -58,8 +58,8 @@ private[sql] case class InsertIntoDataSource(
   }
 }
 
-private[sql] case class InsertIntoFSBasedRelation(
-    @transient relation: FSBasedRelation,
+private[sql] case class InsertIntoHadoopFsRelation(
+    @transient relation: HadoopFsRelation,
     @transient query: LogicalPlan,
     partitionColumns: Array[String],
     mode: SaveMode)
@@ -102,7 +102,7 @@ private[sql] case class InsertIntoFSBasedRelation(
         insert(new DefaultWriterContainer(relation, job), df)
       } else {
         val writerContainer = new DynamicPartitionWriterContainer(
-          relation, job, partitionColumns, "__HIVE_DEFAULT_PARTITION__")
+          relation, job, partitionColumns, PartitioningUtils.DEFAULT_PARTITION_NAME)
         insertWithDynamicPartitions(sqlContext, writerContainer, df, partitionColumns)
       }
     }
@@ -234,7 +234,7 @@ private[sql] case class InsertIntoFSBasedRelation(
 }
 
 private[sql] abstract class BaseWriterContainer(
-    @transient val relation: FSBasedRelation,
+    @transient val relation: HadoopFsRelation,
     @transient job: Job)
   extends SparkHadoopMapReduceUtil
   with Logging
@@ -269,7 +269,7 @@ private[sql] abstract class BaseWriterContainer(
     setupIDs(0, 0, 0)
     setupConf()
     taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
-    relation.prepareForWrite(job)
+    relation.prepareJobForWrite(job)
     outputFormatClass = job.getOutputFormatClass
     outputCommitter = newOutputCommitter(taskAttemptContext)
     outputCommitter.setupJob(jobContext)
@@ -346,7 +346,7 @@ private[sql] abstract class BaseWriterContainer(
 }
 
 private[sql] class DefaultWriterContainer(
-    @transient relation: FSBasedRelation,
+    @transient relation: HadoopFsRelation,
     @transient job: Job)
   extends BaseWriterContainer(relation, job) {
 
@@ -372,7 +372,7 @@ private[sql] class DefaultWriterContainer(
 }
 
 private[sql] class DynamicPartitionWriterContainer(
-    @transient relation: FSBasedRelation,
+    @transient relation: HadoopFsRelation,
     @transient job: Job,
     partitionColumns: Array[String],
     defaultPartitionName: String)

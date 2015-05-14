@@ -32,15 +32,15 @@ import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.{Row, SQLContext}
 
 /**
- * A simple example [[FSBasedRelationProvider]].
+ * A simple example [[HadoopFsRelationProvider]].
  */
-class SimpleTextSource extends FSBasedRelationProvider {
+class SimpleTextSource extends HadoopFsRelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
-      parameters: Map[String, String]): FSBasedRelation = {
+      parameters: Map[String, String]): HadoopFsRelation = {
     val partitionsSchema = partitionColumns.getOrElse(StructType(Array.empty[StructField]))
     new SimpleTextRelation(paths, schema, partitionsSchema, parameters)(sqlContext)
   }
@@ -80,7 +80,7 @@ class SimpleTextOutputWriter extends OutputWriter {
 }
 
 /**
- * A simple example [[FSBasedRelation]], used for testing purposes.  Data are stored as comma
+ * A simple example [[HadoopFsRelation]], used for testing purposes.  Data are stored as comma
  * separated string lines.  When scanning data, schema must be explicitly provided via data source
  * option `"dataSchema"`.
  */
@@ -90,7 +90,7 @@ class SimpleTextRelation(
     partitionsSchema: StructType,
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
-  extends FSBasedRelation(paths, partitionsSchema) {
+  extends HadoopFsRelation(paths, partitionsSchema) {
 
   import sqlContext.sparkContext
 
