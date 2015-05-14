@@ -121,7 +121,7 @@ abstract class DStream[T: ClassTag] (
    *
    * This is not defined if the DStream is created outside of one of the public DStream operations.
    */
-  protected val baseScope: Option[String] = {
+  private[streaming] val baseScope: Option[String] = {
     Option(ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY))
   }
 
