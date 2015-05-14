@@ -201,15 +201,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
    * @param times all time values that will be used in the graphs.
    */
   private def generateTimeMap(times: Seq[Long]): Seq[Node] = {
-    val dateFormat =
-      if (listener.batchDuration < 1000) {
-        new SimpleDateFormat("HH:mm:ss.SSS")
-      } else {
-        // If batchInterval >= 1 second, don't show milliseconds
-        new SimpleDateFormat("HH:mm:ss")
-      }
     val js = "var timeFormat = {};\n" + times.map { time =>
-      val formattedTime = dateFormat.format(new Date(time))
+      val formattedTime =
+        UIUtils.formatBatchTime(time, listener.batchDuration, showYYYYMMSS = false)
       s"timeFormat[$time] = '$formattedTime';"
     }.mkString("\n")
 

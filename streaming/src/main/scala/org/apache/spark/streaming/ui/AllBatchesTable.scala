@@ -26,14 +26,6 @@ import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 
 private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) {
 
-  protected val batchTimeFormat =
-    if (batchInterval < 1000) {
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS")
-    } else {
-      // If batchInterval >= 1 second, don't show milliseconds
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-    }
-
   protected def columns: Seq[Node] = {
     <th>Batch Time</th>
       <th>Input Size</th>
@@ -46,7 +38,7 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
 
   protected def baseRow(batch: BatchUIData): Seq[Node] = {
     val batchTime = batch.batchTime.milliseconds
-    val formattedBatchTime = batchTimeFormat.format(new Date(batchTime))
+    val formattedBatchTime = UIUtils.formatBatchTime(batchTime, batchInterval)
     val eventCount = batch.numRecords
     val schedulingDelay = batch.schedulingDelay
     val formattedSchedulingDelay = schedulingDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
