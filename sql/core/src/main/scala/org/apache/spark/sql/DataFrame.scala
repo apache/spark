@@ -1276,13 +1276,19 @@ class DataFrame private[sql](
   def javaRDD: JavaRDD[Row] = toJavaRDD
 
   /**
-   * Registers this [[DataFrame]] as a temporary table using the given name.  The lifetime of this
-   * temporary table is tied to the [[SQLContext]] that was used to create this DataFrame.
-   *
+   * Check if the table name already exists
+   * Registers this [[DataFrame]] as a temporary table using the given name if 
+   * no such table name present else throw an exception 
+   * The lifetime of this temporary table is tied to  
+   * the [[SQLContext]] that was used to create this DataFrame.
+   * 
    * @group basic
    * @since 1.3.0
    */
   def registerTempTable(tableName: String): Unit = {
+    if( sqlContext.catalog.tableExists(Seq(tableName)) ){
+      throw new IllegalArgumentException(s"Table $tableName already exists")
+    }
     sqlContext.registerDataFrameAsTable(this, tableName)
   }
 
