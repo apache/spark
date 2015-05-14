@@ -889,6 +889,16 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    */
   def bitwiseXOR(other: Any): Column = BitwiseXor(expr, lit(other).expr)
 
+  /**
+   * Create a new [[WindowFunctionDefinition]] bundled with this column(expression).
+   * {{{
+   *   df.select(avg($"value").over...)
+   * }}}
+   *
+   * @group expr_ops
+   */
+  def over: WindowFunctionDefinition = new WindowFunctionDefinition(this)
+
 }
 
 
