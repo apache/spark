@@ -123,7 +123,7 @@ class Params(Identifiable):
     def getOrDefault(self, param):
         """
         Gets the value of a param in the user-supplied param map or its
-        default value. Raises an error if either is set.
+        default value. Raises an error if neither is set.
         """
         if isinstance(param, Param):
             if param in self.paramMap:
@@ -134,6 +134,7 @@ class Params(Identifiable):
             return self.getOrDefault(self.getParam(param))
         else:
             raise KeyError("Cannot recognize %r as a param." % param)
+
 
     def extractParamMap(self, extraParamMap={}):
         """

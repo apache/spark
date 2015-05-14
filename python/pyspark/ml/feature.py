@@ -790,7 +790,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
 
     @keyword_only
     def __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
-                 seed=42, inputCol=None, outputCol=None):
+                 seed=None, inputCol=None, outputCol=None):
         """
         __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
                  seed=42, inputCol=None, outputCol=None)
@@ -810,9 +810,9 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
 
     @keyword_only
     def setParams(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
-                  seed=42, inputCol=None, outputCol=None):
+                  seed=None, inputCol=None, outputCol=None):
         """
-        setParams(self, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, seed=42,
+        setParams(self, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, seed=None,
                  inputCol=None, outputCol=None)
         Sets params for this Word2Vec.
         """

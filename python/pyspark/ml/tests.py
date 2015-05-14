@@ -33,7 +33,7 @@ else:
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 from pyspark.sql import DataFrame
 from pyspark.ml.param import Param
-from pyspark.ml.param.shared import HasMaxIter, HasInputCol
+from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
 from pyspark.ml.pipeline import Estimator, Model, Pipeline, Transformer
 
 
@@ -112,15 +112,15 @@ class PipelineTests(PySparkTestCase):
         self.assertEqual(6, dataset.index)
 
 
-class TestParams(HasMaxIter, HasInputCol):
+class TestParams(HasMaxIter, HasInputCol, HasSeed):
     """
-    A subclass of Params mixed with HasMaxIter and HasInputCol.
+    A subclass of Params mixed with HasMaxIter, HasInputCol and HasSeed.
     """
 
-    def __init__(self):
+    def __init__(self, seed=None):
         super(TestParams, self).__init__()
         self._setDefault(maxIter=10)
-
+        self._set(seed=seed)
 
 class ParamTests(PySparkTestCase):
 
@@ -135,9 +135,10 @@ class ParamTests(PySparkTestCase):
         testParams = TestParams()
         maxIter = testParams.maxIter
         inputCol = testParams.inputCol
+        seed = testParams.seed
 
         params = testParams.params
-        self.assertEqual(params, [inputCol, maxIter])
+        self.assertEqual(params, [inputCol, maxIter, seed])
 
         self.assertTrue(testParams.hasDefault(maxIter))
         self.assertFalse(testParams.isSet(maxIter))
@@ -153,10 +154,26 @@ class ParamTests(PySparkTestCase):
         with self.assertRaises(KeyError):
             testParams.getInputCol()
 
+        # Since the default is normally random, set it to a known number for debug str
+        testParams._setDefault(seed=41)
+        testParams.setSeed(43)
+
         self.assertEquals(
             testParams.explainParams(),
             "\n".join(["inputCol: input column name (undefined)",
-                       "maxIter: max number of iterations (>= 0) (default: 10, current: 100)"]))
+                       "maxIter: max number of iterations (>= 0) (default: 10, current: 100)",
+                       "seed: random seed (default: 41, current: 43)"]))
+
+    def test_hasseed(self):
+        noSeedSpecd = TestParams()
+        withSeedSpecd = TestParams(seed = 42)
+        # Check that we no longer use 42 as the magic number
+        self.assertNotEqual(noSeedSpecd.getSeed(), 42)
+        origSeed = noSeedSpecd.getSeed()
+        # Check that we only compute the seed once
+        self.assertEqual(noSeedSpecd.getSeed(), origSeed)
+        # Check that a specified seed is honored
+        self.assertEqual(withSeedSpecd.getSeed(), 42)
 
 
 if __name__ == "__main__":
