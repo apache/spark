@@ -90,7 +90,7 @@ private[spark] class ApplicationMaster(
         System.setProperty("spark.master", "yarn-cluster")
 
         // Propagate the application ID so that YarnClusterSchedulerBackend can pick it up.
-        System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
+        System.setProperty("spark.app.id", appAttemptId.getApplicationId().toString())
 
         // Propagate the attempt if, so that in case of event logging,
         // different attempt's logs gets created in different directory
