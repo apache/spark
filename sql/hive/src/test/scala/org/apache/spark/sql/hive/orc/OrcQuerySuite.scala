@@ -112,15 +112,16 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
 
     test("Read/Write All Types with non-primitive type") {
       val tempDir = getTempFilePath("orcTest").getCanonicalPath
-      val range = (0 to 255)
-      val data = sparkContext.parallelize(range)
-        .map(x => AllDataTypesWithNonPrimitiveType(
-        s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0,
-        (0 until x),
-        (0 until x).map(Option(_).filter(_ % 3 == 0)),
-        (0 until x).map(i => i -> i.toLong).toMap,
-        (0 until x).map(i => i -> Option(i.toLong)).toMap + (x -> None),
-        Data((0 until x), Nested(x, s"$x"))))
+      val range = 0 to 255
+      val data = sparkContext.parallelize(range).map { x =>
+        AllDataTypesWithNonPrimitiveType(
+          s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0,
+          0 until x,
+          (0 until x).map(Option(_).filter(_ % 3 == 0)),
+          (0 until x).map(i => i -> i.toLong).toMap,
+          (0 until x).map(i => i -> Option(i.toLong)).toMap + (x -> None),
+          Data(0 until x, Nested(x, s"$x")))
+      }
       data.toDF().saveAsOrcFile(tempDir)
 
       checkAnswer(
@@ -204,11 +205,11 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
     //  We only support zlib in hive0.12.0 now
     test("Default Compression options for writing to an Orcfile") {
       // TODO: support other compress codec
-      var tempDir = getTempFilePath("orcTest").getCanonicalPath
-      val rdd = sparkContext.parallelize((1 to 100))
+      val tempDir = getTempFilePath("orcTest").getCanonicalPath
+      val rdd = sparkContext.parallelize(1 to 100)
         .map(i => TestRDDEntry(i, s"val_$i"))
       rdd.toDF().saveAsOrcFile(tempDir)
-      var actualCodec = OrcFileOperator.getFileReader(tempDir).getCompression
+      val actualCodec = OrcFileOperator.getFileReader(tempDir).getCompression
       assert(actualCodec == CompressionKind.ZLIB)
       Utils.deleteRecursively(new File(tempDir))
     }
@@ -217,7 +218,7 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
     ignore("Other Compression options for writing to an Orcfile - 0.13.1 and above") {
       TestHive.sparkContext.hadoopConfiguration.set(orcDefaultCompressVar, "SNAPPY")
       var tempDir = getTempFilePath("orcTest").getCanonicalPath
-      val rdd = sparkContext.parallelize((1 to 100))
+      val rdd = sparkContext.parallelize(1 to 100)
         .map(i => TestRDDEntry(i, s"val_$i"))
       rdd.toDF().saveAsOrcFile(tempDir)
       var actualCodec = OrcFileOperator.getFileReader(tempDir).getCompression

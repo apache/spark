@@ -37,6 +37,7 @@ case class OrcParData(intField: Int, stringField: String)
 // The data that also includes the partitioning key
 case class OrcParDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
 
+// TODO This test suite duplicates ParquetPartitionDiscoverySuite a lot
 class OrcPartitionDiscoverySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   val defaultPartitionName = ConfVars.DEFAULTPARTITIONNAME.defaultVal
 

@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.hive.orc
 
+import org.apache.hadoop.hive.common.`type`.{HiveChar, HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
+import org.apache.hadoop.hive.serde2.io.DateWritable
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.sources._
 
@@ -29,48 +32,113 @@ import org.apache.spark.sql.sources._
  */
 private[orc] object OrcFilters extends Logging {
   def createFilter(expr: Array[Filter]): Option[SearchArgument] = {
-    if (expr.nonEmpty) {
-      expr.foldLeft(Some(SearchArgument.FACTORY.newBuilder().startAnd()): Option[Builder]) {
-        (maybeBuilder, e) => createFilter(e, maybeBuilder)
-      }.map(_.end().build())
-    } else {
-      None
+    expr.reduceOption(And).flatMap { conjunction =>
+      val builder = SearchArgument.FACTORY.newBuilder()
+      buildSearchArgument(conjunction, builder).map(_.build())
     }
   }
 
-  private def createFilter(expression: Filter, maybeBuilder: Option[Builder]): Option[Builder] = {
-    maybeBuilder.flatMap { builder =>
-      expression match {
-        case p@And(left, right) =>
-          for {
-            lhs <- createFilter(left, Some(builder.startAnd()))
-            rhs <- createFilter(right, Some(lhs))
-          } yield rhs.end()
-        case p@Or(left, right) =>
-          for {
-            lhs <- createFilter(left, Some(builder.startOr()))
-            rhs <- createFilter(right, Some(lhs))
-          } yield rhs.end()
-        case p@Not(child) =>
-          createFilter(child, Some(builder.startNot())).map(_.end())
-        case p@EqualTo(attribute, value) =>
-          Some(builder.equals(attribute, value))
-        case p@LessThan(attribute, value) =>
-          Some(builder.lessThan(attribute, value))
-        case p@LessThanOrEqual(attribute, value) =>
-          Some(builder.lessThanEquals(attribute, value))
-        case p@GreaterThan(attribute, value) =>
-          Some(builder.startNot().lessThanEquals(attribute, value).end())
-        case p@GreaterThanOrEqual(attribute, value) =>
-          Some(builder.startNot().lessThan(attribute, value).end())
-        case p@IsNull(attribute) =>
-          Some(builder.isNull(attribute))
-        case p@IsNotNull(attribute) =>
-          Some(builder.startNot().isNull(attribute).end())
-        case p@In(attribute, values) =>
-          Some(builder.in(attribute, values))
-        case _ => None
-      }
+  private def buildSearchArgument(expression: Filter, builder: Builder): Option[Builder] = {
+    def newBuilder = SearchArgument.FACTORY.newBuilder()
+
+    def isSearchableLiteral(value: Any) = value match {
+      // These are types recognized by the `SearchArgumentImpl.BuilderImpl.boxLiteral()` method.
+      case _: String | _: Long | _: Double | _: DateWritable | _: HiveDecimal | _: HiveChar |
+           _: HiveVarchar | _: Byte | _: Short | _: Integer | _: Float => true
+      case _ => false
+    }
+
+    // lian: I probably missed something here, and had to end up with a pretty weird double-checking
+    // pattern when converting `And`/`Or`/`Not` filters.
+    //
+    // The annoying part is that, `SearchArgument` builder methods like `startAnd()` `startOr()`,
+    // and `startNot()` mutate internal state of the builder instance.  This forces us to translate
+    // all convertible filters with a single builder instance. However, before actually converting a
+    // filter, we've no idea whether it can be recognized by ORC or not. Thus, when an inconvertible
+    // filter is found, we may already end up with a builder whose internal state is inconsistent.
+    //
+    // For example, to convert an `And` filter with builder `b`, we call `b.startAnd()` first, and
+    // then try to convert its children.  Say we convert `left` child successfully, but find that
+    // `right` child is inconvertible.  Alas, `b.startAnd()` call can't be rolled back, and `b` is
+    // inconsistent now.
+    //
+    // The workaround employed here is that, for `And`/`Or`/`Not`, we first try to convert their
+    // children with brand new builders, and only do the actual conversion with the right builder
+    // instance when the children are proven to be convertible.
+    //
+    // P.S.: Hive seems to use `SearchArgument` together with `ExprNodeGenericFuncDesc` only.
+    // Usage of builder methods mentioned above can only be found in test code, where all tested
+    // filters are known to be convertible.
+
+    expression match {
+      case And(left, right) =>
+        val tryLeft = buildSearchArgument(left, newBuilder)
+        val tryRight = buildSearchArgument(right, newBuilder)
+
+        val conjunction = for {
+          _ <- tryLeft
+          _ <- tryRight
+          lhs <- buildSearchArgument(left, builder.startAnd())
+          rhs <- buildSearchArgument(right, lhs)
+        } yield rhs.end()
+
+        // For filter `left AND right`, we can still push down `left` even if `right` is not
+        // convertible, and vice versa.
+        conjunction
+          .orElse(tryLeft.flatMap(_ => buildSearchArgument(left, builder)))
+          .orElse(tryRight.flatMap(_ => buildSearchArgument(right, builder)))
+
+      case And(left, right) =>
+        for {
+          _ <- buildSearchArgument(left, newBuilder)
+          _ <- buildSearchArgument(right, newBuilder)
+          lhs <- buildSearchArgument(left, builder.startOr())
+          rhs <- buildSearchArgument(right, lhs)
+        } yield rhs.end()
+
+      case Not(child) =>
+        for {
+          _ <- buildSearchArgument(child, newBuilder)
+          negate <- buildSearchArgument(child, builder.startNot())
+        } yield negate.end()
+
+      case EqualTo(attribute, value) =>
+        Option(value)
+          .filter(isSearchableLiteral)
+          .map(builder.equals(attribute, _))
+
+      case LessThan(attribute, value) =>
+        Option(value)
+          .filter(isSearchableLiteral)
+          .map(builder.lessThan(attribute, _))
+
+      case LessThanOrEqual(attribute, value) =>
+        Option(value)
+          .filter(isSearchableLiteral)
+          .map(builder.lessThanEquals(attribute, _))
+
+      case GreaterThan(attribute, value) =>
+        Option(value)
+          .filter(isSearchableLiteral)
+          .map(builder.startNot().lessThanEquals(attribute, _).end())
+
+      case GreaterThanOrEqual(attribute, value) =>
+        Option(value)
+          .filter(isSearchableLiteral)
+          .map(builder.startNot().lessThan(attribute, _).end())
+
+      case IsNull(attribute) =>
+        Some(builder.isNull(attribute))
+
+      case IsNotNull(attribute) =>
+        Some(builder.startNot().isNull(attribute).end())
+
+      case In(attribute, values) =>
+        Option(values)
+          .filter(_.forall(isSearchableLiteral))
+          .map(builder.in(attribute, _))
+
+      case _ => None
     }
   }
 }

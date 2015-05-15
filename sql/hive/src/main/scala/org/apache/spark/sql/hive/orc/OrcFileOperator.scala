@@ -28,28 +28,25 @@ import org.apache.spark.sql.hive.HiveMetastoreTypes
 import org.apache.spark.sql.types.StructType
 
 private[orc] object OrcFileOperator extends Logging{
-
   def getFileReader(pathStr: String, config: Option[Configuration] = None ): Reader = {
     val conf = config.getOrElse(new Configuration)
     val fspath = new Path(pathStr)
     val fs = fspath.getFileSystem(conf)
     val orcFiles = listOrcFiles(pathStr, conf)
-    OrcFile.createReader(fs, orcFiles(0))
+
+    // TODO Need to consider all files when schema evolution is taken into account.
+    OrcFile.createReader(fs, orcFiles.head)
   }
 
   def readSchema(path: String, conf: Option[Configuration]): StructType = {
     val reader = getFileReader(path, conf)
-    val readerInspector: StructObjectInspector = reader.getObjectInspector
-      .asInstanceOf[StructObjectInspector]
+    val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
     val schema = readerInspector.getTypeName
     HiveMetastoreTypes.toDataType(schema).asInstanceOf[StructType]
   }
 
   def getObjectInspector(path: String, conf: Option[Configuration]): StructObjectInspector = {
-    val reader = getFileReader(path, conf)
-    val readerInspector: StructObjectInspector = reader.getObjectInspector
-      .asInstanceOf[StructObjectInspector]
-    readerInspector
+    getFileReader(path, conf).getObjectInspector.asInstanceOf[StructObjectInspector]
   }
 
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
@@ -66,6 +63,7 @@ private[orc] object OrcFileOperator extends Logging{
       throw new IllegalArgumentException(
         s"orcFileOperator: path $path does not have valid orc files matching the pattern")
     }
+
     paths
   }
 }

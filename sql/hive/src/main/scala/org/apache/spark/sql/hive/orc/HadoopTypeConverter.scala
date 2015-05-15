@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.hive.orc
 
-
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 
 import org.apache.spark.sql.catalyst.expressions.MutableRow
-import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
+import org.apache.spark.sql.hive.HiveInspectors
 
 /**
  * We can consolidate TableReader.unwrappers and HiveInspectors.wrapperFor to use

@@ -20,11 +20,10 @@ package org.apache.spark.sql.hive.orc
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.sources.{FSBasedRelationTest}
+import org.apache.spark.sql.sources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
 
-
-class FSBasedOrcRelationSuite extends FSBasedRelationTest {
+class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
   override val dataSourceName: String = classOf[DefaultSource].getCanonicalName
 
   import sqlContext._
