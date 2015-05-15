@@ -111,13 +111,16 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |  SELECT key FROM gen_tmp ORDER BY key ASC;
     """.stripMargin)
 
-  test("multiple generator in projection") {
+  test("multiple generators in projection") {
+    // TGF with non-TGF in project is allowed in Spark SQL, but not in Hive
+    sql("SELECT explode(array(key, key)) as (k1, k2), key, value FROM src").collect()
+
     intercept[AnalysisException] {
-      sql("SELECT explode(map(key, value)), key FROM src").collect()
+      sql("SELECT explode(array(key, key)), explode(array(key, key)) FROM src").collect()
     }
 
     intercept[AnalysisException] {
-      sql("SELECT explode(map(key, value)) as k1, k2, key FROM src").collect()
+      sql("SELECT explode(array(key, key)) as k1, explode(array(key, key)) FROM src").collect()
     }
   }
 

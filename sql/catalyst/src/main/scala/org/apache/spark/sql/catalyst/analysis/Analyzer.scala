@@ -577,9 +577,10 @@ class Analyzer(
     private object AliasedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
         case Alias(g: Generator, name) if g.elementTypes.size > 1 => {
-          // In project, we probably give a default name which is not correct
-          // e.g. SELECT explode(map(key, value)) FROM src;
-          // Let's ignore the specified names for generator in project list
+          // In project, we named a default single name for TGF during parser (as normal UDF),
+          // but the TGF is supposed to has multiple output columns.
+          //    e.g. SELECT explode(map(key, value)) FROM src;
+          // Let's simply ignore the given name for this case.
           Some((g, Nil))
         }
         case Alias(g: Generator, name) => Some((g, name :: Nil))

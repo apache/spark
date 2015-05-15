@@ -548,17 +548,18 @@ class SQLQuerySuite extends QueryTest {
     dropTempTable("data")
   }
 
-  test("resolve udtf with single alias") {
+  test("resolve udtf in projection #1") {
     val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
     jsonRDD(rdd).registerTempTable("data")
     val df = sql("SELECT explode(a) AS val FROM data")
     val col = df("val")
   }
 
-  test("resolve udtf without alias in projection") {
+  test("resolve udtf in projection #2") {
     val rdd = sparkContext.makeRDD((1 to 2).map(i => s"""{"a":[$i, ${i + 1}]}"""))
     jsonRDD(rdd).registerTempTable("data")
     checkAnswer(sql("SELECT explode(map(1, 1)) FROM data LIMIT 1"), Row(1, 1) :: Nil)
+    checkAnswer(sql("SELECT explode(map(1, 1)) as (k1, k2) FROM data LIMIT 1"), Row(1, 1) :: Nil)
     checkAnswer(sql("SELECT explode(array(1, 1)) FROM data LIMIT 1"), Row(1) :: Nil)
   }
 
