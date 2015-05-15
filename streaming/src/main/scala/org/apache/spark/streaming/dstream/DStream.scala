@@ -140,7 +140,8 @@ abstract class DStream[T: ClassTag] (
    */
   private def makeScope(time: Time): Option[RDDOperationScope] = {
     baseScope.map { bsJson =>
-      val formattedBatchTime = UIUtils.formatBatchTime(time.milliseconds)
+      val formattedBatchTime =
+        UIUtils.formatBatchTime(time.milliseconds, ssc.graph.batchDuration.milliseconds)
       val bscope = RDDOperationScope.fromJson(bsJson)
       val baseName = customScopeName.getOrElse(bscope.name) // e.g. countByWindow
       val scopeName =
