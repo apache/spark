@@ -19,14 +19,35 @@ package org.apache.spark
 
 import java.util.concurrent.{TimeUnit, Executors}
 
+import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.util.{Try, Random}
 
 import org.scalatest.FunSuite
+import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.ResetSystemProperties
+import org.apache.spark.util.{RpcUtils, ResetSystemProperties}
 import com.esotericsoftware.kryo.Kryo
 
 class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemProperties {
+  test("Test byteString conversion") {
+    val conf = new SparkConf()
+    // Simply exercise the API, we don't need a complete conversion test since that's handled in
+    // UtilsSuite.scala
+    assert(conf.getSizeAsBytes("fake","1k") === ByteUnit.KiB.toBytes(1))
+    assert(conf.getSizeAsKb("fake","1k") === ByteUnit.KiB.toKiB(1))
+    assert(conf.getSizeAsMb("fake","1k") === ByteUnit.KiB.toMiB(1))
+    assert(conf.getSizeAsGb("fake","1k") === ByteUnit.KiB.toGiB(1))
+  }
+
+  test("Test timeString conversion") {
+    val conf = new SparkConf()
+    // Simply exercise the API, we don't need a complete conversion test since that's handled in
+    // UtilsSuite.scala
+    assert(conf.getTimeAsMs("fake","1ms") === TimeUnit.MILLISECONDS.toMillis(1))
+    assert(conf.getTimeAsSeconds("fake","1000ms") === TimeUnit.MILLISECONDS.toSeconds(1000))
+  }
+
   test("loading from system properties") {
     System.setProperty("spark.test.testProperty", "2")
     val conf = new SparkConf()
@@ -197,6 +218,51 @@ class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     serializer.newInstance().serialize(new StringBuffer())
   }
 
+  test("deprecated configs") {
+    val conf = new SparkConf()
+    val newName = "spark.history.fs.update.interval"
+
+    assert(!conf.contains(newName))
+
+    conf.set("spark.history.updateInterval", "1")
+    assert(conf.get(newName) === "1")
+
+    conf.set("spark.history.fs.updateInterval", "2")
+    assert(conf.get(newName) === "2")
+
+    conf.set("spark.history.fs.update.interval.seconds", "3")
+    assert(conf.get(newName) === "3")
+
+    conf.set(newName, "4")
+    assert(conf.get(newName) === "4")
+
+    val count = conf.getAll.filter { case (k, v) => k.startsWith("spark.history.") }.size
+    assert(count === 4)
+
+    conf.set("spark.yarn.applicationMaster.waitTries", "42")
+    assert(conf.getTimeAsSeconds("spark.yarn.am.waitTime") === 420)
+  }
+
+  test("akka deprecated configs") {
+    val conf = new SparkConf()
+
+    assert(!conf.contains("spark.rpc.numRetries"))
+    assert(!conf.contains("spark.rpc.retry.wait"))
+    assert(!conf.contains("spark.rpc.askTimeout"))
+    assert(!conf.contains("spark.rpc.lookupTimeout"))
+
+    conf.set("spark.akka.num.retries", "1")
+    assert(RpcUtils.numRetries(conf) === 1)
+
+    conf.set("spark.akka.retry.wait", "2")
+    assert(RpcUtils.retryWaitMs(conf) === 2L)
+
+    conf.set("spark.akka.askTimeout", "3")
+    assert(RpcUtils.askTimeout(conf) === (3 seconds))
+
+    conf.set("spark.akka.lookupTimeout", "4")
+    assert(RpcUtils.lookupTimeout(conf) === (4 seconds))
+  }
 }
 
 class Class1 {}

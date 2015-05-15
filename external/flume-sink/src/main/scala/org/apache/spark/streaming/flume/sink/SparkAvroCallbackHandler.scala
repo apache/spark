@@ -21,9 +21,9 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import org.apache.flume.Channel
-import org.apache.commons.lang.RandomStringUtils
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.apache.flume.Channel
+import org.apache.commons.lang3.RandomStringUtils
 
 /**
  * Class that implements the SparkFlumeProtocol, that is used by the Avro Netty Server to process

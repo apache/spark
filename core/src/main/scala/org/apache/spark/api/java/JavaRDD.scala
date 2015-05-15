@@ -192,7 +192,7 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    */
   def sortBy[S](f: JFunction[T, S], ascending: Boolean, numPartitions: Int): JavaRDD[T] = {
     import scala.collection.JavaConverters._
-    def fn = (x: T) => f.call(x)
+    def fn: (T) => S = (x: T) => f.call(x)
     import com.google.common.collect.Ordering  // shadows scala.math.Ordering
     implicit val ordering = Ordering.natural().asInstanceOf[Ordering[S]]
     implicit val ctag: ClassTag[S] = fakeClassTag

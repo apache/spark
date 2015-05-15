@@ -18,75 +18,90 @@
 package org.apache.spark.streaming
 
 import java.io.{File, BufferedWriter, OutputStreamWriter}
-import java.net.{SocketException, ServerSocket}
+import java.net.{Socket, SocketException, ServerSocket}
 import java.nio.charset.Charset
-import java.util.concurrent.{Executors, TimeUnit, ArrayBlockingQueue}
+import java.util.concurrent.{CountDownLatch, Executors, TimeUnit, ArrayBlockingQueue}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer, SynchronizedQueue}
 import scala.language.postfixOps
 
 import com.google.common.io.Files
+import org.apache.hadoop.io.{Text, LongWritable}
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Logging
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{ManualClock, Utils}
-import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.rdd.RDD
-import org.apache.hadoop.io.{Text, LongWritable}
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
-import org.apache.hadoop.fs.Path
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.scheduler.{StreamingListenerBatchCompleted, StreamingListener}
+import org.apache.spark.util.{ManualClock, Utils}
+import org.apache.spark.streaming.dstream.{InputDStream, ReceiverInputDStream}
+import org.apache.spark.streaming.receiver.Receiver
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
   test("socket input stream") {
-    // Start the server
-    val testServer = new TestServer()
-    testServer.start()
+    withTestServer(new TestServer()) { testServer =>
+      // Start the server
+      testServer.start()
 
-    // Set up the streaming context and input streams
-    val ssc = new StreamingContext(conf, batchDuration)
-    val networkStream = ssc.socketTextStream(
-      "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
-    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
-    val outputStream = new TestOutputStream(networkStream, outputBuffer)
-    def output = outputBuffer.flatMap(x => x)
-    outputStream.register()
-    ssc.start()
+      // Set up the streaming context and input streams
+      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+        ssc.addStreamingListener(ssc.progressListener)
 
-    // Feed data to the server to send to the network receiver
-    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    val input = Seq(1, 2, 3, 4, 5)
-    val expectedOutput = input.map(_.toString)
-    Thread.sleep(1000)
-    for (i <- 0 until input.size) {
-      testServer.send(input(i).toString + "\n")
-      Thread.sleep(500)
-      clock.advance(batchDuration.milliseconds)
-    }
-    Thread.sleep(1000)
-    logInfo("Stopping server")
-    testServer.stop()
-    logInfo("Stopping context")
-    ssc.stop()
+        val input = Seq(1, 2, 3, 4, 5)
+        // Use "batchCount" to make sure we check the result after all batches finish
+        val batchCounter = new BatchCounter(ssc)
+        val networkStream = ssc.socketTextStream(
+          "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
+        val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
+        val outputStream = new TestOutputStream(networkStream, outputBuffer)
+        outputStream.register()
+        ssc.start()
 
-    // Verify whether data received was as expected
-    logInfo("--------------------------------")
-    logInfo("output.size = " + outputBuffer.size)
-    logInfo("output")
-    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-    logInfo("expected output.size = " + expectedOutput.size)
-    logInfo("expected output")
-    expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-    logInfo("--------------------------------")
+        // Feed data to the server to send to the network receiver
+        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+        val expectedOutput = input.map(_.toString)
+        for (i <- 0 until input.size) {
+          testServer.send(input(i).toString + "\n")
+          Thread.sleep(500)
+          clock.advance(batchDuration.milliseconds)
+        }
+        // Make sure we finish all batches before "stop"
+        if (!batchCounter.waitUntilBatchesCompleted(input.size, 30000)) {
+          fail("Timeout: cannot finish all batches in 30 seconds")
+        }
 
-    // Verify whether all the elements received are as expected
-    // (whether the elements were received one in each interval is not verified)
-    assert(output.size === expectedOutput.size)
-    for (i <- 0 until output.size) {
-      assert(output(i) === expectedOutput(i))
+        // Verify all "InputInfo"s have been reported
+        assert(ssc.progressListener.numTotalReceivedRecords === input.size)
+        assert(ssc.progressListener.numTotalProcessedRecords === input.size)
+
+        logInfo("Stopping server")
+        testServer.stop()
+        logInfo("Stopping context")
+        ssc.stop()
+
+        // Verify whether data received was as expected
+        logInfo("--------------------------------")
+        logInfo("output.size = " + outputBuffer.size)
+        logInfo("output")
+        outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+        logInfo("expected output.size = " + expectedOutput.size)
+        logInfo("expected output")
+        expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+        logInfo("--------------------------------")
+
+        // Verify whether all the elements received are as expected
+        // (whether the elements were received one in each interval is not verified)
+        val output: ArrayBuffer[String] = outputBuffer.flatMap(x => x)
+        assert(output.size === expectedOutput.size)
+        for (i <- 0 until output.size) {
+          assert(output(i) === expectedOutput(i))
+        }
+      }
     }
   }
 
@@ -164,7 +179,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val countStream = networkStream.count
     val outputBuffer = new ArrayBuffer[Seq[Long]] with SynchronizedBuffer[Seq[Long]]
     val outputStream = new TestOutputStream(countStream, outputBuffer)
-    def output = outputBuffer.flatMap(x => x)
+    def output: ArrayBuffer[Long] = outputBuffer.flatMap(x => x)
     outputStream.register()
     ssc.start()
 
@@ -196,7 +211,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val queueStream = ssc.queueStream(queue, oneAtATime = true)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     val outputStream = new TestOutputStream(queueStream, outputBuffer)
-    def output = outputBuffer.filter(_.size > 0)
+    def output: ArrayBuffer[Seq[String]] = outputBuffer.filter(_.size > 0)
     outputStream.register()
     ssc.start()
 
@@ -204,7 +219,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq("1", "2", "3", "4", "5")
     val expectedOutput = input.map(Seq(_))
-    //Thread.sleep(1000)
+
     val inputIterator = input.toIterator
     for (i <- 0 until input.size) {
       // Enqueue more than 1 item per tick but they should dequeue one at a time
@@ -239,7 +254,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val queueStream = ssc.queueStream(queue, oneAtATime = false)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     val outputStream = new TestOutputStream(queueStream, outputBuffer)
-    def output = outputBuffer.filter(_.size > 0)
+    def output: ArrayBuffer[Seq[String]] = outputBuffer.filter(_.size > 0)
     outputStream.register()
     ssc.start()
 
@@ -276,6 +291,30 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     for (i <- 0 until output.size) {
       assert(output(i) === expectedOutput(i))
     }
+  }
+
+  test("test track the number of input stream") {
+    val ssc = new StreamingContext(conf, batchDuration)
+
+    class TestInputDStream extends InputDStream[String](ssc) {
+      def start() { }
+      def stop() { }
+      def compute(validTime: Time): Option[RDD[String]] = None
+    }
+
+    class TestReceiverInputDStream extends ReceiverInputDStream[String](ssc) {
+      def getReceiver: Receiver[String] = null
+    }
+
+    // Register input streams
+    val receiverInputStreams = Array(new TestReceiverInputDStream, new TestReceiverInputDStream)
+    val inputStreams = Array(new TestInputDStream, new TestInputDStream, new TestInputDStream)
+
+    assert(ssc.graph.getInputStreams().length == receiverInputStreams.length + inputStreams.length)
+    assert(ssc.graph.getReceiverInputStreams().length == receiverInputStreams.length)
+    assert(ssc.graph.getReceiverInputStreams() === receiverInputStreams)
+    assert(ssc.graph.getInputStreams().map(_.id) === Array.tabulate(5)(i => i))
+    assert(receiverInputStreams.map(_.id) === Array(0, 1))
   }
 
   def testFileStream(newFilesOnly: Boolean) {
@@ -343,30 +382,45 @@ class TestServer(portToBind: Int = 0) extends Logging {
 
   val serverSocket = new ServerSocket(portToBind)
 
+  private val startLatch = new CountDownLatch(1)
+
   val servingThread = new Thread() {
     override def run() {
       try {
         while(true) {
           logInfo("Accepting connections on port " + port)
           val clientSocket = serverSocket.accept()
-          logInfo("New connection")
-          try {
-            clientSocket.setTcpNoDelay(true)
-            val outputStream = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream))
+          if (startLatch.getCount == 1) {
+            // The first connection is a test connection to implement "waitForStart", so skip it
+            // and send a signal
+            if (!clientSocket.isClosed) {
+              clientSocket.close()
+            }
+            startLatch.countDown()
+          } else {
+            // Real connections
+            logInfo("New connection")
+            try {
+              clientSocket.setTcpNoDelay(true)
+              val outputStream = new BufferedWriter(
+                new OutputStreamWriter(clientSocket.getOutputStream))
 
-            while(clientSocket.isConnected) {
-              val msg = queue.poll(100, TimeUnit.MILLISECONDS)
-              if (msg != null) {
-                outputStream.write(msg)
-                outputStream.flush()
-                logInfo("Message '" + msg + "' sent")
+              while (clientSocket.isConnected) {
+                val msg = queue.poll(100, TimeUnit.MILLISECONDS)
+                if (msg != null) {
+                  outputStream.write(msg)
+                  outputStream.flush()
+                  logInfo("Message '" + msg + "' sent")
+                }
+              }
+            } catch {
+              case e: SocketException => logError("TestServer error", e)
+            } finally {
+              logInfo("Connection closed")
+              if (!clientSocket.isClosed) {
+                clientSocket.close()
               }
             }
-          } catch {
-            case e: SocketException => logError("TestServer error", e)
-          } finally {
-            logInfo("Connection closed")
-            if (!clientSocket.isClosed) clientSocket.close()
           }
         }
       } catch {
@@ -378,13 +432,35 @@ class TestServer(portToBind: Int = 0) extends Logging {
     }
   }
 
-  def start() { servingThread.start() }
+  def start(): Unit = {
+    servingThread.start()
+    if (!waitForStart(10000)) {
+      stop()
+      throw new AssertionError("Timeout: TestServer cannot start in 10 seconds")
+    }
+  }
+
+  /**
+   * Wait until the server starts. Return true if the server starts in "millis" milliseconds.
+   * Otherwise, return false to indicate it's timeout.
+   */
+  private def waitForStart(millis: Long): Boolean = {
+    // We will create a test connection to the server so that we can make sure it has started.
+    val socket = new Socket("localhost", port)
+    try {
+      startLatch.await(millis, TimeUnit.MILLISECONDS)
+    } finally {
+      if (!socket.isClosed) {
+        socket.close()
+      }
+    }
+  }
 
   def send(msg: String) { queue.put(msg) }
 
   def stop() { servingThread.interrupt() }
 
-  def port = serverSocket.getLocalPort
+  def port: Int = serverSocket.getLocalPort
 }
 
 /** This is a receiver to test multiple threads inserting data using block generator */

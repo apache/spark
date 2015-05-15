@@ -32,6 +32,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var userClass: String = null
   var pyFiles: String = null
   var primaryPyFile: String = null
+  var primaryRFile: String = null
   var userArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
   var executorMemory = 1024 // MB
   var executorCores = 1
@@ -41,6 +42,8 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var amCores: Int = 1
   var appName: String = "Spark"
   var priority = 0
+  var principal: String = null
+  var keytab: String = null
   def isClusterMode: Boolean = userClass != null
 
   private var driverMemory: Int = 512 // MB
@@ -102,9 +105,13 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
    * This is intended to be called only after the provided arguments have been parsed.
    */
   private def validateArgs(): Unit = {
-    if (numExecutors <= 0) {
+    if (numExecutors < 0 || (!isDynamicAllocationEnabled && numExecutors == 0)) {
       throw new IllegalArgumentException(
-        "You must specify at least 1 executor!\n" + getUsageMessage())
+        s"""
+           |Number of executors was $numExecutors, but must be at least 1
+           |(or 0 if dynamic executor allocation is enabled).
+           |${getUsageMessage()}
+         """.stripMargin)
     }
     if (executorCores < sparkConf.getInt("spark.task.cpus", 1)) {
       throw new SparkException("Executor cores must not be less than " +
@@ -148,6 +155,10 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
         case ("--primary-py-file") :: value :: tail =>
           primaryPyFile = value
+          args = tail
+
+        case ("--primary-r-file") :: value :: tail =>
+          primaryRFile = value
           args = tail
 
         case ("--args" | "--arg") :: value :: tail =>
@@ -222,11 +233,24 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           archives = value
           args = tail
 
+        case ("--principal") :: value :: tail =>
+          principal = value
+          args = tail
+
+        case ("--keytab") :: value :: tail =>
+          keytab = value
+          args = tail
+
         case Nil =>
 
         case _ =>
           throw new IllegalArgumentException(getUsageMessage(args))
       }
+    }
+
+    if (primaryPyFile != null && primaryRFile != null) {
+      throw new IllegalArgumentException("Cannot have primary-py-file and primary-r-file" +
+        " at the same time")
     }
   }
 
@@ -240,6 +264,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       |                           mode)
       |  --class CLASS_NAME       Name of your application's main class (required)
       |  --primary-py-file        A main Python file
+      |  --primary-r-file         A main R file
       |  --arg ARG                Argument to be passed to your application's main class.
       |                           Multiple invocations are possible, each will be passed in order.
       |  --num-executors NUM      Number of executors to start (Default: 2)

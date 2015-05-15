@@ -27,7 +27,7 @@ import org.apache.spark.util.random.XORShiftRandom
 
 class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
 
-  override def maxWaitTimeMillis = 30000
+  override def maxWaitTimeMillis: Int = 30000
 
   test("accuracy for single center and equivalence to grand average") {
     // set parameters
@@ -59,7 +59,7 @@ class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
     // estimated center from streaming should exactly match the arithmetic mean of all data points
     // because the decay factor is set to 1.0
     val grandMean =
-      input.flatten.map(x => x.toBreeze).reduce(_+_) / (numBatches * numPoints).toDouble
+      input.flatten.map(x => x.toBreeze).reduce(_ + _) / (numBatches * numPoints).toDouble
     assert(model.latestModel().clusterCenters(0) ~== Vectors.dense(grandMean.toArray) absTol 1E-5)
   }
 

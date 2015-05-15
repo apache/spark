@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
+import java.net.URL
 import java.sql.{Date, DriverManager, Statement}
 
 import scala.collection.mutable.ArrayBuffer
@@ -41,7 +42,7 @@ import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.util.Utils
 
 object TestData {
-  def getTestDataFilePath(name: String) = {
+  def getTestDataFilePath(name: String): URL = {
     Thread.currentThread().getContextClassLoader.getResource(s"data/files/$name")
   }
 
@@ -50,7 +51,7 @@ object TestData {
 }
 
 class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
-  override def mode = ServerMode.binary
+  override def mode: ServerMode.Value = ServerMode.binary
 
   private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
     // Transport creation logics below mimics HiveConnection.createBinaryTransport
@@ -337,7 +338,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 }
 
 class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
-  override def mode = ServerMode.http
+  override def mode: ServerMode.Value = ServerMode.http
 
   test("JDBC query execution") {
     withJdbcStatement { statement =>
@@ -408,24 +409,24 @@ abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll wit
   private val CLASS_NAME = HiveThriftServer2.getClass.getCanonicalName.stripSuffix("$")
   private val LOG_FILE_MARK = s"starting $CLASS_NAME, logging to "
 
-  private val startScript = "../../sbin/start-thriftserver.sh".split("/").mkString(File.separator)
-  private val stopScript = "../../sbin/stop-thriftserver.sh".split("/").mkString(File.separator)
+  protected val startScript = "../../sbin/start-thriftserver.sh".split("/").mkString(File.separator)
+  protected val stopScript = "../../sbin/stop-thriftserver.sh".split("/").mkString(File.separator)
 
   private var listeningPort: Int = _
   protected def serverPort: Int = listeningPort
 
   protected def user = System.getProperty("user.name")
 
-  private var warehousePath: File = _
-  private var metastorePath: File = _
-  private def metastoreJdbcUri = s"jdbc:derby:;databaseName=$metastorePath;create=true"
+  protected var warehousePath: File = _
+  protected var metastorePath: File = _
+  protected def metastoreJdbcUri = s"jdbc:derby:;databaseName=$metastorePath;create=true"
 
   private val pidDir: File = Utils.createTempDir("thriftserver-pid")
   private var logPath: File = _
   private var logTailingProcess: Process = _
   private var diagnosisBuffer: ArrayBuffer[String] = ArrayBuffer.empty[String]
 
-  private def serverStartCommand(port: Int) = {
+  protected def serverStartCommand(port: Int) = {
     val portConf = if (mode == ServerMode.binary) {
       ConfVars.HIVE_SERVER2_THRIFT_PORT
     } else {

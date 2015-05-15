@@ -21,7 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.parquet.ParquetRelation2._
+import org.apache.spark.sql.sources.PartitioningUtils._
+import org.apache.spark.sql.sources.{Partition, PartitionSpec}
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, Row, SQLContext}
@@ -38,18 +39,18 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
   import sqlContext._
   import sqlContext.implicits._
 
-  val defaultPartitionName = "__NULL__"
+  val defaultPartitionName = "__HIVE_DEFAULT_PARTITION__"
 
   test("column type inference") {
     def check(raw: String, literal: Literal): Unit = {
       assert(inferPartitionColumnValue(raw, defaultPartitionName) === literal)
     }
 
-    check("10", Literal(10, IntegerType))
-    check("1000000000000000", Literal(1000000000000000L, LongType))
-    check("1.5", Literal(1.5, FloatType))
-    check("hello", Literal("hello", StringType))
-    check(defaultPartitionName, Literal(null, NullType))
+    check("10", Literal.create(10, IntegerType))
+    check("1000000000000000", Literal.create(1000000000000000L, LongType))
+    check("1.5", Literal.create(1.5, FloatType))
+    check("hello", Literal.create("hello", StringType))
+    check(defaultPartitionName, Literal.create(null, NullType))
   }
 
   test("parse partition") {
@@ -75,22 +76,22 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       "file://path/a=10",
       PartitionValues(
         ArrayBuffer("a"),
-        ArrayBuffer(Literal(10, IntegerType))))
+        ArrayBuffer(Literal.create(10, IntegerType))))
 
     check(
       "file://path/a=10/b=hello/c=1.5",
       PartitionValues(
         ArrayBuffer("a", "b", "c"),
         ArrayBuffer(
-          Literal(10, IntegerType),
-          Literal("hello", StringType),
-          Literal(1.5, FloatType))))
+          Literal.create(10, IntegerType),
+          Literal.create("hello", StringType),
+          Literal.create(1.5, FloatType))))
 
     check(
       "file://path/a=10/b_hello/c=1.5",
       PartitionValues(
         ArrayBuffer("c"),
-        ArrayBuffer(Literal(1.5, FloatType))))
+        ArrayBuffer(Literal.create(1.5, FloatType))))
 
     checkThrows[AssertionError]("file://path/=10", "Empty partition column name")
     checkThrows[AssertionError]("file://path/a=", "Empty partition column value")
@@ -251,9 +252,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
 
       val parquetRelation = load(
         "org.apache.spark.sql.parquet",
-        Map(
-          "path" -> base.getCanonicalPath,
-          ParquetRelation2.DEFAULT_PARTITION_NAME -> defaultPartitionName))
+        Map("path" -> base.getCanonicalPath))
 
       parquetRelation.registerTempTable("t")
 
@@ -296,9 +295,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
 
       val parquetRelation = load(
         "org.apache.spark.sql.parquet",
-        Map(
-          "path" -> base.getCanonicalPath,
-          ParquetRelation2.DEFAULT_PARTITION_NAME -> defaultPartitionName))
+        Map("path" -> base.getCanonicalPath))
 
       parquetRelation.registerTempTable("t")
 

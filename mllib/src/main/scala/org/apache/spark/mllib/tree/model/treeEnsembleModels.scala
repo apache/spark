@@ -38,6 +38,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
+
 /**
  * :: Experimental ::
  * Represents a random forest model.
@@ -47,7 +48,7 @@ import org.apache.spark.util.Utils
  */
 @Experimental
 class RandomForestModel(override val algo: Algo, override val trees: Array[DecisionTreeModel])
-  extends TreeEnsembleModel(algo, trees, Array.fill(trees.size)(1.0),
+  extends TreeEnsembleModel(algo, trees, Array.fill(trees.length)(1.0),
     combiningStrategy = if (algo == Classification) Vote else Average)
   with Saveable {
 
@@ -58,10 +59,12 @@ class RandomForestModel(override val algo: Algo, override val trees: Array[Decis
       RandomForestModel.SaveLoadV1_0.thisClassName)
   }
 
-  override protected def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
+  override protected def formatVersion: String = RandomForestModel.formatVersion
 }
 
 object RandomForestModel extends Loader[RandomForestModel] {
+
+  private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
   override def load(sc: SparkContext, path: String): RandomForestModel = {
     val (loadedClassName, version, jsonMetadata) = Loader.loadMetadata(sc, path)
@@ -102,14 +105,12 @@ class GradientBoostedTreesModel(
   extends TreeEnsembleModel(algo, trees, treeWeights, combiningStrategy = Sum)
   with Saveable {
 
-  require(trees.size == treeWeights.size)
+  require(trees.length == treeWeights.length)
 
   override def save(sc: SparkContext, path: String): Unit = {
     TreeEnsembleModel.SaveLoadV1_0.save(sc, path, this,
       GradientBoostedTreesModel.SaveLoadV1_0.thisClassName)
   }
-
-  override protected def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
   /**
    * Method to compute error or loss for every iteration of gradient boosting.
@@ -130,41 +131,87 @@ class GradientBoostedTreesModel(
 
     val numIterations = trees.length
     val evaluationArray = Array.fill(numIterations)(0.0)
+    val localTreeWeights = treeWeights
 
-    var predictionAndError: RDD[(Double, Double)] = remappedData.map { i =>
-      val pred = treeWeights(0) * trees(0).predict(i.features)
-      val error = loss.computeError(pred, i.label)
-      (pred, error)
-    }
+    var predictionAndError = GradientBoostedTreesModel.computeInitialPredictionAndError(
+      remappedData, localTreeWeights(0), trees(0), loss)
+
     evaluationArray(0) = predictionAndError.values.mean()
 
-    // Avoid the model being copied across numIterations.
     val broadcastTrees = sc.broadcast(trees)
-    val broadcastWeights = sc.broadcast(treeWeights)
-
-    (1 until numIterations).map { nTree =>
+    (1 until numIterations).foreach { nTree =>
       predictionAndError = remappedData.zip(predictionAndError).mapPartitions { iter =>
         val currentTree = broadcastTrees.value(nTree)
-        val currentTreeWeight = broadcastWeights.value(nTree)
-        iter.map {
-          case (point, (pred, error)) => {
-            val newPred = pred + currentTree.predict(point.features) * currentTreeWeight
-            val newError = loss.computeError(newPred, point.label)
-            (newPred, newError)
-          }
+        val currentTreeWeight = localTreeWeights(nTree)
+        iter.map { case (point, (pred, error)) =>
+          val newPred = pred + currentTree.predict(point.features) * currentTreeWeight
+          val newError = loss.computeError(newPred, point.label)
+          (newPred, newError)
         }
       }
       evaluationArray(nTree) = predictionAndError.values.mean()
     }
 
     broadcastTrees.unpersist()
-    broadcastWeights.unpersist()
     evaluationArray
   }
 
+  override protected def formatVersion: String = GradientBoostedTreesModel.formatVersion
 }
 
 object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
+
+  /**
+   * Compute the initial predictions and errors for a dataset for the first
+   * iteration of gradient boosting.
+   * @param data: training data.
+   * @param initTreeWeight: learning rate assigned to the first tree.
+   * @param initTree: first DecisionTreeModel.
+   * @param loss: evaluation metric.
+   * @return a RDD with each element being a zip of the prediction and error
+   *         corresponding to every sample.
+   */
+  def computeInitialPredictionAndError(
+      data: RDD[LabeledPoint],
+      initTreeWeight: Double,
+      initTree: DecisionTreeModel,
+      loss: Loss): RDD[(Double, Double)] = {
+    data.map { lp =>
+      val pred = initTreeWeight * initTree.predict(lp.features)
+      val error = loss.computeError(pred, lp.label)
+      (pred, error)
+    }
+  }
+
+  /**
+   * Update a zipped predictionError RDD
+   * (as obtained with computeInitialPredictionAndError)
+   * @param data: training data.
+   * @param predictionAndError: predictionError RDD
+   * @param treeWeight: Learning rate.
+   * @param tree: Tree using which the prediction and error should be updated.
+   * @param loss: evaluation metric.
+   * @return a RDD with each element being a zip of the prediction and error
+   *         corresponding to each sample.
+   */
+  def updatePredictionError(
+    data: RDD[LabeledPoint],
+    predictionAndError: RDD[(Double, Double)],
+    treeWeight: Double,
+    tree: DecisionTreeModel,
+    loss: Loss): RDD[(Double, Double)] = {
+
+    val newPredError = data.zip(predictionAndError).mapPartitions { iter =>
+      iter.map { case (lp, (pred, error)) =>
+        val newPred = pred + tree.predict(lp.features) * treeWeight
+        val newError = loss.computeError(newPred, lp.label)
+        (newPred, newError)
+      }
+    }
+    newPredError
+  }
+
+  private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
   override def load(sc: SparkContext, path: String): GradientBoostedTreesModel = {
     val (loadedClassName, version, jsonMetadata) = Loader.loadMetadata(sc, path)
@@ -295,12 +342,12 @@ private[tree] sealed class TreeEnsembleModel(
   }
 
   /**
-   * Get number of trees in forest.
+   * Get number of trees in ensemble.
    */
-  def numTrees: Int = trees.size
+  def numTrees: Int = trees.length
 
   /**
-   * Get total number of nodes, summed over all trees in the forest.
+   * Get total number of nodes, summed over all trees in the ensemble.
    */
   def totalNumNodes: Int = trees.map(_.numNodes).sum
 }

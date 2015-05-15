@@ -148,6 +148,15 @@ Parameters belong to specific instances of `Estimator`s and `Transformer`s.
 For example, if we have two `LogisticRegression` instances `lr1` and `lr2`, then we can build a `ParamMap` with both `maxIter` parameters specified: `ParamMap(lr1.maxIter -> 10, lr2.maxIter -> 20)`.
 This is useful if there are two algorithms with the `maxIter` parameter in a `Pipeline`.
 
+# Algorithm Guides
+
+There are now several algorithms in the Pipelines API which are not in the lower-level MLlib API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines.
+
+**Pipelines API Algorithm Guides**
+
+* [Feature Extraction, Transformation, and Selection](ml-features.html)
+
+
 # Code Examples
 
 This section gives code examples illustrating the functionality discussed above.
@@ -493,7 +502,7 @@ from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.sql import Row, SQLContext
 
 sc = SparkContext(appName="SimpleTextClassificationPipeline")
-sqlCtx = SQLContext(sc)
+sqlContext = SQLContext(sc)
 
 # Prepare training documents, which are labeled.
 LabeledDocument = Row("id", "text", "label")

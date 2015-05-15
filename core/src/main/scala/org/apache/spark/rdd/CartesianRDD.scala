@@ -53,11 +53,11 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
   extends RDD[Pair[T, U]](sc, Nil)
   with Serializable {
 
-  val numPartitionsInRdd2 = rdd2.partitions.size
+  val numPartitionsInRdd2 = rdd2.partitions.length
 
   override def getPartitions: Array[Partition] = {
     // create the cross product split
-    val array = new Array[Partition](rdd1.partitions.size * rdd2.partitions.size)
+    val array = new Array[Partition](rdd1.partitions.length * rdd2.partitions.length)
     for (s1 <- rdd1.partitions; s2 <- rdd2.partitions) {
       val idx = s1.index * numPartitionsInRdd2 + s2.index
       array(idx) = new CartesianPartition(idx, rdd1, rdd2, s1.index, s2.index)

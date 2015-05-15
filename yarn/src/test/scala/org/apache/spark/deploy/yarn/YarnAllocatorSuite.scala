@@ -79,7 +79,7 @@ class YarnAllocatorSuite extends FunSuite with Matchers with BeforeAndAfterEach 
   }
 
   class MockSplitInfo(host: String) extends SplitInfo(null, host, null, 1, null) {
-    override def equals(other: Any) = false
+    override def equals(other: Any): Boolean = false
   }
 
   def createAllocator(maxExecutors: Int = 5): YarnAllocator = {
@@ -118,7 +118,9 @@ class YarnAllocatorSuite extends FunSuite with Matchers with BeforeAndAfterEach 
     handler.getNumExecutorsRunning should be (1)
     handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
     handler.allocatedHostToContainersMap.get("host1").get should contain (container.getId)
-    rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size should be (0)
+
+    val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
+    size should be (0)
   }
 
   test("some containers allocated") {

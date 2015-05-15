@@ -23,13 +23,16 @@ import org.apache.spark.util.Utils
 
 import scala.beans.{BeanInfo, BeanProperty}
 
+import com.clearspring.analytics.stream.cardinality.HyperLogLog
+
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.expressions.{OpenHashSetUDT, HyperLogLogUDT}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{sparkContext, sql}
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
-
+import org.apache.spark.util.collection.OpenHashSet
 
 @SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])
 private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
@@ -63,7 +66,7 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
     }
   }
 
-  override def userClass = classOf[MyDenseVector]
+  override def userClass: Class[MyDenseVector] = classOf[MyDenseVector]
 
   private[spark] override def asNullable: MyDenseVectorUDT = this
 }
@@ -118,5 +121,24 @@ class UserDefinedTypeSuite extends QueryTest {
     df.take(1)(0).getAs[MyDenseVector](1)
     df.limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[MyDenseVector](0)
     df.orderBy('int).limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[MyDenseVector](0)
+  }
+
+  test("HyperLogLogUDT") {
+    val hyperLogLogUDT = HyperLogLogUDT
+    val hyperLogLog = new HyperLogLog(0.4)
+    (1 to 10).foreach(i => hyperLogLog.offer(Row(i)))
+
+    val actual = hyperLogLogUDT.deserialize(hyperLogLogUDT.serialize(hyperLogLog))
+    assert(actual.cardinality() === hyperLogLog.cardinality())
+    assert(java.util.Arrays.equals(actual.getBytes, hyperLogLog.getBytes))
+  }
+
+  test("OpenHashSetUDT") {
+    val openHashSetUDT = new OpenHashSetUDT(IntegerType)
+    val set = new OpenHashSet[Int]
+    (1 to 10).foreach(i => set.add(i))
+
+    val actual = openHashSetUDT.deserialize(openHashSetUDT.serialize(set))
+    assert(actual.iterator.toSet === set.iterator.toSet)
   }
 }

@@ -44,7 +44,7 @@ package object analysis {
   }
 
   /** Catches any AnalysisExceptions thrown by `f` and attaches `t`'s position if any. */
-  def withPosition[A](t: TreeNode[_])(f: => A) = {
+  def withPosition[A](t: TreeNode[_])(f: => A): A = {
     try f catch {
       case a: AnalysisException =>
         throw a.withPosition(t.origin.line, t.origin.startPosition)

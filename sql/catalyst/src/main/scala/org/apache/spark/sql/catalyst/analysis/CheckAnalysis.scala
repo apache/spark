@@ -25,7 +25,8 @@ import org.apache.spark.sql.types._
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
-class CheckAnalysis {
+trait CheckAnalysis {
+  self: Analyzer =>
 
   /**
    * Override to provide additional checks for correct analysis.
@@ -33,17 +34,31 @@ class CheckAnalysis {
    */
   val extendedCheckRules: Seq[LogicalPlan => Unit] = Nil
 
-  def failAnalysis(msg: String): Nothing = {
+  protected def failAnalysis(msg: String): Nothing = {
     throw new AnalysisException(msg)
   }
 
-  def apply(plan: LogicalPlan): Unit = {
+  def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
+    exprs.flatMap(_.collect {
+      case e: Generator => true
+    }).length >= 1
+  }
+
+  def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
+            if (operator.childrenResolved) {
+              a match {
+                case UnresolvedAttribute(nameParts) =>
+                  // Throw errors for specific problems with get field.
+                  operator.resolveChildren(nameParts, resolver, throwErrors = true)
+              }
+            }
+
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
 
@@ -54,7 +69,12 @@ class CheckAnalysis {
           case b: BinaryExpression if !b.resolved =>
             failAnalysis(
               s"invalid expression ${b.prettyString} " +
-                s"between ${b.left.simpleString} and ${b.right.simpleString}")
+              s"between ${b.left.dataType.simpleString} and ${b.right.dataType.simpleString}")
+
+          case w @ WindowExpression(windowFunction, windowSpec) if windowSpec.validate.nonEmpty =>
+            // The window spec is not valid.
+            val reason = windowSpec.validate.get
+            failAnalysis(s"Window specification $windowSpec is not valid because $reason")
         }
 
         operator match {
@@ -100,6 +120,12 @@ class CheckAnalysis {
           case o if !o.resolved =>
             failAnalysis(
               s"unresolved operator ${operator.simpleString}")
+
+          case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
+            failAnalysis(
+              s"""Only a single table generating function is allowed in a SELECT clause, found:
+                 | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
+
 
           case _ => // Analysis successful!
         }

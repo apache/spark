@@ -22,6 +22,7 @@ import java.util.Random
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.scalatest.FunSuite
@@ -68,39 +69,42 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     }
   }
 
-  test("normal equation construction with explict feedback") {
+  test("normal equation construction") {
     val k = 2
     val ne0 = new NormalEquation(k)
-      .add(Array(1.0f, 2.0f), 3.0f)
-      .add(Array(4.0f, 5.0f), 6.0f)
+      .add(Array(1.0f, 2.0f), 3.0)
+      .add(Array(4.0f, 5.0f), 6.0, 2.0) // weighted
     assert(ne0.k === k)
     assert(ne0.triK === k * (k + 1) / 2)
-    assert(ne0.n === 2)
     // NumPy code that computes the expected values:
     // A = np.matrix("1 2; 4 5")
     // b = np.matrix("3; 6")
-    // ata = A.transpose() * A
-    // atb = A.transpose() * b
-    assert(Vectors.dense(ne0.ata) ~== Vectors.dense(17.0, 22.0, 29.0) relTol 1e-8)
-    assert(Vectors.dense(ne0.atb) ~== Vectors.dense(27.0, 36.0) relTol 1e-8)
+    // C = np.matrix(np.diag([1, 2]))
+    // ata = A.transpose() * C * A
+    // atb = A.transpose() * C * b
+    assert(Vectors.dense(ne0.ata) ~== Vectors.dense(33.0, 42.0, 54.0) relTol 1e-8)
+    assert(Vectors.dense(ne0.atb) ~== Vectors.dense(51.0, 66.0) relTol 1e-8)
 
     val ne1 = new NormalEquation(2)
-      .add(Array(7.0f, 8.0f), 9.0f)
+      .add(Array(7.0f, 8.0f), 9.0)
     ne0.merge(ne1)
-    assert(ne0.n === 3)
     // NumPy code that computes the expected values:
     // A = np.matrix("1 2; 4 5; 7 8")
     // b = np.matrix("3; 6; 9")
-    // ata = A.transpose() * A
-    // atb = A.transpose() * b
-    assert(Vectors.dense(ne0.ata) ~== Vectors.dense(66.0, 78.0, 93.0) relTol 1e-8)
-    assert(Vectors.dense(ne0.atb) ~== Vectors.dense(90.0, 108.0) relTol 1e-8)
+    // C = np.matrix(np.diag([1, 2, 1]))
+    // ata = A.transpose() * C * A
+    // atb = A.transpose() * C * b
+    assert(Vectors.dense(ne0.ata) ~== Vectors.dense(82.0, 98.0, 118.0) relTol 1e-8)
+    assert(Vectors.dense(ne0.atb) ~== Vectors.dense(114.0, 138.0) relTol 1e-8)
 
     intercept[IllegalArgumentException] {
-      ne0.add(Array(1.0f), 2.0f)
+      ne0.add(Array(1.0f), 2.0)
     }
     intercept[IllegalArgumentException] {
-      ne0.add(Array(1.0f, 2.0f, 3.0f), 4.0f)
+      ne0.add(Array(1.0f, 2.0f, 3.0f), 4.0)
+    }
+    intercept[IllegalArgumentException] {
+      ne0.add(Array(1.0f, 2.0f), 0.0, -1.0)
     }
     intercept[IllegalArgumentException] {
       val ne2 = new NormalEquation(3)
@@ -108,41 +112,16 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     }
 
     ne0.reset()
-    assert(ne0.n === 0)
     assert(ne0.ata.forall(_ == 0.0))
     assert(ne0.atb.forall(_ == 0.0))
-  }
-
-  test("normal equation construction with implicit feedback") {
-    val k = 2
-    val alpha = 0.5
-    val ne0 = new NormalEquation(k)
-      .addImplicit(Array(-5.0f, -4.0f), -3.0f, alpha)
-      .addImplicit(Array(-2.0f, -1.0f), 0.0f, alpha)
-      .addImplicit(Array(1.0f, 2.0f), 3.0f, alpha)
-    assert(ne0.k === k)
-    assert(ne0.triK === k * (k + 1) / 2)
-    assert(ne0.n === 0) // addImplicit doesn't increase the count.
-    // NumPy code that computes the expected values:
-    // alpha = 0.5
-    // A = np.matrix("-5 -4; -2 -1; 1 2")
-    // b = np.matrix("-3; 0; 3")
-    // b1 = b > 0
-    // c = 1.0 + alpha * np.abs(b)
-    // C = np.diag(c.A1)
-    // I = np.eye(3)
-    // ata = A.transpose() * (C - I) * A
-    // atb = A.transpose() * C * b1
-    assert(Vectors.dense(ne0.ata) ~== Vectors.dense(39.0, 33.0, 30.0) relTol 1e-8)
-    assert(Vectors.dense(ne0.atb) ~== Vectors.dense(2.5, 5.0) relTol 1e-8)
   }
 
   test("CholeskySolver") {
     val k = 2
     val ne0 = new NormalEquation(k)
-      .add(Array(1.0f, 2.0f), 4.0f)
-      .add(Array(1.0f, 3.0f), 9.0f)
-      .add(Array(1.0f, 4.0f), 16.0f)
+      .add(Array(1.0f, 2.0f), 4.0)
+      .add(Array(1.0f, 3.0f), 9.0)
+      .add(Array(1.0f, 4.0f), 16.0)
     val ne1 = new NormalEquation(k)
       .merge(ne0)
 
@@ -154,13 +133,12 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     // x0 = np.linalg.lstsq(A, b)[0]
     assert(Vectors.dense(x0) ~== Vectors.dense(-8.333333, 6.0) relTol 1e-6)
 
-    assert(ne0.n === 0)
     assert(ne0.ata.forall(_ == 0.0))
     assert(ne0.atb.forall(_ == 0.0))
 
-    val x1 = chol.solve(ne1, 0.5).map(_.toDouble)
+    val x1 = chol.solve(ne1, 1.5).map(_.toDouble)
     // NumPy code that computes the expected solution, where lambda is scaled by n:
-    // x0 = np.linalg.solve(A.transpose() * A + 0.5 * 3 * np.eye(2), A.transpose() * b)
+    // x0 = np.linalg.solve(A.transpose() * A + 1.5 * np.eye(2), A.transpose() * b)
     assert(Vectors.dense(x1) ~== Vectors.dense(-0.1155556, 3.28) relTol 1e-6)
   }
 

@@ -17,20 +17,22 @@
 
 package org.apache.spark.mllib.classification;
 
+import java.io.Serializable;
+import java.util.Arrays;
+import java.util.List;
+
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
 
-import java.io.Serializable;
-import java.util.Arrays;
-import java.util.List;
 
 public class JavaNaiveBayesSuite implements Serializable {
   private transient JavaSparkContext sc;
@@ -101,5 +103,12 @@ public class JavaNaiveBayesSuite implements Serializable {
     JavaRDD<Double> predictions = model.predict(vectors);
     // Should be able to get the first prediction.
     predictions.first();
+  }
+
+  @Test
+  public void testModelTypeSetters() {
+    NaiveBayes nb = new NaiveBayes()
+        .setModelType("Bernoulli")
+        .setModelType("Multinomial");
   }
 }

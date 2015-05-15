@@ -26,7 +26,6 @@ import org.apache.hadoop.mapred._
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.HadoopRDD
 
@@ -104,55 +103,8 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
   }
 
   def commit() {
-    val taCtxt = getTaskContext()
-    val cmtr = getOutputCommitter()
-
-    // Called after we have decided to commit
-    def performCommit(): Unit = {
-      try {
-        cmtr.commitTask(taCtxt)
-        logInfo (s"$taID: Committed")
-      } catch {
-        case e: IOException =>
-          logError("Error committing the output of task: " + taID.value, e)
-          cmtr.abortTask(taCtxt)
-          throw e
-      }
-    }
-
-    // First, check whether the task's output has already been committed by some other attempt
-    if (cmtr.needsTaskCommit(taCtxt)) {
-      // The task output needs to be committed, but we don't know whether some other task attempt
-      // might be racing to commit the same output partition. Therefore, coordinate with the driver
-      // in order to determine whether this attempt can commit (see SPARK-4879).
-      val shouldCoordinateWithDriver: Boolean = {
-        val sparkConf = SparkEnv.get.conf
-        // We only need to coordinate with the driver if there are multiple concurrent task
-        // attempts, which should only occur if speculation is enabled
-        val speculationEnabled = sparkConf.getBoolean("spark.speculation", false)
-        // This (undocumented) setting is an escape-hatch in case the commit code introduces bugs
-        sparkConf.getBoolean("spark.hadoop.outputCommitCoordination.enabled", speculationEnabled)
-      }
-      if (shouldCoordinateWithDriver) {
-        val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
-        val canCommit = outputCommitCoordinator.canCommit(jobID, splitID, attemptID)
-        if (canCommit) {
-          performCommit()
-        } else {
-          val msg = s"$taID: Not committed because the driver did not authorize commit"
-          logInfo(msg)
-          // We need to abort the task so that the driver can reschedule new attempts, if necessary
-          cmtr.abortTask(taCtxt)
-          throw new CommitDeniedException(msg, jobID, splitID, attemptID)
-        }
-      } else {
-        // Speculation is disabled or a user has chosen to manually bypass the commit coordination
-        performCommit()
-      }
-    } else {
-      // Some other attempt committed the output, so we do nothing and signal success
-      logInfo(s"No need to commit output of task because needsTaskCommit=false: ${taID.value}")
-    }
+    SparkHadoopMapRedUtil.commitTask(
+      getOutputCommitter(), getTaskContext(), jobID, splitID, attemptID)
   }
 
   def commitJob() {

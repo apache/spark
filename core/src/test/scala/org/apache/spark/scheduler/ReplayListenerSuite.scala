@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.{File, PrintWriter}
+import java.net.URI
 
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -49,7 +50,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     val fstream = fileSystem.create(logFilePath)
     val writer = new PrintWriter(fstream)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
-      125L, "Mickey")
+      125L, "Mickey", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
@@ -145,7 +146,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
    * log the events.
    */
   private class EventMonster(conf: SparkConf)
-    extends EventLoggingListener("test", "testdir", conf) {
+    extends EventLoggingListener("test", None, new URI("testdir"), conf) {
 
     override def start() { }
 

@@ -43,7 +43,7 @@ object LabelPropagation {
    */
   def run[VD, ED: ClassTag](graph: Graph[VD, ED], maxSteps: Int): Graph[VertexId, ED] = {
     val lpaGraph = graph.mapVertices { case (vid, _) => vid }
-    def sendMessage(e: EdgeTriplet[VertexId, ED]) = {
+    def sendMessage(e: EdgeTriplet[VertexId, ED]): Iterator[(VertexId, Map[VertexId, VertexId])] = {
       Iterator((e.srcId, Map(e.dstAttr -> 1L)), (e.dstId, Map(e.srcAttr -> 1L)))
     }
     def mergeMessage(count1: Map[VertexId, Long], count2: Map[VertexId, Long])
@@ -54,7 +54,7 @@ object LabelPropagation {
         i -> (count1Val + count2Val)
       }.toMap
     }
-    def vertexProgram(vid: VertexId, attr: Long, message: Map[VertexId, Long]) = {
+    def vertexProgram(vid: VertexId, attr: Long, message: Map[VertexId, Long]): VertexId = {
       if (message.isEmpty) attr else message.maxBy(_._2)._1
     }
     val initialMessage = Map[VertexId, Long]()

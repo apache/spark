@@ -62,7 +62,7 @@ class EdgeTriplet[VD, ED] extends Edge[ED] {
   def vertexAttr(vid: VertexId): VD =
     if (srcId == vid) srcAttr else { assert(dstId == vid); dstAttr }
 
-  override def toString = ((srcId, srcAttr), (dstId, dstAttr), attr).toString()
+  override def toString: String = ((srcId, srcAttr), (dstId, dstAttr), attr).toString()
 
   def toTuple: ((VertexId, VD), (VertexId, VD), ED) = ((srcId, srcAttr), (dstId, dstAttr), attr)
 }

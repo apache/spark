@@ -60,6 +60,8 @@ abstract class DStream[T: ClassTag] (
     @transient private[streaming] var ssc: StreamingContext
   ) extends Serializable with Logging {
 
+  validateAtInit()
+
   // =======================================================================
   // Methods that should be implemented by subclasses of DStream
   // =======================================================================
@@ -171,7 +173,22 @@ abstract class DStream[T: ClassTag] (
     dependencies.foreach(_.initialize(zeroTime))
   }
 
-  private[streaming] def validate() {
+  private def validateAtInit(): Unit = {
+    ssc.getState() match {
+      case StreamingContextState.INITIALIZED =>
+        // good to go
+      case StreamingContextState.ACTIVE =>
+        throw new SparkException(
+          "Adding new inputs, transformations, and output operations after " +
+            "starting a context is not supported")
+      case StreamingContextState.STOPPED =>
+        throw new SparkException(
+          "Adding new inputs, transformations, and output operations after " +
+            "stopping a context is not supported")
+    }
+  }
+
+  private[streaming] def validateAtStart() {
     assert(rememberDuration != null, "Remember duration is set to null")
 
     assert(
@@ -226,7 +243,7 @@ abstract class DStream[T: ClassTag] (
         math.ceil(rememberDuration.milliseconds / 1000.0).toInt + " seconds."
     )
 
-    dependencies.foreach(_.validate())
+    dependencies.foreach(_.validateAtStart())
 
     logInfo("Slide time = " + slideDuration)
     logInfo("Storage level = " + storageLevel)
@@ -553,7 +570,8 @@ abstract class DStream[T: ClassTag] (
     // because the DStream is reachable from the outer object here, and because 
     // DStreams can't be serialized with closures, we can't proactively check 
     // it for serializability and so we pass the optional false to SparkContext.clean
-    transform((r: RDD[T], t: Time) => context.sparkContext.clean(transformFunc(r), false))
+    val cleanedF = context.sparkContext.clean(transformFunc, false)
+    transform((r: RDD[T], t: Time) => cleanedF(r))
   }
 
   /**
@@ -626,7 +644,7 @@ abstract class DStream[T: ClassTag] (
         println("Time: " + time)
         println("-------------------------------------------")
         firstNum.take(num).foreach(println)
-        if (firstNum.size > num) println("...")
+        if (firstNum.length > num) println("...")
         println()
       }
     }
@@ -762,16 +780,22 @@ abstract class DStream[T: ClassTag] (
     if (!isInitialized) {
       throw new SparkException(this + " has not been initialized")
     }
-    if (!(fromTime - zeroTime).isMultipleOf(slideDuration)) {
+
+    val alignedToTime = if ((toTime - zeroTime).isMultipleOf(slideDuration)) {
+      toTime
+    } else {
+      logWarning("toTime (" + toTime + ") is not a multiple of slideDuration ("
+          + slideDuration + ")")
+        toTime.floor(slideDuration, zeroTime)
+    }
+
+    val alignedFromTime = if ((fromTime - zeroTime).isMultipleOf(slideDuration)) {
+      fromTime
+    } else {
       logWarning("fromTime (" + fromTime + ") is not a multiple of slideDuration ("
-        + slideDuration + ")")
+      + slideDuration + ")")
+      fromTime.floor(slideDuration, zeroTime)
     }
-    if (!(toTime - zeroTime).isMultipleOf(slideDuration)) {
-      logWarning("toTime (" + fromTime + ") is not a multiple of slideDuration ("
-        + slideDuration + ")")
-    }
-    val alignedToTime = toTime.floor(slideDuration)
-    val alignedFromTime = fromTime.floor(slideDuration)
 
     logInfo("Slicing from " + fromTime + " to " + toTime +
       " (aligned to " + alignedFromTime + " and " + alignedToTime + ")")
@@ -839,7 +863,7 @@ object DStream {
 
     /** Filtering function that excludes non-user classes for a streaming application */
     def streamingExclustionFunction(className: String): Boolean = {
-      def doesMatch(r: Regex) = r.findFirstIn(className).isDefined
+      def doesMatch(r: Regex): Boolean = r.findFirstIn(className).isDefined
       val isSparkClass = doesMatch(SPARK_CLASS_REGEX)
       val isSparkExampleClass = doesMatch(SPARK_EXAMPLES_CLASS_REGEX)
       val isSparkStreamingTestClass = doesMatch(SPARK_STREAMING_TESTCLASS_REGEX)

@@ -35,7 +35,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 
   override def toString: String = s"Coalesce(${children.mkString(",")})"
 
-  def dataType: DataType = if (resolved) {
+  override def dataType: DataType = if (resolved) {
     children.head.dataType
   } else {
     val childTypes = children.map(c => s"$c: ${c.dataType}").mkString(", ")
@@ -72,5 +72,28 @@ case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[E
 
   override def eval(input: Row): Any = {
     child.eval(input) != null
+  }
+}
+
+/**
+ * A predicate that is evaluated to be true if there are at least `n` non-null values.
+ */
+case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate {
+  override def nullable: Boolean = false
+  override def foldable: Boolean = false
+  override def toString: String = s"AtLeastNNulls(n, ${children.mkString(",")})"
+
+  private[this] val childrenArray = children.toArray
+
+  override def eval(input: Row): Boolean = {
+    var numNonNulls = 0
+    var i = 0
+    while (i < childrenArray.length && numNonNulls < n) {
+      if (childrenArray(i).eval(input) != null) {
+        numNonNulls += 1
+      }
+      i += 1
+    }
+    numNonNulls >= n
   }
 }

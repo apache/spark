@@ -23,6 +23,7 @@ import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.linalg.{DenseVector, Vector}
 import org.apache.spark.mllib.optimization._
+import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{DataValidators, Saveable, Loader}
 import org.apache.spark.rdd.RDD
@@ -46,7 +47,7 @@ class LogisticRegressionModel (
     val numFeatures: Int,
     val numClasses: Int)
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable
-  with Saveable {
+  with Saveable with PMMLExportable {
 
   if (numClasses == 2) {
     require(weights.size == numFeatures,
@@ -62,6 +63,15 @@ class LogisticRegressionModel (
       s" but was given weights of length ${weights.size}")
   }
 
+  private val dataWithBiasSize: Int = weights.size / (numClasses - 1)
+
+  private val weightsArray: Array[Double] = weights match {
+    case dv: DenseVector => dv.values
+    case _ =>
+      throw new IllegalArgumentException(
+        s"weights only supports dense vector but got type ${weights.getClass}.")
+  }
+
   /**
    * Constructs a [[LogisticRegressionModel]] with weights and intercept for binary classification.
    */
@@ -74,6 +84,7 @@ class LogisticRegressionModel (
    * Sets the threshold that separates positive predictions from negative predictions
    * in Binary Logistic Regression. An example with prediction score greater than or equal to
    * this threshold is identified as an positive, and negative otherwise. The default value is 0.5.
+   * It is only used for binary classification.
    */
   @Experimental
   def setThreshold(threshold: Double): this.type = {
@@ -84,6 +95,7 @@ class LogisticRegressionModel (
   /**
    * :: Experimental ::
    * Returns the threshold (if any) used for converting raw prediction scores into 0/1 predictions.
+   * It is only used for binary classification.
    */
   @Experimental
   def getThreshold: Option[Double] = threshold
@@ -91,6 +103,7 @@ class LogisticRegressionModel (
   /**
    * :: Experimental ::
    * Clears the threshold so that `predict` will output raw prediction scores.
+   * It is only used for binary classification.
    */
   @Experimental
   def clearThreshold(): this.type = {
@@ -106,7 +119,6 @@ class LogisticRegressionModel (
 
     // If dataMatrix and weightMatrix have the same dimension, it's binary logistic regression.
     if (numClasses == 2) {
-      require(numFeatures == weightMatrix.size)
       val margin = dot(weightMatrix, dataMatrix) + intercept
       val score = 1.0 / (1.0 + math.exp(-margin))
       threshold match {
@@ -114,30 +126,9 @@ class LogisticRegressionModel (
         case None => score
       }
     } else {
-      val dataWithBiasSize = weightMatrix.size / (numClasses - 1)
-
-      val weightsArray = weightMatrix match {
-        case dv: DenseVector => dv.values
-        case _ =>
-          throw new IllegalArgumentException(
-            s"weights only supports dense vector but got type ${weightMatrix.getClass}.")
-      }
-
-      val margins = (0 until numClasses - 1).map { i =>
-        var margin = 0.0
-        dataMatrix.foreachActive { (index, value) =>
-          if (value != 0.0) margin += value * weightsArray((i * dataWithBiasSize) + index)
-        }
-        // Intercept is required to be added into margin.
-        if (dataMatrix.size + 1 == dataWithBiasSize) {
-          margin += weightsArray((i * dataWithBiasSize) + dataMatrix.size)
-        }
-        margin
-      }
-
       /**
-       * Find the one with maximum margins. If the maxMargin is negative, then the prediction
-       * result will be the first class.
+       * Compute and find the one with maximum margins. If the maxMargin is negative, then the
+       * prediction result will be the first class.
        *
        * PS, if you want to compute the probabilities for each outcome instead of the outcome
        * with maximum probability, remember to subtract the maxMargin from margins if maxMargin
@@ -145,13 +136,20 @@ class LogisticRegressionModel (
        */
       var bestClass = 0
       var maxMargin = 0.0
-      var i = 0
-      while(i < margins.size) {
-        if (margins(i) > maxMargin) {
-          maxMargin = margins(i)
+      val withBias = dataMatrix.size + 1 == dataWithBiasSize
+      (0 until numClasses - 1).foreach { i =>
+        var margin = 0.0
+        dataMatrix.foreachActive { (index, value) =>
+          if (value != 0.0) margin += value * weightsArray((i * dataWithBiasSize) + index)
+        }
+        // Intercept is required to be added into margin.
+        if (withBias) {
+          margin += weightsArray((i * dataWithBiasSize) + dataMatrix.size)
+        }
+        if (margin > maxMargin) {
+          maxMargin = margin
           bestClass = i + 1
         }
-        i += 1
       }
       bestClass.toDouble
     }

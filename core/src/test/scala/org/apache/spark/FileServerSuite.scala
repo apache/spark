@@ -20,10 +20,9 @@ package org.apache.spark
 import java.io._
 import java.net.URI
 import java.util.jar.{JarEntry, JarOutputStream}
-import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLException
 
-import com.google.common.io.ByteStreams
-import org.apache.commons.io.{FileUtils, IOUtils}
+import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.lang3.RandomUtils
 import org.scalatest.FunSuite
 
@@ -228,7 +227,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     try {
       server.initialize()
 
-      intercept[SSLHandshakeException] {
+      intercept[SSLException] {
         fileTransferTest(server)
       }
     } finally {
@@ -239,7 +238,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   def fileTransferTest(server: HttpFileServer, sm: SecurityManager = null): Unit = {
     val randomContent = RandomUtils.nextBytes(100)
     val file = File.createTempFile("FileServerSuite", "sslTests", tmpDir)
-    FileUtils.writeByteArrayToFile(file, randomContent)
+    Files.write(randomContent, file)
     server.addFile(file)
 
     val uri = new URI(server.serverUri + "/files/" + file.getName)
@@ -254,7 +253,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
       Utils.setupSecureURLConnection(connection, sm)
     }
 
-    val buf = IOUtils.toByteArray(connection.getInputStream)
+    val buf = ByteStreams.toByteArray(connection.getInputStream)
     assert(buf === randomContent)
   }
 

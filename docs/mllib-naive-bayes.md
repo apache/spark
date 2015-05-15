@@ -13,12 +13,15 @@ compute the conditional probability distribution of label given an observation
 and use it for prediction.
 
 MLlib supports [multinomial naive
-Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes),
-which is typically used for [document
-classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
+Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
+and [Bernoulli naive Bayes] (http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
+These models are typically used for [document classification]
+(http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
 Within that context, each observation is a document and each
-feature represents a term whose value is the frequency of the term.
-Feature values must be nonnegative to represent term frequencies.
+feature represents a term whose value is the frequency of the term (in multinomial naive Bayes) or
+a zero or one indicating whether the term was found in the document (in Bernoulli naive Bayes).
+Feature values must be nonnegative. The model type is selected with an optional parameter
+"Multinomial" or "Bernoulli" with "Multinomial" as the default.
 [Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
 setting the parameter $\lambda$ (default to $1.0$). For document classification, the input feature
 vectors are usually sparse, and sparse vectors should be supplied as input to take advantage of
@@ -32,7 +35,7 @@ sparsity. Since the training data is only used once, it is not necessary to cach
 [NaiveBayes](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayes$) implements
 multinomial naive Bayes. It takes an RDD of
 [LabeledPoint](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint) and an optional
-smoothing parameter `lambda` as input, and output a
+smoothing parameter `lambda` as input, an optional model type parameter (default is Multinomial), and outputs a
 [NaiveBayesModel](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayesModel), which
 can be used for evaluation and prediction.
 
@@ -51,7 +54,7 @@ val splits = parsedData.randomSplit(Array(0.6, 0.4), seed = 11L)
 val training = splits(0)
 val test = splits(1)
 
-val model = NaiveBayes.train(training, lambda = 1.0)
+val model = NaiveBayes.train(training, lambda = 1.0, model = "Multinomial")
 
 val predictionAndLabel = test.map(p => (model.predict(p.features), p.label))
 val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test.count()

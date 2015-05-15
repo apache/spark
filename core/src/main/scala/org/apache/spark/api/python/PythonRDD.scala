@@ -604,8 +604,7 @@ private[spark] object PythonRDD extends Logging {
    * The thread will terminate after all the data are sent or any exceptions happen.
    */
   private def serveIterator[T](items: Iterator[T], threadName: String): Int = {
-    val serverSocket = new ServerSocket(0, 1)
-    serverSocket.setReuseAddress(true)
+    val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
     // Close the socket if no connection in 3 seconds
     serverSocket.setSoTimeout(3000)
 
@@ -615,9 +614,9 @@ private[spark] object PythonRDD extends Logging {
         try {
           val sock = serverSocket.accept()
           val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
-          try {
+          Utils.tryWithSafeFinally {
             writeIteratorToStream(items, out)
-          } finally {
+          } {
             out.close()
           }
         } catch {
@@ -863,9 +862,9 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
     val file = File.createTempFile("broadcast", "", dir)
     path = file.getAbsolutePath
     val out = new FileOutputStream(file)
-    try {
+    Utils.tryWithSafeFinally {
       Utils.copyStream(in, out)
-    } finally {
+    } {
       out.close()
     }
   }

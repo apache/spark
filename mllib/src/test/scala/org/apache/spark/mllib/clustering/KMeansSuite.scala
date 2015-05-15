@@ -199,9 +199,13 @@ class KMeansSuite extends FunSuite with MLlibTestSparkContext {
   test("k-means|| initialization") {
 
     case class VectorWithCompare(x: Vector) extends Ordered[VectorWithCompare] {
-      @Override def compare(that: VectorWithCompare): Int = {
-        if(this.x.toArray.foldLeft[Double](0.0)((acc, x) => acc + x * x) >
-          that.x.toArray.foldLeft[Double](0.0)((acc, x) => acc + x * x)) -1 else 1
+      override def compare(that: VectorWithCompare): Int = {
+        if (this.x.toArray.foldLeft[Double](0.0)((acc, x) => acc + x * x) >
+          that.x.toArray.foldLeft[Double](0.0)((acc, x) => acc + x * x)) {
+          -1
+        } else {
+          1
+        }
       }
     }
 

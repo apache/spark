@@ -848,15 +848,18 @@ private[spark] class TaskSetManager(
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
-    val defaultWait = conf.get("spark.locality.wait", "3000")
-    level match {
-      case TaskLocality.PROCESS_LOCAL =>
-        conf.get("spark.locality.wait.process", defaultWait).toLong
-      case TaskLocality.NODE_LOCAL =>
-        conf.get("spark.locality.wait.node", defaultWait).toLong
-      case TaskLocality.RACK_LOCAL =>
-        conf.get("spark.locality.wait.rack", defaultWait).toLong
-      case _ => 0L
+    val defaultWait = conf.get("spark.locality.wait", "3s")
+    val localityWaitKey = level match {
+      case TaskLocality.PROCESS_LOCAL => "spark.locality.wait.process"
+      case TaskLocality.NODE_LOCAL => "spark.locality.wait.node"
+      case TaskLocality.RACK_LOCAL => "spark.locality.wait.rack"
+      case _ => null
+    }
+    
+    if (localityWaitKey != null) {
+      conf.getTimeAsMs(localityWaitKey, defaultWait)  
+    } else {
+      0L
     }
   }
 

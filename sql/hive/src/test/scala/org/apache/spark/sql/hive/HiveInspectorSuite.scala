@@ -79,9 +79,9 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     Literal(Decimal(BigDecimal(123.123))) ::
     Literal(new java.sql.Timestamp(123123)) ::
     Literal(Array[Byte](1,2,3)) ::
-    Literal(Seq[Int](1,2,3), ArrayType(IntegerType)) ::
-    Literal(Map[Int, Int](1->2, 2->1), MapType(IntegerType, IntegerType)) ::
-    Literal(Row(1,2.0d,3.0f),
+    Literal.create(Seq[Int](1,2,3), ArrayType(IntegerType)) ::
+    Literal.create(Map[Int, Int](1->2, 2->1), MapType(IntegerType, IntegerType)) ::
+    Literal.create(Row(1,2.0d,3.0f),
       StructType(StructField("c1", IntegerType) ::
       StructField("c2", DoubleType) ::
       StructField("c3", FloatType) :: Nil)) ::
@@ -116,21 +116,20 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
   }
 
   def checkDataType(dt1: Seq[DataType], dt2: Seq[DataType]): Unit = {
-    dt1.zip(dt2).map {
-      case (dd1, dd2) =>
-        assert(dd1.getClass === dd2.getClass)  // DecimalType doesn't has the default precision info
+    dt1.zip(dt2).foreach { case (dd1, dd2) =>
+      assert(dd1.getClass === dd2.getClass)  // DecimalType doesn't has the default precision info
     }
   }
 
   def checkValues(row1: Seq[Any], row2: Seq[Any]): Unit = {
-    row1.zip(row2).map {
-      case (r1, r2) => checkValue(r1, r2)
+    row1.zip(row2).foreach { case (r1, r2) =>
+      checkValue(r1, r2)
     }
   }
 
   def checkValues(row1: Seq[Any], row2: Row): Unit = {
-    row1.zip(row2.toSeq).map {
-      case (r1, r2) => checkValue(r1, r2)
+    row1.zip(row2.toSeq).foreach { case (r1, r2) =>
+      checkValue(r1, r2)
     }
   }
 
@@ -141,7 +140,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
         assert(r1.compare(r2) === 0)
       case (r1: Array[Byte], r2: Array[Byte])
         if r1 != null && r2 != null && r1.length == r2.length =>
-        r1.zip(r2).map { case (b1, b2) => assert(b1 === b2) }
+        r1.zip(r2).foreach { case (b1, b2) => assert(b1 === b2) }
       case (r1, r2) => assert(r1 === r2)
     }
   }
@@ -166,7 +165,8 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     val constantData = constantExprs.map(_.eval())
     val constantNullData = constantData.map(_ => null)
     val constantWritableOIs = constantExprs.map(e => toWritableInspector(e.dataType))
-    val constantNullWritableOIs = constantExprs.map(e => toInspector(Literal(null, e.dataType)))
+    val constantNullWritableOIs =
+      constantExprs.map(e => toInspector(Literal.create(null, e.dataType)))
 
     checkValues(constantData, constantData.zip(constantWritableOIs).map {
       case (d, oi) => unwrap(wrap(d, oi), oi)
@@ -202,7 +202,8 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
       case (t, idx) => StructField(s"c_$idx", t)
     })
 
-    checkValues(row, unwrap(wrap(Row.fromSeq(row), toInspector(dt)), toInspector(dt)).asInstanceOf[Row])
+    checkValues(row,
+      unwrap(wrap(Row.fromSeq(row), toInspector(dt)), toInspector(dt)).asInstanceOf[Row])
     checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
   }
 
@@ -212,8 +213,10 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     val d = row(0) :: row(0) :: Nil
     checkValue(d, unwrap(wrap(d, toInspector(dt)), toInspector(dt)))
     checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
-    checkValue(d, unwrap(wrap(d, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
-    checkValue(d, unwrap(wrap(null, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
+    checkValue(d,
+      unwrap(wrap(d, toInspector(Literal.create(d, dt))), toInspector(Literal.create(d, dt))))
+    checkValue(d,
+      unwrap(wrap(null, toInspector(Literal.create(d, dt))), toInspector(Literal.create(d, dt))))
   }
 
   test("wrap / unwrap Map Type") {
@@ -222,7 +225,9 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     val d = Map(row(0) -> row(1))
     checkValue(d, unwrap(wrap(d, toInspector(dt)), toInspector(dt)))
     checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
-    checkValue(d, unwrap(wrap(d, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
-    checkValue(d, unwrap(wrap(null, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
+    checkValue(d,
+      unwrap(wrap(d, toInspector(Literal.create(d, dt))), toInspector(Literal.create(d, dt))))
+    checkValue(d,
+      unwrap(wrap(null, toInspector(Literal.create(d, dt))), toInspector(Literal.create(d, dt))))
   }
 }

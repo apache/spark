@@ -41,7 +41,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfo, TypeInfoFactory}
 import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.InputFormat
 
-import org.apache.spark.sql.types.{Decimal, DecimalType}
+import org.apache.spark.sql.types.{UTF8String, Decimal, DecimalType}
 
 private[hive] case class HiveFunctionWrapper(functionClassName: String)
   extends java.io.Serializable {
@@ -135,7 +135,7 @@ private[hive] object HiveShim {
       PrimitiveCategory.VOID, null)
 
   def getStringWritable(value: Any): hadoopIo.Text =
-    if (value == null) null else new hadoopIo.Text(value.asInstanceOf[String])
+    if (value == null) null else new hadoopIo.Text(value.asInstanceOf[UTF8String].toString)
 
   def getIntWritable(value: Any): hadoopIo.IntWritable =
     if (value == null) null else new hadoopIo.IntWritable(value.asInstanceOf[Int])

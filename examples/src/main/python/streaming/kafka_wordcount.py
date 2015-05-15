@@ -27,6 +27,7 @@
       spark-streaming-kafka-assembly-*.jar examples/src/main/python/streaming/kafka_wordcount.py \
       localhost:2181 test`
 """
+from __future__ import print_function
 
 import sys
 
@@ -36,7 +37,7 @@ from pyspark.streaming.kafka import KafkaUtils
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print >> sys.stderr, "Usage: kafka_wordcount.py <zk> <topic>"
+        print("Usage: kafka_wordcount.py <zk> <topic>", file=sys.stderr)
         exit(-1)
 
     sc = SparkContext(appName="PythonStreamingKafkaWordCount")

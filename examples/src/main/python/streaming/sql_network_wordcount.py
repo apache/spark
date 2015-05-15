@@ -27,6 +27,7 @@
  and then run the example
     `$ bin/spark-submit examples/src/main/python/streaming/sql_network_wordcount.py localhost 9999`
 """
+from __future__ import print_function
 
 import os
 import sys
@@ -44,7 +45,7 @@ def getSqlContextInstance(sparkContext):
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print >> sys.stderr, "Usage: sql_network_wordcount.py <hostname> <port> "
+        print("Usage: sql_network_wordcount.py <hostname> <port> ", file=sys.stderr)
         exit(-1)
     host, port = sys.argv[1:]
     sc = SparkContext(appName="PythonSqlNetworkWordCount")
@@ -57,7 +58,7 @@ if __name__ == "__main__":
 
     # Convert RDDs of the words DStream to DataFrame and run SQL query
     def process(time, rdd):
-        print "========= %s =========" % str(time)
+        print("========= %s =========" % str(time))
 
         try:
             # Get the singleton instance of SQLContext

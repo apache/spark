@@ -65,7 +65,7 @@ object PowerIterationClusteringExample {
   def main(args: Array[String]) {
     val defaultParams = Params()
 
-    val parser = new OptionParser[Params]("PIC Circles") {
+    val parser = new OptionParser[Params]("PowerIterationClusteringExample") {
       head("PowerIterationClusteringExample: an example PIC app using concentric circles.")
       opt[Int]('k', "k")
         .text(s"number of circles (/clusters), default: ${defaultParams.k}")
@@ -76,9 +76,9 @@ object PowerIterationClusteringExample {
       opt[Int]("maxIterations")
         .text(s"number of iterations, default: ${defaultParams.maxIterations}")
         .action((x, c) => c.copy(maxIterations = x))
-      opt[Int]('r', "r")
+      opt[Double]('r', "r")
         .text(s"radius of outermost circle, default: ${defaultParams.outerRadius}")
-        .action((x, c) => c.copy(numPoints = x))
+        .action((x, c) => c.copy(outerRadius = x))
     }
 
     parser.parse(args, defaultParams).map { params =>
@@ -154,3 +154,4 @@ object PowerIterationClusteringExample {
     coeff * math.exp(expCoeff * ssquares)
   }
 }
+

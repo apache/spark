@@ -181,7 +181,8 @@ class RandomRDDsSuite extends FunSuite with MLlibTestSparkContext with Serializa
       val poisson = RandomRDDs.poissonVectorRDD(sc, poissonMean, rows, cols, parts, seed)
       testGeneratedVectorRDD(poisson, rows, cols, parts, poissonMean, math.sqrt(poissonMean), 0.1)
 
-      val exponential = RandomRDDs.exponentialVectorRDD(sc, exponentialMean, rows, cols, parts, seed)
+      val exponential =
+        RandomRDDs.exponentialVectorRDD(sc, exponentialMean, rows, cols, parts, seed)
       testGeneratedVectorRDD(exponential, rows, cols, parts, exponentialMean, exponentialMean, 0.1)
 
       val gamma = RandomRDDs.gammaVectorRDD(sc, gammaShape, gammaScale, rows, cols, parts, seed)
@@ -197,7 +198,7 @@ private[random] class MockDistro extends RandomDataGenerator[Double] {
   // This allows us to check that each partition has a different seed
   override def nextValue(): Double = seed.toDouble
 
-  override def setSeed(seed: Long) = this.seed = seed
+  override def setSeed(seed: Long): Unit = this.seed = seed
 
   override def copy(): MockDistro = new MockDistro
 }

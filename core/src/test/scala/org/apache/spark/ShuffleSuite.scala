@@ -142,7 +142,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
   test("shuffle on mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
-    def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
+    def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
     val data = Array(p(1, 1), p(1, 2), p(1, 3), p(2, 1))
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
     val results = new ShuffledRDD[Int, Int, Int](pairs,
@@ -155,7 +155,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     // This is not in SortingSuite because of the local cluster setup.
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
-    def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
+    def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
     val data = Array(p(1, 11), p(3, 33), p(100, 100), p(2, 22))
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
     val results = new OrderedRDDFunctions[Int, Int, MutablePair[Int, Int]](pairs)
@@ -169,7 +169,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
   test("cogroup using mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
-    def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
+    def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
     val data1 = Seq(p(1, 1), p(1, 2), p(1, 3), p(2, 1))
     val data2 = Seq(p(1, "11"), p(1, "12"), p(2, "22"), p(3, "3"))
     val pairs1: RDD[MutablePair[Int, Int]] = sc.parallelize(data1, 2)
@@ -196,7 +196,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
   test("subtract mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
-    def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
+    def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
     val data1 = Seq(p(1, 1), p(1, 2), p(1, 3), p(2, 1), p(3, 33))
     val data2 = Seq(p(1, "11"), p(1, "12"), p(2, "22"))
     val pairs1: RDD[MutablePair[Int, Int]] = sc.parallelize(data1, 2)
@@ -242,14 +242,14 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
       shuffleSpillCompress <- Set(true, false);
       shuffleCompress <- Set(true, false)
     ) {
-      val conf = new SparkConf()
+      val myConf = conf.clone()
         .setAppName("test")
         .setMaster("local")
         .set("spark.shuffle.spill.compress", shuffleSpillCompress.toString)
         .set("spark.shuffle.compress", shuffleCompress.toString)
         .set("spark.shuffle.memoryFraction", "0.001")
       resetSparkContext()
-      sc = new SparkContext(conf)
+      sc = new SparkContext(myConf)
       try {
         sc.parallelize(0 until 100000).map(i => (i / 4, i)).groupByKey().collect()
       } catch {

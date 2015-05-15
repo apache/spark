@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 import sys
 
 from pyspark import SparkContext
@@ -40,7 +42,7 @@ ROW                   COLUMN+CELL
 """
 if __name__ == "__main__":
     if len(sys.argv) != 7:
-        print >> sys.stderr, """
+        print("""
         Usage: hbase_outputformat <host> <table> <row> <family> <qualifier> <value>
 
         Run with example jar:
@@ -48,7 +50,7 @@ if __name__ == "__main__":
         /path/to/examples/hbase_outputformat.py <args>
         Assumes you have created <table> with column family <family> in HBase
         running on <host> already
-        """
+        """, file=sys.stderr)
         exit(-1)
 
     host = sys.argv[1]

@@ -21,19 +21,18 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.BeforeAndAfterEach
-
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.InvalidInputException
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql._
-import org.apache.spark.util.Utils
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.parquet.ParquetRelation2
+import org.apache.spark.sql.parquet.FSBasedParquetRelation
 import org.apache.spark.sql.sources.LogicalRelation
+import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
@@ -172,7 +171,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT * FROM jsonTable"),
       Row("a", "b"))
 
-    FileUtils.deleteDirectory(tempDir)
+    Utils.deleteRecursively(tempDir)
     sparkContext.parallelize(("a1", "b1", "c1") :: Nil).toDF()
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
@@ -188,7 +187,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
       Row("a1", "b1", "c1"))
-    FileUtils.deleteDirectory(tempDir)
+    Utils.deleteRecursively(tempDir)
   }
 
   test("drop, change, recreate") {
@@ -210,7 +209,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT * FROM jsonTable"),
       Row("a", "b"))
 
-    FileUtils.deleteDirectory(tempDir)
+    Utils.deleteRecursively(tempDir)
     sparkContext.parallelize(("a", "b", "c") :: Nil).toDF()
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
@@ -229,7 +228,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
       Row("a", "b", "c"))
-    FileUtils.deleteDirectory(tempDir)
+    Utils.deleteRecursively(tempDir)
   }
 
   test("invalidate cache and reload") {
@@ -580,11 +579,11 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       )
 
       table("test_parquet_ctas").queryExecution.optimizedPlan match {
-        case LogicalRelation(p: ParquetRelation2) => // OK
+        case LogicalRelation(p: FSBasedParquetRelation) => // OK
         case _ =>
           fail(
             "test_parquet_ctas should be converted to " +
-            s"${classOf[ParquetRelation2].getCanonicalName}")
+            s"${classOf[FSBasedParquetRelation].getCanonicalName}")
       }
 
       // Clenup and reset confs.
@@ -681,6 +680,32 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     val actualSchema = table("wide_schema").schema
     assert(schema === actualSchema)
   }
+
+  test("SPARK-6655 still support a schema stored in spark.sql.sources.schema") {
+    val tableName = "spark6655"
+    val schema = StructType(StructField("int", IntegerType, true) :: Nil)
+
+    val hiveTable = HiveTable(
+      specifiedDatabase = Some("default"),
+      name = tableName,
+      schema = Seq.empty,
+      partitionColumns = Seq.empty,
+      properties = Map(
+        "spark.sql.sources.provider" -> "json",
+        "spark.sql.sources.schema" -> schema.json,
+        "EXTERNAL" -> "FALSE"),
+      tableType = ManagedTable,
+      serdeProperties = Map(
+        "path" -> catalog.hiveDefaultTableFilePath(tableName)))
+
+    catalog.client.createTable(hiveTable)
+
+    invalidateTable(tableName)
+    val actualSchema = table(tableName).schema
+    assert(schema === actualSchema)
+    sql(s"drop table $tableName")
+  }
+
 
   test("insert into a table") {
     def createDF(from: Int, to: Int): DataFrame =

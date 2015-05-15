@@ -30,7 +30,7 @@ class DistributionSuite extends FunSuite {
       inputPartitioning: Partitioning,
       requiredDistribution: Distribution,
       satisfied: Boolean) {
-    if (inputPartitioning.satisfies(requiredDistribution) != satisfied)
+    if (inputPartitioning.satisfies(requiredDistribution) != satisfied) {
       fail(
         s"""
         |== Input Partitioning ==
@@ -40,6 +40,7 @@ class DistributionSuite extends FunSuite {
         |== Does input partitioning satisfy required distribution? ==
         |Expected $satisfied got ${inputPartitioning.satisfies(requiredDistribution)}
         """.stripMargin)
+    }
   }
 
   test("HashPartitioning is the output partitioning") {

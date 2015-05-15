@@ -137,7 +137,7 @@
  <!--   <parameter name="maxMethods"><![CDATA[30]]></parameter> -->
  <!--  </parameters> -->
  <!-- </check> -->
- <check level="error" class="org.scalastyle.scalariform.PublicMethodsHaveTypeChecker" enabled="false"></check>
+ <check level="error" class="org.scalastyle.scalariform.PublicMethodsHaveTypeChecker" enabled="true"></check>
  <check level="error" class="org.scalastyle.file.NewLineAtEofChecker" enabled="true"></check>
  <check level="error" class="org.scalastyle.file.NoNewLineAtEofChecker" enabled="false"></check>
  <check level="error" class="org.scalastyle.scalariform.NonASCIICharacterChecker" enabled="true"></check>

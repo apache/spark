@@ -18,7 +18,7 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.sql.DataFrame
 
 /**
@@ -26,7 +26,7 @@ import org.apache.spark.sql.DataFrame
  * Abstract class for evaluators that compute metrics from predictions.
  */
 @AlphaComponent
-abstract class Evaluator extends Identifiable {
+abstract class Evaluator extends Params {
 
   /**
    * Evaluates the output.
@@ -35,5 +35,18 @@ abstract class Evaluator extends Identifiable {
    * @param paramMap parameter map that specifies the input columns and output metrics
    * @return metric
    */
-  def evaluate(dataset: DataFrame, paramMap: ParamMap): Double
+  def evaluate(dataset: DataFrame, paramMap: ParamMap): Double = {
+    this.copy(paramMap).evaluate(dataset)
+  }
+
+  /**
+   * Evaluates the output.
+   * @param dataset a dataset that contains labels/observations and predictions.
+   * @return metric
+   */
+  def evaluate(dataset: DataFrame): Double
+
+  override def copy(extra: ParamMap): Evaluator = {
+    super.copy(extra).asInstanceOf[Evaluator]
+  }
 }

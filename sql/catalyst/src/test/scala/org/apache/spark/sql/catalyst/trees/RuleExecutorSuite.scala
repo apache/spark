@@ -34,7 +34,7 @@ class RuleExecutorSuite extends FunSuite {
       val batches = Batch("once", Once, DecrementLiterals) :: Nil
     }
 
-    assert(ApplyOnce(Literal(10)) === Literal(9))
+    assert(ApplyOnce.execute(Literal(10)) === Literal(9))
   }
 
   test("to fixed point") {
@@ -42,7 +42,7 @@ class RuleExecutorSuite extends FunSuite {
       val batches = Batch("fixedPoint", FixedPoint(100), DecrementLiterals) :: Nil
     }
 
-    assert(ToFixedPoint(Literal(10)) === Literal(0))
+    assert(ToFixedPoint.execute(Literal(10)) === Literal(0))
   }
 
   test("to maxIterations") {
@@ -50,6 +50,6 @@ class RuleExecutorSuite extends FunSuite {
       val batches = Batch("fixedPoint", FixedPoint(10), DecrementLiterals) :: Nil
     }
 
-    assert(ToFixedPoint(Literal(100)) === Literal(90))
+    assert(ToFixedPoint.execute(Literal(100)) === Literal(90))
   }
 }
