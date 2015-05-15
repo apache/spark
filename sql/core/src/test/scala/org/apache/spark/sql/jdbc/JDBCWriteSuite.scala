@@ -43,6 +43,29 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
    
     conn1 = DriverManager.getConnection(url1, properties)
     conn1.prepareStatement("create schema test").executeUpdate()
+    conn1.prepareStatement("drop table if exists test.people").executeUpdate()
+    conn1.prepareStatement(
+      "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
+    conn1.prepareStatement("insert into test.people values ('fred', 1)").executeUpdate()
+    conn1.prepareStatement("insert into test.people values ('mary', 2)").executeUpdate()
+    conn1.prepareStatement("drop table if exists test.people1").executeUpdate()
+    conn1.prepareStatement(
+      "create table test.people1 (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
+    conn1.commit()
+     
+    TestSQLContext.sql(
+      s"""
+        |CREATE TEMPORARY TABLE PEOPLE
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url1', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+    
+    TestSQLContext.sql(
+      s"""
+        |CREATE TEMPORARY TABLE PEOPLE1
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url1', dbtable 'TEST.PEOPLE1', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))  
   }
 
   after {
@@ -114,5 +137,17 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
       df2.insertIntoJDBC(url, "TEST.INCOMPATIBLETEST", true)
     }
   }
-
+  
+  test("INSERT to JDBC Datasource") {
+    TestSQLContext.sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
+    assert(2 == TestSQLContext.jdbc(url1, "TEST.PEOPLE1", properties).count)
+    assert(2 == TestSQLContext.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
+  }
+  
+  test("INSERT to JDBC Datasource with overwrite") {
+    TestSQLContext.sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
+    TestSQLContext.sql("INSERT OVERWRITE TABLE PEOPLE1 SELECT * FROM PEOPLE")
+    assert(2 == TestSQLContext.jdbc(url1, "TEST.PEOPLE1", properties).count)
+    assert(2 == TestSQLContext.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
+  } 
 }

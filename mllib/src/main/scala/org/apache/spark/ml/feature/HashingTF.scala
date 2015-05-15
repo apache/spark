@@ -20,6 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.{IntParam, ParamValidators}
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.types.DataType
@@ -29,7 +30,9 @@ import org.apache.spark.sql.types.DataType
  * Maps a sequence of terms to their term frequencies using the hashing trick.
  */
 @AlphaComponent
-class HashingTF extends UnaryTransformer[Iterable[_], Vector, HashingTF] {
+class HashingTF(override val uid: String) extends UnaryTransformer[Iterable[_], Vector, HashingTF] {
+
+  def this() = this(Identifiable.randomUID("hashingTF"))
 
   /**
    * Number of features.  Should be > 0.

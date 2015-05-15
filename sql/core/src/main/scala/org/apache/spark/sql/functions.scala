@@ -438,6 +438,7 @@ object functions {
    * }}}
    *
    * @group normal_funcs
+   * @since 1.4.0
    */
   def when(condition: Column, value: Any): Column = {
     CaseWhen(Seq(condition.expr, lit(value).expr))

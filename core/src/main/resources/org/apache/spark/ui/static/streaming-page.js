@@ -98,7 +98,16 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
     var x = d3.scale.linear().domain([minX, maxX]).range([0, width]);
     var y = d3.scale.linear().domain([minY, maxY]).range([height, 0]);
 
-    var xAxis = d3.svg.axis().scale(x).orient("bottom").tickFormat(function(d) { return timeFormat[d]; });
+    var xAxis = d3.svg.axis().scale(x).orient("bottom").tickFormat(function(d) {
+        var formattedDate = timeFormat[d];
+        var dotIndex = formattedDate.indexOf('.');
+        if (dotIndex >= 0) {
+            // Remove milliseconds
+            return formattedDate.substring(0, dotIndex);
+        } else {
+            return formattedDate;
+        }
+    });
     var formatYValue = d3.format(",.2f");
     var yAxis = d3.svg.axis().scale(y).orient("left").ticks(5).tickFormat(formatYValue);
 
@@ -252,28 +261,16 @@ function drawHistogram(id, values, minY, maxY, unitY, batchInterval) {
 }
 
 $(function() {
-    function getParameterFromURL(param)
-    {
-        var parameters = window.location.search.substring(1); // Remove "?"
-        var keyValues = parameters.split('&');
-        for (var i = 0; i < keyValues.length; i++)
-        {
-            var paramKeyValue = keyValues[i].split('=');
-            if (paramKeyValue[0] == param)
-            {
-                return paramKeyValue[1];
-            }
-        }
-    }
-
-    var status = getParameterFromURL("show-streams-detail") == "true";
+    var status = window.localStorage && window.localStorage.getItem("show-streams-detail") == "true";
 
     $("span.expand-input-rate").click(function() {
         status = !status;
         $("#inputs-table").toggle('collapsed');
         // Toggle the class of the arrow between open and closed
         $(this).find('.expand-input-rate-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
-        window.history.pushState('', document.title, window.location.pathname + '?show-streams-detail=' + status);
+        if (window.localStorage) {
+            window.localStorage.setItem("show-streams-detail", "" + status);
+        }
     });
 
     if (status) {
