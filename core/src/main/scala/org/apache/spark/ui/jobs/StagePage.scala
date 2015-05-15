@@ -521,21 +521,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         val host = taskInfo.host
         executorsSet += ((executorId, host))
 
-        val classNameByStatus = {
-          if (taskInfo.successful) {
-            "succeeded"
-          } else if (taskInfo.failed) {
-            "failed"
-          } else if (taskInfo.running) {
-            "running"
-          }
-        }
-
         val launchTime = taskInfo.launchTime
         val finishTime = if (!taskInfo.running) taskInfo.finishTime else currentTime
         val totalExecutionTime = finishTime - launchTime
         minLaunchTime = launchTime.min(minLaunchTime)
-        maxFinishTime = launchTime.max(maxFinishTime)
+        maxFinishTime = finishTime.max(maxFinishTime)
 
         def toProportion(time: Long) = (time.toDouble / totalExecutionTime * 100).toLong
 
@@ -583,7 +573,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         val timelineObject =
           s"""
              {
-               'className': 'task task-assignment-timeline-object $classNameByStatus',
+               'className': 'task task-assignment-timeline-object',
                'group': '$executorId',
                'content': '<div class="task-assignment-timeline-content"' +
                  'data-toggle="tooltip" data-placement="top"' +
@@ -644,7 +634,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           """
     }.mkString("[", ",", "]")
 
-    val maxZoom = maxFinishTime - minLaunchTime
     <span class="expand-task-assignment-timeline">
       <span class="expand-task-assignment-timeline-arrow arrow-closed"></span>
       <a>Event Timeline</a>
@@ -671,7 +660,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     </div> ++
     <script type="text/javascript">
       {Unparsed(s"drawTaskAssignmentTimeline(" +
-      s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxZoom)")}
+      s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime)")}
     </script>
   }
 
@@ -748,7 +737,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val diskBytesSpilledSortable = maybeDiskBytesSpilled.map(_.toString).getOrElse("")
       val diskBytesSpilledReadable = maybeDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
 
-      <tr id={"task-" + info.index + "-" + info.attempt}>
+      <tr>
         <td>{info.index}</td>
         <td>{info.taskId}</td>
         <td sorttable_customkey={info.attempt.toString}>{

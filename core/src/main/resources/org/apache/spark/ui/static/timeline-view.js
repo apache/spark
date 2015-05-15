@@ -133,7 +133,7 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
   });
 }
 
-function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, zoomMax) {
+function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, maxFinishTime) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
   var container = $("#task-assignment-timeline")[0]
@@ -146,8 +146,8 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, zo
     selectable: false,
     showCurrentTime: false,
     min: minLaunchTime,
-    zoomable: false,
-    zoomMax: zoomMax
+    max: maxFinishTime,
+    zoomable: false
   };
 
   var taskTimeline = new vis.Timeline(container)
@@ -155,48 +155,32 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, zo
   taskTimeline.setGroups(groups);
   taskTimeline.setItems(items);
 
+  // If a user zooms while a tooltip is displayed, the user may zoom such that the cursor is no
+  // longer over the task that the tooltip corresponds to. So, when a user zooms, we should hide
+  // any currently displayed tooltips.
+  var currentDisplayedTooltip = null;
+  $("#task-assignment-timeline").on({
+    "mouseenter": function() {
+      currentDisplayedTooltip = this;
+    },
+    "mouseleave": function() {
+      currentDisplayedTooltip = null;
+    }
+  }, ".task-assignment-timeline-content");
   taskTimeline.on("rangechange", function(prop) {
     if (currentDisplayedTooltip !== null) {
       $(currentDisplayedTooltip).tooltip("hide");
     }
   });
 
-  function getTaskIdxAndAttempt(selector) {
-    var taskIdxText = $(selector).attr("data-title");
-    var taskIdxAndAttempt = taskIdxText.match("Task (\\d+) \\(attempt (\\d+)");
-    var taskIdx = taskIdxAndAttempt[1];
-    var taskAttempt = taskIdxAndAttempt[2];
-    return taskIdx + "-" + taskAttempt;
-  }
-
-  // If we zoom up and a box moves away when the corresponding tooltip is shown,
-  // the tooltip can be remain.
-  // So, we need to hide tooltips using another mechanism.
-  var currentDisplayedTooltip = null;
-
-  $("#task-assignment-timeline").on({
-    "mouseenter": function() {
-      var taskIdxAndAttempt = getTaskIdxAndAttempt(this);
-      $("#task-" + taskIdxAndAttempt).addClass("corresponding-item-hover");
-      $(this).tooltip("show");
-      currentDisplayedTooltip = this;
-    },
-    "mouseleave" : function() {
-      var taskIdxAndAttempt = getTaskIdxAndAttempt(this);
-      $("#task-" + taskIdxAndAttempt).removeClass("corresponding-item-hover");
-      $(this).tooltip("hide");
-      currentDisplayedTooltip = null;
-    }
-  }, ".task-assignment-timeline-content");
-
-  setupZoomable('#task-assignment-timeline-zoom-lock', taskTimeline);
+  setupZoomable("#task-assignment-timeline-zoom-lock", taskTimeline);
 
   $("span.expand-task-assignment-timeline").click(function() {
-    $("#task-assignment-timeline").toggleClass('collapsed');
+    $("#task-assignment-timeline").toggleClass("collapsed");
 
      // Switch the class of the arrow from open to closed.
-    $(this).find('.expand-task-assignment-timeline-arrow').toggleClass('arrow-open');
-    $(this).find('.expand-task-assignment-timeline-arrow').toggleClass('arrow-closed');
+    $(this).find(".expand-task-assignment-timeline-arrow").toggleClass("arrow-open");
+    $(this).find(".expand-task-assignment-timeline-arrow").toggleClass("arrow-closed");
   });
 }
 
