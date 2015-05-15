@@ -92,27 +92,44 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
 
   test("save()/load() - non-partitioned table - Overwrite") {
     withTempPath { file =>
-      testDF.write.mode(SaveMode.Overwrite).format(dataSourceName).save(file.getCanonicalPath)
-      testDF.write.mode(SaveMode.Overwrite).format(dataSourceName).save(file.getCanonicalPath)
+      testDF.save(
+        path = file.getCanonicalPath,
+        source = dataSourceName,
+        mode = SaveMode.Overwrite)
+
+      testDF.save(
+        path = file.getCanonicalPath,
+        source = dataSourceName,
+        mode = SaveMode.Overwrite)
 
       checkAnswer(
-        read.format(dataSourceName)
-          .option("path", file.getCanonicalPath)
-          .option("dataSchema", dataSchema.json)
-          .load(),
+        load(
+          source = dataSourceName,
+          options = Map(
+            "path" -> file.getCanonicalPath,
+            "dataSchema" -> dataSchema.json)),
         testDF.collect())
     }
   }
 
   test("save()/load() - non-partitioned table - Append") {
     withTempPath { file =>
-      testDF.write.mode(SaveMode.Overwrite).format(dataSourceName).save(file.getCanonicalPath)
-      testDF.write.mode(SaveMode.Append).format(dataSourceName).save(file.getCanonicalPath)
+      testDF.save(
+        path = file.getCanonicalPath,
+        source = dataSourceName,
+        mode = SaveMode.Overwrite)
+
+      testDF.save(
+        path = file.getCanonicalPath,
+        source = dataSourceName,
+        mode = SaveMode.Append)
 
       checkAnswer(
-        read.format(dataSourceName)
-          .option("dataSchema", dataSchema.json)
-          .load(file.getCanonicalPath).orderBy("a"),
+        load(
+          source = dataSourceName,
+          options = Map(
+            "path" -> file.getCanonicalPath,
+            "dataSchema" -> dataSchema.json)).orderBy("a"),
         testDF.unionAll(testDF).orderBy("a").collect())
     }
   }
@@ -130,7 +147,10 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
 
   test("save()/load() - non-partitioned table - Ignore") {
     withTempDir { file =>
-      testDF.write.mode(SaveMode.Ignore).format(dataSourceName).save(file.getCanonicalPath)
+      testDF.save(
+        path = file.getCanonicalPath,
+        source = dataSourceName,
+        mode = SaveMode.Ignore)
 
       val path = new Path(file.getCanonicalPath)
       val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
@@ -140,81 +160,89 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
 
   test("save()/load() - partitioned table - simple queries") {
     withTempPath { file =>
-      partitionedTestDF.write
-        .format(dataSourceName)
-        .mode(SaveMode.ErrorIfExists)
-        .partitionBy("p1", "p2")
-        .save(file.getCanonicalPath)
+      partitionedTestDF.save(
+        source = dataSourceName,
+        mode = SaveMode.ErrorIfExists,
+        options = Map("path" -> file.getCanonicalPath),
+        partitionColumns = Seq("p1", "p2"))
 
       checkQueries(
-        read.format(dataSourceName)
-          .option("dataSchema", dataSchema.json)
-          .load(file.getCanonicalPath))
+        load(
+          source = dataSourceName,
+          options = Map(
+            "path" -> file.getCanonicalPath,
+            "dataSchema" -> dataSchema.json)))
     }
   }
 
   test("save()/load() - partitioned table - Overwrite") {
     withTempPath { file =>
-      partitionedTestDF.write
-        .format(dataSourceName)
-        .mode(SaveMode.Overwrite)
-        .partitionBy("p1", "p2")
-        .save(file.getCanonicalPath)
+      partitionedTestDF.save(
+        source = dataSourceName,
+        mode = SaveMode.Overwrite,
+        options = Map("path" -> file.getCanonicalPath),
+        partitionColumns = Seq("p1", "p2"))
 
-      partitionedTestDF.write
-        .format(dataSourceName)
-        .mode(SaveMode.Overwrite)
-        .partitionBy("p1", "p2")
-        .save(file.getCanonicalPath)
+      partitionedTestDF.save(
+        source = dataSourceName,
+        mode = SaveMode.Overwrite,
+        options = Map("path" -> file.getCanonicalPath),
+        partitionColumns = Seq("p1", "p2"))
 
       checkAnswer(
-        read.format(dataSourceName)
-          .option("dataSchema", dataSchema.json)
-          .load(file.getCanonicalPath),
+        load(
+          source = dataSourceName,
+          options = Map(
+            "path" -> file.getCanonicalPath,
+            "dataSchema" -> dataSchema.json)),
         partitionedTestDF.collect())
     }
   }
 
   test("save()/load() - partitioned table - Append") {
     withTempPath { file =>
-      partitionedTestDF.write
-        .format(dataSourceName)
-        .mode(SaveMode.Overwrite)
-        .partitionBy("p1", "p2")
-        .save(file.getCanonicalPath)
+      partitionedTestDF.save(
+        source = dataSourceName,
+        mode = SaveMode.Overwrite,
+        options = Map("path" -> file.getCanonicalPath),
+        partitionColumns = Seq("p1", "p2"))
 
-      partitionedTestDF.write
-        .format(dataSourceName)
-        .mode(SaveMode.Append)
-        .partitionBy("p1", "p2")
-        .save(file.getCanonicalPath)
+      partitionedTestDF.save(
+        source = dataSourceName,
+        mode = SaveMode.Append,
+        options = Map("path" -> file.getCanonicalPath),
+        partitionColumns = Seq("p1", "p2"))
 
       checkAnswer(
-        read.format(dataSourceName)
-          .option("dataSchema", dataSchema.json)
-          .load(file.getCanonicalPath),
+        load(
+          source = dataSourceName,
+          options = Map(
+            "path" -> file.getCanonicalPath,
+            "dataSchema" -> dataSchema.json)),
         partitionedTestDF.unionAll(partitionedTestDF).collect())
     }
   }
 
   test("save()/load() - partitioned table - Append - new partition values") {
     withTempPath { file =>
-      partitionedTestDF1.write
-        .format(dataSourceName)
-        .mode(SaveMode.Overwrite)
-        .partitionBy("p1", "p2")
-        .save(file.getCanonicalPath)
+      partitionedTestDF1.save(
+        source = dataSourceName,
+        mode = SaveMode.Overwrite,
+        options = Map("path" -> file.getCanonicalPath),
+        partitionColumns = Seq("p1", "p2"))
 
-      partitionedTestDF2.write
-        .format(dataSourceName)
-        .mode(SaveMode.Append)
-        .partitionBy("p1", "p2")
-        .save(file.getCanonicalPath)
+      partitionedTestDF2.save(
+        source = dataSourceName,
+        mode = SaveMode.Append,
+        options = Map("path" -> file.getCanonicalPath),
+        partitionColumns = Seq("p1", "p2"))
 
       checkAnswer(
-        read.format(dataSourceName)
-          .option("dataSchema", dataSchema.json)
-          .load(file.getCanonicalPath),
+        load(
+          source = dataSourceName,
+          options = Map(
+            "path" -> file.getCanonicalPath,
+            "dataSchema" -> dataSchema.json)),
         partitionedTestDF.collect())
     }
   }
@@ -222,11 +250,11 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
   test("save()/load() - partitioned table - ErrorIfExists") {
     withTempDir { file =>
       intercept[RuntimeException] {
-        partitionedTestDF.write
-          .format(dataSourceName)
-          .mode(SaveMode.ErrorIfExists)
-          .partitionBy("p1", "p2")
-          .save(file.getCanonicalPath)
+        partitionedTestDF.save(
+          source = dataSourceName,
+          mode = SaveMode.ErrorIfExists,
+          options = Map("path" -> file.getCanonicalPath),
+          partitionColumns = Seq("p1", "p2"))
       }
     }
   }
@@ -315,19 +343,19 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
   }
 
   test("saveAsTable()/load() - partitioned table - Overwrite") {
-    partitionedTestDF.write
-      .format(dataSourceName)
-      .mode(SaveMode.Overwrite)
-      .option("dataSchema", dataSchema.json)
-      .partitionBy("p1", "p2")
-      .saveAsTable("t")
+    partitionedTestDF.saveAsTable(
+      tableName = "t",
+      source = dataSourceName,
+      mode = SaveMode.Overwrite,
+      options = Map("dataSchema" -> dataSchema.json),
+      partitionColumns = Seq("p1", "p2"))
 
-    partitionedTestDF.write
-      .format(dataSourceName)
-      .mode(SaveMode.Overwrite)
-      .option("dataSchema", dataSchema.json)
-      .partitionBy("p1", "p2")
-      .saveAsTable("t")
+    partitionedTestDF.saveAsTable(
+      tableName = "t",
+      source = dataSourceName,
+      mode = SaveMode.Overwrite,
+      options = Map("dataSchema" -> dataSchema.json),
+      partitionColumns = Seq("p1", "p2"))
 
     withTable("t") {
       checkAnswer(table("t"), partitionedTestDF.collect())
@@ -335,19 +363,19 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
   }
 
   test("saveAsTable()/load() - partitioned table - Append") {
-    partitionedTestDF.write
-      .format(dataSourceName)
-      .mode(SaveMode.Overwrite)
-      .option("dataSchema", dataSchema.json)
-      .partitionBy("p1", "p2")
-      .saveAsTable("t")
+    partitionedTestDF.saveAsTable(
+      tableName = "t",
+      source = dataSourceName,
+      mode = SaveMode.Overwrite,
+      options = Map("dataSchema" -> dataSchema.json),
+      partitionColumns = Seq("p1", "p2"))
 
-    partitionedTestDF.write
-      .format(dataSourceName)
-      .mode(SaveMode.Append)
-      .option("dataSchema", dataSchema.json)
-      .partitionBy("p1", "p2")
-      .saveAsTable("t")
+    partitionedTestDF.saveAsTable(
+      tableName = "t",
+      source = dataSourceName,
+      mode = SaveMode.Append,
+      options = Map("dataSchema" -> dataSchema.json),
+      partitionColumns = Seq("p1", "p2"))
 
     withTable("t") {
       checkAnswer(table("t"), partitionedTestDF.unionAll(partitionedTestDF).collect())
@@ -355,19 +383,19 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
   }
 
   test("saveAsTable()/load() - partitioned table - Append - new partition values") {
-    partitionedTestDF1.write
-      .format(dataSourceName)
-      .mode(SaveMode.Overwrite)
-      .option("dataSchema", dataSchema.json)
-      .partitionBy("p1", "p2")
-      .saveAsTable("t")
+    partitionedTestDF1.saveAsTable(
+      tableName = "t",
+      source = dataSourceName,
+      mode = SaveMode.Overwrite,
+      options = Map("dataSchema" -> dataSchema.json),
+      partitionColumns = Seq("p1", "p2"))
 
-    partitionedTestDF2.write
-      .format(dataSourceName)
-      .mode(SaveMode.Append)
-      .option("dataSchema", dataSchema.json)
-      .partitionBy("p1", "p2")
-      .saveAsTable("t")
+    partitionedTestDF2.saveAsTable(
+      tableName = "t",
+      source = dataSourceName,
+      mode = SaveMode.Append,
+      options = Map("dataSchema" -> dataSchema.json),
+      partitionColumns = Seq("p1", "p2"))
 
     withTable("t") {
       checkAnswer(table("t"), partitionedTestDF.collect())
@@ -375,31 +403,31 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
   }
 
   test("saveAsTable()/load() - partitioned table - Append - mismatched partition columns") {
-    partitionedTestDF1.write
-      .format(dataSourceName)
-      .mode(SaveMode.Overwrite)
-      .option("dataSchema", dataSchema.json)
-      .partitionBy("p1", "p2")
-      .saveAsTable("t")
+    partitionedTestDF1.saveAsTable(
+      tableName = "t",
+      source = dataSourceName,
+      mode = SaveMode.Overwrite,
+      options = Map("dataSchema" -> dataSchema.json),
+      partitionColumns = Seq("p1", "p2"))
 
     // Using only a subset of all partition columns
     intercept[Throwable] {
-      partitionedTestDF2.write
-        .format(dataSourceName)
-        .mode(SaveMode.Append)
-        .option("dataSchema", dataSchema.json)
-        .partitionBy("p1")
-        .saveAsTable("t")
+      partitionedTestDF2.saveAsTable(
+        tableName = "t",
+        source = dataSourceName,
+        mode = SaveMode.Append,
+        options = Map("dataSchema" -> dataSchema.json),
+        partitionColumns = Seq("p1"))
     }
 
     // Using different order of partition columns
     intercept[Throwable] {
-      partitionedTestDF2.write
-        .format(dataSourceName)
-        .mode(SaveMode.Append)
-        .option("dataSchema", dataSchema.json)
-        .partitionBy("p2", "p1")
-        .saveAsTable("t")
+      partitionedTestDF2.saveAsTable(
+        tableName = "t",
+        source = dataSourceName,
+        mode = SaveMode.Append,
+        options = Map("dataSchema" -> dataSchema.json),
+        partitionColumns = Seq("p2", "p1"))
     }
   }
 
@@ -408,12 +436,12 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
 
     withTempTable("t") {
       intercept[AnalysisException] {
-        partitionedTestDF.write
-          .format(dataSourceName)
-          .mode(SaveMode.ErrorIfExists)
-          .option("dataSchema", dataSchema.json)
-          .partitionBy("p1", "p2")
-          .saveAsTable("t")
+        partitionedTestDF.saveAsTable(
+          tableName = "t",
+          source = dataSourceName,
+          mode = SaveMode.ErrorIfExists,
+          options = Map("dataSchema" -> dataSchema.json),
+          partitionColumns = Seq("p1", "p2"))
       }
     }
   }
@@ -422,12 +450,12 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
     Seq.empty[(Int, String)].toDF().registerTempTable("t")
 
     withTempTable("t") {
-      partitionedTestDF.write
-        .format(dataSourceName)
-        .mode(SaveMode.Ignore)
-        .option("dataSchema", dataSchema.json)
-        .partitionBy("p1", "p2")
-        .saveAsTable("t")
+      partitionedTestDF.saveAsTable(
+        tableName = "t",
+        source = dataSourceName,
+        mode = SaveMode.Ignore,
+        options = Map("dataSchema" -> dataSchema.json),
+        partitionColumns = Seq("p1", "p2"))
 
       assert(table("t").collect().isEmpty)
     }
@@ -435,16 +463,17 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
 
   test("Hadoop style globbing") {
     withTempPath { file =>
-      partitionedTestDF.write
-        .format(dataSourceName)
-        .mode(SaveMode.Overwrite)
-        .partitionBy("p1", "p2")
-        .save(file.getCanonicalPath)
+      partitionedTestDF.save(
+        source = dataSourceName,
+        mode = SaveMode.Overwrite,
+        options = Map("path" -> file.getCanonicalPath),
+        partitionColumns = Seq("p1", "p2"))
 
-      val df = read
-        .format(dataSourceName)
-        .option("dataSchema", dataSchema.json)
-        .load(s"${file.getCanonicalPath}/p1=*/p2=???")
+      val df = load(
+        source = dataSourceName,
+        options = Map(
+          "path" -> s"${file.getCanonicalPath}/p1=*/p2=???",
+          "dataSchema" -> dataSchema.json))
 
       val expectedPaths = Set(
         s"${file.getCanonicalFile}/p1=1/p2=foo",
