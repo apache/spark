@@ -32,12 +32,14 @@ from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
 
 __all__ = [
     'approxCountDistinct',
+    'coalesce',
     'countDistinct',
     'monotonicallyIncreasingId',
     'rand',
     'randn',
     'sparkPartitionId',
-    'udf']
+    'udf',
+    'when']
 
 
 def _create_function(name, doc=""):
@@ -104,6 +106,8 @@ _functions = {
     'toRadians': 'Converts an angle measured in degrees to an approximately equivalent angle ' +
              'measured in radians.',
 
+    'bitwiseNOT': 'Computes bitwise not.',
+
     'max': 'Aggregate function: returns the maximum value of the expression in a group.',
     'min': 'Aggregate function: returns the minimum value of the expression in a group.',
     'first': 'Aggregate function: returns the first value in a group.',
@@ -162,6 +166,62 @@ def approxCountDistinct(col, rsd=None):
         jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col))
     else:
         jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col), rsd)
+    return Column(jc)
+
+
+def explode(col):
+    """Returns a new row for each element in the given array or map.
+
+    >>> from pyspark.sql import Row
+    >>> eDF = sqlContext.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
+    >>> eDF.select(explode(eDF.intlist).alias("anInt")).collect()
+    [Row(anInt=1), Row(anInt=2), Row(anInt=3)]
+
+    >>> eDF.select(explode(eDF.mapfield).alias("key", "value")).show()
+    +---+-----+
+    |key|value|
+    +---+-----+
+    |  a|    b|
+    +---+-----+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.explode(_to_java_column(col))
+    return Column(jc)
+
+
+def coalesce(*cols):
+    """Returns the first column that is not null.
+
+    >>> cDf = sqlContext.createDataFrame([(None, None), (1, None), (None, 2)], ("a", "b"))
+    >>> cDf.show()
+    +----+----+
+    |   a|   b|
+    +----+----+
+    |null|null|
+    |   1|null|
+    |null|   2|
+    +----+----+
+
+    >>> cDf.select(coalesce(cDf["a"], cDf["b"])).show()
+    +-------------+
+    |Coalesce(a,b)|
+    +-------------+
+    |         null|
+    |            1|
+    |            2|
+    +-------------+
+
+    >>> cDf.select('*', coalesce(cDf["a"], lit(0.0))).show()
+    +----+----+---------------+
+    |   a|   b|Coalesce(a,0.0)|
+    +----+----+---------------+
+    |null|null|            0.0|
+    |   1|null|            1.0|
+    |null|   2|            0.0|
+    +----+----+---------------+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.coalesce(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
 
@@ -249,6 +309,27 @@ def struct(*cols):
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]
     jc = sc._jvm.functions.struct(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
+def when(condition, value):
+    """Evaluates a list of conditions and returns one of multiple possible result expressions.
+    If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
+
+    :param condition: a boolean :class:`Column` expression.
+    :param value: a literal value, or a :class:`Column` expression.
+
+    >>> df.select(when(df['age'] == 2, 3).otherwise(4).alias("age")).collect()
+    [Row(age=3), Row(age=4)]
+
+    >>> df.select(when(df.age == 2, df.age + 1).alias("age")).collect()
+    [Row(age=3), Row(age=None)]
+    """
+    sc = SparkContext._active_spark_context
+    if not isinstance(condition, Column):
+        raise TypeError("condition should be a Column")
+    v = value._jc if isinstance(value, Column) else value
+    jc = sc._jvm.functions.when(condition._jc, v)
     return Column(jc)
 
 

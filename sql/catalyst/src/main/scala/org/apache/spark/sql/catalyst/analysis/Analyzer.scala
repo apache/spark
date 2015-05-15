@@ -19,19 +19,21 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
  * when all relations are already filled in and the analyzer needs only to resolve attribute
  * references.
  */
-object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true)
+object SimpleAnalyzer
+  extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, new SimpleCatalystConf(true))
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
@@ -41,11 +43,17 @@ object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true
 class Analyzer(
     catalog: Catalog,
     registry: FunctionRegistry,
-    caseSensitive: Boolean,
+    conf: CatalystConf,
     maxIterations: Int = 100)
   extends RuleExecutor[LogicalPlan] with HiveTypeCoercion with CheckAnalysis {
 
-  val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
+  def resolver: Resolver = {
+    if (conf.caseSensitiveAnalysis) {
+      caseSensitiveResolution
+    } else {
+      caseInsensitiveResolution
+    }
+  }
 
   val fixedPoint = FixedPoint(maxIterations)
 
@@ -55,13 +63,16 @@ class Analyzer(
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
   lazy val batches: Seq[Batch] = Seq(
+    Batch("Substitution", fixedPoint,
+      CTESubstitution ::
+      WindowsSubstitution ::
+      Nil : _*),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
       ResolveGenerate ::
-      ImplicitGenerate ::
       ResolveFunctions ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
@@ -70,6 +81,55 @@ class Analyzer(
       typeCoercionRules ++
       extendedResolutionRules : _*)
   )
+
+  /**
+   * Substitute child plan with cte definitions
+   */
+  object CTESubstitution extends Rule[LogicalPlan] {
+    // TODO allow subquery to define CTE
+    def apply(plan: LogicalPlan): LogicalPlan = plan match {
+      case With(child, relations) => substituteCTE(child, relations)
+      case other => other
+    }
+
+    def substituteCTE(plan: LogicalPlan, cteRelations: Map[String, LogicalPlan]): LogicalPlan = {
+      plan transform {
+        // In hive, if there is same table name in database and CTE definition,
+        // hive will use the table in database, not the CTE one.
+        // Taking into account the reasonableness and the implementation complexity,
+        // here use the CTE definition first, check table name only and ignore database name
+        // see https://github.com/apache/spark/pull/4929#discussion_r27186638 for more info
+        case u : UnresolvedRelation =>
+          val substituted = cteRelations.get(u.tableIdentifier.last).map { relation =>
+            val withAlias = u.alias.map(Subquery(_, relation))
+            withAlias.getOrElse(relation)
+          }
+          substituted.getOrElse(u)
+      }
+    }
+  }
+
+  /**
+   * Substitute child plan with WindowSpecDefinitions.
+   */
+  object WindowsSubstitution extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      // Lookup WindowSpecDefinitions. This rule works with unresolved children.
+      case WithWindowDefinition(windowDefinitions, child) =>
+        child.transform {
+          case plan => plan.transformExpressions {
+            case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
+              val errorMessage =
+                s"Window specification $windowName is not defined in the WINDOW clause."
+              val windowSpecDefinition =
+                windowDefinitions
+                  .get(windowName)
+                  .getOrElse(failAnalysis(errorMessage))
+              WindowExpression(c, windowSpecDefinition)
+          }
+        }
+    }
+  }
 
   /**
    * Removes no-op Alias expressions from the plan.
@@ -172,36 +232,20 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    def getTable(u: UnresolvedRelation, cteRelations: Map[String, LogicalPlan]): LogicalPlan = {
+    def getTable(u: UnresolvedRelation): LogicalPlan = {
       try {
-        // In hive, if there is same table name in database and CTE definition,
-        // hive will use the table in database, not the CTE one.
-        // Taking into account the reasonableness and the implementation complexity,
-        // here use the CTE definition first, check table name only and ignore database name
-        cteRelations.get(u.tableIdentifier.last)
-          .map(relation => u.alias.map(Subquery(_, relation)).getOrElse(relation))
-          .getOrElse(catalog.lookupRelation(u.tableIdentifier, u.alias))
+        catalog.lookupRelation(u.tableIdentifier, u.alias)
       } catch {
         case _: NoSuchTableException =>
           u.failAnalysis(s"no such table ${u.tableName}")
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = {
-      val (realPlan, cteRelations) = plan match {
-        // TODO allow subquery to define CTE
-        // Add cte table to a temp relation map,drop `with` plan and keep its child
-        case With(child, relations) => (child, relations)
-        case other => (other, Map.empty[String, LogicalPlan])
-      }
-
-      realPlan transform {
-        case i@InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
-          i.copy(
-            table = EliminateSubQueries(getTable(u, cteRelations)))
-        case u: UnresolvedRelation =>
-          getTable(u, cteRelations)
-      }
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case i@InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
+        i.copy(table = EliminateSubQueries(getTable(u)))
+      case u: UnresolvedRelation =>
+        getTable(u)
     }
   }
 
@@ -277,6 +321,16 @@ class Analyzer(
           case oldVersion @ Aggregate(_, aggregateExpressions, _)
               if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
             (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
+
+          case oldVersion: Generate
+              if oldVersion.generatedSet.intersect(conflictingAttributes).nonEmpty =>
+            val newOutput = oldVersion.generatorOutput.map(_.newInstance())
+            (oldVersion, oldVersion.copy(generatorOutput = newOutput))
+
+          case oldVersion @ Window(_, windowExpressions, _, child)
+              if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
+                .nonEmpty =>
+            (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
         }.headOption.getOrElse { // Only handle first case, others will be fixed on the next pass.
           sys.error(
             s"""
@@ -311,8 +365,8 @@ class Analyzer(
               withPosition(u) { q.resolveChildren(nameParts, resolver).getOrElse(u) }
             logDebug(s"Resolving $u to $result")
             result
-          case UnresolvedGetField(child, fieldName) if child.resolved =>
-            GetField(child, fieldName, resolver)
+          case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
+            ExtractValue(child, fieldExpr, resolver)
         }
     }
 
@@ -471,65 +525,88 @@ class Analyzer(
   }
 
   /**
-   * When a SELECT clause has only a single expression and that expression is a
-   * [[catalyst.expressions.Generator Generator]] we convert the
-   * [[catalyst.plans.logical.Project Project]] to a [[catalyst.plans.logical.Generate Generate]].
-   */
-  object ImplicitGenerate extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case Project(Seq(Alias(g: Generator, name)), child) =>
-        Generate(g, join = false, outer = false,
-          qualifier = None, UnresolvedAttribute(name) :: Nil, child)
-      case Project(Seq(MultiAlias(g: Generator, names)), child) =>
-        Generate(g, join = false, outer = false,
-          qualifier = None, names.map(UnresolvedAttribute(_)), child)
-    }
-  }
-
-  /**
-   * Resolve the Generate, if the output names specified, we will take them, otherwise
-   * we will try to provide the default names, which follow the same rule with Hive.
+   * Rewrites table generating expressions that either need one or more of the following in order
+   * to be resolved:
+   *  - concrete attribute references for their output.
+   *  - to be relocated from a SELECT clause (i.e. from  a [[Project]]) into a [[Generate]]).
+   *
+   * Names for the output [[Attributes]] are extracted from [[Alias]] or [[MultiAlias]] expressions
+   * that wrap the [[Generator]]. If more than one [[Generator]] is found in a Project, an
+   * [[AnalysisException]] is throw.
    */
   object ResolveGenerate extends Rule[LogicalPlan] {
-    // Construct the output attributes for the generator,
-    // The output attribute names can be either specified or
-    // auto generated.
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p: Generate if !p.child.resolved || !p.generator.resolved => p
+      case g: Generate if g.resolved == false =>
+          g.copy(
+            generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
+
+      case p @ Project(projectList, child) =>
+        // Holds the resolved generator, if one exists in the project list.
+        var resolvedGenerator: Generate = null
+
+        val newProjectList = projectList.flatMap {
+          case AliasedGenerator(generator, names) if generator.childrenResolved =>
+            if (resolvedGenerator != null) {
+              failAnalysis(
+                s"Only one generator allowed per select but ${resolvedGenerator.nodeName} and " +
+                s"and ${generator.nodeName} found.")
+            }
+
+            resolvedGenerator =
+              Generate(
+                generator,
+                join = projectList.size > 1, // Only join if there are other expressions in SELECT.
+                outer = false,
+                qualifier = None,
+                generatorOutput = makeGeneratorOutput(generator, names),
+                child)
+
+            resolvedGenerator.generatorOutput
+          case other => other :: Nil
+        }
+
+        if (resolvedGenerator != null) {
+          Project(newProjectList, resolvedGenerator)
+        } else {
+          p
+        }
+    }
+
+    /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
+    private object AliasedGenerator {
+      def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
+        case Alias(g: Generator, name) => Some((g, name :: Nil))
+        case MultiAlias(g: Generator, names) => Some(g, names)
+        case _ => None
+      }
+    }
+
+    /**
+     * Construct the output attributes for a [[Generator]], given a list of names.  If the list of
+     * names is empty names are assigned by ordinal (i.e., _c0, _c1, ...) to match Hive's defaults.
+     */
     private def makeGeneratorOutput(
         generator: Generator,
-        generatorOutput: Seq[Attribute]): Seq[Attribute] = {
+        names: Seq[String]): Seq[Attribute] = {
       val elementTypes = generator.elementTypes
 
-      if (generatorOutput.length == elementTypes.length) {
-        generatorOutput.zip(elementTypes).map {
-          case (a, (t, nullable)) if !a.resolved =>
-            AttributeReference(a.name, t, nullable)()
-          case (a, _) => a
+      if (names.length == elementTypes.length) {
+        names.zip(elementTypes).map {
+          case (name, (t, nullable)) =>
+            AttributeReference(name, t, nullable)()
         }
-      } else if (generatorOutput.length == 0) {
+      } else if (names.isEmpty) {
         elementTypes.zipWithIndex.map {
           // keep the default column names as Hive does _c0, _c1, _cN
           case ((t, nullable), i) => AttributeReference(s"_c$i", t, nullable)()
         }
       } else {
-        throw new AnalysisException(
-          s"""
-             |The number of aliases supplied in the AS clause does not match
-             |the number of columns output by the UDTF expected
-             |${elementTypes.size} aliases but got ${generatorOutput.size}
-           """.stripMargin)
+        failAnalysis(
+          "The number of aliases supplied in the AS clause does not match the number of columns " +
+          s"output by the UDTF expected ${elementTypes.size} aliases but got " +
+          s"${names.mkString(",")} ")
       }
-    }
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case p: Generate if !p.child.resolved || !p.generator.resolved => p
-      case p: Generate if p.resolved == false =>
-        // if the generator output names are not specified, we will use the default ones.
-        Generate(
-          p.generator,
-          join = p.join,
-          outer = p.outer,
-          p.qualifier,
-          makeGeneratorOutput(p.generator, p.generatorOutput), p.child)
     }
   }
 
@@ -638,11 +715,10 @@ class Analyzer(
     def addWindow(windowExpressions: Seq[NamedExpression], child: LogicalPlan): LogicalPlan = {
       // First, we group window expressions based on their Window Spec.
       val groupedWindowExpression = windowExpressions.groupBy { expr =>
-        val windowExpression = expr.find {
-          case window: WindowExpression => true
-          case other => false
-        }.map(_.asInstanceOf[WindowExpression].windowSpec)
-        windowExpression.getOrElse(
+        val windowSpec = expr.collectFirst {
+          case window: WindowExpression => window.windowSpec
+        }
+        windowSpec.getOrElse(
           failAnalysis(s"$windowExpressions does not have any WindowExpression."))
       }.toSeq
 
@@ -665,27 +741,12 @@ class Analyzer(
     // We have to use transformDown at here to make sure the rule of
     // "Aggregate with Having clause" will be triggered.
     def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-      // Lookup WindowSpecDefinitions. This rule works with unresolved children.
-      case WithWindowDefinition(windowDefinitions, child) =>
-        child.transform {
-          case plan => plan.transformExpressions {
-            case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
-              val errorMessage =
-                s"Window specification $windowName is not defined in the WINDOW clause."
-              val windowSpecDefinition =
-                windowDefinitions
-                  .get(windowName)
-                  .getOrElse(failAnalysis(errorMessage))
-              WindowExpression(c, windowSpecDefinition)
-          }
-        }
-
       // Aggregate with Having clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.
       case f @ Filter(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
         if child.resolved &&
            hasWindowFunction(aggregateExprs) &&
-           !a.expressions.exists(!_.resolved) =>
+           a.expressions.forall(_.resolved) =>
         val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
@@ -702,7 +763,7 @@ class Analyzer(
       // Aggregate without Having clause.
       case a @ Aggregate(groupingExprs, aggregateExprs, child)
         if hasWindowFunction(aggregateExprs) &&
-           !a.expressions.exists(!_.resolved) =>
+           a.expressions.forall(_.resolved) =>
         val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)

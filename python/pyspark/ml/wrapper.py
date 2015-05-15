@@ -21,7 +21,7 @@ from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml.param import Params
 from pyspark.ml.pipeline import Estimator, Transformer, Evaluator, Model
-from pyspark.mllib.common import inherit_doc
+from pyspark.mllib.common import inherit_doc, _java2py, _py2java
 
 
 def _jvm():
@@ -67,7 +67,9 @@ class JavaWrapper(Params):
         paramMap = self.extractParamMap(params)
         for param in self.params:
             if param in paramMap:
-                java_obj.set(param.name, paramMap[param])
+                value = paramMap[param]
+                java_param = java_obj.getParam(param.name)
+                java_obj.set(java_param.w(value))
 
     def _empty_java_param_map(self):
         """
@@ -79,7 +81,8 @@ class JavaWrapper(Params):
         paramMap = self._empty_java_param_map()
         for param, value in params.items():
             if param.parent is self:
-                paramMap.put(java_obj.getParam(param.name), value)
+                java_param = java_obj.getParam(param.name)
+                paramMap.put(java_param.w(value))
         return paramMap
 
 
@@ -126,10 +129,8 @@ class JavaTransformer(Transformer, JavaWrapper):
 
     def transform(self, dataset, params={}):
         java_obj = self._java_obj()
-        self._transfer_params_to_java({}, java_obj)
-        java_param_map = self._create_java_param_map(params, java_obj)
-        return DataFrame(java_obj.transform(dataset._jdf, java_param_map),
-                         dataset.sql_ctx)
+        self._transfer_params_to_java(params, java_obj)
+        return DataFrame(java_obj.transform(dataset._jdf), dataset.sql_ctx)
 
 
 @inherit_doc
@@ -147,6 +148,12 @@ class JavaModel(Model, JavaTransformer):
 
     def _java_obj(self):
         return self._java_model
+
+    def _call_java(self, name, *args):
+        m = getattr(self._java_model, name)
+        sc = SparkContext._active_spark_context
+        java_args = [_py2java(sc, arg) for arg in args]
+        return _java2py(sc, m(*java_args))
 
 
 @inherit_doc

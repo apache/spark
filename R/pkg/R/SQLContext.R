@@ -150,21 +150,21 @@ createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
   dataFrame(sdf)
 }
 
-#' toDF
-#'
-#' Converts an RDD to a DataFrame by infer the types.
-#'
-#' @param x An RDD
-#'
-#' @rdname DataFrame
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
-#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
-#' df <- toDF(rdd)
-#' }
+# toDF
+#
+# Converts an RDD to a DataFrame by infer the types.
+#
+# @param x An RDD
+#
+# @rdname DataFrame
+# @export
+# @examples
+#\dontrun{
+# sc <- sparkR.init()
+# sqlCtx <- sparkRSQL.init(sc)
+# rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
+# df <- toDF(rdd)
+# }
 
 setGeneric("toDF", function(x, ...) { standardGeneric("toDF") })
 
@@ -207,23 +207,23 @@ jsonFile <- function(sqlCtx, path) {
 }
 
 
-#' JSON RDD
-#'
-#' Loads an RDD storing one JSON object per string as a DataFrame.
-#'
-#' @param sqlCtx SQLContext to use
-#' @param rdd An RDD of JSON string
-#' @param schema A StructType object to use as schema
-#' @param samplingRatio The ratio of simpling used to infer the schema
-#' @return A DataFrame
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
-#' rdd <- texFile(sc, "path/to/json")
-#' df <- jsonRDD(sqlCtx, rdd)
-#' }
+# JSON RDD
+#
+# Loads an RDD storing one JSON object per string as a DataFrame.
+#
+# @param sqlCtx SQLContext to use
+# @param rdd An RDD of JSON string
+# @param schema A StructType object to use as schema
+# @param samplingRatio The ratio of simpling used to infer the schema
+# @return A DataFrame
+# @export
+# @examples
+#\dontrun{
+# sc <- sparkR.init()
+# sqlCtx <- sparkRSQL.init(sc)
+# rdd <- texFile(sc, "path/to/json")
+# df <- jsonRDD(sqlCtx, rdd)
+# }
 
 # TODO: support schema
 jsonRDD <- function(sqlCtx, rdd, schema = NULL, samplingRatio = 1.0) {
@@ -421,7 +421,7 @@ clearCache <- function(sqlCtx) {
 #' \dontrun{
 #' sc <- sparkR.init()
 #' sqlCtx <- sparkRSQL.init(sc)
-#' df <- loadDF(sqlCtx, path, "parquet")
+#' df <- read.df(sqlCtx, path, "parquet")
 #' registerTempTable(df, "table")
 #' dropTempTable(sqlCtx, "table")
 #' }
@@ -450,16 +450,23 @@ dropTempTable <- function(sqlCtx, tableName) {
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlCtx <- sparkRSQL.init(sc)
-#' df <- load(sqlCtx, "path/to/file.json", source = "json")
+#' df <- read.df(sqlCtx, "path/to/file.json", source = "json")
 #' }
 
-loadDF <- function(sqlCtx, path = NULL, source = NULL, ...) {
+read.df <- function(sqlCtx, path = NULL, source = NULL, ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
     options[['path']] <- path
   }
   sdf <- callJMethod(sqlCtx, "load", source, options)
   dataFrame(sdf)
+}
+
+#' @aliases loadDF
+#' @export
+
+loadDF <- function(sqlCtx, path = NULL, source = NULL, ...) {
+  read.df(sqlCtx, path, source, ...)
 }
 
 #' Create an external table

@@ -20,8 +20,7 @@ package org.apache.spark.ml.util
 import scala.collection.immutable.HashMap
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, BinaryAttribute, NominalAttribute,
-  NumericAttribute}
+import org.apache.spark.ml.attribute._
 import org.apache.spark.sql.types.StructField
 
 
@@ -39,9 +38,9 @@ object MetadataUtils {
    */
   def getNumClasses(labelSchema: StructField): Option[Int] = {
     Attribute.fromStructField(labelSchema) match {
-      case numAttr: NumericAttribute => None
       case binAttr: BinaryAttribute => Some(2)
       case nomAttr: NominalAttribute => nomAttr.getNumValues
+      case _: NumericAttribute | UnresolvedAttribute => None
     }
   }
 
@@ -65,7 +64,7 @@ object MetadataUtils {
           Iterator()
         } else {
           attr match {
-            case numAttr: NumericAttribute => Iterator()
+            case _: NumericAttribute | UnresolvedAttribute => Iterator()
             case binAttr: BinaryAttribute => Iterator(idx -> 2)
             case nomAttr: NominalAttribute =>
               nomAttr.getNumValues match {

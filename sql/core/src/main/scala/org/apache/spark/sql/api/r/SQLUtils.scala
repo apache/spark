@@ -72,17 +72,6 @@ private[r] object SQLUtils {
     sqlContext.createDataFrame(rowRDD, schema)
   }
 
-  // A helper to include grouping columns in Agg()
-  def aggWithGrouping(gd: GroupedData, exprs: Column*): DataFrame = {
-    val aggExprs = exprs.map { col =>
-      col.expr match {
-        case expr: NamedExpression => expr
-        case expr: Expression => Alias(expr, expr.simpleString)()
-      }
-    }
-    gd.toDF(aggExprs)
-  }
-
   def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {
     df.map(r => rowToRBytes(r))
   }
