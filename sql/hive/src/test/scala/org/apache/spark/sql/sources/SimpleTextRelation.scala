@@ -41,8 +41,7 @@ class SimpleTextSource extends HadoopFsRelationProvider {
       schema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
-    val partitionsSchema = partitionColumns.getOrElse(StructType(Array.empty[StructField]))
-    new SimpleTextRelation(paths, schema, partitionsSchema, parameters)(sqlContext)
+    new SimpleTextRelation(paths, schema, partitionColumns, parameters)(sqlContext)
   }
 }
 
@@ -77,16 +76,14 @@ class SimpleTextOutputWriter(path: String, context: TaskAttemptContext) extends 
  * option `"dataSchema"`.
  */
 class SimpleTextRelation(
-    val paths: Array[String],
+    override val paths: Array[String],
     val maybeDataSchema: Option[StructType],
-    partitionsSchema: StructType,
+    override val userDefinedPartitionColumns: Option[StructType],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
   extends HadoopFsRelation {
 
   import sqlContext.sparkContext
-
-  override def userDefinedPartitionColumns: Option[StructType] = Some(partitionsSchema)
 
   override val dataSchema: StructType =
     maybeDataSchema.getOrElse(DataType.fromJson(parameters("dataSchema")).asInstanceOf[StructType])

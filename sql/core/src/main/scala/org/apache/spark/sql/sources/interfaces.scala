@@ -366,17 +366,23 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
   private val codegenEnabled = sqlContext.conf.codegenEnabled
 
-  private var _partitionSpec: PartitionSpec = maybePartitionSpec.map { spec =>
-    spec.copy(partitionColumns = spec.partitionColumns.asNullable)
-  }.getOrElse {
-    if (sqlContext.conf.partitionDiscoveryEnabled()) {
-      discoverPartitions()
-    } else {
-      PartitionSpec(StructType(Nil), Array.empty[Partition])
-    }
-  }
+  private var _partitionSpec: PartitionSpec = _
 
-  final private[sql] def partitionSpec: PartitionSpec = _partitionSpec
+  final private[sql] def partitionSpec: PartitionSpec = {
+    if (_partitionSpec == null) {
+      _partitionSpec = maybePartitionSpec
+        .map(spec => spec.copy(partitionColumns = spec.partitionColumns.asNullable))
+        .orElse(userDefinedPartitionColumns.map(PartitionSpec(_, Array.empty[Partition])))
+        .getOrElse {
+        if (sqlContext.conf.partitionDiscoveryEnabled()) {
+          discoverPartitions()
+        } else {
+          PartitionSpec(StructType(Nil), Array.empty[Partition])
+        }
+      }
+    }
+    _partitionSpec
+  }
 
   /**
    * Base paths of this relation.  For partitioned relations, it should be either root directories
