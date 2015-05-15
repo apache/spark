@@ -34,7 +34,7 @@ from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 from pyspark.sql import DataFrame
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol
-from pyspark.ml.pipeline import Estimator, Model, Pipeline, Transformer
+from pyspark.ml import Estimator, Model, Pipeline, Transformer
 
 
 class MockDataset(DataFrame):
@@ -48,6 +48,9 @@ class HasFake(Params):
     def __init__(self):
         super(HasFake, self).__init__()
         self.fake = Param(self, "fake", "fake param")
+
+    def getFake(self):
+        return self.getOrDefault(self.fake)
 
 
 class MockTransformer(Transformer, HasFake):
@@ -71,6 +74,7 @@ class MockEstimator(Estimator, HasFake):
     def _fit(self, dataset):
         self.dataset_index = dataset.index
         model = MockModel()
+        self._copyValues(model)
         return model
 
 
@@ -86,12 +90,13 @@ class PipelineTests(PySparkTestCase):
         transformer1 = MockTransformer()
         estimator2 = MockEstimator()
         transformer3 = MockTransformer()
-        pipeline = Pipeline() \
-            .setStages([estimator0, transformer1, estimator2, transformer3])
+        pipeline = Pipeline(stages=[estimator0, transformer1, estimator2, transformer3])
         pipeline_model = pipeline.fit(dataset, {estimator0.fake: 0, transformer1.fake: 1})
         model0, transformer1, model2, transformer3 = pipeline_model.stages
         self.assertEqual(0, model0.dataset_index)
+        self.assertEqual(0, model0.getFake())
         self.assertEqual(1, transformer1.dataset_index)
+        self.assertEqual(1, transformer1.getFake())
         self.assertEqual(2, dataset.index)
         self.assertIsNone(model2.dataset_index, "The last model shouldn't be called in fit.")
         self.assertIsNone(transformer3.dataset_index,

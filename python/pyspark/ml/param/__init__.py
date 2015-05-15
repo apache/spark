@@ -70,9 +70,9 @@ class Params(Identifiable):
     @property
     def params(self):
         """
-        Returns all params ordered by name. The default implementation
-        uses :py:func:`dir` to get all attributes of type
-        :py:class:`Param`.
+        Returns all params as a namedtuple, ordered by name. The
+        default implementation uses :py:func:`dir` to get all
+        attributes of type :py:class:`Param`.
         """
         if self._params is None:
             self._params = list(filter(lambda attr: isinstance(attr, Param),
@@ -243,5 +243,5 @@ class Params(Identifiable):
         paramMap = self.extractParamMap(extra)
         for p in self.params:
             if p in paramMap and to.hasParam(p.name):
-                to._set((p.name, paramMap[p]))
+                to._set(**{p.name: paramMap[p]})
         return to
