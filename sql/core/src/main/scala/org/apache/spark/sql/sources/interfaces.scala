@@ -287,7 +287,7 @@ trait CatalystScan {
  * @since 1.4.0
  */
 @Experimental
-trait OutputWriterFactory extends Serializable {
+abstract class OutputWriterFactory extends Serializable {
   /**
    * When writing to a [[HadoopFsRelation]], this method gets called by each task on executor side
    * to instantiate new [[OutputWriter]]s.

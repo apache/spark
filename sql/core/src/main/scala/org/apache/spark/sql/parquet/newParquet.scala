@@ -115,7 +115,7 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
 }
 
 private[sql] class ParquetRelation2(
-    val paths: Array[String],
+    override val paths: Array[String],
     private val maybeDataSchema: Option[StructType],
     private val maybePartitionSpec: Option[PartitionSpec],
     parameters: Map[String, String])(
