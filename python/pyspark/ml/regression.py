@@ -286,8 +286,9 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance", \
-                 numTrees=20, featureSubsetStrategy="auto", seed=None)
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
+                 impurity="variance", numTrees=20, \
+                 featureSubsetStrategy="auto", seed=None)
         """
         super(RandomForestRegressor, self).__init__()
         #: param for Criterion used for information gain calculation (case-insensitive).
