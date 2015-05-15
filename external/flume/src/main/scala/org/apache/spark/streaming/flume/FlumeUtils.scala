@@ -59,7 +59,7 @@ object FlumeUtils {
       port: Int,
       storageLevel: StorageLevel,
       enableDecompression: Boolean
-    ): ReceiverInputDStream[SparkFlumeEvent] = ssc.withScope {
+    ): ReceiverInputDStream[SparkFlumeEvent] = ssc.withNamedScope("flume stream") {
     new FlumeInputDStream[SparkFlumeEvent](ssc, hostname, port, storageLevel, enableDecompression)
   }
 
@@ -159,7 +159,7 @@ object FlumeUtils {
       storageLevel: StorageLevel,
       maxBatchSize: Int,
       parallelism: Int
-    ): ReceiverInputDStream[SparkFlumeEvent] = ssc.withScope {
+    ): ReceiverInputDStream[SparkFlumeEvent] = ssc.withNamedScope("flume polling stream") {
     new FlumePollingInputDStream[SparkFlumeEvent](ssc, addresses, maxBatchSize,
       parallelism, storageLevel)
   }

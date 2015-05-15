@@ -32,8 +32,6 @@ class QueueInputDStream[T: ClassTag](
     defaultRDD: RDD[T]
   ) extends InputDStream[T](ssc) {
 
-  protected[streaming] override val customScopeName: Option[String] = Some(s"queue stream [$id]")
-
   override def start() { }
 
   override def stop() { }

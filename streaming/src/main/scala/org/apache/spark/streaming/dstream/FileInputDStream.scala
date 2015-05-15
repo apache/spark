@@ -126,8 +126,6 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
   @transient private var path_ : Path = null
   @transient private var fs_ : FileSystem = null
 
-  protected[streaming] override val customScopeName: Option[String] = Some(s"file stream [$id]")
-
   override def start() { }
 
   override def stop() { }

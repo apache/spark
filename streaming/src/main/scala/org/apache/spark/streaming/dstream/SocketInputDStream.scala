@@ -37,8 +37,6 @@ class SocketInputDStream[T: ClassTag](
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[T](ssc_) {
 
-  protected[streaming] override val customScopeName: Option[String] = Some(s"socket stream [$id]")
-
   def getReceiver(): Receiver[T] = {
     new SocketReceiver(host, port, bytesToObjects, storageLevel)
   }

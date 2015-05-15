@@ -55,8 +55,6 @@ class KafkaInputDStream[
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[(K, V)](ssc_) with Logging {
 
-  protected[streaming] override val customScopeName: Option[String] = Some(s"kafka stream [$id]")
-
   def getReceiver(): Receiver[(K, V)] = {
     if (!useReliableReceiver) {
       new KafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)

@@ -27,8 +27,6 @@ import scala.reflect.ClassTag
 class ConstantInputDStream[T: ClassTag](ssc_ : StreamingContext, rdd: RDD[T])
   extends InputDStream[T](ssc_) {
 
-  protected[streaming] override val customScopeName: Option[String] = Some(s"constant stream [$id]")
-
   override def start() {}
 
   override def stop() {}

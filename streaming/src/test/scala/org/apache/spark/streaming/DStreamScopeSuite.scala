@@ -120,31 +120,16 @@ class DStreamScopeSuite extends FunSuite with BeforeAndAfter with BeforeAndAfter
     testStream(countStream)
   }
 
-  test("scoping with custom names") {
-    var baseScope: RDDOperationScope = null
-    var rddScope: RDDOperationScope = null
-
-    /** Make a stream in our own scoped DStream operation. */
-    def makeStream(customName: Option[String]): Unit = ssc.withScope {
-      val stream = new DummyInputDStream(ssc, customName)
+  test("scoping input streams") {
+    ssc.withNamedScope("dummy stream") {
+      val stream = new DummyInputDStream(ssc)
       stream.initialize(Time(0))
-      val _baseScope = stream.baseScope.map(RDDOperationScope.fromJson)
-      val _rddScope = stream.getOrCompute(Time(1000)).get.scope
-      assertDefined(_baseScope, _rddScope)
-      baseScope = _baseScope.get
-      rddScope = _rddScope.get
+      val baseScope = stream.baseScope.map(RDDOperationScope.fromJson)
+      val rddScope = stream.getOrCompute(Time(1000)).get.scope
+      assertDefined(baseScope, rddScope)
+      assert(baseScope.get.name === "dummy stream")
+      assertScopeCorrect(baseScope.get.id, s"dummy stream [${stream.id}]", rddScope.get, 1000)
     }
-
-    // By default, a DStream gets its scope name from the operation that created it
-    makeStream(customName = None)
-    assert(baseScope.name.startsWith("makeStream"))
-    assertScopeCorrect(baseScope, rddScope, 1000)
-    // If the DStream defines a custom scope name, however, use that instead of deriving it
-    // from the method. Custom scope names are used extensively by real InputDStreams, which
-    // are frequently created from methods with generic names (e.g. createStream)
-    makeStream(customName = Some("dummy stream"))
-    assert(baseScope.name.startsWith("makeStream")) // not used by RDDs
-    assertScopeCorrect(baseScope.id, "dummy stream", rddScope, 1000)
   }
 
   /** Assert that the RDD operation scope properties are not set in our SparkContext. */
@@ -184,12 +169,7 @@ class DStreamScopeSuite extends FunSuite with BeforeAndAfter with BeforeAndAfter
 /**
  * A dummy input stream that does absolutely nothing.
  */
-private class DummyInputDStream(
-    ssc: StreamingContext,
-    customName: Option[String] = None)
-  extends InputDStream[Int](ssc) {
-
-  protected[streaming] override val customScopeName: Option[String] = customName
+private class DummyInputDStream(ssc: StreamingContext) extends InputDStream[Int](ssc) {
   override def start(): Unit = { }
   override def stop(): Unit = { }
   override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.emptyRDD[Int])

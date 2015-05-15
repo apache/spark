@@ -96,7 +96,7 @@ private[spark] object RDDOperationScope extends Logging {
       sc: SparkContext,
       allowNesting: Boolean = false)(body: => T): T = {
     val stackTrace = Thread.currentThread.getStackTrace().tail // ignore "Thread#getStackTrace"
-    val ourMethodName = stackTrace(1).getMethodName //
+    val ourMethodName = stackTrace(1).getMethodName // i.e. withScope
     // Climb upwards to find the first method that's called something different
     val callerMethodName = stackTrace
       .find(_.getMethodName != ourMethodName)

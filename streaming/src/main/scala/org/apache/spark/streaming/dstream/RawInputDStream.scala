@@ -45,8 +45,6 @@ class RawInputDStream[T: ClassTag](
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[T](ssc_ ) with Logging {
 
-  protected[streaming] override val customScopeName: Option[String] = Some(s"raw stream [$id]")
-
   def getReceiver(): Receiver[T] = {
     new RawNetworkReceiver(host, port, storageLevel).asInstanceOf[Receiver[T]]
   }
