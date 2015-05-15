@@ -1511,13 +1511,19 @@ class Column(object):
     isNull = _unary_op("isNull", "True if the current expression is null.")
     isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
 
-    def alias(self, alias):
-        """Return a alias for this column
+    def alias(self, *alias):
+        """Returns this column aliased with a new name or names (in the case of expressions that
+        return more than one column, such as explode).
 
         >>> df.select(df.age.alias("age2")).collect()
         [Row(age2=2), Row(age2=5)]
         """
-        return Column(getattr(self._jc, "as")(alias))
+
+        if len(alias) == 1:
+            return Column(getattr(self._jc, "as")(alias[0]))
+        else:
+            sc = SparkContext._active_spark_context
+            return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
     @ignore_unicode_prefix
     def cast(self, dataType):
@@ -1545,6 +1551,37 @@ class Column(object):
         expression is between the given columns.
         """
         return (self >= lowerBound) & (self <= upperBound)
+
+    @ignore_unicode_prefix
+    def when(self, condition, value):
+        """Evaluates a list of conditions and returns one of multiple possible result expressions.
+        If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
+
+        See :func:`pyspark.sql.functions.when` for example usage.
+
+        :param condition: a boolean :class:`Column` expression.
+        :param value: a literal value, or a :class:`Column` expression.
+
+        """
+        sc = SparkContext._active_spark_context
+        if not isinstance(condition, Column):
+            raise TypeError("condition should be a Column")
+        v = value._jc if isinstance(value, Column) else value
+        jc = sc._jvm.functions.when(condition._jc, v)
+        return Column(jc)
+
+    @ignore_unicode_prefix
+    def otherwise(self, value):
+        """Evaluates a list of conditions and returns one of multiple possible result expressions.
+        If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
+
+        See :func:`pyspark.sql.functions.when` for example usage.
+
+        :param value: a literal value, or a :class:`Column` expression.
+        """
+        v = value._jc if isinstance(value, Column) else value
+        jc = self._jc.otherwise(value)
+        return Column(jc)
 
     def __repr__(self):
         return 'Column<%s>' % self._jc.toString().encode('utf8')
