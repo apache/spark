@@ -40,6 +40,9 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
     var metrics: TaskMetrics)
   extends TaskResult[T] with Externalizable {
 
+  private var valueObjectDeserialized = false
+  private var valueObject: T = _
+
   def this() = this(null.asInstanceOf[ByteBuffer], null, null)
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
@@ -72,10 +75,19 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
       }
     }
     metrics = in.readObject().asInstanceOf[TaskMetrics]
+    valueObjectDeserialized = false
   }
 
   def value(): T = {
-    val resultSer = SparkEnv.get.serializer.newInstance()
-    resultSer.deserialize(valueBytes)
+    if (valueObjectDeserialized) {
+      valueObject
+    } else {
+      // This should not run when holding a lock because it may cost dozens of seconds for a large
+      // value.
+      val resultSer = SparkEnv.get.serializer.newInstance()
+      valueObject = resultSer.deserialize(valueBytes)
+      valueObjectDeserialized = true
+      valueObject
+    }
   }
 }
