@@ -19,7 +19,7 @@ package org.apache.spark.rpc.akka
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
@@ -29,6 +29,8 @@ import akka.actor.{ActorSystem, ExtendedActorSystem, Actor, ActorRef, Props, Add
 import akka.event.Logging.Error
 import akka.pattern.{ask => akkaAsk}
 import akka.remote.{AssociationEvent, AssociatedEvent, DisassociatedEvent, AssociationErrorEvent}
+import com.google.common.util.concurrent.MoreExecutors
+
 import org.apache.spark.{SparkException, Logging, SparkConf}
 import org.apache.spark.rpc._
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils}
@@ -247,6 +249,10 @@ private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
   }
 }
 
+private[akka] object AkkaRpcEnv {
+  val askExecutionContext = ExecutionContext.fromExecutorService(MoreExecutors.sameThreadExecutor())
+}
+
 /**
  * Monitor errors reported by Akka and log them.
  */
@@ -294,7 +300,6 @@ private[akka] class AkkaRpcEndpointRef(
   }
 
   override def ask[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T] = {
-    import scala.concurrent.ExecutionContext.Implicits.global
     actorRef.ask(AkkaMessage(message, true))(timeout).flatMap {
       case msg @ AkkaMessage(message, reply) =>
         if (reply) {
@@ -305,7 +310,7 @@ private[akka] class AkkaRpcEndpointRef(
         }
       case AkkaFailure(e) =>
         Future.failed(e)
-    }.mapTo[T]
+    }(AkkaRpcEnv.askExecutionContext).mapTo[T]
   }
 
   override def toString: String = s"${getClass.getSimpleName}($actorRef)"
