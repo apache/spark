@@ -183,7 +183,7 @@ class GaussianMixtureModel(object):
     @property
     def weights(self):
         """
-        Weights for each Gaussian distribution in the mixture, where weights[i]() is
+        Weights for each Gaussian distribution in the mixture, where weights[i] is
         the weight for Gaussian i, and weights.sum == 1.
         """
         return self._weights
@@ -191,7 +191,7 @@ class GaussianMixtureModel(object):
     @property
     def gaussians(self):
         """
-        Array of MultivariateGaussian where gaussians[i]() represents
+        Array of MultivariateGaussian where gaussians[i] represents
         the Multivariate Gaussian (Normal) Distribution for Gaussian i.
         """
         return self._gaussians
