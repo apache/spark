@@ -58,7 +58,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     provider.checkForLogs()
     val securityManager = new SecurityManager(conf)
 
-    server = new HistoryServer(conf, provider, securityManager, 18080)
+    server = new HistoryServer(conf, provider, securityManager, "18080")
     server.initialize()
     server.bind()
     port = server.boundPort
