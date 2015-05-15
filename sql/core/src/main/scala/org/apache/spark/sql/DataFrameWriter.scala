@@ -106,6 +106,12 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     this
   }
 
+  /**
+   * Partitions the output by the given columns on the file system. If specified, the output is
+   * laid out on the file system similar to Hive's partitioning scheme.
+   *
+   * @since 1.4.0
+   */
   @scala.annotation.varargs
   def partitionBy(colNames: String*): this.type = {
     this.partitioningColumns = Option(colNames)
