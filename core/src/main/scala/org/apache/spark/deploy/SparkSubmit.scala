@@ -118,8 +118,8 @@ object SparkSubmit {
    * Kill an existing submission using the REST protocol. Standalone and Mesos cluster mode only.
    */
   private def kill(args: SparkSubmitArguments): Unit = {
-    new RestSubmissionClient()
-      .killSubmission(args.master, args.submissionToKill)
+    new RestSubmissionClient(args.master)
+      .killSubmission(args.submissionToKill)
   }
 
   /**
@@ -127,8 +127,8 @@ object SparkSubmit {
    * Standalone and Mesos cluster mode only.
    */
   private def requestStatus(args: SparkSubmitArguments): Unit = {
-    new RestSubmissionClient()
-      .requestSubmissionStatus(args.master, args.submissionToRequestStatusFor)
+    new RestSubmissionClient(args.master)
+      .requestSubmissionStatus(args.submissionToRequestStatusFor)
   }
 
   /**
@@ -332,6 +332,47 @@ object SparkSubmit {
       }
     }
 
+    // In yarn mode for a python app, add pyspark archives to files
+    // that can be distributed with the job
+    if (args.isPython && clusterManager == YARN) {
+      var pyArchives: String = null
+      val pyArchivesEnvOpt = sys.env.get("PYSPARK_ARCHIVES_PATH")
+      if (pyArchivesEnvOpt.isDefined) {
+        pyArchives = pyArchivesEnvOpt.get
+      } else {
+        if (!sys.env.contains("SPARK_HOME")) {
+          printErrorAndExit("SPARK_HOME does not exist for python application in yarn mode.")
+        }
+        val pythonPath = new ArrayBuffer[String]
+        for (sparkHome <- sys.env.get("SPARK_HOME")) {
+          val pyLibPath = Seq(sparkHome, "python", "lib").mkString(File.separator)
+          val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
+          if (!pyArchivesFile.exists()) {
+            printErrorAndExit("pyspark.zip does not exist for python application in yarn mode.")
+          }
+          val py4jFile = new File(pyLibPath, "py4j-0.8.2.1-src.zip")
+          if (!py4jFile.exists()) {
+            printErrorAndExit("py4j-0.8.2.1-src.zip does not exist for python application " +
+              "in yarn mode.")
+          }
+          pythonPath += pyArchivesFile.getAbsolutePath()
+          pythonPath += py4jFile.getAbsolutePath()
+        }
+        pyArchives = pythonPath.mkString(",")
+      }
+
+      pyArchives = pyArchives.split(",").map { localPath=>
+        val localURI = Utils.resolveURI(localPath)
+        if (localURI.getScheme != "local") {
+          args.files = mergeFileLists(args.files, localURI.toString)
+          new Path(localPath).getName
+        } else {
+          localURI.getPath
+        }
+      }.mkString(File.pathSeparator)
+      sysProps("spark.submit.pyArchives") = pyArchives
+    }
+
     // If we're running a R app, set the main class to our specific R runner
     if (args.isR && deployMode == CLIENT) {
       if (args.primaryResource == SPARKR_SHELL) {
@@ -399,6 +440,10 @@ object SparkSubmit {
       OptionAssigner(args.files, YARN, CLUSTER, clOption = "--files"),
       OptionAssigner(args.archives, YARN, CLUSTER, clOption = "--archives"),
       OptionAssigner(args.jars, YARN, CLUSTER, clOption = "--addJars"),
+
+      // Yarn client or cluster
+      OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, clOption = "--principal"),
+      OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, clOption = "--keytab"),
 
       // Other options
       OptionAssigner(args.executorCores, STANDALONE, ALL_DEPLOY_MODES,
@@ -697,7 +742,7 @@ object SparkSubmit {
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */
-private[deploy] object SparkSubmitUtils {
+private[spark] object SparkSubmitUtils {
 
   // Exposed for testing
   var printStream = SparkSubmit.printStream
@@ -734,12 +779,30 @@ private[deploy] object SparkSubmitUtils {
   /**
    * Extracts maven coordinates from a comma-delimited string
    * @param remoteRepos Comma-delimited string of remote repositories
+   * @param ivySettings The Ivy settings for this session
    * @return A ChainResolver used by Ivy to search for and resolve dependencies.
    */
-  def createRepoResolvers(remoteRepos: Option[String]): ChainResolver = {
+  def createRepoResolvers(remoteRepos: Option[String], ivySettings: IvySettings): ChainResolver = {
     // We need a chain resolver if we want to check multiple repositories
     val cr = new ChainResolver
     cr.setName("list")
+
+    val localM2 = new IBiblioResolver
+    localM2.setM2compatible(true)
+    val m2Path = ".m2" + File.separator + "repository" + File.separator
+    localM2.setRoot(new File(System.getProperty("user.home"), m2Path).toURI.toString)
+    localM2.setUsepoms(true)
+    localM2.setName("local-m2-cache")
+    cr.add(localM2)
+
+    val localIvy = new IBiblioResolver
+    localIvy.setRoot(new File(ivySettings.getDefaultIvyUserDir,
+      "local" + File.separator).toURI.toString)
+    val ivyPattern = Seq("[organisation]", "[module]", "[revision]", "[type]s",
+      "[artifact](-[classifier]).[ext]").mkString(File.separator)
+    localIvy.setPattern(ivyPattern)
+    localIvy.setName("local-ivy-cache")
+    cr.add(localIvy)
 
     // the biblio resolver resolves POM declared dependencies
     val br: IBiblioResolver = new IBiblioResolver
@@ -773,8 +836,7 @@ private[deploy] object SparkSubmitUtils {
 
   /**
    * Output a comma-delimited list of paths for the downloaded jars to be added to the classpath
-   * (will append to jars in SparkSubmit). The name of the jar is given
-   * after a '!' by Ivy. It also sometimes contains '(bundle)' after '.jar'. Remove that as well.
+   * (will append to jars in SparkSubmit).
    * @param artifacts Sequence of dependencies that were resolved and retrieved
    * @param cacheDirectory directory where jars are cached
    * @return a comma-delimited list of paths for the dependencies
@@ -783,10 +845,9 @@ private[deploy] object SparkSubmitUtils {
       artifacts: Array[AnyRef],
       cacheDirectory: File): String = {
     artifacts.map { artifactInfo =>
-      val artifactString = artifactInfo.toString
-      val jarName = artifactString.drop(artifactString.lastIndexOf("!") + 1)
+      val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
       cacheDirectory.getAbsolutePath + File.separator +
-        jarName.substring(0, jarName.lastIndexOf(".jar") + 4)
+        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}.jar"
     }.mkString(",")
   }
 
@@ -868,6 +929,7 @@ private[deploy] object SparkSubmitUtils {
         if (alternateIvyCache.trim.isEmpty) {
           new File(ivySettings.getDefaultIvyUserDir, "jars")
         } else {
+          ivySettings.setDefaultIvyUserDir(new File(alternateIvyCache))
           ivySettings.setDefaultCache(new File(alternateIvyCache, "cache"))
           new File(alternateIvyCache, "jars")
         }
@@ -877,7 +939,7 @@ private[deploy] object SparkSubmitUtils {
       // create a pattern matcher
       ivySettings.addMatcher(new GlobPatternMatcher)
       // create the dependency resolvers
-      val repoResolver = createRepoResolvers(remoteRepos)
+      val repoResolver = createRepoResolvers(remoteRepos, ivySettings)
       ivySettings.addResolver(repoResolver)
       ivySettings.setDefaultResolver(repoResolver.getName)
 
@@ -911,7 +973,8 @@ private[deploy] object SparkSubmitUtils {
       }
       // retrieve all resolved dependencies
       ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId,
-        packagesDirectory.getAbsolutePath + File.separator + "[artifact](-[classifier]).[ext]",
+        packagesDirectory.getAbsolutePath + File.separator +
+          "[organization]_[artifact]-[revision].[ext]",
         retrieveOptions.setConfs(Array(ivyConfName)))
       System.setOut(sysOut)
       resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)

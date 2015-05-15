@@ -22,6 +22,7 @@ import java.sql.DriverManager
 import java.util.{Calendar, GregorianCalendar, Properties}
 
 import org.apache.spark.sql.test._
+import org.apache.spark.sql.types._
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{FunSuite, BeforeAndAfter}
 import TestSQLContext._
@@ -103,6 +104,8 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         ).executeUpdate()
     conn.prepareStatement("insert into test.timetypes values ('12:34:56', "
       + "'1996-01-01', '2002-02-20 11:22:33.543543543')").executeUpdate()
+    conn.prepareStatement("insert into test.timetypes values ('12:34:56', "
+      + "null, '2002-02-20 11:22:33.543543543')").executeUpdate()
     conn.commit()
     sql(
       s"""
@@ -124,6 +127,23 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         |CREATE TEMPORARY TABLE flttypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.FLTTYPES', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
+    conn.prepareStatement(
+      s"""
+        |create table test.nulltypes (a INT, b BOOLEAN, c TINYINT, d BINARY(20), e VARCHAR(20),
+        |f VARCHAR_IGNORECASE(20), g CHAR(20), h BLOB, i CLOB, j TIME, k DATE, l TIMESTAMP,
+        |m DOUBLE, n REAL, o DECIMAL(40, 20))
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.prepareStatement("insert into test.nulltypes values ("
+      + "null, null, null, null, null, null, null, null, null, "
+      + "null, null, null, null, null, null)").executeUpdate()
+    conn.commit()
+    sql(
+      s"""
+         |CREATE TEMPORARY TABLE nulltypes
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', dbtable 'TEST.NULLTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
@@ -182,6 +202,22 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(ids(0) === 1)
     assert(ids(1) === 2)
     assert(ids(2) === 3)
+  }
+
+  test("Register JDBC query with renamed fields") {
+    // Regression test for bug SPARK-7345
+    sql(
+      s"""
+        |CREATE TEMPORARY TABLE renamed
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable '(select NAME as NAME1, NAME as NAME2 from TEST.PEOPLE)',
+        |user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
+    val df = sql("SELECT * FROM renamed")
+    assert(df.schema.fields.size == 2)
+    assert(df.schema.fields(0).name == "NAME1")
+    assert(df.schema.fields(1).name == "NAME2")
   }
 
   test("Basic API") {
@@ -253,7 +289,22 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     val rows = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.TIMETYPES").collect()
     val cachedRows = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.TIMETYPES").cache().collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+    assert(rows(1).getAs[java.sql.Date](1) === null)
     assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+  }
+
+  test("test DATE types in cache") {
+    val rows = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.TIMETYPES").collect()
+    TestSQLContext
+      .jdbc(urlWithUserAndPass, "TEST.TIMETYPES").cache().registerTempTable("mycached_date")
+    val cachedRows = sql("select * from mycached_date").collect()
+    assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+    assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+  }
+
+  test("test types for null value") {
+    val rows = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.NULLTYPES").collect()
+    assert((0 to 14).forall(i => rows(0).isNullAt(i)))
   }
 
   test("H2 floating-point types") {
@@ -261,7 +312,11 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(rows(0).getDouble(0) === 1.00000000000000022) // Yes, I meant ==.
     assert(rows(0).getDouble(1) === 1.00000011920928955) // Yes, I meant ==.
     assert(rows(0).getAs[BigDecimal](2)
-        .equals(new BigDecimal("123456789012345.54321543215432100000")))
+      .equals(new BigDecimal("123456789012345.54321543215432100000")))
+    assert(rows(0).schema.fields(2).dataType === DecimalType(40, 20))
+    val compareDecimal = sql("SELECT C FROM flttypes where C > C - 1").collect()
+    assert(compareDecimal(0).getAs[BigDecimal](0)
+      .equals(new BigDecimal("123456789012345.54321543215432100000")))
   }
 
   test("SQL query as table name") {

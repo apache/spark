@@ -88,7 +88,7 @@ case class AllDataTypesScan(
 }
 
 class TableScanSuite extends DataSourceTest {
-  import caseInsensisitiveContext._
+  import caseInsensitiveContext._
 
   var tableWithSchemaExpected = (1 to 10).map { i =>
     Row(

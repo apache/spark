@@ -65,12 +65,6 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   }
 }
 
-case class Pow(left: Expression, right: Expression) extends BinaryMathExpression(math.pow, "POWER")
-
-case class Hypot(
-    left: Expression,
-    right: Expression) extends BinaryMathExpression(math.hypot, "HYPOT")
-
 case class Atan2(
     left: Expression,
     right: Expression) extends BinaryMathExpression(math.atan2, "ATAN2") {
@@ -91,3 +85,9 @@ case class Atan2(
     }
   }
 }
+
+case class Hypot(
+    left: Expression,
+    right: Expression) extends BinaryMathExpression(math.hypot, "HYPOT")
+
+case class Pow(left: Expression, right: Expression) extends BinaryMathExpression(math.pow, "POWER")

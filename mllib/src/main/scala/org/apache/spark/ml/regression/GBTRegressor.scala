@@ -21,21 +21,18 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
-import org.apache.spark.ml.impl.tree._
-import org.apache.spark.ml.param.{Params, ParamMap, Param}
-import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
-import org.apache.spark.ml.util.MetadataUtils
+import org.apache.spark.ml.{PredictionModel, Predictor}
+import org.apache.spark.ml.param.{Param, ParamMap}
+import org.apache.spark.ml.tree.{GBTParams, TreeRegressorParams, DecisionTreeModel, TreeEnsembleModel}
+import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, Loss => OldLoss,
-  SquaredError => OldSquaredError}
+import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, Loss => OldLoss, SquaredError => OldSquaredError}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
-
 
 /**
  * :: AlphaComponent ::
@@ -45,9 +42,11 @@ import org.apache.spark.sql.DataFrame
  * It supports both continuous and categorical features.
  */
 @AlphaComponent
-final class GBTRegressor
+final class GBTRegressor(override val uid: String)
   extends Predictor[Vector, GBTRegressor, GBTRegressionModel]
   with GBTParams with TreeRegressorParams with Logging {
+
+  def this() = this(Identifiable.randomUID("gbtr"))
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -102,21 +101,16 @@ final class GBTRegressor
    */
   val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
     " tries to minimize (case-insensitive). Supported options:" +
-    s" ${GBTRegressor.supportedLossTypes.mkString(", ")}")
+    s" ${GBTRegressor.supportedLossTypes.mkString(", ")}",
+    (value: String) => GBTRegressor.supportedLossTypes.contains(value.toLowerCase))
 
   setDefault(lossType -> "squared")
 
   /** @group setParam */
-  def setLossType(value: String): this.type = {
-    val lossStr = value.toLowerCase
-    require(GBTRegressor.supportedLossTypes.contains(lossStr), "GBTRegressor was given bad loss" +
-      s" type: $value. Supported options: ${GBTRegressor.supportedLossTypes.mkString(", ")}")
-    set(lossType, lossStr)
-    this
-  }
+  def setLossType(value: String): this.type = set(lossType, value)
 
   /** @group getParam */
-  def getLossType: String = getOrDefault(lossType)
+  def getLossType: String = $(lossType).toLowerCase
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {
@@ -129,16 +123,14 @@ final class GBTRegressor
     }
   }
 
-  override protected def train(
-      dataset: DataFrame,
-      paramMap: ParamMap): GBTRegressionModel = {
+  override protected def train(dataset: DataFrame): GBTRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
-      MetadataUtils.getCategoricalFeatures(dataset.schema(paramMap(featuresCol)))
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, paramMap)
+      MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
     val oldGBT = new OldGBT(boostingStrategy)
     val oldModel = oldGBT.run(oldDataset)
-    GBTRegressionModel.fromOld(oldModel, this, paramMap, categoricalFeatures)
+    GBTRegressionModel.fromOld(oldModel, this, categoricalFeatures)
   }
 }
 
@@ -159,8 +151,7 @@ object GBTRegressor {
  */
 @AlphaComponent
 final class GBTRegressionModel(
-    override val parent: GBTRegressor,
-    override val fittingParamMap: ParamMap,
+    override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
     private val _treeWeights: Array[Double])
   extends PredictionModel[Vector, GBTRegressionModel]
@@ -183,10 +174,8 @@ final class GBTRegressionModel(
     if (prediction > 0.0) 1.0 else 0.0
   }
 
-  override protected def copy(): GBTRegressionModel = {
-    val m = new GBTRegressionModel(parent, fittingParamMap, _trees, _treeWeights)
-    Params.inheritValues(this.extractParamMap(), this, m)
-    m
+  override def copy(extra: ParamMap): GBTRegressionModel = {
+    copyValues(new GBTRegressionModel(uid, _trees, _treeWeights), extra)
   }
 
   override def toString: String = {
@@ -205,14 +194,14 @@ private[ml] object GBTRegressionModel {
   def fromOld(
       oldModel: OldGBTModel,
       parent: GBTRegressor,
-      fittingParamMap: ParamMap,
       categoricalFeatures: Map[Int, Int]): GBTRegressionModel = {
     require(oldModel.algo == OldAlgo.Regression, "Cannot convert GradientBoostedTreesModel" +
       s" with algo=${oldModel.algo} (old API) to GBTRegressionModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
       // parent, fittingParamMap for each tree is null since there are no good ways to set these.
-      DecisionTreeRegressionModel.fromOld(tree, null, null, categoricalFeatures)
+      DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
-    new GBTRegressionModel(parent, fittingParamMap, newTrees, oldModel.treeWeights)
+    val uid = if (parent != null) parent.uid else Identifiable.randomUID("gbtr")
+    new GBTRegressionModel(parent.uid, newTrees, oldModel.treeWeights)
   }
 }

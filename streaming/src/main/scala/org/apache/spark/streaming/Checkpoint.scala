@@ -77,7 +77,8 @@ object Checkpoint extends Logging {
   }
 
   /** Get checkpoint files present in the give directory, ordered by oldest-first */
-  def getCheckpointFiles(checkpointDir: String, fs: FileSystem): Seq[Path] = {
+  def getCheckpointFiles(checkpointDir: String, fsOption: Option[FileSystem] = None): Seq[Path] = {
+
     def sortFunc(path1: Path, path2: Path): Boolean = {
       val (time1, bk1) = path1.getName match { case REGEX(x, y) => (x.toLong, !y.isEmpty) }
       val (time2, bk2) = path2.getName match { case REGEX(x, y) => (x.toLong, !y.isEmpty) }
@@ -85,6 +86,7 @@ object Checkpoint extends Logging {
     }
 
     val path = new Path(checkpointDir)
+    val fs = fsOption.getOrElse(path.getFileSystem(new Configuration()))
     if (fs.exists(path)) {
       val statuses = fs.listStatus(path)
       if (statuses != null) {
@@ -160,7 +162,7 @@ class CheckpointWriter(
           }
 
           // Delete old checkpoint files
-          val allCheckpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, fs)
+          val allCheckpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, Some(fs))
           if (allCheckpointFiles.size > 10) {
             allCheckpointFiles.take(allCheckpointFiles.size - 10).foreach(file => {
               logInfo("Deleting " + file)
@@ -234,15 +236,24 @@ class CheckpointWriter(
 private[streaming]
 object CheckpointReader extends Logging {
 
-  def read(checkpointDir: String, conf: SparkConf, hadoopConf: Configuration): Option[Checkpoint] =
-  {
+  /**
+   * Read checkpoint files present in the given checkpoint directory. If there are no checkpoint
+   * files, then return None, else try to return the latest valid checkpoint object. If no
+   * checkpoint files could be read correctly, then return None (if ignoreReadError = true),
+   * or throw exception (if ignoreReadError = false).
+   */
+  def read(
+      checkpointDir: String,
+      conf: SparkConf,
+      hadoopConf: Configuration,
+      ignoreReadError: Boolean = false): Option[Checkpoint] = {
     val checkpointPath = new Path(checkpointDir)
 
     // TODO(rxin): Why is this a def?!
     def fs: FileSystem = checkpointPath.getFileSystem(hadoopConf)
 
     // Try to find the checkpoint files
-    val checkpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, fs).reverse
+    val checkpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).reverse
     if (checkpointFiles.isEmpty) {
       return None
     }
@@ -282,7 +293,10 @@ object CheckpointReader extends Logging {
     })
 
     // If none of checkpoint files could be read, then throw exception
-    throw new SparkException("Failed to read checkpoint from directory " + checkpointPath)
+    if (!ignoreReadError) {
+      throw new SparkException(s"Failed to read checkpoint from directory $checkpointPath")
+    }
+    None
   }
 }
 

@@ -250,7 +250,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       case Cast(child @ DateType(), StringType) =>
         child.castOrNull(c =>
           q"""org.apache.spark.sql.types.UTF8String(
-                org.apache.spark.sql.types.DateUtils.toString($c))""",
+                org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""",
           StringType)
 
       case Cast(child @ NumericType(), IntegerType) =>
@@ -672,6 +672,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case DoubleType => ru.Literal(Constant(-1.toDouble))
     case DecimalType() => q"org.apache.spark.sql.types.Decimal(-1)"
     case IntegerType => ru.Literal(Constant(-1))
+    case DateType => ru.Literal(Constant(-1))
     case _ => ru.Literal(Constant(null))
   }
 

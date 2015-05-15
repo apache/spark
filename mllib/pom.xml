@@ -109,6 +109,21 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.jpmml</groupId>
+      <artifactId>pmml-model</artifactId>
+      <version>1.1.15</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.sun.xml.fastinfoset</groupId>
+          <artifactId>FastInfoset</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.sun.istack</groupId>
+          <artifactId>istack-commons-runtime</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
   </dependencies>
   <profiles>
     <profile>
@@ -126,16 +141,5 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-    <resources>
-      <resource>
-        <directory>../python</directory>
-        <includes>
-          <include>pyspark/mllib/*.py</include>
-          <include>pyspark/mllib/stat/*.py</include>
-          <include>pyspark/ml/*.py</include>
-          <include>pyspark/ml/param/*.py</include>
-        </includes>
-      </resource>
-    </resources>
   </build>
 </project>

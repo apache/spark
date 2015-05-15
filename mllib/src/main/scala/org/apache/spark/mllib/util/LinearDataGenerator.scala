@@ -75,8 +75,8 @@ object LinearDataGenerator {
       seed: Int,
       eps: Double = 0.1): Seq[LabeledPoint] = {
     generateLinearInput(intercept, weights,
-      Array.fill[Double](weights.size)(0.0),
-      Array.fill[Double](weights.size)(1.0 / 3.0),
+      Array.fill[Double](weights.length)(0.0),
+      Array.fill[Double](weights.length)(1.0 / 3.0),
       nPoints, seed, eps)}
 
   /**
@@ -103,17 +103,16 @@ object LinearDataGenerator {
 
     val rnd = new Random(seed)
     val x = Array.fill[Array[Double]](nPoints)(
-      Array.fill[Double](weights.length)(rnd.nextDouble))
+      Array.fill[Double](weights.length)(rnd.nextDouble()))
 
-    x.map(vector => {
-      // This doesn't work if `vector` is a sparse vector.
-      val vectorArray = vector.toArray
+    x.foreach { v =>
       var i = 0
-      while (i < vectorArray.size) {
-        vectorArray(i) = (vectorArray(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
+      val len = v.length
+      while (i < len) {
+        v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
         i += 1
       }
-    })
+    }
 
     val y = x.map { xi =>
       blas.ddot(weights.length, xi, 1, weights, 1) + intercept + eps * rnd.nextGaussian()

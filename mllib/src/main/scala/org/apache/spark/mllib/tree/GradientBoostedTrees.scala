@@ -180,7 +180,9 @@ object GradientBoostedTrees extends Logging {
     val persistedInput = if (input.getStorageLevel == StorageLevel.NONE) {
       input.persist(StorageLevel.MEMORY_AND_DISK)
       true
-    } else false
+    } else {
+      false
+    }
 
     timer.stop("init")
 

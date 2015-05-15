@@ -19,8 +19,7 @@ package org.apache.spark.sql
 
 import java.lang.{Double => JavaDouble}
 
-import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.mathfunctions._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 
@@ -159,11 +158,11 @@ class MathExpressionsSuite extends QueryTest {
   }
 
   test("toDeg") {
-    testOneToOneMathFunction(toDeg, math.toDegrees)
+    testOneToOneMathFunction(toDegrees, math.toDegrees)
   }
 
   test("toRad") {
-    testOneToOneMathFunction(toRad, math.toRadians)
+    testOneToOneMathFunction(toRadians, math.toRadians)
   }
 
   test("cbrt") {
@@ -192,18 +191,6 @@ class MathExpressionsSuite extends QueryTest {
 
   test("signum") {
     testOneToOneMathFunction[Double](signum, math.signum)
-  }
-
-  test("isignum") {
-    testOneToOneMathFunction[Int](isignum, math.signum)
-  }
-
-  test("fsignum") {
-    testOneToOneMathFunction[Float](fsignum, math.signum)
-  }
-
-  test("lsignum") {
-    testOneToOneMathFunction[Long](lsignum, math.signum)
   }
 
   test("pow") {

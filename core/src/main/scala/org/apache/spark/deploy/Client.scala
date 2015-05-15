@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy
 
+import scala.collection.mutable.HashSet
 import scala.concurrent._
 
 import akka.actor._
@@ -31,20 +32,23 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, RpcUtils, Utils}
 
 /**
  * Proxy that relays messages to the driver.
+ *
+ * We currently don't support retry if submission fails. In HA mode, client will submit request to
+ * all masters and see which one could handle it.
  */
 private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
   extends Actor with ActorLogReceive with Logging {
 
-  var masterActor: ActorSelection = _
+  private val masterActors = driverArgs.masters.map { m =>
+    context.actorSelection(Master.toAkkaUrl(m, AkkaUtils.protocol(context.system)))
+  }
+  private val lostMasters = new HashSet[Address]
+  private var activeMasterActor: ActorSelection = null
+
   val timeout = RpcUtils.askTimeout(conf)
 
   override def preStart(): Unit = {
-    masterActor = context.actorSelection(
-      Master.toAkkaUrl(driverArgs.master, AkkaUtils.protocol(context.system)))
-
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-
-    println(s"Sending ${driverArgs.cmd} command to ${driverArgs.master}")
 
     driverArgs.cmd match {
       case "launch" =>
@@ -79,11 +83,17 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
           driverArgs.supervise,
           command)
 
-        masterActor ! RequestSubmitDriver(driverDescription)
+        // This assumes only one Master is active at a time
+        for (masterActor <- masterActors) {
+          masterActor ! RequestSubmitDriver(driverDescription)
+        }
 
       case "kill" =>
         val driverId = driverArgs.driverId
-        masterActor ! RequestKillDriver(driverId)
+        // This assumes only one Master is active at a time
+        for (masterActor <- masterActors) {
+          masterActor ! RequestKillDriver(driverId)
+        }
     }
   }
 
@@ -92,10 +102,9 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
     println("... waiting before polling master for driver state")
     Thread.sleep(5000)
     println("... polling master for driver state")
-    val statusFuture = (masterActor ? RequestDriverStatus(driverId))(timeout)
+    val statusFuture = (activeMasterActor ? RequestDriverStatus(driverId))(timeout)
       .mapTo[DriverStatusResponse]
     val statusResponse = Await.result(statusFuture, timeout)
-
     statusResponse.found match {
       case false =>
         println(s"ERROR: Cluster master did not recognize $driverId")
@@ -122,20 +131,46 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
 
     case SubmitDriverResponse(success, driverId, message) =>
       println(message)
-      if (success) pollAndReportStatus(driverId.get) else System.exit(-1)
+      if (success) {
+        activeMasterActor = context.actorSelection(sender.path)
+        pollAndReportStatus(driverId.get)
+      } else if (!Utils.responseFromBackup(message)) {
+        System.exit(-1)
+      }
+
 
     case KillDriverResponse(driverId, success, message) =>
       println(message)
-      if (success) pollAndReportStatus(driverId) else System.exit(-1)
+      if (success) {
+        activeMasterActor = context.actorSelection(sender.path)
+        pollAndReportStatus(driverId)
+      } else if (!Utils.responseFromBackup(message)) {
+        System.exit(-1)
+      }
 
     case DisassociatedEvent(_, remoteAddress, _) =>
-      println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
-      System.exit(-1)
+      if (!lostMasters.contains(remoteAddress)) {
+        println(s"Error connecting to master $remoteAddress.")
+        lostMasters += remoteAddress
+        // Note that this heuristic does not account for the fact that a Master can recover within
+        // the lifetime of this client. Thus, once a Master is lost it is lost to us forever. This
+        // is not currently a concern, however, because this client does not retry submissions.
+        if (lostMasters.size >= masterActors.size) {
+          println("No master is available, exiting.")
+          System.exit(-1)
+        }
+      }
 
     case AssociationErrorEvent(cause, _, remoteAddress, _, _) =>
-      println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
-      println(s"Cause was: $cause")
-      System.exit(-1)
+      if (!lostMasters.contains(remoteAddress)) {
+        println(s"Error connecting to master ($remoteAddress).")
+        println(s"Cause was: $cause")
+        lostMasters += remoteAddress
+        if (lostMasters.size >= masterActors.size) {
+          println("No master is available, exiting.")
+          System.exit(-1)
+        }
+      }
   }
 }
 
@@ -163,7 +198,9 @@ object Client {
       "driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
     // Verify driverArgs.master is a valid url so that we can use it in ClientActor safely
-    Master.toAkkaUrl(driverArgs.master, AkkaUtils.protocol(actorSystem))
+    for (m <- driverArgs.masters) {
+      Master.toAkkaUrl(m, AkkaUtils.protocol(actorSystem))
+    }
     actorSystem.actorOf(Props(classOf[ClientActor], driverArgs, conf))
 
     actorSystem.awaitTermination()

@@ -25,27 +25,16 @@ import org.apache.spark.sql.types._
  * input format, therefore these functions extend `ExpectsInputTypes`.
  * @param name The short name of the function
  */
-abstract class MathematicalExpression(name: String)
+abstract class MathematicalExpression(f: Double => Double, name: String)
   extends UnaryExpression with Serializable with ExpectsInputTypes {
   self: Product =>
   type EvaluatedType = Any
 
+  override def expectedChildTypes: Seq[DataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
-}
-
-/**
- * A unary expression specifically for math functions that take a `Double` as input and return
- * a `Double`.
- * @param f The math function.
- * @param name The short name of the function
- */
-abstract class MathematicalExpressionForDouble(f: Double => Double, name: String)
-  extends MathematicalExpression(name) { self: Product =>
-  
-  override def expectedChildTypes: Seq[DataType] = Seq(DoubleType)
 
   override def eval(input: Row): Any = {
     val evalE = child.eval(input)
@@ -58,111 +47,46 @@ abstract class MathematicalExpressionForDouble(f: Double => Double, name: String
   }
 }
 
-/**
- * A unary expression specifically for math functions that take an `Int` as input and return
- * an `Int`.
- * @param f The math function.
- * @param name The short name of the function
- */
-abstract class MathematicalExpressionForInt(f: Int => Int, name: String)
-  extends MathematicalExpression(name) { self: Product =>
+case class Acos(child: Expression) extends MathematicalExpression(math.acos, "ACOS")
 
-  override def dataType: DataType = IntegerType
-  override def expectedChildTypes: Seq[DataType] = Seq(IntegerType)
+case class Asin(child: Expression) extends MathematicalExpression(math.asin, "ASIN")
 
-  override def eval(input: Row): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) null else f(evalE.asInstanceOf[Int])
-  }
-}
+case class Atan(child: Expression) extends MathematicalExpression(math.atan, "ATAN")
 
-/**
- * A unary expression specifically for math functions that take a `Float` as input and return
- * a `Float`.
- * @param f The math function.
- * @param name The short name of the function
- */
-abstract class MathematicalExpressionForFloat(f: Float => Float, name: String)
-  extends MathematicalExpression(name) { self: Product =>
+case class Cbrt(child: Expression) extends MathematicalExpression(math.cbrt, "CBRT")
 
-  override def dataType: DataType = FloatType
-  override def expectedChildTypes: Seq[DataType] = Seq(FloatType)
+case class Ceil(child: Expression) extends MathematicalExpression(math.ceil, "CEIL")
 
-  override def eval(input: Row): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) {
-      null
-    } else {
-      val result = f(evalE.asInstanceOf[Float])
-      if (result.isNaN) null else result
-    }
-  }
-}
+case class Cos(child: Expression) extends MathematicalExpression(math.cos, "COS")
 
-/**
- * A unary expression specifically for math functions that take a `Long` as input and return
- * a `Long`.
- * @param f The math function.
- * @param name The short name of the function
- */
-abstract class MathematicalExpressionForLong(f: Long => Long, name: String)
-  extends MathematicalExpression(name) { self: Product =>
+case class Cosh(child: Expression) extends MathematicalExpression(math.cosh, "COSH")
 
-  override def dataType: DataType = LongType
-  override def expectedChildTypes: Seq[DataType] = Seq(LongType)
+case class Exp(child: Expression) extends MathematicalExpression(math.exp, "EXP")
 
-  override def eval(input: Row): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) null else f(evalE.asInstanceOf[Long])
-  }
-}
+case class Expm1(child: Expression) extends MathematicalExpression(math.expm1, "EXPM1")
 
-case class Sin(child: Expression) extends MathematicalExpressionForDouble(math.sin, "SIN")
+case class Floor(child: Expression) extends MathematicalExpression(math.floor, "FLOOR")
 
-case class Asin(child: Expression) extends MathematicalExpressionForDouble(math.asin, "ASIN")
+case class Log(child: Expression) extends MathematicalExpression(math.log, "LOG")
 
-case class Sinh(child: Expression) extends MathematicalExpressionForDouble(math.sinh, "SINH")
+case class Log10(child: Expression) extends MathematicalExpression(math.log10, "LOG10")
 
-case class Cos(child: Expression) extends MathematicalExpressionForDouble(math.cos, "COS")
+case class Log1p(child: Expression) extends MathematicalExpression(math.log1p, "LOG1P")
 
-case class Acos(child: Expression) extends MathematicalExpressionForDouble(math.acos, "ACOS")
+case class Rint(child: Expression) extends MathematicalExpression(math.rint, "ROUND")
 
-case class Cosh(child: Expression) extends MathematicalExpressionForDouble(math.cosh, "COSH")
+case class Signum(child: Expression) extends MathematicalExpression(math.signum, "SIGNUM")
 
-case class Tan(child: Expression) extends MathematicalExpressionForDouble(math.tan, "TAN")
+case class Sin(child: Expression) extends MathematicalExpression(math.sin, "SIN")
 
-case class Atan(child: Expression) extends MathematicalExpressionForDouble(math.atan, "ATAN")
+case class Sinh(child: Expression) extends MathematicalExpression(math.sinh, "SINH")
 
-case class Tanh(child: Expression) extends MathematicalExpressionForDouble(math.tanh, "TANH")
+case class Tan(child: Expression) extends MathematicalExpression(math.tan, "TAN")
 
-case class Ceil(child: Expression) extends MathematicalExpressionForDouble(math.ceil, "CEIL")
-
-case class Floor(child: Expression) extends MathematicalExpressionForDouble(math.floor, "FLOOR")
-
-case class Rint(child: Expression) extends MathematicalExpressionForDouble(math.rint, "ROUND")
-
-case class Cbrt(child: Expression) extends MathematicalExpressionForDouble(math.cbrt, "CBRT")
-
-case class Signum(child: Expression) extends MathematicalExpressionForDouble(math.signum, "SIGNUM")
-
-case class ISignum(child: Expression) extends MathematicalExpressionForInt(math.signum, "ISIGNUM")
-
-case class FSignum(child: Expression) extends MathematicalExpressionForFloat(math.signum, "FSIGNUM")
-
-case class LSignum(child: Expression) extends MathematicalExpressionForLong(math.signum, "LSIGNUM")
+case class Tanh(child: Expression) extends MathematicalExpression(math.tanh, "TANH")
 
 case class ToDegrees(child: Expression) 
-  extends MathematicalExpressionForDouble(math.toDegrees, "DEGREES")
+  extends MathematicalExpression(math.toDegrees, "DEGREES")
 
 case class ToRadians(child: Expression) 
-  extends MathematicalExpressionForDouble(math.toRadians, "RADIANS")
-
-case class Log(child: Expression) extends MathematicalExpressionForDouble(math.log, "LOG")
-
-case class Log10(child: Expression) extends MathematicalExpressionForDouble(math.log10, "LOG10")
-
-case class Log1p(child: Expression) extends MathematicalExpressionForDouble(math.log1p, "LOG1P")
-
-case class Exp(child: Expression) extends MathematicalExpressionForDouble(math.exp, "EXP")
-
-case class Expm1(child: Expression) extends MathematicalExpressionForDouble(math.expm1, "EXPM1")
+  extends MathematicalExpression(math.toRadians, "RADIANS")

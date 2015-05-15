@@ -50,6 +50,9 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   // These two are created only when scheduler starts.
   // eventLoop not being null means the scheduler has been started and not stopped
   var receiverTracker: ReceiverTracker = null
+  // A tracker to track all the input stream information as well as processed record number
+  var inputInfoTracker: InputInfoTracker = null
+
   private var eventLoop: EventLoop[JobSchedulerEvent] = null
 
   def start(): Unit = synchronized {
@@ -65,6 +68,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
     listenerBus.start(ssc.sparkContext)
     receiverTracker = new ReceiverTracker(ssc)
+    inputInfoTracker = new InputInfoTracker(ssc)
     receiverTracker.start()
     jobGenerator.start()
     logInfo("Started JobScheduler")
@@ -172,16 +176,28 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     ssc.waiter.notifyError(e)
   }
 
-  private class JobHandler(job: Job) extends Runnable {
+  private class JobHandler(job: Job) extends Runnable with Logging {
     def run() {
-      eventLoop.post(JobStarted(job))
-      // Disable checks for existing output directories in jobs launched by the streaming scheduler,
-      // since we may need to write output to an existing directory during checkpoint recovery;
-      // see SPARK-4835 for more details.
-      PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
-        job.run()
+      ssc.sc.setLocalProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, job.time.milliseconds.toString)
+      ssc.sc.setLocalProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, job.outputOpId.toString)
+      try {
+        eventLoop.post(JobStarted(job))
+        // Disable checks for existing output directories in jobs launched by the streaming
+        // scheduler, since we may need to write output to an existing directory during checkpoint
+        // recovery; see SPARK-4835 for more details.
+        PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
+          job.run()
+        }
+        eventLoop.post(JobCompleted(job))
+      } finally {
+        ssc.sc.setLocalProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, null)
+        ssc.sc.setLocalProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, null)
       }
-      eventLoop.post(JobCompleted(job))
     }
   }
+}
+
+private[streaming] object JobScheduler {
+  val BATCH_TIME_PROPERTY_KEY = "spark.streaming.internal.batchTime"
+  val OUTPUT_OP_ID_PROPERTY_KEY = "spark.streaming.internal.outputOpId"
 }

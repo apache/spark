@@ -19,12 +19,18 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.catalyst.DefaultParserDialect
+import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
+
 import org.apache.spark.sql.types._
+
+/** A SQL Dialect for testing purpose, and it can not be nested type */
+class MyDialect extends DefaultParserDialect
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
@@ -46,6 +52,16 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
+  test("support table.star") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.*
+          |FROM testData l join testData2 r on (l.key = r.a)
+        """.stripMargin),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+  }
+
   test("self join with alias in agg") {
       Seq(1,2,3)
         .map(i => (i, i.toString))
@@ -62,6 +78,23 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
           |GROUP BY x.str
         """.stripMargin),
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+  }
+
+  test("SQL Dialect Switching to a new SQL parser") {
+    val newContext = new SQLContext(TestSQLContext.sparkContext)
+    newContext.setConf("spark.sql.dialect", classOf[MyDialect].getCanonicalName())
+    assert(newContext.getSQLDialect().getClass === classOf[MyDialect])
+    assert(newContext.sql("SELECT 1").collect() === Array(Row(1)))
+  }
+
+  test("SQL Dialect Switch to an invalid parser with alias") {
+    val newContext = new SQLContext(TestSQLContext.sparkContext)
+    newContext.sql("SET spark.sql.dialect=MyTestClass")
+    intercept[DialectException] {
+      newContext.sql("SELECT 1")
+    }
+    // test if the dialect set back to DefaultSQLDialect
+    assert(newContext.getSQLDialect().getClass === classOf[DefaultParserDialect])
   }
 
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
@@ -86,6 +119,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
           |group by attribute
         """.stripMargin),
       Row(1, 1) :: Nil)
+  }
+
+  test("SPARK-6201 IN type conversion") {
+    jsonRDD(sparkContext.parallelize(Seq("{\"a\": \"1\"}}", "{\"a\": \"2\"}}", "{\"a\": \"3\"}}")))
+      .registerTempTable("d")
+
+    checkAnswer(
+      sql("select * from d where d.a in (1,2)"),
+      Seq(Row("1"), Row("2")))
   }
 
   test("SPARK-3176 Added Parser of SQL ABS()") {
@@ -255,6 +297,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-3173 Timestamp support in the parser") {
+    checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.0'"),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00")))
+
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time=CAST('1969-12-31 16:00:00.001' AS TIMESTAMP)"),
       Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
@@ -830,6 +876,16 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     conf.clear()
   }
 
+  test("SET commands with illegal or inappropriate argument") {
+    conf.clear()
+    // Set negative mapred.reduce.tasks for automatically determing
+    // the number of reducers is not supported
+    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
+    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-01"))
+    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-2"))
+    conf.clear()
+  }
+
   test("apply schema") {
     val schema1 = StructType(
       StructField("f1", IntegerType, false) ::
@@ -1224,6 +1280,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
     rdd.toDF().registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
+  }
+
+  test("SPARK-4699 case sensitivity SQL query") {
+    setConf(SQLConf.CASE_SENSITIVE, "false")
+    val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
+    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
+    rdd.toDF().registerTempTable("testTable1")
+    checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
+    setConf(SQLConf.CASE_SENSITIVE, "true")
   }
 
   test("SPARK-6145: ORDER BY test for nested fields") {

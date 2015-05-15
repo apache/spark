@@ -356,7 +356,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
-    val reregister = !master.driverEndpoint.askWithReply[Boolean](
+    val reregister = !master.driverEndpoint.askWithRetry[Boolean](
       BlockManagerHeartbeat(store.blockManagerId))
     assert(reregister == true)
   }
@@ -526,6 +526,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
   test("tachyon storage") {
     // TODO Make the spark.test.tachyon.enable true after using tachyon 0.5.0 testing jar.
     val tachyonUnitTestEnabled = conf.getBoolean("spark.test.tachyon.enable", false)
+    conf.set(ExternalBlockStore.BLOCK_MANAGER_NAME, ExternalBlockStore.DEFAULT_BLOCK_MANAGER_NAME)
     if (tachyonUnitTestEnabled) {
       store = makeBlockManager(1200)
       val a1 = new Array[Byte](400)

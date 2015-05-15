@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedGetField, EliminateSubQueries}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedExtractValue, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -35,6 +35,7 @@ class ConstantFoldingSuite extends PlanTest {
       Batch("AnalysisNodes", Once,
         EliminateSubQueries) ::
       Batch("ConstantFolding", Once,
+        OptimizeIn,
         ConstantFolding,
         BooleanSimplification) :: Nil
   }
@@ -160,7 +161,7 @@ class ConstantFoldingSuite extends PlanTest {
     val originalQuery =
       testRelation
         .select(
-          Rand + Literal(1) as Symbol("c1"),
+          Rand(5L) + Literal(1) as Symbol("c1"),
           Sum('a) as Symbol("c2"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -168,7 +169,7 @@ class ConstantFoldingSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select(
-          Rand + Literal(1.0) as Symbol("c1"),
+          Rand(5L) + Literal(1.0) as Symbol("c1"),
           Sum('a) as Symbol("c2"))
         .analyze
 
@@ -180,10 +181,10 @@ class ConstantFoldingSuite extends PlanTest {
       IsNull(Literal(null)) as 'c1,
       IsNotNull(Literal(null)) as 'c2,
 
-      GetItem(Literal.create(null, ArrayType(IntegerType)), 1) as 'c3,
-      GetItem(
+      UnresolvedExtractValue(Literal.create(null, ArrayType(IntegerType)), 1) as 'c3,
+      UnresolvedExtractValue(
         Literal.create(Seq(1), ArrayType(IntegerType)), Literal.create(null, IntegerType)) as 'c4,
-      UnresolvedGetField(
+      UnresolvedExtractValue(
         Literal.create(null, StructType(Seq(StructField("a", IntegerType, true)))),
         "a") as 'c5,
 
@@ -244,6 +245,38 @@ class ConstantFoldingSuite extends PlanTest {
           Literal.create(null, BooleanType) as 'c19,
           Literal.create(null, BooleanType) as 'c20
         ).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+  
+  test("Constant folding test: Fold In(v, list) into true or false") {
+    var originalQuery =
+      testRelation
+        .select('a)
+        .where(In(Literal(1), Seq(Literal(1), Literal(2))))
+
+    var optimized = Optimize.execute(originalQuery.analyze)
+
+    var correctAnswer =
+      testRelation
+        .select('a)
+        .where(Literal(true))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+
+    originalQuery =
+      testRelation
+        .select('a)
+        .where(In(Literal(1), Seq(Literal(1), 'a.attr)))
+
+    optimized = Optimize.execute(originalQuery.analyze)
+
+    correctAnswer =
+      testRelation
+        .select('a)
+        .where(Literal(true))
+        .analyze
 
     comparePlans(optimized, correctAnswer)
   }

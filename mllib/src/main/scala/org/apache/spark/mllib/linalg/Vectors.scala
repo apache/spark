@@ -116,6 +116,40 @@ sealed trait Vector extends Serializable {
    *          with type `Double`.
    */
   private[spark] def foreachActive(f: (Int, Double) => Unit)
+
+  /**
+   * Number of active entries.  An "active entry" is an element which is explicitly stored,
+   * regardless of its value.  Note that inactive entries have value 0.
+   */
+  def numActives: Int
+
+  /**
+   * Number of nonzero elements. This scans all active values and count nonzeros.
+   */
+  def numNonzeros: Int
+
+  /**
+   * Converts this vector to a sparse vector with all explicit zeros removed.
+   */
+  def toSparse: SparseVector
+
+  /**
+   * Converts this vector to a dense vector.
+   */
+  def toDense: DenseVector = new DenseVector(this.toArray)
+
+  /**
+   * Returns a vector in either dense or sparse format, whichever uses less storage.
+   */
+  def compressed: Vector = {
+    val nnz = numNonzeros
+    // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
+    if (1.5 * (nnz + 1.0) < size) {
+      toSparse
+    } else {
+      toDense
+    }
+  }
 }
 
 /**
@@ -525,6 +559,56 @@ class DenseVector(val values: Array[Double]) extends Vector {
     }
     result
   }
+
+  override def numActives: Int = size
+
+  override def numNonzeros: Int = {
+    // same as values.count(_ != 0.0) but faster
+    var nnz = 0
+    values.foreach { v =>
+      if (v != 0.0) {
+        nnz += 1
+      }
+    }
+    nnz
+  }
+
+  override def toSparse: SparseVector = {
+    val nnz = numNonzeros
+    val ii = new Array[Int](nnz)
+    val vv = new Array[Double](nnz)
+    var k = 0
+    foreachActive { (i, v) =>
+      if (v != 0) {
+        ii(k) = i
+        vv(k) = v
+        k += 1
+      }
+    }
+    new SparseVector(size, ii, vv)
+  }
+
+  /**
+   * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
+   * Returns -1 if vector has length 0.
+   */
+  private[spark] def argmax: Int = {
+    if (size == 0) {
+      -1
+    } else {
+      var maxIdx = 0
+      var maxValue = values(0)
+      var i = 1
+      while (i < size) {
+        if (values(i) > maxValue) {
+          maxIdx = i
+          maxValue = values(i)
+        }
+        i += 1
+      }
+      maxIdx
+    }
+  }
 }
 
 object DenseVector {
@@ -601,6 +685,37 @@ class SparseVector(
       k += 1
     }
     result
+  }
+
+  override def numActives: Int = values.length
+
+  override def numNonzeros: Int = {
+    var nnz = 0
+    values.foreach { v =>
+      if (v != 0.0) {
+        nnz += 1
+      }
+    }
+    nnz
+  }
+
+  override def toSparse: SparseVector = {
+    val nnz = numNonzeros
+    if (nnz == numActives) {
+      this
+    } else {
+      val ii = new Array[Int](nnz)
+      val vv = new Array[Double](nnz)
+      var k = 0
+      foreachActive { (i, v) =>
+        if (v != 0.0) {
+          ii(k) = i
+          vv(k) = v
+          k += 1
+        }
+      }
+      new SparseVector(size, ii, vv)
+    }
   }
 }
 

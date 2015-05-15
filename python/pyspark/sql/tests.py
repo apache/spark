@@ -117,6 +117,21 @@ class SQLTests(ReusedPySparkTestCase):
         ReusedPySparkTestCase.tearDownClass()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 
+    def test_explode(self):
+        from pyspark.sql.functions import explode
+        d = [Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"})]
+        rdd = self.sc.parallelize(d)
+        data = self.sqlCtx.createDataFrame(rdd)
+
+        result = data.select(explode(data.intlist).alias("a")).select("a").collect()
+        self.assertEqual(result[0][0], 1)
+        self.assertEqual(result[1][0], 2)
+        self.assertEqual(result[2][0], 3)
+
+        result = data.select(explode(data.mapfield).alias("a", "b")).select("a", "b").collect()
+        self.assertEqual(result[0][0], "a")
+        self.assertEqual(result[0][1], "b")
+
     def test_udf_with_callable(self):
         d = [Row(number=i, squared=i**2) for i in range(10)]
         rdd = self.sc.parallelize(d)
@@ -375,6 +390,13 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(self.testData, df.select(df.key, df.value).collect())
         self.assertEqual([Row(value='1')], df.where(df.key == 1).select(df.value).collect())
 
+    def test_freqItems(self):
+        vals = [Row(a=1, b=-2.0) if i % 2 == 0 else Row(a=i, b=i * 1.0) for i in range(100)]
+        df = self.sc.parallelize(vals).toDF()
+        items = df.stat.freqItems(("a", "b"), 0.4).collect()[0]
+        self.assertTrue(1 in items[0])
+        self.assertTrue(-2.0 in items[1])
+
     def test_aggregator(self):
         df = self.df
         g = df.groupBy()
@@ -386,6 +408,73 @@ class SQLTests(ReusedPySparkTestCase):
                          tuple(g.agg(functions.first(df.key), functions.last(df.value)).first()))
         self.assertTrue(95 < g.agg(functions.approxCountDistinct(df.key)).first()[0])
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
+
+    def test_corr(self):
+        import math
+        df = self.sc.parallelize([Row(a=i, b=math.sqrt(i)) for i in range(10)]).toDF()
+        corr = df.stat.corr("a", "b")
+        self.assertTrue(abs(corr - 0.95734012) < 1e-6)
+
+    def test_cov(self):
+        df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
+        cov = df.stat.cov("a", "b")
+        self.assertTrue(abs(cov - 55.0 / 3) < 1e-6)
+
+    def test_crosstab(self):
+        df = self.sc.parallelize([Row(a=i % 3, b=i % 2) for i in range(1, 7)]).toDF()
+        ct = df.stat.crosstab("a", "b").collect()
+        ct = sorted(ct, key=lambda x: x[0])
+        for i, row in enumerate(ct):
+            self.assertEqual(row[0], str(i))
+            self.assertTrue(row[1], 1)
+            self.assertTrue(row[2], 1)
+
+    def test_math_functions(self):
+        df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
+        from pyspark.sql import functions
+        import math
+
+        def get_values(l):
+            return [j[0] for j in l]
+
+        def assert_close(a, b):
+            c = get_values(b)
+            diff = [abs(v - c[k]) < 1e-6 for k, v in enumerate(a)]
+            return sum(diff) == len(a)
+        assert_close([math.cos(i) for i in range(10)],
+                     df.select(functions.cos(df.a)).collect())
+        assert_close([math.cos(i) for i in range(10)],
+                     df.select(functions.cos("a")).collect())
+        assert_close([math.sin(i) for i in range(10)],
+                     df.select(functions.sin(df.a)).collect())
+        assert_close([math.sin(i) for i in range(10)],
+                     df.select(functions.sin(df['a'])).collect())
+        assert_close([math.pow(i, 2 * i) for i in range(10)],
+                     df.select(functions.pow(df.a, df.b)).collect())
+        assert_close([math.pow(i, 2) for i in range(10)],
+                     df.select(functions.pow(df.a, 2)).collect())
+        assert_close([math.pow(i, 2) for i in range(10)],
+                     df.select(functions.pow(df.a, 2.0)).collect())
+        assert_close([math.hypot(i, 2 * i) for i in range(10)],
+                     df.select(functions.hypot(df.a, df.b)).collect())
+
+    def test_rand_functions(self):
+        df = self.df
+        from pyspark.sql import functions
+        rnd = df.select('key', functions.rand()).collect()
+        for row in rnd:
+            assert row[1] >= 0.0 and row[1] <= 1.0, "got: %s" % row[1]
+        rndn = df.select('key', functions.randn(5)).collect()
+        for row in rndn:
+            assert row[1] >= -4.0 and row[1] <= 4.0, "got: %s" % row[1]
+
+    def test_between_function(self):
+        df = self.sc.parallelize([
+            Row(a=1, b=2, c=3),
+            Row(a=2, b=1, c=3),
+            Row(a=4, b=1, c=4)]).toDF()
+        self.assertEqual([Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)],
+                         df.filter(df.a.between(df.b, df.c)).collect())
 
     def test_save_and_load(self):
         df = self.df
@@ -444,6 +533,13 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual("b", df.select(df.r.getField("b")).first()[0])
         self.assertEqual("v", df.select(df.d["k"]).first()[0])
         self.assertEqual("v", df.select(df.d.getItem("k")).first()[0])
+
+    def test_field_accessor(self):
+        df = self.sc.parallelize([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})]).toDF()
+        self.assertEqual(1, df.select(df.l[0]).first()[0])
+        self.assertEqual(1, df.select(df.r["a"]).first()[0])
+        self.assertEqual("b", df.select(df.r["b"]).first()[0])
+        self.assertEqual("v", df.select(df.d["k"]).first()[0])
 
     def test_infer_long_type(self):
         longrow = [Row(f1='a', f2=100000000000000)]
@@ -569,6 +665,67 @@ class SQLTests(ReusedPySparkTestCase):
             [(None, None, None)], schema).fillna("haha", subset=['name', 'age']).first()
         self.assertEqual(row.name, "haha")
         self.assertEqual(row.age, None)
+        self.assertEqual(row.height, None)
+
+    def test_bitwise_operations(self):
+        from pyspark.sql import functions
+        row = Row(a=170, b=75)
+        df = self.sqlCtx.createDataFrame([row])
+        result = df.select(df.a.bitwiseAND(df.b)).collect()[0].asDict()
+        self.assertEqual(170 & 75, result['(a & b)'])
+        result = df.select(df.a.bitwiseOR(df.b)).collect()[0].asDict()
+        self.assertEqual(170 | 75, result['(a | b)'])
+        result = df.select(df.a.bitwiseXOR(df.b)).collect()[0].asDict()
+        self.assertEqual(170 ^ 75, result['(a ^ b)'])
+        result = df.select(functions.bitwiseNOT(df.b)).collect()[0].asDict()
+        self.assertEqual(~75, result['~b'])
+
+    def test_replace(self):
+        schema = StructType([
+            StructField("name", StringType(), True),
+            StructField("age", IntegerType(), True),
+            StructField("height", DoubleType(), True)])
+
+        # replace with int
+        row = self.sqlCtx.createDataFrame([(u'Alice', 10, 10.0)], schema).replace(10, 20).first()
+        self.assertEqual(row.age, 20)
+        self.assertEqual(row.height, 20.0)
+
+        # replace with double
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 80, 80.0)], schema).replace(80.0, 82.1).first()
+        self.assertEqual(row.age, 82)
+        self.assertEqual(row.height, 82.1)
+
+        # replace with string
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace(u'Alice', u'Ann').first()
+        self.assertEqual(row.name, u"Ann")
+        self.assertEqual(row.age, 10)
+
+        # replace with subset specified by a string of a column name w/ actual change
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace(10, 20, subset='age').first()
+        self.assertEqual(row.age, 20)
+
+        # replace with subset specified by a string of a column name w/o actual change
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace(10, 20, subset='height').first()
+        self.assertEqual(row.age, 10)
+
+        # replace with subset specified with one column replaced, another column not in subset
+        # stays unchanged.
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, 10.0)], schema).replace(10, 20, subset=['name', 'age']).first()
+        self.assertEqual(row.name, u'Alice')
+        self.assertEqual(row.age, 20)
+        self.assertEqual(row.height, 10.0)
+
+        # replace with subset specified but no column will be replaced
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, None)], schema).replace(10, 20, subset=['name', 'height']).first()
+        self.assertEqual(row.name, u'Alice')
+        self.assertEqual(row.age, 10)
         self.assertEqual(row.height, None)
 
 
