@@ -133,6 +133,73 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
   });
 }
 
+function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, zoomMax) {
+  var groups = new vis.DataSet(groupArray);
+  var items = new vis.DataSet(eventObjArray);
+  var container = $("#task-assignment-timeline")[0]
+  var options = {
+    groupOrder: function(a, b) {
+      return a.value - b.value
+    },
+    editable: false,
+    align: 'left',
+    selectable: false,
+    showCurrentTime: false,
+    min: minLaunchTime,
+    zoomable: false,
+    zoomMax: zoomMax
+  };
+
+  var taskTimeline = new vis.Timeline(container)
+  taskTimeline.setOptions(options);
+  taskTimeline.setGroups(groups);
+  taskTimeline.setItems(items);
+
+  taskTimeline.on("rangechange", function(prop) {
+    if (currentDisplayedTooltip !== null) {
+      $(currentDisplayedTooltip).tooltip("hide");
+    }
+  });
+
+  function getTaskIdxAndAttempt(selector) {
+    var taskIdxText = $(selector).attr("data-title");
+    var taskIdxAndAttempt = taskIdxText.match("Task (\\d+) \\(attempt (\\d+)");
+    var taskIdx = taskIdxAndAttempt[1];
+    var taskAttempt = taskIdxAndAttempt[2];
+    return taskIdx + "-" + taskAttempt;
+  }
+
+  // If we zoom up and a box moves away when the corresponding tooltip is shown,
+  // the tooltip can be remain.
+  // So, we need to hide tooltips using another mechanism.
+  var currentDisplayedTooltip = null;
+
+  $("#task-assignment-timeline").on({
+    "mouseenter": function() {
+      var taskIdxAndAttempt = getTaskIdxAndAttempt(this);
+      $("#task-" + taskIdxAndAttempt).addClass("corresponding-item-hover");
+      $(this).tooltip("show");
+      currentDisplayedTooltip = this;
+    },
+    "mouseleave" : function() {
+      var taskIdxAndAttempt = getTaskIdxAndAttempt(this);
+      $("#task-" + taskIdxAndAttempt).removeClass("corresponding-item-hover");
+      $(this).tooltip("hide");
+      currentDisplayedTooltip = null;
+    }
+  }, ".task-assignment-timeline-content");
+
+  setupZoomable('#task-assignment-timeline-zoom-lock', taskTimeline);
+
+  $("span.expand-task-assignment-timeline").click(function() {
+    $("#task-assignment-timeline").toggleClass('collapsed');
+
+     // Switch the class of the arrow from open to closed.
+    $(this).find('.expand-task-assignment-timeline-arrow').toggleClass('arrow-open');
+    $(this).find('.expand-task-assignment-timeline-arrow').toggleClass('arrow-closed');
+  });
+}
+
 function setupExecutorEventAction() {
   $(".item.box.executor").each(function () {
     $(this).hover(
@@ -147,7 +214,7 @@ function setupExecutorEventAction() {
 }
 
 function setupZoomable(id, timeline) {
-  $(id + '>input[type="checkbox"]').click(function() {
+  $(id + ' > input[type="checkbox"]').click(function() {
     if (this.checked) {
       timeline.setOptions({zoomable: true});
     } else {
@@ -155,7 +222,7 @@ function setupZoomable(id, timeline) {
     }
   });
 
-  $(id + ">span").click(function() {
+  $(id + " > span").click(function() {
     $(this).parent().find('input:checkbox').trigger('click');
   });
 }
