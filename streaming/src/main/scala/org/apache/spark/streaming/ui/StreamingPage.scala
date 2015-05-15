@@ -166,8 +166,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
   private def generateLoadResources(): Seq[Node] = {
     // scalastyle:off
     <script src={SparkUIUtils.prependBaseUri("/static/d3.min.js")}></script>
-      <link rel="stylesheet" href={SparkUIUtils.prependBaseUri("/static/streaming-page.css")} type="text/css"/>
-      <script src={SparkUIUtils.prependBaseUri("/static/streaming-page.js")}></script>
+      <link rel="stylesheet" href={SparkUIUtils.prependBaseUri("/static/streaming/streaming-page.css")} type="text/css"/>
+      <script src={SparkUIUtils.prependBaseUri("/static/streaming/streaming-page.js")}></script>
     // scalastyle:on
   }
 
