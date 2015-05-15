@@ -546,11 +546,23 @@ setGeneric("asc", function(x) { standardGeneric("asc") })
 
 #' @rdname column
 #' @export
+setGeneric("atan2", function(x, ...) { standardGeneric("atan2") })
+
+#' @rdname column
+#' @export
 setGeneric("avg", function(x, ...) { standardGeneric("avg") })
 
 #' @rdname column
 #' @export
 setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
+
+#' @rdname column
+#' @export
+setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
+
+#' @rdname column
+#' @export
+setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
 #' @rdname column
 #' @export
@@ -574,6 +586,10 @@ setGeneric("getField", function(x, ...) { standardGeneric("getField") })
 #' @rdname column
 #' @export
 setGeneric("getItem", function(x, ...) { standardGeneric("getItem") })
+
+#' @rdname column
+#' @export
+setGeneric("hypot", function(x, ...) { standardGeneric("hypot") })
 
 #' @rdname column
 #' @export
@@ -605,7 +621,15 @@ setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
 
 #' @rdname column
 #' @export
+setGeneric("rint", function(x, ...) { standardGeneric("rint") })
+
+#' @rdname column
+#' @export
 setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
+
+#' @rdname column
+#' @export
+setGeneric("pow", function(x, ...) { standardGeneric("pow") })
 
 #' @rdname column
 #' @export
@@ -613,7 +637,19 @@ setGeneric("startsWith", function(x, ...) { standardGeneric("startsWith") })
 
 #' @rdname column
 #' @export
+setGeneric("signum", function(x) { standardGeneric("signum") })
+
+#' @rdname column
+#' @export
 setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
+
+#' @rdname column
+#' @export
+setGeneric("toDegrees", function(x) { standardGeneric("toDegrees") })
+
+#' @rdname column
+#' @export
+setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 
 #' @rdname column
 #' @export

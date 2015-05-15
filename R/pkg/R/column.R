@@ -58,9 +58,13 @@ operators <- list(
   "&" = "and", "|" = "or" #, "!" = "unary_$bang"
 )
 column_functions1 <- c("asc", "desc", "isNull", "isNotNull")
-column_functions2 <- c("like", "rlike", "startsWith", "endsWith", "getField", "getItem", "contains")
+column_functions2 <- c("like", "rlike", "startsWith", "endsWith", "getField", "getItem",     "contains")
 functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
-               "first", "last", "lower", "upper", "sumDistinct")
+               "first", "last", "lower", "upper", "sumDistinct",
+               "acos", "asin", "atan", "cbrt", "ceil", "cos", "cosh", "exp",
+               "expm1", "floor", "log", "log10", "log1p", "rint", "signum",
+               "sin", "sinh", "tan", "tanh", "toDegrees", "toRadians")
+binary_mathfunctions<- c("atan2", "hypot", "pow")
 
 createOperator <- function(op) {
   setMethod(op,
@@ -111,6 +115,18 @@ createStaticFunction <- function(name) {
             })
 }
 
+createBinaryMathfunctions <- function(name) {
+  setMethod(name,
+            signature(x = "Column"),
+            function(x, data) {
+              if (class(data) == "Column") {
+                data <- data@jc
+              }
+              jc <- callJStatic("org.apache.spark.sql.functions", name, x@jc, data)
+              column(jc)
+            })
+}
+
 createMethods <- function() {
   for (op in names(operators)) {
     createOperator(op)
@@ -123,6 +139,9 @@ createMethods <- function() {
   }
   for (x in functions) {
     createStaticFunction(x)
+  }
+  for (name in binary_mathfunctions) {
+    createBinaryMathfunctions(name)
   }
 }
 
