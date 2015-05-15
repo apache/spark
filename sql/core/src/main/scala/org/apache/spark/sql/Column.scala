@@ -911,7 +911,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group expr_ops
    */
-  def over(w: WindowFunctionDefinition) = w.newColumn(this)
+  def over(w: WindowFunctionDefinition): WindowFunctionDefinition = w.newColumn(this)
 
 }
 
