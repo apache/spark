@@ -77,11 +77,14 @@ abstract class Expression extends TreeNode[Expression] {
     }.toString
   }
 
-  def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass &&
-    this.productIterator.zip(other.asInstanceOf[Product].productIterator).forall {
+  def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass && {
+    val elements1 = this.productIterator.toSeq
+    val elements2 = other.asInstanceOf[Product].productIterator.toSeq
+    elements1.length == elements2.length && elements1.zip(elements2).forall {
       case (e1: Expression, e2: Expression) => e1 semanticEquals e2
       case (i1, i2) => i1 == i2
     }
+  }
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
