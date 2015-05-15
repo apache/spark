@@ -59,10 +59,10 @@ final class UnsafeSorterSpillWriter {
   }
 
   public void write(
-    Object baseObject,
-    long baseOffset,
-    int recordLength,
-    long keyPrefix) throws IOException {
+      Object baseObject,
+      long baseOffset,
+      int recordLength,
+      long keyPrefix) throws IOException {
     dos.writeInt(recordLength);
     dos.writeLong(keyPrefix);
     PlatformDependent.copyMemory(
@@ -72,7 +72,6 @@ final class UnsafeSorterSpillWriter {
       PlatformDependent.BYTE_ARRAY_OFFSET,
       recordLength);
     writer.write(arr, 0, recordLength);
-    // TODO: add a test that detects whether we leave this call out:
     writer.recordWritten();
   }
 
