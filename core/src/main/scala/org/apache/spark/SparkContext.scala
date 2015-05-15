@@ -27,12 +27,13 @@ import java.util.concurrent.atomic.{AtomicReference, AtomicBoolean, AtomicIntege
 import java.util.UUID.randomUUID
 
 import scala.collection.{Map, Set}
-import scala.collection.JavaConversions._
 import scala.collection.generic.Growable
+import scala.collection.JavaConversions._
 import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
 
+import com.google.common.annotations.VisibleForTesting
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
@@ -41,7 +42,6 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, Sequence
   TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
-import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.mesos.MesosNativeLibrary
 
@@ -315,7 +315,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def dagScheduler_=(ds: DAGScheduler): Unit = {
     _dagScheduler = ds
   }
+
+  @VisibleForTesting
   private[spark] def logUrls: Option[Predef.Map[String, String]] = _logUrls
+
+  @VisibleForTesting
   private[spark] def logUrls_=(logUrlsMap: Option[Predef.Map[String, String]]): Unit = {
     _logUrls = logUrlsMap
     logInfo(s"Setting log urls to ${_logUrls.get.mkString(" | ")}")
@@ -1918,9 +1922,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // the cluster manager to get an application ID (in case the cluster manager provides one).
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
       startTime, sparkUser, applicationAttemptId))
+    val logPrefix = "spark.driver.log."
+    logUrls = Option(
+      System.getProperties.stringPropertyNames()
+        .filter(_.startsWith(logPrefix))
+        .map(key => (key.substring(logPrefix.length), System.getProperty(key)))
+        .toMap
+    )
     _logUrls.foreach { logUrlsMap =>
-      listenerBus.post(SparkListenerExecutorAdded(System.currentTimeMillis(), SparkContext
-        .DRIVER_IDENTIFIER, new ExecutorInfo(Utils.localHostName(), 0, logUrlsMap)))
+      listenerBus.post(SparkListenerExecutorAdded(System.currentTimeMillis(),
+        SparkContext.DRIVER_IDENTIFIER, new ExecutorInfo(Utils.localHostName(), 0, logUrlsMap)))
     }
   }
 
@@ -2432,13 +2443,6 @@ object SparkContext extends Logging {
           }
         }
         scheduler.initialize(backend)
-        val logPrefix = "spark.driver.log."
-        sc.logUrls = Option(
-          System.getProperties.stringPropertyNames()
-          .filter(_.startsWith(logPrefix))
-          .map (key => (key.substring(logPrefix.length), System.getProperty(key)))
-          .toMap
-        )
         (backend, scheduler)
 
       case "yarn-client" =>
