@@ -58,8 +58,7 @@ var VizConstants = {
   graphPrefix: "graph_",
   nodePrefix: "node_",
   stagePrefix: "stage_",
-  clusterPrefix: "cluster_",
-  stageClusterPrefix: "cluster_stage_"
+  clusterPrefix: "cluster_"
 };
 
 var JobPageVizConstants = {
@@ -133,9 +132,7 @@ function renderDagViz(forJob) {
   }
 
   // Render
-  var svg = graphContainer()
-    .append("svg")
-    .attr("class", jobOrStage);
+  var svg = graphContainer().append("svg").attr("class", jobOrStage);
   if (forJob) {
     renderDagVizForJob(svg);
   } else {
@@ -183,24 +180,29 @@ function renderDagVizForJob(svgContainer) {
   metadataContainer().selectAll(".stage-metadata").each(function(d, i) {
     var metadata = d3.select(this);
     var dot = metadata.select(".dot-file").text();
-    var stageId = metadata.attr("stage-id");
+    var stageId = metadata.attr("stage-id").replace(VizConstants.stagePrefix, "");
     var containerId = VizConstants.graphPrefix + stageId;
-    // Link each graph to the corresponding stage page (TODO: handle stage attempts)
-    var stageLink = "/stages/stage/?id=" +
-      stageId.replace(VizConstants.stagePrefix, "") + "&attempt=0&expandDagViz=true";
-    var container = svgContainer
-      .append("a")
-      .attr("xlink:href", stageLink)
-      .append("g")
-      .attr("id", containerId);
+    var isSkipped = metadata.attr("skipped") == "true";
+    var container;
+    if (isSkipped) {
+      container = svgContainer
+        .append("g")
+        .attr("id", containerId)
+        .attr("skipped", "true");
+    } else {
+      container = svgContainer
+        .append("a")
+         // Link each graph to the corresponding stage page (TODO: handle stage attempts)
+        .attr("xlink:href", "/stages/stage/?id=" + stageId + "&attempt=0&expandDagViz=true")
+        .append("g")
+        .attr("id", containerId);
+    }
 
     // Now we need to shift the container for this stage so it doesn't overlap with
     // existing ones, taking into account the position and width of the last stage's
     // container. We do not need to do this for the first stage of this job.
     if (i > 0) {
-      var existingStages = svgContainer
-        .selectAll("g.cluster")
-        .filter("[class*=\"" + VizConstants.stageClusterPrefix + "\"]");
+      var existingStages = svgContainer.selectAll("g.cluster.stage")
       if (!existingStages.empty()) {
         var lastStage = d3.select(existingStages[0].pop());
         var lastStageWidth = toFloat(lastStage.select("rect").attr("width"));
@@ -212,6 +214,12 @@ function renderDagVizForJob(svgContainer) {
 
     // Actually render the stage
     renderDot(dot, container, true);
+
+    // Mark elements as skipped if appropriate. Unfortunately we need to mark all
+    // elements instead of the parent container because of CSS override rules.
+    if (isSkipped) {
+      container.selectAll("g").classed("skipped", true);
+    }
 
     // Round corners on rectangles
     container
@@ -242,6 +250,9 @@ function renderDot(dot, container, forJob) {
   var renderer = new dagreD3.render();
   preprocessGraphLayout(g, forJob);
   renderer(container, g);
+
+  // Find the stage cluster and mark it for styling and post-processing
+  container.selectAll("g.cluster[name*=\"Stage\"]").classed("stage", true);
 }
 
 /* -------------------- *

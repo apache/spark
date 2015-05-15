@@ -15,6 +15,15 @@
  * limitations under the License.
  */
 
+#dag-viz-graph a, #dag-viz-graph a:hover {
+  text-decoration: none;
+}
+
+#dag-viz-graph .label {
+  font-weight: normal;
+  text-shadow: none;
+}
+
 #dag-viz-graph svg path {
   stroke: #444;
   stroke-width: 1.5px;
@@ -22,28 +31,6 @@
 
 #dag-viz-graph svg g.cluster rect {
   stroke-width: 1px;
-}
-
-#dag-viz-graph svg g.node circle {
-  fill: #444;
-}
-
-#dag-viz-graph svg g.node rect {
-  fill: #C3EBFF;
-  stroke: #3EC0FF;
-  stroke-width: 1px;
-}
-
-#dag-viz-graph svg g.node.cached circle {
-  fill: #A3F545;
-  stroke: #52C366;
-  stroke-width: 2px;
-}
-
-#dag-viz-graph svg g.node.cached rect {
-  fill: #B3F5C5;
-  stroke: #52C366;
-  stroke-width: 2px;
 }
 
 #dag-viz-graph div#empty-dag-viz-message {
@@ -63,9 +50,21 @@
   stroke-width: 1px;
 }
 
-#dag-viz-graph svg.job g.cluster[class*="stage"] rect {
+#dag-viz-graph svg.job g.cluster.skipped rect {
+  fill: #AAA;
+  stroke: #888;
+  stroke-width: 1px;
+}
+
+#dag-viz-graph svg.job g.cluster.stage rect {
   fill: #FFFFFF;
   stroke: #FF99AC;
+  stroke-width: 1px;
+}
+
+#dag-viz-graph svg.job g.cluster.stage.skipped rect {
+  fill: #DDD;
+  stroke: #AAA;
   stroke-width: 1px;
 }
 
@@ -77,6 +76,20 @@
   fill: #333;
 }
 
+#dag-viz-graph svg.job g.cluster.skipped text {
+  fill: #666;
+}
+
+#dag-viz-graph svg.job g.node circle {
+  fill: #444;
+}
+
+#dag-viz-graph svg.job g.node.cached circle {
+  fill: #A3F545;
+  stroke: #52C366;
+  stroke-width: 2px;
+}
+
 /* Stage page specific styles */
 
 #dag-viz-graph svg.stage g.cluster rect {
@@ -85,7 +98,7 @@
   stroke-width: 1px;
 }
 
-#dag-viz-graph svg.stage g.cluster[class*="stage"] rect {
+#dag-viz-graph svg.stage g.cluster.stage rect {
   fill: #FFFFFF;
   stroke: #FFA6B6;
   stroke-width: 1px;
@@ -99,11 +112,14 @@
   fill: #333;
 }
 
-#dag-viz-graph a, #dag-viz-graph a:hover {
-  text-decoration: none;
+#dag-viz-graph svg.stage g.node rect {
+  fill: #C3EBFF;
+  stroke: #3EC0FF;
+  stroke-width: 1px;
 }
 
-#dag-viz-graph .label {
-  font-weight: normal;
-  text-shadow: none;
+#dag-viz-graph svg.stage g.node.cached rect {
+  fill: #B3F5C5;
+  stroke: #52C366;
+  stroke-width: 2px;
 }

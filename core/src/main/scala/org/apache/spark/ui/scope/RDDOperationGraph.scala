@@ -52,9 +52,12 @@ private[ui] case class RDDOperationEdge(fromId: Int, toId: Int)
  * This represents any grouping of RDDs, including operation scopes (e.g. textFile, flatMap),
  * stages, jobs, or any higher level construct. A cluster may be nested inside of other clusters.
  */
-private[ui] class RDDOperationCluster(val id: String, val name: String) {
+private[ui] class RDDOperationCluster(val id: String, private var _name: String) {
   private val _childNodes = new ListBuffer[RDDOperationNode]
   private val _childClusters = new ListBuffer[RDDOperationCluster]
+
+  def name: String = _name
+  def setName(n: String): Unit = { _name = n }
 
   def childNodes: Seq[RDDOperationNode] = _childNodes.iterator.toSeq
   def childClusters: Seq[RDDOperationCluster] = _childClusters.iterator.toSeq
@@ -88,7 +91,7 @@ private[ui] object RDDOperationGraph extends Logging {
     val clusters = new mutable.HashMap[String, RDDOperationCluster] // indexed by cluster ID
 
     // Root cluster is the stage cluster
-    val stageClusterId = s"stage_${stage.stageId}"
+    val stageClusterId = stage.stageId.toString
     val stageClusterName = s"Stage ${stage.stageId}" +
       { if (stage.attemptId == 0) "" else s" (attempt ${stage.attemptId})" }
     val rootCluster = new RDDOperationCluster(stageClusterId, stageClusterName)
