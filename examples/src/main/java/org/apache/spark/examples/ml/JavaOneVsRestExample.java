@@ -105,7 +105,7 @@ public class JavaOneVsRestExample {
     // score the model on test data
     DataFrame testDataFrame = jsql.createDataFrame(test, LabeledPoint.class);
     DataFrame predictions = ovrModel.transform(testDataFrame.cache())
-            .select("prediction", "label");
+      .select("prediction", "label");
 
     MulticlassMetrics metrics = new MulticlassMetrics(predictions);
 
@@ -135,11 +135,7 @@ public class JavaOneVsRestExample {
 
   private static Params parse(String[] args) {
     Options options = generateCommandlineOptions();
-    if (args == null || args.length == 0) printHelpAndQuit(options);
-
-    // handle the command line options
     CommandLineParser parser = new PosixParser();
-
     Params params = new Params();
 
     try {
@@ -184,9 +180,8 @@ public class JavaOneVsRestExample {
   }
 
   private static Options generateCommandlineOptions() {
-
     Option input = OptionBuilder.withArgName("input")
-            .hasArg()
+      .hasArg()
       .isRequired()
       .withDescription("input path to labeled examples. This path must be specified")
       .create("input");
@@ -197,7 +192,7 @@ public class JavaOneVsRestExample {
     Option fracTest = OptionBuilder.withArgName("testInput")
       .hasArg()
       .withDescription("fraction of data to hold out for testing." +
-              " If given option testInput, this option is ignored. default: 0.2")
+        " If given option testInput, this option is ignored. default: 0.2")
       .create("fracTest");
     Option maxIter = OptionBuilder.withArgName("maxIter")
       .hasArg()
@@ -206,7 +201,7 @@ public class JavaOneVsRestExample {
     Option tol = OptionBuilder.withArgName("tol")
       .hasArg()
       .withDescription("the convergence tolerance of iterations " +
-              "for Logistic Regression. default: 1E-6")
+        "for Logistic Regression. default: 1E-6")
       .create("tol");
     Option fitIntercept = OptionBuilder.withArgName("fitIntercept")
       .hasArg()
@@ -236,7 +231,7 @@ public class JavaOneVsRestExample {
 
   private static void printHelpAndQuit(Options options) {
     HelpFormatter formatter = new HelpFormatter();
-    formatter.printHelp( "JavaOneVsRestExample", options );
+    formatter.printHelp("JavaOneVsRestExample", options);
     System.exit(-1);
   }
 }
