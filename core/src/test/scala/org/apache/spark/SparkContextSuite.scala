@@ -278,9 +278,13 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
   test("Spark Context Logs URL presence") {
     System.setProperty("spark.driver.log.stdout", "dummy stdout")
     System.setProperty("spark.driver.log.stderr", "dummy stderr")
-    val sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-    assert(sc.logUrls.nonEmpty)
-    val urls = sc.logUrls.get
-    assert(urls === Predef.Map("stdout" -> "dummy stdout","stderr" -> "dummy stderr"))
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    try {
+      assert(sc.logUrls.nonEmpty)
+      val urls = sc.logUrls.get
+      assert(urls === Predef.Map("stdout" -> "dummy stdout", "stderr" -> "dummy stderr"))
+    } finally {
+      sc.stop()
+    }
   }
 }
