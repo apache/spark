@@ -42,6 +42,8 @@ to be runnable, use `make-distribution.sh` in the project root directory. It can
 with Maven profile settings and so on like the direct Maven build. Example:
 
     ./make-distribution.sh --name custom-spark --tgz -Phadoop-2.4 -Pyarn
+    
+For more information on usage, run `./make-distribution.sh --help`
 
 # Setting up Maven's Memory Usage
 
