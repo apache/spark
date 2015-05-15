@@ -60,7 +60,7 @@ private[spark] object SerDe {
       case 'd' => new java.lang.Double(readDouble(dis))
       case 'b' => new java.lang.Boolean(readBoolean(dis))
       case 'c' => readString(dis)
-      case 'e' => readMap(dis)
+      case 'e' => readEnv(dis)
       case 'r' => readBytes(dis)
       case 'l' => readList(dis)
       case 'D' => readDate(dis)
@@ -160,6 +160,24 @@ private[spark] object SerDe {
       val valuesType = readObjectType(in)
       val valuesLen = readInt(in)
       val values = (0 until valuesLen).map(_ => readTypedObject(in, valuesType))
+      mapAsJavaMap(keys.zip(values).toMap)
+    } else {
+      new java.util.HashMap[Object, Object]()
+    }
+  }
+
+  def readEnv(in: DataInputStream): java.util.Map[Object, Object] = {
+    val len = readInt(in)
+    if (len > 0) {
+      val keysType = readObjectType(in)
+      val keysLen = readInt(in)
+      val keys = (0 until keysLen).map(_ => readTypedObject(in, keysType))
+
+      val valuesLen = readInt(in)
+      val values = (0 until valuesLen).map(_ => {
+        val valueType = readObjectType(in)
+        readTypedObject(in, valueType)
+      })
       mapAsJavaMap(keys.zip(values).toMap)
     } else {
       new java.util.HashMap[Object, Object]()
