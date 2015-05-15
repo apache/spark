@@ -27,11 +27,9 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import com.google.common.reflect.TypeToken
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
@@ -43,8 +41,6 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.ParserDialect
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.json._
-import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -597,6 +593,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * :: Experimental ::
+   * Returns a [[DataFrameReader]] that can be used to read data in as a [[DataFrame]].
+   *
+   * @group genericdata
+   * @since 1.4.0
+   */
+  @Experimental
+  def read: DataFrameReader = new DataFrameReader(this)
+
+  /**
    * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
    * [[DataFrame]] if no paths are passed in.
    *
@@ -608,10 +614,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     if (paths.isEmpty) {
       emptyDataFrame
     } else if (conf.parquetUseDataSourceApi) {
-      val globbedPaths = paths.map(new Path(_)).flatMap(SparkHadoopUtil.get.globPath).toArray
-      baseRelationToDataFrame(
-        new ParquetRelation2(
-          globbedPaths.map(_.toString), None, None, Map.empty[String, String])(this))
+      read.parquet(paths : _*)
     } else {
       DataFrame(this, parquet.ParquetRelation(
         paths.mkString(","), Some(sparkContext.hadoopConfiguration), this))
@@ -625,7 +628,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group specificdata
    * @since 1.3.0
    */
-  def jsonFile(path: String): DataFrame = jsonFile(path, 1.0)
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonFile(path: String): DataFrame = read.json(path, 1.0)
 
   /**
    * :: Experimental ::
@@ -635,18 +639,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group specificdata
    * @since 1.3.0
    */
-  @Experimental
-  def jsonFile(path: String, schema: StructType): DataFrame =
-    load("json", schema, Map("path" -> path))
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonFile(path: String, schema: StructType): DataFrame = read.json(path, schema)
 
   /**
    * :: Experimental ::
    * @group specificdata
    * @since 1.3.0
    */
-  @Experimental
-  def jsonFile(path: String, samplingRatio: Double): DataFrame =
-    load("json", Map("path" -> path, "samplingRatio" -> samplingRatio.toString))
+  @deprecated("Use read.json()", "1.4.0")
+  def jsonFile(path: String, samplingRatio: Double): DataFrame = read.json(path, samplingRatio)
 
   /**
    * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
@@ -656,9 +658,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group specificdata
    * @since 1.3.0
    */
+  @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: RDD[String]): DataFrame = jsonRDD(json, 1.0)
 
-
   /**
    * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
    * [[DataFrame]].
@@ -667,6 +669,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group specificdata
    * @since 1.3.0
    */
+  @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: JavaRDD[String]): DataFrame = jsonRDD(json.rdd, 1.0)
 
   /**
@@ -677,19 +680,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group specificdata
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
-    if (conf.useJacksonStreamingAPI) {
-      baseRelationToDataFrame(new JSONRelation(() => json, None, 1.0, Some(schema))(this))
-    } else {
-      val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
-      val appliedSchema =
-        Option(schema).getOrElse(
-          JsonRDD.nullTypeToStringType(
-            JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
-      val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-      createDataFrame(rowRDD, appliedSchema, needsConversion = false)
-    }
+    read.json(json, schema)
   }
 
   /**
@@ -700,9 +693,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group specificdata
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
-    jsonRDD(json.rdd, schema)
+    read.json(json, schema)
   }
 
   /**
@@ -713,18 +706,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group specificdata
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
-    if (conf.useJacksonStreamingAPI) {
-      baseRelationToDataFrame(new JSONRelation(() => json, None, samplingRatio, None)(this))
-    } else {
-      val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
-      val appliedSchema =
-        JsonRDD.nullTypeToStringType(
-          JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
-      val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-      createDataFrame(rowRDD, appliedSchema, needsConversion = false)
-    }
+    read.json(json, samplingRatio)
   }
 
   /**
@@ -735,9 +719,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group specificdata
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
-    jsonRDD(json.rdd, samplingRatio);
+    jsonRDD(json.rdd, samplingRatio)
   }
 
   /**

@@ -42,7 +42,7 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
     path.delete()
 
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    df = jsonRDD(rdd)
+    df = read.json(rdd)
     df.registerTempTable("jsonTable")
   }
 

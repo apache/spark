@@ -155,7 +155,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      parquetFile(base.getCanonicalPath).registerTempTable("t")
+      read.parquet(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -202,7 +202,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      parquetFile(base.getCanonicalPath).registerTempTable("t")
+      read.parquet(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
