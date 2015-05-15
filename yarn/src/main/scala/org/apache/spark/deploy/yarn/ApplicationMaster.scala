@@ -21,8 +21,10 @@ import scala.util.control.NonFatal
 
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
-import java.net.{Socket, URL}
+import java.net.{NetworkInterface, Socket, URL}
 import java.util.concurrent.atomic.AtomicReference
+
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.yarn.api._
@@ -270,9 +272,43 @@ private[spark] class ApplicationMaster(
       val yarnClient = YarnClient.createYarnClient()
       yarnClient.init(yarnConf)
       yarnClient.start()
-      val logUrl = yarnClient.getContainerReport(containerId).getLogUrl
-      System.setProperty("spark.yarn.driver.log.url", logUrl)
-      logInfo(s"Driver logs are at $logUrl")
+      val addresses =
+        NetworkInterface.getNetworkInterfaces.asScala
+          .flatMap(_.getInetAddresses.asScala)
+          .toSeq
+      try {
+        val nodeReports = yarnClient.getNodeReports(NodeState.RUNNING).asScala
+        val nodeReport =
+          nodeReports.find { x =>
+            val host = x.getNodeId.getHost
+            addresses.exists { address =>
+              address.getHostAddress == host ||
+              address.getHostName == host    ||
+              address.getCanonicalHostName == host
+            }
+          }
+
+        nodeReport.foreach { report =>
+          val httpAddress = report.getHttpAddress
+          // lookup appropriate http scheme for container log urls
+          val yarnHttpPolicy = yarnConf.get(
+            YarnConfiguration.YARN_HTTP_POLICY_KEY,
+            YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
+          )
+          val user = Utils.getCurrentUserName()
+          val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
+          val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
+          logInfo(s"Base URL for logs: $baseUrl")
+          System.setProperty("spark.driver.log.stderr", s"$baseUrl/stderr?start=0")
+          System.setProperty("spark.driver.log.stdout", s"$baseUrl/stdout?start=0")
+        }
+      } catch {
+        case e: Exception =>
+          logInfo("Container Report API is not available in the version of YARN being used, so AM" +
+            " logs link will not appear in application UI")
+      } finally {
+        yarnClient.close()
+      }
     }
     userClassThread = startUserApplication()
 

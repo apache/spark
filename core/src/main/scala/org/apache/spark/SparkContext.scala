@@ -2432,21 +2432,13 @@ object SparkContext extends Logging {
           }
         }
         scheduler.initialize(backend)
-        val logUrl = System.getProperty("spark.yarn.driver.log.url")
-        if (logUrl != null) {
-          // lookup appropriate http scheme for container log urls
-          val yarnConf: YarnConfiguration = new YarnConfiguration(sc.hadoopConfiguration)
-          val yarnHttpPolicy = yarnConf.get(
-            YarnConfiguration.YARN_HTTP_POLICY_KEY,
-            YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
-          )
-          val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
-          val baseUrl = s"$httpScheme$logUrl"
-          sc.logUrls =
-            Some(Predef.Map(
-                "stderr" -> s"$baseUrl/stderr?start=0",
-                "stdout" -> s"$baseUrl/stdout?start=0"))
-        }
+        val logPrefix = "spark.driver.log."
+        sc.logUrls = Option(
+          System.getProperties.stringPropertyNames()
+          .filter(_.startsWith(logPrefix))
+          .map (key => (key.substring(logPrefix.length), System.getProperty(key)))
+          .toMap
+        )
         (backend, scheduler)
 
       case "yarn-client" =>
