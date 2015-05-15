@@ -97,7 +97,7 @@ case class Min(child: Expression) extends PartialAggregate with trees.UnaryNode[
   override def toString: String = s"MIN($child)"
 
   override def asPartial: SplitEvaluation = {
-    val partialMin = Alias(Min(child), "PartialMin")()
+    val partialMin = Alias(Min(MinCell(child)), "PartialMin")()
     SplitEvaluation(Min(partialMin.toAttribute), partialMin :: Nil)
   }
 
@@ -128,7 +128,7 @@ case class Max(child: Expression) extends PartialAggregate with trees.UnaryNode[
   override def toString: String = s"MAX($child)"
 
   override def asPartial: SplitEvaluation = {
-    val partialMax = Alias(Max(child), "PartialMax")()
+    val partialMax = Alias(Max(MaxCell(child)), "PartialMax")()
     SplitEvaluation(Max(partialMax.toAttribute), partialMax :: Nil)
   }
 
@@ -159,7 +159,7 @@ case class Count(child: Expression) extends PartialAggregate with trees.UnaryNod
   override def toString: String = s"COUNT($child)"
 
   override def asPartial: SplitEvaluation = {
-    val partialCount = Alias(Count(child), "PartialCount")()
+    val partialCount = Alias(Count(CountCell(child)), "PartialCount")()
     SplitEvaluation(Coalesce(Seq(Sum(partialCount.toAttribute), Literal(0L))), partialCount :: Nil)
   }
 
@@ -328,8 +328,8 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
     child.dataType match {
       case DecimalType.Fixed(_, _) | DecimalType.Unlimited =>
         // Turn the child to unlimited decimals for calculation, before going back to fixed
-        val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), "PartialSum")()
-        val partialCount = Alias(Count(child), "PartialCount")()
+        val partialSum = Alias(Sum(SumCell(Cast(child, DecimalType.Unlimited))), "PartialSum")()
+        val partialCount = Alias(Count(CountCell(child)), "PartialCount")()
 
         val castedSum = Cast(Sum(partialSum.toAttribute), DecimalType.Unlimited)
         val castedCount = Cast(Sum(partialCount.toAttribute), DecimalType.Unlimited)
@@ -338,8 +338,8 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
           partialCount :: partialSum :: Nil)
 
       case _ =>
-        val partialSum = Alias(Sum(child), "PartialSum")()
-        val partialCount = Alias(Count(child), "PartialCount")()
+        val partialSum = Alias(Sum(SumCell(child)), "PartialSum")()
+        val partialCount = Alias(Count(CountCell(child)), "PartialCount")()
 
         val castedSum = Cast(Sum(partialSum.toAttribute), dataType)
         val castedCount = Cast(Sum(partialCount.toAttribute), dataType)
@@ -370,13 +370,13 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
   override def asPartial: SplitEvaluation = {
     child.dataType match {
       case DecimalType.Fixed(_, _) =>
-        val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), "PartialSum")()
+        val partialSum = Alias(Sum(SumCell(Cast(child, DecimalType.Unlimited))), "PartialSum")()
         SplitEvaluation(
           Cast(CombineSum(partialSum.toAttribute), dataType),
           partialSum :: Nil)
 
       case _ =>
-        val partialSum = Alias(Sum(child), "PartialSum")()
+        val partialSum = Alias(Sum(SumCell(child)), "PartialSum")()
         SplitEvaluation(
           CombineSum(partialSum.toAttribute),
           partialSum :: Nil)
@@ -560,7 +560,7 @@ case class CountFunction(expr: Expression, base: AggregateExpression) extends Ag
   override def update(input: Row): Unit = {
     val evaluatedExpr = expr.eval(input)
     if (evaluatedExpr != null) {
-      count += 1L
+      count += evaluatedExpr.asInstanceOf[Long]
     }
   }
 
@@ -618,7 +618,7 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
 
   private val sum = MutableLiteral(null, calcType)
 
-  private val addFunction = 
+  private val addFunction =
     Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum, zero))
 
   override def update(input: Row): Unit = {

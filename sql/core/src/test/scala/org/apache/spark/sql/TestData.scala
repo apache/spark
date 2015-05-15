@@ -203,4 +203,12 @@ object TestData {
         :: ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2), false)
         :: Nil).toDF()
   complexData.registerTempTable("complexData")
+
+  case class ComplexData2(s: Seq[TestData], a: Seq[Int], b: Boolean)
+  val complexData2 =
+    TestSQLContext.sparkContext.parallelize(
+      ComplexData2(Seq[TestData](TestData(1, "1"), TestData(1, "2")), Seq(1), true)
+        :: ComplexData2(Seq[TestData](TestData(2, "2"), TestData(2, "3")), Seq(2), false)
+        :: Nil).toDF()
+  complexData2.registerTempTable("complexData2")
 }

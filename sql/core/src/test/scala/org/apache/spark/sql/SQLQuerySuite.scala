@@ -1306,6 +1306,51 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(sql("SELECT b[0].a FROM t ORDER BY c0.a"), Row(1))
   }
 
+  test("SPARK-7549 Support aggregating over nested fields") {
+    checkAnswer(sql("SELECT sum(a[0]) FROM complexData2"), Row(3))
+    checkAnswer(sql("SELECT sum(s.key) FROM complexData2"), Row(6))
+    checkAnswer(sql("SELECT sum(nestedData[0]) FROM arrayData"), Row(15))
+
+    checkAnswer(sql("SELECT count(a[0]) FROM complexData2"), Row(2))
+    checkAnswer(sql("SELECT count(s.key) FROM complexData2"), Row(4))
+    checkAnswer(sql("SELECT count(nestedData[0]) FROM arrayData"), Row(6))
+
+    checkAnswer(sql("SELECT min(a[0]) FROM complexData2"), Row(1))
+    checkAnswer(sql("SELECT min(s.key) FROM complexData2"), Row(1))
+    checkAnswer(sql("SELECT min(nestedData[0]) FROM arrayData"), Row(1))
+
+    checkAnswer(sql("SELECT max(a[0]) FROM complexData2"), Row(2))
+    checkAnswer(sql("SELECT max(s.key) FROM complexData2"), Row(2))
+    checkAnswer(sql("SELECT max(nestedData[0]) FROM arrayData"), Row(4))
+
+    checkAnswer(sql("SELECT avg(a[0]) FROM complexData2"), Row(1.5))
+    checkAnswer(sql("SELECT avg(s.key) FROM complexData2"), Row(1.5))
+    checkAnswer(sql("SELECT avg(nestedData[0]) FROM arrayData"), Row(2.5))
+
+    val originalValue = conf.codegenEnabled
+    setConf(SQLConf.CODEGEN_ENABLED, "true")
+    checkAnswer(sql("SELECT sum(a[0]) FROM complexData2"), Row(3))
+    checkAnswer(sql("SELECT sum(s.key) FROM complexData2"), Row(6))
+    checkAnswer(sql("SELECT sum(nestedData[0]) FROM arrayData"), Row(15))
+
+    checkAnswer(sql("SELECT count(a[0]) FROM complexData2"), Row(2))
+    checkAnswer(sql("SELECT count(s.key) FROM complexData2"), Row(4))
+    checkAnswer(sql("SELECT count(nestedData[0]) FROM arrayData"), Row(6))
+
+    checkAnswer(sql("SELECT min(a[0]) FROM complexData2"), Row(1))
+    checkAnswer(sql("SELECT min(s.key) FROM complexData2"), Row(1))
+    checkAnswer(sql("SELECT min(nestedData[0]) FROM arrayData"), Row(1))
+
+    checkAnswer(sql("SELECT max(a[0]) FROM complexData2"), Row(2))
+    checkAnswer(sql("SELECT max(s.key) FROM complexData2"), Row(2))
+    checkAnswer(sql("SELECT max(nestedData[0]) FROM arrayData"), Row(4))
+
+    checkAnswer(sql("SELECT avg(a[0]) FROM complexData2"), Row(1.5))
+    checkAnswer(sql("SELECT avg(s.key) FROM complexData2"), Row(1.5))
+    checkAnswer(sql("SELECT avg(nestedData[0]) FROM arrayData"), Row(2.5))
+    setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+  }
+
   test("SPARK-6898: complete support for special chars in column names") {
     jsonRDD(sparkContext.makeRDD(
       """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))

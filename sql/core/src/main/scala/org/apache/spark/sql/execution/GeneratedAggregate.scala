@@ -83,7 +83,7 @@ case class GeneratedAggregate(
         }
         val currentCount = AttributeReference("currentCount", LongType, nullable = false)()
         val initialValue = Literal(0L)
-        val updateFunction = If(IsNotNull(toCount), Add(currentCount, Literal(1L)), currentCount)
+        val updateFunction = If(IsNotNull(toCount), Add(currentCount, toCount), currentCount)
         val result = currentCount
 
         AggregateEvaluation(currentCount :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
