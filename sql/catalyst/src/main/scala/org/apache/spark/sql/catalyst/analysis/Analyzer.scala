@@ -394,7 +394,8 @@ class Analyzer(
           if !s.resolved && child.resolved && resolvedExceptWindowExpressions(projectList) =>
         val windowAttributes =
           projectList.filter(e => hasWindowExpression(e)).map(_.toAttribute).toSet
-        val (resolvedOrdering, missing) = resolveAndFindMissing(ordering, windowAttributes, p, child)
+        val (resolvedOrdering, missing) =
+          resolveAndFindMissing(ordering, windowAttributes, p, child)
 
         // If this rule was not a no-op, return the transformed plan, otherwise return the original.
         if (missing.nonEmpty) {
