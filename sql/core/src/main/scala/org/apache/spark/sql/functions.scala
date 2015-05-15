@@ -321,6 +321,132 @@ object functions {
   def max(columnName: String): Column = max(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
+  // Window functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Window function: returns the lag value of current row of the expression,
+   * null when the current row extends before the beginning of the window.
+   *
+   * @group window_funcs
+   */
+  def lag(columnName: String): Column = {
+    lag(columnName, 1)
+  }
+
+  /**
+   * Window function: returns the lag value of current row of the column,
+   * null when the current row extends before the beginning of the window.
+   *
+   * @group window_funcs
+   */
+  def lag(e: Column): Column = {
+    lag(e, 1)
+  }
+
+  /**
+   * Window function: returns the lag values of current row of the expression,
+   * null when the current row extends before the beginning of the window.
+   *
+   * @group window_funcs
+   */
+  def lag(e: Column, count: Int): Column = {
+    lag(e, count, null)
+  }
+
+  /**
+   * Window function: returns the lag values of current row of the column,
+   * null when the current row extends before the beginning of the window.
+   *
+   * @group window_funcs
+   */
+  def lag(columnName: String, count: Int): Column = {
+    lag(columnName, count, null)
+  }
+
+  /**
+   * Window function: returns the lag values of current row of the column,
+   * given default value when the current row extends before the beginning
+   * of the window.
+   *
+   * @group window_funcs
+   */
+  def lag(columnName: String, count: Int, defaultValue: Any): Column = {
+    lag(Column(columnName), count, defaultValue)
+  }
+
+  /**
+   * Window function: returns the lag values of current row of the expression,
+   * given default value when the current row extends before the beginning
+   * of the window.
+   *
+   * @group window_funcs
+   */
+  def lag(e: Column, count: Int, defaultValue: Any): Column = {
+    UnresolvedWindowFunction("lag", e.expr :: Literal(count) :: Literal(defaultValue) :: Nil)
+  }
+
+  /**
+   * Window function: returns the lead value of current row of the column,
+   * null when the current row extends before the end of the window.
+   *
+   * @group window_funcs
+   */
+  def lead(columnName: String): Column = {
+    lead(columnName, 1)
+  }
+
+  /**
+   * Window function: returns the lead value of current row of the expression,
+   * null when the current row extends before the end of the window.
+   *
+   * @group window_funcs
+   */
+  def lead(e: Column): Column = {
+    lead(e, 1)
+  }
+
+  /**
+   * Window function: returns the lead values of current row of the column,
+   * null when the current row extends before the end of the window.
+   *
+   * @group window_funcs
+   */
+  def lead(columnName: String, count: Int): Column = {
+    lead(columnName, count, null)
+  }
+
+  /**
+   * Window function: returns the lead values of current row of the expression,
+   * null when the current row extends before the end of the window.
+   *
+   * @group window_funcs
+   */
+  def lead(e: Column, count: Int): Column = {
+    lead(e, count, null)
+  }
+
+  /**
+   * Window function: returns the lead values of current row of the column,
+   * given default value when the current row extends before the end of the window.
+   *
+   * @group window_funcs
+   */
+  def lead(columnName: String, count: Int, defaultValue: Any): Column = {
+    lead(Column(columnName), count, defaultValue)
+  }
+
+  /**
+   * Window function: returns the lead values of current row of the expression,
+   * given default value when the current row extends before the end of the window.
+   *
+   * @group window_funcs
+   */
+  def lead(e: Column, count: Int, defaultValue: Any): Column = {
+    UnresolvedWindowFunction("lead", e.expr :: Literal(count) :: Literal(defaultValue) :: Nil)
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
   // Non-aggregate functions
   //////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1392,5 +1518,7 @@ object functions {
   def callUdf(udfName: String, cols: Column*): Column = {
      UnresolvedFunction(udfName, cols.map(_.expr))
   }
+
+  def over: WindowFunctionDefinition = new WindowFunctionDefinition()
 
 }

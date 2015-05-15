@@ -890,7 +890,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def bitwiseXOR(other: Any): Column = BitwiseXor(expr, lit(other).expr)
 
   /**
-   * Create a new [[WindowFunctionDefinition]] bundled with this column(expression).
+   * Create a new [[WindowFunctionDefinition]] bundled with this column.
    * {{{
    *   df.select(avg($"value").over...)
    * }}}
@@ -898,6 +898,20 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    */
   def over: WindowFunctionDefinition = new WindowFunctionDefinition(this)
+
+  /**
+   * Reuse an existed [[WindowFunctionDefinition]] and bundled with this column.
+   * {{{
+   *   val w = over.partitionBy("name").orderBy("id")
+   *   df.select(
+   *     sum("price").over(w).between.preceding(2),
+   *     avg("price").over(w).between.preceding(4)
+   *   )
+   * }}}
+   *
+   * @group expr_ops
+   */
+  def over(w: WindowFunctionDefinition) = w.newColumn(this)
 
 }
 

@@ -49,10 +49,14 @@ import org.apache.spark.sql.catalyst.expressions._
  */
 @Experimental
 class WindowFunctionDefinition protected[sql](
-    column: Column,
+    column: Column = null,
     partitionSpec: Seq[Expression] = Nil,
     orderSpec: Seq[SortOrder] = Nil,
     frame: WindowFrame = UnspecifiedFrame) {
+
+  private[sql] def newColumn(c: Column): WindowFunctionDefinition = {
+    new WindowFunctionDefinition(c, partitionSpec, orderSpec, frame)
+  }
 
   /**
    * Returns a new [[WindowFunctionDefinition]] partitioned by the specified column.
@@ -218,6 +222,9 @@ class WindowFunctionDefinition protected[sql](
    * @group window_funcs
    */
   def toColumn: Column = {
+    if (column == null) {
+      throw new AnalysisException("Window didn't bind with expression")
+    }
     val windowExpr = column.expr match {
       case Average(child) => WindowExpression(
         UnresolvedWindowFunction("avg", child :: Nil),

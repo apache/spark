@@ -23,8 +23,67 @@ import org.apache.spark.sql.hive.test.TestHive.implicits._
 
 class HiveDataFrameWindowSuite extends QueryTest {
 
+  test("reuse window") {
+    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    val w = over.partitionBy("key").orderBy("value")
+
+    checkAnswer(
+      df.select(
+        lead("key").over(w).toColumn,
+        lead("value").over(w).toColumn),
+      Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
+  }
+
+  test("lead in window") {
+    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    checkAnswer(
+      df.select(
+        lead("value").over
+          .partitionBy($"key")
+          .orderBy($"value")
+          .toColumn),
+      Row("1") :: Row("2") :: Row(null) :: Row(null) :: Nil)
+  }
+
+  test("lag in window") {
+    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    checkAnswer(
+      df.select(
+        lead("value").over
+          .partitionBy($"key")
+          .orderBy($"value")
+          .toColumn),
+      Row("1") :: Row("2") :: Row(null) :: Row(null) :: Nil)
+  }
+
+  test("lead in window with default value") {
+    val df = Seq((1, "1"), (1, "1"), (2, "2"), (1, "1"),
+                 (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    checkAnswer(
+      df.select(
+        lead("value", 2, "n/a").over
+          .partitionBy("key")
+          .orderBy("value")
+          .toColumn),
+      Row("1") :: Row("1") :: Row("2") :: Row("n/a")
+        :: Row("n/a") :: Row("n/a") :: Row("n/a") :: Nil)
+  }
+
+  test("lag in window with default value") {
+    val df = Seq((1, "1"), (1, "1"), (2, "2"), (1, "1"),
+                 (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    checkAnswer(
+      df.select(
+        lead("value", 2, "n/a").over
+          .partitionBy($"key")
+          .orderBy($"value")
+          .toColumn),
+      Row("1") :: Row("1") :: Row("2") :: Row("n/a")
+        :: Row("n/a") :: Row("n/a") :: Row("n/a") :: Nil)
+  }
+
   test("aggregation in a Row window") {
-    val df = Seq((1, "1"), (2, "2")).toDF("key", "value")
+    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     checkAnswer(
       df.select(
         avg("key").over
@@ -33,11 +92,11 @@ class HiveDataFrameWindowSuite extends QueryTest {
           .rows
           .preceding(1)
           .toColumn),
-      Row(1.0) :: Row(2.0) :: Nil)
+      Row(1.0) :: Row(1.0) :: Row(2.0) :: Row(2.0) :: Nil)
   }
 
   test("aggregation in a Range window") {
-    val df = Seq((1, "1"), (2, "2")).toDF("key", "value")
+    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     checkAnswer(
       df.select(
         avg("key").over
@@ -47,11 +106,11 @@ class HiveDataFrameWindowSuite extends QueryTest {
           .preceding(1)
           .following(1)
           .toColumn),
-      Row(1.0) :: Row(2.0) :: Nil)
+      Row(1.0) :: Row(1.0) :: Row(2.0) :: Row(2.0) :: Nil)
   }
 
   test("multiple aggregate function in window") {
-    val df = Seq((1, "1"), (2, "2")).toDF("key", "value")
+    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     checkAnswer(
       df.select(
         avg("key").over
@@ -66,7 +125,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
           .preceding(1)
           .following(1)
           .toColumn),
-      Row(1, 1.0) :: Row(2, 2.0) :: Nil)
+      Row(1.0, 1) :: Row(1.0, 2) :: Row(2.0, 2) :: Row(2.0, 4) :: Nil)
   }
 
   test("Window function in Unspecified Window") {
