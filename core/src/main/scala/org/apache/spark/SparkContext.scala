@@ -712,29 +712,49 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     val numElements: BigInt = {
       val safeStart = BigInt(start)
       val safeEnd = BigInt(end)
-      if (((safeEnd - safeStart) % step).toInt == 0) {
+      if ((safeEnd - safeStart) % step == 0 || safeEnd > safeStart ^ step > 0) {
         (safeEnd - safeStart) / step
       } else {
+        // the remainder has the same sign with range, could add 1 more
         (safeEnd - safeStart) / step + 1
       }
     }
     parallelize(0 until numSlices, numSlices).mapPartitionsWithIndex((i, _) => {
       val partitionStart = ((i * numElements) / numSlices * step + start).toLong
-      val partitionEnd = (((i + 1) * numElements) / numSlices * step + start).toLong
+      val partitionEnd = (((i + 1) * numElements) / numSlices) * step + start
+      def getSafeMargin(bi: BigInt): Long =
+        if (bi.isValidLong) {
+          bi.toLong
+        } else if (bi > 0) {
+          Long.MaxValue
+        } else {
+          Long.MinValue
+        }
+      val safePartitionStart = getSafeMargin(partitionStart)
+      val safePartitionEnd = getSafeMargin(partitionEnd)
 
       new Iterator[Long] {
-        private[this] var number: Long = partitionStart
+        private[this] var number: Long = safePartitionStart
+        private[this] var overflow: Boolean = false
 
         override def hasNext =
-          if (step > 0) {
-            number < partitionEnd
-          } else {
-            number > partitionEnd
-          }
+          if (!overflow) {
+            if (step > 0) {
+              number < safePartitionEnd
+            } else {
+              number > safePartitionEnd
+            }
+          } else false
 
         override def next() = {
           val ret = number
           number += step
+          if (number < ret ^ step < 0) {
+            // we have Long.MaxValue + Long.MaxValue < Long.MaxValue
+            // and Long.MinValue + Long.MinValue > Long.MinValue, so iff the step causes a step
+            // back, we are pretty sure that we have an overflow.
+            overflow = true
+          }
           ret
         }
       }
