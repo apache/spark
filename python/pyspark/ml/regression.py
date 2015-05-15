@@ -51,6 +51,10 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     -1.0
+    >>> model.weights
+    DenseVector([1.0])
+    >>> model.intercept
+    0.0
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
@@ -116,6 +120,20 @@ class LinearRegressionModel(JavaModel):
     """
     Model fitted by LinearRegression.
     """
+
+    @property
+    def weights(self):
+        """
+        Model weights.
+        """
+        return self._call_java("weights")
+
+    @property
+    def intercept(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("intercept")
 
 
 class TreeRegressorParams(object):
