@@ -107,9 +107,8 @@ public class JavaOneVsRestExample {
     DataFrame predictions = ovrModel.transform(testDataFrame.cache())
       .select("prediction", "label");
 
+    // obtain metrics
     MulticlassMetrics metrics = new MulticlassMetrics(predictions);
-
-
     StructField predictionColSchema = predictions.schema().apply("prediction");
     Integer numClasses = (Integer) MetadataUtils.getNumClasses(predictionColSchema).get();
 
