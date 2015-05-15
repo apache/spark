@@ -23,9 +23,20 @@ import org.apache.spark.sql.hive.test.TestHive.implicits._
 
 class HiveDataFrameWindowSuite extends QueryTest {
 
-  test("reuse window") {
+  test("reuse window partitionBy") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    val w = over.partitionBy("key").orderBy("value")
+    val w = partitionBy("key").orderBy("value")
+
+    checkAnswer(
+      df.select(
+        lead("key").over(w).toColumn,
+        lead("value").over(w).toColumn),
+      Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
+  }
+
+  test("reuse window orderBy") {
+    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    val w = orderBy("value").partitionBy("key")
 
     checkAnswer(
       df.select(

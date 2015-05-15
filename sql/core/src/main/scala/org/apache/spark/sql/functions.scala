@@ -446,6 +446,61 @@ object functions {
     UnresolvedWindowFunction("lead", e.expr :: Literal(count) :: Literal(defaultValue) :: Nil)
   }
 
+  /**
+   * Returns a new [[WindowFunctionDefinition]] partitioned by the specified column.
+   * For example:
+   * {{{
+   *   // The following 2 are equivalent
+   *   partitionBy("k1", "k2").orderBy("k3")
+   *   partitionBy($"K1", $"k2").orderBy($"k3")
+   * }}}
+   * @group window_funcs
+   */
+  @scala.annotation.varargs
+  def partitionBy(colName: String, colNames: String*): WindowFunctionDefinition = {
+    new WindowFunctionDefinition().partitionBy(colName, colNames: _*)
+  }
+
+  /**
+   * Returns a new [[WindowFunctionDefinition]] partitioned by the specified column.
+   * For example:
+   * {{{
+   *   partitionBy($"col1", $"col2").orderBy("value")
+   * }}}
+   * @group window_funcs
+   */
+  @scala.annotation.varargs
+  def partitionBy(cols: Column*): WindowFunctionDefinition = {
+    new WindowFunctionDefinition().partitionBy(cols: _*)
+  }
+
+  /**
+   * Create a new [[WindowFunctionDefinition]] sorted by the specified columns.
+   * For example:
+   * {{{
+   *   // The following 2 are equivalent
+   *   orderBy("k2", "k3").partitionBy("k1")
+   *   orderBy($"k2", $"k3").partitionBy("k1")
+   * }}}
+   * @group window_funcs
+   */
+  @scala.annotation.varargs
+  def orderBy(colName: String, colNames: String*): WindowFunctionDefinition = {
+    new WindowFunctionDefinition().orderBy(colName, colNames: _*)
+  }
+
+  /**
+   * Returns a new [[WindowFunctionDefinition]] sorted by the specified columns.
+   * For example
+   * {{{
+   *   val w = orderBy($"k2", $"k3").partitionBy("k1")
+   * }}}
+   * @group window_funcs
+   */
+  def orderBy(cols: Column*): WindowFunctionDefinition = {
+    new WindowFunctionDefinition().orderBy(cols: _*)
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Non-aggregate functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -1518,7 +1573,5 @@ object functions {
   def callUdf(udfName: String, cols: Column*): Column = {
      UnresolvedFunction(udfName, cols.map(_.expr))
   }
-
-  def over: WindowFunctionDefinition = new WindowFunctionDefinition()
 
 }
