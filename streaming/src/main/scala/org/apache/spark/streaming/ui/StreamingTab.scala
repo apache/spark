@@ -17,10 +17,11 @@
 
 package org.apache.spark.streaming.ui
 
+import org.eclipse.jetty.servlet.ServletContextHandler
+
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.ui.{JettyUtils, SparkUI, SparkUITab}
-import org.eclipse.jetty.servlet.ServletContextHandler
 
 import StreamingTab._
 
