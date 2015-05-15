@@ -40,7 +40,7 @@ import org.apache.spark.streaming.util.WriteAheadLogUtils
 abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
   extends InputDStream[T](ssc_) {
 
-  protected override val customScopeName: Option[String] = Some(s"receiver stream [$id]")
+  protected[streaming] override val customScopeName: Option[String] = Some(s"receiver stream [$id]")
 
   /**
    * Gets the receiver object that will be sent to the worker nodes

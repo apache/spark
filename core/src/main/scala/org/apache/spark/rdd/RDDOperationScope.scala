@@ -43,8 +43,8 @@ import org.apache.spark.{Logging, SparkContext}
 @JsonPropertyOrder(Array("id", "name", "parent"))
 private[spark] class RDDOperationScope(
     val name: String,
-    val id: String = RDDOperationScope.nextScopeId().toString,
-    val parent: Option[RDDOperationScope] = None) {
+    val parent: Option[RDDOperationScope] = None,
+    val id: String = RDDOperationScope.nextScopeId().toString) {
 
   def toJson: String = {
     RDDOperationScope.jsonMapper.writeValueAsString(this)
@@ -96,7 +96,7 @@ private[spark] object RDDOperationScope extends Logging {
       sc: SparkContext,
       allowNesting: Boolean = false)(body: => T): T = {
     val stackTrace = Thread.currentThread.getStackTrace().tail // ignore "Thread#getStackTrace"
-    val ourMethodName = stackTrace(1).getMethodName
+    val ourMethodName = stackTrace(1).getMethodName //
     // Climb upwards to find the first method that's called something different
     val callerMethodName = stackTrace
       .find(_.getMethodName != ourMethodName)
@@ -139,7 +139,7 @@ private[spark] object RDDOperationScope extends Logging {
         sc.setLocalProperty(scopeKey, new RDDOperationScope(name).toJson)
       } else if (sc.getLocalProperty(noOverrideKey) == null) {
         // Otherwise, set the scope only if the higher level caller allows us to do so
-        sc.setLocalProperty(scopeKey, new RDDOperationScope(name, parent = oldScope).toJson)
+        sc.setLocalProperty(scopeKey, new RDDOperationScope(name, oldScope).toJson)
       }
       // Optionally disallow the child body to override our scope
       if (!allowNesting) {

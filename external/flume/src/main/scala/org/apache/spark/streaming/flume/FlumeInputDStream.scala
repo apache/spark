@@ -50,7 +50,7 @@ class FlumeInputDStream[T: ClassTag](
   enableDecompression: Boolean
 ) extends ReceiverInputDStream[SparkFlumeEvent](ssc_) {
 
-  protected override val customScopeName: Option[String] = Some(s"input stream [$id]")
+  protected[streaming] override val customScopeName: Option[String] = Some(s"input stream [$id]")
 
   override def getReceiver(): Receiver[SparkFlumeEvent] = {
     new FlumeReceiver(host, port, storageLevel, enableDecompression)

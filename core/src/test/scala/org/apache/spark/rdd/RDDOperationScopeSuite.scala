@@ -27,8 +27,8 @@ import org.apache.spark.{TaskContext, Partition, SparkContext}
 class RDDOperationScopeSuite extends FunSuite with BeforeAndAfter {
   private var sc: SparkContext = null
   private val scope1 = new RDDOperationScope("scope1")
-  private val scope2 = new RDDOperationScope("scope2", parent = Some(scope1))
-  private val scope3 = new RDDOperationScope("scope3", parent = Some(scope2))
+  private val scope2 = new RDDOperationScope("scope2", Some(scope1))
+  private val scope3 = new RDDOperationScope("scope3", Some(scope2))
 
   before {
     sc = new SparkContext("local", "test")

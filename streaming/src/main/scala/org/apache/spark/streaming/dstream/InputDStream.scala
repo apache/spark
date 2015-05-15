@@ -50,7 +50,7 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
   private[streaming] def name: String = s"${getClass.getSimpleName}-$id"
 
   /** Human-friendly scope name to use in place of generic operation names (e.g. createStream). */
-  protected override val customScopeName: Option[String] = Some(s"input stream [$id]")
+  protected[streaming] override val customScopeName: Option[String] = Some(s"input stream [$id]")
 
   /**
    * Checks whether the 'time' is valid wrt slideDuration for generating RDD.

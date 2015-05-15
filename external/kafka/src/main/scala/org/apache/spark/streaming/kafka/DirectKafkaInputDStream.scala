@@ -65,7 +65,7 @@ class DirectKafkaInputDStream[
   val maxRetries = context.sparkContext.getConf.getInt(
     "spark.streaming.kafka.maxRetries", 1)
 
-  protected override val customScopeName: Option[String] = Some(s"kafka direct stream [$id]")
+  protected[streaming] override val customScopeName: Option[String] = Some(s"kafka direct stream [$id]")
 
   protected[streaming] override val checkpointData =
     new DirectKafkaInputDStreamCheckpointData

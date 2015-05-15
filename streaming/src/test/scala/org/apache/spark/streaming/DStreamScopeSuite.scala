@@ -189,7 +189,7 @@ private class DummyInputDStream(
     customName: Option[String] = None)
   extends InputDStream[Int](ssc) {
 
-  protected override val customScopeName: Option[String] = customName
+  protected[streaming] override val customScopeName: Option[String] = customName
   override def start(): Unit = { }
   override def stop(): Unit = { }
   override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.emptyRDD[Int])
