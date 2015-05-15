@@ -177,6 +177,9 @@ private[spark] class TaskSetManager(
 
   var emittedTaskSizeWarning = false
 
+  // Executor blacklist tracker for TaskSetManager to decide how to schedule the task
+  private val executorBlacklistTracker = sched.sc.executorBlacklistTracker
+
   /**
    * Add a task to all the pending-task lists that it should be on. If readding is set, we are
    * re-adding the task so only include it in each list if it's not already there.
@@ -285,6 +288,13 @@ private[spark] class TaskSetManager(
 
       return failed.contains(execId) &&
         clock.getTimeMillis() - failed.get(execId).get < EXECUTOR_TASK_BLACKLIST_TIMEOUT
+    }
+
+    if (executorBlacklistTracker.isDefined) {
+      val blacklist = executorBlacklistTracker.get.getExecutorBlacklist
+      if (blacklist.contains(execId)) {
+        return true
+      }
     }
 
     false
