@@ -33,8 +33,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     Linear regression.
 
     The learning objective is to minimize the squared error, with regularization.
-    The specific squared error loss function used is:
-      L = 1/2n ||A weights - y||^2^
+    The specific squared error loss function used is: L = 1/2n ||A weights - y||^2^
 
     This support multiple types of regularization:
      - none (a.k.a. ordinary least squares)
@@ -191,7 +190,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance")
         """
         super(DecisionTreeRegressor, self).__init__()
@@ -213,9 +212,8 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                   impurity="variance"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="variance")
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance")
         Sets params for the DecisionTreeRegressor.
         """
         kwargs = self.setParams._input_kwargs
@@ -286,10 +284,10 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance",
                  numTrees=20, featureSubsetStrategy="auto", seed=42):
         """
-        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance",
-                 numTrees=20, featureSubsetStrategy="auto", seed=42)
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
+                 impurity="variance", numTrees=20, featureSubsetStrategy="auto", seed=42)
         """
         super(RandomForestRegressor, self).__init__()
         #: param for Criterion used for information gain calculation (case-insensitive).
@@ -321,9 +319,9 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=42,
                   impurity="variance", numTrees=20, featureSubsetStrategy="auto"):
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=42,
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=42, \
                   impurity="variance", numTrees=20, featureSubsetStrategy="auto")
         Sets params for linear regression.
         """
@@ -432,10 +430,10 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="squared",
                  maxIter=20, stepSize=0.1):
         """
-        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="squared",
-                 maxIter=20, stepSize=0.1)
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
+                 lossType="squared", maxIter=20, stepSize=0.1)
         """
         super(GBTRegressor, self).__init__()
         #: param for Loss function which GBT tries to minimize (case-insensitive).
@@ -463,9 +461,9 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   lossType="squared", maxIter=20, stepSize=0.1):
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   lossType="squared", maxIter=20, stepSize=0.1)
         Sets params for Gradient Boosted Tree Regression.
         """
