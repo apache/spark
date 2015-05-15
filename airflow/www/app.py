@@ -1394,8 +1394,19 @@ def task_instance_link(v, c, m, p):
         dag_id=m.dag_id,
         task_id=m.task_id,
         execution_date=m.execution_date.isoformat())
+    url_root = url_for(
+        'airflow.graph',
+        dag_id=m.dag_id,
+        root=m.task_id,
+        execution_date=m.execution_date.isoformat())
     return Markup(
-        '<a href="{url}">{m.task_id}</a>'.format(**locals()))
+        """
+        <a href="{url}">{m.task_id}</a>
+        <a href="{url_root}" title="Filter on this task and upstream">
+        <span class="glyphicon glyphicon-filter" style="margin-left: 0px;"
+            aria-hidden="true"></span>
+        </a>
+        """.format(**locals()))
 
 
 def duration_f(v, c, m, p):
