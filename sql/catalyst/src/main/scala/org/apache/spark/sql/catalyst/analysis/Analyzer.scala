@@ -386,9 +386,21 @@ class Analyzer(
    * remove these attributes after sorting.
    */
   object ResolveSortReferences extends Rule[LogicalPlan] {
+
+    private def hasWindowExpression(expr: NamedExpression): Boolean = {
+      expr.find {
+        case window: WindowExpression => true
+        case _ => false
+      }.isDefined
+    }
+
+    private def resolvedExceptWindowExpressions(exprs: Seq[NamedExpression]): Boolean = {
+      exprs.filter(e => !hasWindowExpression(e)).forall(_.resolved)
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case s @ Sort(ordering, global, p @ Project(projectList, child))
-          if !s.resolved && p.resolved =>
+          if !s.resolved && child.resolved && resolvedExceptWindowExpressions(projectList) =>
         val (resolvedOrdering, missing) = resolveAndFindMissing(ordering, p, child)
 
         // If this rule was not a no-op, return the transformed plan, otherwise return the original.
@@ -402,7 +414,7 @@ class Analyzer(
           s // Nothing we can do here. Return original plan.
         }
       case s @ Sort(ordering, global, a @ Aggregate(grouping, aggs, child))
-          if !s.resolved && a.resolved =>
+          if !s.resolved && child.resolved && resolvedExceptWindowExpressions(aggs) =>
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         // A small hack to create an object that will allow us to resolve any references that
         // refer to named expressions that are present in the grouping expressions.
