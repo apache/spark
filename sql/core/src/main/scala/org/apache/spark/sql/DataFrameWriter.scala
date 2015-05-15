@@ -163,6 +163,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Saves the content of the [[DataFrame]] in JSON format at the specified path.
+   * This is equivalent to:
+   * {{{
+   *   format("json").save(path)
+   * }}}
    *
    * @since 1.4.0
    */
@@ -170,6 +174,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Saves the content of the [[DataFrame]] in Parquet format at the specified path.
+   * This is equivalent to:
+   * {{{
+   *   format("parquet").save(path)
+   * }}}
    *
    * @since 1.4.0
    */
