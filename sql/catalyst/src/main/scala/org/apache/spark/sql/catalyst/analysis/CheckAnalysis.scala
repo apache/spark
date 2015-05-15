@@ -111,12 +111,6 @@ trait CheckAnalysis {
                 s"union node: $u left output size: ${left.output.size}, " +
                   s"right output size: ${right.output.size}")
 
-          case u @ Union(left, right) if left.output.zip(right.output).exists(z => z._1.dataType != z._2.dataType) =>
-            failAnalysis(
-              s"union's left child and right child have different output types." +
-                s"union node: $u. left output datatypes: ${left.output.map(_.dataType)}, " +
-                  s"right output datatypes: ${right.output.map(_.dataType)}")
-
           case _ => // Fallbacks to the following checks
         }
 
