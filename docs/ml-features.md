@@ -262,7 +262,7 @@ continuousDataFrame = sqlContext.createDataFrame([
 binarizer = Binarizer(threshold=0.5, inputCol="feature", outputCol="binarized_feature")
 binarizedDataFrame = binarizer.transform(continuousDataFrame)
 binarizedFeatures = binarizedDataFrame.select("binarized_feature")
-for binarized_feature in binarizedFeatures.collect():
+for binarized_feature, in binarizedFeatures.collect():
   print binarized_feature
 {% endhighlight %}
 </div>
