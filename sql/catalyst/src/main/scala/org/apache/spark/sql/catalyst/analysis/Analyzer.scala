@@ -576,6 +576,12 @@ class Analyzer(
     /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
     private object AliasedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
+        case Alias(g: Generator, name) if g.elementTypes.size > 1 => {
+          // In project, we probably give a default name which is not correct
+          // e.g. SELECT explode(map(key, value)) FROM src;
+          // Let's ignore the specified names for generator in project list
+          Some((g, Nil))
+        }
         case Alias(g: Generator, name) => Some((g, name :: Nil))
         case MultiAlias(g: Generator, names) => Some(g, names)
         case _ => None
