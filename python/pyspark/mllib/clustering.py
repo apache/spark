@@ -135,6 +135,9 @@ class GaussianMixtureModel(object):
         if isinstance(x, RDD):
             cluster_labels = self.predictSoft(x).map(lambda z: z.index(max(z)))
             return cluster_labels
+        else:
+            raise TypeError("x should be represented by an RDD, "
+                            "but got %s." % type(x))
 
     def predictSoft(self, x):
         """
@@ -148,6 +151,9 @@ class GaussianMixtureModel(object):
             membership_matrix = callMLlibFunc("predictSoftGMM", x.map(_convert_to_vector),
                                               self.weights, means, sigmas)
             return membership_matrix
+        else:
+            raise TypeError("x should be represented by an RDD, "
+                            "but got %s." % type(x))
 
 
 class GaussianMixture(object):
