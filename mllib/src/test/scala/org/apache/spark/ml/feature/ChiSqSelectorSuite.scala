@@ -45,7 +45,7 @@ class ChiSqSelectorSuite extends FunSuite with MLlibTestSparkContext {
     )
 
     val df = sc.parallelize(data.zip(preFilteredData))
-      .map(x => Tuple3(x._1.label, x._1.features, x._2))
+      .map(x => (x._1.label, x._1.features, x._2))
       .toDF("label", "data", "preFilteredData")
 
     val model = new ChiSqSelector()

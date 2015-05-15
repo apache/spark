@@ -38,7 +38,8 @@ private[feature] trait ChiSqSelectorParams extends Params
 
   /**
    * Number of features that selector will select (ordered by statistic value descending). If the
-   * number of features is < numTopFeatures, then this will select all features.
+   * number of features is < numTopFeatures, then this will select all features. The default value
+   * of numTopFeatures is 50.
    * @group param
    */
   final val numTopFeatures = new IntParam(this, "numTopFeatures",
@@ -71,7 +72,7 @@ final class ChiSqSelector extends Estimator[ChiSqSelectorModel] with ChiSqSelect
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   override def fit(dataset: DataFrame): ChiSqSelectorModel = {
-    transformSchema(dataset.schema)
+    transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(labelCol), $(featuresCol)).map {
       case Row(label: Double, features: Vector) =>
         LabeledPoint(label, features)
@@ -92,7 +93,7 @@ final class ChiSqSelector extends Estimator[ChiSqSelectorModel] with ChiSqSelect
  * Model fitted by [[ChiSqSelector]].
  */
 @AlphaComponent
-class ChiSqSelectorModel private[ml] (
+final class ChiSqSelectorModel private[ml] (
     override val parent: ChiSqSelector,
     private val chiSqSelector: feature.ChiSqSelectorModel)
   extends Model[ChiSqSelectorModel] with ChiSqSelectorParams {
@@ -104,7 +105,7 @@ class ChiSqSelectorModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame): DataFrame = {
-    transformSchema(dataset.schema)
+    transformSchema(dataset.schema, logging = true)
     val newField = prepOutputField(dataset.schema)
     val newCol =
       callUDF(chiSqSelector.transform: Vector => Vector, new VectorUDT, dataset($(featuresCol)))
@@ -127,7 +128,7 @@ class ChiSqSelectorModel private[ml] (
     val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
       origAttrGroup.attributes.get.zipWithIndex.filter(x => selector.contains(x._2)).map(_._1)
     } else {
-      Array.fill[Attribute](selector.size)(NumericAttribute.defaultAttr)
+      Array.fill[Attribute](selector.size)(NominalAttribute.defaultAttr)
     }
     val newAttributeGroup = new AttributeGroup($(outputCol), featureAttributes)
     newAttributeGroup.toStructField()
