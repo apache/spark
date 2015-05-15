@@ -226,7 +226,7 @@ private[sql] object ResolvedDataSource {
       case Some(schema: StructType) => clazz.newInstance() match {
         case dataSource: SchemaRelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
-        case dataSource: FSBasedRelationProvider =>
+        case dataSource: HadoopFsRelationProvider =>
           val maybePartitionsSchema = if (partitionColumns.isEmpty) {
             None
           } else {
@@ -256,7 +256,7 @@ private[sql] object ResolvedDataSource {
       case None => clazz.newInstance() match {
         case dataSource: RelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
-        case dataSource: FSBasedRelationProvider =>
+        case dataSource: HadoopFsRelationProvider =>
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
             val patternPath = new Path(caseInsensitiveOptions("path"))
@@ -296,7 +296,7 @@ private[sql] object ResolvedDataSource {
     val relation = clazz.newInstance() match {
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(sqlContext, mode, options, data)
-      case dataSource: FSBasedRelationProvider =>
+      case dataSource: HadoopFsRelationProvider =>
         // Don't glob path for the write path.  The contracts here are:
         //  1. Only one output path can be specified on the write path;
         //  2. Output path must be a legal HDFS style file system path;
@@ -315,7 +315,7 @@ private[sql] object ResolvedDataSource {
           Some(partitionColumnsSchema(data.schema, partitionColumns)),
           caseInsensitiveOptions)
         sqlContext.executePlan(
-          InsertIntoFSBasedRelation(
+          InsertIntoHadoopFsRelation(
             r,
             data.logicalPlan,
             partitionColumns.toArray,
