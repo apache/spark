@@ -25,6 +25,7 @@ import tempfile
 import array as pyarray
 
 from numpy import array, array_equal, zeros, inf
+import scipy.sparse as sp
 from py4j.protocol import Py4JJavaError
 
 if sys.version_info[:2] <= (2, 6):
@@ -831,6 +832,14 @@ class MLUtilsTests(MLlibTestCase):
         ret = MLUtils.appendBias(data)
         self.assertEqual(ret[3], 1.0)
         self.assertEqual(type(ret), list)
+
+    def test_append_bias_with_sp_vector(self):
+        data = Vectors.sparse(3, {0: 2.0, 2: 2.0})
+        # Returned value must be scipy.sparse matrix
+        ret = MLUtils.appendBias(data)
+        self.assertEqual(ret.shape, (1, 4))
+        self.assertEqual(ret.toarray()[0][3], 1.0)
+        self.assertEqual(type(ret), sp.csc_matrix)
 
     def test_load_vectors(self):
         import shutil
