@@ -81,7 +81,7 @@ abstract class Expression extends TreeNode[Expression] {
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
   self: Product =>
 
-  def symbol: String = sys.error(s"BinaryExpressions must either override eval or evalInternal")
+  def symbol: String = sys.error(s"BinaryExpressions must either override toString or symbol")
 
   override def foldable: Boolean = left.foldable && right.foldable
 
