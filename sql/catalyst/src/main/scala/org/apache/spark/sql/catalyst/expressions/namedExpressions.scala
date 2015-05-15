@@ -181,6 +181,11 @@ case class AttributeReference(
     case _ => false
   }
 
+  override def semanticEquals(other: Expression): Boolean = other match {
+    case ar: AttributeReference => exprId == ar.exprId
+    case _ => false
+  }
+
   override def hashCode: Int = {
     // See http://stackoverflow.com/questions/113511/hash-code-implementation
     var h = 17

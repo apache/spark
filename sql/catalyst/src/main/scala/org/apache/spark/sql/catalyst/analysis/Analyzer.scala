@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -148,17 +147,17 @@ class Analyzer(
      * @param exprs the attributes in sequence
      * @return the attributes of non selected specified via bitmask (with the bit set to 1)
      */
-    private def buildNonSelectExprSet(bitmask: Int, exprs: Seq[Expression])
-    : OpenHashSet[Expression] = {
-      val set = new OpenHashSet[Expression](2)
+    private def buildNonSelectExprs(bitmask: Int, exprs: Seq[Expression])
+    : Seq[Expression] = {
+      val buffer = ArrayBuffer.empty[Expression]
 
       var bit = exprs.length - 1
       while (bit >= 0) {
-        if (((bitmask >> bit) & 1) == 0) set.add(exprs(bit))
+        if (((bitmask >> bit) & 1) == 0) buffer += exprs(bit)
         bit -= 1
       }
 
-      set
+      buffer
     }
 
     /*
@@ -197,10 +196,10 @@ class Analyzer(
 
       g.bitmasks.foreach { bitmask =>
         // get the non selected grouping attributes according to the bit mask
-        val nonSelectedGroupExprSet = buildNonSelectExprSet(bitmask, g.groupByExprs)
+        val nonSelectedGroupExprs = buildNonSelectExprs(bitmask, g.groupByExprs)
 
         val substitution = (g.child.output :+ g.gid).map(expr => expr transformDown {
-          case x: Expression if nonSelectedGroupExprSet.contains(x) =>
+          case x: Expression if nonSelectedGroupExprs.find(_ semanticEquals x).isDefined =>
             // if the input attribute in the Invalid Grouping Expression set of for this group
             // replace it with constant null
             Literal.create(null, expr.dataType)

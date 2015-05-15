@@ -76,6 +76,12 @@ abstract class Expression extends TreeNode[Expression] {
       case u: UnresolvedAttribute => PrettyAttribute(u.name)
     }.toString
   }
+
+  def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass &&
+    this.productIterator.zip(other.asInstanceOf[Product].productIterator).forall {
+      case (e1: Expression, e2: Expression) => e1 semanticEquals e2
+      case (i1, i2) => i1 == i2
+    }
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {

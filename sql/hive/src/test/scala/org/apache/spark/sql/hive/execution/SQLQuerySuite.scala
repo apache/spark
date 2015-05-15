@@ -773,4 +773,22 @@ class SQLQuerySuite extends QueryTest {
         | select * from v2 order by key limit 1
       """.stripMargin), Row(0, 3))
   }
+
+  test("SPARK-7269 Check analysis failed in case in-sensitive") {
+    Seq(1, 2, 3).map { i =>
+      (i.toString, i.toString)
+    }.toDF("key", "value").registerTempTable("df_analysis")
+    sql("SELECT kEy from df_analysis group by key").collect()
+    sql("SELECT kEy+3 from df_analysis group by key+3").collect()
+    sql("SELECT kEy+3, a.kEy, A.kEy from df_analysis A group by key").collect()
+    sql("SELECT cast(kEy+1 as Int) from df_analysis A group by cast(key+1 as int)").collect()
+    sql("SELECT cast(kEy+1 as Int) from df_analysis A group by key+1").collect()
+    sql("SELECT 2 from df_analysis A group by key+1").collect()
+    intercept[AnalysisException] {
+      sql("SELECT kEy+1 from df_analysis group by key+3")
+    }
+    intercept[AnalysisException] {
+      sql("SELECT cast(key+2 as Int) from df_analysis A group by cast(key+1 as int)")
+    }
+  }
 }
