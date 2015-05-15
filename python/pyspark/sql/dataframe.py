@@ -1511,13 +1511,19 @@ class Column(object):
     isNull = _unary_op("isNull", "True if the current expression is null.")
     isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
 
-    def alias(self, alias):
-        """Return a alias for this column
+    def alias(self, *alias):
+        """Returns this column aliased with a new name or names (in the case of expressions that
+        return more than one column, such as explode).
 
         >>> df.select(df.age.alias("age2")).collect()
         [Row(age2=2), Row(age2=5)]
         """
-        return Column(getattr(self._jc, "as")(alias))
+
+        if len(alias) == 1:
+            return Column(getattr(self._jc, "as")(alias[0]))
+        else:
+            sc = SparkContext._active_spark_context
+            return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
     @ignore_unicode_prefix
     def cast(self, dataType):
