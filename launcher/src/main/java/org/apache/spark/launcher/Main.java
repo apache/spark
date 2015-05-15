@@ -101,12 +101,9 @@ class Main {
    * The method quotes all arguments so that spaces are handled as expected. Quotes within arguments
    * are "double quoted" (which is batch for escaping a quote). This page has more details about
    * quoting and other batch script fun stuff: http://ss64.com/nt/syntax-esc.html
-   *
-   * The command is executed using "cmd /c" and formatted in single line, since that's the
-   * easiest way to consume this from a batch script (see spark-class2.cmd).
    */
   private static String prepareWindowsCommand(List<String> cmd, Map<String, String> childEnv) {
-    StringBuilder cmdline = new StringBuilder("cmd /c \"");
+    StringBuilder cmdline = new StringBuilder();
     for (Map.Entry<String, String> e : childEnv.entrySet()) {
       cmdline.append(String.format("set %s=%s", e.getKey(), e.getValue()));
       cmdline.append(" && ");
@@ -115,7 +112,6 @@ class Main {
       cmdline.append(quoteForBatchScript(arg));
       cmdline.append(" ");
     }
-    cmdline.append("\"");
     return cmdline.toString();
   }
 

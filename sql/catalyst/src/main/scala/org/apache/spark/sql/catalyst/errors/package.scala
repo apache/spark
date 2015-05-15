@@ -38,6 +38,8 @@ package object errors {
     }
   }
 
+  class DialectException(msg: String, cause: Throwable) extends Exception(msg, cause)
+
   /**
    *  Wraps any exceptions that are thrown while executing `f` in a
    *  [[catalyst.errors.TreeNodeException TreeNodeException]], attaching the provided `tree`.

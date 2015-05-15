@@ -22,6 +22,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
+import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{DataValidators, Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -36,7 +37,7 @@ class SVMModel (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable
-  with Saveable {
+  with Saveable with PMMLExportable {
 
   private var threshold: Option[Double] = Some(0.0)
 

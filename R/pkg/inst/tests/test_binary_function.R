@@ -66,3 +66,36 @@ test_that("cogroup on two RDDs", {
   expect_equal(sortKeyValueList(actual),
                sortKeyValueList(expected))
 })
+
+test_that("zipPartitions() on RDDs", {
+  rdd1 <- parallelize(sc, 1:2, 2L)  # 1, 2
+  rdd2 <- parallelize(sc, 1:4, 2L)  # 1:2, 3:4
+  rdd3 <- parallelize(sc, 1:6, 2L)  # 1:3, 4:6
+  actual <- collect(zipPartitions(rdd1, rdd2, rdd3, 
+                                  func = function(x, y, z) { list(list(x, y, z))} ))
+  expect_equal(actual,
+               list(list(1, c(1,2), c(1,2,3)), list(2, c(3,4), c(4,5,6))))
+  
+  mockFile = c("Spark is pretty.", "Spark is awesome.")
+  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  writeLines(mockFile, fileName)
+  
+  rdd <- textFile(sc, fileName, 1)
+  actual <- collect(zipPartitions(rdd, rdd, 
+                                  func = function(x, y) { list(paste(x, y, sep = "\n")) }))
+  expected <- list(paste(mockFile, mockFile, sep = "\n"))
+  expect_equal(actual, expected)
+  
+  rdd1 <- parallelize(sc, 0:1, 1)
+  actual <- collect(zipPartitions(rdd1, rdd, 
+                                  func = function(x, y) { list(x + nchar(y)) }))
+  expected <- list(0:1 + nchar(mockFile))
+  expect_equal(actual, expected)
+  
+  rdd <- map(rdd, function(x) { x })
+  actual <- collect(zipPartitions(rdd, rdd1, 
+                                  func = function(x, y) { list(y + nchar(x)) }))
+  expect_equal(actual, expected)
+  
+  unlink(fileName)
+})

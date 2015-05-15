@@ -293,7 +293,7 @@ private[akka] class AkkaRpcEndpointRef(
     actorRef ! AkkaMessage(message, false)
   }
 
-  override def sendWithReply[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T] = {
+  override def ask[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T] = {
     import scala.concurrent.ExecutionContext.Implicits.global
     actorRef.ask(AkkaMessage(message, true))(timeout).flatMap {
       case msg @ AkkaMessage(message, reply) =>

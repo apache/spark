@@ -211,7 +211,74 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     Utils.timeStringAsMs(get(key, defaultValue))
   }
 
+  /**
+   * Get a size parameter as bytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then bytes are assumed.
+   * @throws NoSuchElementException
+   */
+  def getSizeAsBytes(key: String): Long = {
+    Utils.byteStringAsBytes(get(key))
+  }
 
+  /**
+   * Get a size parameter as bytes, falling back to a default if not set. If no
+   * suffix is provided then bytes are assumed.
+   */
+  def getSizeAsBytes(key: String, defaultValue: String): Long = {
+    Utils.byteStringAsBytes(get(key, defaultValue))
+  }
+  
+  /**
+   * Get a size parameter as Kibibytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then Kibibytes are assumed.
+   * @throws NoSuchElementException
+   */
+  def getSizeAsKb(key: String): Long = {
+    Utils.byteStringAsKb(get(key))
+  }
+
+  /**
+   * Get a size parameter as Kibibytes, falling back to a default if not set. If no
+   * suffix is provided then Kibibytes are assumed.
+   */
+  def getSizeAsKb(key: String, defaultValue: String): Long = {
+    Utils.byteStringAsKb(get(key, defaultValue))
+  }
+  
+  /**
+   * Get a size parameter as Mebibytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then Mebibytes are assumed.
+   * @throws NoSuchElementException
+   */
+  def getSizeAsMb(key: String): Long = {
+    Utils.byteStringAsMb(get(key))
+  }
+
+  /**
+   * Get a size parameter as Mebibytes, falling back to a default if not set. If no
+   * suffix is provided then Mebibytes are assumed.
+   */
+  def getSizeAsMb(key: String, defaultValue: String): Long = {
+    Utils.byteStringAsMb(get(key, defaultValue))
+  }
+  
+  /**
+   * Get a size parameter as Gibibytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then Gibibytes are assumed.
+   * @throws NoSuchElementException
+   */
+  def getSizeAsGb(key: String): Long = {
+    Utils.byteStringAsGb(get(key))
+  }
+
+  /**
+   * Get a size parameter as Gibibytes, falling back to a default if not set. If no
+   * suffix is provided then Gibibytes are assumed.
+   */
+  def getSizeAsGb(key: String, defaultValue: String): Long = {
+    Utils.byteStringAsGb(get(key, defaultValue))
+  }
+  
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
     Option(settings.get(key)).orElse(getDeprecatedConfig(key, this))
@@ -407,7 +474,13 @@ private[spark] object SparkConf extends Logging {
         "The spark.cache.class property is no longer being used! Specify storage levels using " +
         "the RDD.persist() method instead."),
       DeprecatedConfig("spark.yarn.user.classpath.first", "1.3",
-        "Please use spark.{driver,executor}.userClassPathFirst instead."))
+        "Please use spark.{driver,executor}.userClassPathFirst instead."),
+      DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
+        "Please use spark.kryoserializer.buffer instead. The default value for " +
+          "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
+          "are no longer accepted. To specify the equivalent now, one may use '64k'.")
+    )
+    
     Map(configs.map { cfg => (cfg.key -> cfg) }:_*)
   }
 
@@ -432,6 +505,21 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.yarn.applicationMaster.waitTries", "1.3",
         // Translate old value to a duration, with 10s wait time per try.
         translation = s => s"${s.toLong * 10}s")),
+    "spark.reducer.maxSizeInFlight" -> Seq(
+      AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
+    "spark.kryoserializer.buffer" ->
+        Seq(AlternateConfig("spark.kryoserializer.buffer.mb", "1.4", 
+          translation = s => s"${s.toDouble * 1000}k")),
+    "spark.kryoserializer.buffer.max" -> Seq(
+      AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),
+    "spark.shuffle.file.buffer" -> Seq(
+      AlternateConfig("spark.shuffle.file.buffer.kb", "1.4")),
+    "spark.executor.logs.rolling.maxSize" -> Seq(
+      AlternateConfig("spark.executor.logs.rolling.size.maxBytes", "1.4")),
+    "spark.io.compression.snappy.blockSize" -> Seq(
+      AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),
+    "spark.io.compression.lz4.blockSize" -> Seq(
+      AlternateConfig("spark.io.compression.lz4.block.size", "1.4")),
     "spark.rpc.numRetries" -> Seq(
       AlternateConfig("spark.akka.num.retries", "1.4")),
     "spark.rpc.retry.wait" -> Seq(

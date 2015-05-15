@@ -18,12 +18,11 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.ml.classification.{Classifier, ClassifierParams, ClassificationModel}
-import org.apache.spark.ml.param.{Params, IntParam, ParamMap}
+import org.apache.spark.ml.classification.{ClassificationModel, Classifier, ClassifierParams}
+import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
-
 
 /**
  * A simple example demonstrating how to write your own learning algorithm using Estimator,
@@ -99,7 +98,7 @@ private trait MyLogisticRegressionParams extends ClassifierParams {
    * class since the maxIter parameter is only used during training (not in the Model).
    */
   val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations")
-  def getMaxIter: Int = getOrDefault(maxIter)
+  def getMaxIter: Int = $(maxIter)
 }
 
 /**
@@ -117,18 +116,16 @@ private class MyLogisticRegression
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   // This method is used by fit()
-  override protected def train(
-      dataset: DataFrame,
-      paramMap: ParamMap): MyLogisticRegressionModel = {
+  override protected def train(dataset: DataFrame): MyLogisticRegressionModel = {
     // Extract columns from data using helper method.
-    val oldDataset = extractLabeledPoints(dataset, paramMap)
+    val oldDataset = extractLabeledPoints(dataset)
 
     // Do learning to estimate the weight vector.
     val numFeatures = oldDataset.take(1)(0).features.size
     val weights = Vectors.zeros(numFeatures) // Learning would happen here.
 
     // Create a model, and return it.
-    new MyLogisticRegressionModel(this, paramMap, weights)
+    new MyLogisticRegressionModel(this, weights)
   }
 }
 
@@ -139,7 +136,6 @@ private class MyLogisticRegression
  */
 private class MyLogisticRegressionModel(
     override val parent: MyLogisticRegression,
-    override val fittingParamMap: ParamMap,
     val weights: Vector)
   extends ClassificationModel[Vector, MyLogisticRegressionModel]
   with MyLogisticRegressionParams {
@@ -176,9 +172,7 @@ private class MyLogisticRegressionModel(
    *
    * This is used for the default implementation of [[transform()]].
    */
-  override protected def copy(): MyLogisticRegressionModel = {
-    val m = new MyLogisticRegressionModel(parent, fittingParamMap, weights)
-    Params.inheritValues(extractParamMap(), this, m)
-    m
+  override def copy(extra: ParamMap): MyLogisticRegressionModel = {
+    copyValues(new MyLogisticRegressionModel(parent, weights), extra)
   }
 }

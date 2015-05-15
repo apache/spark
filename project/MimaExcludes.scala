@@ -72,6 +72,71 @@ object MimaExcludes {
             // SPARK-6703 Add getOrCreate method to SparkContext
             ProblemFilters.exclude[IncompatibleResultTypeProblem]
                 ("org.apache.spark.SparkContext.org$apache$spark$SparkContext$$activeContext")
+          )++ Seq(
+            // SPARK-7090 Introduce LDAOptimizer to LDA to further improve extensibility
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.mllib.clustering.LDA$EMOptimizer")
+          ) ++ Seq(
+            // SPARK-6756 add toSparse, toDense, numActives, numNonzeros, and compressed to Vector
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.compressed"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.toDense"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.numNonzeros"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.toSparse"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Vector.numActives")
+          ) ++ Seq(
+            // Execution should never be included as its always internal.
+            MimaBuild.excludeSparkPackage("sql.execution"),
+            // This `protected[sql]` method was removed in 1.3.1
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.sql.SQLContext.checkAnalysis"),
+            // These `private[sql]` class were removed in 1.4.0:
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.execution.AddExchange"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.execution.AddExchange$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.PartitionSpec"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.PartitionSpec$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.Partition"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.Partition$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetRelation2$PartitionValues"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetRelation2$PartitionValues$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetRelation2"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetRelation2$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetRelation2$MetadataCache"),
+            // These test support classes were moved out of src/main and into src/test:
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetTestData"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetTestData$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.TestGroupWriteSupport"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CachedData"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CachedData$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CacheManager")
+          ) ++ Seq(
+            // SPARK-7530 Added StreamingContext.getState()
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.StreamingContext.state_=")
+          ) ++ Seq(
+            // SPARK-7081 changed ShuffleWriter from a trait to an abstract class and removed some
+            // unnecessary type bounds in order to fix some compiler warnings that occurred when
+            // implementing this interface in Java. Note that ShuffleWriter is private[spark].
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.shuffle.ShuffleWriter")
           )
 
         case v if v.startsWith("1.3") =>

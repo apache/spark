@@ -17,13 +17,16 @@
 
 package org.apache.spark.storage
 
+import java.io.IOException
+import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.{Date, Random}
 
-import tachyon.client.TachyonFS
-import tachyon.client.TachyonFile
+import com.google.common.io.ByteStreams
+import tachyon.client.{ReadType, WriteType, TachyonFS, TachyonFile}
+import tachyon.TachyonURI
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, SparkConf, Logging}
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.util.Utils
 
@@ -32,39 +35,101 @@ import org.apache.spark.util.Utils
  * Creates and maintains the logical mapping between logical blocks and tachyon fs locations. By
  * default, one block is mapped to one file with a name given by its BlockId.
  *
- * @param rootDirs The directories to use for storing block files. Data will be hashed among these.
  */
-private[spark] class TachyonBlockManager(
-    blockManager: BlockManager,
-    rootDirs: String,
-    val master: String)
-  extends Logging {
+private[spark] class TachyonBlockManager() extends ExternalBlockManager with Logging {
 
-  val client = if (master != null && master != "") TachyonFS.get(master) else null
-
-  if (client == null) {
-    logError("Failed to connect to the Tachyon as the master address is not configured")
-    System.exit(ExecutorExitCode.TACHYON_STORE_FAILED_TO_INITIALIZE)
-  }
-
-  private val MAX_DIR_CREATION_ATTEMPTS = 10
-  private val subDirsPerTachyonDir =
-    blockManager.conf.get("spark.tachyonStore.subDirectories", "64").toInt
+  var blockManager: BlockManager =_
+  var rootDirs: String = _
+  var master: String = _
+  var client: tachyon.client.TachyonFS = _
+  private var subDirsPerTachyonDir: Int = _
 
   // Create one Tachyon directory for each path mentioned in spark.tachyonStore.folderName;
   // then, inside this directory, create multiple subdirectories that we will hash files into,
   // in order to avoid having really large inodes at the top level in Tachyon.
-  private val tachyonDirs: Array[TachyonFile] = createTachyonDirs()
-  private val subDirs = Array.fill(tachyonDirs.length)(new Array[TachyonFile](subDirsPerTachyonDir))
+  private var tachyonDirs: Array[TachyonFile] = _
+  private var subDirs: Array[Array[tachyon.client.TachyonFile]] = _
 
-  addShutdownHook()
+
+  override def init(blockManager: BlockManager, executorId: String): Unit = {
+    this.blockManager = blockManager
+    val storeDir = blockManager.conf.get(ExternalBlockStore.BASE_DIR, "/tmp_spark_tachyon")
+    val appFolderName = blockManager.conf.get(ExternalBlockStore.FOLD_NAME)
+
+    rootDirs = s"$storeDir/$appFolderName/$executorId"
+    master = blockManager.conf.get(ExternalBlockStore.MASTER_URL, "tachyon://localhost:19998")
+    client = if (master != null && master != "") TachyonFS.get(new TachyonURI(master)) else null
+    // original implementation call System.exit, we change it to run without extblkstore support
+    if (client == null) {
+      logError("Failed to connect to the Tachyon as the master address is not configured")
+      throw new IOException("Failed to connect to the Tachyon as the master " +
+        "address is not configured")
+    }
+    subDirsPerTachyonDir = blockManager.conf.get("spark.externalBlockStore.subDirectories",
+      ExternalBlockStore.SUB_DIRS_PER_DIR).toInt
+
+    // Create one Tachyon directory for each path mentioned in spark.tachyonStore.folderName;
+    // then, inside this directory, create multiple subdirectories that we will hash files into,
+    // in order to avoid having really large inodes at the top level in Tachyon.
+    tachyonDirs = createTachyonDirs()
+    subDirs = Array.fill(tachyonDirs.length)(new Array[TachyonFile](subDirsPerTachyonDir))
+    tachyonDirs.foreach(tachyonDir => Utils.registerShutdownDeleteDir(tachyonDir))
+  }
+
+  override def toString: String = {"ExternalBlockStore-Tachyon"}
+
+  override def removeBlock(blockId: BlockId): Boolean = {
+    val file = getFile(blockId)
+    if (fileExists(file)) {
+      removeFile(file)
+    } else {
+      false
+    }
+  }
+
+  override def blockExists(blockId: BlockId): Boolean = {
+    val file = getFile(blockId)
+    fileExists(file)
+  }
+
+  override def putBytes(blockId: BlockId, bytes: ByteBuffer): Unit = {
+    val file = getFile(blockId)
+    val os = file.getOutStream(WriteType.TRY_CACHE)
+    os.write(bytes.array())
+    os.close()
+  }
+
+  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+    val file = getFile(blockId)
+    if (file == null || file.getLocationHosts.size == 0) {
+      return None
+    }
+    val is = file.getInStream(ReadType.CACHE)
+    assert (is != null)
+    try {
+      val size = file.length
+      val bs = new Array[Byte](size.asInstanceOf[Int])
+      ByteStreams.readFully(is, bs)
+      Some(ByteBuffer.wrap(bs))
+    } catch {
+      case ioe: IOException =>
+        logWarning(s"Failed to fetch the block $blockId from Tachyon", ioe)
+        None
+    } finally {
+      is.close()
+    }
+  }
+
+  override def getSize(blockId: BlockId): Long = {
+    getFile(blockId.name).length
+  }
 
   def removeFile(file: TachyonFile): Boolean = {
-    client.delete(file.getPath(), false)
+    client.delete(new TachyonURI(file.getPath()), false)
   }
 
   def fileExists(file: TachyonFile): Boolean = {
-    client.exist(file.getPath())
+    client.exist(new TachyonURI(file.getPath()))
   }
 
   def getFile(filename: String): TachyonFile = {
@@ -81,7 +146,7 @@ private[spark] class TachyonBlockManager(
         if (old != null) {
           old
         } else {
-          val path = tachyonDirs(dirId) + "/" + "%02x".format(subDirId)
+          val path = new TachyonURI(s"${tachyonDirs(dirId)}/${"%02x".format(subDirId)}")
           client.mkdir(path)
           val newDir = client.getFile(path)
           subDirs(dirId)(subDirId) = newDir
@@ -89,7 +154,7 @@ private[spark] class TachyonBlockManager(
         }
       }
     }
-    val filePath = subDir + "/" + filename
+    val filePath = new TachyonURI(s"$subDir/$filename")
     if(!client.exist(filePath)) {
       client.createFile(filePath)
     }
@@ -109,11 +174,11 @@ private[spark] class TachyonBlockManager(
       var tachyonDirId: String = null
       var tries = 0
       val rand = new Random()
-      while (!foundLocalDir && tries < MAX_DIR_CREATION_ATTEMPTS) {
+      while (!foundLocalDir && tries < ExternalBlockStore.MAX_DIR_CREATION_ATTEMPTS) {
         tries += 1
         try {
           tachyonDirId = "%s-%04x".format(dateFormat.format(new Date), rand.nextInt(65536))
-          val path = rootDir + "/" + "spark-tachyon-" + tachyonDirId
+          val path = new TachyonURI(s"$rootDir/spark-tachyon-$tachyonDirId")
           if (!client.exist(path)) {
             foundLocalDir = client.mkdir(path)
             tachyonDir = client.getFile(path)
@@ -124,30 +189,27 @@ private[spark] class TachyonBlockManager(
         }
       }
       if (!foundLocalDir) {
-        logError("Failed " + MAX_DIR_CREATION_ATTEMPTS + " attempts to create tachyon dir in " +
-          rootDir)
-        System.exit(ExecutorExitCode.TACHYON_STORE_FAILED_TO_CREATE_DIR)
+        logError("Failed " + ExternalBlockStore.MAX_DIR_CREATION_ATTEMPTS
+          + " attempts to create tachyon dir in " + rootDir)
+        System.exit(ExecutorExitCode.EXTERNAL_BLOCK_STORE_FAILED_TO_CREATE_DIR)
       }
       logInfo("Created tachyon directory at " + tachyonDir)
       tachyonDir
     }
   }
 
-  private def addShutdownHook() {
-    tachyonDirs.foreach(tachyonDir => Utils.registerShutdownDeleteDir(tachyonDir))
-    Utils.addShutdownHook { () =>
-      logDebug("Shutdown hook called")
-      tachyonDirs.foreach { tachyonDir =>
-        try {
-          if (!Utils.hasRootAsShutdownDeleteDir(tachyonDir)) {
-            Utils.deleteRecursively(tachyonDir, client)
-          }
-        } catch {
-          case e: Exception =>
-            logError("Exception while deleting tachyon spark dir: " + tachyonDir, e)
+  override def shutdown() {
+    logDebug("Shutdown hook called")
+    tachyonDirs.foreach { tachyonDir =>
+      try {
+        if (!Utils.hasRootAsShutdownDeleteDir(tachyonDir)) {
+          Utils.deleteRecursively(tachyonDir, client)
         }
+      } catch {
+        case e: Exception =>
+          logError("Exception while deleting tachyon spark dir: " + tachyonDir, e)
       }
-      client.close()
     }
+    client.close()
   }
 }
