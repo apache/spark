@@ -186,8 +186,9 @@ function renderDagVizForJob(svgContainer) {
     var stageId = metadata.attr("stage-id");
     var containerId = VizConstants.graphPrefix + stageId;
     // Link each graph to the corresponding stage page (TODO: handle stage attempts)
-    var stageLink = "/stages/stage/?id=" +
-      stageId.replace(VizConstants.stagePrefix, "") + "&attempt=0&expandDagViz=true";
+    var stageLink = $("#stage-" + stageId.replace(VizConstants.stagePrefix, "") + "-0")
+      .find("a")
+      .attr("href") + "&expandDagViz=true";
     var container = svgContainer
       .append("a")
       .attr("xlink:href", stageLink)
