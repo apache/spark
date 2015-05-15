@@ -349,8 +349,9 @@ object KafkaUtils {
       fromOffsets: Map[TopicAndPartition, Long],
       messageHandler: MessageAndMetadata[K, V] => R
   ): InputDStream[R] = ssc.withScope {
+    val cleanedHandler = ssc.sc.clean(messageHandler)
     new DirectKafkaInputDStream[K, V, KD, VD, R](
-      ssc, kafkaParams, fromOffsets, messageHandler)
+      ssc, kafkaParams, fromOffsets, cleanedHandler)
   }
 
   /**
@@ -470,11 +471,12 @@ object KafkaUtils {
     implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
     implicit val valueDecoderCmt: ClassTag[VD] = ClassTag(valueDecoderClass)
     implicit val recordCmt: ClassTag[R] = ClassTag(recordClass)
+    val cleanedHandler = jssc.sparkContext.clean(messageHandler.call _)
     createDirectStream[K, V, KD, VD, R](
       jssc.ssc,
       Map(kafkaParams.toSeq: _*),
       Map(fromOffsets.mapValues { _.longValue() }.toSeq: _*),
-      messageHandler.call _
+      cleanedHandler
     )
   }
 
