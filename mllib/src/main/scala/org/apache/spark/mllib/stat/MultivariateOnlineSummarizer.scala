@@ -70,23 +70,30 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     require(n == sample.size, s"Dimensions mismatch when adding new sample." +
       s" Expecting $n but got ${sample.size}.")
 
+    val localCurrMean= currMean
+    val localCurrM2n = currM2n
+    val localCurrM2 = currM2
+    val localCurrL1 = currL1
+    val localNnz = nnz
+    val localCurrMax = currMax
+    val localCurrMin = currMin
     sample.foreachActive { (index, value) =>
       if (value != 0.0) {
-        if (currMax(index) < value) {
-          currMax(index) = value
+        if (localCurrMax(index) < value) {
+          localCurrMax(index) = value
         }
-        if (currMin(index) > value) {
-          currMin(index) = value
+        if (localCurrMin(index) > value) {
+          localCurrMin(index) = value
         }
 
-        val prevMean = currMean(index)
+        val prevMean = localCurrMean(index)
         val diff = value - prevMean
-        currMean(index) = prevMean + diff / (nnz(index) + 1.0)
-        currM2n(index) += (value - currMean(index)) * diff
-        currM2(index) += value * value
-        currL1(index) += math.abs(value)
+        localCurrMean(index) = prevMean + diff / (localNnz(index) + 1.0)
+        localCurrM2n(index) += (value - localCurrMean(index)) * diff
+        localCurrM2(index) += value * value
+        localCurrL1(index) += math.abs(value)
 
-        nnz(index) += 1.0
+        localNnz(index) += 1.0
       }
     }
 
@@ -130,14 +137,14 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       }
     } else if (totalCnt == 0 && other.totalCnt != 0) {
       this.n = other.n
-      this.currMean = other.currMean.clone
-      this.currM2n = other.currM2n.clone
-      this.currM2 = other.currM2.clone
-      this.currL1 = other.currL1.clone
+      this.currMean = other.currMean.clone()
+      this.currM2n = other.currM2n.clone()
+      this.currM2 = other.currM2.clone()
+      this.currL1 = other.currL1.clone()
       this.totalCnt = other.totalCnt
-      this.nnz = other.nnz.clone
-      this.currMax = other.currMax.clone
-      this.currMin = other.currMin.clone
+      this.nnz = other.nnz.clone()
+      this.currMax = other.currMax.clone()
+      this.currMin = other.currMin.clone()
     }
     this
   }
@@ -165,7 +172,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     if (denominator > 0.0) {
       val deltaMean = currMean
       var i = 0
-      while (i < currM2n.size) {
+      val len = currM2n.length
+      while (i < len) {
         realVariance(i) =
           currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * (totalCnt - nnz(i)) / totalCnt
         realVariance(i) /= denominator
@@ -211,7 +219,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     val realMagnitude = Array.ofDim[Double](n)
 
     var i = 0
-    while (i < currM2.size) {
+    val len = currM2.length
+    while (i < len) {
       realMagnitude(i) = math.sqrt(currM2(i))
       i += 1
     }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.DriverManager
+import java.util.Properties
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
@@ -28,15 +29,48 @@ import org.apache.spark.sql.types._
 class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
   val url = "jdbc:h2:mem:testdb2"
   var conn: java.sql.Connection = null
-
+  val url1 = "jdbc:h2:mem:testdb3"
+  var conn1: java.sql.Connection = null
+  val properties = new Properties()
+  properties.setProperty("user", "testUser")
+  properties.setProperty("password", "testPass")
+  properties.setProperty("rowId", "false")
+    
   before {
     Class.forName("org.h2.Driver")
     conn = DriverManager.getConnection(url)
     conn.prepareStatement("create schema test").executeUpdate()
+   
+    conn1 = DriverManager.getConnection(url1, properties)
+    conn1.prepareStatement("create schema test").executeUpdate()
+    conn1.prepareStatement("drop table if exists test.people").executeUpdate()
+    conn1.prepareStatement(
+      "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
+    conn1.prepareStatement("insert into test.people values ('fred', 1)").executeUpdate()
+    conn1.prepareStatement("insert into test.people values ('mary', 2)").executeUpdate()
+    conn1.prepareStatement("drop table if exists test.people1").executeUpdate()
+    conn1.prepareStatement(
+      "create table test.people1 (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
+    conn1.commit()
+     
+    TestSQLContext.sql(
+      s"""
+        |CREATE TEMPORARY TABLE PEOPLE
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url1', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+    
+    TestSQLContext.sql(
+      s"""
+        |CREATE TEMPORARY TABLE PEOPLE1
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url1', dbtable 'TEST.PEOPLE1', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))  
   }
 
   after {
     conn.close()
+    conn1.close()
   }
 
   val sc = TestSQLContext.sparkContext
@@ -65,13 +99,13 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
     val df = TestSQLContext.createDataFrame(sc.parallelize(arr2x3), schema3)
     val df2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
 
-    df.createJDBCTable(url, "TEST.DROPTEST", false)
-    assert(2 == TestSQLContext.jdbc(url, "TEST.DROPTEST").count)
-    assert(3 == TestSQLContext.jdbc(url, "TEST.DROPTEST").collect()(0).length)
+    df.createJDBCTable(url1, "TEST.DROPTEST", false, properties)
+    assert(2 == TestSQLContext.jdbc(url1, "TEST.DROPTEST", properties).count)
+    assert(3 == TestSQLContext.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
 
-    df2.createJDBCTable(url, "TEST.DROPTEST", true)
-    assert(1 == TestSQLContext.jdbc(url, "TEST.DROPTEST").count)
-    assert(2 == TestSQLContext.jdbc(url, "TEST.DROPTEST").collect()(0).length)
+    df2.createJDBCTable(url1, "TEST.DROPTEST", true, properties)
+    assert(1 == TestSQLContext.jdbc(url1, "TEST.DROPTEST", properties).count)
+    assert(2 == TestSQLContext.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
   }
 
   test("CREATE then INSERT to append") {
@@ -88,10 +122,10 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
     val df = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
     val df2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
 
-    df.createJDBCTable(url, "TEST.TRUNCATETEST", false)
-    df2.insertIntoJDBC(url, "TEST.TRUNCATETEST", true)
-    assert(1 == TestSQLContext.jdbc(url, "TEST.TRUNCATETEST").count)
-    assert(2 == TestSQLContext.jdbc(url, "TEST.TRUNCATETEST").collect()(0).length)
+    df.createJDBCTable(url1, "TEST.TRUNCATETEST", false, properties)
+    df2.insertIntoJDBC(url1, "TEST.TRUNCATETEST", true, properties)
+    assert(1 == TestSQLContext.jdbc(url1, "TEST.TRUNCATETEST", properties).count)
+    assert(2 == TestSQLContext.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
   }
 
   test("Incompatible INSERT to append") {
@@ -103,5 +137,17 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
       df2.insertIntoJDBC(url, "TEST.INCOMPATIBLETEST", true)
     }
   }
-
+  
+  test("INSERT to JDBC Datasource") {
+    TestSQLContext.sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
+    assert(2 == TestSQLContext.jdbc(url1, "TEST.PEOPLE1", properties).count)
+    assert(2 == TestSQLContext.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
+  }
+  
+  test("INSERT to JDBC Datasource with overwrite") {
+    TestSQLContext.sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
+    TestSQLContext.sql("INSERT OVERWRITE TABLE PEOPLE1 SELECT * FROM PEOPLE")
+    assert(2 == TestSQLContext.jdbc(url1, "TEST.PEOPLE1", properties).count)
+    assert(2 == TestSQLContext.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
+  } 
 }

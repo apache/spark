@@ -117,6 +117,21 @@ class SQLTests(ReusedPySparkTestCase):
         ReusedPySparkTestCase.tearDownClass()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 
+    def test_explode(self):
+        from pyspark.sql.functions import explode
+        d = [Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"})]
+        rdd = self.sc.parallelize(d)
+        data = self.sqlCtx.createDataFrame(rdd)
+
+        result = data.select(explode(data.intlist).alias("a")).select("a").collect()
+        self.assertEqual(result[0][0], 1)
+        self.assertEqual(result[1][0], 2)
+        self.assertEqual(result[2][0], 3)
+
+        result = data.select(explode(data.mapfield).alias("a", "b")).select("a", "b").collect()
+        self.assertEqual(result[0][0], "a")
+        self.assertEqual(result[0][1], "b")
+
     def test_udf_with_callable(self):
         d = [Row(number=i, squared=i**2) for i in range(10)]
         rdd = self.sc.parallelize(d)
@@ -664,6 +679,54 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(170 ^ 75, result['(a ^ b)'])
         result = df.select(functions.bitwiseNOT(df.b)).collect()[0].asDict()
         self.assertEqual(~75, result['~b'])
+
+    def test_replace(self):
+        schema = StructType([
+            StructField("name", StringType(), True),
+            StructField("age", IntegerType(), True),
+            StructField("height", DoubleType(), True)])
+
+        # replace with int
+        row = self.sqlCtx.createDataFrame([(u'Alice', 10, 10.0)], schema).replace(10, 20).first()
+        self.assertEqual(row.age, 20)
+        self.assertEqual(row.height, 20.0)
+
+        # replace with double
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 80, 80.0)], schema).replace(80.0, 82.1).first()
+        self.assertEqual(row.age, 82)
+        self.assertEqual(row.height, 82.1)
+
+        # replace with string
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace(u'Alice', u'Ann').first()
+        self.assertEqual(row.name, u"Ann")
+        self.assertEqual(row.age, 10)
+
+        # replace with subset specified by a string of a column name w/ actual change
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace(10, 20, subset='age').first()
+        self.assertEqual(row.age, 20)
+
+        # replace with subset specified by a string of a column name w/o actual change
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace(10, 20, subset='height').first()
+        self.assertEqual(row.age, 10)
+
+        # replace with subset specified with one column replaced, another column not in subset
+        # stays unchanged.
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, 10.0)], schema).replace(10, 20, subset=['name', 'age']).first()
+        self.assertEqual(row.name, u'Alice')
+        self.assertEqual(row.age, 20)
+        self.assertEqual(row.height, 10.0)
+
+        # replace with subset specified but no column will be replaced
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, None)], schema).replace(10, 20, subset=['name', 'height']).first()
+        self.assertEqual(row.name, u'Alice')
+        self.assertEqual(row.age, 10)
+        self.assertEqual(row.height, None)
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):

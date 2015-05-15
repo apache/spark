@@ -20,6 +20,7 @@ package org.apache.spark.examples.ml
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.classification.{ClassificationModel, Classifier, ClassifierParams}
 import org.apache.spark.ml.param.{IntParam, ParamMap}
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
@@ -106,9 +107,11 @@ private trait MyLogisticRegressionParams extends ClassifierParams {
  *
  * NOTE: This is private since it is an example.  In practice, you may not want it to be private.
  */
-private class MyLogisticRegression
+private class MyLogisticRegression(override val uid: String)
   extends Classifier[Vector, MyLogisticRegression, MyLogisticRegressionModel]
   with MyLogisticRegressionParams {
+
+  def this() = this(Identifiable.randomUID("myLogReg"))
 
   setMaxIter(100) // Initialize
 
@@ -125,7 +128,7 @@ private class MyLogisticRegression
     val weights = Vectors.zeros(numFeatures) // Learning would happen here.
 
     // Create a model, and return it.
-    new MyLogisticRegressionModel(this, weights)
+    new MyLogisticRegressionModel(uid, weights).setParent(this)
   }
 }
 
@@ -135,7 +138,7 @@ private class MyLogisticRegression
  * NOTE: This is private since it is an example.  In practice, you may not want it to be private.
  */
 private class MyLogisticRegressionModel(
-    override val parent: MyLogisticRegression,
+    override val uid: String,
     val weights: Vector)
   extends ClassificationModel[Vector, MyLogisticRegressionModel]
   with MyLogisticRegressionParams {
@@ -173,6 +176,6 @@ private class MyLogisticRegressionModel(
    * This is used for the default implementation of [[transform()]].
    */
   override def copy(extra: ParamMap): MyLogisticRegressionModel = {
-    copyValues(new MyLogisticRegressionModel(parent, weights), extra)
+    copyValues(new MyLogisticRegressionModel(uid, weights), extra)
   }
 }
