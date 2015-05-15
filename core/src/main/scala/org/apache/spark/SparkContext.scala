@@ -27,8 +27,9 @@ import java.util.concurrent.atomic.{AtomicReference, AtomicBoolean, AtomicIntege
 import java.util.UUID.randomUUID
 
 import scala.collection.{Map, Set}
-import scala.collection.generic.Growable
+
 import scala.collection.JavaConversions._
+import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
@@ -57,7 +58,7 @@ import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.{ExecutorInfo, CoarseGrainedSchedulerBackend, SparkDeploySchedulerBackend, SimrSchedulerBackend}
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SparkDeploySchedulerBackend, SimrSchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
@@ -1921,18 +1922,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
-      startTime, sparkUser, applicationAttemptId))
-    val logPrefix = "spark.driver.log."
-    logUrls = Option(
-      System.getProperties.stringPropertyNames()
-        .filter(_.startsWith(logPrefix))
-        .map(key => (key.substring(logPrefix.length), System.getProperty(key)))
-        .toMap
-    )
-    _logUrls.foreach { logUrlsMap =>
-      listenerBus.post(SparkListenerExecutorAdded(System.currentTimeMillis(),
-        SparkContext.DRIVER_IDENTIFIER, new ExecutorInfo(Utils.localHostName(), 0, logUrlsMap)))
-    }
+      startTime, sparkUser, applicationAttemptId, schedulerBackend.getDriverLogUrls))
   }
 
   /** Post the application end event */

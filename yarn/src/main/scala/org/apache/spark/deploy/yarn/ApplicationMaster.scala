@@ -267,68 +267,25 @@ private[spark] class ApplicationMaster(
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
     if (isClusterMode) {
-      val containerId = ConverterUtils.toContainerId(
-        System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name()))
-      val yarnClient = YarnClient.createYarnClient()
-      yarnClient.init(yarnConf)
-      yarnClient.start()
-      val addresses =
-        NetworkInterface.getNetworkInterfaces.asScala
-          .flatMap(_.getInetAddresses.asScala)
-          .toSeq
-      try {
-        val nodeReports = yarnClient.getNodeReports(NodeState.RUNNING).asScala
-        val nodeReport =
-          nodeReports.find { x =>
-            val host = x.getNodeId.getHost
-            addresses.exists { address =>
-              address.getHostAddress == host ||
-              address.getHostName == host    ||
-              address.getCanonicalHostName == host
-            }
-          }
+      userClassThread = startUserApplication()
+      // This a bit hacky, but we need to wait until the spark.driver.port property has
+      // been set by the Thread executing the user class.
+      val sc = waitForSparkContextInitialized()
 
-        nodeReport.foreach { report =>
-          val httpAddress = report.getHttpAddress
-          // lookup appropriate http scheme for container log urls
-          val yarnHttpPolicy = yarnConf.get(
-            YarnConfiguration.YARN_HTTP_POLICY_KEY,
-            YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
-          )
-          val user = Utils.getCurrentUserName()
-          val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
-          val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
-          logInfo(s"Base URL for logs: $baseUrl")
-          System.setProperty("spark.driver.log.stderr", s"$baseUrl/stderr?start=0")
-          System.setProperty("spark.driver.log.stdout", s"$baseUrl/stdout?start=0")
-        }
-      } catch {
-        case e: Exception =>
-          logInfo("Container Report API is not available in the version of YARN being used, so AM" +
-            " logs link will not appear in application UI")
-      } finally {
-        yarnClient.close()
+      // If there is no SparkContext at this point, just fail the app.
+      if (sc == null) {
+        finish(FinalApplicationStatus.FAILED,
+          ApplicationMaster.EXIT_SC_NOT_INITED,
+          "Timed out waiting for SparkContext.")
+      } else {
+        rpcEnv = sc.env.rpcEnv
+        runAMEndpoint(
+          sc.getConf.get("spark.driver.host"),
+          sc.getConf.get("spark.driver.port"),
+          isClusterMode = true)
+        registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
+        userClassThread.join()
       }
-    }
-    userClassThread = startUserApplication()
-
-    // This a bit hacky, but we need to wait until the spark.driver.port property has
-    // been set by the Thread executing the user class.
-    val sc = waitForSparkContextInitialized()
-
-    // If there is no SparkContext at this point, just fail the app.
-    if (sc == null) {
-      finish(FinalApplicationStatus.FAILED,
-        ApplicationMaster.EXIT_SC_NOT_INITED,
-        "Timed out waiting for SparkContext.")
-    } else {
-      rpcEnv = sc.env.rpcEnv
-      runAMEndpoint(
-        sc.getConf.get("spark.driver.host"),
-        sc.getConf.get("spark.driver.port"),
-        isClusterMode = true)
-      registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
-      userClassThread.join()
     }
   }
 

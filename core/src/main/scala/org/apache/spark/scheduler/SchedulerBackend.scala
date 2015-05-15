@@ -49,4 +49,11 @@ private[spark] trait SchedulerBackend {
    */
   def applicationAttemptId(): Option[String] = None
 
+  /**
+   * Get the URLs for the driver logs. These URLs are used to display the links in the UI
+   * Executors tab for the driver.
+   * @return
+   */
+  def getDriverLogUrls: Option[Map[String, String]] = None
+
 }
