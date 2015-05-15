@@ -96,7 +96,7 @@ private[spark] object RDDOperationScope {
       sc: SparkContext,
       allowNesting: Boolean = false)(body: => T): T = {
     val callerMethodName = Thread.currentThread.getStackTrace()(3).getMethodName
-    withScope[T](sc, callerMethodName, allowNesting)(body)
+    withScope[T](sc, callerMethodName, allowNesting, ignoreParent = false)(body)
   }
 
   /**
@@ -116,7 +116,7 @@ private[spark] object RDDOperationScope {
       sc: SparkContext,
       name: String,
       allowNesting: Boolean,
-      ignoreParent: Boolean = false)(body: => T): T = {
+      ignoreParent: Boolean)(body: => T): T = {
     // Save the old scope to restore it later
     val scopeKey = SparkContext.RDD_SCOPE_KEY
     val noOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY

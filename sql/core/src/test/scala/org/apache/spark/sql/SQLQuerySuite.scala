@@ -19,10 +19,10 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
@@ -30,7 +30,7 @@ import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
 import org.apache.spark.sql.types._
 
 /** A SQL Dialect for testing purpose, and it can not be nested type */
-class MyDialect extends DefaultDialect
+class MyDialect extends DefaultParserDialect
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
@@ -94,7 +94,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       newContext.sql("SELECT 1")
     }
     // test if the dialect set back to DefaultSQLDialect
-    assert(newContext.getSQLDialect().getClass === classOf[DefaultDialect])
+    assert(newContext.getSQLDialect().getClass === classOf[DefaultParserDialect])
   }
 
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
@@ -297,6 +297,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-3173 Timestamp support in the parser") {
+    checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.0'"),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00")))
+
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time=CAST('1969-12-31 16:00:00.001' AS TIMESTAMP)"),
       Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))

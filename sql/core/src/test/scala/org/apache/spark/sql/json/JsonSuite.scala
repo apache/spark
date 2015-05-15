@@ -24,6 +24,7 @@ import com.fasterxml.jackson.core.JsonFactory
 import org.scalactic.Tolerance._
 
 import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.json.InferSchema.compatibleType
 import org.apache.spark.sql.sources.LogicalRelation

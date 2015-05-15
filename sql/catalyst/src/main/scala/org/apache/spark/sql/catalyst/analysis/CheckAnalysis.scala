@@ -69,7 +69,7 @@ trait CheckAnalysis {
           case b: BinaryExpression if !b.resolved =>
             failAnalysis(
               s"invalid expression ${b.prettyString} " +
-                s"between ${b.left.simpleString} and ${b.right.simpleString}")
+              s"between ${b.left.dataType.simpleString} and ${b.right.dataType.simpleString}")
 
           case w @ WindowExpression(windowFunction, windowSpec) if windowSpec.validate.nonEmpty =>
             // The window spec is not valid.

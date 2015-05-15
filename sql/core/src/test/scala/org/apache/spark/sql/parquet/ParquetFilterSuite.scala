@@ -350,7 +350,7 @@ class ParquetDataSourceOffFilterSuite extends ParquetFilterSuiteBase with Before
   override protected def afterAll(): Unit = {
     sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
   }
-  
+
   test("SPARK-6742: don't push down predicates which reference partition columns") {
     import sqlContext.implicits._
 
@@ -365,7 +365,7 @@ class ParquetDataSourceOffFilterSuite extends ParquetFilterSuiteBase with Before
           path,
           Some(sqlContext.sparkContext.hadoopConfiguration), sqlContext,
           Seq(AttributeReference("part", IntegerType, false)()) ))
-       
+
         checkAnswer(
           df.filter("a = 1 or part = 1"),
           (1 to 3).map(i => Row(1, i, i.toString)))
