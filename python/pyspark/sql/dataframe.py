@@ -1512,7 +1512,7 @@ class Column(object):
     isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
 
     def alias(self, *alias):
-        """Returns this column aliased with a new name or names (in the case of expressions that 
+        """Returns this column aliased with a new name or names (in the case of expressions that
         return more than one column, such as explode).
 
         >>> df.select(df.age.alias("age2")).collect()
