@@ -102,9 +102,9 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
     println("... waiting before polling master for driver state")
     Thread.sleep(5000)
     println("... polling master for driver state")
-    val statusFuture = (activeMasterActor ? RequestDriverStatus(driverId))(timeout)
+    val statusFuture = (activeMasterActor ? RequestDriverStatus(driverId))(timeout.duration)
       .mapTo[DriverStatusResponse]
-    val statusResponse = Await.result(statusFuture, timeout)
+    val statusResponse = timeout.awaitResult(statusFuture)
     statusResponse.found match {
       case false =>
         println(s"ERROR: Cluster master did not recognize $driverId")

@@ -20,7 +20,6 @@ package org.apache.spark.rpc.akka
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.concurrent.Future
-import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -212,7 +211,7 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   override def asyncSetupEndpointRefByURI(uri: String): Future[RpcEndpointRef] = {
     import actorSystem.dispatcher
-    actorSystem.actorSelection(uri).resolveOne(defaultLookupTimeout).
+    actorSystem.actorSelection(uri).resolveOne(defaultLookupTimeout.duration).
       map(new AkkaRpcEndpointRef(defaultAddress, _, conf))
   }
 
@@ -293,9 +292,9 @@ private[akka] class AkkaRpcEndpointRef(
     actorRef ! AkkaMessage(message, false)
   }
 
-  override def ask[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T] = {
+  override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
     import scala.concurrent.ExecutionContext.Implicits.global
-    actorRef.ask(AkkaMessage(message, true))(timeout).flatMap {
+    actorRef.ask(AkkaMessage(message, true))(timeout.duration).flatMap {
       case msg @ AkkaMessage(message, reply) =>
         if (reply) {
           logError(s"Receive $msg but the sender cannot reply")

@@ -17,8 +17,7 @@
 
 package org.apache.spark.rpc
 
-import scala.concurrent.{Await, Future}
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.Future
 import scala.reflect.ClassTag
 
 import org.apache.spark.util.RpcUtils
@@ -52,7 +51,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
    *
    * This method only sends the message once and never retries.
    */
-  def ask[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T]
+  def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T]
 
   /**
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a [[Future]] to
@@ -91,7 +90,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
    * @tparam T type of the reply message
    * @return the reply message from the corresponding [[RpcEndpoint]]
    */
-  def askWithRetry[T: ClassTag](message: Any, timeout: FiniteDuration): T = {
+  def askWithRetry[T: ClassTag](message: Any, timeout: RpcTimeout): T = {
     // TODO: Consider removing multiple attempts
     var attempts = 0
     var lastException: Exception = null
@@ -99,7 +98,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
       attempts += 1
       try {
         val future = ask[T](message, timeout)
-        val result = Await.result(future, timeout)
+        val result = timeout.awaitResult(future)
         if (result == null) {
           throw new SparkException("Actor returned null")
         }
@@ -110,7 +109,10 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
           lastException = e
           logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
       }
-      Thread.sleep(retryWaitMs)
+
+      if (attempts < maxRetries) {
+        Thread.sleep(retryWaitMs)
+      }
     }
 
     throw new SparkException(

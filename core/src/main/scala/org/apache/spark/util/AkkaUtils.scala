@@ -17,9 +17,9 @@
 
 package org.apache.spark.util
 
+import org.apache.spark.rpc.RpcTimeout
+
 import scala.collection.JavaConversions.mapAsJavaMap
-import scala.concurrent.Await
-import scala.concurrent.duration.FiniteDuration
 
 import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
 import akka.pattern.ask
@@ -147,7 +147,7 @@ private[spark] object AkkaUtils extends Logging {
   def askWithReply[T](
       message: Any,
       actor: ActorRef,
-      timeout: FiniteDuration): T = {
+      timeout: RpcTimeout): T = {
     askWithReply[T](message, actor, maxAttempts = 1, retryInterval = Int.MaxValue, timeout)
   }
 
@@ -160,7 +160,7 @@ private[spark] object AkkaUtils extends Logging {
       actor: ActorRef,
       maxAttempts: Int,
       retryInterval: Long,
-      timeout: FiniteDuration): T = {
+      timeout: RpcTimeout): T = {
     // TODO: Consider removing multiple attempts
     if (actor == null) {
       throw new SparkException(s"Error sending message [message = $message]" +
@@ -171,8 +171,8 @@ private[spark] object AkkaUtils extends Logging {
     while (attempts < maxAttempts) {
       attempts += 1
       try {
-        val future = actor.ask(message)(timeout)
-        val result = Await.result(future, timeout)
+        val future = actor.ask(message)(timeout.duration)
+        val result = timeout.awaitResult(future)
         if (result == null) {
           throw new SparkException("Actor returned null")
         }
@@ -200,7 +200,7 @@ private[spark] object AkkaUtils extends Logging {
     val url = address(protocol(actorSystem), driverActorSystemName, driverHost, driverPort, name)
     val timeout = RpcUtils.lookupTimeout(conf)
     logInfo(s"Connecting to $name: $url")
-    Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
+    timeout.awaitResult(actorSystem.actorSelection(url).resolveOne(timeout.duration))
   }
 
   def makeExecutorRef(
@@ -214,7 +214,7 @@ private[spark] object AkkaUtils extends Logging {
     val url = address(protocol(actorSystem), executorActorSystemName, host, port, name)
     val timeout = RpcUtils.lookupTimeout(conf)
     logInfo(s"Connecting to $name: $url")
-    Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
+    timeout.awaitResult(actorSystem.actorSelection(url).resolveOne(timeout.duration))
   }
 
   def protocol(actorSystem: ActorSystem): String = {

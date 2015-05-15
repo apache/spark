@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
 import org.apache.spark.rpc.RpcEndpointRef
@@ -105,7 +105,7 @@ class BlockManagerMaster(
         logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}}")
     }
     if (blocking) {
-      Await.result(future, timeout)
+      timeout.awaitResult(future)
     }
   }
 
@@ -117,7 +117,7 @@ class BlockManagerMaster(
         logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}}")
     }
     if (blocking) {
-      Await.result(future, timeout)
+      timeout.awaitResult(future)
     }
   }
 
@@ -131,7 +131,7 @@ class BlockManagerMaster(
           s" with removeFromMaster = $removeFromMaster - ${e.getMessage}}")
     }
     if (blocking) {
-      Await.result(future, timeout)
+      timeout.awaitResult(future)
     }
   }
 
@@ -169,7 +169,7 @@ class BlockManagerMaster(
     val response = driverEndpoint.
       askWithRetry[Map[BlockManagerId, Future[Option[BlockStatus]]]](msg)
     val (blockManagerIds, futures) = response.unzip
-    val result = Await.result(Future.sequence(futures), timeout)
+    val result = timeout.awaitResult(Future.sequence(futures))
     if (result == null) {
       throw new SparkException("BlockManager returned null for BlockStatus query: " + blockId)
     }
@@ -192,7 +192,7 @@ class BlockManagerMaster(
       askSlaves: Boolean): Seq[BlockId] = {
     val msg = GetMatchingBlockIds(filter, askSlaves)
     val future = driverEndpoint.askWithRetry[Future[Seq[BlockId]]](msg)
-    Await.result(future, timeout)
+    timeout.awaitResult(future)
   }
 
   /** Stop the driver endpoint, called only on the Spark driver node */

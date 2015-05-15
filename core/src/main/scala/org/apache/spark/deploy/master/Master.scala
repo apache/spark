@@ -23,7 +23,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
@@ -940,8 +939,8 @@ private[deploy] object Master extends Logging {
     val actor = actorSystem.actorOf(
       Props(classOf[Master], host, boundPort, webUiPort, securityMgr, conf), actorName)
     val timeout = RpcUtils.askTimeout(conf)
-    val portsRequest = actor.ask(BoundPortsRequest)(timeout)
-    val portsResponse = Await.result(portsRequest, timeout).asInstanceOf[BoundPortsResponse]
+    val portsRequest = actor.ask(BoundPortsRequest)(timeout.duration)
+    val portsResponse = timeout.awaitResult(portsRequest).asInstanceOf[BoundPortsResponse]
     (actorSystem, boundPort, portsResponse.webUIPort, portsResponse.restPort)
   }
 }
