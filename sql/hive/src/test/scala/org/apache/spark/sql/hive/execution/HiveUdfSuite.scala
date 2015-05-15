@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.io.Writable
+import org.apache.spark.sql.types.UTF8String
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHive
 
@@ -137,10 +138,15 @@ class HiveUdfSuite extends QueryTest {
     val testData = TestHive.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
     testData.registerTempTable("inputTable")
 
+    /** Converts $"..." into UTF8String(...). */
+    implicit class StringToUtf8(val sc: StringContext) {
+      def u(args: Any*): UTF8String = UTF8String(sc.s(args :_*))
+    }
+
     sql(s"CREATE TEMPORARY FUNCTION testUDFToListString AS '${classOf[UDFToListString].getName}'")
     checkAnswer(
       sql("SELECT testUDFToListString(s) FROM inputTable"),
-      Seq(Row("data1" :: "data2" :: "data3" :: Nil)))
+      Seq(Row(u"data1" :: u"data2" :: u"data3" :: Nil)))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListString")
 
     TestHive.reset()
