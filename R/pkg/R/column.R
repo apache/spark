@@ -55,16 +55,17 @@ operators <- list(
   "+" = "plus", "-" = "minus", "*" = "multiply", "/" = "divide", "%%" = "mod",
   "==" = "equalTo", ">" = "gt", "<" = "lt", "!=" = "notEqual", "<=" = "leq", ">=" = "geq",
   # we can not override `&&` and `||`, so use `&` and `|` instead
-  "&" = "and", "|" = "or" #, "!" = "unary_$bang"
+  "&" = "and", "|" = "or", #, "!" = "unary_$bang"
+  "^" = "pow"
 )
 column_functions1 <- c("asc", "desc", "isNull", "isNotNull")
-column_functions2 <- c("like", "rlike", "startsWith", "endsWith", "getField", "getItem",     "contains")
+column_functions2 <- c("like", "rlike", "startsWith", "endsWith", "getField", "getItem", "contains")
 functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
                "first", "last", "lower", "upper", "sumDistinct",
-               "acos", "asin", "atan", "cbrt", "ceil", "cos", "cosh", "exp",
-               "expm1", "floor", "log", "log10", "log1p", "rint", "signum",
+               "acos", "asin", "atan", "cbrt", "ceiling", "cos", "cosh", "exp",
+               "expm1", "floor", "log", "log10", "log1p", "rint", "sign",
                "sin", "sinh", "tan", "tanh", "toDegrees", "toRadians")
-binary_mathfunctions<- c("atan2", "hypot", "pow")
+binary_mathfunctions<- c("atan2", "hypot")
 
 createOperator <- function(op) {
   setMethod(op,
@@ -80,7 +81,11 @@ createOperator <- function(op) {
                 if (class(e2) == "Column") {
                   e2 <- e2@jc
                 }
-                callJMethod(e1@jc, operators[[op]], e2)
+                if (op == "^") {
+                  jc <- callJStatic("org.apache.spark.sql.functions", operators[[op]], e1@jc, e2)
+                } else {
+                  callJMethod(e1@jc, operators[[op]], e2)
+                }
               }
               column(jc)
             })
@@ -110,6 +115,12 @@ createStaticFunction <- function(name) {
   setMethod(name,
             signature(x = "Column"),
             function(x) {
+              if (name == "ceiling") {
+                  name <- "ceil"
+              }
+              if (name == "sign") {
+                  name <- "signum"
+              }
               jc <- callJStatic("org.apache.spark.sql.functions", name, x@jc)
               column(jc)
             })

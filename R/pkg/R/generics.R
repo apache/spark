@@ -562,10 +562,6 @@ setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
 
 #' @rdname column
 #' @export
-setGeneric("ceil", function(x) { standardGeneric("ceil") })
-
-#' @rdname column
-#' @export
 setGeneric("contains", function(x, ...) { standardGeneric("contains") })
 #' @rdname column
 #' @export
@@ -629,15 +625,7 @@ setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 
 #' @rdname column
 #' @export
-setGeneric("pow", function(x, ...) { standardGeneric("pow") })
-
-#' @rdname column
-#' @export
 setGeneric("startsWith", function(x, ...) { standardGeneric("startsWith") })
-
-#' @rdname column
-#' @export
-setGeneric("signum", function(x) { standardGeneric("signum") })
 
 #' @rdname column
 #' @export
