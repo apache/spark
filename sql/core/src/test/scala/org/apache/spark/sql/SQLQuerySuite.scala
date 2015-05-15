@@ -41,9 +41,9 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   test("SPARK-6743: no columns from cache") {
     Seq(
-      (83,0,38),
-      (26,0,79),
-      (43,81,24)
+      (83, 0, 38),
+      (26, 0, 79),
+      (43, 81, 24)
     ).toDF("a", "b", "c").registerTempTable("cachedData")
 
     cacheTable("cachedData")
