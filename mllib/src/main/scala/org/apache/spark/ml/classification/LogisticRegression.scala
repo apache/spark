@@ -26,6 +26,7 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction}
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -50,9 +51,11 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
  * Currently, this class only supports binary classification.
  */
 @AlphaComponent
-class LogisticRegression
+class LogisticRegression(override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams with Logging {
+
+  def this() = this(Identifiable.randomUID("logreg"))
 
   /**
    * Set the regularization parameter.
@@ -213,7 +216,7 @@ class LogisticRegression
       (weightsWithIntercept, 0.0)
     }
 
-    new LogisticRegressionModel(this, weights.compressed, intercept)
+    new LogisticRegressionModel(uid, weights.compressed, intercept)
   }
 }
 
@@ -224,7 +227,7 @@ class LogisticRegression
  */
 @AlphaComponent
 class LogisticRegressionModel private[ml] (
-    override val parent: LogisticRegression,
+    override val uid: String,
     val weights: Vector,
     val intercept: Double)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
@@ -276,7 +279,7 @@ class LogisticRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LogisticRegressionModel = {
-    copyValues(new LogisticRegressionModel(parent, weights, intercept), extra)
+    copyValues(new LogisticRegressionModel(uid, weights, intercept), extra)
   }
 
   override protected def raw2prediction(rawPrediction: Vector): Double = {

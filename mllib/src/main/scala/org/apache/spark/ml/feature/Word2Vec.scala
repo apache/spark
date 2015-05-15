@@ -21,7 +21,7 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{VectorUDT, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
@@ -85,7 +85,9 @@ private[feature] trait Word2VecBase extends Params
  * natural language processing or machine learning process.
  */
 @AlphaComponent
-final class Word2Vec extends Estimator[Word2VecModel] with Word2VecBase {
+final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] with Word2VecBase {
+
+  def this() = this(Identifiable.randomUID("w2v"))
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -122,7 +124,7 @@ final class Word2Vec extends Estimator[Word2VecModel] with Word2VecBase {
       .setSeed($(seed))
       .setVectorSize($(vectorSize))
       .fit(input)
-    copyValues(new Word2VecModel(this, wordVectors))
+    copyValues(new Word2VecModel(uid, wordVectors).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -136,7 +138,7 @@ final class Word2Vec extends Estimator[Word2VecModel] with Word2VecBase {
  */
 @AlphaComponent
 class Word2VecModel private[ml] (
-    override val parent: Word2Vec,
+    override val uid: String,
     wordVectors: feature.Word2VecModel)
   extends Model[Word2VecModel] with Word2VecBase {
 

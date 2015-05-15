@@ -1313,7 +1313,7 @@ protected[sql] class QueryExecution(val sqlContext: SQLContext, val logical: Log
   // TODO: Don't just pick the first one...
   lazy val sparkPlan: SparkPlan = {
     SparkPlan.currentContext.set(sqlContext)
-    sqlContext.planner(optimizedPlan).next()
+    sqlContext.planner.plan(optimizedPlan).next()
   }
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
@@ -1337,7 +1337,7 @@ protected[sql] class QueryExecution(val sqlContext: SQLContext, val logical: Log
   def simpleString: String =
     s"""== Physical Plan ==
        |${stringOrError(executedPlan)}
-      """.stripMargin.trim
+    """.stripMargin.trim
 
   override def toString: String = {
     def output =
@@ -1348,16 +1348,16 @@ protected[sql] class QueryExecution(val sqlContext: SQLContext, val logical: Log
     // We need to think about how to avoid the side effect.
     s"""== Parsed Logical Plan ==
        |${stringOrError(logical)}
-        |== Analyzed Logical Plan ==
-        |${stringOrError(output)}
-        |${stringOrError(analyzed)}
-        |== Optimized Logical Plan ==
-        |${stringOrError(optimizedPlan)}
-        |== Physical Plan ==
-        |${stringOrError(executedPlan)}
-        |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
-        |== RDD ==
-      """.stripMargin.trim
+       |== Analyzed Logical Plan ==
+       |${stringOrError(output)}
+       |${stringOrError(analyzed)}
+       |== Optimized Logical Plan ==
+       |${stringOrError(optimizedPlan)}
+       |== Physical Plan ==
+       |${stringOrError(executedPlan)}
+       |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
+       |== RDD ==
+    """.stripMargin.trim
   }
 }
 

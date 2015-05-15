@@ -22,7 +22,7 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.{IntParam, ParamValidators, Params}
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.callUDF
@@ -87,7 +87,10 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *  - Add option for allowing unknown categories.
  */
 @AlphaComponent
-class VectorIndexer extends Estimator[VectorIndexerModel] with VectorIndexerParams {
+class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerModel]
+  with VectorIndexerParams {
+
+  def this() = this(Identifiable.randomUID("vecIdx"))
 
   /** @group setParam */
   def setMaxCategories(value: Int): this.type = set(maxCategories, value)
@@ -110,7 +113,9 @@ class VectorIndexer extends Estimator[VectorIndexerModel] with VectorIndexerPara
       iter.foreach(localCatStats.addVector)
       Iterator(localCatStats)
     }.reduce((stats1, stats2) => stats1.merge(stats2))
-    copyValues(new VectorIndexerModel(this, numFeatures, categoryStats.getCategoryMaps))
+    val model = new VectorIndexerModel(uid, numFeatures, categoryStats.getCategoryMaps)
+      .setParent(this)
+    copyValues(model)
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -238,7 +243,7 @@ private object VectorIndexer {
  */
 @AlphaComponent
 class VectorIndexerModel private[ml] (
-    override val parent: VectorIndexer,
+    override val uid: String,
     val numFeatures: Int,
     val categoryMaps: Map[Int, Map[Double, Int]])
   extends Model[VectorIndexerModel] with VectorIndexerParams {
