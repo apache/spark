@@ -122,6 +122,27 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[hive] def hiveMetastoreJars: String =
     getConf(HIVE_METASTORE_JARS, "builtin")
 
+  /**
+   * A comma separated list of class prefixes that should be loaded using the classloader that
+   * is shared between Spark SQL and a specific version of Hive. An example of classes that should
+   * be shared is JDBC drivers that are needed to talk to the metastore. Other classes that need
+   * to be shared are those that interact with classes that are already shared.  For example,
+   * custom appenders that are used by log4j.
+   */
+  protected[hive] def hiveMetastoreSharedPrefixes: Seq[String] =
+    getConf("spark.sql.hive.metastore.sharedPrefixes", jdbcPrefixes).split(",")
+
+  private def jdbcPrefixes = Seq(
+    "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc").mkString(",")
+
+  /**
+   * A comma separated list of class prefixes that should explicitly be reloaded for each version
+   * of Hive that Spark SQL is communicating with.  For example, Hive UDFs that are declared in a
+   * prefix that typically would be shared (i.e. org.apache.spark.*)
+   */
+  protected[hive] def hiveMetastoreBarrierPrefixes: Seq[String] =
+    getConf("spark.sql.hive.metastore.barrierPrefixes", "").split(",")
+
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
 
@@ -179,12 +200,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         version = metaVersion,
         execJars = jars.toSeq,
         config = allConfig,
-        isolationOn = true)
+        isolationOn = true,
+        barrierPrefixes = hiveMetastoreBarrierPrefixes,
+        sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else if (hiveMetastoreJars == "maven") {
       // TODO: Support for loading the jars from an already downloaded location.
       logInfo(
         s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using maven.")
-      IsolatedClientLoader.forVersion(hiveMetastoreVersion, allConfig )
+      IsolatedClientLoader.forVersion(hiveMetastoreVersion, allConfig)
     } else {
       // Convert to files and expand any directories.
       val jars =
@@ -210,7 +233,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         version = metaVersion,
         execJars = jars.toSeq,
         config = allConfig,
-        isolationOn = true)
+        isolationOn = true,
+        barrierPrefixes = hiveMetastoreBarrierPrefixes,
+        sharedPrefixes = hiveMetastoreSharedPrefixes)
     }
     isolatedLoader.client
   }
