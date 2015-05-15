@@ -57,7 +57,6 @@ var VizConstants = {
   stageSep: 40,
   graphPrefix: "graph_",
   nodePrefix: "node_",
-  stagePrefix: "stage_",
   clusterPrefix: "cluster_"
 };
 
@@ -180,7 +179,7 @@ function renderDagVizForJob(svgContainer) {
   metadataContainer().selectAll(".stage-metadata").each(function(d, i) {
     var metadata = d3.select(this);
     var dot = metadata.select(".dot-file").text();
-    var stageId = metadata.attr("stage-id").replace(VizConstants.stagePrefix, "");
+    var stageId = metadata.attr("stage-id");
     var containerId = VizConstants.graphPrefix + stageId;
     var isSkipped = metadata.attr("skipped") == "true";
     var container;
@@ -190,10 +189,14 @@ function renderDagVizForJob(svgContainer) {
         .attr("id", containerId)
         .attr("skipped", "true");
     } else {
+      // Link each graph to the corresponding stage page (TODO: handle stage attempts)
+      var attemptId = 0
+      var stageLink = $("#stage-" + stageId + "-" + attemptId)
+        .find("a")
+        .attr("href") + "&expandDagViz=true";
       container = svgContainer
         .append("a")
-         // Link each graph to the corresponding stage page (TODO: handle stage attempts)
-        .attr("xlink:href", "/stages/stage/?id=" + stageId + "&attempt=0&expandDagViz=true")
+        .attr("xlink:href", stageLink)
         .append("g")
         .attr("id", containerId);
     }

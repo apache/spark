@@ -72,6 +72,9 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       StructField("cField", StringType) :: Nil
     ))())
 
+  val listRelation = LocalRelation(
+    AttributeReference("list", ArrayType(IntegerType))())
+
   before {
     caseSensitiveCatalog.registerTable(Seq("TaBlE"), testRelation)
     caseInsensitiveCatalog.registerTable(Seq("TaBlE"), testRelation)
@@ -159,9 +162,14 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
         }
       }
 
-      errorMessages.foreach(m => assert(error.getMessage contains m))
+      errorMessages.foreach(m => assert(error.getMessage.toLowerCase contains m.toLowerCase))
     }
   }
+
+  errorTest(
+    "too many generators",
+    listRelation.select(Explode('list).as('a), Explode('list).as('b)),
+    "only one generator" :: "explode" :: Nil)
 
   errorTest(
     "unresolved attributes",

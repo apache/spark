@@ -298,6 +298,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   test("SPARK-3173 Timestamp support in the parser") {
     checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.0'"),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00")))
+
+    checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time=CAST('1969-12-31 16:00:00.001' AS TIMESTAMP)"),
       Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
