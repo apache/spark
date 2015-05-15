@@ -27,7 +27,9 @@ import java.util.concurrent.atomic.AtomicReference
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
+import org.apache.hadoop.yarn.client.api.YarnClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
@@ -262,6 +264,16 @@ private[spark] class ApplicationMaster(
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
+    if (isClusterMode) {
+      val containerId = ConverterUtils.toContainerId(
+        System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name()))
+      val yarnClient = YarnClient.createYarnClient()
+      yarnClient.init(yarnConf)
+      yarnClient.start()
+      val logUrl = yarnClient.getContainerReport(containerId).getLogUrl
+      System.setProperty("spark.yarn.driver.log.url", logUrl)
+      logInfo(s"Driver logs are at $logUrl")
+    }
     userClassThread = startUserApplication()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has

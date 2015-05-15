@@ -41,6 +41,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, Sequence
   TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.mesos.MesosNativeLibrary
 
@@ -56,8 +57,7 @@ import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
-  SparkDeploySchedulerBackend, SimrSchedulerBackend}
+import org.apache.spark.scheduler.cluster.{ExecutorInfo, CoarseGrainedSchedulerBackend, SparkDeploySchedulerBackend, SimrSchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
@@ -225,6 +225,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
+  private var _logUrls: Option[Predef.Map[String, String]] = None
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -313,6 +314,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def dagScheduler: DAGScheduler = _dagScheduler
   private[spark] def dagScheduler_=(ds: DAGScheduler): Unit = {
     _dagScheduler = ds
+  }
+  private[spark] def logUrls: Option[Predef.Map[String, String]] = _logUrls
+  private[spark] def logUrls_=(logUrlsMap: Option[Predef.Map[String, String]]): Unit = {
+    _logUrls = logUrlsMap
+    logInfo(s"Setting log urls to ${_logUrls.get.mkString(" | ")}")
   }
 
   def applicationId: String = _applicationId
@@ -1912,6 +1918,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // the cluster manager to get an application ID (in case the cluster manager provides one).
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
       startTime, sparkUser, applicationAttemptId))
+    _logUrls.foreach { logUrlsMap =>
+      listenerBus.post(SparkListenerExecutorAdded(System.currentTimeMillis(), SparkContext
+        .DRIVER_IDENTIFIER, new ExecutorInfo(Utils.localHostName(), 0, logUrlsMap)))
+    }
   }
 
   /** Post the application end event */
@@ -2422,6 +2432,21 @@ object SparkContext extends Logging {
           }
         }
         scheduler.initialize(backend)
+        val logUrl = System.getProperty("spark.yarn.driver.log.url")
+        if (logUrl != null) {
+          // lookup appropriate http scheme for container log urls
+          val yarnConf: YarnConfiguration = new YarnConfiguration(sc.hadoopConfiguration)
+          val yarnHttpPolicy = yarnConf.get(
+            YarnConfiguration.YARN_HTTP_POLICY_KEY,
+            YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
+          )
+          val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
+          val baseUrl = s"$httpScheme$logUrl"
+          sc.logUrls =
+            Some(Predef.Map(
+                "stderr" -> s"$baseUrl/stderr?start=0",
+                "stdout" -> s"$baseUrl/stdout?start=0"))
+        }
         (backend, scheduler)
 
       case "yarn-client" =>
