@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{UnionRDD, RDD}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
@@ -169,9 +169,12 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       scan.execute()
     }
 
-    val unionedRows = perPartitionRows.reduceOption(_ ++ _).getOrElse {
-      relation.sqlContext.emptyResult
-    }
+    val unionedRows =
+      if (perPartitionRows.length == 0) {
+        relation.sqlContext.emptyResult
+      } else {
+        new UnionRDD(relation.sqlContext.sparkContext, perPartitionRows)
+      }
 
     createPhysicalRDD(logicalRelation.relation, output, unionedRows)
   }
