@@ -68,8 +68,8 @@ private[kinesis] class KinesisReceiver(
     streamName: String,
     endpointUrl: String,
     regionName: String,
-    checkpointInterval: Duration,
     initialPositionInStream: InitialPositionInStream,
+    checkpointInterval: Duration,
     storageLevel: StorageLevel,
     awsCredentialsOption: Option[SerializableAWSCredentials]
   ) extends Receiver[Array[Byte]](storageLevel) with Logging { receiver =>
