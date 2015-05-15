@@ -138,7 +138,11 @@ class HiveUdfSuite extends QueryTest {
     val testData = TestHive.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
     testData.registerTempTable("inputTable")
 
-    /** Converts $"..." into UTF8String(...). */
+    /**
+     * Converts $"..." into UTF8String(...).
+     * TODO: Catalyst (e.g., CatalystTypeConverters) cannot convert UTF8String
+     * into String correctly because of JVM type erasure.
+     */
     implicit class StringToUtf8(val sc: StringContext) {
       def u(args: Any*): UTF8String = UTF8String(sc.s(args :_*))
     }
