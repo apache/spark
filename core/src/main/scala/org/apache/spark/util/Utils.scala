@@ -1800,10 +1800,11 @@ private[spark] object Utils extends Logging {
       val interpClass = classForName("spark.repl.Main")
       interpClass.getMethod("interp").invoke(null) != null
     } catch {
-      // returning true seems to be a mistake but changing it to false causes tests failures in Streaming.
-      // for a more detailed discussion, please, refer to
+      // Returning true seems to be a mistake.
+      // Currently changing it to false causes tests failures in Streaming.
+      // For a more detailed discussion, please, refer to
       // https://github.com/apache/spark/pull/5835#issuecomment-101042271 and subsequent comments.
-      // tracked as https://issues.apache.org/jira/browse/SPARK-7527
+      // Addressing this changed is tracked as https://issues.apache.org/jira/browse/SPARK-7527
       case _: ClassNotFoundException => true
     }
   }
