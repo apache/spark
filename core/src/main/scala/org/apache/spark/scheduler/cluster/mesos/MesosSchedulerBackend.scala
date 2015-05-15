@@ -20,7 +20,6 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.io.File
 import java.util.{ArrayList => JArrayList, Collections, List => JList}
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, TaskInfo => MesosTaskInfo, _}
@@ -58,6 +57,9 @@ private[spark] class MesosSchedulerBackend(
   val listenerBus = sc.listenerBus
 
   private[mesos] val mesosExecutorCores = sc.conf.getDouble("spark.mesos.mesosExecutor.cores", 1)
+
+  // Offer constraints
+  val offerConstraints = parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
 
   @volatile var appId: String = _
 
@@ -186,8 +188,9 @@ private[spark] class MesosSchedulerBackend(
    */
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     inClassLoader() {
+      val qualifyingOffers = filterOffersByConstraints(offers, offerConstraints)
       // Fail-fast on offers we know will be rejected
-      val (usableOffers, unUsableOffers) = offers.partition { o =>
+      val (usableOffers, unUsableOffers) = qualifyingOffers.partition { o =>
         val mem = getResource(o.getResourcesList, "mem")
         val cpus = getResource(o.getResourcesList, "cpus")
         val slaveId = o.getSlaveId.getValue

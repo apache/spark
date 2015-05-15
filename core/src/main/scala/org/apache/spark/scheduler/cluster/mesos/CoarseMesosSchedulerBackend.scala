@@ -20,7 +20,6 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.io.File
 import java.util.{Collections, List => JList}
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
@@ -65,6 +64,9 @@ private[spark] class CoarseMesosSchedulerBackend(
 
 
   val extraCoresPerSlave = conf.getInt("spark.mesos.extra.cores", 0)
+
+  // Offer constraints
+  val slaveOfferConstraints = parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
 
   var nextMesosTaskId = 0
 
@@ -171,7 +173,10 @@ private[spark] class CoarseMesosSchedulerBackend(
     synchronized {
       val filters = Filters.newBuilder().setRefuseSeconds(5).build()
 
-      for (offer <- offers) {
+      // filter out all the offers that do not meet constraints (if specified)
+      val qualifyingOffers = filterOffersByConstraints(offers, slaveOfferConstraints)
+
+      for (offer <- qualifyingOffers) {
         val slaveId = offer.getSlaveId.toString
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
