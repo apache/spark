@@ -23,6 +23,9 @@ defaults = {
         'scheduler_heartbeat_sec': 60,
         'authenticate': False,
     },
+    'celery': {
+        'celery_default_queue': 'default',
+    },
 }
 
 DEFAULT_CONFIG = """\

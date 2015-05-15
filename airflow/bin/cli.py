@@ -286,6 +286,7 @@ def worker(args):
     options = {
         'optimization': 'fair',
         'O': 'fair',
+        'Q': args.queues,
     }
     worker.run(**options)
     sp.kill()
@@ -494,6 +495,10 @@ def get_parser():
 
     ht = "Start a Celery worker node"
     parser_worker = subparsers.add_parser('worker', help=ht)
+    parser_worker.add_argument(
+        "-q", "--queues",
+        help="Coma delimeted list of queues to cater serve",
+        default=conf.get('celery', 'celery_default_queue'))
     parser_worker.set_defaults(func=worker)
 
     ht = "Serve logs generate by worker"

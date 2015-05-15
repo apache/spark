@@ -898,6 +898,10 @@ class BaseOperator(Base):
         This is useful if the different instances of a task X alter
         the same asset, and this asset is used by the dependencies of task X.
     :type wait_for_downstream: bool
+    :param queue: which queue to target when running this job. Not
+        all executors implement queue management, the CeleryExecutor
+        does support targeting specific queues.
+    :type queue: str
     :param dag: a reference to the dag the task is attached to (if any)
     :type dag: DAG
     :param priority_weight: priority weight of this task against other task.
@@ -949,6 +953,7 @@ class BaseOperator(Base):
             default_args=None,
             adhoc=False,
             priority_weight=1,
+            queue=None,
             *args,
             **kwargs):
 
