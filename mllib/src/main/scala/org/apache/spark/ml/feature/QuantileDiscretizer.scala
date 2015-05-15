@@ -24,7 +24,7 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.param.{IntParam, _}
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
@@ -54,7 +54,10 @@ private[feature] trait QuantileDiscretizerBase extends Params with HasInputCol w
  * categorical features.
  */
 @AlphaComponent
-final class QuantileDiscretizer extends Estimator[Bucketizer] with QuantileDiscretizerBase {
+final class QuantileDiscretizer(override val uid: String)
+  extends Estimator[Bucketizer] with QuantileDiscretizerBase {
+
+  def this() = this(Identifiable.randomUID("QuantileDiscretizer"))
 
   /** @group setParam */
   def setNumBuckets(value: Int): this.type = set(numBuckets, value)
@@ -78,8 +81,9 @@ final class QuantileDiscretizer extends Estimator[Bucketizer] with QuantileDiscr
   override def fit(dataset: DataFrame): Bucketizer = {
     val input = dataset.select($(inputCol)).map { case Row(feature: Double) => feature }
     val samples = getSampledInput(input, $(numBuckets))
-    val splits = findSplits(samples, $(numBuckets) - 1)
-    val bucketizer = new Bucketizer(this).setBuckets(splits)
+    val splits = Array(Double.NegativeInfinity) ++ findSplits(samples, $(numBuckets) - 1) ++
+      Array(Double.PositiveInfinity)
+    val bucketizer = new Bucketizer(uid).setSplits(splits)
     copyValues(bucketizer)
   }
 

@@ -33,7 +33,7 @@ class QuantileDiscretizerSuite extends FunSuite with MLlibTestSparkContext {
 
     val random = new Random(47)
     val data = Array.fill[Double](10)(random.nextDouble())
-    val result = Array[Double](2, 1, 0, 0, 1, 1, 1, 0, 2, 2)
+    val result = Array[Double](2, 2, 0, 1, 1, 1, 1, 0, 2, 2)
 
     val df = sc.parallelize(data.zip(result)).toDF("data", "expected")
 
@@ -44,11 +44,15 @@ class QuantileDiscretizerSuite extends FunSuite with MLlibTestSparkContext {
 
     val bucketizer = discretizer.fit(df)
     val res = bucketizer.transform(df)
+
     res.select("expected", "result").collect().foreach {
       case Row(expected: Double, result: Double) => assert(expected == result)
     }
 
     val attr = Attribute.fromStructField(res.schema("result")).asInstanceOf[NominalAttribute]
-    assert(attr.values.get === Array("0.18847866977771732","0.5309454508634242"))
+    assert(attr.values.get === Array(
+      "-Infinity, 0.18847866977771732",
+      "0.18847866977771732, 0.5309454508634242",
+      "0.5309454508634242, Infinity"))
   }
 }
