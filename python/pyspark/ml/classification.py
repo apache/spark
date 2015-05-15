@@ -43,6 +43,10 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
     >>> model.transform(test0).head().prediction
     0.0
+    >>> model.weights
+    DenseVector([5.5...])
+    >>> model.intercept
+    -2.68...
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
     >>> model.transform(test1).head().prediction
     1.0
@@ -147,6 +151,20 @@ class LogisticRegressionModel(JavaModel):
     """
     Model fitted by LogisticRegression.
     """
+
+    @property
+    def weights(self):
+        """
+        Model weights.
+        """
+        return self._call_java("weights")
+
+    @property
+    def intercept(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("intercept")
 
 
 class TreeClassifierParams(object):
