@@ -173,6 +173,7 @@ class SparkContext(object):
             self._jvm.PythonAccumulatorParam(host, port))
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
+        self.pythonVer = sys.version_info.major * 10 + sys.version_info.minor
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have

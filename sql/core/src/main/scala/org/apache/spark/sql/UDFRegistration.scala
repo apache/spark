@@ -46,6 +46,7 @@ class UDFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
       envVars: JMap[String, String],
       pythonIncludes: JList[String],
       pythonExec: String,
+      pythonVer: Int,
       broadcastVars: JList[Broadcast[PythonBroadcast]],
       accumulator: Accumulator[JList[Array[Byte]]],
       stringDataType: String): Unit = {
@@ -70,6 +71,7 @@ class UDFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
         envVars,
         pythonIncludes,
         pythonExec,
+        pythonVer,
         broadcastVars,
         accumulator,
         dataType,

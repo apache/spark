@@ -46,6 +46,7 @@ private[spark] case class PythonUDF(
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
     pythonExec: String,
+    pythonVer: Int,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]],
     dataType: DataType,
@@ -251,6 +252,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       udf.pythonIncludes,
       false,
       udf.pythonExec,
+      udf.pythonVer,
       udf.broadcastVars,
       udf.accumulator
     ).mapPartitions { iter =>

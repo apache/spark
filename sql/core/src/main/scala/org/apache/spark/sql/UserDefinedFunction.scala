@@ -58,14 +58,15 @@ private[sql] case class UserDefinedPythonFunction(
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
     pythonExec: String,
+    pythonVer: Int,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]],
     dataType: DataType) {
 
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
   def apply(exprs: Column*): Column = {
-    val udf = PythonUDF(name, command, envVars, pythonIncludes, pythonExec, broadcastVars,
-      accumulator, dataType, exprs.map(_.expr))
+    val udf = PythonUDF(name, command, envVars, pythonIncludes, pythonExec, pythonVer,
+      broadcastVars, accumulator, dataType, exprs.map(_.expr))
     Column(udf)
   }
 }

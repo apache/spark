@@ -1543,13 +1543,13 @@ class WorkerTests(ReusedPySparkTestCase):
     def test_with_different_versions_of_python(self):
         rdd = self.sc.parallelize(range(10))
         rdd.count()
-        version = sys.version_info
-        sys.version_info = (2, 0, 0)
+        version = self.sc.pythonVer
+        self.sc.pythonVer = 20
         try:
             with QuietTest(self.sc):
                 self.assertRaises(Py4JJavaError, lambda: rdd.count())
         finally:
-            sys.version_info = version
+            self.sc.pythonVer = version
 
 
 class SparkSubmitTests(unittest.TestCase):
