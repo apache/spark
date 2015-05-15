@@ -53,7 +53,9 @@ private[streaming] class FlumePollingInputDStream[T: ClassTag](
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[SparkFlumeEvent](_ssc) {
 
-  protected[streaming] override val customScopeName: Option[String] = Some(s"flume polling stream [$id]")
+  protected[streaming] override val customScopeName: Option[String] = {
+    Some(s"flume polling stream [$id]")
+  }
 
   override def getReceiver(): Receiver[SparkFlumeEvent] = {
     new FlumePollingReceiver(addresses, maxBatchSize, parallelism, storageLevel)
