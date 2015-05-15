@@ -92,8 +92,8 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=0,
                  ratingCol="rating", nonnegative=False, checkpointInterval=10):
         """
-        __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                 implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=0,
+        __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
+                 implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=0, \
                  ratingCol="rating", nonnegative=false, checkpointInterval=10)
         """
         super(ALS, self).__init__()
@@ -118,8 +118,8 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
                   implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=0,
                   ratingCol="rating", nonnegative=False, checkpointInterval=10):
         """
-        setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=0,
+        setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
+                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=0, \
                  ratingCol="rating", nonnegative=False, checkpointInterval=10)
         Sets params for ALS.
         """
