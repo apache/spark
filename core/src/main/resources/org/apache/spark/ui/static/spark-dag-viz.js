@@ -190,9 +190,10 @@ function renderDagVizForJob(svgContainer) {
         .attr("skipped", "true");
     } else {
       // Link each graph to the corresponding stage page (TODO: handle stage attempts)
+      // Use the link from the stage table so it also works for the history server
       var attemptId = 0
-      var stageLink = $("#stage-" + stageId + "-" + attemptId)
-        .find("a")
+      var stageLink = d3.select("#stage-" + stageId + "-" + attemptId)
+        .select("a")
         .attr("href") + "&expandDagViz=true";
       container = svgContainer
         .append("a")

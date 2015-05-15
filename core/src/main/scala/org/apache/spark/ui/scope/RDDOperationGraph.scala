@@ -74,6 +74,8 @@ private[ui] class RDDOperationCluster(val id: String, private var _name: String)
 
 private[ui] object RDDOperationGraph extends Logging {
 
+  val STAGE_CLUSTER_PREFIX = "stage_"
+
   /**
    * Construct a RDDOperationGraph for a given stage.
    *
@@ -91,7 +93,8 @@ private[ui] object RDDOperationGraph extends Logging {
     val clusters = new mutable.HashMap[String, RDDOperationCluster] // indexed by cluster ID
 
     // Root cluster is the stage cluster
-    val stageClusterId = stage.stageId.toString
+    // Use a special prefix here to differentiate this cluster from other operation clusters
+    val stageClusterId = STAGE_CLUSTER_PREFIX + stage.stageId
     val stageClusterName = s"Stage ${stage.stageId}" +
       { if (stage.attemptId == 0) "" else s" (attempt ${stage.attemptId})" }
     val rootCluster = new RDDOperationCluster(stageClusterId, stageClusterName)

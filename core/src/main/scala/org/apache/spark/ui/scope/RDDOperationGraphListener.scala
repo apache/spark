@@ -57,10 +57,12 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
       .getOrElse(Seq.empty)
       .flatMap { sid => stageIdToGraph.get(sid) }
     // Mark any skipped stages as such
-    graphs
-      .filter { g => skippedStageIds.contains(g.rootCluster.id.toInt) }
-      .filter { g => !g.rootCluster.name.contains("skipped") }
-      .foreach { g => g.rootCluster.setName(g.rootCluster.name + " (skipped)") }
+    graphs.foreach { g =>
+      val stageId = g.rootCluster.id.replaceAll(RDDOperationGraph.STAGE_CLUSTER_PREFIX, "").toInt
+      if (skippedStageIds.contains(stageId) && !g.rootCluster.name.contains("skipped")) {
+        g.rootCluster.setName(g.rootCluster.name + " (skipped)")
+      }
+    }
     graphs
   }
 
