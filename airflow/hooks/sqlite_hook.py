@@ -7,9 +7,9 @@ from airflow.hooks.base_hook import BaseHook
 
 class SqliteHook(BaseHook):
 
-    '''
+    """
     Interact with SQLite.
-    '''
+    """
 
     def __init__(
             self, sqlite_conn_id='sqlite_default'):
