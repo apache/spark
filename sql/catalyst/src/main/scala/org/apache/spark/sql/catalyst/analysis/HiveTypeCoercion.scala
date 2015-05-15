@@ -251,10 +251,10 @@ trait HiveTypeCoercion {
         p.makeCopy(Array(Cast(p.left, StringType), p.right))
       case p: BinaryComparison if p.left.dataType == StringType &&
                                   p.right.dataType == TimestampType =>
-        p.makeCopy(Array(p.left, Cast(p.right, StringType)))
+        p.makeCopy(Array(Cast(p.left, TimestampType), p.right))
       case p: BinaryComparison if p.left.dataType == TimestampType &&
                                   p.right.dataType == StringType =>
-        p.makeCopy(Array(Cast(p.left, StringType), p.right))
+        p.makeCopy(Array(p.left, Cast(p.right, TimestampType)))
       case p: BinaryComparison if p.left.dataType == TimestampType &&
                                   p.right.dataType == DateType =>
         p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
@@ -274,7 +274,7 @@ trait HiveTypeCoercion {
         i.makeCopy(Array(Cast(a, StringType), b))
       case i @ In(a, b) if a.dataType == TimestampType &&
                            b.forall(_.dataType == StringType) =>
-        i.makeCopy(Array(Cast(a, StringType), b))
+        i.makeCopy(Array(a, b.map(Cast(_, TimestampType))))
       case i @ In(a, b) if a.dataType == DateType &&
                            b.forall(_.dataType == TimestampType) =>
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
