@@ -121,7 +121,10 @@ abstract class AbstractCommandBuilder {
    * set it.
    */
   void addPermGenSizeOpt(List<String> cmd) {
-    // Don't set MaxPermSize for Java 8 and later.
+    // Don't set MaxPermSize for IBM Java, or Oracle Java 8 and later.
+    if (getJavaVendor() == JavaVendor.IBM) {
+      return;
+    }
     String[] version = System.getProperty("java.version").split("\\.");
     if (Integer.parseInt(version[0]) > 1 || Integer.parseInt(version[1]) > 7) {
       return;

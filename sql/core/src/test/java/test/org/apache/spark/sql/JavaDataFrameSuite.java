@@ -39,7 +39,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.apache.spark.sql.functions.*;
-import static org.apache.spark.sql.mathfunctions.*;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext jsc;
