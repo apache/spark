@@ -43,6 +43,10 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
     >>> model.transform(test0).head().prediction
     0.0
+    >>> model.weights
+    DenseVector([5.5...])
+    >>> model.intercept
+    -2.68...
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
     >>> model.transform(test1).head().prediction
     1.0
@@ -67,7 +71,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                  threshold=0.5, probabilityCol="probability"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
+                 maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  threshold=0.5, probabilityCol="probability")
         """
         super(LogisticRegression, self).__init__()
@@ -92,8 +96,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                   threshold=0.5, probabilityCol="probability"):
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  threshold=0.5, probabilityCol="probability")
         Sets params for logistic regression.
         """
@@ -147,6 +151,20 @@ class LogisticRegressionModel(JavaModel):
     """
     Model fitted by LogisticRegression.
     """
+
+    @property
+    def weights(self):
+        """
+        Model weights.
+        """
+        return self._call_java("weights")
+
+    @property
+    def intercept(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("intercept")
 
 
 class TreeClassifierParams(object):
@@ -202,7 +220,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini")
         """
         super(DecisionTreeClassifier, self).__init__()
@@ -224,9 +242,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                   impurity="gini"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="gini")
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini")
         Sets params for the DecisionTreeClassifier.
         """
         kwargs = self.setParams._input_kwargs
@@ -302,9 +319,9 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
                  numTrees=20, featureSubsetStrategy="auto", seed=42):
         """
-        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
                  numTrees=20, featureSubsetStrategy="auto", seed=42)
         """
         super(RandomForestClassifier, self).__init__()
@@ -337,9 +354,9 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=42,
                   impurity="gini", numTrees=20, featureSubsetStrategy="auto"):
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=42,
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=42, \
                   impurity="gini", numTrees=20, featureSubsetStrategy="auto")
         Sets params for linear classification.
         """
@@ -453,10 +470,10 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="logistic",
                  maxIter=20, stepSize=0.1):
         """
-        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="logistic",
-                 maxIter=20, stepSize=0.1)
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
+                 lossType="logistic", maxIter=20, stepSize=0.1)
         """
         super(GBTClassifier, self).__init__()
         #: param for Loss function which GBT tries to minimize (case-insensitive).
@@ -484,9 +501,9 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   lossType="logistic", maxIter=20, stepSize=0.1):
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   lossType="logistic", maxIter=20, stepSize=0.1)
         Sets params for Gradient Boosted Tree Classification.
         """

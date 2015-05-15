@@ -35,6 +35,10 @@ private[sql] case class Partition(values: Row, path: String)
 private[sql] case class PartitionSpec(partitionColumns: StructType, partitions: Seq[Partition])
 
 private[sql] object PartitioningUtils {
+  // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since sql/core doesn't
+  // depend on Hive.
+  private[sql] val DEFAULT_PARTITION_NAME = "__HIVE_DEFAULT_PARTITION__"
+
   private[sql] case class PartitionValues(columnNames: Seq[String], literals: Seq[Literal]) {
     require(columnNames.size == literals.size)
   }

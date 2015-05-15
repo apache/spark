@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.ParserDialect
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.json._
-import org.apache.spark.sql.parquet.FSBasedParquetRelation
+import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -610,7 +610,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     } else if (conf.parquetUseDataSourceApi) {
       val globbedPaths = paths.map(new Path(_)).flatMap(SparkHadoopUtil.get.globPath).toArray
       baseRelationToDataFrame(
-        new FSBasedParquetRelation(
+        new ParquetRelation2(
           globbedPaths.map(_.toString), None, None, Map.empty[String, String])(this))
     } else {
       DataFrame(this, parquet.ParquetRelation(
@@ -989,7 +989,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def jdbc(url: String, table: String): DataFrame = {
     jdbc(url, table, JDBCRelation.columnPartition(null), new Properties())
   }
-  
+
   /**
    * :: Experimental ::
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
@@ -1002,7 +1002,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def jdbc(url: String, table: String, properties: Properties): DataFrame = {
     jdbc(url, table, JDBCRelation.columnPartition(null), properties)
   }
-  
+
   /**
    * :: Experimental ::
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
@@ -1020,7 +1020,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @Experimental
   def jdbc(
       url: String,
-      table: String,  
+      table: String,
       columnName: String,
       lowerBound: Long,
       upperBound: Long,
@@ -1056,7 +1056,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val parts = JDBCRelation.columnPartition(partitioning)
     jdbc(url, table, parts, properties)
   }
-  
+
   /**
    * :: Experimental ::
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
@@ -1093,7 +1093,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
     jdbc(url, table, parts, properties)
   }
-  
+
   private def jdbc(
       url: String,
       table: String,
@@ -1321,7 +1321,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // TODO: Don't just pick the first one...
     lazy val sparkPlan: SparkPlan = {
       SparkPlan.currentContext.set(self)
-      planner(optimizedPlan).next()
+      planner.plan(optimizedPlan).next()
     }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.

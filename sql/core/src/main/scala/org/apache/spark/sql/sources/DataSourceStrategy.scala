@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{UnionRDD, RDD}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
@@ -59,7 +59,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         (a, _) => t.buildScan(a)) :: Nil
 
     // Scanning partitioned FSBasedRelation
-    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: FSBasedRelation))
+    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: HadoopFsRelation))
         if t.partitionSpec.partitionColumns.nonEmpty =>
       val selectedPartitions = prunePartitions(filters, t.partitionSpec).toArray
 
@@ -87,7 +87,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         selectedPartitions) :: Nil
 
     // Scanning non-partitioned FSBasedRelation
-    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: FSBasedRelation)) =>
+    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: HadoopFsRelation)) =>
       val inputPaths = t.paths.map(new Path(_)).flatMap { path =>
         val fs = path.getFileSystem(t.sqlContext.sparkContext.hadoopConfiguration)
         val qualifiedPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
@@ -111,10 +111,10 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       execution.ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case i @ logical.InsertIntoTable(
-      l @ LogicalRelation(t: FSBasedRelation), part, query, overwrite, false) if part.isEmpty =>
+      l @ LogicalRelation(t: HadoopFsRelation), part, query, overwrite, false) if part.isEmpty =>
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
       execution.ExecutedCommand(
-        InsertIntoFSBasedRelation(t, query, Array.empty[String], mode)) :: Nil
+        InsertIntoHadoopFsRelation(t, query, Array.empty[String], mode)) :: Nil
 
     case _ => Nil
   }
@@ -126,7 +126,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       partitionColumns: StructType,
       partitions: Array[Partition]) = {
     val output = projections.map(_.toAttribute)
-    val relation = logicalRelation.relation.asInstanceOf[FSBasedRelation]
+    val relation = logicalRelation.relation.asInstanceOf[HadoopFsRelation]
 
     // Builds RDD[Row]s for each selected partition.
     val perPartitionRows = partitions.map { case Partition(partitionValues, dir) =>
@@ -169,9 +169,12 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       scan.execute()
     }
 
-    val unionedRows = perPartitionRows.reduceOption(_ ++ _).getOrElse {
-      relation.sqlContext.emptyResult
-    }
+    val unionedRows =
+      if (perPartitionRows.length == 0) {
+        relation.sqlContext.emptyResult
+      } else {
+        new UnionRDD(relation.sqlContext.sparkContext, perPartitionRows)
+      }
 
     createPhysicalRDD(logicalRelation.relation, output, unionedRows)
   }
