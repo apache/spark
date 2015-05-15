@@ -39,6 +39,19 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   import org.apache.spark.sql.test.TestSQLContext.implicits._
   val sqlCtx = TestSQLContext
 
+  test("SPARK-6743: no columns from cache") {
+    Seq(
+      (83,0,38),
+      (26,0,79),
+      (43,81,24)
+    ).toDF("a", "b", "c").registerTempTable("cachedData")
+
+    cacheTable("cachedData")
+    checkAnswer(
+      sql("SELECT t1.b FROM cachedData, cachedData t1 GROUP BY t1.b"),
+      Row(0) :: Row(81) :: Nil)
+  }
+
   test("self join with aliases") {
     Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str").registerTempTable("df")
 
@@ -141,7 +154,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT ABS(2.5)"),
       Row(2.5))
   }
-  
+
   test("aggregation with codegen") {
     val originalValue = conf.codegenEnabled
     setConf(SQLConf.CODEGEN_ENABLED, "true")
@@ -193,7 +206,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       "SELECT value, sum(key) FROM testData3x GROUP BY value",
       (1 to 100).map(i => Row(i.toString, 3 * i)))
     testCodeGen(
-      "SELECT sum(key), SUM(CAST(key as Double)) FROM testData3x",      
+      "SELECT sum(key), SUM(CAST(key as Double)) FROM testData3x",
       Row(5050 * 3, 5050 * 3.0) :: Nil)
     // AVERAGE
     testCodeGen(

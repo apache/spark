@@ -1474,7 +1474,7 @@ class DataFrame private[sql](
 
   /**
    * :: Experimental ::
-   * Creates a table at the given path from the the contents of this DataFrame
+   * (Scala-specific) Creates a table at the given path from the the contents of this DataFrame
    * based on a given data source, [[SaveMode]] specified by mode, a set of options, and a list of
    * partition columns.
    *

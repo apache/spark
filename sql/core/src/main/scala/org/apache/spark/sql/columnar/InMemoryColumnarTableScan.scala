@@ -314,7 +314,7 @@ private[sql] case class InMemoryColumnarTableScan(
                 columnAccessors(i).extractTo(nextRow, i)
                 i += 1
               }
-              nextRow
+              if(attributes.isEmpty) Row.empty else nextRow
             }
 
             override def hasNext: Boolean = columnAccessors(0).hasNext
