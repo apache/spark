@@ -546,10 +546,6 @@ setGeneric("asc", function(x) { standardGeneric("asc") })
 
 #' @rdname column
 #' @export
-setGeneric("atan2", function(x, ...) { standardGeneric("atan2") })
-
-#' @rdname column
-#' @export
 setGeneric("avg", function(x, ...) { standardGeneric("avg") })
 
 #' @rdname column
@@ -585,7 +581,7 @@ setGeneric("getItem", function(x, ...) { standardGeneric("getItem") })
 
 #' @rdname column
 #' @export
-setGeneric("hypot", function(x, ...) { standardGeneric("hypot") })
+setGeneric("hypot", function(y, x) { standardGeneric("hypot") })
 
 #' @rdname column
 #' @export

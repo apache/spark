@@ -128,12 +128,12 @@ createStaticFunction <- function(name) {
 
 createBinaryMathfunctions <- function(name) {
   setMethod(name,
-            signature(x = "Column"),
-            function(x, data) {
-              if (class(data) == "Column") {
-                data <- data@jc
+            signature(y = "Column"),
+            function(y, x) {
+              if (class(x) == "Column") {
+                x <- x@jc
               }
-              jc <- callJStatic("org.apache.spark.sql.functions", name, x@jc, data)
+              jc <- callJStatic("org.apache.spark.sql.functions", name, y@jc, x)
               column(jc)
             })
 }
