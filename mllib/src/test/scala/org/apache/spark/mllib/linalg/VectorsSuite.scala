@@ -71,6 +71,10 @@ class VectorsSuite extends FunSuite {
     val vec2 = Vectors.dense(arr).asInstanceOf[DenseVector]
     val max = vec2.argmax
     assert(max === 3)
+
+    val vec3 = Vectors.dense(Array(-1.0, 0.0, -2.0, 1.0)).asInstanceOf[DenseVector]
+    val max2 = vec3.argmax
+    assert(max === 3)
   }
 
   test("sparse to array") {
@@ -87,9 +91,10 @@ class VectorsSuite extends FunSuite {
     val max = vec2.argmax
     assert(max === 3)
 
-    val vec3 = Vectors.sparse(5,Array(1,3,4),Array(1.0,.5,.7))
+    // check for case that sparse vector is created with a zero value in it by mistake
+    val vec3 = Vectors.sparse(5,Array(0, 2, 4),Array(-1.0, 0.0, -.7))
     val max2 = vec3.argmax
-    assert(max2 === 1)
+    assert(max2 === 4)
   }
 
   test("vector equals") {

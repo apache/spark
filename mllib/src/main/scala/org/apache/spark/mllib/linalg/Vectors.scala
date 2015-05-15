@@ -728,7 +728,7 @@ class SparseVector(
       var maxValue = values(0)
 
       foreachActive { (i, v) =>
-        if(v > maxValue){
+        if(v != 0.0 && v > maxValue){
           maxIdx = i
           maxValue = v
         }
