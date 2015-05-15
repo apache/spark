@@ -53,9 +53,7 @@ object TwitterUtils {
    * @param jssc   JavaStreamingContext object
    */
   def createStream(jssc: JavaStreamingContext): JavaReceiverInputDStream[Status] = {
-    jssc.ssc.withScope {
-      createStream(jssc.ssc, None)
-    }
+    createStream(jssc.ssc, None)
   }
 
   /**
@@ -68,7 +66,7 @@ object TwitterUtils {
    * @param filters Set of filter strings to get only those tweets that match them
    */
   def createStream(jssc: JavaStreamingContext, filters: Array[String]
-      ): JavaReceiverInputDStream[Status] = jssc.ssc.withScope {
+      ): JavaReceiverInputDStream[Status] = {
     createStream(jssc.ssc, None, filters)
   }
 
@@ -85,7 +83,7 @@ object TwitterUtils {
       jssc: JavaStreamingContext,
       filters: Array[String],
       storageLevel: StorageLevel
-    ): JavaReceiverInputDStream[Status] = jssc.ssc.withScope {
+    ): JavaReceiverInputDStream[Status] = {
     createStream(jssc.ssc, None, filters, storageLevel)
   }
 
@@ -96,7 +94,7 @@ object TwitterUtils {
    * @param twitterAuth Twitter4J Authorization
    */
   def createStream(jssc: JavaStreamingContext, twitterAuth: Authorization
-    ): JavaReceiverInputDStream[Status] = jssc.ssc.withScope {
+    ): JavaReceiverInputDStream[Status] = {
     createStream(jssc.ssc, Some(twitterAuth))
   }
 
@@ -111,7 +109,7 @@ object TwitterUtils {
       jssc: JavaStreamingContext,
       twitterAuth: Authorization,
       filters: Array[String]
-    ): JavaReceiverInputDStream[Status] = jssc.ssc.withScope {
+    ): JavaReceiverInputDStream[Status] = {
     createStream(jssc.ssc, Some(twitterAuth), filters)
   }
 
@@ -127,7 +125,7 @@ object TwitterUtils {
       twitterAuth: Authorization,
       filters: Array[String],
       storageLevel: StorageLevel
-    ): JavaReceiverInputDStream[Status] = jssc.ssc.withScope {
+    ): JavaReceiverInputDStream[Status] = {
     createStream(jssc.ssc, Some(twitterAuth), filters, storageLevel)
   }
 }

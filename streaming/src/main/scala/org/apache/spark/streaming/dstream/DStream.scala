@@ -25,7 +25,7 @@ import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
-import org.apache.spark.{SparkContext, Logging, SparkException}
+import org.apache.spark.{Logging, SparkContext, SparkException}
 import org.apache.spark.rdd.{BlockRDD, PairRDDFunctions, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
@@ -127,9 +127,7 @@ abstract class DStream[T: ClassTag] (
 
   /**
    * Make a scope name based on the given one.
-   *
-   * By default, this just returns the base name. Subclasses
-   * may optionally override this to provide custom scope names.
+   * Subclasses may optionally override this to provide custom scope names.
    */
   protected[streaming] def makeScopeName(baseName: String): String = baseName
 
@@ -351,8 +349,8 @@ abstract class DStream[T: ClassTag] (
       if (isTimeValid(time)) {
         val rddOption = doCompute(time)
 
-        // Register the generated RDD for caching and checkpointing
         rddOption.foreach { case newRDD =>
+          // Register the generated RDD for caching and checkpointing
           if (storageLevel != StorageLevel.NONE) {
             newRDD.persist(storageLevel)
             logDebug(s"Persisting RDD ${newRDD.id} for time $time to $storageLevel")
@@ -363,7 +361,6 @@ abstract class DStream[T: ClassTag] (
           }
           generatedRDDs.put(time, newRDD)
         }
-
         rddOption
       } else {
         None
@@ -739,9 +736,7 @@ abstract class DStream[T: ClassTag] (
    * the same interval as this DStream.
    * @param windowDuration width of the window; must be a multiple of this DStream's interval.
    */
-  def window(windowDuration: Duration): DStream[T] = ssc.withScope {
-    window(windowDuration, this.slideDuration)
-  }
+  def window(windowDuration: Duration): DStream[T] = window(windowDuration, this.slideDuration)
 
   /**
    * Return a new DStream in which each RDD contains all the elements in seen in a

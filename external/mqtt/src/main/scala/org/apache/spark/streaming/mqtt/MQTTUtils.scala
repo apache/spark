@@ -52,7 +52,7 @@ object MQTTUtils {
       jssc: JavaStreamingContext,
       brokerUrl: String,
       topic: String
-    ): JavaReceiverInputDStream[String] = jssc.ssc.withScope {
+    ): JavaReceiverInputDStream[String] = {
     implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
     createStream(jssc.ssc, brokerUrl, topic)
   }
@@ -69,7 +69,7 @@ object MQTTUtils {
       brokerUrl: String,
       topic: String,
       storageLevel: StorageLevel
-    ): JavaReceiverInputDStream[String] = jssc.ssc.withScope {
+    ): JavaReceiverInputDStream[String] = {
     implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
     createStream(jssc.ssc, brokerUrl, topic, storageLevel)
   }
