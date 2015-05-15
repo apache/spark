@@ -900,6 +900,10 @@ class BaseOperator(Base):
     :type wait_for_downstream: bool
     :param dag: a reference to the dag the task is attached to (if any)
     :type dag: DAG
+    :param priority_weight: priority weight of this task against other task.
+        This allows the executor to trigger higher priority tasks before
+        others when things get backed up.
+    :type priority_weight: int
     """
 
     # For derived classes to define which fields will get jinjaified
@@ -944,6 +948,7 @@ class BaseOperator(Base):
             params=None,
             default_args=None,
             adhoc=False,
+            priority_weight=1,
             *args,
             **kwargs):
 
@@ -967,6 +972,7 @@ class BaseOperator(Base):
             self.retry_delay = timedelta(seconds=retry_delay)
         self.params = params or {}  # Available in templates!
         self.adhoc = adhoc
+        self.priority_weight = priority_weight
         if dag:
             dag.add_task(self)
             self.dag = dag
@@ -986,6 +992,13 @@ class BaseOperator(Base):
             return self.dag.schedule_interval
         else:
             return self._schedule_interval
+
+    @property
+    def priority_weight_total(self):
+        return sum([
+            t.priority_weight
+            for t in  self.get_flat_relatives(upstream=False)
+        ]) + self.priority_weight
 
     def __cmp__(self, other):
         blacklist = {

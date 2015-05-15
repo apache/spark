@@ -275,8 +275,7 @@ class SchedulerJob(BaseJob):
                 if ti.is_runnable():
                     logging.info(
                         'First run for {ti}'.format(**locals()))
-                    cmd = ti.command(local=True)
-                    executor.queue_command(ti.key, cmd)
+                    executor.queue_task_instance(ti)
             else:
                 ti = ti_dict[task.task_id]
                 ti.task = task  # Hacky but worky
@@ -287,8 +286,7 @@ class SchedulerJob(BaseJob):
                     # the retry delay is met
                     if ti.is_runnable():
                         logging.debug('Queuing retry: ' + str(ti))
-                        cmd = ti.command(local=True)
-                        executor.queue_command(ti.key, cmd)
+                        executor.queue_task_instance(ti)
                 else:
                     # Trying to run the next schedule
                     next_schedule = (
@@ -304,8 +302,7 @@ class SchedulerJob(BaseJob):
                     ti.refresh_from_db()
                     if ti.is_runnable():
                         logging.debug('Queuing next run: ' + str(ti))
-                        cmd = ti.command(local=True)
-                        executor.queue_command(ti.key, cmd)
+                        executor.queue_task_instance(ti)
         # Releasing the lock
         db_dag = session.query(DagModel).filter(DagModel.dag_id==dag.dag_id).first()
         db_dag.scheduler_lock = False
@@ -456,12 +453,10 @@ class BackfillJob(BaseJob):
                     succeeded.append(key)
                     del tasks_to_run[key]
                 elif ti.is_runnable():
-                    executor.queue_command(
-                        key=ti.key, command=ti.command(
-                            mark_success=self.mark_success,
-                            local=True,
-                            pickle_id=pickle_id)
-                    )
+                    executor.queue_task_instance(
+                        ti,
+                        mark_success=self.mark_success,
+                        pickle_id=pickle_id)
                     ti.state = State.RUNNING
                     if key not in started:
                         started.append(key)

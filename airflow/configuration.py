@@ -6,6 +6,7 @@ import os
 defaults = {
     'core': {
         'unit_test_mode': False,
+        'parallelism': 32,
     },
     'webserver': {
         'base_url': 'http://localhost:8080',
@@ -30,6 +31,7 @@ dags_folder = {AIRFLOW_HOME}/dags
 base_log_folder = {AIRFLOW_HOME}/logs
 executor = SequentialExecutor
 sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/airflow.db
+parallelism = 32
 
 [webserver]
 base_url = http://localhost:8080

@@ -1,3 +1,4 @@
+import logging
 import subprocess
 
 from airflow.executors.base_executor import BaseExecutor
@@ -17,11 +18,12 @@ class SequentialExecutor(BaseExecutor):
         super(SequentialExecutor, self).__init__()
         self.commands_to_run = []
 
-    def queue_command(self, key, command):
+    def execute_async(self, key, command):
         self.commands_to_run.append((key, command,))
 
-    def heartbeat(self):
+    def sync(self):
         for key, command in self.commands_to_run:
+            logging.info("command" + str(command))
             try:
                 sp = subprocess.Popen(command, shell=True)
                 sp.wait()

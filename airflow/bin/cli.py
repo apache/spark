@@ -139,7 +139,7 @@ def run(args):
             ignore_dependencies=args.ignore_dependencies,
             pickle_id=pickle_id)
         print("Sending run command to executor:\n" + cmd)
-        executor.queue_command(ti.key, cmd)
+        executor.queue_task_instance(ti)
         executor.end()
 
 def task_state(args):

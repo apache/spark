@@ -17,8 +17,9 @@ TODO
 #### Backend
 * Add a run_only_latest flag to BaseOperator, runs only most recent task instance where deps are met
 * Pickle all the THINGS!
-* Master auto dag refresh at time intervals
-* Prevent timezone chagne on import
+* Add priority_weight(Int) to BaseOperator, +@property subtree_priority
+* BaseExecutor parallelism limit
+* Distributed scheduler
 * Add decorator to timeout imports on master process [lib](https://github.com/pnpnpn/timeout-decorator)
 
 #### Wishlist

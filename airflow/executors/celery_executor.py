@@ -1,14 +1,14 @@
 import logging
-import time
-
-from airflow.executors.base_executor import BaseExecutor
-from airflow.configuration import conf
-from airflow.utils import State
-
 import subprocess
+import time
 
 from celery import Celery
 from celery import states as celery_states
+
+from airflow.executors.base_executor import BaseExecutor
+from airflow.configuration import conf
+
+PARALLELISM = conf.get('core', 'PARALLELISM')
 
 '''
 To start the celery worker, run the command:
@@ -56,15 +56,15 @@ class CeleryExecutor(BaseExecutor):
         self.tasks[key] = execute_command.delay(command)
         self.last_state[key] = celery_states.PENDING
 
-    def heartbeat(self):
+    def sync(self):
         for key, async in self.tasks.items():
             if self.last_state[key] != async.state:
                 if async.state == celery_states.SUCCESS:
-                    self.change_state(key, State.SUCCESS)
+                    self.success(key)
                     del self.tasks[key]
                     del self.last_state[key]
                 elif async.state == celery_states.FAILURE:
-                    self.change_state(key, State.FAILED)
+                    self.fail(key)
                     del self.tasks[key]
                     del self.last_state[key]
                 self.last_state[key] = async.state

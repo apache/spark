@@ -3,9 +3,11 @@ import multiprocessing
 import subprocess
 import time
 
+from airflow.configuration import conf
+from airflow.executors.base_executor import BaseExecutor
 from airflow.utils import State
 
-from airflow.executors.base_executor import BaseExecutor
+PARALLELISM = conf.get('core', 'PARALLELISM')
 
 
 class LocalWorker(multiprocessing.Process):
@@ -37,19 +39,11 @@ class LocalWorker(multiprocessing.Process):
 
 
 class LocalExecutor(BaseExecutor):
-    '''
+    """
     LocalExecutor executes tasks locally in parallel. It uses the
     multiprocessing Python library and queues to parallelize the execution
     of tasks.
-    '''
-
-    def __init__(self, parallelism=16):
-        '''
-        :param parallelism: Number of processes running simultanously
-        :type parallelism: int
-        '''
-        super(LocalExecutor, self).__init__()
-        self.parallelism = parallelism
+    """
 
     def start(self):
         self.queue = multiprocessing.JoinableQueue()
@@ -65,7 +59,7 @@ class LocalExecutor(BaseExecutor):
     def execute_async(self, key, command):
         self.queue.put((key, command))
 
-    def heartbeat(self):
+    def sync(self):
         while not self.result_queue.empty():
             results = self.result_queue.get()
             self.change_state(*results)
