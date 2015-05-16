@@ -500,7 +500,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   test("date row") {
     checkAnswer(sql(
-      """select cast("2015-01-28" as date) from testData limit 1"""),
+      """select cast('2015-01-28' as date) from testData limit 1"""),
       Row(java.sql.Date.valueOf("2015-01-28"))
     )
   }
@@ -1316,5 +1316,18 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       .registerTempTable("t")
 
     checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
+  }
+
+  test("SPARK-6649: DataFrame created through SQLContext.jdbc() failed if columns table must be quoted") {
+    jsonRDD(sparkContext.makeRDD(
+         """{"SELECT": "hello world", "WHERE": true, "AND": true }""" :: Nil))
+      .registerTempTable("FROM")
+
+    checkAnswer(sql(
+      """
+        SELECT "SELECT" AS "AS"
+        FROM "FROM" "FROM"
+        WHERE "WHERE" AND "AND"
+      """), Row("hello world"))
   }
 }
