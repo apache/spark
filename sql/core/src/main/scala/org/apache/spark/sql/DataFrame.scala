@@ -1291,6 +1291,8 @@ class DataFrame private[sql](
 
   /**
    * :: Experimental ::
+   * Interface for saving the content of the [[DataFrame]] out into external storage.
+   *
    * @group output
    * @since 1.4.0
    */
@@ -1304,7 +1306,7 @@ class DataFrame private[sql](
    * @group output
    * @since 1.3.0
    */
-  @deprecated("Use write.parquet()", "1.4.0")
+  @deprecated("Use write.parquet(path)", "1.4.0")
   def saveAsParquetFile(path: String): Unit = {
     if (sqlContext.conf.parquetUseDataSourceApi) {
       write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
@@ -1314,7 +1316,6 @@ class DataFrame private[sql](
   }
 
   /**
-   * :: Experimental ::
    * Creates a table from the the contents of this DataFrame.
    * It will use the default data source configured by spark.sql.sources.default.
    * This will fail if the table already exists.
@@ -1329,13 +1330,12 @@ class DataFrame private[sql](
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String): Unit = {
     write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
   }
 
   /**
-   * :: Experimental ::
    * Creates a table from the the contents of this DataFrame, using the default data source
    * configured by spark.sql.sources.default and [[SaveMode.ErrorIfExists]] as the save mode.
    *
@@ -1349,7 +1349,7 @@ class DataFrame private[sql](
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.mode(mode).saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String, mode: SaveMode): Unit = {
     if (sqlContext.catalog.tableExists(Seq(tableName)) && mode == SaveMode.Append) {
       // If table already exists and the save mode is Append,
@@ -1361,7 +1361,6 @@ class DataFrame private[sql](
   }
 
   /**
-   * :: Experimental ::
    * Creates a table at the given path from the the contents of this DataFrame
    * based on a given data source and a set of options,
    * using [[SaveMode.ErrorIfExists]] as the save mode.
@@ -1376,7 +1375,7 @@ class DataFrame private[sql](
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String, source: String): Unit = {
     write.format(source).saveAsTable(tableName)
   }
@@ -1396,13 +1395,12 @@ class DataFrame private[sql](
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).mode(mode).saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String, source: String, mode: SaveMode): Unit = {
     write.format(source).mode(mode).saveAsTable(tableName)
   }
 
   /**
-   * :: Experimental ::
    * Creates a table at the given path from the the contents of this DataFrame
    * based on a given data source, [[SaveMode]] specified by mode, and a set of options.
    *
@@ -1416,7 +1414,8 @@ class DataFrame private[sql](
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
+    "1.4.0")
   def saveAsTable(
       tableName: String,
       source: String,
@@ -1426,7 +1425,6 @@ class DataFrame private[sql](
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific)
    * Creates a table from the the contents of this DataFrame based on a given data source,
    * [[SaveMode]] specified by mode, and a set of options.
@@ -1441,7 +1439,8 @@ class DataFrame private[sql](
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
+    "1.4.0")
   def saveAsTable(
       tableName: String,
       source: String,
@@ -1451,62 +1450,57 @@ class DataFrame private[sql](
   }
 
   /**
-   * :: Experimental ::
    * Saves the contents of this DataFrame to the given path,
    * using the default data source configured by spark.sql.sources.default and
    * [[SaveMode.ErrorIfExists]] as the save mode.
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.save(path)", "1.4.0")
   def save(path: String): Unit = {
     write.save(path)
   }
 
   /**
-   * :: Experimental ::
    * Saves the contents of this DataFrame to the given path and [[SaveMode]] specified by mode,
    * using the default data source configured by spark.sql.sources.default.
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.mode(mode).save(path)", "1.4.0")
   def save(path: String, mode: SaveMode): Unit = {
     write.mode(mode).save(path)
   }
 
   /**
-   * :: Experimental ::
    * Saves the contents of this DataFrame to the given path based on the given data source,
    * using [[SaveMode.ErrorIfExists]] as the save mode.
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).save(path)", "1.4.0")
   def save(path: String, source: String): Unit = {
     write.format(source).save(path)
   }
 
   /**
-   * :: Experimental ::
    * Saves the contents of this DataFrame to the given path based on the given data source and
    * [[SaveMode]] specified by mode.
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).mode(mode).save(path)", "1.4.0")
   def save(path: String, source: String, mode: SaveMode): Unit = {
     write.format(source).mode(mode).save(path)
   }
 
   /**
-   * :: Experimental ::
    * Saves the contents of this DataFrame based on the given data source,
    * [[SaveMode]] specified by mode, and a set of options.
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
   def save(
       source: String,
       mode: SaveMode,
@@ -1515,14 +1509,13 @@ class DataFrame private[sql](
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific)
    * Saves the contents of this DataFrame based on the given data source,
    * [[SaveMode]] specified by mode, and a set of options
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
   def save(
       source: String,
       mode: SaveMode,

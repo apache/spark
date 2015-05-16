@@ -194,6 +194,15 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
     }
   }
 
+  /**
+   * Returns the specified table as a [[DataFrame]].
+   *
+   * @since 1.4.0
+   */
+  def table(tableName: String): DataFrame = {
+    DataFrame(sqlContext, sqlContext.catalog.lookupRelation(Seq(tableName)))
+  }
+
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////

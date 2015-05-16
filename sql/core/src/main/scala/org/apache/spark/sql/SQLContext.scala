@@ -595,6 +595,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * Returns a [[DataFrameReader]] that can be used to read data in as a [[DataFrame]].
+   * {{{
+   *   sqlContext.read.parquet("/path/to/file.parquet")
+   *   sqlContext.read.schema(schema).json("/path/to/file.json")
+   * }}}
    *
    * @group genericdata
    * @since 1.4.0
@@ -609,6 +613,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group specificdata
    * @since 1.3.0
    */
+  @deprecated("Use read.parquet()", "1.4.0")
   @scala.annotation.varargs
   def parquetFile(paths: String*): DataFrame = {
     if (paths.isEmpty) {
@@ -634,7 +639,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * :: Experimental ::
    * Loads a JSON file (one object per line) and applies the given schema,
    * returning the result as a [[DataFrame]].
    *
@@ -647,7 +651,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * :: Experimental ::
    * @group specificdata
    * @since 1.3.0
    */
@@ -679,7 +682,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def jsonRDD(json: JavaRDD[String]): DataFrame = read.json(json)
 
   /**
-   * :: Experimental ::
    * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
    * returning the result as a [[DataFrame]].
    *
@@ -692,7 +694,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * :: Experimental ::
    * Loads an JavaRDD<String> storing JSON objects (one object per record) and applies the given
    * schema, returning the result as a [[DataFrame]].
    *
@@ -705,7 +706,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * :: Experimental ::
    * Loads an RDD[String] storing JSON objects (one object per record) inferring the
    * schema, returning the result as a [[DataFrame]].
    *
@@ -718,7 +718,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * :: Experimental ::
    * Loads a JavaRDD[String] storing JSON objects (one object per record) inferring the
    * schema, returning the result as a [[DataFrame]].
    *
@@ -731,65 +730,60 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * :: Experimental ::
    * Returns the dataset stored at path as a DataFrame,
    * using the default data source configured by spark.sql.sources.default.
    *
    * @group genericdata
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use read.load(path)", "1.4.0")
   def load(path: String): DataFrame = {
     read.load(path)
   }
 
   /**
-   * :: Experimental ::
    * Returns the dataset stored at path as a DataFrame, using the given data source.
    *
    * @group genericdata
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use read.format(source).load(path)", "1.4.0")
   def load(path: String, source: String): DataFrame = {
     read.format(source).load(path)
   }
 
   /**
-   * :: Experimental ::
    * (Java-specific) Returns the dataset specified by the given data source and
    * a set of options as a DataFrame.
    *
    * @group genericdata
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use read.format(source).options(options).load()", "1.4.0")
   def load(source: String, options: java.util.Map[String, String]): DataFrame = {
     read.options(options).format(source).load()
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific) Returns the dataset specified by the given data source and
    * a set of options as a DataFrame.
    *
    * @group genericdata
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use read.format(source).options(options).load()", "1.4.0")
   def load(source: String, options: Map[String, String]): DataFrame = {
     read.options(options).format(source).load()
   }
 
   /**
-   * :: Experimental ::
    * (Java-specific) Returns the dataset specified by the given data source and
    * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
    *
    * @group genericdata
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use read.format(source).schema(schema).options(options).load()", "1.4.0")
   def load(
       source: String,
       schema: StructType,
@@ -798,13 +792,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific) Returns the dataset specified by the given data source and
    * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
    * @group genericdata
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use read.format(source).schema(schema).options(options).load()", "1.4.0")
   def load(
       source: String,
       schema: StructType,

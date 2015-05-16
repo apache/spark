@@ -154,13 +154,13 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
   }
 
   test("save directly to the path of a JSON table") {
-    table("jt").selectExpr("a * 5 as a", "b").save(path.toString, "json", SaveMode.Overwrite)
+    table("jt").selectExpr("a * 5 as a", "b").write.mode(SaveMode.Overwrite).json(path.toString)
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i * 5, s"str$i"))
     )
 
-    table("jt").save(path.toString, "json", SaveMode.Overwrite)
+    table("jt").write.mode(SaveMode.Overwrite).json(path.toString)
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i, s"str$i"))
