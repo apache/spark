@@ -1174,10 +1174,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group genericdata
    */
   @deprecated("Use read.format(source).schema(schema).options(options).load()", "1.4.0")
-  def load(
-    source: String,
-    schema: StructType,
-    options: java.util.Map[String, String]): DataFrame = {
+  def load(source: String, schema: StructType, options: java.util.Map[String, String]): DataFrame =
+  {
     read.format(source).schema(schema).options(options).load()
   }
 
@@ -1188,10 +1186,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group genericdata
    */
   @deprecated("Use read.format(source).schema(schema).options(options).load()", "1.4.0")
-  def load(
-    source: String,
-    schema: StructType,
-    options: Map[String, String]): DataFrame = {
+  def load(source: String, schema: StructType, options: Map[String, String]): DataFrame = {
     read.format(source).schema(schema).options(options).load()
   }
 
@@ -1220,12 +1215,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @deprecated("use read.jdbc()", "1.4.0")
   def jdbc(
-    url: String,
-    table: String,
-    columnName: String,
-    lowerBound: Long,
-    upperBound: Long,
-    numPartitions: Int): DataFrame = {
+      url: String,
+      table: String,
+      columnName: String,
+      lowerBound: Long,
+      upperBound: Long,
+      numPartitions: Int): DataFrame = {
     read.jdbc(url, table, columnName, lowerBound, upperBound, numPartitions, new Properties)
   }
 

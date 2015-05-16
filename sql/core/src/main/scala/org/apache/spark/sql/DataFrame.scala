@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.io.CharArrayWriter
-import java.sql.DriverManager
 import java.util.Properties
 
 import scala.collection.JavaConversions._
@@ -40,9 +39,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
-import org.apache.spark.sql.jdbc.JDBCWriteDetails
 import org.apache.spark.sql.json.JacksonGenerator
-import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, ResolvedDataSource}
+import org.apache.spark.sql.sources.CreateTableUsingAsSelect
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
