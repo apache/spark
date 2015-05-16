@@ -1045,7 +1045,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       table: String,
       parts: Array[Partition],
       properties: Properties): DataFrame = {
-    val relation = JDBCRelation(url, table, parts, properties)(this)
+    val relation = JDBCRelation(url, table, parts, properties, None)(this)
     baseRelationToDataFrame(relation)
   }
 

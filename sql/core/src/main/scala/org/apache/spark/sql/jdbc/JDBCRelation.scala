@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.DatabaseMetaData
 import java.sql.DriverManager
+import java.sql.ResultSet
 import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
@@ -25,8 +27,10 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.jdbc
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -88,11 +92,22 @@ private[sql] object JDBCRelation {
   }
 }
 
-private[sql] class DefaultSource extends RelationProvider {
+private[sql] class DefaultSource
+  extends RelationProvider
+  with SchemaRelationProvider
+  with CreatableRelationProvider {
   /** Returns a new base relation with the given parameters. */
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
+    createRelation(sqlContext, parameters, null)
+  }
+  
+  /** Returns a new base relation with the given parameters and schema. */
+  override def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      userDefinedSchema: StructType): BaseRelation = {
     val url = parameters.getOrElse("url", sys.error("Option 'url' not specified"))
     val driver = parameters.getOrElse("driver", null)
     val table = parameters.getOrElse("dbtable", sys.error("Option 'dbtable' not specified"))
@@ -120,7 +135,68 @@ private[sql] class DefaultSource extends RelationProvider {
     val parts = JDBCRelation.columnPartition(partitionInfo)
     val properties = new Properties() // Additional properties that we will pass to getConnection
     parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
-    JDBCRelation(url, table, parts, properties)(sqlContext)
+    val userDefinedSchemaOpt = if(userDefinedSchema == null) None else Some(userDefinedSchema)
+    JDBCRelation(url, table, parts, properties, userDefinedSchemaOpt)(sqlContext)
+  }
+  
+  /**
+    * Creates a relation with the given parameters based on the contents of the given
+    * DataFrame. The mode specifies the expected behavior of createRelation when
+    * data already exists.
+    */
+  override def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+    val url = parameters.getOrElse("url", sys.error("Option 'url' not specified"))
+    val driver = parameters.getOrElse("driver", null)
+    val table = parameters.getOrElse("dbtable", sys.error("Option 'dbtable' not specified"))
+    
+    if (driver != null) DriverRegistry.register(driver)
+    
+    val properties = new Properties() // Additional properties that we will pass to getConnection
+    parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
+    
+    val conn = DriverManager.getConnection(url, properties)
+    var doInsertion = false
+    try {
+      val dbm: DatabaseMetaData = conn.getMetaData();
+      // check if table already exists
+      val tables: ResultSet = dbm.getTables(null, null, table, null)
+      var tableExists = tables.next()
+      
+      doInsertion = (mode, tableExists) match {
+        case (SaveMode.ErrorIfExists, true) =>
+          sys.error(s"Table $table already exists.")
+          false
+        case (SaveMode.Overwrite, true) => {
+          val sql = s"DROP TABLE $table"
+          conn.prepareStatement(sql).executeUpdate()
+          tableExists = false
+          true } 
+        case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
+          true
+        case (SaveMode.Ignore, exists) =>
+          !exists
+      }      
+      if(!tableExists) {
+        val schema = JDBCWriteDetails.schemaString(data, url)
+        val createSql = s"CREATE TABLE $table ($schema)"
+        conn.prepareStatement(createSql).executeUpdate()
+      }
+    } finally {
+      conn.close()
+    }
+   
+    val relation = createRelation(sqlContext, parameters)
+    if(doInsertion) relation match {
+      case ir: InsertableRelation => {
+        ir.insert(data, false)
+      }
+      case _ => sys.error(s"JDBC datasource does not support insert")
+    }
+    relation
   }
 }
 
@@ -128,14 +204,16 @@ private[sql] case class JDBCRelation(
     url: String,
     table: String,
     parts: Array[Partition],
-    properties: Properties = new Properties())(@transient val sqlContext: SQLContext)
+    properties: Properties = new Properties(),
+    userDefinedSchema: Option[StructType])(@transient val sqlContext: SQLContext)
   extends BaseRelation
   with PrunedFilteredScan
   with InsertableRelation {
 
   override val needConversion: Boolean = false
 
-  override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
+  override val schema: StructType = 
+    userDefinedSchema.getOrElse { JDBCRDD.resolveTable(url, table, properties) }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val driver: String = DriverRegistry.getDriverClassName(url)
@@ -154,4 +232,13 @@ private[sql] case class JDBCRelation(
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     data.insertIntoJDBC(url, table, overwrite, properties)
   }  
+  
+  override def hashCode(): Int = 
+    37 * (37 * (37 + url.hashCode) + table.hashCode) + schema.hashCode
+
+  override def equals(other: Any): Boolean = other match {
+    case that: JDBCRelation =>
+      (this.url == that.url) && (this.table == that.table) && this.schema.sameType(that.schema)
+    case _ => false
+  }
 }

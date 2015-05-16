@@ -18,11 +18,14 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.sql.DriverManager
+import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.InvalidInputException
+import org.scalatest.BeforeAndAfter
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql._
@@ -37,8 +40,24 @@ import org.apache.spark.util.Utils
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
-class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
+class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach with BeforeAndAfter {
 
+  val url = "jdbc:h2:mem:testdbsource1"
+  var conn: java.sql.Connection = null
+  val properties = new Properties()
+  properties.setProperty("user", "testUser")
+  properties.setProperty("password", "testPass")
+  properties.setProperty("rowId", "false")
+    
+  before {
+    Class.forName("org.h2.Driver")
+    conn = DriverManager.getConnection(url, properties)
+  }
+  
+  after {
+    conn.close();
+  }
+  
   override def afterEach(): Unit = {
     reset()
     Utils.deleteRecursively(tempPath)
@@ -758,4 +777,41 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT p.c1, c2 FROM insertParquet p"),
       (70 to 79).map(i => Row(i, s"str$i")))
   }
+
+  test("create table and insert into a JDBCDataSource table") {
+    def createDF(from: Int, to: Int): DataFrame =
+      createDataFrame((from to to).map(i => Tuple2(i, s"str$i"))).toDF("C1", "C2")
+
+    val propertiesMap = Map(
+      "url"->url,
+      "dbtable"->"INSERTJDBC",
+      "user"->"testUser",
+      "password"->"testPass",
+      "driver"->"org.h2.Driver")
+    val src = "org.apache.spark.sql.jdbc"
+    
+    createDF(0, 9).saveAsTable("INSERTJDBC", src, SaveMode.ErrorIfExists, propertiesMap)
+    checkAnswer(
+      sql("SELECT p.c1, p.c2 FROM INSERTJDBC p WHERE p.c1 > 5"),
+      (6 to 9).map(i => Row(i, s"str$i")))
+     
+    intercept[AnalysisException] {
+      createDF(10, 19).saveAsTable("INSERTJDBC", src, SaveMode.ErrorIfExists, propertiesMap)
+    }
+
+    createDF(10, 19).saveAsTable("INSERTJDBC", src, SaveMode.Append, propertiesMap)
+    checkAnswer(
+      sql("SELECT p.c1, p.c2 FROM INSERTJDBC p WHERE p.c1 > 5"),
+      (6 to 19).map(i => Row(i, s"str$i")))
+
+    createDF(50, 59).saveAsTable("INSERTJDBC", src, SaveMode.Overwrite, propertiesMap)
+    checkAnswer(
+      sql("SELECT p.c1, c2 FROM INSERTJDBC p WHERE p.c1 > 51 AND p.c1 < 55"),
+      (52 to 54).map(i => Row(i, s"str$i")))
+      
+    createDF(60, 69).saveAsTable("INSERTJDBC", src, SaveMode.Ignore, propertiesMap)
+    checkAnswer(
+      sql("SELECT p.c1, c2 FROM INSERTJDBC p"),
+      (50 to 59).map(i => Row(i, s"str$i")))
+  }  
 }
