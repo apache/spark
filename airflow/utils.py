@@ -115,6 +115,15 @@ def initdb():
                 port=10001))
         session.commit()
 
+    conn = session.query(C).filter(C.conn_id == 'sqlite_default').first()
+    if not conn:
+        home = conf.get('core', 'AIRFLOW_HOME')
+        session.add(
+            models.Connection(
+                conn_id='sqlite_default', conn_type='sqlite',
+                host='{}/sqlite_default.db'.format(home)))
+        session.commit()
+
     # Known event types
     KET = models.KnownEventType
     if not session.query(KET).filter(KET.know_event_type == 'Holiday').first():
