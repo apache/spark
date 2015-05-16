@@ -576,7 +576,7 @@ class JsonSuite extends QueryTest {
     dir.delete()
     val path = dir.getCanonicalPath
     sparkContext.parallelize(1 to 100).map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
-    val jsonDF = read.json(path, 0.49)
+    val jsonDF = read.option("samplingRatio", "0.49").json(path)
 
     val analyzed = jsonDF.queryExecution.analyzed
     assert(
@@ -591,7 +591,7 @@ class JsonSuite extends QueryTest {
 
     val schema = StructType(StructField("a", LongType, true) :: Nil)
     val logicalRelation =
-      read.json(path, schema).queryExecution.analyzed.asInstanceOf[LogicalRelation]
+      read.schema(schema).json(path).queryExecution.analyzed.asInstanceOf[LogicalRelation]
     val relationWithSchema = logicalRelation.relation.asInstanceOf[JSONRelation]
     assert(relationWithSchema.path === Some(path))
     assert(relationWithSchema.schema === schema)
@@ -672,7 +672,7 @@ class JsonSuite extends QueryTest {
       StructField("null", StringType, true) ::
       StructField("string", StringType, true) :: Nil)
 
-    val jsonDF1 = read.json(path, schema)
+    val jsonDF1 = read.schema(schema).json(path)
 
     assert(schema === jsonDF1.schema)
 
@@ -689,7 +689,7 @@ class JsonSuite extends QueryTest {
       "this is a simple string.")
     )
 
-    val jsonDF2 = read.json(primitiveFieldAndType, schema)
+    val jsonDF2 = read.schema(schema).json(primitiveFieldAndType)
 
     assert(schema === jsonDF2.schema)
 
@@ -710,7 +710,7 @@ class JsonSuite extends QueryTest {
   test("Applying schemas with MapType") {
     val schemaWithSimpleMap = StructType(
       StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
-    val jsonWithSimpleMap = read.json(mapType1, schemaWithSimpleMap)
+    val jsonWithSimpleMap = read.schema(schemaWithSimpleMap).json(mapType1)
 
     jsonWithSimpleMap.registerTempTable("jsonWithSimpleMap")
 
@@ -738,7 +738,7 @@ class JsonSuite extends QueryTest {
     val schemaWithComplexMap = StructType(
       StructField("map", MapType(StringType, innerStruct, true), false) :: Nil)
 
-    val jsonWithComplexMap = read.json(mapType2, schemaWithComplexMap)
+    val jsonWithComplexMap = read.schema(schemaWithComplexMap).json(mapType2)
 
     jsonWithComplexMap.registerTempTable("jsonWithComplexMap")
 

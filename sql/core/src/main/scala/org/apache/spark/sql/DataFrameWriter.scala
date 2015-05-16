@@ -40,7 +40,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def mode(saveMode: SaveMode): this.type = {
+  def mode(saveMode: SaveMode): DataFrameWriter = {
     this.mode = saveMode
     this
   }
@@ -54,7 +54,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def mode(saveMode: String): this.type = {
+  def mode(saveMode: String): DataFrameWriter = {
     saveMode.toLowerCase match {
       case "overwrite" => SaveMode.Overwrite
       case "append" => SaveMode.Append
@@ -71,7 +71,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def format(source: String): this.type = {
+  def format(source: String): DataFrameWriter = {
     this.source = source
     this
   }
@@ -81,7 +81,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def option(key: String, value: String): this.type = {
+  def option(key: String, value: String): DataFrameWriter = {
     this.extraOptions += (key -> value)
     this
   }
@@ -91,7 +91,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def options(options: scala.collection.Map[String, String]): this.type = {
+  def options(options: scala.collection.Map[String, String]): DataFrameWriter = {
     this.extraOptions ++= options
     this
   }
@@ -101,7 +101,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def options(options: java.util.Map[String, String]): this.type = {
+  def options(options: java.util.Map[String, String]): DataFrameWriter = {
     this.options(scala.collection.JavaConversions.mapAsScalaMap(options))
     this
   }
@@ -113,7 +113,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   @scala.annotation.varargs
-  def partitionBy(colNames: String*): this.type = {
+  def partitionBy(colNames: String*): DataFrameWriter = {
     this.partitioningColumns = Option(colNames)
     this
   }
@@ -181,7 +181,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def parquet(path: String): Unit = save(path)
+  def parquet(path: String): Unit = format("parquet").save(path)
+
+  ///////////////////////////////////////////////////////////////////////////////////////
+  // Builder pattern config options
+  ///////////////////////////////////////////////////////////////////////////////////////
 
   private var source: String = df.sqlContext.conf.defaultDataSourceName
 

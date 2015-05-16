@@ -466,15 +466,13 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
       partitionedTestDF.write
         .format(dataSourceName)
         .mode(SaveMode.Overwrite)
-        .option("dataSchema", dataSchema.json)
         .partitionBy("p1", "p2")
-        .saveAsTable("t")
+        .save(file.getCanonicalPath)
 
-      val df = load(
-        source = dataSourceName,
-        options = Map(
-          "path" -> s"${file.getCanonicalPath}/p1=*/p2=???",
-          "dataSchema" -> dataSchema.json))
+      val df = read
+        .format(dataSourceName)
+        .option("dataSchema", dataSchema.json)
+        .load(s"${file.getCanonicalPath}/p1=*/p2=???")
 
       val expectedPaths = Set(
         s"${file.getCanonicalFile}/p1=1/p2=foo",

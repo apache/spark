@@ -629,7 +629,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   @deprecated("Use read.json()", "1.4.0")
-  def jsonFile(path: String): DataFrame = read.json(path, 1.0)
+  def jsonFile(path: String): DataFrame = {
+    read.json(path)
+  }
 
   /**
    * :: Experimental ::
@@ -640,7 +642,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   @deprecated("Use read.json()", "1.4.0")
-  def jsonFile(path: String, schema: StructType): DataFrame = read.json(path, schema)
+  def jsonFile(path: String, schema: StructType): DataFrame = {
+    read.schema(schema).json(path)
+  }
 
   /**
    * :: Experimental ::
@@ -648,7 +652,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   @deprecated("Use read.json()", "1.4.0")
-  def jsonFile(path: String, samplingRatio: Double): DataFrame = read.json(path, samplingRatio)
+  def jsonFile(path: String, samplingRatio: Double): DataFrame = {
+    read.option("samplingRatio", samplingRatio.toString).json(path)
+  }
 
   /**
    * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
@@ -659,7 +665,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   @deprecated("Use read.json()", "1.4.0")
-  def jsonRDD(json: RDD[String]): DataFrame = jsonRDD(json, 1.0)
+  def jsonRDD(json: RDD[String]): DataFrame = read.json(json)
 
   /**
    * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
@@ -670,7 +676,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   @deprecated("Use read.json()", "1.4.0")
-  def jsonRDD(json: JavaRDD[String]): DataFrame = jsonRDD(json.rdd, 1.0)
+  def jsonRDD(json: JavaRDD[String]): DataFrame = read.json(json)
 
   /**
    * :: Experimental ::
@@ -682,7 +688,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
-    read.json(json, schema)
+    read.schema(schema).json(json)
   }
 
   /**
@@ -695,7 +701,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
-    read.json(json, schema)
+    read.schema(schema).json(json)
   }
 
   /**
@@ -708,7 +714,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
-    read.json(json, samplingRatio)
+    read.option("samplingRatio", samplingRatio.toString).json(json)
   }
 
   /**
@@ -721,7 +727,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
-    jsonRDD(json.rdd, samplingRatio)
+    read.option("samplingRatio", samplingRatio.toString).json(json)
   }
 
   /**
@@ -734,8 +740,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def load(path: String): DataFrame = {
-    val dataSourceName = conf.defaultDataSourceName
-    load(path, dataSourceName)
+    read.load(path)
   }
 
   /**
@@ -747,7 +752,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def load(path: String, source: String): DataFrame = {
-    load(source, Map("path" -> path))
+    read.format(source).load(path)
   }
 
   /**
@@ -760,7 +765,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def load(source: String, options: java.util.Map[String, String]): DataFrame = {
-    load(source, options.toMap)
+    read.options(options).format(source).load()
   }
 
   /**
@@ -773,8 +778,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def load(source: String, options: Map[String, String]): DataFrame = {
-    val resolved = ResolvedDataSource(this, None, Array.empty[String], source, options)
-    DataFrame(this, LogicalRelation(resolved.relation))
+    read.options(options).format(source).load()
   }
 
   /**
@@ -790,24 +794,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       source: String,
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
-    load(source, schema, options.toMap)
-  }
-
-  /**
-   * :: Experimental ::
-   * (Java-specific) Returns the dataset specified by the given data source and
-   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
-   *
-   * @group genericdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def load(
-      source: String,
-      schema: StructType,
-      partitionColumns: Array[String],
-      options: java.util.Map[String, String]): DataFrame = {
-    load(source, schema, partitionColumns, options.toMap)
+    read.format(source).schema(schema).options(options).load()
   }
 
   /**
@@ -822,25 +809,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val resolved = ResolvedDataSource(this, Some(schema), Array.empty[String], source, options)
-    DataFrame(this, LogicalRelation(resolved.relation))
-  }
-
-  /**
-   * :: Experimental ::
-   * (Scala-specific) Returns the dataset specified by the given data source and
-   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
-   * @group genericdata
-   * @since 1.3.0
-   */
-  @Experimental
-  def load(
-      source: String,
-      schema: StructType,
-      partitionColumns: Array[String],
-      options: Map[String, String]): DataFrame = {
-    val resolved = ResolvedDataSource(this, Some(schema), partitionColumns, source, options)
-    DataFrame(this, LogicalRelation(resolved.relation))
+    read.format(source).schema(schema).options(options).load()
   }
 
   /**
