@@ -463,7 +463,7 @@ private[spark] object BLAS extends Serializable with Logging {
   def gemv(
       alpha: Double,
       A: Matrix,
-      x: DenseVector,
+      x: Vector,
       beta: Double,
       y: DenseVector): Unit = {
     require(A.numCols == x.size,
@@ -473,13 +473,16 @@ private[spark] object BLAS extends Serializable with Logging {
     if (alpha == 0.0) {
       logDebug("gemv: alpha is equal to 0. Returning y.")
     } else {
-      A match {
-        case sparse: SparseMatrix =>
-          gemv(alpha, sparse, x, beta, y)
-        case dense: DenseMatrix =>
-          gemv(alpha, dense, x, beta, y)
+      (A, x) match {
+        case (sparse: SparseMatrix, dx: DenseVector) =>
+          gemv(alpha, sparse, dx, beta, y)
+        case (dense: DenseMatrix, dx: DenseVector) =>
+          gemv(alpha, dense, dx, beta, y)
+        case (dense: DenseMatrix, sx: SparseVector) =>
+          gemv(alpha, dense, sx, beta, y)
         case _ =>
-          throw new IllegalArgumentException(s"gemv doesn't support matrix type ${A.getClass}.")
+          throw new IllegalArgumentException(s"gemv doesn't support running on matrix type " +
+            s"${A.getClass} and vector type ${x.getClass}.")
       }
     }
   }
@@ -499,6 +502,55 @@ private[spark] object BLAS extends Serializable with Logging {
     val nA = if (!A.isTransposed) A.numCols else A.numRows
     nativeBLAS.dgemv(tStrA, mA, nA, alpha, A.values, mA, x.values, 1, beta,
       y.values, 1)
+  }
+ 
+  /**
+   * y := alpha * A * x + beta * y
+   * For `DenseMatrix` A and SparseVector x.
+   */
+  private def gemv(
+      alpha: Double,
+      A: DenseMatrix,
+      x: SparseVector,
+      beta: Double,
+      y: DenseVector): Unit =  {
+    val mA: Int = A.numRows
+    val nA: Int = A.numCols
+
+    val Avals = A.values
+    var colCounterForA = 0
+
+    var xIndices = x.indices
+    var xNnz = xIndices.size
+    var xValues = x.values
+
+    scal(beta, y)
+
+    if (!A.isTransposed) {
+      var rowCounterForA = 0
+      while (rowCounterForA < mA) {
+        var sum = 0.0
+        var k = 0
+        while (k < xNnz) {
+          sum += xValues(k) * Avals(xIndices(k) * mA + rowCounterForA)
+          k += 1
+        }
+        y.values(rowCounterForA) += sum * alpha
+        rowCounterForA += 1
+      }
+    } else {
+      var rowCounterForA = 0
+      while (rowCounterForA < mA) {
+        var sum = 0.0
+        var k = 0
+        while (k < xNnz) {
+          sum += xValues(k) * Avals(xIndices(k) + rowCounterForA * nA)
+          k += 1
+        }
+        y.values(rowCounterForA) += sum * alpha
+        rowCounterForA += 1
+      }
+    }
   }
 
   /**
