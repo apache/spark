@@ -22,9 +22,13 @@ import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.util.Utils
 import org.scalatest.FunSuite
 
+/**
+ * A simple set of tests that call the methods of a hive ClientInterface, loading different version 
+ * of hive from maven central.  These tests are simple in that they are mostly just testing to make 
+ * sure that reflective calls are not throwing NoSuchMethod error, but the actually functionallity 
+ * is not fully tested.
+ */
 class VersionsSuite extends FunSuite with Logging {
-  val testType = "derby"
-
   private def buildConf() = {
     lazy val warehousePath = Utils.createTempDir()
     lazy val metastorePath = Utils.createTempDir()
@@ -50,6 +54,14 @@ class VersionsSuite extends FunSuite with Logging {
     causes
   }
 
+  private val emptyDir = Utils.createTempDir().getCanonicalPath
+
+  private def partSpec = {
+    val hashMap = new java.util.LinkedHashMap[String, String]
+    hashMap.put("key", "1")
+    hashMap
+  }
+
   // Its actually pretty easy to mess things up and have all of your tests "pass" by accidentally
   // connecting to an auto-populated, in-process metastore.  Let's make sure we are getting the
   // versions right by forcing a known compatibility failure.
@@ -66,10 +78,9 @@ class VersionsSuite extends FunSuite with Logging {
   private var client: ClientInterface = null
 
   versions.foreach { version =>
-    test(s"$version: listTables") {
+    test(s"$version: create client") {
       client = null
       client = IsolatedClientLoader.forVersion(version, buildConf()).client
-      client.listTables("default")
     }
 
     test(s"$version: createDatabase") {
@@ -100,6 +111,65 @@ class VersionsSuite extends FunSuite with Logging {
 
     test(s"$version: getTable") {
       client.getTable("default", "src")
+    }
+
+    test(s"$version: listTables") {
+      assert(client.listTables("default") === Seq("src"))
+    }
+
+    test(s"$version: currentDatabase") {
+      assert(client.currentDatabase === "default")
+    }
+
+    test(s"$version: getDatabase") {
+      client.getDatabase("default")
+    }
+
+    test(s"$version: alterTable") {
+      client.alterTable(client.getTable("default", "src"))
+    }
+
+    test(s"$version: set command") {
+      client.runSqlHive("SET spark.sql.test.key=1")
+    }
+
+    test(s"$version: create partitioned table DDL") {
+      client.runSqlHive("CREATE TABLE src_part (value INT) PARTITIONED BY (key INT)")
+      client.runSqlHive("ALTER TABLE src_part ADD PARTITION (key = '1')")
+    }
+
+    test(s"$version: getPartitions") {
+      client.getAllPartitions(client.getTable("default", "src_part"))
+    }
+
+    test(s"$version: loadPartition") {
+      client.loadPartition(
+        emptyDir,
+        "default.src_part",
+        partSpec,
+        false,
+        false,
+        false,
+        false)
+    }
+
+    test(s"$version: loadTable") {
+      client.loadTable(
+        emptyDir,
+        "src",
+        false,
+        false)
+    }
+
+    test(s"$version: loadDynamicPartitions") {
+      client.loadDynamicPartitions(
+        emptyDir,
+        "default.src_part",
+        partSpec,
+        false,
+        1,
+        false,
+        false)
     }
   }
 }

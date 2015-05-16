@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
@@ -29,7 +30,7 @@ import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
 import org.apache.spark.sql.types._
 
 /** A SQL Dialect for testing purpose, and it can not be nested type */
-class MyDialect extends DefaultDialect
+class MyDialect extends DefaultParserDialect
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
@@ -93,7 +94,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       newContext.sql("SELECT 1")
     }
     // test if the dialect set back to DefaultSQLDialect
-    assert(newContext.getSQLDialect().getClass === classOf[DefaultDialect])
+    assert(newContext.getSQLDialect().getClass === classOf[DefaultParserDialect])
   }
 
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
@@ -104,7 +105,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("grouping on nested fields") {
-    jsonRDD(sparkContext.parallelize("""{"nested": {"attribute": 1}, "value": 2}""" :: Nil))
+    read.json(sparkContext.parallelize("""{"nested": {"attribute": 1}, "value": 2}""" :: Nil))
      .registerTempTable("rows")
 
     checkAnswer(
@@ -118,6 +119,16 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
           |group by attribute
         """.stripMargin),
       Row(1, 1) :: Nil)
+  }
+
+  test("SPARK-6201 IN type conversion") {
+    read.json(
+      sparkContext.parallelize(Seq("{\"a\": \"1\"}}", "{\"a\": \"2\"}}", "{\"a\": \"3\"}}")))
+      .registerTempTable("d")
+
+    checkAnswer(
+      sql("select * from d where d.a in (1,2)"),
+      Seq(Row("1"), Row("2")))
   }
 
   test("SPARK-3176 Added Parser of SQL ABS()") {
@@ -287,6 +298,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-3173 Timestamp support in the parser") {
+    checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.0'"),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00")))
+
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time=CAST('1969-12-31 16:00:00.001' AS TIMESTAMP)"),
       Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
@@ -862,6 +877,16 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     conf.clear()
   }
 
+  test("SET commands with illegal or inappropriate argument") {
+    conf.clear()
+    // Set negative mapred.reduce.tasks for automatically determing
+    // the number of reducers is not supported
+    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
+    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-01"))
+    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-2"))
+    conf.clear()
+  }
+
   test("apply schema") {
     val schema1 = StructType(
       StructField("f1", IntegerType, false) ::
@@ -1175,7 +1200,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("SPARK-3483 Special chars in column names") {
     val data = sparkContext.parallelize(
       Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
-    jsonRDD(data).registerTempTable("records")
+    read.json(data).registerTempTable("records")
     sql("SELECT `key?number1`, `key.number2` FROM records")
   }
 
@@ -1216,11 +1241,11 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-4322 Grouping field with struct field as sub expression") {
-    jsonRDD(sparkContext.makeRDD("""{"a": {"b": [{"c": 1}]}}""" :: Nil)).registerTempTable("data")
+    read.json(sparkContext.makeRDD("""{"a": {"b": [{"c": 1}]}}""" :: Nil)).registerTempTable("data")
     checkAnswer(sql("SELECT a.b[0].c FROM data GROUP BY a.b[0].c"), Row(1))
     dropTempTable("data")
 
-    jsonRDD(sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
+    read.json(sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
     checkAnswer(sql("SELECT a.b + 1 FROM data GROUP BY a.b + 1"), Row(2))
     dropTempTable("data")
   }
@@ -1258,8 +1283,17 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
   }
 
+  test("SPARK-4699 case sensitivity SQL query") {
+    setConf(SQLConf.CASE_SENSITIVE, "false")
+    val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
+    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
+    rdd.toDF().registerTempTable("testTable1")
+    checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
+    setConf(SQLConf.CASE_SENSITIVE, "true")
+  }
+
   test("SPARK-6145: ORDER BY test for nested fields") {
-    jsonRDD(sparkContext.makeRDD("""{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""" :: Nil))
+    read.json(sparkContext.makeRDD("""{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""" :: Nil))
       .registerTempTable("nestedOrder")
 
     checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY a.b"), Row(1))
@@ -1271,14 +1305,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-6145: special cases") {
-    jsonRDD(sparkContext.makeRDD(
+    read.json(sparkContext.makeRDD(
       """{"a": {"b": [1]}, "b": [{"a": 1}], "c0": {"a": 1}}""" :: Nil)).registerTempTable("t")
     checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY c0.a"), Row(1))
     checkAnswer(sql("SELECT b[0].a FROM t ORDER BY c0.a"), Row(1))
   }
 
   test("SPARK-6898: complete support for special chars in column names") {
-    jsonRDD(sparkContext.makeRDD(
+    read.json(sparkContext.makeRDD(
       """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))
       .registerTempTable("t")
 

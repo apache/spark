@@ -371,6 +371,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       throw new SparkException("An application name must be set in your configuration")
     }
 
+    // System property spark.yarn.app.id must be set if user code ran by AM on a YARN cluster
+    // yarn-standalone is deprecated, but still supported
+    if ((master == "yarn-cluster" || master == "yarn-standalone") &&
+        !_conf.contains("spark.yarn.app.id")) {
+      throw new SparkException("Detected yarn-cluster mode, but isn't running on a cluster. " +
+        "Deployment to YARN is not supported directly by SparkContext. Please use spark-submit.")
+    }
+
     if (_conf.getBoolean("spark.logConf", false)) {
       logInfo("Spark configuration:\n" + _conf.toDebugString)
     }
@@ -407,14 +415,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
 
+    // "_jobProgressListener" should be set up before creating SparkEnv because when creating
+    // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
+    _jobProgressListener = new JobProgressListener(_conf)
+    listenerBus.addListener(jobProgressListener)
+
     // Create the Spark execution environment (cache, map output tracker, etc)
     _env = createSparkEnv(_conf, isLocal, listenerBus)
     SparkEnv.set(_env)
 
     _metadataCleaner = new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, _conf)
-
-    _jobProgressListener = new JobProgressListener(_conf)
-    listenerBus.addListener(jobProgressListener)
 
     _statusTracker = new SparkStatusTracker(this)
 

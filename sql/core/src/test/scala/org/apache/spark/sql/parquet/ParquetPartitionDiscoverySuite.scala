@@ -21,7 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.parquet.ParquetRelation2._
+import org.apache.spark.sql.sources.PartitioningUtils._
+import org.apache.spark.sql.sources.{Partition, PartitionSpec}
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, Row, SQLContext}
@@ -38,7 +39,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
   import sqlContext._
   import sqlContext.implicits._
 
-  val defaultPartitionName = "__NULL__"
+  val defaultPartitionName = "__HIVE_DEFAULT_PARTITION__"
 
   test("column type inference") {
     def check(raw: String, literal: Literal): Unit = {
@@ -154,7 +155,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      parquetFile(base.getCanonicalPath).registerTempTable("t")
+      read.parquet(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -201,7 +202,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      parquetFile(base.getCanonicalPath).registerTempTable("t")
+      read.parquet(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -249,12 +250,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      val parquetRelation = load(
-        "org.apache.spark.sql.parquet",
-        Map(
-          "path" -> base.getCanonicalPath,
-          ParquetRelation2.DEFAULT_PARTITION_NAME -> defaultPartitionName))
-
+      val parquetRelation = read.format("org.apache.spark.sql.parquet").load(base.getCanonicalPath)
       parquetRelation.registerTempTable("t")
 
       withTempTable("t") {
@@ -294,12 +290,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      val parquetRelation = load(
-        "org.apache.spark.sql.parquet",
-        Map(
-          "path" -> base.getCanonicalPath,
-          ParquetRelation2.DEFAULT_PARTITION_NAME -> defaultPartitionName))
-
+      val parquetRelation = read.format("org.apache.spark.sql.parquet").load(base.getCanonicalPath)
       parquetRelation.registerTempTable("t")
 
       withTempTable("t") {
@@ -331,7 +322,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         (1 to 10).map(i => (i, i.toString)).toDF("intField", "stringField"),
         makePartitionDir(base, defaultPartitionName, "pi" -> 2))
 
-      load(base.getCanonicalPath, "org.apache.spark.sql.parquet").registerTempTable("t")
+      read.format("org.apache.spark.sql.parquet").load(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
