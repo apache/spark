@@ -51,8 +51,8 @@
 }
 
 #dag-viz-graph svg.job g.cluster.skipped rect {
-  fill: #AAA;
-  stroke: #888;
+  fill: #D6D6D6;
+  stroke: #B7B7B7;
   stroke-width: 1px;
 }
 
@@ -63,8 +63,7 @@
 }
 
 #dag-viz-graph svg.job g.cluster.stage.skipped rect {
-  fill: #DDD;
-  stroke: #AAA;
+  stroke: #C4C4C4;
   stroke-width: 1px;
 }
 
