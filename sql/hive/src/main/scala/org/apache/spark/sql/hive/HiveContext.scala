@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.{BufferedReader, InputStreamReader, PrintStream}
 import java.sql.Timestamp
+import java.util.concurrent.atomic.AtomicReference
 
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.spark.sql.catalyst.Dialect
@@ -482,5 +483,45 @@ private object HiveContext {
     case (s: String, StringType) => "\"" + s + "\""
     case (decimal, DecimalType()) => decimal.toString
     case (other, tpe) if primitiveTypes contains tpe => other.toString
+  }
+
+
+  private val INSTANTIATION_LOCK = new Object()
+
+  /**
+   * Reference to the last created SQLContext.
+   */
+  @transient private val lastInstantiatedContext = new AtomicReference[HiveContext]()
+
+  /**
+   * Get the singleton SQLContext if it exists or create a new one using the given configuration.
+   * This function can be used to create a singleton SQLContext object that can be shared across
+   * the JVM.
+   */
+  def getOrCreate(sparkContext: SparkContext): HiveContext = {
+    INSTANTIATION_LOCK.synchronized {
+      if (lastInstantiatedContext.get() == null) {
+        new SQLContext(sparkContext)
+      }
+    }
+    lastInstantiatedContext.get()
+  }
+
+  private[hive] def getLastInstantiatedContext(): Option[HiveContext] = {
+    INSTANTIATION_LOCK.synchronized {
+      Option(lastInstantiatedContext.get())
+    }
+  }
+
+  private[hive] def clearLastInstantiatedContext(): Unit = {
+    INSTANTIATION_LOCK.synchronized {
+      lastInstantiatedContext.set(null)
+    }
+  }
+
+  private[hive] def setLastInstantiatedContext(hiveContext: HiveContext): Unit = {
+    INSTANTIATION_LOCK.synchronized {
+      lastInstantiatedContext.set(hiveContext)
+    }
   }
 }
