@@ -21,17 +21,13 @@ import scala.util.control.NonFatal
 
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
-import java.net.{NetworkInterface, Socket, URL}
+import java.net.{Socket, URL}
 import java.util.concurrent.atomic.AtomicReference
-
-import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.client.api.YarnClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
@@ -266,26 +262,25 @@ private[spark] class ApplicationMaster(
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
-    if (isClusterMode) {
-      userClassThread = startUserApplication()
-      // This a bit hacky, but we need to wait until the spark.driver.port property has
-      // been set by the Thread executing the user class.
-      val sc = waitForSparkContextInitialized()
+    userClassThread = startUserApplication()
 
-      // If there is no SparkContext at this point, just fail the app.
-      if (sc == null) {
-        finish(FinalApplicationStatus.FAILED,
-          ApplicationMaster.EXIT_SC_NOT_INITED,
-          "Timed out waiting for SparkContext.")
-      } else {
-        rpcEnv = sc.env.rpcEnv
-        runAMEndpoint(
-          sc.getConf.get("spark.driver.host"),
-          sc.getConf.get("spark.driver.port"),
-          isClusterMode = true)
-        registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
-        userClassThread.join()
-      }
+    // This a bit hacky, but we need to wait until the spark.driver.port property has
+    // been set by the Thread executing the user class.
+    val sc = waitForSparkContextInitialized()
+
+    // If there is no SparkContext at this point, just fail the app.
+    if (sc == null) {
+      finish(FinalApplicationStatus.FAILED,
+        ApplicationMaster.EXIT_SC_NOT_INITED,
+        "Timed out waiting for SparkContext.")
+    } else {
+      rpcEnv = sc.env.rpcEnv
+      runAMEndpoint(
+        sc.getConf.get("spark.driver.host"),
+        sc.getConf.get("spark.driver.port"),
+        isClusterMode = true)
+      registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
+      userClassThread.join()
     }
   }
 

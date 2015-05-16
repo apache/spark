@@ -21,11 +21,9 @@ import java.net.NetworkInterface
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.NodeState
 import org.apache.hadoop.yarn.client.api.YarnClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil

@@ -34,7 +34,6 @@ import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
 
-import com.google.common.annotations.VisibleForTesting
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
@@ -226,7 +225,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
-  private var _logUrls: Option[Predef.Map[String, String]] = None
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -315,15 +313,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def dagScheduler: DAGScheduler = _dagScheduler
   private[spark] def dagScheduler_=(ds: DAGScheduler): Unit = {
     _dagScheduler = ds
-  }
-
-  @VisibleForTesting
-  private[spark] def logUrls: Option[Predef.Map[String, String]] = _logUrls
-
-  @VisibleForTesting
-  private[spark] def logUrls_=(logUrlsMap: Option[Predef.Map[String, String]]): Unit = {
-    _logUrls = logUrlsMap
-    logInfo(s"Setting log urls to ${_logUrls.get.mkString(" | ")}")
   }
 
   def applicationId: String = _applicationId
