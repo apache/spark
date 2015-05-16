@@ -27,6 +27,66 @@ import org.apache.spark.sql.types._
 class ColumnExpressionSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
+  test("single explode") {
+    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    checkAnswer(
+      df.select(explode('intList)),
+      Row(1) :: Row(2) :: Row(3) :: Nil)
+  }
+
+  test("explode and other columns") {
+    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+
+    checkAnswer(
+      df.select($"a", explode('intList)),
+      Row(1, 1) ::
+      Row(1, 2) ::
+      Row(1, 3) :: Nil)
+
+    checkAnswer(
+      df.select($"*", explode('intList)),
+      Row(1, Seq(1,2,3), 1) ::
+      Row(1, Seq(1,2,3), 2) ::
+      Row(1, Seq(1,2,3), 3) :: Nil)
+  }
+
+  test("aliased explode") {
+    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+
+    checkAnswer(
+      df.select(explode('intList).as('int)).select('int),
+      Row(1) :: Row(2) :: Row(3) :: Nil)
+
+    checkAnswer(
+      df.select(explode('intList).as('int)).select(sum('int)),
+      Row(6) :: Nil)
+  }
+
+  test("explode on map") {
+    val df = Seq((1, Map("a" -> "b"))).toDF("a", "map")
+
+    checkAnswer(
+      df.select(explode('map)),
+      Row("a", "b"))
+  }
+
+  test("explode on map with aliases") {
+    val df = Seq((1, Map("a" -> "b"))).toDF("a", "map")
+
+    checkAnswer(
+      df.select(explode('map).as("key1" :: "value1" :: Nil)).select("key1", "value1"),
+      Row("a", "b"))
+  }
+
+  test("self join explode") {
+    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    val exploded = df.select(explode('intList).as('i))
+
+    checkAnswer(
+      exploded.join(exploded, exploded("i") === exploded("i")).agg(count("*")),
+      Row(3) :: Nil)
+  }
+
   test("collect on column produced by a binary operator") {
     val df = Seq((1, 2, 3)).toDF("a", "b", "c")
     checkAnswer(df.select(df("a") + df("b")), Seq(Row(3)))

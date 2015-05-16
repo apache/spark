@@ -324,9 +324,6 @@ private[worker] class Worker(
         map(e => new ExecutorDescription(e.appId, e.execId, e.cores, e.state))
       sender ! WorkerSchedulerStateResponse(workerId, execs.toList, drivers.keys.toSeq)
 
-    case Heartbeat =>
-      logInfo(s"Received heartbeat from driver ${sender.path}")
-
     case RegisterWorkerFailed(message) =>
       if (!registered) {
         logError("Worker registration failed: " + message)

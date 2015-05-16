@@ -77,14 +77,17 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
 
       <div class="row-fluid">
         <div class="span12">
-          <h4> Data Distribution on {rddStorageInfo.dataDistribution.size} Executors </h4>
+          <h4>
+            Data Distribution on {rddStorageInfo.dataDistribution.map(_.size).getOrElse(0)}
+            Executors
+          </h4>
           {workerTable}
         </div>
       </div>
 
       <div class="row-fluid">
         <div class="span12">
-          <h4> {rddStorageInfo.partitions.size} Partitions </h4>
+          <h4> {rddStorageInfo.partitions.map(_.size).getOrElse(0)} Partitions </h4>
           {blockTable}
         </div>
       </div>;

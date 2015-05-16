@@ -88,7 +88,7 @@ abstract class Predictor[
     // This handles a few items such as schema validation.
     // Developers only need to implement train().
     transformSchema(dataset.schema, logging = true)
-    copyValues(train(dataset))
+    copyValues(train(dataset).setParent(this))
   }
 
   override def copy(extra: ParamMap): Learner = {

@@ -41,27 +41,23 @@ import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{Row, SQLConf, SQLContext}
 import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
 
-private[sql] class DefaultSource extends FSBasedRelationProvider {
+private[sql] class DefaultSource extends HadoopFsRelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
-      parameters: Map[String, String]): FSBasedRelation = {
+      parameters: Map[String, String]): HadoopFsRelation = {
     val partitionSpec = partitionColumns.map(PartitionSpec(_, Seq.empty))
-    new FSBasedParquetRelation(paths, schema, partitionSpec, parameters)(sqlContext)
+    new ParquetRelation2(paths, schema, partitionSpec, parameters)(sqlContext)
   }
 }
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
-private[sql] class ParquetOutputWriter extends OutputWriter {
-  private var recordWriter: RecordWriter[Void, Row] = _
-  private var taskAttemptContext: TaskAttemptContext = _
+private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext)
+  extends OutputWriter {
 
-  override def init(
-      path: String,
-      dataSchema: StructType,
-      context: TaskAttemptContext): Unit = {
+  private val recordWriter: RecordWriter[Void, Row] = {
     val conf = context.getConfiguration
     val outputFormat = {
       // When appending new Parquet files to an existing Parquet file directory, to avoid
@@ -77,7 +73,7 @@ private[sql] class ParquetOutputWriter extends OutputWriter {
         if (fs.exists(outputPath)) {
           // Pattern used to match task ID in part file names, e.g.:
           //
-          //   part-r-00001.gz.part
+          //   part-r-00001.gz.parquet
           //          ^~~~~
           val partFilePattern = """part-.-(\d{1,}).*""".r
 
@@ -86,9 +82,8 @@ private[sql] class ParquetOutputWriter extends OutputWriter {
             case name if name.startsWith("_") => 0
             case name if name.startsWith(".") => 0
             case name => sys.error(
-              s"""Trying to write Parquet files to directory $outputPath,
-                 |but found items with illegal name "$name"
-               """.stripMargin.replace('\n', ' ').trim)
+              s"Trying to write Parquet files to directory $outputPath, " +
+                s"but found items with illegal name '$name'.")
           }.reduceOption(_ max _).getOrElse(0)
         } else {
           0
@@ -111,37 +106,39 @@ private[sql] class ParquetOutputWriter extends OutputWriter {
       }
     }
 
-    recordWriter = outputFormat.getRecordWriter(context)
-    taskAttemptContext = context
+    outputFormat.getRecordWriter(context)
   }
 
   override def write(row: Row): Unit = recordWriter.write(null, row)
 
-  override def close(): Unit = recordWriter.close(taskAttemptContext)
+  override def close(): Unit = recordWriter.close(context)
 }
 
-private[sql] class FSBasedParquetRelation(
-    paths: Array[String],
+private[sql] class ParquetRelation2(
+    override val paths: Array[String],
     private val maybeDataSchema: Option[StructType],
     private val maybePartitionSpec: Option[PartitionSpec],
     parameters: Map[String, String])(
     val sqlContext: SQLContext)
-  extends FSBasedRelation(paths, maybePartitionSpec)
+  extends HadoopFsRelation(maybePartitionSpec)
   with Logging {
 
   // Should we merge schemas from all Parquet part-files?
   private val shouldMergeSchemas =
-    parameters.getOrElse(FSBasedParquetRelation.MERGE_SCHEMA, "true").toBoolean
+    parameters.getOrElse(ParquetRelation2.MERGE_SCHEMA, "true").toBoolean
 
   private val maybeMetastoreSchema = parameters
-    .get(FSBasedParquetRelation.METASTORE_SCHEMA)
+    .get(ParquetRelation2.METASTORE_SCHEMA)
     .map(DataType.fromJson(_).asInstanceOf[StructType])
 
-  private val metadataCache = new MetadataCache
-  metadataCache.refresh()
+  private lazy val metadataCache: MetadataCache = {
+    val meta = new MetadataCache
+    meta.refresh()
+    meta
+  }
 
   override def equals(other: scala.Any): Boolean = other match {
-    case that: FSBasedParquetRelation =>
+    case that: ParquetRelation2 =>
       val schemaEquality = if (shouldMergeSchemas) {
         this.shouldMergeSchemas == that.shouldMergeSchemas
       } else {
@@ -175,8 +172,6 @@ private[sql] class FSBasedParquetRelation(
     }
   }
 
-  override def outputWriterClass: Class[_ <: OutputWriter] = classOf[ParquetOutputWriter]
-
   override def dataSchema: StructType = metadataCache.dataSchema
 
   override private[sql] def refresh(): Unit = {
@@ -187,9 +182,12 @@ private[sql] class FSBasedParquetRelation(
   // Parquet data source always uses Catalyst internal representations.
   override val needConversion: Boolean = false
 
-  override val sizeInBytes = metadataCache.dataStatuses.map(_.getLen).sum
+  override def sizeInBytes: Long = metadataCache.dataStatuses.map(_.getLen).sum
 
-  override def prepareForWrite(job: Job): Unit = {
+  override def userDefinedPartitionColumns: Option[StructType] =
+    maybePartitionSpec.map(_.partitionColumns)
+
+  override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     val conf = ContextUtil.getConfiguration(job)
 
     val committerClass =
@@ -224,6 +222,13 @@ private[sql] class FSBasedParquetRelation(
         .getOrElse(
           sqlContext.conf.parquetCompressionCodec.toUpperCase,
           CompressionCodecName.UNCOMPRESSED).name())
+
+    new OutputWriterFactory {
+      override def newInstance(
+          path: String, dataSchema: StructType, context: TaskAttemptContext): OutputWriter = {
+        new ParquetOutputWriter(path, context)
+      }
+    }
   }
 
   override def buildScan(
@@ -231,7 +236,7 @@ private[sql] class FSBasedParquetRelation(
       filters: Array[Filter],
       inputPaths: Array[String]): RDD[Row] = {
 
-    val job = Job.getInstance(SparkHadoopUtil.get.conf)
+    val job = new Job(SparkHadoopUtil.get.conf)
     val conf = ContextUtil.getConfiguration(job)
 
     ParquetInputFormat.setReadSupportClass(job, classOf[RowReadSupport])
@@ -385,7 +390,7 @@ private[sql] class FSBasedParquetRelation(
         // case insensitivity issue and possible schema mismatch (probably caused by schema
         // evolution).
         maybeMetastoreSchema
-          .map(FSBasedParquetRelation.mergeMetastoreParquetSchema(_, dataSchema0))
+          .map(ParquetRelation2.mergeMetastoreParquetSchema(_, dataSchema0))
           .getOrElse(dataSchema0)
       }
     }
@@ -439,12 +444,12 @@ private[sql] class FSBasedParquetRelation(
         "No schema defined, " +
           s"and no Parquet data file or summary file found under ${paths.mkString(", ")}.")
 
-      FSBasedParquetRelation.readSchema(filesToTouch.map(footers.apply), sqlContext)
+      ParquetRelation2.readSchema(filesToTouch.map(footers.apply), sqlContext)
     }
   }
 }
 
-private[sql] object FSBasedParquetRelation extends Logging {
+private[sql] object ParquetRelation2 extends Logging {
   // Whether we should merge schemas collected from all Parquet part-files.
   private[sql] val MERGE_SCHEMA = "mergeSchema"
 

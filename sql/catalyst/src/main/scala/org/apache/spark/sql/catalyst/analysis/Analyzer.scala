@@ -73,7 +73,6 @@ class Analyzer(
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
       ResolveGenerate ::
-      ImplicitGenerate ::
       ResolveFunctions ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
@@ -322,6 +321,16 @@ class Analyzer(
           case oldVersion @ Aggregate(_, aggregateExpressions, _)
               if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
             (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
+
+          case oldVersion: Generate
+              if oldVersion.generatedSet.intersect(conflictingAttributes).nonEmpty =>
+            val newOutput = oldVersion.generatorOutput.map(_.newInstance())
+            (oldVersion, oldVersion.copy(generatorOutput = newOutput))
+
+          case oldVersion @ Window(_, windowExpressions, _, child)
+              if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
+                .nonEmpty =>
+            (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
         }.headOption.getOrElse { // Only handle first case, others will be fixed on the next pass.
           sys.error(
             s"""
@@ -516,65 +525,88 @@ class Analyzer(
   }
 
   /**
-   * When a SELECT clause has only a single expression and that expression is a
-   * [[catalyst.expressions.Generator Generator]] we convert the
-   * [[catalyst.plans.logical.Project Project]] to a [[catalyst.plans.logical.Generate Generate]].
-   */
-  object ImplicitGenerate extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case Project(Seq(Alias(g: Generator, name)), child) =>
-        Generate(g, join = false, outer = false,
-          qualifier = None, UnresolvedAttribute(name) :: Nil, child)
-      case Project(Seq(MultiAlias(g: Generator, names)), child) =>
-        Generate(g, join = false, outer = false,
-          qualifier = None, names.map(UnresolvedAttribute(_)), child)
-    }
-  }
-
-  /**
-   * Resolve the Generate, if the output names specified, we will take them, otherwise
-   * we will try to provide the default names, which follow the same rule with Hive.
+   * Rewrites table generating expressions that either need one or more of the following in order
+   * to be resolved:
+   *  - concrete attribute references for their output.
+   *  - to be relocated from a SELECT clause (i.e. from  a [[Project]]) into a [[Generate]]).
+   *
+   * Names for the output [[Attributes]] are extracted from [[Alias]] or [[MultiAlias]] expressions
+   * that wrap the [[Generator]]. If more than one [[Generator]] is found in a Project, an
+   * [[AnalysisException]] is throw.
    */
   object ResolveGenerate extends Rule[LogicalPlan] {
-    // Construct the output attributes for the generator,
-    // The output attribute names can be either specified or
-    // auto generated.
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p: Generate if !p.child.resolved || !p.generator.resolved => p
+      case g: Generate if g.resolved == false =>
+          g.copy(
+            generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
+
+      case p @ Project(projectList, child) =>
+        // Holds the resolved generator, if one exists in the project list.
+        var resolvedGenerator: Generate = null
+
+        val newProjectList = projectList.flatMap {
+          case AliasedGenerator(generator, names) if generator.childrenResolved =>
+            if (resolvedGenerator != null) {
+              failAnalysis(
+                s"Only one generator allowed per select but ${resolvedGenerator.nodeName} and " +
+                s"and ${generator.nodeName} found.")
+            }
+
+            resolvedGenerator =
+              Generate(
+                generator,
+                join = projectList.size > 1, // Only join if there are other expressions in SELECT.
+                outer = false,
+                qualifier = None,
+                generatorOutput = makeGeneratorOutput(generator, names),
+                child)
+
+            resolvedGenerator.generatorOutput
+          case other => other :: Nil
+        }
+
+        if (resolvedGenerator != null) {
+          Project(newProjectList, resolvedGenerator)
+        } else {
+          p
+        }
+    }
+
+    /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
+    private object AliasedGenerator {
+      def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
+        case Alias(g: Generator, name) => Some((g, name :: Nil))
+        case MultiAlias(g: Generator, names) => Some(g, names)
+        case _ => None
+      }
+    }
+
+    /**
+     * Construct the output attributes for a [[Generator]], given a list of names.  If the list of
+     * names is empty names are assigned by ordinal (i.e., _c0, _c1, ...) to match Hive's defaults.
+     */
     private def makeGeneratorOutput(
         generator: Generator,
-        generatorOutput: Seq[Attribute]): Seq[Attribute] = {
+        names: Seq[String]): Seq[Attribute] = {
       val elementTypes = generator.elementTypes
 
-      if (generatorOutput.length == elementTypes.length) {
-        generatorOutput.zip(elementTypes).map {
-          case (a, (t, nullable)) if !a.resolved =>
-            AttributeReference(a.name, t, nullable)()
-          case (a, _) => a
+      if (names.length == elementTypes.length) {
+        names.zip(elementTypes).map {
+          case (name, (t, nullable)) =>
+            AttributeReference(name, t, nullable)()
         }
-      } else if (generatorOutput.length == 0) {
+      } else if (names.isEmpty) {
         elementTypes.zipWithIndex.map {
           // keep the default column names as Hive does _c0, _c1, _cN
           case ((t, nullable), i) => AttributeReference(s"_c$i", t, nullable)()
         }
       } else {
-        throw new AnalysisException(
-          s"""
-             |The number of aliases supplied in the AS clause does not match
-             |the number of columns output by the UDTF expected
-             |${elementTypes.size} aliases but got ${generatorOutput.size}
-           """.stripMargin)
+        failAnalysis(
+          "The number of aliases supplied in the AS clause does not match the number of columns " +
+          s"output by the UDTF expected ${elementTypes.size} aliases but got " +
+          s"${names.mkString(",")} ")
       }
-    }
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case p: Generate if !p.child.resolved || !p.generator.resolved => p
-      case p: Generate if p.resolved == false =>
-        // if the generator output names are not specified, we will use the default ones.
-        Generate(
-          p.generator,
-          join = p.join,
-          outer = p.outer,
-          p.qualifier,
-          makeGeneratorOutput(p.generator, p.generatorOutput), p.child)
     }
   }
 

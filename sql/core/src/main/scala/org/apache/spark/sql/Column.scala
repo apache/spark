@@ -18,12 +18,13 @@
 package org.apache.spark.sql
 
 import scala.language.implicitConversions
+import scala.collection.JavaConversions._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedStar, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.{MultiAlias, UnresolvedAttribute, UnresolvedStar, UnresolvedExtractValue}
 import org.apache.spark.sql.types._
 
 
@@ -346,6 +347,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.4.0
    */
   def when(condition: Column, value: Any):Column = this.expr match {
     case CaseWhen(branches: Seq[Expression]) =>
@@ -374,6 +376,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.4.0
    */
   def otherwise(value: Any):Column = this.expr match {
     case CaseWhen(branches: Seq[Expression]) =>
@@ -724,6 +727,30 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def as(alias: String): Column = Alias(expr, alias)()
+
+  /**
+   * (Scala-specific) Assigns the given aliases to the results of a table generating function.
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select(explode($"myMap").as("key" :: "value" :: Nil))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.4.0
+   */
+  def as(aliases: Seq[String]): Column = MultiAlias(expr, aliases)
+
+  /**
+   * Assigns the given aliases to the results of a table generating function.
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select(explode($"myMap").as("key" :: "value" :: Nil))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.4.0
+   */
+  def as(aliases: Array[String]): Column = MultiAlias(expr, aliases)
 
   /**
    * Gives the column an alias.
