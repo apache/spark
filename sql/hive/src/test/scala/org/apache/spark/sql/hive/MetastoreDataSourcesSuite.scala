@@ -21,20 +21,18 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapred.InvalidInputException
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.metastore.TableType
-import org.apache.hadoop.hive.ql.metadata.Table
-import org.apache.hadoop.mapred.InvalidInputException
-
 import org.apache.spark.sql._
-import org.apache.spark.util.Utils
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.LogicalRelation
+import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
@@ -62,7 +60,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
-      jsonFile(filePath).collect().toSeq)
+      read.json(filePath).collect().toSeq)
   }
 
   test ("persistent JSON table with a user specified schema") {
@@ -79,7 +77,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |)
       """.stripMargin)
 
-    jsonFile(filePath).registerTempTable("expectedJsonTable")
+    read.json(filePath).registerTempTable("expectedJsonTable")
 
     checkAnswer(
       sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM jsonTable"),
@@ -106,7 +104,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     assert(expectedSchema === table("jsonTable").schema)
 
-    jsonFile(filePath).registerTempTable("expectedJsonTable")
+    read.json(filePath).registerTempTable("expectedJsonTable")
 
     checkAnswer(
       sql("SELECT b, `<d>`.`=` FROM jsonTable"),
@@ -125,7 +123,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
-      jsonFile(filePath).collect().toSeq)
+      read.json(filePath).collect().toSeq)
   }
 
   test("drop table") {
@@ -140,7 +138,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
-      jsonFile(filePath).collect().toSeq)
+      read.json(filePath).collect().toSeq)
 
     sql("DROP TABLE jsonTable")
 
@@ -243,7 +241,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |)
       """.stripMargin)
 
-    jsonFile(filePath).registerTempTable("expectedJsonTable")
+    read.json(filePath).registerTempTable("expectedJsonTable")
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
@@ -476,7 +474,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     // Drop table will also delete the data.
     sql("DROP TABLE savedJsonTable")
     intercept[InvalidInputException] {
-      jsonFile(catalog.hiveDefaultTableFilePath("savedJsonTable"))
+      read.json(catalog.hiveDefaultTableFilePath("savedJsonTable"))
     }
 
     // Create an external table by specifying the path.
@@ -493,7 +491,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     // Data should not be deleted after we drop the table.
     sql("DROP TABLE savedJsonTable")
     checkAnswer(
-      jsonFile(tempPath.toString),
+      read.json(tempPath.toString),
       df.collect())
 
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
@@ -528,7 +526,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     // Data should not be deleted.
     sql("DROP TABLE createdJsonTable")
     checkAnswer(
-      jsonFile(tempPath.toString),
+      read.json(tempPath.toString),
       df.collect())
 
     // Try to specify the schema.
@@ -686,16 +684,21 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("SPARK-6655 still support a schema stored in spark.sql.sources.schema") {
     val tableName = "spark6655"
     val schema = StructType(StructField("int", IntegerType, true) :: Nil)
-    // Manually create the metadata in metastore.
-    val tbl = new Table("default", tableName)
-    tbl.setProperty("spark.sql.sources.provider", "json")
-    tbl.setProperty("spark.sql.sources.schema", schema.json)
-    tbl.setProperty("EXTERNAL", "FALSE")
-    tbl.setTableType(TableType.MANAGED_TABLE)
-    tbl.setSerdeParam("path", catalog.hiveDefaultTableFilePath(tableName))
-    catalog.synchronized {
-      catalog.client.createTable(tbl)
-    }
+
+    val hiveTable = HiveTable(
+      specifiedDatabase = Some("default"),
+      name = tableName,
+      schema = Seq.empty,
+      partitionColumns = Seq.empty,
+      properties = Map(
+        "spark.sql.sources.provider" -> "json",
+        "spark.sql.sources.schema" -> schema.json,
+        "EXTERNAL" -> "FALSE"),
+      tableType = ManagedTable,
+      serdeProperties = Map(
+        "path" -> catalog.hiveDefaultTableFilePath(tableName)))
+
+    catalog.client.createTable(hiveTable)
 
     invalidateTable(tableName)
     val actualSchema = table(tableName).schema

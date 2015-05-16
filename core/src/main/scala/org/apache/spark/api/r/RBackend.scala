@@ -18,7 +18,7 @@
 package org.apache.spark.api.r
 
 import java.io.{DataOutputStream, File, FileOutputStream, IOException}
-import java.net.{InetSocketAddress, ServerSocket}
+import java.net.{InetAddress, InetSocketAddress, ServerSocket}
 import java.util.concurrent.TimeUnit
 
 import io.netty.bootstrap.ServerBootstrap
@@ -65,7 +65,7 @@ private[spark] class RBackend {
       }
     })
 
-    channelFuture = bootstrap.bind(new InetSocketAddress(0))
+    channelFuture = bootstrap.bind(new InetSocketAddress("localhost", 0))
     channelFuture.syncUninterruptibly()
     channelFuture.channel().localAddress().asInstanceOf[InetSocketAddress].getPort()
   }
@@ -101,7 +101,7 @@ private[spark] object RBackend extends Logging {
     try {
       // bind to random port
       val boundPort = sparkRBackend.init()
-      val serverSocket = new ServerSocket(0, 1)
+      val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
       val listenPort = serverSocket.getLocalPort()
 
       // tell the R process via temporary file

@@ -130,8 +130,8 @@ private object GBTRegressorSuite {
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
     val newModel = gbt.fit(newData)
     // Use parent, fittingParamMap from newTree since these are not checked anyways.
-    val oldModelAsNew = GBTRegressionModel.fromOld(oldModel, newModel.parent,
-      newModel.fittingParamMap, categoricalFeatures)
+    val oldModelAsNew = GBTRegressionModel.fromOld(
+      oldModel, newModel.parent.asInstanceOf[GBTRegressor], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
   }
 }

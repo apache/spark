@@ -29,10 +29,12 @@ import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 import kafka.admin.AdminUtils
+import kafka.api.Request
+import kafka.common.TopicAndPartition
 import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
 import kafka.serializer.StringEncoder
 import kafka.server.{KafkaConfig, KafkaServer}
-import kafka.utils.ZKStringSerializer
+import kafka.utils.{ZKStringSerializer, ZkUtils}
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.I0Itec.zkclient.ZkClient
 
@@ -227,12 +229,35 @@ private class KafkaTestUtils extends Logging {
     tryAgain(1)
   }
 
-  private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {
+  /** Wait until the leader offset for the given topic/partition equals the specified offset */
+  def waitUntilLeaderOffset(
+      topic: String,
+      partition: Int,
+      offset: Long): Unit = {
     eventually(Time(10000), Time(100)) {
+      val kc = new KafkaCluster(Map("metadata.broker.list" -> brokerAddress))
+      val tp = TopicAndPartition(topic, partition)
+      val llo = kc.getLatestLeaderOffsets(Set(tp)).right.get.apply(tp).offset
       assert(
-        server.apis.metadataCache.containsTopicAndPartition(topic, partition),
-        s"Partition [$topic, $partition] metadata not propagated after timeout"
-      )
+        llo == offset,
+        s"$topic $partition $offset not reached after timeout")
+    }
+  }
+
+  private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {
+    def isPropagated = server.apis.metadataCache.getPartitionInfo(topic, partition) match {
+      case Some(partitionState) =>
+        val leaderAndInSyncReplicas = partitionState.leaderIsrAndControllerEpoch.leaderAndIsr
+
+        ZkUtils.getLeaderForPartition(zkClient, topic, partition).isDefined &&
+          Request.isValidBrokerId(leaderAndInSyncReplicas.leader) &&
+          leaderAndInSyncReplicas.isr.size >= 1
+
+      case _ =>
+        false
+    }
+    eventually(Time(10000), Time(100)) {
+      assert(isPropagated, s"Partition [$topic, $partition] metadata not propagated after timeout")
     }
   }
 

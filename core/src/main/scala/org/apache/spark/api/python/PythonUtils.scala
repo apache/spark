@@ -31,7 +31,7 @@ private[spark] object PythonUtils {
   def sparkPythonPath: String = {
     val pythonPath = new ArrayBuffer[String]
     for (sparkHome <- sys.env.get("SPARK_HOME")) {
-      pythonPath += Seq(sparkHome, "python").mkString(File.separator)
+      pythonPath += Seq(sparkHome, "python", "lib", "pyspark.zip").mkString(File.separator)
       pythonPath += Seq(sparkHome, "python", "lib", "py4j-0.8.2.1-src.zip").mkString(File.separator)
     }
     pythonPath ++= SparkContext.jarOfObject(this)
@@ -52,5 +52,12 @@ private[spark] object PythonUtils {
    */
   def toSeq[T](cols: JList[T]): Seq[T] = {
     cols.toList.toSeq
+  }
+
+  /**
+   * Convert java map of K, V into Map of K, V (for calling API with varargs)
+   */
+  def toScalaMap[K, V](jm: java.util.Map[K, V]): Map[K, V] = {
+    jm.toMap
   }
 }

@@ -25,9 +25,9 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Row, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources._
-import org.apache.spark.util.Utils
 
 private[sql] object JDBCRDD extends Logging {
   /**
@@ -109,7 +109,7 @@ private[sql] object JDBCRDD extends Logging {
         val fields = new Array[StructField](ncols)
         var i = 0
         while (i < ncols) {
-          val columnName = rsmd.getColumnName(i + 1)
+          val columnName = rsmd.getColumnLabel(i + 1)
           val dataType = rsmd.getColumnType(i + 1)
           val typeName = rsmd.getColumnTypeName(i + 1)
           val fieldSize = rsmd.getPrecision(i + 1)
@@ -362,7 +362,13 @@ private[sql] class JDBCRDD(
           conversions(i) match {
             case BooleanConversion    => mutableRow.setBoolean(i, rs.getBoolean(pos))
             case DateConversion       =>
-              mutableRow.update(i, DateUtils.fromJavaDate(rs.getDate(pos)))
+              // DateUtils.fromJavaDate does not handle null value, so we need to check it.
+              val dateVal = rs.getDate(pos)
+              if (dateVal != null) {
+                mutableRow.update(i, DateUtils.fromJavaDate(dateVal))
+              } else {
+                mutableRow.update(i, null)
+              }
             // When connecting with Oracle DB through JDBC, the precision and scale of BigDecimal
             // object returned by ResultSet.getBigDecimal is not correctly matched to the table
             // schema reported by ResultSetMetaData.getPrecision and ResultSetMetaData.getScale.
@@ -372,8 +378,19 @@ private[sql] class JDBCRDD(
             // retrieve it, you will get wrong result 199.99.
             // So it is needed to set precision and scale for Decimal based on JDBC metadata.
             case DecimalConversion(Some((p, s))) =>
-              mutableRow.update(i, Decimal(rs.getBigDecimal(pos), p, s))
-            case DecimalConversion(None) => mutableRow.update(i, Decimal(rs.getBigDecimal(pos)))
+              val decimalVal = rs.getBigDecimal(pos)
+              if (decimalVal == null) {
+                mutableRow.update(i, null)
+              } else {
+                mutableRow.update(i, Decimal(decimalVal, p, s))
+              }
+            case DecimalConversion(None) =>
+              val decimalVal = rs.getBigDecimal(pos)
+              if (decimalVal == null) {
+                mutableRow.update(i, null)
+              } else {
+                mutableRow.update(i, Decimal(decimalVal))
+              }
             case DoubleConversion     => mutableRow.setDouble(i, rs.getDouble(pos))
             case FloatConversion      => mutableRow.setFloat(i, rs.getFloat(pos))
             case IntegerConversion    => mutableRow.setInt(i, rs.getInt(pos))

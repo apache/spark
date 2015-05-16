@@ -32,11 +32,18 @@ abstract class Model[M <: Model[M]] extends Transformer {
    * The parent estimator that produced this model.
    * Note: For ensembles' component Models, this value can be null.
    */
-  val parent: Estimator[M]
+  var parent: Estimator[M] = _
 
   /**
-   * Fitting parameters, such that parent.fit(..., fittingParamMap) could reproduce the model.
-   * Note: For ensembles' component Models, this value can be null.
+   * Sets the parent of this model (Java API).
    */
-  val fittingParamMap: ParamMap
+  def setParent(parent: Estimator[M]): M = {
+    this.parent = parent
+    this.asInstanceOf[M]
+  }
+
+  override def copy(extra: ParamMap): M = {
+    // The default implementation of Params.copy doesn't work for models.
+    throw new NotImplementedError(s"${this.getClass} doesn't implement copy(extra: ParamMap)")
+  }
 }

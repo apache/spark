@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Connection, Driver, DriverManager, DriverPropertyInfo, PreparedStatement}
+import java.sql.{Connection, Driver, DriverManager, DriverPropertyInfo, PreparedStatement, SQLFeatureNotSupportedException}
 import java.util.Properties
 
 import scala.collection.mutable
@@ -57,9 +57,14 @@ package object jdbc {
      * non-Serializable.  Instead, we explicitly close over all variables that
      * are used.
      */
-    def savePartition(url: String, table: String, iterator: Iterator[Row],
-        rddSchema: StructType, nullTypes: Array[Int]): Iterator[Byte] = {
-      val conn = DriverManager.getConnection(url)
+    def savePartition(
+        url: String,
+        table: String,
+        iterator: Iterator[Row],
+        rddSchema: StructType,
+        nullTypes: Array[Int],
+        properties: Properties): Iterator[Byte] = {
+      val conn = DriverManager.getConnection(url, properties)
       var committed = false
       try {
         conn.setAutoCommit(false) // Everything in the same db transaction.
@@ -152,7 +157,11 @@ package object jdbc {
     /**
      * Saves the RDD to the database in a single transaction.
      */
-    def saveTable(df: DataFrame, url: String, table: String) {
+    def saveTable(
+        df: DataFrame,
+        url: String,
+        table: String,
+        properties: Properties = new Properties()) {
       val quirks = DriverQuirks.get(url)
       var nullTypes: Array[Int] = df.schema.fields.map(field => {
         var nullType: Option[Int] = quirks.getJDBCType(field.dataType)._2
@@ -178,7 +187,7 @@ package object jdbc {
 
       val rddSchema = df.schema
       df.foreachPartition { iterator =>
-        JDBCWriteDetails.savePartition(url, table, iterator, rddSchema, nullTypes)
+        JDBCWriteDetails.savePartition(url, table, iterator, rddSchema, nullTypes, properties)
       }
     }
 
@@ -195,7 +204,9 @@ package object jdbc {
 
     override def getMinorVersion: Int = wrapped.getMinorVersion
 
-    override def getParentLogger: java.util.logging.Logger = wrapped.getParentLogger
+    def getParentLogger: java.util.logging.Logger =
+      throw new SQLFeatureNotSupportedException(
+        s"${this.getClass().getName}.getParentLogger is not yet implemented.")
 
     override def connect(url: String, info: Properties): Connection = wrapped.connect(url, info)
 

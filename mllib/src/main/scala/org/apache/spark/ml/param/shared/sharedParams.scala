@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.param.shared
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.param._
 import org.apache.spark.util.Utils
 
@@ -37,7 +36,7 @@ private[ml] trait HasRegParam extends Params {
   final val regParam: DoubleParam = new DoubleParam(this, "regParam", "regularization parameter (>= 0)", ParamValidators.gtEq(0))
 
   /** @group getParam */
-  final def getRegParam: Double = getOrDefault(regParam)
+  final def getRegParam: Double = $(regParam)
 }
 
 /**
@@ -52,7 +51,7 @@ private[ml] trait HasMaxIter extends Params {
   final val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations (>= 0)", ParamValidators.gtEq(0))
 
   /** @group getParam */
-  final def getMaxIter: Int = getOrDefault(maxIter)
+  final def getMaxIter: Int = $(maxIter)
 }
 
 /**
@@ -69,7 +68,7 @@ private[ml] trait HasFeaturesCol extends Params {
   setDefault(featuresCol, "features")
 
   /** @group getParam */
-  final def getFeaturesCol: String = getOrDefault(featuresCol)
+  final def getFeaturesCol: String = $(featuresCol)
 }
 
 /**
@@ -86,7 +85,7 @@ private[ml] trait HasLabelCol extends Params {
   setDefault(labelCol, "label")
 
   /** @group getParam */
-  final def getLabelCol: String = getOrDefault(labelCol)
+  final def getLabelCol: String = $(labelCol)
 }
 
 /**
@@ -103,7 +102,7 @@ private[ml] trait HasPredictionCol extends Params {
   setDefault(predictionCol, "prediction")
 
   /** @group getParam */
-  final def getPredictionCol: String = getOrDefault(predictionCol)
+  final def getPredictionCol: String = $(predictionCol)
 }
 
 /**
@@ -120,7 +119,7 @@ private[ml] trait HasRawPredictionCol extends Params {
   setDefault(rawPredictionCol, "rawPrediction")
 
   /** @group getParam */
-  final def getRawPredictionCol: String = getOrDefault(rawPredictionCol)
+  final def getRawPredictionCol: String = $(rawPredictionCol)
 }
 
 /**
@@ -129,15 +128,15 @@ private[ml] trait HasRawPredictionCol extends Params {
 private[ml] trait HasProbabilityCol extends Params {
 
   /**
-   * Param for column name for predicted class conditional probabilities.
+   * Param for Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities..
    * @group param
    */
-  final val probabilityCol: Param[String] = new Param[String](this, "probabilityCol", "column name for predicted class conditional probabilities")
+  final val probabilityCol: Param[String] = new Param[String](this, "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
 
   setDefault(probabilityCol, "probability")
 
   /** @group getParam */
-  final def getProbabilityCol: String = getOrDefault(probabilityCol)
+  final def getProbabilityCol: String = $(probabilityCol)
 }
 
 /**
@@ -152,7 +151,7 @@ private[ml] trait HasThreshold extends Params {
   final val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in binary classification prediction, in range [0, 1]", ParamValidators.inRange(0, 1))
 
   /** @group getParam */
-  final def getThreshold: Double = getOrDefault(threshold)
+  final def getThreshold: Double = $(threshold)
 }
 
 /**
@@ -167,7 +166,7 @@ private[ml] trait HasInputCol extends Params {
   final val inputCol: Param[String] = new Param[String](this, "inputCol", "input column name")
 
   /** @group getParam */
-  final def getInputCol: String = getOrDefault(inputCol)
+  final def getInputCol: String = $(inputCol)
 }
 
 /**
@@ -179,10 +178,10 @@ private[ml] trait HasInputCols extends Params {
    * Param for input column names.
    * @group param
    */
-  final val inputCols: Param[Array[String]] = new Param[Array[String]](this, "inputCols", "input column names")
+  final val inputCols: StringArrayParam = new StringArrayParam(this, "inputCols", "input column names")
 
   /** @group getParam */
-  final def getInputCols: Array[String] = getOrDefault(inputCols)
+  final def getInputCols: Array[String] = $(inputCols)
 }
 
 /**
@@ -197,7 +196,7 @@ private[ml] trait HasOutputCol extends Params {
   final val outputCol: Param[String] = new Param[String](this, "outputCol", "output column name")
 
   /** @group getParam */
-  final def getOutputCol: String = getOrDefault(outputCol)
+  final def getOutputCol: String = $(outputCol)
 }
 
 /**
@@ -212,7 +211,7 @@ private[ml] trait HasCheckpointInterval extends Params {
   final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "checkpoint interval (>= 1)", ParamValidators.gtEq(1))
 
   /** @group getParam */
-  final def getCheckpointInterval: Int = getOrDefault(checkpointInterval)
+  final def getCheckpointInterval: Int = $(checkpointInterval)
 }
 
 /**
@@ -229,7 +228,7 @@ private[ml] trait HasFitIntercept extends Params {
   setDefault(fitIntercept, true)
 
   /** @group getParam */
-  final def getFitIntercept: Boolean = getOrDefault(fitIntercept)
+  final def getFitIntercept: Boolean = $(fitIntercept)
 }
 
 /**
@@ -246,7 +245,7 @@ private[ml] trait HasSeed extends Params {
   setDefault(seed, Utils.random.nextLong())
 
   /** @group getParam */
-  final def getSeed: Long = getOrDefault(seed)
+  final def getSeed: Long = $(seed)
 }
 
 /**
@@ -261,7 +260,7 @@ private[ml] trait HasElasticNetParam extends Params {
   final val elasticNetParam: DoubleParam = new DoubleParam(this, "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", ParamValidators.inRange(0, 1))
 
   /** @group getParam */
-  final def getElasticNetParam: Double = getOrDefault(elasticNetParam)
+  final def getElasticNetParam: Double = $(elasticNetParam)
 }
 
 /**
@@ -276,7 +275,7 @@ private[ml] trait HasTol extends Params {
   final val tol: DoubleParam = new DoubleParam(this, "tol", "the convergence tolerance for iterative algorithms")
 
   /** @group getParam */
-  final def getTol: Double = getOrDefault(tol)
+  final def getTol: Double = $(tol)
 }
 
 /**
@@ -291,6 +290,6 @@ private[ml] trait HasStepSize extends Params {
   final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization.")
 
   /** @group getParam */
-  final def getStepSize: Double = getOrDefault(stepSize)
+  final def getStepSize: Double = $(stepSize)
 }
 // scalastyle:on
