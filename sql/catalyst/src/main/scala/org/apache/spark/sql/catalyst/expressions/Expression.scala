@@ -77,6 +77,10 @@ abstract class Expression extends TreeNode[Expression] {
     }.toString
   }
 
+  /**
+   * Returns true if 2 expressions are equal in semantic, which is similar to equals method
+   * but has different definition on some leaf expressions like AttributeReference.
+   */
   def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass && {
     val elements1 = this.productIterator.toSeq
     val elements2 = other.asInstanceOf[Product].productIterator.toSeq
