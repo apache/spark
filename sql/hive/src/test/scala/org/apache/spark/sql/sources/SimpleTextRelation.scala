@@ -24,7 +24,7 @@ import com.google.common.base.Objects
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
-import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
@@ -32,17 +32,16 @@ import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.{Row, SQLContext}
 
 /**
- * A simple example [[FSBasedRelationProvider]].
+ * A simple example [[HadoopFsRelationProvider]].
  */
-class SimpleTextSource extends FSBasedRelationProvider {
+class SimpleTextSource extends HadoopFsRelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
-      parameters: Map[String, String]): FSBasedRelation = {
-    val partitionsSchema = partitionColumns.getOrElse(StructType(Array.empty[StructField]))
-    new SimpleTextRelation(paths, schema, partitionsSchema, parameters)(sqlContext)
+      parameters: Map[String, String]): HadoopFsRelation = {
+    new SimpleTextRelation(paths, schema, partitionColumns, parameters)(sqlContext)
   }
 }
 
@@ -59,38 +58,30 @@ class AppendingTextOutputFormat(outputFile: Path) extends TextOutputFormat[NullW
   }
 }
 
-class SimpleTextOutputWriter extends OutputWriter {
-  private var recordWriter: RecordWriter[NullWritable, Text] = _
-  private var taskAttemptContext: TaskAttemptContext = _
-
-  override def init(
-      path: String,
-      dataSchema: StructType,
-      context: TaskAttemptContext): Unit = {
-    recordWriter = new AppendingTextOutputFormat(new Path(path)).getRecordWriter(context)
-    taskAttemptContext = context
-  }
+class SimpleTextOutputWriter(path: String, context: TaskAttemptContext) extends OutputWriter {
+  private val recordWriter: RecordWriter[NullWritable, Text] =
+    new AppendingTextOutputFormat(new Path(path)).getRecordWriter(context)
 
   override def write(row: Row): Unit = {
     val serialized = row.toSeq.map(_.toString).mkString(",")
     recordWriter.write(null, new Text(serialized))
   }
 
-  override def close(): Unit = recordWriter.close(taskAttemptContext)
+  override def close(): Unit = recordWriter.close(context)
 }
 
 /**
- * A simple example [[FSBasedRelation]], used for testing purposes.  Data are stored as comma
+ * A simple example [[HadoopFsRelation]], used for testing purposes.  Data are stored as comma
  * separated string lines.  When scanning data, schema must be explicitly provided via data source
  * option `"dataSchema"`.
  */
 class SimpleTextRelation(
-    paths: Array[String],
+    override val paths: Array[String],
     val maybeDataSchema: Option[StructType],
-    partitionsSchema: StructType,
+    override val userDefinedPartitionColumns: Option[StructType],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
-  extends FSBasedRelation(paths, partitionsSchema) {
+  extends HadoopFsRelation {
 
   import sqlContext.sparkContext
 
@@ -110,9 +101,6 @@ class SimpleTextRelation(
   override def hashCode(): Int =
     Objects.hashCode(paths, maybeDataSchema, dataSchema)
 
-  override def outputWriterClass: Class[_ <: OutputWriter] =
-    classOf[SimpleTextOutputWriter]
-
   override def buildScan(inputPaths: Array[String]): RDD[Row] = {
     val fields = dataSchema.map(_.dataType)
 
@@ -120,6 +108,15 @@ class SimpleTextRelation(
       Row(record.split(",").zip(fields).map { case (value, dataType) =>
         Cast(Literal(value), dataType).eval()
       }: _*)
+    }
+  }
+
+  override def prepareJobForWrite(job: Job): OutputWriterFactory = new OutputWriterFactory {
+    override def newInstance(
+        path: String,
+        dataSchema: StructType,
+        context: TaskAttemptContext): OutputWriter = {
+      new SimpleTextOutputWriter(path, context)
     }
   }
 }

@@ -20,6 +20,9 @@ package org.apache.spark.util
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration._
+
 import org.scalatest.FunSuite
 
 class ThreadUtilsSuite extends FunSuite {
@@ -53,5 +56,14 @@ class ThreadUtilsSuite extends FunSuite {
     } finally {
       executor.shutdownNow()
     }
+  }
+
+  test("sameThread") {
+    val callerThreadName = Thread.currentThread().getName()
+    val f = Future {
+      Thread.currentThread().getName()
+    }(ThreadUtils.sameThread)
+    val futureThreadName = Await.result(f, 10.seconds)
+    assert(futureThreadName === callerThreadName)
   }
 }

@@ -107,6 +107,8 @@
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
+    <module>external/kafka</module>
+    <module>external/kafka-assembly</module>
   </modules>
 
   <properties>
@@ -1757,10 +1759,6 @@
         <jline.version>${scala.version}</jline.version>
         <jline.groupid>org.scala-lang</jline.groupid>
       </properties>
-      <modules>
-        <module>external/kafka</module>
-        <module>external/kafka-assembly</module>
-      </modules>
     </profile>
 
     <profile>

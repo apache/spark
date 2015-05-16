@@ -61,7 +61,7 @@ object RDDRelation {
     df.saveAsParquetFile("pair.parquet")
 
     // Read in parquet file.  Parquet files are self-describing so the schmema is preserved.
-    val parquetFile = sqlContext.parquetFile("pair.parquet")
+    val parquetFile = sqlContext.read.parquet("pair.parquet")
 
     // Queries can be run using the DSL on parequet files just like the original RDD.
     parquetFile.where($"key" === 1).select($"value".as("a")).collect().foreach(println)

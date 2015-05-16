@@ -75,9 +75,9 @@ public class JavaSaveLoadSuite {
   public void saveAndLoad() {
     Map<String, String> options = new HashMap<String, String>();
     options.put("path", path.toString());
-    df.save("org.apache.spark.sql.json", SaveMode.ErrorIfExists, options);
+    df.save("json", SaveMode.ErrorIfExists, options);
 
-    DataFrame loadedDF = sqlContext.load("org.apache.spark.sql.json", options);
+    DataFrame loadedDF = sqlContext.read().format("json").options(options).load();
 
     checkAnswer(loadedDF, df.collectAsList());
   }
@@ -86,12 +86,12 @@ public class JavaSaveLoadSuite {
   public void saveAndLoadWithSchema() {
     Map<String, String> options = new HashMap<String, String>();
     options.put("path", path.toString());
-    df.save("org.apache.spark.sql.json", SaveMode.ErrorIfExists, options);
+    df.save("json", SaveMode.ErrorIfExists, options);
 
     List<StructField> fields = new ArrayList<StructField>();
     fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));
     StructType schema = DataTypes.createStructType(fields);
-    DataFrame loadedDF = sqlContext.load("org.apache.spark.sql.json", schema, options);
+    DataFrame loadedDF = sqlContext.load("json", schema, options);
 
     checkAnswer(loadedDF, sqlContext.sql("SELECT b FROM jsonTable").collectAsList());
   }
