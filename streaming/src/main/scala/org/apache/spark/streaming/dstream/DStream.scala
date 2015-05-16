@@ -121,15 +121,9 @@ abstract class DStream[T: ClassTag] (
    *
    * This is not defined if the DStream is created outside of one of the public DStream operations.
    */
-  private[streaming] val baseScope: Option[String] = {
+  protected[streaming] val baseScope: Option[String] = {
     Option(ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY))
   }
-
-  /**
-   * Make a scope name based on the given one.
-   * Subclasses may optionally override this to provide custom scope names.
-   */
-  protected[streaming] def makeScopeName(baseName: String): String = baseName
 
   /**
    * Make a scope that groups RDDs created in the same DStream operation in the same batch.
@@ -142,8 +136,8 @@ abstract class DStream[T: ClassTag] (
     baseScope.map { bsJson =>
       val formattedBatchTime =
         UIUtils.formatBatchTime(time.milliseconds, ssc.graph.batchDuration.milliseconds)
-      val bscope = RDDOperationScope.fromJson(bsJson)
-      val baseName = makeScopeName(bscope.name) // e.g. countByWindow, "kafka stream [0]"
+      val bs = RDDOperationScope.fromJson(bsJson)
+      val baseName = bs.name // e.g. countByWindow, "kafka stream [0]"
       val scopeName =
         if (baseName.length > 10) {
           // If the operation name is too long, wrap the line
@@ -151,7 +145,7 @@ abstract class DStream[T: ClassTag] (
         } else {
           s"$baseName @ $formattedBatchTime"
         }
-      val scopeId = s"${bscope.id}_${time.milliseconds}"
+      val scopeId = s"${bs.id}_${time.milliseconds}"
       new RDDOperationScope(scopeName, id = scopeId)
     }
   }

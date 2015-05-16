@@ -80,7 +80,7 @@ object KafkaUtils {
       kafkaParams: Map[String, String],
       topics: Map[String, Int],
       storageLevel: StorageLevel
-    ): ReceiverInputDStream[(K, V)] = ssc.withNamedScope("kafka stream") {
+    ): ReceiverInputDStream[(K, V)] = {
     val walEnabled = WriteAheadLogUtils.enableReceiverLog(ssc.conf)
     new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, walEnabled, storageLevel)
   }
@@ -348,7 +348,7 @@ object KafkaUtils {
       kafkaParams: Map[String, String],
       fromOffsets: Map[TopicAndPartition, Long],
       messageHandler: MessageAndMetadata[K, V] => R
-  ): InputDStream[R] = ssc.withNamedScope("kafka direct stream") {
+  ): InputDStream[R] = {
     val cleanedHandler = ssc.sc.clean(messageHandler)
     new DirectKafkaInputDStream[K, V, KD, VD, R](
       ssc, kafkaParams, fromOffsets, cleanedHandler)
@@ -394,7 +394,7 @@ object KafkaUtils {
       ssc: StreamingContext,
       kafkaParams: Map[String, String],
       topics: Set[String]
-  ): InputDStream[(K, V)] = ssc.withNamedScope("kafka direct stream") {
+  ): InputDStream[(K, V)] = {
     val messageHandler = (mmd: MessageAndMetadata[K, V]) => (mmd.key, mmd.message)
     val kc = new KafkaCluster(kafkaParams)
     val reset = kafkaParams.get("auto.offset.reset").map(_.toLowerCase)

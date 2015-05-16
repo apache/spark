@@ -37,7 +37,7 @@ object MQTTUtils {
       brokerUrl: String,
       topic: String,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): ReceiverInputDStream[String] = ssc.withNamedScope("mqtt stream") {
+    ): ReceiverInputDStream[String] = {
     new MQTTInputDStream(ssc, brokerUrl, topic, storageLevel)
   }
 

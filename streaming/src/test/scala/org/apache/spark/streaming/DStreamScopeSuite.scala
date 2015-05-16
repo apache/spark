@@ -43,15 +43,32 @@ class DStreamScopeSuite extends FunSuite with BeforeAndAfter with BeforeAndAfter
   after { assertPropertiesNotSet() }
 
   test("dstream without scope") {
-    val inputStream = new DummyInputDStream(ssc)
-    inputStream.initialize(Time(0))
+    val dummyStream = new DummyDStream(ssc)
+    dummyStream.initialize(Time(0))
 
     // This DStream is not instantiated in any scope, so all RDDs
     // created by this stream should similarly not have a scope
-    assert(inputStream.baseScope === None)
-    assert(inputStream.getOrCompute(Time(1000)).get.scope === None)
-    assert(inputStream.getOrCompute(Time(2000)).get.scope === None)
-    assert(inputStream.getOrCompute(Time(3000)).get.scope === None)
+    assert(dummyStream.baseScope === None)
+    assert(dummyStream.getOrCompute(Time(1000)).get.scope === None)
+    assert(dummyStream.getOrCompute(Time(2000)).get.scope === None)
+    assert(dummyStream.getOrCompute(Time(3000)).get.scope === None)
+  }
+
+  test("input dstream without scope") {
+    val inputStream = new DummyInputDStream(ssc)
+    inputStream.initialize(Time(0))
+
+    val baseScope = inputStream.baseScope.map(RDDOperationScope.fromJson)
+    val scope1 = inputStream.getOrCompute(Time(1000)).get.scope
+    val scope2 = inputStream.getOrCompute(Time(2000)).get.scope
+    val scope3 = inputStream.getOrCompute(Time(3000)).get.scope
+
+    // This DStream is not instantiated in any scope, so all RDDs
+    assertDefined(baseScope, scope1, scope2, scope3)
+    assert(baseScope.get.name.startsWith("dummy stream"))
+    assertScopeCorrect(baseScope.get, scope1.get, 1000)
+    assertScopeCorrect(baseScope.get, scope2.get, 2000)
+    assertScopeCorrect(baseScope.get, scope3.get, 3000)
   }
 
   test("scoping simple operations") {
@@ -120,18 +137,6 @@ class DStreamScopeSuite extends FunSuite with BeforeAndAfter with BeforeAndAfter
     testStream(countStream)
   }
 
-  test("scoping input streams") {
-    ssc.withNamedScope("dummy stream") {
-      val stream = new DummyInputDStream(ssc)
-      stream.initialize(Time(0))
-      val baseScope = stream.baseScope.map(RDDOperationScope.fromJson)
-      val rddScope = stream.getOrCompute(Time(1000)).get.scope
-      assertDefined(baseScope, rddScope)
-      assert(baseScope.get.name === "dummy stream")
-      assertScopeCorrect(baseScope.get.id, s"dummy stream [${stream.id}]", rddScope.get, 1000)
-    }
-  }
-
   /** Assert that the RDD operation scope properties are not set in our SparkContext. */
   private def assertPropertiesNotSet(): Unit = {
     assert(ssc != null)
@@ -164,6 +169,15 @@ class DStreamScopeSuite extends FunSuite with BeforeAndAfter with BeforeAndAfter
     options.zipWithIndex.foreach { case (o, i) => assert(o.isDefined, s"Option $i was empty!") }
   }
 
+}
+
+/**
+ * A dummy stream that does absolutely nothing.
+ */
+private class DummyDStream(ssc: StreamingContext) extends DStream[Int](ssc) {
+  override def dependencies: List[DStream[Int]] = List.empty
+  override def slideDuration: Duration = Seconds(1)
+  override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.emptyRDD[Int])
 }
 
 /**

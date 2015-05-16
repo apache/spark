@@ -40,7 +40,7 @@ object TwitterUtils {
       twitterAuth: Option[Authorization],
       filters: Seq[String] = Nil,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): ReceiverInputDStream[Status] = ssc.withNamedScope("twitter stream") {
+    ): ReceiverInputDStream[Status] = {
     new TwitterInputDStream(ssc, twitterAuth, filters, storageLevel)
   }
 

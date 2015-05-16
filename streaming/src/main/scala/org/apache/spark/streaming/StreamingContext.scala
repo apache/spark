@@ -335,7 +335,7 @@ class StreamingContext private[streaming] (
       port: Int,
       converter: (InputStream) => Iterator[T],
       storageLevel: StorageLevel
-    ): ReceiverInputDStream[T] = withNamedScope("socket stream") {
+    ): ReceiverInputDStream[T] = {
     new SocketInputDStream[T](this, hostname, port, converter, storageLevel)
   }
 
@@ -372,7 +372,7 @@ class StreamingContext private[streaming] (
     K: ClassTag,
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
-  ] (directory: String): InputDStream[(K, V)] = withNamedScope("file stream") {
+  ] (directory: String): InputDStream[(K, V)] = {
     new FileInputDStream[K, V, F](this, directory)
   }
 
@@ -393,9 +393,7 @@ class StreamingContext private[streaming] (
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
   ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean): InputDStream[(K, V)] = {
-    withNamedScope("file stream") {
-      new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly)
-    }
+    new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly)
   }
 
   /**
@@ -418,7 +416,7 @@ class StreamingContext private[streaming] (
   ] (directory: String,
      filter: Path => Boolean,
      newFilesOnly: Boolean,
-     conf: Configuration): InputDStream[(K, V)] = withNamedScope("file stream") {
+     conf: Configuration): InputDStream[(K, V)] = {
     new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly, Option(conf))
   }
 
@@ -475,7 +473,7 @@ class StreamingContext private[streaming] (
   def queueStream[T: ClassTag](
       queue: Queue[RDD[T]],
       oneAtATime: Boolean = true
-    ): InputDStream[T] = withNamedScope("queue stream") {
+    ): InputDStream[T] = {
     queueStream(queue, oneAtATime, sc.makeRDD(Seq[T](), 1))
   }
 
@@ -492,7 +490,7 @@ class StreamingContext private[streaming] (
       queue: Queue[RDD[T]],
       oneAtATime: Boolean,
       defaultRDD: RDD[T]
-    ): InputDStream[T] = withNamedScope("queue stream") {
+    ): InputDStream[T] = {
     new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
   }
 

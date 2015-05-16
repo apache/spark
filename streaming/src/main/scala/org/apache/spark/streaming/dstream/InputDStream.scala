@@ -19,7 +19,10 @@ package org.apache.spark.streaming.dstream
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.streaming.{Time, Duration, StreamingContext}
+import org.apache.spark.util.Utils
 
 /**
  * This is the abstract base class for all input streams. This class provides methods
@@ -44,13 +47,31 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
   /** This is an unique identifier for the input stream. */
   val id = ssc.getNewInputStreamId()
 
-  /**
-   * The name of this InputDStream. By default, it's the class name with its id.
-   */
-  private[streaming] def name: String = s"${getClass.getSimpleName}-$id"
+  /** A human-readable name of this InputDStream */
+  private[streaming] def name: String = {
+    // e.g. FlumePollingDStream -> "Flume polling stream"
+    val newName = Utils.getFormattedClassName(this)
+      .replaceAll("InputDStream", "Stream")
+      .split("(?=[A-Z])")
+      .filter(_.nonEmpty)
+      .mkString(" ")
+      .toLowerCase
+      .capitalize
+    s"$newName [$id]"
+  }
 
-  /** Make a scope name based on the given one. This includes the ID of this stream. */
-  protected[streaming] override def makeScopeName(baseName: String): String = s"$baseName [$id]"
+  /**
+   * The base scope associated with the operation that created this DStream.
+   *
+   * For InputDStreams, we use the name of this DStream as the scope name.
+   * If an outer scope is given, we assume that it includes an alternative name for this stream.
+   */
+  protected[streaming] override val baseScope: Option[String] = {
+    val scopeName = Option(ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY))
+      .map { json => RDDOperationScope.fromJson(json).name + s" [$id]" }
+      .getOrElse(name.toLowerCase)
+    Some(new RDDOperationScope(scopeName).toJson)
+  }
 
   /**
    * Checks whether the 'time' is valid wrt slideDuration for generating RDD.
