@@ -15,6 +15,7 @@ _hooks = {
     'postgres_hook': ['PostgresHook'],
     'presto_hook': ['PrestoHook'],
     'samba_hook': ['SambaHook'],
+    'sqlite_hook': ['SqliteHook'],
     'S3_hook': ['S3Hook'],
 }
 
