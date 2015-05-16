@@ -45,7 +45,7 @@ import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelat
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, Partition, SparkContext}
+import org.apache.spark.{Partition, SparkContext}
 
 /**
  * The entry point for working with structured data (rows and columns) in Spark.  Allows the
