@@ -110,7 +110,7 @@ object KMeansModel extends Loader[KMeansModel] {
       val dataRDD = sc.parallelize(model.clusterCenters.zipWithIndex).map { case (point, id) =>
         Cluster(id, point)
       }.toDF()
-      dataRDD.saveAsParquetFile(Loader.dataPath(path))
+      dataRDD.write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): KMeansModel = {
