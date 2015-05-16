@@ -305,6 +305,16 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
+   * Save the VertexRDD in this Graph as a SequenceFile of serialized objects.
+   */
+  def saveVerticesAsObjectFile(path: String) = graph.vertices.saveAsObjectFile(path)
+
+  /**
+   * Save the EdgeRDD in this Graph as a SequenceFile of serialized objects.
+   */
+  def saveEdgesAsObjectFile(path: String) = graph.edges.saveAsObjectFile(path)
+
+  /**
    * Execute a Pregel-like iterative vertex-parallel abstraction.  The
    * user-defined vertex-program `vprog` is executed in parallel on
    * each vertex receiving any inbound messages and computing a new

@@ -17,10 +17,13 @@
 
 package org.apache.spark.graphx
 
+import java.io.File
+
 import org.apache.spark.SparkContext
 import org.apache.spark.graphx.Graph._
 import org.apache.spark.graphx.impl.EdgePartition
 import org.apache.spark.rdd._
+import org.apache.spark.util.Utils
 import org.scalatest.FunSuite
 
 class GraphOpsSuite extends FunSuite with LocalSparkContext {
@@ -197,6 +200,21 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
             assert(edgeIds.contains(vid - 1))
           }
       }
+    }
+  }
+
+  test("save and load a graph") {
+    withSpark { sc =>
+      val edges = sc.parallelize((1 to 10).map(x => (x: VertexId, 0: VertexId)), 2)
+      val graph = Graph.fromEdgeTuples(edges, 1)
+      val tempDir = Utils.createTempDir()
+      val verticesDir = new File(tempDir, "vertices").getAbsolutePath
+      val edgesDir = new File(tempDir, "edges").getAbsolutePath
+      // Try writing and reading the graph as an object file
+      graph.saveVerticesAsObjectFile(verticesDir)
+      graph.saveEdgesAsObjectFile(edgesDir)
+      val loadedGraph = GraphLoader.graphObjectFile[Int, Int](sc, verticesDir, edgesDir, 2)
+      assert(graph.degrees.collect.toList === loadedGraph.degrees.collect.toList)
     }
   }
 

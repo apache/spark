@@ -21,6 +21,8 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.graphx.impl.{EdgePartitionBuilder, GraphImpl}
 
+import scala.reflect.ClassTag
+
 /**
  * Provides utilities for loading [[Graph]]s from files.
  */
@@ -97,5 +99,39 @@ object GraphLoader extends Logging {
     GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1, edgeStorageLevel = edgeStorageLevel,
       vertexStorageLevel = vertexStorageLevel)
   } // end of edgeListFile
+
+  /**
+   * Load a graph from a SequenceFile containing serialized objects.
+   *
+   * @param sc SparkContext
+   * @param vertexPath
+   * @param edgePath
+   * @param numEdgePartitions the number of partitions for the VertexRDD and the EdgeRDD
+   * Setting this value to -1 will use the default parallelism.
+   * @tparam VD the vertex attribute type
+   * @tparam ED the edge attribute type
+   */
+  def graphObjectFile[VD: ClassTag, ED: ClassTag](
+      sc: SparkContext,
+      vertexPath: String,
+      edgePath: String,
+      numEdgePartitions: Int = -1
+      ): Graph[VD, ED] = {
+    val vertices =
+      if (numEdgePartitions > 0) {
+        sc.objectFile[(VertexId, VD)](vertexPath, numEdgePartitions)
+          .coalesce(numEdgePartitions)
+      } else {
+        sc.objectFile[(VertexId, VD)](vertexPath)
+      }
+    val edges =
+      if (numEdgePartitions > 0) {
+        sc.objectFile[Edge[ED]](edgePath, numEdgePartitions)
+          .coalesce(numEdgePartitions)
+      } else {
+        sc.objectFile[Edge[ED]](edgePath)
+      }
+    Graph(vertices, edges)
+  }
 
 }
