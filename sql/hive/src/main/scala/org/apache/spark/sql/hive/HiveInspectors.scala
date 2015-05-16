@@ -218,7 +218,7 @@ private[hive] trait HiveInspectors extends Logging {
     case c: Class[_] if c.isArray => ArrayType(javaClassToDataType(c.getComponentType))
 
     // list type
-    case c: Class[_] if c == classOf[java.util.List[java.lang.Object]] =>
+    case c: Class[_] if c == classOf[java.util.List[_]] =>
       logWarning("Failed to catch a component type in List<> because of type erasure in JVM," +
         " so you need to cast it into the correct type by yourself")
       ArrayType(NullType)
