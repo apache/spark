@@ -21,8 +21,6 @@ import java.lang.{Iterable => JIterable}
 
 import scala.collection.JavaConverters._
 
-import breeze.linalg.{Axis, DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
-import breeze.numerics.{exp => brzExp, log => brzLog}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
@@ -50,8 +48,8 @@ class NaiveBayesModel private[mllib] (
     val modelType: String)
   extends ClassificationModel with Serializable with Saveable {
 
-  val piVector = Vectors.dense(pi).asInstanceOf[DenseVector]
-  val thetaMatrix = new DenseMatrix(labels.size, theta(0).size, theta.flatten, true)
+  private val piVector = new DenseVector(pi)
+  private val thetaMatrix = new DenseMatrix(labels.size, theta(0).size, theta.flatten, true)
 
   private[mllib] def this(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]]) =
     this(labels, pi, theta, "Multinomial")
@@ -66,15 +64,15 @@ class NaiveBayesModel private[mllib] (
   // Bernoulli scoring requires log(condprob) if 1, log(1-condprob) if 0.
   // This precomputes log(1.0 - exp(theta)) and its sum which are used for the linear algebra
   // application of this condition (in predict function).
-  private val (thetaMinusnegTheta, brzNegThetaSum) = modelType match {
+  private val (thetaMinusNegTheta, negThetaSum) = modelType match {
     case "Multinomial" => (None, None)
     case "Bernoulli" =>
       val negTheta = thetaMatrix.map(value => math.log(1.0 - math.exp(value)))
-      val ones = Vectors.dense(Array.fill(thetaMatrix.numCols){1.0}).asInstanceOf[DenseVector]
-      val thetaMinusnegTheta = thetaMatrix.map { value =>
+      val ones = new DenseVector(Array.fill(thetaMatrix.numCols){1.0})
+      val thetaMinusNegTheta = thetaMatrix.map { value =>
         value - math.log(1.0 - math.exp(value))
       }
-      (Option(thetaMinusnegTheta), Option(negTheta.multiply(ones)))
+      (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
     case _ =>
       // This should never happen.
       throw new UnknownError(s"NaiveBayesModel was created with an unknown ModelType: $modelType")
@@ -91,7 +89,7 @@ class NaiveBayesModel private[mllib] (
   override def predict(testData: Vector): Double = {
     modelType match {
       case "Multinomial" =>
-        val prob = thetaMatrix.multiply(testData.toDense)
+        val prob = thetaMatrix.multiply(testData)
         BLAS.axpy(1.0, piVector, prob)
         labels(prob.argmax)
       case "Bernoulli" =>
@@ -101,9 +99,9 @@ class NaiveBayesModel private[mllib] (
               s"Bernoulli Naive Bayes requires 0 or 1 feature values but found $testData.")
           }
         }
-        val prob = thetaMinusnegTheta.get.multiply(testData.toDense)
+        val prob = thetaMinusNegTheta.get.multiply(testData)
         BLAS.axpy(1.0, piVector, prob)
-        BLAS.axpy(1.0, brzNegThetaSum.get, prob)
+        BLAS.axpy(1.0, negThetaSum.get, prob)
         labels(prob.argmax)
       case _ =>
         // This should never happen.

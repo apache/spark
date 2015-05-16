@@ -257,11 +257,12 @@ class BLASSuite extends FunSuite {
       new DenseMatrix(4, 3, Array(0.0, 1.0, 0.0, 0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 3.0))
     val sA = new SparseMatrix(4, 3, Array(0, 1, 3, 4), Array(1, 0, 2, 3), Array(1.0, 2.0, 1.0, 3.0))
 
-    val x = new DenseVector(Array(1.0, 2.0, 3.0))
+    val dx = new DenseVector(Array(1.0, 2.0, 3.0))
+    val sx = dx.toSparse
     val expected = new DenseVector(Array(4.0, 1.0, 2.0, 9.0))
 
-    assert(dA.multiply(x) ~== expected absTol 1e-15)
-    assert(sA.multiply(x) ~== expected absTol 1e-15)
+    assert(dA.multiply(dx) ~== expected absTol 1e-15)
+    assert(sA.multiply(dx) ~== expected absTol 1e-15)
 
     val y1 = new DenseVector(Array(1.0, 3.0, 1.0, 0.0))
     val y2 = y1.copy
@@ -270,17 +271,26 @@ class BLASSuite extends FunSuite {
     val expected2 = new DenseVector(Array(6.0, 7.0, 4.0, 9.0))
     val expected3 = new DenseVector(Array(10.0, 8.0, 6.0, 18.0))
 
-    gemv(1.0, dA, x, 2.0, y1)
-    gemv(1.0, sA, x, 2.0, y2)
-    gemv(2.0, dA, x, 2.0, y3)
-    gemv(2.0, sA, x, 2.0, y4)
+    gemv(1.0, dA, dx, 2.0, y1)
+    gemv(1.0, sA, dx, 2.0, y2)
+    gemv(2.0, dA, dx, 2.0, y3)
+    gemv(2.0, sA, dx, 2.0, y4)
     assert(y1 ~== expected2 absTol 1e-15)
     assert(y2 ~== expected2 absTol 1e-15)
     assert(y3 ~== expected3 absTol 1e-15)
     assert(y4 ~== expected3 absTol 1e-15)
+
+    val y1_copy = new DenseVector(Array(1.0, 3.0, 1.0, 0.0))
+    val y3_copy = y1_copy.copy
+
+    gemv(1.0, dA, sx, 2.0, y1_copy)
+    gemv(2.0, dA, sx, 2.0, y3_copy)
+    assert(y1_copy ~== expected2 absTol 1e-15)
+    assert(y3_copy ~== expected3 absTol 1e-15)
+ 
     withClue("columns of A don't match the rows of B") {
       intercept[Exception] {
-        gemv(1.0, dA.transpose, x, 2.0, y1)
+        gemv(1.0, dA.transpose, dx, 2.0, y1)
       }
     }
     val dAT =
@@ -291,7 +301,7 @@ class BLASSuite extends FunSuite {
     val dATT = dAT.transpose
     val sATT = sAT.transpose
 
-    assert(dATT.multiply(x) ~== expected absTol 1e-15)
-    assert(sATT.multiply(x) ~== expected absTol 1e-15)
+    assert(dATT.multiply(dx) ~== expected absTol 1e-15)
+    assert(sATT.multiply(dx) ~== expected absTol 1e-15)
   }
 }
