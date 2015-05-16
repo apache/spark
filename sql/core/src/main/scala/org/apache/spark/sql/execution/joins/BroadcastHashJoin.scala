@@ -78,5 +78,5 @@ case class BroadcastHashJoin(
 object BroadcastHashJoin {
 
   private val broadcastHashJoinExecutionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("broadcast-hash-join"))
+    ThreadUtils.newDaemonCachedThreadPool("broadcast-hash-join", 1024))
 }
