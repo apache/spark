@@ -195,8 +195,7 @@ private[spark] class AppClient(
       try {
         val timeout = RpcUtils.askTimeout(conf)
         val future = actor.ask(StopAppClient)(timeout.duration)
-        // TODO(bryanc) - RpcTimeout use awaitResult ???
-        Await.result(future, timeout.duration)
+        timeout.awaitResult(future)
       } catch {
         case e: TimeoutException =>
           logInfo("Stop request to Master timed out; it may already be shut down.")
