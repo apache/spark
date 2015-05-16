@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc.CompressionKind
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.Row
@@ -216,7 +217,8 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
 
     // Following codec is supported in hive-0.13.1, ignore it now
     ignore("Other Compression options for writing to an Orcfile - 0.13.1 and above") {
-      TestHive.sparkContext.hadoopConfiguration.set(orcDefaultCompressVar, "SNAPPY")
+      val conf = TestHive.sparkContext.hadoopConfiguration
+      conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.name(), "SNAPPY")
       var tempDir = getTempFilePath("orcTest").getCanonicalPath
       val rdd = sparkContext.parallelize(1 to 100)
         .map(i => TestRDDEntry(i, s"val_$i"))
@@ -225,14 +227,14 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
       assert(actualCodec == CompressionKind.SNAPPY)
       Utils.deleteRecursively(new File(tempDir))
 
-      TestHive.sparkContext.hadoopConfiguration.set(orcDefaultCompressVar, "NONE")
+      conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.name(), "NONE")
       tempDir = getTempFilePath("orcTest").getCanonicalPath
       rdd.toDF().saveAsOrcFile(tempDir)
       actualCodec = OrcFileOperator.getFileReader(tempDir).getCompression
       assert(actualCodec == CompressionKind.NONE)
       Utils.deleteRecursively(new File(tempDir))
 
-      TestHive.sparkContext.hadoopConfiguration.set(orcDefaultCompressVar, "LZO")
+      conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.name(), "LZO")
       tempDir = getTempFilePath("orcTest").getCanonicalPath
       rdd.toDF().saveAsOrcFile(tempDir)
       actualCodec = OrcFileOperator.getFileReader(tempDir).getCompression

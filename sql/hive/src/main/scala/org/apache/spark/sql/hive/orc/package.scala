@@ -17,34 +17,58 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.{DataFrame, SaveMode}
 
 package object orc {
+  /**
+   * ::Experimental::
+   *
+   * Extra ORC file loading functionality on [[HiveContext]] through implicit conversion.
+   *
+   * @since 1.4.0
+   */
+  @Experimental
   implicit class OrcContext(sqlContext: HiveContext) {
+    /**
+     * ::Experimental::
+     *
+     * Loads specified Parquet files, returning the result as a [[DataFrame]].
+     *
+     * @since 1.4.0
+     */
+    @Experimental
     @scala.annotation.varargs
-    def orcFile(path: String, paths: String*): DataFrame = {
-      val pathArray: Array[String] = {
-        if (paths.isEmpty) {
-          Array(path)
-        } else {
-         paths.toArray ++ Array(path)
-        }
-      }
-
-      val orcRelation = OrcRelation(pathArray, Map.empty)(sqlContext)
+    def orcFile(paths: String*): DataFrame = {
+      val orcRelation = OrcRelation(paths.toArray, Map.empty)(sqlContext)
       sqlContext.baseRelationToDataFrame(orcRelation)
     }
   }
 
+  /**
+   * ::Experimental::
+   *
+   * Extra ORC file writing functionality on [[DataFrame]] through implicit conversion
+   *
+   * @since 1.4.0
+   */
+  @Experimental
   implicit class OrcDataFrame(dataFrame: DataFrame) {
+    /**
+     * ::Experimental::
+     *
+     * Saves the contents of this [[DataFrame]] as an ORC file, preserving the schema.  Files that
+     * are written out using this method can be read back in as a [[DataFrame]] using
+     * [[OrcContext.orcFile()]].
+     *
+     * @since 1.4.0
+     */
+    @Experimental
     def saveAsOrcFile(path: String, mode: SaveMode = SaveMode.Overwrite): Unit = {
       dataFrame.save(path, source = classOf[DefaultSource].getCanonicalName, mode)
     }
   }
 
-  // Flags for orc copression, predicates pushdown, etc.
-  val orcDefaultCompressVar = "hive.exec.orc.default.compress"
-
   // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
-  val SARG_PUSHDOWN = "sarg.pushdown"
+  private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
 }
