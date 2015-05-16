@@ -688,11 +688,11 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
 
     val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
     val df2 = df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").max("y.int")
-    intercept[Throwable](df2.saveAsParquetFile(filePath))
+    intercept[Throwable](df2.write.parquet(filePath))
 
     val df3 = df2.toDF("str", "max_int")
-    df3.saveAsParquetFile(filePath2)
-    val df4 = parquetFile(filePath2)
+    df3.write.parquet(filePath2)
+    val df4 = read.parquet(filePath2)
     checkAnswer(df4, Row("1", 1) :: Row("2", 2) :: Row("3", 3) :: Nil)
     assert(df4.columns === Array("str", "max_int"))
   }
@@ -731,14 +731,14 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
       sparkContext.makeRDD(1 to 10)
         .map(i => ParquetData(i, s"part-$p"))
         .toDF()
-        .saveAsParquetFile(partDir.getCanonicalPath)
+        .write.parquet(partDir.getCanonicalPath)
     }
 
     sparkContext
       .makeRDD(1 to 10)
       .map(i => ParquetData(i, s"part-1"))
       .toDF()
-      .saveAsParquetFile(new File(normalTableDir, "normal").getCanonicalPath)
+      .write.parquet(new File(normalTableDir, "normal").getCanonicalPath)
 
     partitionedTableDirWithKey = Utils.createTempDir()
 
@@ -747,7 +747,7 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
       sparkContext.makeRDD(1 to 10)
         .map(i => ParquetDataWithKey(p, i, s"part-$p"))
         .toDF()
-        .saveAsParquetFile(partDir.getCanonicalPath)
+        .write.parquet(partDir.getCanonicalPath)
     }
 
     partitionedTableDirWithKeyAndComplexTypes = Utils.createTempDir()
@@ -757,7 +757,7 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
       sparkContext.makeRDD(1 to 10).map { i =>
         ParquetDataWithKeyAndComplexTypes(
           p, i, s"part-$p", StructContainer(i, f"${i}_string"), 1 to i)
-      }.toDF().saveAsParquetFile(partDir.getCanonicalPath)
+      }.toDF().write.parquet(partDir.getCanonicalPath)
     }
 
     partitionedTableDirWithComplexTypes = Utils.createTempDir()
@@ -766,7 +766,7 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
       val partDir = new File(partitionedTableDirWithComplexTypes, s"p=$p")
       sparkContext.makeRDD(1 to 10).map { i =>
         ParquetDataWithComplexTypes(i, s"part-$p", StructContainer(i, f"${i}_string"), 1 to i)
-      }.toDF().saveAsParquetFile(partDir.getCanonicalPath)
+      }.toDF().write.parquet(partDir.getCanonicalPath)
     }
   }
 
