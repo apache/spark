@@ -1200,7 +1200,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * url named table.
    *
    * @group specificdata
-   * @since 1.3.0
    */
   @deprecated("use read.jdbc()", "1.4.0")
   def jdbc(url: String, table: String): DataFrame = {
@@ -1218,7 +1217,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
    *                      evenly into this many partitions
    * @group specificdata
-   * @since 1.3.0
    */
   @deprecated("use read.jdbc()", "1.4.0")
   def jdbc(
@@ -1238,7 +1236,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * of the [[DataFrame]].
    *
    * @group specificdata
-   * @since 1.3.0
    */
   @deprecated("use read.jdbc()", "1.4.0")
   def jdbc(url: String, table: String, theParts: Array[String]): DataFrame = {

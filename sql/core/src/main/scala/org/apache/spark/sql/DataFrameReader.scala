@@ -98,6 +98,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
    * Specifies the input partitioning. If specified, the underlying data source does not need to
    * discover the data partitioning scheme, and thus can speed up very large inputs.
    *
+   * This is only applicable for Parquet at the moment.
+   *
    * @since 1.4.0
    */
   @scala.annotation.varargs
@@ -144,15 +146,22 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
 
   /**
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
-   * url named table.  Partitions of the table will be retrieved in parallel based on the parameters
+   * url named table. Partitions of the table will be retrieved in parallel based on the parameters
    * passed to this function.
    *
+   * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
+   * your external database systems.
+   *
+   * @param url JDBC database url of the form `jdbc:subprotocol:subname`
+   * @param table Name of the table in the external database.
    * @param columnName the name of a column of integral type that will be used for partitioning.
    * @param lowerBound the minimum value of `columnName` used to decide partition stride
    * @param upperBound the maximum value of `columnName` used to decide partition stride
    * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
    *                      evenly into this many partitions
-   * @param connectionProperties connection properties
+   * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
+   *                             tag/value. Normally at least a "user" and "password" property
+   *                             should be included.
    *
    * @since 1.4.0
    */
@@ -171,18 +180,27 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
 
   /**
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
-   * url named table using connection properties. The theParts parameter gives a list expressions
-   * suitable for inclusion in WHERE clauses; each one defines one partition
+   * url named table using connection properties. The `predicates` parameter gives a list
+   * expressions suitable for inclusion in WHERE clauses; each one defines one partition
    * of the [[DataFrame]].
    *
+   * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
+   * your external database systems.
+   *
+   * @param url JDBC database url of the form `jdbc:subprotocol:subname`
+   * @param table Name of the table in the external database.
+   * @param predicates Condition in the where clause for each partition.
+   * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
+   *                             tag/value. Normally at least a "user" and "password" property
+   *                             should be included.
    * @since 1.4.0
    */
   def jdbc(
       url: String,
       table: String,
-      theParts: Array[String],
+      predicates: Array[String],
       connectionProperties: Properties): DataFrame = {
-    val parts: Array[Partition] = theParts.zipWithIndex.map { case (part, i) =>
+    val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
       JDBCPartition(part, i) : Partition
     }
     jdbc(url, table, parts, connectionProperties)
