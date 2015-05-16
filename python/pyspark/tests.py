@@ -1544,7 +1544,7 @@ class WorkerTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize(range(10))
         rdd.count()
         version = self.sc.pythonVer
-        self.sc.pythonVer = 20
+        self.sc.pythonVer = "2.0"
         try:
             with QuietTest(self.sc):
                 self.assertRaises(Py4JJavaError, lambda: rdd.count())
