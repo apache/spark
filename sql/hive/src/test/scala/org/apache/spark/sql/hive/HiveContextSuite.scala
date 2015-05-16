@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.test.TestHive
 
 
@@ -37,15 +38,19 @@ class HiveContextSuite extends FunSuite with BeforeAndAfterAll {
     val hiveContext = HiveContext.getOrCreate(testSparkContext)
     assert(hiveContext != null, "HiveContext.getOrCreate returned null")
     assert(HiveContext.getOrCreate(testSparkContext).eq(hiveContext),
-      "HiveContext created by SQLContext.getOrCreate not returned by SQLContext.getOrCreate")
+      "HiveContext created by HiveContext.getOrCreate not returned by HiveContext.getOrCreate")
+    assert(SQLContext.getOrCreate(testSparkContext).eq(hiveContext),
+      "HiveContext created by HiveContext.getOrCreate not returned by SQLContext.getOrCreate")
   }
 
   test("getOrCreate gets last explicitly instantiated HiveContext") {
     HiveContext.clearLastInstantiatedContext()
     val hiveContext = new HiveContext(testSparkContext)
     assert(HiveContext.getOrCreate(testSparkContext) != null,
-      "HiveContext.getOrCreate after explicitly created SQLContext returned null")
+      "HiveContext.getOrCreate after explicitly created HiveContext returned null")
     assert(HiveContext.getOrCreate(testSparkContext).eq(hiveContext),
-      "HiveContext.getOrCreate after explicitly created SQLContext did not return the context")
+      "HiveContext.getOrCreate after explicitly created HiveContext did not return the context")
+    assert(SQLContext.getOrCreate(testSparkContext).eq(hiveContext),
+      "SQLContext.getOrCreate after explicitly created HiveContext did not return the context")
   }
 }

@@ -467,6 +467,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         case _ => super.simpleString
       }
   }
+
+  HiveContext.setLastInstantiatedContext(self)
 }
 
 
