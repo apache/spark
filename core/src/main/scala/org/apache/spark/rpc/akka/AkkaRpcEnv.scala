@@ -19,7 +19,7 @@ package org.apache.spark.rpc.akka
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag

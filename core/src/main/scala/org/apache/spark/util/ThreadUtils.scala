@@ -53,7 +53,7 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Create a cached thread pool which the max number of threads is `maxThreadNumber`. Thread names
+   * Create a cached thread pool whose max number of threads is `maxThreadNumber`. Thread names
    * are formatted as prefix-ID, where ID is a unique, sequentially assigned integer.
    */
   def newDaemonCachedThreadPool(prefix: String, maxThreadNumber: Int): ThreadPoolExecutor = {
