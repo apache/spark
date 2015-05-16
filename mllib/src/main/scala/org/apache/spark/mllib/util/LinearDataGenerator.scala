@@ -107,7 +107,8 @@ object LinearDataGenerator {
 
     x.foreach { v =>
       var i = 0
-      while (i < v.length) {
+      val len = v.length
+      while (i < len) {
         v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
         i += 1
       }

@@ -1,10 +1,18 @@
 pyspark.ml package
-=====================
+==================
 
-Module Context
---------------
+ML Pipeline APIs
+----------------
 
 .. automodule:: pyspark.ml
+    :members:
+    :undoc-members:
+    :inherited-members:
+
+pyspark.ml.param module
+-----------------------
+
+.. automodule:: pyspark.ml.param
     :members:
     :undoc-members:
     :inherited-members:
@@ -25,8 +33,24 @@ pyspark.ml.classification module
     :undoc-members:
     :inherited-members:
 
-pyspark.ml.tuning module
+pyspark.ml.recommendation module
 --------------------------------
+
+.. automodule:: pyspark.ml.recommendation
+    :members:
+    :undoc-members:
+    :inherited-members:
+
+pyspark.ml.regression module
+----------------------------
+
+.. automodule:: pyspark.ml.regression
+    :members:
+    :undoc-members:
+    :inherited-members:
+
+pyspark.ml.tuning module
+------------------------
 
 .. automodule:: pyspark.ml.tuning
     :members:
@@ -34,7 +58,7 @@ pyspark.ml.tuning module
     :inherited-members:
 
 pyspark.ml.evaluation module
---------------------------------
+----------------------------
 
 .. automodule:: pyspark.ml.evaluation
     :members:

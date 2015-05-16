@@ -84,6 +84,83 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
+class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
+    """
+    Maps a column of continuous features to a column of feature buckets.
+
+    >>> df = sqlContext.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
+    >>> bucketizer = Bucketizer(splits=[-float("inf"), 0.5, 1.4, float("inf")],
+    ...     inputCol="values", outputCol="buckets")
+    >>> bucketed = bucketizer.transform(df).collect()
+    >>> bucketed[0].buckets
+    0.0
+    >>> bucketed[1].buckets
+    0.0
+    >>> bucketed[2].buckets
+    1.0
+    >>> bucketed[3].buckets
+    2.0
+    >>> bucketizer.setParams(outputCol="b").transform(df).head().b
+    0.0
+    """
+
+    _java_class = "org.apache.spark.ml.feature.Bucketizer"
+    # a placeholder to make it appear in the generated doc
+    splits = \
+        Param(Params._dummy(), "splits",
+              "Split points for mapping continuous features into buckets. With n+1 splits, " +
+              "there are n buckets. A bucket defined by splits x,y holds values in the " +
+              "range [x,y) except the last bucket, which also includes y. The splits " +
+              "should be strictly increasing. Values at -inf, inf must be explicitly " +
+              "provided to cover all Double values; otherwise, values outside the splits " +
+              "specified will be treated as errors.")
+
+    @keyword_only
+    def __init__(self, splits=None, inputCol=None, outputCol=None):
+        """
+        __init__(self, splits=None, inputCol=None, outputCol=None)
+        """
+        super(Bucketizer, self).__init__()
+        #: param for Splitting points for mapping continuous features into buckets. With n+1 splits,
+        #  there are n buckets. A bucket defined by splits x,y holds values in the range [x,y)
+        #  except the last bucket, which also includes y. The splits should be strictly increasing.
+        #  Values at -inf, inf must be explicitly provided to cover all Double values; otherwise,
+        #  values outside the splits specified will be treated as errors.
+        self.splits = \
+            Param(self, "splits",
+                  "Split points for mapping continuous features into buckets. With n+1 splits, " +
+                  "there are n buckets. A bucket defined by splits x,y holds values in the " +
+                  "range [x,y) except the last bucket, which also includes y. The splits " +
+                  "should be strictly increasing. Values at -inf, inf must be explicitly " +
+                  "provided to cover all Double values; otherwise, values outside the splits " +
+                  "specified will be treated as errors.")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, splits=None, inputCol=None, outputCol=None):
+        """
+        setParams(self, splits=None, inputCol=None, outputCol=None)
+        Sets params for this Bucketizer.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setSplits(self, value):
+        """
+        Sets the value of :py:attr:`splits`.
+        """
+        self.paramMap[self.splits] = value
+        return self
+
+    def getSplits(self):
+        """
+        Gets the value of threshold or its default value.
+        """
+        return self.getOrDefault(self.splits)
+
+
+@inherit_doc
 class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
     """
     Maps a sequence of terms to their term frequencies using the
@@ -404,7 +481,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     def __init__(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+",
                  inputCol=None, outputCol=None):
         """
-        __init__(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+",
+        __init__(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+", \
                  inputCol=None, outputCol=None)
         """
         super(RegexTokenizer, self).__init__()
@@ -419,7 +496,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     def setParams(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+",
                   inputCol=None, outputCol=None):
         """
-        setParams(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+",
+        setParams(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+", \
                   inputCol="input", outputCol="output")
         Sets params for this RegexTokenizer.
         """
@@ -792,7 +869,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     def __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
                  seed=42, inputCol=None, outputCol=None):
         """
-        __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
+        __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, \
                  seed=42, inputCol=None, outputCol=None)
         """
         super(Word2Vec, self).__init__()
@@ -812,7 +889,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     def setParams(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
                   seed=42, inputCol=None, outputCol=None):
         """
-        setParams(self, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, seed=42,
+        setParams(self, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, seed=42, \
                  inputCol=None, outputCol=None)
         Sets params for this Word2Vec.
         """

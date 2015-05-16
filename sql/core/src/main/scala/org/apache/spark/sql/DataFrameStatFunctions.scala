@@ -23,6 +23,8 @@ import org.apache.spark.sql.execution.stat._
 /**
  * :: Experimental ::
  * Statistic functions for [[DataFrame]]s.
+ *
+ * @since 1.4.0
  */
 @Experimental
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
@@ -32,6 +34,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param col1 the name of the first column
    * @param col2 the name of the second column
    * @return the covariance of the two columns.
+   *
+   * @since 1.4.0
    */
   def cov(col1: String, col2: String): Double = {
     StatFunctions.calculateCov(df, Seq(col1, col2))
@@ -45,6 +49,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param col1 the name of the column
    * @param col2 the name of the column to calculate the correlation against
    * @return The Pearson Correlation Coefficient as a Double.
+   *
+   * @since 1.4.0
    */
   def corr(col1: String, col2: String, method: String): Double = {
     require(method == "pearson", "Currently only the calculation of the Pearson Correlation " +
@@ -58,6 +64,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param col1 the name of the column
    * @param col2 the name of the column to calculate the correlation against
    * @return The Pearson Correlation Coefficient as a Double.
+   *
+   * @since 1.4.0
    */
   def corr(col1: String, col2: String): Double = {
     corr(col1, col2, "pearson")
@@ -76,6 +84,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param col2 The name of the second column. Distinct items will make the column names
    *             of the DataFrame.
    * @return A DataFrame containing for the contingency table.
+   *
+   * @since 1.4.0
    */
   def crosstab(col1: String, col2: String): DataFrame = {
     StatFunctions.crossTabulate(df, col1, col2)
@@ -91,6 +101,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param support The minimum frequency for an item to be considered `frequent`. Should be greater
    *                than 1e-4.
    * @return A Local DataFrame with the Array of frequent items for each column.
+   *
+   * @since 1.4.0
    */
   def freqItems(cols: Array[String], support: Double): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, support)
@@ -104,6 +116,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
+   *
+   * @since 1.4.0
    */
   def freqItems(cols: Array[String]): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, 0.01)
@@ -116,6 +130,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
+   *
+   * @since 1.4.0
    */
   def freqItems(cols: Seq[String], support: Double): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, support)
@@ -129,6 +145,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
+   *
+   * @since 1.4.0
    */
   def freqItems(cols: Seq[String]): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, 0.01)

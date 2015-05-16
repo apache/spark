@@ -483,7 +483,11 @@ private[hive] case class HiveGenericUdtf(
   extends Generator with HiveInspectors {
 
   @transient
-  protected lazy val function: GenericUDTF = funcWrapper.createFunction()
+  protected lazy val function: GenericUDTF = {
+    val fun: GenericUDTF = funcWrapper.createFunction()
+    fun.setCollector(collector)
+    fun
+  }
 
   @transient
   protected lazy val inputInspectors = children.map(toInspector)
@@ -494,6 +498,9 @@ private[hive] case class HiveGenericUdtf(
   @transient
   protected lazy val udtInput = new Array[AnyRef](children.length)
 
+  @transient
+  protected lazy val collector = new UDTFCollector
+
   lazy val elementTypes = outputInspector.getAllStructFieldRefs.map {
     field => (inspectorToDataType(field.getFieldObjectInspector), true)
   }
@@ -502,8 +509,7 @@ private[hive] case class HiveGenericUdtf(
     outputInspector // Make sure initialized.
 
     val inputProjection = new InterpretedProjection(children)
-    val collector = new UDTFCollector
-    function.setCollector(collector)
+
     function.process(wrap(inputProjection(input), inputInspectors, udtInput))
     collector.collectRows()
   }
@@ -523,6 +529,12 @@ private[hive] case class HiveGenericUdtf(
       collected = new ArrayBuffer[Row]
       toCollect
     }
+  }
+
+  override def terminate(): TraversableOnce[Row] = {
+    outputInspector // Make sure initialized.
+    function.close()
+    collector.collectRows()
   }
 
   override def toString: String = {

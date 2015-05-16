@@ -44,6 +44,10 @@
   stroke-width: 1px;
 }
 
+#dag-viz-graph div#empty-dag-viz-message {
+  margin: 15px;
+}
+
 /* Job page specific styles */
 
 #dag-viz-graph svg.job marker#marker-arrow path {
@@ -57,7 +61,7 @@
   stroke-width: 1px;
 }
 
-#dag-viz-graph svg.job g.cluster[id*="stage"] rect {
+#dag-viz-graph svg.job g.cluster[class*="stage"] rect {
   fill: #FFFFFF;
   stroke: #FF99AC;
   stroke-width: 1px;
@@ -79,7 +83,7 @@
   stroke-width: 1px;
 }
 
-#dag-viz-graph svg.stage g.cluster[id*="stage"] rect {
+#dag-viz-graph svg.stage g.cluster[class*="stage"] rect {
   fill: #FFFFFF;
   stroke: #FFA6B6;
   stroke-width: 1px;

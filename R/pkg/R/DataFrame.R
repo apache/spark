@@ -150,7 +150,7 @@ setMethod("isLocal",
             callJMethod(x@sdf, "isLocal")
           })
 
-#' ShowDF
+#' showDF
 #'
 #' Print the first numRows rows of a DataFrame
 #'
@@ -170,7 +170,8 @@ setMethod("isLocal",
 setMethod("showDF",
           signature(x = "DataFrame"),
           function(x, numRows = 20) {
-            callJMethod(x@sdf, "showString", numToInt(numRows))
+            s <- callJMethod(x@sdf, "showString", numToInt(numRows))
+            cat(s)
           })
 
 #' show
@@ -187,7 +188,7 @@ setMethod("showDF",
 #' sqlCtx <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlCtx, path)
-#' show(df)
+#' df
 #'}
 setMethod("show", "DataFrame",
           function(object) {
@@ -293,8 +294,8 @@ setMethod("registerTempTable",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlCtx <- sparkRSQL.init(sc)
-#' df <- loadDF(sqlCtx, path, "parquet")
-#' df2 <- loadDF(sqlCtx, path2, "parquet")
+#' df <- read.df(sqlCtx, path, "parquet")
+#' df2 <- read.df(sqlCtx, path2, "parquet")
 #' registerTempTable(df, "table1")
 #' insertInto(df2, "table1", overwrite = TRUE)
 #'}
@@ -472,14 +473,15 @@ setMethod("distinct",
             dataFrame(sdf)
           })
 
-#' SampleDF
+#' Sample
 #'
 #' Return a sampled subset of this DataFrame using a random seed.
 #'
 #' @param x A SparkSQL DataFrame
 #' @param withReplacement Sampling with replacement or not
 #' @param fraction The (rough) sample target fraction
-#' @rdname sampleDF
+#' @rdname sample
+#' @aliases sample_frac
 #' @export
 #' @examples
 #'\dontrun{
@@ -487,10 +489,10 @@ setMethod("distinct",
 #' sqlCtx <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlCtx, path)
-#' collect(sampleDF(df, FALSE, 0.5)) 
-#' collect(sampleDF(df, TRUE, 0.5))
+#' collect(sample(df, FALSE, 0.5)) 
+#' collect(sample(df, TRUE, 0.5))
 #'}
-setMethod("sampleDF",
+setMethod("sample",
           # TODO : Figure out how to send integer as java.lang.Long to JVM so
           # we can send seed as an argument through callJMethod
           signature(x = "DataFrame", withReplacement = "logical",
@@ -499,6 +501,15 @@ setMethod("sampleDF",
             if (fraction < 0.0) stop(cat("Negative fraction value:", fraction))
             sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction)
             dataFrame(sdf)
+          })
+
+#' @rdname sample
+#' @aliases sample
+setMethod("sample_frac",
+          signature(x = "DataFrame", withReplacement = "logical",
+                    fraction = "numeric"),
+          function(x, withReplacement, fraction) {
+            sample(x, withReplacement, fraction)
           })
 
 #' Count
@@ -682,7 +693,8 @@ setMethod("toRDD",
 #' @param x a DataFrame
 #' @return a GroupedData
 #' @seealso GroupedData
-#' @rdname DataFrame
+#' @aliases group_by
+#' @rdname groupBy
 #' @export
 #' @examples
 #' \dontrun{
@@ -705,17 +717,34 @@ setMethod("groupBy",
              groupedData(sgd)
            })
 
-#' Agg
+#' @rdname groupBy
+#' @aliases group_by
+setMethod("group_by",
+          signature(x = "DataFrame"),
+          function(x, ...) {
+            groupBy(x, ...)
+          })
+
+#' Summarize data across columns
 #'
 #' Compute aggregates by specifying a list of columns
 #'
 #' @param x a DataFrame
 #' @rdname DataFrame
+#' @aliases summarize
 #' @export
 setMethod("agg",
           signature(x = "DataFrame"),
           function(x, ...) {
             agg(groupBy(x), ...)
+          })
+
+#' @rdname DataFrame
+#' @aliases agg
+setMethod("summarize",
+          signature(x = "DataFrame"),
+          function(x, ...) {
+            agg(x, ...)
           })
 
 
@@ -886,7 +915,7 @@ setMethod("select",
           signature(x = "DataFrame", col = "list"),
           function(x, col) {
             cols <- lapply(col, function(c) {
-              if (class(c)== "Column") {
+              if (class(c) == "Column") {
                 c@jc
               } else {
                 col(c)@jc
@@ -946,6 +975,42 @@ setMethod("withColumn",
             select(x, x$"*", alias(col, colName))
           })
 
+#' Mutate
+#'
+#' Return a new DataFrame with the specified columns added.
+#'
+#' @param x A DataFrame
+#' @param col a named argument of the form name = col
+#' @return A new DataFrame with the new columns added.
+#' @rdname withColumn
+#' @aliases withColumn
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' newDF <- mutate(df, newCol = df$col1 * 5, newCol2 = df$col1 * 2)
+#' names(newDF) # Will contain newCol, newCol2
+#' }
+setMethod("mutate",
+          signature(x = "DataFrame"),
+          function(x, ...) {
+            cols <- list(...)
+            stopifnot(length(cols) > 0)
+            stopifnot(class(cols[[1]]) == "Column")
+            ns <- names(cols)
+            if (!is.null(ns)) {
+              for (n in ns) {
+                if (n != "") {
+                  cols[[n]] <- alias(cols[[n]], n)
+                }
+              }
+            }
+            do.call(select, c(x, x$"*", cols))
+          })
+
 #' WithColumnRenamed
 #'
 #' Rename an existing column in a DataFrame.
@@ -977,17 +1042,15 @@ setMethod("withColumnRenamed",
             select(x, cols)
           })
 
-setClassUnion("characterOrColumn", c("character", "Column"))
-
-#' SortDF 
+#' Rename
 #'
-#' Sort a DataFrame by the specified column(s).
+#' Rename an existing column in a DataFrame.
 #'
-#' @param x A DataFrame to be sorted.
-#' @param col Either a Column object or character vector indicating the field to sort on
-#' @param ... Additional sorting fields
-#' @return A DataFrame where all elements are sorted.
-#' @rdname sortDF
+#' @param x A DataFrame
+#' @param newCol A named pair of the form new_column_name = existing_column
+#' @return A DataFrame with the column name changed.
+#' @rdname withColumnRenamed
+#' @aliases withColumnRenamed
 #' @export
 #' @examples
 #'\dontrun{
@@ -995,11 +1058,51 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' sqlCtx <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlCtx, path)
-#' sortDF(df, df$col1)
-#' sortDF(df, "col1")
-#' sortDF(df, asc(df$col1), desc(abs(df$col2)))
+#' newDF <- rename(df, col1 = df$newCol1)
 #' }
-setMethod("sortDF",
+setMethod("rename",
+          signature(x = "DataFrame"),
+          function(x, ...) {
+            renameCols <- list(...)
+            stopifnot(length(renameCols) > 0)
+            stopifnot(class(renameCols[[1]]) == "Column")
+            newNames <- names(renameCols)
+            oldNames <- lapply(renameCols, function(col) {
+              callJMethod(col@jc, "toString")
+            })
+            cols <- lapply(columns(x), function(c) {
+              if (c %in% oldNames) {
+                alias(col(c), newNames[[match(c, oldNames)]])
+              } else {
+                col(c)
+              }
+            })
+            select(x, cols)
+          })
+
+setClassUnion("characterOrColumn", c("character", "Column"))
+
+#' Arrange
+#'
+#' Sort a DataFrame by the specified column(s).
+#'
+#' @param x A DataFrame to be sorted.
+#' @param col Either a Column object or character vector indicating the field to sort on
+#' @param ... Additional sorting fields
+#' @return A DataFrame where all elements are sorted.
+#' @rdname arrange
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' arrange(df, df$col1)
+#' arrange(df, "col1")
+#' arrange(df, asc(df$col1), desc(abs(df$col2)))
+#' }
+setMethod("arrange",
           signature(x = "DataFrame", col = "characterOrColumn"),
           function(x, col, ...) {
             if (class(col) == "character") {
@@ -1013,12 +1116,12 @@ setMethod("sortDF",
             dataFrame(sdf)
           })
 
-#' @rdname sortDF
+#' @rdname arrange
 #' @aliases orderBy,DataFrame,function-method
 setMethod("orderBy",
           signature(x = "DataFrame", col = "characterOrColumn"),
           function(x, col) {
-            sortDF(x, col)
+            arrange(x, col)
           })
 
 #' Filter
@@ -1026,7 +1129,7 @@ setMethod("orderBy",
 #' Filter the rows of a DataFrame according to a given condition.
 #'
 #' @param x A DataFrame to be sorted.
-#' @param condition The condition to sort on. This may either be a Column expression
+#' @param condition The condition to filter on. This may either be a Column expression
 #' or a string containing a SQL statement
 #' @return A DataFrame containing only the rows that meet the condition.
 #' @rdname filter
@@ -1106,6 +1209,7 @@ setMethod("join",
 #'
 #' Return a new DataFrame containing the union of rows in this DataFrame
 #' and another DataFrame. This is equivalent to `UNION ALL` in SQL.
+#' Note that this does not remove duplicate rows across the two DataFrames.
 #'
 #' @param x A Spark DataFrame
 #' @param y A Spark DataFrame
@@ -1199,7 +1303,7 @@ setMethod("except",
 #' @param source A name for external data source
 #' @param mode One of 'append', 'overwrite', 'error', 'ignore'
 #'
-#' @rdname saveAsTable
+#' @rdname write.df 
 #' @export
 #' @examples
 #'\dontrun{
@@ -1207,9 +1311,9 @@ setMethod("except",
 #' sqlCtx <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlCtx, path)
-#' saveAsTable(df, "myfile")
+#' write.df(df, "myfile", "parquet", "overwrite")
 #' }
-setMethod("saveDF",
+setMethod("write.df",
           signature(df = "DataFrame", path = 'character', source = 'character',
                     mode = 'character'),
           function(df, path = NULL, source = NULL, mode = "append", ...){
@@ -1230,6 +1334,15 @@ setMethod("saveDF",
             callJMethod(df@sdf, "save", source, jmode, options)
           })
 
+#' @rdname write.df
+#' @aliases saveDF
+#' @export
+setMethod("saveDF",
+          signature(df = "DataFrame", path = 'character', source = 'character',
+                    mode = 'character'),
+          function(df, path = NULL, source = NULL, mode = "append", ...){
+            write.df(df, path, source, mode, ...)
+          })
 
 #' saveAsTable
 #'

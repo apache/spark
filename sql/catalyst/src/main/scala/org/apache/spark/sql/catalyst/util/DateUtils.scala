@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
+package org.apache.spark.sql.catalyst.util
 
 import java.sql.Date
 import java.text.SimpleDateFormat

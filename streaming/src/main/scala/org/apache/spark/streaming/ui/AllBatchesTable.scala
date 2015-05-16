@@ -17,22 +17,28 @@
 
 package org.apache.spark.streaming.ui
 
+import java.text.SimpleDateFormat
+import java.util.Date
+
 import scala.xml.Node
 
 import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 
-private[ui] abstract class BatchTableBase(tableId: String) {
+private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) {
 
   protected def columns: Seq[Node] = {
     <th>Batch Time</th>
       <th>Input Size</th>
-      <th>Scheduling Delay</th>
-      <th>Processing Time</th>
+      <th>Scheduling Delay
+        {SparkUIUtils.tooltip("Time taken by Streaming scheduler to submit jobs of a batch", "top")}
+      </th>
+      <th>Processing Time
+        {SparkUIUtils.tooltip("Time taken to process all jobs of a batch", "top")}</th>
   }
 
   protected def baseRow(batch: BatchUIData): Seq[Node] = {
     val batchTime = batch.batchTime.milliseconds
-    val formattedBatchTime = SparkUIUtils.formatDate(batch.batchTime.milliseconds)
+    val formattedBatchTime = UIUtils.formatBatchTime(batchTime, batchInterval)
     val eventCount = batch.numRecords
     val schedulingDelay = batch.schedulingDelay
     val formattedSchedulingDelay = schedulingDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
@@ -76,7 +82,8 @@ private[ui] abstract class BatchTableBase(tableId: String) {
 
 private[ui] class ActiveBatchTable(
     runningBatches: Seq[BatchUIData],
-    waitingBatches: Seq[BatchUIData]) extends BatchTableBase("active-batches-table") {
+    waitingBatches: Seq[BatchUIData],
+    batchInterval: Long) extends BatchTableBase("active-batches-table", batchInterval) {
 
   override protected def columns: Seq[Node] = super.columns ++ <th>Status</th>
 
@@ -96,10 +103,12 @@ private[ui] class ActiveBatchTable(
   }
 }
 
-private[ui] class CompletedBatchTable(batches: Seq[BatchUIData])
-  extends BatchTableBase("completed-batches-table") {
+private[ui] class CompletedBatchTable(batches: Seq[BatchUIData], batchInterval: Long)
+  extends BatchTableBase("completed-batches-table", batchInterval) {
 
-  override protected def columns: Seq[Node] = super.columns ++ <th>Total Delay</th>
+  override protected def columns: Seq[Node] = super.columns ++
+    <th>Total Delay
+      {SparkUIUtils.tooltip("Total time taken to handle a batch", "top")}</th>
 
   override protected def renderRows: Seq[Node] = {
     batches.flatMap(batch => <tr>{completedBatchRow(batch)}</tr>)
