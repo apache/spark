@@ -79,7 +79,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
         s.blockManagerId.executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER ||
         s.blockManagerId.executorId == SparkContext.DRIVER_IDENTIFIER
       }
-      storageStatus.foreach(s => executorToLogUrls(s.blockManagerId.executorId) = logs.toMap)
+      storageStatus.foreach { s => executorToLogUrls(s.blockManagerId.executorId) = logs.toMap }
     }
   }
 

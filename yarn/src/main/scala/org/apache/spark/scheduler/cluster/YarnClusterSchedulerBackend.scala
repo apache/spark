@@ -66,57 +66,49 @@ private[spark] class YarnClusterSchedulerBackend(
   override def getDriverLogUrls: Option[Map[String, String]] = {
     var yarnClientOpt: Option[YarnClient] = None
     var driverLogs: Option[Map[String, String]] = None
-    val appId: String = applicationId()
-    if (appId == null) {
-      logError("Application Id not set. Cannot get Driver Log URLs")
-      None
-    } else {
-      try {
-        val yarnConf = new YarnConfiguration(sc.hadoopConfiguration)
-        val containerId = YarnSparkHadoopUtil.get.getContainerId
+    try {
+      val yarnConf = new YarnConfiguration(sc.hadoopConfiguration)
+      val containerId = YarnSparkHadoopUtil.get.getContainerId
+      yarnClientOpt = Some(YarnClient.createYarnClient())
+      yarnClientOpt.foreach { yarnClient =>
+        yarnClient.init(yarnConf)
+        yarnClient.start()
+        val addresses =
+          NetworkInterface.getNetworkInterfaces.asScala
+            .flatMap(_.getInetAddresses.asScala)
+            .toSeq
 
-        yarnClientOpt = Some(YarnClient.createYarnClient())
-
-        yarnClientOpt.foreach { yarnClient =>
-          yarnClient.init(yarnConf)
-          yarnClient.start()
-          val addresses =
-            NetworkInterface.getNetworkInterfaces.asScala
-              .flatMap(_.getInetAddresses.asScala)
-              .toSeq
-
-          val nodeReport =
-            yarnClient.getNodeReports(NodeState.RUNNING).asScala.find { x =>
-              val host = x.getNodeId.getHost
-              addresses.exists { address =>
-                address.getHostAddress == host ||
-                  address.getHostName == host ||
-                  address.getCanonicalHostName == host
-              }
+        val nodeReport =
+          yarnClient.getNodeReports(NodeState.RUNNING).asScala.find { x =>
+            val host = x.getNodeId.getHost
+            addresses.exists { address =>
+              address.getHostAddress == host ||
+                address.getHostName == host ||
+                address.getCanonicalHostName == host
             }
-          nodeReport.foreach { report =>
-            val httpAddress = report.getHttpAddress
-            // lookup appropriate http scheme for container log urls
-            val yarnHttpPolicy = yarnConf.get(
-              YarnConfiguration.YARN_HTTP_POLICY_KEY,
-              YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
-            )
-            val user = Utils.getCurrentUserName()
-            val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
-            val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
-            logInfo(s"Base URL for logs: $baseUrl")
-            driverLogs = Some(
-              Map("stderr" -> s"$baseUrl/stderr?start=0", "stdout" -> s"$baseUrl/stdout?start=0"))
           }
+        nodeReport.foreach { report =>
+          val httpAddress = report.getHttpAddress
+          // lookup appropriate http scheme for container log urls
+          val yarnHttpPolicy = yarnConf.get(
+            YarnConfiguration.YARN_HTTP_POLICY_KEY,
+            YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
+          )
+          val user = Utils.getCurrentUserName()
+          val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
+          val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
+          logInfo(s"Base URL for logs: $baseUrl")
+          driverLogs = Some(
+            Map("stderr" -> s"$baseUrl/stderr?start=0", "stdout" -> s"$baseUrl/stdout?start=0"))
         }
-      } catch {
-        case e: Exception =>
-          logInfo("Node Report API is not available in the version of YARN being used, so AM" +
-            " logs link will not appear in application UI", e)
-      } finally {
-        yarnClientOpt.foreach(_.close())
       }
-      driverLogs
+    } catch {
+      case e: Exception =>
+        logInfo("Node Report API is not available in the version of YARN being used, so AM" +
+          " logs link will not appear in application UI", e)
+    } finally {
+      yarnClientOpt.foreach(_.close())
     }
+    driverLogs
   }
 }
