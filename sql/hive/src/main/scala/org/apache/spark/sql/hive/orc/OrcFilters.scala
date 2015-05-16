@@ -88,7 +88,7 @@ private[orc] object OrcFilters extends Logging {
           .orElse(tryLeft.flatMap(_ => buildSearchArgument(left, builder)))
           .orElse(tryRight.flatMap(_ => buildSearchArgument(right, builder)))
 
-      case And(left, right) =>
+      case Or(left, right) =>
         for {
           _ <- buildSearchArgument(left, newBuilder)
           _ <- buildSearchArgument(right, newBuilder)
