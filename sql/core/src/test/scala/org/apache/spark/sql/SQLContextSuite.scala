@@ -17,62 +17,33 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.test.TestSQLContext
 
-class SQLContextSuite extends FunSuite with BeforeAndAfter {
-  private val sparkConf = new SparkConf()
-    .setMaster("local")
-    .setAppName("SQLContextSuite")
-    .clone.set("newContext", "true")
+class SQLContextSuite extends FunSuite with BeforeAndAfterAll {
 
-  private var sparkContext: SparkContext = null
-  private var sqlContext: SQLContext = null
+  private val testSqlContext = TestSQLContext
+  private val testSparkContext = TestSQLContext.sparkContext
 
-  before {
+  override def afterAll(): Unit = {
+    SQLContext.setLastInstantiatedContext(testSqlContext)
+  }
+
+  test("getOrCreate instantiates SQLContext") {
     SQLContext.clearLastInstantiatedContext()
-    SparkContext.clearActiveContext()
-  }
-
-  after {
-    if (sqlContext != null) {
-      sparkContext = sqlContext.sparkContext
-      sqlContext = null
-    }
-    if (sparkContext != null) {
-      sparkContext.stop()
-      sparkContext = null
-    }
-  }
-
-  test("getOrCreate instantiates SQLContext from SparkConf") {
-    sqlContext = SQLContext.getOrCreate(sparkConf)
-    assert(sqlContext != null, "SQLContext not created")
-    assert(sqlContext.sparkContext != null, "SparkContext not created")
-    assert(sqlContext.sparkContext.conf.getBoolean("newContext", false),
-      "Provided conf not used to create SparkContext")
-    assert(SQLContext.getOrCreate(sparkConf).eq(sqlContext),
-      "Created SQLContext not saved as singleton")
-  }
-
-  test("getOrCreate instantiates SQLContext from SparkContext") {
-    sparkContext = new SparkContext(sparkConf)
-    sqlContext = SQLContext.getOrCreate(sparkConf)
-    assert(sqlContext != null, "SQLContext not created")
-    assert(sqlContext.sparkContext != null, "SparkContext not passed")
-    assert(SQLContext.getOrCreate(sparkConf) != null,
-      "Instantiated SQLContext was not saved, null returned")
-    assert(SQLContext.getOrCreate(sparkConf).eq(sqlContext),
-      "Different SQLContext was returned")
+    val sqlContext = SQLContext.getOrCreate(testSparkContext)
+    assert(sqlContext != null, "SQLContext.getOrCreate returned null")
+    assert(SQLContext.getOrCreate(testSparkContext).eq(sqlContext),
+      "SQLContext created by SQLContext.getOrCreate not returned by SQLContext.getOrCreate")
   }
 
   test("getOrCreate gets last explicitly instantiated SQLContext") {
-    sparkContext = new SparkContext(sparkConf)
-    sqlContext = new SQLContext(sparkContext)
-    assert(SQLContext.getOrCreate(sparkConf) != null,
-      "Explicitly instantiated SQLContext was not saved, null returned")
-    assert(SQLContext.getOrCreate(sparkConf).eq(sqlContext),
-      "Different SQLContext was returned")
+    SQLContext.clearLastInstantiatedContext()
+    val sqlContext = new SQLContext(testSparkContext)
+    assert(SQLContext.getOrCreate(testSparkContext) != null,
+      "SQLContext.getOrCreate after explicitly created SQLContext returned null")
+    assert(SQLContext.getOrCreate(testSparkContext).eq(sqlContext),
+      "SQLContext.getOrCreate after explicitly created SQLContext did not return the context")
   }
 }

@@ -1294,15 +1294,6 @@ object SQLContext {
    * This function can be used to create a singleton SQLContext object that can be shared across
    * the JVM.
    */
-  def getOrCreate(config: SparkConf): SQLContext = {
-    getOrCreate(SparkContext.getOrCreate(config))
-  }
-
-  /**
-   * Get the singleton SQLContext if it exists or create a new one using the given configuration.
-   * This function can be used to create a singleton SQLContext object that can be shared across
-   * the JVM.
-   */
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
     INSTANTIATION_LOCK.synchronized {
       if (lastInstantiatedContext.get() == null) {
@@ -1312,13 +1303,19 @@ object SQLContext {
     lastInstantiatedContext.get()
   }
 
+  private[sql] def getLastInstantiatedContext(): Option[SQLContext] = {
+    INSTANTIATION_LOCK.synchronized {
+      Option(lastInstantiatedContext.get())
+    }
+  }
+
   private[sql] def clearLastInstantiatedContext(): Unit = {
     INSTANTIATION_LOCK.synchronized {
       lastInstantiatedContext.set(null)
     }
   }
 
-  private def setLastInstantiatedContext(sqlContext: SQLContext): Unit = {
+  private[sql] def setLastInstantiatedContext(sqlContext: SQLContext): Unit = {
     INSTANTIATION_LOCK.synchronized {
       lastInstantiatedContext.set(sqlContext)
     }
