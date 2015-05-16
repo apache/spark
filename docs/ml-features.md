@@ -191,6 +191,7 @@ for words_label in wordsDataFrame.select("words", "label").take(3):
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 import org.apache.spark.ml.feature.PolynomialExpansion
+import org.apache.spark.mllib.linalg.Vectors
 
 val data = Array(
   Vectors.dense(-2.0, 2.3),
@@ -202,15 +203,13 @@ val polynomialExpansion = new PolynomialExpansion()
   .setInputCol("features")
   .setOutputCol("polyFeatures")
   .setDegree(3)
-val expandedFeatures = polynomialExpansion.transform(df)
-expandedFeatures.select("polyFeatures").take(3).foreach(println)
+val polyDF = polynomialExpansion.transform(df)
+polyDF.select("polyFeatures").take(3).foreach(println)
 {% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import scala.Tuple2;
-
 import com.google.common.collect.Lists;
 
 import org.apache.spark.api.java.JavaRDD;
@@ -240,25 +239,28 @@ JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
 StructType schema = new StructType(new StructField[] {
   new StructField("features", new VectorUDT(), false, Metadata.empty()),
 });
-DataFrame dataset = jsql.createDataFrame(data, schema);
-DataFrame polyDF = polyExpansion.transform(dataset);
+DataFrame df = jsql.createDataFrame(data, schema);
+DataFrame polyDF = polyExpansion.transform(df);
 Row[] row = polyDF.select("polyFeatures").take(3);
 for (Row r : row) {
-  System.out.println((((Vector)r.get(0))));
+  System.out.println(r.get(0));
 }
 {% endhighlight %}
 </div>
 
 <div data-lang="python" markdown="1">
 {% highlight python %}
-from pyspark.mllib.linalg import Vectors
 from pyspark.ml.feature import PolynomialExpansion
+from pyspark.mllib.linalg import Vectors
+
 df = sqlContext.createDataFrame(
-  [(Vectors.dense([-2.0, 2.3]), ), (Vectors.dense([0.0, 0.0]), ), (Vectors.dense([0.6, -1.1]), )],
-  ["dense"])
-px = PolynomialExpansion(degree=2, inputCol="dense", outputCol="expanded")
+  [(Vectors.dense([-2.0, 2.3]), ),
+  (Vectors.dense([0.0, 0.0]), ),
+  (Vectors.dense([0.6, -1.1]), )],
+  ["features"])
+px = PolynomialExpansion(degree=2, inputCol="features", outputCol="polyFeatures")
 polyDF = px.transform(df)
-for expanded in polyDF.select("expanded").take(3):
+for expanded in polyDF.select("polyFeatures").take(3):
   print expanded
 {% endhighlight %}
 </div>
