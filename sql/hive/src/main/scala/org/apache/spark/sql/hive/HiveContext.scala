@@ -141,7 +141,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * prefix that typically would be shared (i.e. org.apache.spark.*)
    */
   protected[hive] def hiveMetastoreBarrierPrefixes: Seq[String] =
-    getConf("spark.sql.hive.metastore.barrierPrefixes", "").split(",")
+    getConf("spark.sql.hive.metastore.barrierPrefixes", "")
+      .split(",").filterNot(_ == "")
 
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
