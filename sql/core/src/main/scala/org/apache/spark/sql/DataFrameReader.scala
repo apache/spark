@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql
 
+import java.util.Properties
+
 import org.apache.hadoop.fs.Path
+import org.apache.spark.Partition
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.json.{JsonRDD, JSONRelation}
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.{LogicalRelation, ResolvedDataSource}
@@ -31,7 +35,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * :: Experimental ::
  * Interface used to load a [[DataFrame]] from external storage systems (e.g. file systems,
- * key-value stores, etc).
+ * key-value stores, etc). Use [[SQLContext.read]] to access this.
  *
  * @since 1.4.0
  */
@@ -126,6 +130,71 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
       provider = source,
       options = extraOptions.toMap)
     DataFrame(sqlContext, LogicalRelation(resolved.relation))
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table and connection properties.
+   *
+   * @since 1.4.0
+   */
+  def jdbc(url: String, table: String, properties: Properties): DataFrame = {
+    jdbc(url, table, JDBCRelation.columnPartition(null), properties)
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table.  Partitions of the table will be retrieved in parallel based on the parameters
+   * passed to this function.
+   *
+   * @param columnName the name of a column of integral type that will be used for partitioning.
+   * @param lowerBound the minimum value of `columnName` used to decide partition stride
+   * @param upperBound the maximum value of `columnName` used to decide partition stride
+   * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
+   *                      evenly into this many partitions
+   * @param connectionProperties connection properties
+   *
+   * @since 1.4.0
+   */
+  def jdbc(
+      url: String,
+      table: String,
+      columnName: String,
+      lowerBound: Long,
+      upperBound: Long,
+      numPartitions: Int,
+      connectionProperties: Properties): DataFrame = {
+    val partitioning = JDBCPartitioningInfo(columnName, lowerBound, upperBound, numPartitions)
+    val parts = JDBCRelation.columnPartition(partitioning)
+    jdbc(url, table, parts, connectionProperties)
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table using connection properties. The theParts parameter gives a list expressions
+   * suitable for inclusion in WHERE clauses; each one defines one partition
+   * of the [[DataFrame]].
+   *
+   * @since 1.4.0
+   */
+  def jdbc(
+      url: String,
+      table: String,
+      theParts: Array[String],
+      connectionProperties: Properties): DataFrame = {
+    val parts: Array[Partition] = theParts.zipWithIndex.map { case (part, i) =>
+      JDBCPartition(part, i) : Partition
+    }
+    jdbc(url, table, parts, connectionProperties)
+  }
+
+  private def jdbc(
+      url: String,
+      table: String,
+      parts: Array[Partition],
+      connectionProperties: Properties): DataFrame = {
+    val relation = JDBCRelation(url, table, parts, connectionProperties)(sqlContext)
+    sqlContext.baseRelationToDataFrame(relation)
   }
 
   /**
