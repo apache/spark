@@ -103,7 +103,7 @@ object DatasetExample {
     tmpDir.deleteOnExit()
     val outputDir = new File(tmpDir, "dataset").toString
     println(s"Saving to $outputDir as Parquet file.")
-    df.saveAsParquetFile(outputDir)
+    df.write.parquet(outputDir)
 
     println(s"Loading Parquet file with UDT from $outputDir.")
     val newDataset = sqlContext.read.parquet(outputDir)
