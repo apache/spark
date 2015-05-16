@@ -106,7 +106,7 @@ object DatasetExample {
     df.saveAsParquetFile(outputDir)
 
     println(s"Loading Parquet file with UDT from $outputDir.")
-    val newDataset = sqlContext.parquetFile(outputDir)
+    val newDataset = sqlContext.read.parquet(outputDir)
 
     println(s"Schema from Parquet: ${newDataset.schema.prettyJson}")
     val newFeatures = newDataset.select("features").map { case Row(v: Vector) => v }

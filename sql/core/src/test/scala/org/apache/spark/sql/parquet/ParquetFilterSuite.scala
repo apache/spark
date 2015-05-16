@@ -328,12 +328,12 @@ class ParquetDataSourceOnFilterSuite extends ParquetFilterSuiteBase with BeforeA
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED -> "true") {
       withTempPath { dir =>
         val path = s"${dir.getCanonicalPath}/part=1"
-        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").saveAsParquetFile(path)
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
 
         // If the "part = 1" filter gets pushed down, this query will throw an exception since
         // "part" is not a valid column in the actual Parquet file
         checkAnswer(
-          sqlContext.parquetFile(path).filter("part = 1"),
+          sqlContext.read.parquet(path).filter("part = 1"),
           (1 to 3).map(i => Row(i, i.toString, 1)))
       }
     }
@@ -357,7 +357,7 @@ class ParquetDataSourceOffFilterSuite extends ParquetFilterSuiteBase with Before
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED -> "true") {
       withTempPath { dir =>
         val path = s"${dir.getCanonicalPath}/part=1"
-        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").saveAsParquetFile(path)
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
 
         // If the "part = 1" filter gets pushed down, this query will throw an exception since
         // "part" is not a valid column in the actual Parquet file
