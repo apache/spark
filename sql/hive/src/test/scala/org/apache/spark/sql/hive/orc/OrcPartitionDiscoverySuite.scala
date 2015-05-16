@@ -48,13 +48,13 @@ class OrcPartitionDiscoverySuite extends QueryTest with FunSuiteLike with Before
 
   def makeOrcFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {
-    data.toDF().saveAsOrcFile(path.getCanonicalPath)
+    data.toDF().write.format("orc").mode("overwrite").save(path.getCanonicalPath)
   }
 
 
   def makeOrcFile[T <: Product: ClassTag: TypeTag](
       df: DataFrame, path: File): Unit = {
-    df.saveAsOrcFile(path.getCanonicalPath)
+    df.write.format("orc").mode("overwrite").save(path.getCanonicalPath)
   }
 
   protected def withTempTable(tableName: String)(f: => Unit): Unit = {
@@ -89,7 +89,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with FunSuiteLike with Before
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      TestHive.orcFile(base.getCanonicalPath).registerTempTable("t")
+      read.format("orc").load(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -136,7 +136,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with FunSuiteLike with Before
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      TestHive.orcFile(base.getCanonicalPath).registerTempTable("t")
+      read.format("orc").load(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -185,13 +185,11 @@ class OrcPartitionDiscoverySuite extends QueryTest with FunSuiteLike with Before
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      val orcRelation = load(
-        "org.apache.spark.sql.hive.orc.DefaultSource",
-        Map(
-          "path" -> base.getCanonicalPath,
-          ConfVars.DEFAULTPARTITIONNAME.varname -> defaultPartitionName))
-
-      orcRelation.registerTempTable("t")
+      read
+        .format("orc")
+        .option(ConfVars.DEFAULTPARTITIONNAME.varname, defaultPartitionName)
+        .load(base.getCanonicalPath)
+        .registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -230,13 +228,11 @@ class OrcPartitionDiscoverySuite extends QueryTest with FunSuiteLike with Before
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      val orcRelation = load(
-        "org.apache.spark.sql.hive.orc.DefaultSource",
-        Map(
-          "path" -> base.getCanonicalPath,
-          ConfVars.DEFAULTPARTITIONNAME.varname -> defaultPartitionName))
-
-      orcRelation.registerTempTable("t")
+      read
+        .format("orc")
+        .option(ConfVars.DEFAULTPARTITIONNAME.varname, defaultPartitionName)
+        .load(base.getCanonicalPath)
+        .registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(

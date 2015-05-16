@@ -41,7 +41,7 @@ private[sql] trait OrcTest extends SQLTestUtils {
       (data: Seq[T])
       (f: String => Unit): Unit = {
     withTempPath { file =>
-      sparkContext.parallelize(data).toDF().saveAsOrcFile(file.getCanonicalPath)
+      sparkContext.parallelize(data).toDF().write.format("orc").save(file.getCanonicalPath)
       f(file.getCanonicalPath)
     }
   }
@@ -53,8 +53,7 @@ private[sql] trait OrcTest extends SQLTestUtils {
   protected def withOrcDataFrame[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: DataFrame => Unit): Unit = {
-    import org.apache.spark.sql.hive.orc.OrcContext
-    withOrcFile(data)(path => f(hiveContext.orcFile(path)))
+    withOrcFile(data)(path => f(hiveContext.read.format("orc").load(path)))
   }
 
   /**
@@ -73,12 +72,12 @@ private[sql] trait OrcTest extends SQLTestUtils {
 
   protected def makeOrcFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {
-    data.toDF().save(path.getCanonicalPath, "org.apache.spark.sql.orc", SaveMode.Overwrite)
+    data.toDF().write.format("orc").mode(SaveMode.Overwrite).save(path.getCanonicalPath)
   }
 
   protected def makeOrcFile[T <: Product: ClassTag: TypeTag](
       df: DataFrame, path: File): Unit = {
-    df.save(path.getCanonicalPath, "org.apache.spark.sql.orc", SaveMode.Overwrite)
+    df.write.format("orc").mode(SaveMode.Overwrite).save(path.getCanonicalPath)
   }
 }
 

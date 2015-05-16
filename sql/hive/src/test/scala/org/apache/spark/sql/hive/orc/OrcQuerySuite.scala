@@ -21,43 +21,13 @@ import java.io.File
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc.CompressionKind
+import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.util.Utils
-import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
-
-case class TestRDDEntry(key: Int, value: String)
-
-case class NullReflectData(
-    intField: java.lang.Integer,
-    longField: java.lang.Long,
-    floatField: java.lang.Float,
-    doubleField: java.lang.Double,
-    booleanField: java.lang.Boolean)
-
-case class OptionalReflectData(
-    intField: Option[Int],
-    longField: Option[Long],
-    floatField: Option[Float],
-    doubleField: Option[Double],
-    booleanField: Option[Boolean])
-
-case class Nested(i: Int, s: String)
-
-case class Data(array: Seq[Int], nested: Nested)
-
-case class AllDataTypes(
-    stringField: String,
-    intField: Int,
-    longField: Long,
-    floatField: Float,
-    doubleField: Double,
-    shortField: Short,
-    byteField: Byte,
-    booleanField: Boolean)
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -72,7 +42,7 @@ case class AllDataTypesWithNonPrimitiveType(
     arrayContainsNull: Seq[Option[Int]],
     map: Map[Int, Long],
     mapValueContainsNull: Map[Int, Option[Long]],
-    data: Data)
+    data: (Seq[Int], (Int, String)))
 
 case class BinaryData(binaryData: Array[Byte])
 
@@ -80,7 +50,10 @@ case class Contact(name: String, phone: String)
 
 case class Person(name: String, age: Int, contacts: Seq[Contact])
 
-class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
+class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll with OrcTest {
+  override val sqlContext = TestHive
+
+  import TestHive.read
 
   def getTempFilePath(prefix: String, suffix: String = ""): File = {
     val tempFile = File.createTempFile(prefix, suffix)
@@ -88,157 +61,146 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
     tempFile
   }
 
-  test("Read/Write All Types") {
-      val tempDir = getTempFilePath("orcTest").getCanonicalPath
-      val range = (0 to 255)
-      val data = sparkContext.parallelize(range)
-        .map(x =>
-        AllDataTypes(s"$x", x, x.toLong, x.toFloat,x.toDouble, x.toShort, x.toByte, x % 2 == 0))
-      data.toDF().saveAsOrcFile(tempDir)
+  test("Read/write All Types") {
+    val data = (0 to 255).map { i =>
+      (s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0)
+    }
+
+    withOrcFile(data) { file =>
       checkAnswer(
-        TestHive.orcFile(tempDir),
-        data.toDF().collect().toSeq)
-      Utils.deleteRecursively(new File(tempDir))
+        read.format("orc").load(file),
+        data.toDF().collect())
+    }
+  }
+
+  test("Read/write binary data") {
+    withOrcFile(BinaryData("test".getBytes("utf8")) :: Nil) { file =>
+      val bytes = read.format("orc").load(file).head().getAs[Array[Byte]](0)
+      assert(new String(bytes, "utf8") === "test")
+    }
+  }
+
+  test("Read/write all types with non-primitive type") {
+    val data = (0 to 255).map { i =>
+      AllDataTypesWithNonPrimitiveType(
+        s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0,
+        0 until i,
+        (0 until i).map(Option(_).filter(_ % 3 == 0)),
+        (0 until i).map(i => i -> i.toLong).toMap,
+        (0 until i).map(i => i -> Option(i.toLong)).toMap + (i -> None),
+        (0 until i, (i, s"$i")))
     }
 
-    test("read/write binary data") {
-      val tempDir = getTempFilePath("orcTest").getCanonicalPath
-      sparkContext.parallelize(BinaryData("test".getBytes("utf8")) :: Nil)
-        .toDF().saveAsOrcFile(tempDir)
-      TestHive.orcFile(tempDir)
-        .map(r => new String(r(0).asInstanceOf[Array[Byte]], "utf8"))
-        .collect().toSeq == Seq("test")
-      Utils.deleteRecursively(new File(tempDir))
-    }
-
-    test("Read/Write All Types with non-primitive type") {
-      val tempDir = getTempFilePath("orcTest").getCanonicalPath
-      val range = 0 to 255
-      val data = sparkContext.parallelize(range).map { x =>
-        AllDataTypesWithNonPrimitiveType(
-          s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0,
-          0 until x,
-          (0 until x).map(Option(_).filter(_ % 3 == 0)),
-          (0 until x).map(i => i -> i.toLong).toMap,
-          (0 until x).map(i => i -> Option(i.toLong)).toMap + (x -> None),
-          Data(0 until x, Nested(x, s"$x")))
-      }
-      data.toDF().saveAsOrcFile(tempDir)
-
+    withOrcFile(data) { file =>
       checkAnswer(
-        TestHive.orcFile(tempDir),
-        data.toDF().collect().toSeq)
-      Utils.deleteRecursively(new File(tempDir))
+        read.format("orc").load(file),
+        data.toDF().collect())
+    }
+  }
+
+  test("Creating case class RDD table") {
+    val data = (1 to 100).map(i => (i, s"val_$i"))
+    sparkContext.parallelize(data).toDF().registerTempTable("t")
+    withTempTable("t") {
+      checkAnswer(sql("SELECT * FROM t"), data.toDF().collect())
+    }
+  }
+
+  test("Simple selection form ORC table") {
+    val data = (1 to 10).map { i =>
+      Person(s"name_$i", i, (0 to 1).map { m => Contact(s"contact_$m", s"phone_$m") })
     }
 
-    test("Creating case class RDD table") {
-      sparkContext.parallelize((1 to 100))
-        .map(i => TestRDDEntry(i, s"val_$i"))
-        .toDF().registerTempTable("tmp")
-      val rdd = sql("SELECT * FROM tmp").collect().sortBy(_.getInt(0))
-      var counter = 1
-      rdd.foreach {
-        // '===' does not like string comparison?
-        row: Row => {
-          assert(row.getString(1).equals(s"val_$counter"),
-            s"row $counter value ${row.getString(1)} does not match val_$counter")
-          counter = counter + 1
-        }
-      }
-    }
-
-    test("Simple selection form orc table") {
-      val tempDir = getTempFilePath("orcTest").getCanonicalPath
-      val data = sparkContext.parallelize((1 to 10))
-        .map(i => Person(s"name_$i", i,  (0 until 2).map{ m=>
-        Contact(s"contact_$m", s"phone_$m") }))
-      data.toDF().saveAsOrcFile(tempDir)
-      val f = TestHive.orcFile(tempDir)
-      f.registerTempTable("tmp")
-
+    withOrcTable(data, "t") {
       // ppd:
       // leaf-0 = (LESS_THAN_EQUALS age 5)
       // expr = leaf-0
-      var rdd = sql("SELECT name FROM tmp where age <= 5")
-      assert(rdd.count() == 5)
+      assert(sql("SELECT name FROM t WHERE age <= 5").count() === 5)
 
       // ppd:
       // leaf-0 = (LESS_THAN_EQUALS age 5)
       // expr = (not leaf-0)
-      rdd = sql("SELECT name, contacts FROM tmp where age > 5")
-      assert(rdd.count() == 5)
-      var contacts = rdd.flatMap(t=>t(1).asInstanceOf[Seq[_]])
-      assert(contacts.count() == 10)
+      assertResult(10) {
+        sql("SELECT name, contacts FROM t where age > 5")
+          .flatMap(_.getAs[Seq[_]]("contacts"))
+          .count()
+      }
 
       // ppd:
       // leaf-0 = (LESS_THAN_EQUALS age 5)
       // leaf-1 = (LESS_THAN age 8)
       // expr = (and (not leaf-0) leaf-1)
-      rdd = sql("SELECT name, contacts FROM tmp where age > 5 and age < 8")
-      assert(rdd.count() == 2)
-      contacts = rdd.flatMap(t=>t(1).asInstanceOf[Seq[_]])
-      assert(contacts.count() == 4)
+      {
+        val df = sql("SELECT name, contacts FROM t WHERE age > 5 AND age < 8")
+        assert(df.count() === 2)
+        assertResult(4) {
+          df.flatMap(_.getAs[Seq[_]]("contacts")).count()
+        }
+      }
 
       // ppd:
       // leaf-0 = (LESS_THAN age 2)
       // leaf-1 = (LESS_THAN_EQUALS age 8)
       // expr = (or leaf-0 (not leaf-1))
-      rdd = sql("SELECT name, contacts FROM tmp where age < 2 or age > 8")
-      assert(rdd.count() == 3)
-      contacts = rdd.flatMap(t=>t(1).asInstanceOf[Seq[_]])
-      assert(contacts.count() == 6)
+      {
+        val df = sql("SELECT name, contacts FROM t WHERE age < 2 OR age > 8")
+        assert(df.count() === 3)
+        assertResult(6) {
+          df.flatMap(_.getAs[Seq[_]]("contacts")).count()
+        }
+      }
+    }
+  }
 
+  test("save and load case class RDD with `None`s as orc") {
+    val data = (
+      None: Option[Int],
+      None: Option[Long],
+      None: Option[Float],
+      None: Option[Double],
+      None: Option[Boolean]
+    ) :: Nil
 
-      Utils.deleteRecursively(new File(tempDir))
+    withOrcFile(data) { file =>
+      checkAnswer(
+        read.format("orc").load(file),
+        Row(Seq.fill(5)(null): _*))
+    }
+  }
+
+  // We only support zlib in Hive 0.12.0 now
+  test("Default compression options for writing to an ORC file") {
+    withOrcFile((1 to 100).map(i => (i, s"val_$i"))) { file =>
+      assertResult(CompressionKind.ZLIB) {
+        OrcFileOperator.getFileReader(file).getCompression
+      }
+    }
+  }
+
+  // Following codec is supported in hive-0.13.1, ignore it now
+  ignore("Other compression options for writing to an ORC file - 0.13.1 and above") {
+    val data = (1 to 100).map(i => (i, s"val_$i"))
+    val conf = sparkContext.hadoopConfiguration
+
+    conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "SNAPPY")
+    withOrcFile(data) { file =>
+      assertResult(CompressionKind.SNAPPY) {
+        OrcFileOperator.getFileReader(file).getCompression
+      }
     }
 
-    test("save and load case class RDD with Nones as orc") {
-      val data = OptionalReflectData(None, None, None, None, None)
-      val rdd = sparkContext.parallelize(data :: Nil)
-      val tempDir = getTempFilePath("orcTest").getCanonicalPath
-      rdd.toDF().saveAsOrcFile(tempDir)
-      val readFile = TestHive.orcFile(tempDir)
-      val rdd_saved = readFile.collect()
-      assert(rdd_saved(0).toSeq === Seq.fill(5)(null))
-      Utils.deleteRecursively(new File(tempDir))
+    conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "NONE")
+    withOrcFile(data) { file =>
+      assertResult(CompressionKind.NONE) {
+        OrcFileOperator.getFileReader(file).getCompression
+      }
     }
 
-    //  We only support zlib in hive0.12.0 now
-    test("Default Compression options for writing to an Orcfile") {
-      // TODO: support other compress codec
-      val tempDir = getTempFilePath("orcTest").getCanonicalPath
-      val rdd = sparkContext.parallelize(1 to 100)
-        .map(i => TestRDDEntry(i, s"val_$i"))
-      rdd.toDF().saveAsOrcFile(tempDir)
-      val actualCodec = OrcFileOperator.getFileReader(tempDir).getCompression
-      assert(actualCodec == CompressionKind.ZLIB)
-      Utils.deleteRecursively(new File(tempDir))
+    conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "LZO")
+    withOrcFile(data) { file =>
+      assertResult(CompressionKind.LZO) {
+        OrcFileOperator.getFileReader(file).getCompression
+      }
     }
-
-    // Following codec is supported in hive-0.13.1, ignore it now
-    ignore("Other Compression options for writing to an Orcfile - 0.13.1 and above") {
-      val conf = TestHive.sparkContext.hadoopConfiguration
-      conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.name(), "SNAPPY")
-      var tempDir = getTempFilePath("orcTest").getCanonicalPath
-      val rdd = sparkContext.parallelize(1 to 100)
-        .map(i => TestRDDEntry(i, s"val_$i"))
-      rdd.toDF().saveAsOrcFile(tempDir)
-      var actualCodec = OrcFileOperator.getFileReader(tempDir).getCompression
-      assert(actualCodec == CompressionKind.SNAPPY)
-      Utils.deleteRecursively(new File(tempDir))
-
-      conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.name(), "NONE")
-      tempDir = getTempFilePath("orcTest").getCanonicalPath
-      rdd.toDF().saveAsOrcFile(tempDir)
-      actualCodec = OrcFileOperator.getFileReader(tempDir).getCompression
-      assert(actualCodec == CompressionKind.NONE)
-      Utils.deleteRecursively(new File(tempDir))
-
-      conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.name(), "LZO")
-      tempDir = getTempFilePath("orcTest").getCanonicalPath
-      rdd.toDF().saveAsOrcFile(tempDir)
-      actualCodec = OrcFileOperator.getFileReader(tempDir).getCompression
-      assert(actualCodec == CompressionKind.LZO)
-      Utils.deleteRecursively(new File(tempDir))
-    }
+  }
 }

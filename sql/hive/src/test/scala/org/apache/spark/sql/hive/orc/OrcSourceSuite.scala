@@ -18,10 +18,11 @@
 package org.apache.spark.sql.hive.orc
 
 import java.io.File
+
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{Row, QueryTest}
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.{QueryTest, Row}
 
 case class OrcData(intField: Int, stringField: String)
 
@@ -42,25 +43,25 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
     orcTableDir.mkdir()
     import org.apache.spark.sql.hive.test.TestHive.implicits._
 
-    (sparkContext
+    sparkContext
       .makeRDD(1 to 10)
-      .map(i => OrcData(i, s"part-$i")))
-      .toDF.registerTempTable(s"orc_temp_table")
-
-    sql(s"""
-      create external table normal_orc
-      (
-        intField INT,
-        stringField STRING
-      )
-      STORED AS orc
-      location '${orcTableDir.getCanonicalPath}'
-    """)
+      .map(i => OrcData(i, s"part-$i"))
+      .toDF()
+      .registerTempTable(s"orc_temp_table")
 
     sql(
-      s"""insert into table normal_orc
-      select intField, stringField from orc_temp_table""")
+      s"""CREATE EXTERNAL TABLE normal_orc(
+         |  intField INT,
+         |  stringField STRING
+         |)
+         |STORED AS ORC
+         |LOCATION '${orcTableAsDir.getCanonicalPath}'
+       """.stripMargin)
 
+    sql(
+      s"""INSERT INTO TABLE normal_orc
+         |SELECT intField, stringField FROM orc_temp_table
+       """.stripMargin)
   }
 
   override def afterAll(): Unit = {
@@ -73,41 +74,15 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source"),
-      Row(1, "part-1") ::
-        Row(2, "part-2") ::
-        Row(3, "part-3") ::
-        Row(4, "part-4") ::
-        Row(5, "part-5") ::
-        Row(6, "part-6") ::
-        Row(7, "part-7") ::
-        Row(8, "part-8") ::
-        Row(9, "part-9") ::
-        Row(10, "part-10") :: Nil
-    )
+      (1 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source where intField > 5"),
-      Row(6, "part-6") ::
-        Row(7, "part-7") ::
-        Row(8, "part-8") ::
-        Row(9, "part-9") ::
-        Row(10, "part-10") :: Nil
-    )
+      (6 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
-      sql("SELECT count(intField), stringField FROM normal_orc_source group by stringField"),
-      Row(1, "part-1") ::
-        Row(1, "part-2") ::
-        Row(1, "part-3") ::
-        Row(1, "part-4") ::
-        Row(1, "part-5") ::
-        Row(1, "part-6") ::
-        Row(1, "part-7") ::
-        Row(1, "part-8") ::
-        Row(1, "part-9") ::
-        Row(1, "part-10") :: Nil
-    )
-
+      sql("SELECT COUNT(intField), stringField FROM normal_orc_source GROUP BY stringField"),
+      (1 to 10).map(i => Row(1, s"part-$i")))
   }
 
   test("create temporary orc table as") {
@@ -115,76 +90,36 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source"),
-      Row(1, "part-1") ::
-        Row(2, "part-2") ::
-        Row(3, "part-3") ::
-        Row(4, "part-4") ::
-        Row(5, "part-5") ::
-        Row(6, "part-6") ::
-        Row(7, "part-7") ::
-        Row(8, "part-8") ::
-        Row(9, "part-9") ::
-        Row(10, "part-10") :: Nil
-    )
+      (1 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
-      sql("SELECT * FROM normal_orc_source where intField > 5"),
-      Row(6, "part-6") ::
-        Row(7, "part-7") ::
-        Row(8, "part-8") ::
-        Row(9, "part-9") ::
-        Row(10, "part-10") :: Nil
-    )
+      sql("SELECT * FROM normal_orc_source WHERE intField > 5"),
+      (6 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
-      sql("SELECT count(intField), stringField FROM normal_orc_source group by stringField"),
-      Row(1, "part-1") ::
-        Row(1, "part-2") ::
-        Row(1, "part-3") ::
-        Row(1, "part-4") ::
-        Row(1, "part-5") ::
-        Row(1, "part-6") ::
-        Row(1, "part-7") ::
-        Row(1, "part-8") ::
-        Row(1, "part-9") ::
-        Row(1, "part-10") :: Nil
-    )
-
+      sql("SELECT COUNT(intField), stringField FROM normal_orc_source GROUP BY stringField"),
+      (1 to 10).map(i => Row(1, s"part-$i")))
   }
 
   test("appending insert") {
-    sql("insert into table normal_orc_source select * from orc_temp_table where intField > 5")
+    sql("INSERT INTO TABLE normal_orc_source SELECT * FROM orc_temp_table WHERE intField > 5")
+
     checkAnswer(
-      sql("select * from normal_orc_source"),
-      Row(1, "part-1") ::
-        Row(2, "part-2") ::
-        Row(3, "part-3") ::
-        Row(4, "part-4") ::
-        Row(5, "part-5") ::
-        Row(6, "part-6") ::
-        Row(6, "part-6") ::
-        Row(7, "part-7") ::
-        Row(7, "part-7") ::
-        Row(8, "part-8") ::
-        Row(8, "part-8") ::
-        Row(9, "part-9") ::
-        Row(9, "part-9") ::
-        Row(10, "part-10") ::
-        Row(10, "part-10") :: Nil
-    )
+      sql("SELECT * FROM normal_orc_source"),
+      (1 to 5).map(i => Row(i, s"part-$i")) ++ (6 to 10).flatMap { i =>
+        Seq.fill(2)(Row(i, s"part-$i"))
+      })
   }
 
   test("overwrite insert") {
-    sql("insert overwrite table normal_orc_as_source select * " +
-      "from orc_temp_table where intField > 5")
+    sql(
+      """INSERT OVERWRITE TABLE normal_orc_as_source
+        |SELECT * FROM orc_temp_table WHERE intField > 5
+      """.stripMargin)
+
     checkAnswer(
-      sql("select * from normal_orc_as_source"),
-      Row(6, "part-6") ::
-        Row(7, "part-7") ::
-        Row(8, "part-8") ::
-        Row(9, "part-9") ::
-        Row(10, "part-10") :: Nil
-    )
+      sql("SELECT * FROM normal_orc_as_source"),
+      (6 to 10).map(i => Row(i, s"part-$i")))
   }
 }
 
@@ -192,21 +127,20 @@ class OrcSourceSuite extends OrcSuite {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    sql( s"""
-      create temporary table normal_orc_source
-      USING org.apache.spark.sql.hive.orc
-      OPTIONS (
-        path '${new File(orcTableDir.getAbsolutePath).getCanonicalPath}'
-      )
-    """)
+    sql(
+      s"""CREATE TEMPORARY TABLE normal_orc_source
+         |USING org.apache.spark.sql.hive.orc
+         |OPTIONS (
+         |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
+         |)
+       """.stripMargin)
 
-    sql( s"""
-      create temporary table normal_orc_as_source
-      USING org.apache.spark.sql.hive.orc
-      OPTIONS (
-        path '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
-      )
-      as select * from orc_temp_table
-    """)
+    sql(
+      s"""CREATE TEMPORARY TABLE normal_orc_as_source
+         |USING org.apache.spark.sql.hive.orc
+         |OPTIONS (
+         |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
+         |)
+       """.stripMargin)
   }
 }

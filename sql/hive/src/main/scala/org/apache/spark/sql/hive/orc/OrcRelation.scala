@@ -34,7 +34,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.hive.{HiveMetastoreTypes, HiveShim}
+import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveMetastoreTypes, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext}
@@ -50,6 +50,10 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider {
       schema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
+    assert(
+      sqlContext.isInstanceOf[HiveContext],
+      "The ORC data source can only be used with HiveContext.")
+
     val partitionSpec = partitionColumns.map(PartitionSpec(_, Seq.empty[Partition]))
     OrcRelation(paths, parameters, schema, partitionSpec)(sqlContext)
   }
@@ -59,7 +63,7 @@ private[orc] class OrcOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
-  extends OutputWriter with SparkHadoopMapRedUtil {
+  extends OutputWriter with SparkHadoopMapRedUtil with HiveInspectors {
 
   private val serializer = {
     val table = new Properties()
@@ -89,7 +93,7 @@ private[orc] class OrcOutputWriter(
 
   // Used to convert Catalyst values into Hadoop `Writable`s.
   private val wrappers = structOI.getAllStructFieldRefs.map { ref =>
-    HadoopTypeConverter.wrappers(ref.getFieldObjectInspector)
+    wrapperFor(ref.getFieldObjectInspector)
   }.toArray
 
   // `OrcRecordWriter.close()` creates an empty file if no rows are written at all.  We use this
@@ -190,7 +194,10 @@ private[orc] case class OrcTableScan(
     attributes: Seq[Attribute],
     @transient relation: OrcRelation,
     filters: Array[Filter],
-    inputPaths: Array[String]) extends Logging {
+    inputPaths: Array[String])
+  extends Logging
+  with HiveInspectors {
+
   @transient private val sqlContext = relation.sqlContext
 
   private def addColumnIds(
@@ -215,7 +222,7 @@ private[orc] case class OrcTableScan(
       case (attr, ordinal) =>
         soi.getStructFieldRef(attr.name.toLowerCase) -> ordinal
     }.unzip
-    val unwrappers = HadoopTypeConverter.unwrappers(fieldRefs)
+    val unwrappers = fieldRefs.map(unwrapperFor)
     // Map each tuple to a row object
     iterator.map { value =>
       val raw = deserializer.deserialize(value)
@@ -240,7 +247,7 @@ private[orc] case class OrcTableScan(
     // Tries to push down filters if ORC filter push-down is enabled
     if (sqlContext.conf.orcFilterPushDown) {
       OrcFilters.createFilter(filters).foreach { f =>
-        conf.set(SARG_PUSHDOWN, f.toKryo)
+        conf.set(OrcTableScan.SARG_PUSHDOWN, f.toKryo)
         conf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
       }
     }
@@ -275,4 +282,9 @@ private[orc] case class OrcTableScan(
         mutableRow)
     }
   }
+}
+
+private[orc] object OrcTableScan {
+  // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
+  private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
 }

@@ -40,7 +40,9 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         sparkContext
           .parallelize(for (i <- 1 to 3) yield (i, s"val_$i", p1))
           .toDF("a", "b", "p1")
-          .saveAsOrcFile(partitionDir.toString)
+          .write
+          .format("orc")
+          .save(partitionDir.toString)
       }
 
       val dataSchemaWithPartition =

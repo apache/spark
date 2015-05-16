@@ -55,7 +55,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def mode(saveMode: String): DataFrameWriter = {
-    saveMode.toLowerCase match {
+    this.mode = saveMode.toLowerCase match {
       case "overwrite" => SaveMode.Overwrite
       case "append" => SaveMode.Append
       case "ignore" => SaveMode.Ignore
