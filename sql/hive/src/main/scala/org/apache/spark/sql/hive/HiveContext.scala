@@ -548,7 +548,7 @@ private[hive] object HiveContext {
   def getOrCreate(sparkContext: SparkContext): HiveContext = {
     INSTANTIATION_LOCK.synchronized {
       if (lastInstantiatedContext.get() == null) {
-        new SQLContext(sparkContext)
+        new HiveContext(sparkContext)
       }
     }
     lastInstantiatedContext.get()
