@@ -1290,22 +1290,32 @@ class DataFrame private[sql](
   }
 
   /**
+   * :: Experimental ::
+   * Interface for saving the content of the [[DataFrame]] out into external storage.
+   *
+   * @group output
+   * @since 1.4.0
+   */
+  @Experimental
+  def write: DataFrameWriter = new DataFrameWriter(this)
+
+  /**
    * Saves the contents of this [[DataFrame]] as a parquet file, preserving the schema.
    * Files that are written out using this method can be read back in as a [[DataFrame]]
    * using the `parquetFile` function in [[SQLContext]].
    * @group output
    * @since 1.3.0
    */
+  @deprecated("Use write.parquet(path)", "1.4.0")
   def saveAsParquetFile(path: String): Unit = {
     if (sqlContext.conf.parquetUseDataSourceApi) {
-      save("org.apache.spark.sql.parquet", SaveMode.ErrorIfExists, Map("path" -> path))
+      write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
     } else {
       sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
     }
   }
 
   /**
-   * :: Experimental ::
    * Creates a table from the the contents of this DataFrame.
    * It will use the default data source configured by spark.sql.sources.default.
    * This will fail if the table already exists.
@@ -1320,13 +1330,12 @@ class DataFrame private[sql](
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String): Unit = {
-    saveAsTable(tableName, SaveMode.ErrorIfExists)
+    write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
   }
 
   /**
-   * :: Experimental ::
    * Creates a table from the the contents of this DataFrame, using the default data source
    * configured by spark.sql.sources.default and [[SaveMode.ErrorIfExists]] as the save mode.
    *
@@ -1340,20 +1349,18 @@ class DataFrame private[sql](
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.mode(mode).saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String, mode: SaveMode): Unit = {
     if (sqlContext.catalog.tableExists(Seq(tableName)) && mode == SaveMode.Append) {
       // If table already exists and the save mode is Append,
       // we will just call insertInto to append the contents of this DataFrame.
       insertInto(tableName, overwrite = false)
     } else {
-      val dataSourceName = sqlContext.conf.defaultDataSourceName
-      saveAsTable(tableName, dataSourceName, mode)
+      write.mode(mode).saveAsTable(tableName)
     }
   }
 
   /**
-   * :: Experimental ::
    * Creates a table at the given path from the the contents of this DataFrame
    * based on a given data source and a set of options,
    * using [[SaveMode.ErrorIfExists]] as the save mode.
@@ -1368,9 +1375,9 @@ class DataFrame private[sql](
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String, source: String): Unit = {
-    saveAsTable(tableName, source, SaveMode.ErrorIfExists)
+    write.format(source).saveAsTable(tableName)
   }
 
   /**
@@ -1388,13 +1395,12 @@ class DataFrame private[sql](
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).mode(mode).saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String, source: String, mode: SaveMode): Unit = {
-    saveAsTable(tableName, source, mode, Map.empty[String, String])
+    write.format(source).mode(mode).saveAsTable(tableName)
   }
 
   /**
-   * :: Experimental ::
    * Creates a table at the given path from the the contents of this DataFrame
    * based on a given data source, [[SaveMode]] specified by mode, and a set of options.
    *
@@ -1408,40 +1414,17 @@ class DataFrame private[sql](
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
+    "1.4.0")
   def saveAsTable(
       tableName: String,
       source: String,
       mode: SaveMode,
       options: java.util.Map[String, String]): Unit = {
-    saveAsTable(tableName, source, mode, options.toMap)
+    write.format(source).mode(mode).options(options).saveAsTable(tableName)
   }
 
   /**
-   * :: Experimental ::
-   * Creates a table at the given path from the the contents of this DataFrame
-   * based on a given data source, [[SaveMode]] specified by mode, a set of options, and a list of
-   * partition columns.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   * @group output
-   * @since 1.4.0
-   */
-  @Experimental
-  def saveAsTable(
-      tableName: String,
-      source: String,
-      mode: SaveMode,
-      options: java.util.Map[String, String],
-      partitionColumns: java.util.List[String]): Unit = {
-    saveAsTable(tableName, source, mode, options.toMap, partitionColumns)
-  }
-
-  /**
-   * :: Experimental ::
    * (Scala-specific)
    * Creates a table from the the contents of this DataFrame based on a given data source,
    * [[SaveMode]] specified by mode, and a set of options.
@@ -1456,167 +1439,88 @@ class DataFrame private[sql](
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
+    "1.4.0")
   def saveAsTable(
       tableName: String,
       source: String,
       mode: SaveMode,
       options: Map[String, String]): Unit = {
-    val cmd =
-      CreateTableUsingAsSelect(
-        tableName,
-        source,
-        temporary = false,
-        Array.empty[String],
-        mode,
-        options,
-        logicalPlan)
-
-    sqlContext.executePlan(cmd).toRdd
+    write.format(source).mode(mode).options(options).saveAsTable(tableName)
   }
 
   /**
-   * :: Experimental ::
-   * Creates a table at the given path from the the contents of this DataFrame
-   * based on a given data source, [[SaveMode]] specified by mode, a set of options, and a list of
-   * partition columns.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   * @group output
-   * @since 1.4.0
-   */
-  @Experimental
-  def saveAsTable(
-      tableName: String,
-      source: String,
-      mode: SaveMode,
-      options: Map[String, String],
-      partitionColumns: Seq[String]): Unit = {
-    sqlContext.executePlan(
-      CreateTableUsingAsSelect(
-        tableName,
-        source,
-        temporary = false,
-        partitionColumns.toArray,
-        mode,
-        options,
-        logicalPlan)).toRdd
-  }
-
-  /**
-   * :: Experimental ::
    * Saves the contents of this DataFrame to the given path,
    * using the default data source configured by spark.sql.sources.default and
    * [[SaveMode.ErrorIfExists]] as the save mode.
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.save(path)", "1.4.0")
   def save(path: String): Unit = {
-    save(path, SaveMode.ErrorIfExists)
+    write.save(path)
   }
 
   /**
-   * :: Experimental ::
    * Saves the contents of this DataFrame to the given path and [[SaveMode]] specified by mode,
    * using the default data source configured by spark.sql.sources.default.
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.mode(mode).save(path)", "1.4.0")
   def save(path: String, mode: SaveMode): Unit = {
-    val dataSourceName = sqlContext.conf.defaultDataSourceName
-    save(path, dataSourceName, mode)
+    write.mode(mode).save(path)
   }
 
   /**
-   * :: Experimental ::
    * Saves the contents of this DataFrame to the given path based on the given data source,
    * using [[SaveMode.ErrorIfExists]] as the save mode.
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).save(path)", "1.4.0")
   def save(path: String, source: String): Unit = {
-    save(source, SaveMode.ErrorIfExists, Map("path" -> path))
+    write.format(source).save(path)
   }
 
   /**
-   * :: Experimental ::
    * Saves the contents of this DataFrame to the given path based on the given data source and
    * [[SaveMode]] specified by mode.
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).mode(mode).save(path)", "1.4.0")
   def save(path: String, source: String, mode: SaveMode): Unit = {
-    save(source, mode, Map("path" -> path))
+    write.format(source).mode(mode).save(path)
   }
 
   /**
-   * :: Experimental ::
    * Saves the contents of this DataFrame based on the given data source,
    * [[SaveMode]] specified by mode, and a set of options.
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
   def save(
       source: String,
       mode: SaveMode,
       options: java.util.Map[String, String]): Unit = {
-    save(source, mode, options.toMap)
+    write.format(source).mode(mode).options(options).save()
   }
 
   /**
-   * :: Experimental ::
-   * Saves the contents of this DataFrame to the given path based on the given data source,
-   * [[SaveMode]] specified by mode, and partition columns specified by `partitionColumns`.
-   * @group output
-   * @since 1.4.0
-   */
-  @Experimental
-  def save(
-      source: String,
-      mode: SaveMode,
-      options: java.util.Map[String, String],
-      partitionColumns: java.util.List[String]): Unit = {
-    save(source, mode, options.toMap, partitionColumns)
-  }
-
-  /**
-   * :: Experimental ::
    * (Scala-specific)
    * Saves the contents of this DataFrame based on the given data source,
    * [[SaveMode]] specified by mode, and a set of options
    * @group output
    * @since 1.3.0
    */
-  @Experimental
+  @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
   def save(
       source: String,
       mode: SaveMode,
       options: Map[String, String]): Unit = {
-    ResolvedDataSource(sqlContext, source, Array.empty[String], mode, options, this)
-  }
-
-  /**
-   * :: Experimental ::
-   * Saves the contents of this DataFrame to the given path based on the given data source,
-   * [[SaveMode]] specified by mode, and partition columns specified by `partitionColumns`.
-   * @group output
-   * @since 1.4.0
-   */
-  @Experimental
-  def save(
-      source: String,
-      mode: SaveMode,
-      options: Map[String, String],
-      partitionColumns: Seq[String]): Unit = {
-    ResolvedDataSource(sqlContext, source, partitionColumns.toArray, mode, options, this)
+    write.format(source).mode(mode).options(options).save()
   }
 
   /**
