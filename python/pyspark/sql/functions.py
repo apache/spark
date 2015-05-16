@@ -27,7 +27,7 @@ from pyspark import SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
-from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
+from pyspark.sql.column import Column, _to_java_column, _to_seq
 
 
 __all__ = [

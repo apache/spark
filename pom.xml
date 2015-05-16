@@ -107,6 +107,8 @@
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
+    <module>external/kafka</module>
+    <module>external/kafka-assembly</module>
   </modules>
 
   <properties>
@@ -135,7 +137,7 @@
     <hive.version.short>0.13.1</hive.version.short>
     <derby.version>10.10.1.1</derby.version>
     <parquet.version>1.6.0rc3</parquet.version>
-    <jblas.version>1.2.3</jblas.version>
+    <jblas.version>1.2.4</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
     <orbit.version>3.0.0.v201112011016</orbit.version>
     <chill.version>0.5.0</chill.version>
@@ -1757,10 +1759,6 @@
         <jline.version>${scala.version}</jline.version>
         <jline.groupid>org.scala-lang</jline.groupid>
       </properties>
-      <modules>
-        <module>external/kafka</module>
-        <module>external/kafka-assembly</module>
-      </modules>
     </profile>
 
     <profile>
