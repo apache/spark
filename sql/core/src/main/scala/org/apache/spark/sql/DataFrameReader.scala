@@ -24,12 +24,8 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.json.{JsonRDD, JSONRelation}
-<<<<<<< HEAD
 import org.apache.spark.sql.parquet.ParquetRelation2
-=======
-import org.apache.spark.sql.parquet.FSBasedParquetRelation
 import org.apache.spark.sql.sources.{LogicalRelation, ResolvedDataSource}
->>>>>>> Added general load methods.
 import org.apache.spark.sql.types.StructType
 
 /**
