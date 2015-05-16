@@ -304,11 +304,17 @@ class SchedulerJob(BaseJob):
                         logging.debug('Queuing next run: ' + str(ti))
                         executor.queue_task_instance(ti)
         # Releasing the lock
-        db_dag = session.query(DagModel).filter(DagModel.dag_id==dag.dag_id).first()
+        logging.debug("Unlocking DAG (scheduler_lock)")
+        db_dag = (
+            session.query(DagModel)
+                .filter(DagModel.dag_id==dag.dag_id)
+                .first()
+        )
         db_dag.scheduler_lock = False
         session.merge(db_dag)
         session.commit()
 
+        logging.debug("Calling the executor's heartbeat")
         executor.heartbeat()
         session.close()
 
@@ -352,6 +358,7 @@ class SchedulerJob(BaseJob):
                     dag for dag in dagbag.dags.values() if not dag.parent_dag]
             paused_dag_ids = dagbag.paused_dags()
             for dag in dags:
+                logging.debug("Scheduling {}".format(dag.dag_id))
                 dag = dagbag.get_dag(dag.dag_id)
                 if not dag or (dag.dag_id in paused_dag_ids):
                     continue
@@ -359,6 +366,7 @@ class SchedulerJob(BaseJob):
                     self.process_dag(dag, executor)
                 except Exception as e:
                     logging.exception(e)
+            logging.debug("Done scheduling all DAGs")
             self.heartbeat()
         executor.end()
 

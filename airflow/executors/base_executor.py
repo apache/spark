@@ -54,6 +54,7 @@ class BaseExecutor(object):
 
     def heartbeat(self):
         # Calling child class sync method
+        logging.debug("Calling the {} sync method".format(self.__class__))
         self.sync()
 
         # Triggering new jobs
@@ -61,6 +62,10 @@ class BaseExecutor(object):
             open_slots = len(self.queued_tasks)
         else:
             open_slots = self.parallelism - len(self.running)
+
+        logging.debug("{} running task instances".format(len(self.running)))
+        logging.debug("{} in queue".format(len(self.queued_tasks)))
+        logging.debug("{} open slots".format(open_slots))
 
         sorted_queue = sorted(
             [(k, v) for k, v in self.queued_tasks.items()],
