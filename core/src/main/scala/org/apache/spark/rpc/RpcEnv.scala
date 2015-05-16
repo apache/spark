@@ -188,8 +188,8 @@ private[spark] object RpcAddress {
 
 
 /**
- * Associates a timeout with a configuration property so that a TimeoutException can be
- * traced back to the controlling property.
+ * Associates a timeout with a description so that a when a TimeoutException occurs, additional
+ * context about the timeout can be amended to the exception message.
  * @param timeout timeout duration in seconds
  * @param description description to be displayed in a timeout exception
  */
@@ -212,14 +212,16 @@ private[spark] class RpcTimeout(timeout: FiniteDuration, description: String) {
       Await.result(future, duration)
     }
     catch {
-      case te: TimeoutException =>
-        throw amend(te)
+      case te: TimeoutException => throw amend(te)
     }
   }
-
-  // TODO(bryanc) wrap Await.ready also
 }
 
+
+/**
+ * Create an RpcTimeout using a configuration property that controls the timeout duration so when
+ * a TimeoutException is thrown, the property key will be indicated in the message.
+ */
 object RpcTimeout {
 
   private[this] val messagePrefix = "This timeout is controlled by "
@@ -248,5 +250,4 @@ object RpcTimeout {
     val timeout = { conf.getTimeAsSeconds(timeoutProp, defaultValue) seconds }
     new RpcTimeout(timeout, messagePrefix + timeoutProp)
   }
-
 }
