@@ -15,7 +15,7 @@ To start the celery worker, run the command:
 airflow worker
 '''
 
-CELERY_DEFAULT_QUEUE = conf.getint('celery', 'CELERY_DEFAULT_QUEUE')
+CELERY_DEFAULT_QUEUE = conf.get('celery', 'CELERY_DEFAULT_QUEUE')
 
 
 class CeleryConfig(object):
