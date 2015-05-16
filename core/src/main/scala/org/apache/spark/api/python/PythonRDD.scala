@@ -47,7 +47,7 @@ private[spark] class PythonRDD(
     pythonIncludes: JList[String],
     preservePartitoning: Boolean,
     pythonExec: String,
-    pythonVer: Int,
+    pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]])
   extends RDD[Array[Byte]](parent) {
@@ -212,7 +212,7 @@ private[spark] class PythonRDD(
         // Partition index
         dataOut.writeInt(split.index)
         // Python version of driver
-        dataOut.writeInt(pythonVer)
+        PythonRDD.writeUTF(pythonVer, dataOut)
         // sparkFilesDir
         PythonRDD.writeUTF(SparkFiles.getRootDirectory, dataOut)
         // Python includes (*.zip and *.egg files)

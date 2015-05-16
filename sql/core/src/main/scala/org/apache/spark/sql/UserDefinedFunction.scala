@@ -58,7 +58,7 @@ private[sql] case class UserDefinedPythonFunction(
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
     pythonExec: String,
-    pythonVer: Int,
+    pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]],
     dataType: DataType) {

@@ -57,12 +57,11 @@ def main(infile, outfile):
         if split_index == -1:  # for unit tests
             exit(-1)
 
-        version = read_int(infile)
-        version = (version // 10, version % 10)
-        if version != sys.version_info[:2]:
+        version = utf8_deserializer.loads(infile)
+        if version != "%d.%d" % sys.version_info[:2]:
             raise Exception(("Python in worker has different version %s than that in " +
                              "driver %s, PySpark cannot run with different minor versions") %
-                            (sys.version_info[:2], version))
+                            ("%d.%d" % sys.version_info[:2], version))
 
         # initialize global state
         shuffle.MemoryBytesSpilled = 0
