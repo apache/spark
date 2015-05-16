@@ -158,8 +158,8 @@ class DStreamScopeSuite extends FunSuite with BeforeAndAfter with BeforeAndAfter
       baseScopeName: String,
       rddScope: RDDOperationScope,
       batchTime: Long): Unit = {
-    val formattedBatchTime =
-      UIUtils.formatBatchTime(batchTime, ssc.graph.batchDuration.milliseconds)
+    val formattedBatchTime = UIUtils.formatBatchTime(
+      batchTime, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
     assert(rddScope.id === s"${baseScopeId}_$batchTime")
     assert(rddScope.name.replaceAll("\\n", " ") === s"$baseScopeName @ $formattedBatchTime")
   }
