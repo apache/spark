@@ -1,5 +1,6 @@
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
+from airflow.executors import DEFAULT_EXECUTOR
 
 
 class SubDagOperator(BaseOperator):
@@ -16,6 +17,7 @@ class SubDagOperator(BaseOperator):
     def __init__(
             self,
             subdag,
+            executor=DEFAULT_EXECUTOR,
             *args, **kwargs):
         """
         Yo dawg. This runs a sub dag. By convention, a sub dag's dag_id
@@ -35,7 +37,10 @@ class SubDagOperator(BaseOperator):
                 "The subdag's dag_id should correspond to the parent's "
                 "'dag_id.task_id'")
         self.subdag = subdag
+        self.executor = executor
 
     def execute(self, context):
         ed = context['execution_date']
-        self.subdag.run(start_date=ed, end_date=ed, donot_pickle=True)
+        self.subdag.run(
+            start_date=ed, end_date=ed, donot_pickle=True,
+            executor=self.executor)

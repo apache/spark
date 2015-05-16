@@ -68,7 +68,7 @@ class CeleryExecutor(BaseExecutor):
                     del self.tasks[key]
                     del self.last_state[key]
                 else:
-                    logging.info("Enexpected state: " + async.state)
+                    logging.info("Unexpected state: " + async.state)
                 self.last_state[key] = async.state
 
     def end(self):

@@ -265,7 +265,6 @@ class SchedulerJob(BaseJob):
         logging.debug("{} rows returned".format(len(latest_ti)))
 
         for task in dag.tasks:
-            logging.debug("Processing {}".format(task.task_id))
             if task.adhoc:
                 continue
             if task.task_id not in ti_dict:
