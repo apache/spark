@@ -21,7 +21,7 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{RandomForestParams, TreeRegressorParams, DecisionTreeModel, TreeEnsembleModel}
-import org.apache.spark.ml.util.MetadataUtils
+import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
@@ -37,9 +37,11 @@ import org.apache.spark.sql.DataFrame
  * It supports both continuous and categorical features.
  */
 @AlphaComponent
-final class RandomForestRegressor
+final class RandomForestRegressor(override val uid: String)
   extends Predictor[Vector, RandomForestRegressor, RandomForestRegressionModel]
   with RandomForestParams with TreeRegressorParams {
+
+  def this() = this(Identifiable.randomUID("rfr"))
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -105,7 +107,7 @@ object RandomForestRegressor {
  */
 @AlphaComponent
 final class RandomForestRegressionModel private[ml] (
-    override val parent: RandomForestRegressor,
+    override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel])
   extends PredictionModel[Vector, RandomForestRegressionModel]
   with TreeEnsembleModel with Serializable {
@@ -128,7 +130,7 @@ final class RandomForestRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): RandomForestRegressionModel = {
-    copyValues(new RandomForestRegressionModel(parent, _trees), extra)
+    copyValues(new RandomForestRegressionModel(uid, _trees), extra)
   }
 
   override def toString: String = {
@@ -154,6 +156,6 @@ private[ml] object RandomForestRegressionModel {
       // parent, fittingParamMap for each tree is null since there are no good ways to set these.
       DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
-    new RandomForestRegressionModel(parent, newTrees)
+    new RandomForestRegressionModel(parent.uid, newTrees)
   }
 }

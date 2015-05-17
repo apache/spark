@@ -204,23 +204,42 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(ids(2) === 3)
   }
 
+  test("Register JDBC query with renamed fields") {
+    // Regression test for bug SPARK-7345
+    sql(
+      s"""
+        |CREATE TEMPORARY TABLE renamed
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable '(select NAME as NAME1, NAME as NAME2 from TEST.PEOPLE)',
+        |user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
+    val df = sql("SELECT * FROM renamed")
+    assert(df.schema.fields.size == 2)
+    assert(df.schema.fields(0).name == "NAME1")
+    assert(df.schema.fields(1).name == "NAME2")
+  }
+
   test("Basic API") {
-    assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE").collect().size === 3)
+    assert(TestSQLContext.read.jdbc(
+      urlWithUserAndPass, "TEST.PEOPLE", new Properties).collect().length === 3)
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
-    assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3)
-      .collect.size === 3)
+    assert(
+      TestSQLContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties)
+      .collect().length === 3)
   }
 
   test("Partitioning via list-of-where-clauses API") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
-    assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts).collect().size === 3)
+    assert(TestSQLContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties)
+      .collect().length === 3)
   }
 
   test("H2 integral types") {
     val rows = sql("SELECT * FROM inttypes WHERE A IS NOT NULL").collect()
-    assert(rows.size === 1)
+    assert(rows.length === 1)
     assert(rows(0).getInt(0) === 1)
     assert(rows(0).getBoolean(1) === false)
     assert(rows(0).getInt(2) === 3)
@@ -230,7 +249,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
 
   test("H2 null entries") {
     val rows = sql("SELECT * FROM inttypes WHERE A IS NULL").collect()
-    assert(rows.size === 1)
+    assert(rows.length === 1)
     assert(rows(0).isNullAt(0))
     assert(rows(0).isNullAt(1))
     assert(rows(0).isNullAt(2))
@@ -270,24 +289,28 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("test DATE types") {
-    val rows = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.TIMETYPES").collect()
-    val cachedRows = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.TIMETYPES").cache().collect()
+    val rows = TestSQLContext.read.jdbc(
+      urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
+    val cachedRows = TestSQLContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+      .cache().collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(rows(1).getAs[java.sql.Date](1) === null)
     assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
   }
 
   test("test DATE types in cache") {
-    val rows = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.TIMETYPES").collect()
-    TestSQLContext
-      .jdbc(urlWithUserAndPass, "TEST.TIMETYPES").cache().registerTempTable("mycached_date")
+    val rows =
+      TestSQLContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
+    TestSQLContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+      .cache().registerTempTable("mycached_date")
     val cachedRows = sql("select * from mycached_date").collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
   }
 
   test("test types for null value") {
-    val rows = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.NULLTYPES").collect()
+    val rows = TestSQLContext.read.jdbc(
+      urlWithUserAndPass, "TEST.NULLTYPES", new Properties).collect()
     assert((0 to 14).forall(i => rows(0).isNullAt(i)))
   }
 

@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+private[spark] trait CatalystConf {
+  def caseSensitiveAnalysis: Boolean
+}
 
 /**
- * Root class of SQL Parser Dialect, and we don't guarantee the binary
- * compatibility for the future release, let's keep it as the internal
- * interface for advanced user.
- *
+ * A trivial conf that is empty.  Used for testing when all
+ * relations are already filled in and the analyser needs only to resolve attribute references.
  */
-@DeveloperApi
-abstract class Dialect {
-  // this is the main function that will be implemented by sql parser.
-  def parse(sqlText: String): LogicalPlan
+object EmptyConf extends CatalystConf {
+  override def caseSensitiveAnalysis: Boolean = {
+    throw new UnsupportedOperationException
+  }
 }
+
+/** A CatalystConf that can be used for local testing. */
+case class SimpleCatalystConf(caseSensitiveAnalysis: Boolean) extends CatalystConf

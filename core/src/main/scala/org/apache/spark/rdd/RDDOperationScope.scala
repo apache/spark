@@ -96,22 +96,27 @@ private[spark] object RDDOperationScope {
       sc: SparkContext,
       allowNesting: Boolean = false)(body: => T): T = {
     val callerMethodName = Thread.currentThread.getStackTrace()(3).getMethodName
-    withScope[T](sc, callerMethodName, allowNesting)(body)
+    withScope[T](sc, callerMethodName, allowNesting, ignoreParent = false)(body)
   }
 
   /**
    * Execute the given body such that all RDDs created in this body will have the same scope.
    *
-   * If nesting is allowed, this concatenates the previous scope with the new one in a way that
-   * signifies the hierarchy. Otherwise, if nesting is not allowed, then any children calls to
-   * this method executed in the body will have no effect.
+   * If nesting is allowed, any subsequent calls to this method in the given body will instantiate
+   * child scopes that are nested within our scope. Otherwise, these calls will take no effect.
+   *
+   * Additionally, the caller of this method may optionally ignore the configurations and scopes
+   * set by the higher level caller. In this case, this method will ignore the parent caller's
+   * intention to disallow nesting, and the new scope instantiated will not have a parent. This
+   * is useful for scoping physical operations in Spark SQL, for instance.
    *
    * Note: Return statements are NOT allowed in body.
    */
   private[spark] def withScope[T](
       sc: SparkContext,
       name: String,
-      allowNesting: Boolean)(body: => T): T = {
+      allowNesting: Boolean,
+      ignoreParent: Boolean)(body: => T): T = {
     // Save the old scope to restore it later
     val scopeKey = SparkContext.RDD_SCOPE_KEY
     val noOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY
@@ -119,8 +124,11 @@ private[spark] object RDDOperationScope {
     val oldScope = Option(oldScopeJson).map(RDDOperationScope.fromJson)
     val oldNoOverride = sc.getLocalProperty(noOverrideKey)
     try {
-      // Set the scope only if the higher level caller allows us to do so
-      if (sc.getLocalProperty(noOverrideKey) == null) {
+      if (ignoreParent) {
+        // Ignore all parent settings and scopes and start afresh with our own root scope
+        sc.setLocalProperty(scopeKey, new RDDOperationScope(name).toJson)
+      } else if (sc.getLocalProperty(noOverrideKey) == null) {
+        // Otherwise, set the scope only if the higher level caller allows us to do so
         sc.setLocalProperty(scopeKey, new RDDOperationScope(name, oldScope).toJson)
       }
       // Optionally disallow the child body to override our scope

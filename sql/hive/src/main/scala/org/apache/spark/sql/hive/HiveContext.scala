@@ -22,7 +22,7 @@ import java.sql.Timestamp
 import java.util.{ArrayList => JArrayList}
 
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
-import org.apache.spark.sql.catalyst.Dialect
+import org.apache.spark.sql.catalyst.ParserDialect
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
@@ -46,6 +46,7 @@ import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, Query
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.sources.{DDLParser, DataSourceStrategy}
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -53,7 +54,7 @@ import org.apache.spark.util.Utils
 /**
  * This is the HiveQL Dialect, this dialect is strongly bind with HiveContext
  */
-private[hive] class HiveQLDialect extends Dialect {
+private[hive] class HiveQLDialect extends ParserDialect {
   override def parse(sqlText: String): LogicalPlan = {
     HiveQl.parseSql(sqlText)
   }
@@ -62,6 +63,8 @@ private[hive] class HiveQLDialect extends Dialect {
 /**
  * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
  * Configuration for Hive is read from hive-site.xml on the classpath.
+ *
+ * @since 1.0.0
  */
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
@@ -118,6 +121,29 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   protected[hive] def hiveMetastoreJars: String =
     getConf(HIVE_METASTORE_JARS, "builtin")
+
+  /**
+   * A comma separated list of class prefixes that should be loaded using the classloader that
+   * is shared between Spark SQL and a specific version of Hive. An example of classes that should
+   * be shared is JDBC drivers that are needed to talk to the metastore. Other classes that need
+   * to be shared are those that interact with classes that are already shared.  For example,
+   * custom appenders that are used by log4j.
+   */
+  protected[hive] def hiveMetastoreSharedPrefixes: Seq[String] =
+    getConf("spark.sql.hive.metastore.sharedPrefixes", jdbcPrefixes)
+      .split(",").filterNot(_ == "")
+
+  private def jdbcPrefixes = Seq(
+    "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc").mkString(",")
+
+  /**
+   * A comma separated list of class prefixes that should explicitly be reloaded for each version
+   * of Hive that Spark SQL is communicating with.  For example, Hive UDFs that are declared in a
+   * prefix that typically would be shared (i.e. org.apache.spark.*)
+   */
+  protected[hive] def hiveMetastoreBarrierPrefixes: Seq[String] =
+    getConf("spark.sql.hive.metastore.barrierPrefixes", "")
+      .split(",").filterNot(_ == "")
 
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
@@ -176,12 +202,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         version = metaVersion,
         execJars = jars.toSeq,
         config = allConfig,
-        isolationOn = true)
+        isolationOn = true,
+        barrierPrefixes = hiveMetastoreBarrierPrefixes,
+        sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else if (hiveMetastoreJars == "maven") {
       // TODO: Support for loading the jars from an already downloaded location.
       logInfo(
         s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using maven.")
-      IsolatedClientLoader.forVersion(hiveMetastoreVersion, allConfig )
+      IsolatedClientLoader.forVersion(hiveMetastoreVersion, allConfig)
     } else {
       // Convert to files and expand any directories.
       val jars =
@@ -207,7 +235,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         version = metaVersion,
         execJars = jars.toSeq,
         config = allConfig,
-        isolationOn = true)
+        isolationOn = true,
+        barrierPrefixes = hiveMetastoreBarrierPrefixes,
+        sharedPrefixes = hiveMetastoreSharedPrefixes)
     }
     isolatedLoader.client
   }
@@ -224,6 +254,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * Spark SQL or the external data source library it uses might cache certain metadata about a
    * table, such as the location of blocks. When those change outside of Spark SQL, users should
    * call this function to invalidate the cache.
+   *
+   * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
     // TODO: Database support...
@@ -241,6 +273,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    *
    * Right now, it only supports Hive tables and it only updates the size of a Hive table
    * in the Hive metastore.
+   *
+   * @since 1.2.0
    */
   @Experimental
   def analyze(tableName: String) {
@@ -328,8 +362,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /* An analyzer that uses the Hive metastore. */
   @transient
-  override protected[sql] lazy val analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = false) {
+  override protected[sql] lazy val analyzer: Analyzer =
+    new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
         catalog.CreateTables ::
@@ -350,6 +384,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[hive] class SQLSession extends super.SQLSession {
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+      override def caseSensitiveAnalysis: Boolean =
+        getConf(SQLConf.CASE_SENSITIVE, "false").toBoolean
     }
 
     /**

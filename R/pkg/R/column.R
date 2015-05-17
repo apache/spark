@@ -55,12 +55,17 @@ operators <- list(
   "+" = "plus", "-" = "minus", "*" = "multiply", "/" = "divide", "%%" = "mod",
   "==" = "equalTo", ">" = "gt", "<" = "lt", "!=" = "notEqual", "<=" = "leq", ">=" = "geq",
   # we can not override `&&` and `||`, so use `&` and `|` instead
-  "&" = "and", "|" = "or" #, "!" = "unary_$bang"
+  "&" = "and", "|" = "or", #, "!" = "unary_$bang"
+  "^" = "pow"
 )
 column_functions1 <- c("asc", "desc", "isNull", "isNotNull")
 column_functions2 <- c("like", "rlike", "startsWith", "endsWith", "getField", "getItem", "contains")
 functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
-               "first", "last", "lower", "upper", "sumDistinct")
+               "first", "last", "lower", "upper", "sumDistinct",
+               "acos", "asin", "atan", "cbrt", "ceiling", "cos", "cosh", "exp",
+               "expm1", "floor", "log", "log10", "log1p", "rint", "sign",
+               "sin", "sinh", "tan", "tanh", "toDegrees", "toRadians")
+binary_mathfunctions<- c("atan2", "hypot")
 
 createOperator <- function(op) {
   setMethod(op,
@@ -76,7 +81,11 @@ createOperator <- function(op) {
                 if (class(e2) == "Column") {
                   e2 <- e2@jc
                 }
-                callJMethod(e1@jc, operators[[op]], e2)
+                if (op == "^") {
+                  jc <- callJStatic("org.apache.spark.sql.functions", operators[[op]], e1@jc, e2)
+                } else {
+                  callJMethod(e1@jc, operators[[op]], e2)
+                }
               }
               column(jc)
             })
@@ -106,7 +115,25 @@ createStaticFunction <- function(name) {
   setMethod(name,
             signature(x = "Column"),
             function(x) {
+              if (name == "ceiling") {
+                  name <- "ceil"
+              }
+              if (name == "sign") {
+                  name <- "signum"
+              }
               jc <- callJStatic("org.apache.spark.sql.functions", name, x@jc)
+              column(jc)
+            })
+}
+
+createBinaryMathfunctions <- function(name) {
+  setMethod(name,
+            signature(y = "Column"),
+            function(y, x) {
+              if (class(x) == "Column") {
+                x <- x@jc
+              }
+              jc <- callJStatic("org.apache.spark.sql.functions", name, y@jc, x)
               column(jc)
             })
 }
@@ -124,6 +151,9 @@ createMethods <- function() {
   for (x in functions) {
     createStaticFunction(x)
   }
+  for (name in binary_mathfunctions) {
+    createBinaryMathfunctions(name)
+  }
 }
 
 createMethods()
@@ -131,6 +161,8 @@ createMethods()
 #' alias
 #'
 #' Set a new name for a column
+
+#' @rdname column
 setMethod("alias",
           signature(object = "Column"),
           function(object, data) {
@@ -141,7 +173,11 @@ setMethod("alias",
             }
           })
 
+#' substr
+#'
 #' An expression that returns a substring.
+#'
+#' @rdname column
 #'
 #' @param start starting position
 #' @param stop ending position
@@ -152,6 +188,9 @@ setMethod("substr", signature(x = "Column"),
           })
 
 #' Casts the column to a different data type.
+#'
+#' @rdname column
+#'
 #' @examples
 #' \dontrun{
 #'   cast(df$age, "string")
@@ -173,8 +212,8 @@ setMethod("cast",
 
 #' Approx Count Distinct
 #'
-#' Returns the approximate number of distinct items in a group.
-#'
+#' @rdname column
+#' @return the approximate number of distinct items in a group.
 setMethod("approxCountDistinct",
           signature(x = "Column"),
           function(x, rsd = 0.95) {
@@ -184,8 +223,8 @@ setMethod("approxCountDistinct",
 
 #' Count Distinct
 #'
-#' returns the number of distinct items in a group.
-#'
+#' @rdname column
+#' @return the number of distinct items in a group.
 setMethod("countDistinct",
           signature(x = "Column"),
           function(x, ...) {
@@ -197,3 +236,18 @@ setMethod("countDistinct",
             column(jc)
           })
 
+#' @rdname column
+#' @aliases countDistinct
+setMethod("n_distinct",
+          signature(x = "Column"),
+          function(x, ...) {
+            countDistinct(x, ...)
+          })
+
+#' @rdname column
+#' @aliases count
+setMethod("n",
+          signature(x = "Column"),
+          function(x) {
+            count(x)
+          })

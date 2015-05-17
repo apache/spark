@@ -509,7 +509,7 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
     "spark.kryoserializer.buffer" ->
         Seq(AlternateConfig("spark.kryoserializer.buffer.mb", "1.4", 
-          translation = s => s"${s.toDouble * 1000}k")),
+          translation = s => s"${(s.toDouble * 1000).toInt}k")),
     "spark.kryoserializer.buffer.max" -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),
     "spark.shuffle.file.buffer" -> Seq(

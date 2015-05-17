@@ -196,7 +196,6 @@ class RandomForestSuite extends FunSuite with MLlibTestSparkContext {
       numClasses = 3, categoricalFeaturesInfo = categoricalFeaturesInfo)
     val model = RandomForest.trainClassifier(input, strategy, numTrees = 2,
       featureSubsetStrategy = "sqrt", seed = 12345)
-    EnsembleTestHelper.validateClassifier(model, arr, 1.0)
   }
 
   test("subsampling rate in RandomForest"){

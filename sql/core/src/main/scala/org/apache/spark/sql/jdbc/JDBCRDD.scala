@@ -25,11 +25,20 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Row, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources._
-import org.apache.spark.util.Utils
+
+/**
+ * Data corresponding to one partition of a JDBCRDD.
+ */
+private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
+  override def index: Int = idx
+}
+
 
 private[sql] object JDBCRDD extends Logging {
+
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
    * the DriverQuirks class corresponding to your database driver returns null.
@@ -109,7 +118,7 @@ private[sql] object JDBCRDD extends Logging {
         val fields = new Array[StructField](ncols)
         var i = 0
         while (i < ncols) {
-          val columnName = rsmd.getColumnName(i + 1)
+          val columnName = rsmd.getColumnLabel(i + 1)
           val dataType = rsmd.getColumnType(i + 1)
           val typeName = rsmd.getColumnTypeName(i + 1)
           val fieldSize = rsmd.getPrecision(i + 1)
@@ -168,6 +177,7 @@ private[sql] object JDBCRDD extends Logging {
       DriverManager.getConnection(url, properties)
     }
   }
+
   /**
    * Build and return JDBCRDD from the given information.
    *
@@ -193,18 +203,14 @@ private[sql] object JDBCRDD extends Logging {
       requiredColumns: Array[String],
       filters: Array[Filter],
       parts: Array[Partition]): RDD[Row] = {
-
-    val prunedSchema = pruneSchema(schema, requiredColumns)
-
-    return new
-        JDBCRDD(
-          sc,
-          getConnector(driver, url, properties),
-          prunedSchema,
-          fqTable,
-          requiredColumns,
-          filters,
-          parts)
+    new JDBCRDD(
+      sc,
+      getConnector(driver, url, properties),
+      pruneSchema(schema, requiredColumns),
+      fqTable,
+      requiredColumns,
+      filters,
+      parts)
   }
 }
 

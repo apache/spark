@@ -18,7 +18,6 @@
 package org.apache.spark.shuffle
 
 import java.io.File
-import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -29,7 +28,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.FileShuffleBlockManager.ShuffleFileGroup
+import org.apache.spark.shuffle.FileShuffleBlockResolver.ShuffleFileGroup
 import org.apache.spark.storage._
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
 import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVector}
@@ -64,9 +63,8 @@ private[spark] trait ShuffleWriterGroup {
  * files within a ShuffleFileGroups associated with the block's reducer.
  */
 // Note: Changes to the format in this file should be kept in sync with
-// org.apache.spark.network.shuffle.StandaloneShuffleBlockManager#getHashBasedShuffleBlockData().
-private[spark]
-class FileShuffleBlockManager(conf: SparkConf)
+// org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getHashBasedShuffleBlockData().
+private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   extends ShuffleBlockResolver with Logging {
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf)
@@ -78,7 +76,7 @@ class FileShuffleBlockManager(conf: SparkConf)
   private val consolidateShuffleFiles =
     conf.getBoolean("spark.shuffle.consolidateFiles", false)
 
-  // Use getSizeAsKb (not bytes) to maintain backwards compatibility of on units are provided 
+  // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
   private val bufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
 
   /**
@@ -242,8 +240,7 @@ class FileShuffleBlockManager(conf: SparkConf)
   }
 }
 
-private[spark]
-object FileShuffleBlockManager {
+private[spark] object FileShuffleBlockResolver {
   /**
    * A group of shuffle files, one per reducer.
    * A particular mapper will be assigned a single ShuffleFileGroup to write its output to.
