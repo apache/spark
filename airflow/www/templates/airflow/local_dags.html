@@ -4,36 +4,53 @@
 
 {% block head_css %}
 {{ super() }}
+<link rel="stylesheet" type="text/css"
+    href="{{ url_for("static", filename="dataTables.bootstrap.css") }}">
 {% endblock %}
 
 {% block body %}
   <h2>DAGs</h2>
 
-    <table class="table table-striped table-bordered">
-        <tr>
-            <th>DAG</th>
-            <th>Filepath</th>
-            <th>Owner</th>
-            <th>Instances States</th>
-            <th class="text-center">Links</th>
-        </tr>
-        {% for dag in dags %}
+    <table id="dags" class="table table-striped table-bordered">
+        <thead>
             <tr>
+                <th></th>
+                <th>DAG</th>
+                <th>Owner</th>
+                <th>Instances States</th>
+                <th class="text-center">Links</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for dag_id in all_dag_ids %}
+            {% set dag = dags[dag_id] if dag_id in dags else None %}
+            <tr>
+                <td class="text-center" style="width:10px;">
+                    {% if dag_id in orm_dags %}
+                    <a href="/admin/dagmodel/edit/?id=airflow_maintenance" title="Info">
+                        <span class="glyphicon glyphicon-search" aria-hidden="true"></span>
+                    </a>
+                    {% endif %}
+                </td>
                 <td>
+                    {% if dag %}
                     <a href="{{ url_for('airflow.graph', dag_id=dag.dag_id) }}">
-                        {{ dag.dag_id }}
+                        {{ dag_id }}
                     </a>
+                    {% else %}
+                        {{ dag_id }}
+                        <span class="glyphicon glyphicon-info-sign" class="info" aria-hidden="true" title="This DAG isn't available in the web server's DagBag object. It shows up in this list because the scheduler marked it as active in the metdata database."></span>
+                    {% endif %}
+                    {% if dag_id not in orm_dags and False %}
+                        <span class="glyphicon glyphicon-info-sign" class="info" aria-hidden="true" title="This DAG seems to be existing only locally. The master scheduler doesn't seem to be aware of its existence."></span>
+                    {% endif %}
                 </td>
-                <td>
-                    <a href="{{ url_for('airflow.code', dag_id=dag.dag_id) }}">
-                        {{ dag.filepath }}
-                    </a>
-                </td>
-                <td>{{ dag.owner }}</td>
+                    <td>{{ dag.owner if dag else orm_dags[dag_id].owners }}</td>
                 <td style="padding:0px; width:90px; height:10px;">
                     <svg height="10" width="10" id='{{ dag.dag_id }}' style="display: block;"></svg>
                 </td>
                 <td class="text-center" style="width:160px;">
+                {% if dag %}
     <a href="{{ url_for("airflow.tree", dag_id=dag.dag_id, num_runs=25) }}" title="Tree View">
         <span class="glyphicon glyphicon-tree-deciduous" aria-hidden="true"></span>
     </a>
@@ -53,23 +70,32 @@
       <a href="{{ url_for("airflow.code", dag_id=dag.dag_id) }}" title="Code View">
         <span class="glyphicon glyphicon-flash" aria-hidden="true"></span>
       </a>
-      <a href="{{ url_for("airflow.refresh", dag_id=dag.dag_id) }}" title="Refresh">
-        <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span>
-      </a>
       <a href="/admin/log/?sort=1&desc=1&flt1_dag_id_equals={{ dag.dag_id }}">
          <i class="icon-list"></i>
          <span class="glyphicon glyphicon-align-justify" aria-hidden="true"></span>
       </a>
+                {% endif %}
+      <a href="{{ url_for("airflow.refresh", dag_id=dag_id) }}" title="Refresh">
+        <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span>
+      </a>
                 </td>
             </tr>
         {% endfor %}
+        </tbody>
     </table>
 {% endblock %}
 
 {% block tail %}
   {{ super() }}
   <script src="{{ url_for('static', filename='d3.v3.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='jquery.dataTables.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='dataTables.bootstrap.js') }}"></script>
   <script>
+console.log($().jquery); 
+      $('#dags').dataTable({
+        "iDisplayLength": 100,
+        "bSort": false,
+      });
       diameter = 25;
       circle_margin = 4;
       stroke_width = 2;

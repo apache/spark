@@ -229,21 +229,34 @@ class DagModelView(SuperUserMixin, ModelView):
         )
 
 mv = DagModelView(
-    models.DagModel, Session, name="DAGs")
+    models.DagModel, Session, name="DAGs", category="Admin")
 
 
 class HomeView(AdminIndexView):
     @expose("/")
     @login_required
     def index(self):
-        return redirect('/admin/dagmodel/')
+        session = Session()
+        DM = models.DagModel
+        qry = session.query(DM).filter(~DM.is_subdag, DM.is_active).all()
+        orm_dags = {dag.dag_id: dag for dag in qry}
+        session.expunge_all()
+        session.commit()
+        session.close()
+        dags = dagbag.dags.values()
+        dags = {dag.dag_id: dag for dag in dags if not dag.parent_dag}
+        all_dag_ids = sorted(set(orm_dags.keys()) | set(dags.keys()))
+        return self.render(
+            'airflow/local_dags.html',
+            dags=dags,
+            orm_dags=orm_dags,
+            all_dag_ids=all_dag_ids)
 
 admin = Admin(
     app,
     name="Airflow",
-    index_view=HomeView(),
+    index_view=HomeView(name="DAGs"),
     template_mode='bootstrap3')
-admin._menu = []
 admin.add_view(mv)
 
 
@@ -560,13 +573,6 @@ class Airflow(BaseView):
             sql=sql,
             label=chart.label)
 
-    @expose('/local_dags')
-    @login_required
-    def local_dags(self):
-        dags = dagbag.dags.values()
-        dags = [dag for dag in dags if not dag.parent_dag]
-        dags = sorted(dags, key=lambda dag: dag.dag_id)
-        return self.render('airflow/local_dags.html', dags=dags)
 
     @expose('/dag_stats')
     @login_required
