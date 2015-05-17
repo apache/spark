@@ -196,9 +196,8 @@ class FeatureTests(PySparkTestCase):
         idf0m = idf0.fit(dataset, {idf0.outputCol: "idf"})
         self.assertEqual(idf0m.uid, idf0.uid,
                          "Model should inherit the UID from its parent estimator.")
-        self.assertEqual(idf0m.getOutputCol(), "idf")
-        output = idf0m.transform(dataset, {idf0m.outputCol: "features"})
-        self.assertIsNone(output.head().features)
+        output = idf0m.transform(dataset)
+        self.assertIsNotNone(output.head().idf)
 
 
 if __name__ == "__main__":
