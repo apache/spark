@@ -18,11 +18,15 @@
 package org.apache.spark.mllib.linalg.distributed
 
 import breeze.linalg.{DenseMatrix => BDM}
+import org.apache.spark.HashPartitioner
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.SingularValueDecomposition
+import scala.collection.mutable
+import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
+import KernelType._
 
 /**
  * :: Experimental ::
@@ -186,4 +190,85 @@ class IndexedRowMatrix(
     }
     mat
   }
+
+  def rowSimilarities(
+      kernelType: KernelType = COSINE,
+      topk: Int = nRows.toInt,
+      threshold: Double = 1e-4): CoordinateMatrix = {
+    val rowNorms = IndexedRowMatrix.rowMagnitudes(rows, 2)
+    val kernel = kernelType match {
+      case COSINE => CosineKernel(rowNorms, threshold)
+      case EUCLIDEAN => EuclideanKernel(rowNorms, threshold)
+      case RBF => RBFKernel(rowNorms, threshold)
+    }
+    IndexedRowMatrix.multiply(rows, rows, kernel, topk)
+  }
 }
+
+object IndexedRowMatrix {
+  def rowMagnitudes(rows: RDD[IndexedRow], norm: Int) : Map[Long, Double] = {
+    rows.map { indexedRow =>
+      (indexedRow.index, Vectors.norm(indexedRow.vector, norm))
+    }.collect().toMap
+  }
+
+  def blockify(features: RDD[IndexedRow], blockSize: Int): RDD[(Int, Array[IndexedRow])] = {
+    val featurePartitioner = new HashPartitioner(blockSize)
+    val blockedFeatures = features.map { row =>
+      (featurePartitioner.getPartition(row.index), row)
+    }.groupByKey(blockSize).map {
+      case (index, rows) => (index, rows.toArray)
+    }
+    blockedFeatures.count()
+    blockedFeatures
+  }
+
+  // TO DO: Explore LSH and KDTree ideas to further improve runtime
+  def multiply(
+      small: RDD[IndexedRow],
+      big: RDD[IndexedRow],
+      kernel: Kernel,
+      topk: Int): CoordinateMatrix = {
+    val ord = Ordering[(Float, Long)].on[(Long, Double)](x => (x._2.toFloat, x._1))
+    val defaultParallelism = big.sparkContext.defaultParallelism
+
+    val smallBlocks = math.max(small.sparkContext.defaultParallelism, small.partitions.size) / 2
+    val bigBlocks = math.max(defaultParallelism, big.partitions.size) / 2
+
+    val blockedSmall = blockify(small, smallBlocks)
+    val blockedBig = blockify(big, bigBlocks)
+
+    blockedSmall.setName("blockedSmallMatrix")
+    blockedBig.setName("blockedBigMatrix")
+
+    blockedBig.cache()
+
+    val topkSims = blockedBig.cartesian(blockedSmall).flatMap {
+      case ((bigBlockIndex, bigRows), (smallBlockIndex, smallRows)) =>
+        val buf = mutable.ArrayBuilder.make[(Long, (Long, Double))]
+        for (i <- 0 until bigRows.size; j <- 0 until smallRows.size) {
+          val bigIndex = bigRows(i).index
+          val bigRow = bigRows(i).vector
+          val smallIndex = smallRows(j).index
+          val smallRow = smallRows(j).vector
+          val kernelVal = kernel.compute(smallRow, smallIndex, bigRow, bigIndex)
+          if (kernelVal != 0.0) {
+            val entry = (bigIndex, (smallIndex, kernelVal))
+            buf += entry
+          }
+        }
+        buf.result()
+    }.topByKey(topk)(ord).flatMap { case (i, value) =>
+      value.map { sim =>
+        MatrixEntry(i, sim._1, sim._2)
+      }
+    }.repartition(defaultParallelism)
+
+    blockedBig.unpersist()
+
+    // Materialize the cartesian RDD
+    topkSims.count()
+    new CoordinateMatrix(topkSims)
+  }
+}
+
