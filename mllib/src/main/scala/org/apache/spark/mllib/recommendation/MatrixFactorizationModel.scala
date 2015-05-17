@@ -24,6 +24,8 @@ import scala.collection.mutable
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.hadoop.fs.Path
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.distributed.{IndexedRowMatrix, IndexedRow, CoordinateMatrix}
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -134,6 +136,36 @@ class MatrixFactorizationModel(
   def recommendUsers(product: Int, num: Int): Array[Rating] =
     MatrixFactorizationModel.recommend(productFeatures.lookup(product).head, userFeatures, num)
       .map(t => Rating(t._1, product, t._2))
+
+  /**
+   * Find similar products to every product. Cosine similarity is used
+   *
+   * @param num how many products to return. The number returned may be less than this.
+   * @return CoordinateMatrix containing similar product pair and the corresponding similarity
+   *  scores. zero similarities are filtered out
+   */
+  def similarProducts(num: Int): CoordinateMatrix = {
+    val indexedRows = productFeatures.map {
+      case (index, features) => IndexedRow(index.toLong, Vectors.dense(features))
+    }
+    val indexedMatrix = new IndexedRowMatrix(indexedRows)
+    indexedMatrix.rowSimilarities(topk = num)
+  }
+
+  /**
+   * Find similar users to every user. Cosine similarity is used
+   *
+   * @param num how many users to return. The number returned may be less than this.
+   * @return CoordinateMatrix containing similar user pair and the corresponding similarity
+   *  scores. zero similarities are filtered out
+   */
+  def similarUsers(num: Int): CoordinateMatrix = {
+    val indexedRows = userFeatures.map {
+      case (index, features) => IndexedRow(index.toLong, Vectors.dense(features))
+    }
+    val indexedMatrix = new IndexedRowMatrix(indexedRows)
+    indexedMatrix.rowSimilarities(topk = num)
+  }
 
   protected override val formatVersion: String = "1.0"
 
