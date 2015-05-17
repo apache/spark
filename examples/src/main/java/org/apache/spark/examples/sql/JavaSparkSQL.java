@@ -99,7 +99,7 @@ public class JavaSparkSQL {
     // Read in the parquet file created above.
     // Parquet files are self-describing so the schema is preserved.
     // The result of loading a parquet file is also a DataFrame.
-    DataFrame parquetFile = sqlContext.parquetFile("people.parquet");
+    DataFrame parquetFile = sqlContext.read().parquet("people.parquet");
 
     //Parquet files can also be registered as tables and then used in SQL statements.
     parquetFile.registerTempTable("parquetFile");
@@ -120,7 +120,7 @@ public class JavaSparkSQL {
     // The path can be either a single text file or a directory storing text files.
     String path = "examples/src/main/resources/people.json";
     // Create a DataFrame from the file(s) pointed by path
-    DataFrame peopleFromJsonFile = sqlContext.jsonFile(path);
+    DataFrame peopleFromJsonFile = sqlContext.read().json(path);
 
     // Because the schema of a JSON dataset is automatically inferred, to write queries,
     // it is better to take a look at what is the schema.

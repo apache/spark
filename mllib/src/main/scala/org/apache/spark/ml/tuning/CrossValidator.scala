@@ -23,6 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
@@ -81,7 +82,10 @@ private[ml] trait CrossValidatorParams extends Params {
  * K-fold cross validation.
  */
 @AlphaComponent
-class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorParams with Logging {
+class CrossValidator(override val uid: String) extends Estimator[CrossValidatorModel]
+  with CrossValidatorParams with Logging {
+
+  def this() = this(Identifiable.randomUID("cv"))
 
   private val f2jBLAS = new F2jBLAS
 
@@ -136,7 +140,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
-    copyValues(new CrossValidatorModel(this, bestModel))
+    copyValues(new CrossValidatorModel(uid, bestModel).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -150,7 +154,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
  */
 @AlphaComponent
 class CrossValidatorModel private[ml] (
-    override val parent: CrossValidator,
+    override val uid: String,
     val bestModel: Model[_])
   extends Model[CrossValidatorModel] with CrossValidatorParams {
 

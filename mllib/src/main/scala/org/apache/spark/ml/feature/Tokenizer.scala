@@ -20,6 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
@@ -27,7 +28,9 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  * A tokenizer that converts the input string to lowercase and then splits it by white spaces.
  */
 @AlphaComponent
-class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
+class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[String], Tokenizer] {
+
+  def this() = this(Identifiable.randomUID("tok"))
 
   override protected def createTransformFunc: String => Seq[String] = {
     _.toLowerCase.split("\\s")
@@ -48,7 +51,10 @@ class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
  * It returns an array of strings that can be empty.
  */
 @AlphaComponent
-class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
+class RegexTokenizer(override val uid: String)
+  extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
+
+  def this() = this(Identifiable.randomUID("regexTok"))
 
   /**
    * Minimum token length, >= 0.

@@ -175,7 +175,7 @@ object TestData {
       "4, D4, true, 2147483644" :: Nil)
 
   case class TimestampField(time: Timestamp)
-  val timestamps = TestSQLContext.sparkContext.parallelize((1 to 3).map { i =>
+  val timestamps = TestSQLContext.sparkContext.parallelize((0 to 3).map { i =>
     TimestampField(new Timestamp(i))
   })
   timestamps.toDF().registerTempTable("timestamps")
