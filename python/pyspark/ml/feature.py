@@ -258,6 +258,7 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
     def _create_model(self, java_model):
         return IDFModel(java_model)
 
+
 class IDFModel(JavaModel):
     """
     Model fitted by IDF.
