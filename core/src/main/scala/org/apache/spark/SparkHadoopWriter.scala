@@ -41,20 +41,20 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
   with SparkHadoopMapRedUtil
   with Serializable {
 
-  private val now = new Date()
-  private val conf = new SerializableWritable(jobConf)
+  protected val now = new Date()
+  protected val conf = new SerializableWritable(jobConf)
 
-  private var jobID = 0
-  private var splitID = 0
-  private var attemptID = 0
-  private var jID: SerializableWritable[JobID] = null
-  private var taID: SerializableWritable[TaskAttemptID] = null
+  protected var jobID = 0
+  protected var splitID = 0
+  protected var attemptID = 0
+  protected var jID: SerializableWritable[JobID] = null
+  protected var taID: SerializableWritable[TaskAttemptID] = null
 
-  @transient private var writer: RecordWriter[AnyRef,AnyRef] = null
-  @transient private var format: OutputFormat[AnyRef,AnyRef] = null
-  @transient private var committer: OutputCommitter = null
-  @transient private var jobContext: JobContext = null
-  @transient private var taskContext: TaskAttemptContext = null
+  @transient protected var writer: RecordWriter[AnyRef,AnyRef] = null
+  @transient protected var format: OutputFormat[AnyRef,AnyRef] = null
+  @transient protected var committer: OutputCommitter = null
+  @transient protected var jobContext: JobContext = null
+  @transient protected var taskContext: TaskAttemptContext = null
 
   def preSetup() {
     setIDs(0, 0, 0)
@@ -112,9 +112,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
     cmtr.commitJob(getJobContext())
   }
 
-  // ********* Private Functions *********
-
-  private def getOutputFormat(): OutputFormat[AnyRef,AnyRef] = {
+  def getOutputFormat(): OutputFormat[AnyRef,AnyRef] = {
     if (format == null) {
       format = conf.value.getOutputFormat()
         .asInstanceOf[OutputFormat[AnyRef,AnyRef]]
@@ -122,28 +120,28 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
     format
   }
 
-  private def getOutputCommitter(): OutputCommitter = {
+  def getOutputCommitter(): OutputCommitter = {
     if (committer == null) {
       committer = conf.value.getOutputCommitter
     }
     committer
   }
 
-  private def getJobContext(): JobContext = {
+  def getJobContext(): JobContext = {
     if (jobContext == null) {
       jobContext = newJobContext(conf.value, jID.value)
     }
     jobContext
   }
 
-  private def getTaskContext(): TaskAttemptContext = {
+  def getTaskContext(): TaskAttemptContext = {
     if (taskContext == null) {
       taskContext =  newTaskAttemptContext(conf.value, taID.value)
     }
     taskContext
   }
 
-  private def setIDs(jobid: Int, splitid: Int, attemptid: Int) {
+  def setIDs(jobid: Int, splitid: Int, attemptid: Int) {
     jobID = jobid
     splitID = splitid
     attemptID = attemptid

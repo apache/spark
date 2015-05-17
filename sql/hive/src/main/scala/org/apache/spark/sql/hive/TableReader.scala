@@ -333,7 +333,7 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
     logDebug(soi.toString)
 
     val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map { case (attr, ordinal) =>
-      soi.getStructFieldRef(attr.name) -> ordinal
+      soi.getStructFieldRef(attr.name.toLowerCase) -> ordinal
     }.unzip
 
     /**
