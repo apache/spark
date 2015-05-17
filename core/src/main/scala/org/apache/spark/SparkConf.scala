@@ -478,7 +478,12 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
         "Please use spark.kryoserializer.buffer instead. The default value for " +
           "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
-          "are no longer accepted. To specify the equivalent now, one may use '64k'.")
+          "are no longer accepted. To specify the equivalent now, one may use '64k'."),
+      DeprecatedConfig("spark.cleaner.ttl", "1.4",
+        "TTL-based metadata cleaning is no longer necessary in recent Spark versions " +
+        "and can lead to confusing errors if metadata is deleted for entities that are still in " +
+        "use. Except in extremely special circumstances, you should remove this setting and rely " +
+        "on Spark's reference-tracking-based cleanup instead. See SPARK-7689 for more details.")
     )
     
     Map(configs.map { cfg => (cfg.key -> cfg) }:_*)
