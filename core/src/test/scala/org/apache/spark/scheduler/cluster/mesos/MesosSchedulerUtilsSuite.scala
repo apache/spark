@@ -61,7 +61,11 @@ class MesosSchedulerUtilsSuite extends FlatSpec with Matchers with MockitoSugar 
   }
 
   it should "parse an empty constraint string correctly" in new MesosSchedulerUtils {
-    parseConstraintString("") should be (Map())
+    parseConstraintString("") shouldBe Map()
+  }
+
+  it should "throw an exception when the input is malformed" in new MesosSchedulerUtils {
+    an[IllegalArgumentException] should be thrownBy parseConstraintString("tachyon;zone:us-east")
   }
 
 }
