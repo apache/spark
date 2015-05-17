@@ -32,7 +32,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 		import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 
 		val kinesisStream = KinesisUtils.createStream(
-        	streamingContext, [Kinesis stream name], [endpoint URL], [checkpoint interval], [initial position])
+        	[appName], [streamingContext], [stream name], [endpoint URL], [regionName], [awsAccessKeyId], [awsSecretKey], [checkpoint interval], [initial position] [storage level])
 
 	See the [API docs](api/scala/index.html#org.apache.spark.streaming.kinesis.KinesisUtils$)
 	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/extras/kinesis-asl/src/main/scala/org/apache/spark/examples/streaming/KinesisWordCountASL.scala). Refer to the Running the Example section for instructions on how to run the example.
@@ -44,29 +44,36 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 		import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
 
 		JavaReceiverInputDStream<byte[]> kinesisStream = KinesisUtils.createStream(
-        	streamingContext, [Kinesis stream name], [endpoint URL], [checkpoint interval], [initial position]);
+        	[appName], [javaStreamingContext], [stream name], [endpoint URL], [regionName], [awsAccessKeyId], [awsSecretKey], [checkpoint interval], [initial position] [storage level]);
 
 	See the [API docs](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisUtils.html)
 	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/extras/kinesis-asl/src/main/java/org/apache/spark/examples/streaming/JavaKinesisWordCountASL.java). Refer to the next subsection for instructions to run the example.
 
 	</div>
 	</div>
+        - `app name`: Name of the application used used by Kinesis to tie this Kinesis application to the Kinesis stream.  Note:  this application name will override the one from StreamingContext.SparkConf
 
-    - `streamingContext`: StreamingContext containg an application name used by Kinesis to tie this Kinesis application to the Kinesis stream
+        - `streamingContext`: StreamingContext possibly containing a SparkConf with an application name used by Kinesis to tie this Kinesis application to the Kinesis stream
 
-	- `[Kinesis stream name]`: The Kinesis stream that this streaming application receives from
+	- `[stream name]`: The Kinesis stream that this streaming application receives from
 		- The application name used in the streaming context becomes the Kinesis application name
 		- The application name must be unique for a given account and region.
-		- The Kinesis backend automatically associates the application name to the Kinesis stream using a DynamoDB table (always in the us-east-1 region) created during Kinesis Client Library initialization. 
+		- The Kinesis backend automatically associates the application name to the Kinesis stream using a DynamoDB table  created in the specified region (can be separate from the Kinesis stream region) during Kinesis Client Library initialization. 
 		- Changing the application name or stream name can lead to Kinesis errors in some cases.  If you see errors, you may need to manually delete the DynamoDB table.
 
-
 	- `[endpoint URL]`: Valid Kinesis endpoints URL can be found [here](http://docs.aws.amazon.com/general/latest/gr/rande.html#ak_region).
+
+    - `[region name]`: The region used by the Kinesis Client Library for DynamoDB (lease coordination and checkpointing) and CloudWatch (metrics)
+
+    - `[aws access key id]`: AWS access key id
+
+    - `[aws secret key]`: AWS secret key
 
 	- `[checkpoint interval]`: The interval (e.g., Duration(2000) = 2 seconds) at which the Kinesis Client Library saves its position in the stream.  For starters, set it to the same as the batch interval of the streaming application.
 
 	- `[initial position]`: Can be either `InitialPositionInStream.TRIM_HORIZON` or `InitialPositionInStream.LATEST` (see Kinesis Checkpointing section and Amazon Kinesis API documentation for more details).
 
+	- `[storage level]`: Can be one of the following `StorageLevel.MEMORY_AND_DISK_2`, `StorageLevel.MEMORY_ONLY_2`, `StorageLevel.MEMORY_AND_DISK`, etc. (See Spark RDD StorageLevel documentation for more details).
 
 3. **Deploying:** Package `spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}` and its dependencies (except `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` which are provided by `spark-submit`) into the application JAR. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
 
@@ -99,7 +106,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 
 	- The Kinesis input DStream will balance the load during re-shard events (merging and splitting) due to changes in load.
 
-	- As a best practice, it's recommended that you avoid re-shard jitter by over-provisioning when possible.
+	- As a best practice, it's recommended that you avoid re-shard jitter by over-provisioning from the start when possible.
 
 	- Each Kinesis input DStream maintains its own checkpoint info.  See the Kinesis Checkpointing section for more details.
 
@@ -115,19 +122,19 @@ To run the example,
 
 - Set up Kinesis stream (see earlier section) within AWS. Note the name of the Kinesis stream and the endpoint URL corresponding to the region where the stream was created.
 
-- Set up the environment variables AWS_ACCESS_KEY_ID and AWS_SECRET_KEY with your AWS credentials.
+- Set up the environment variables AWS_ACCESS_KEY_ID and AWS_SECRET_KEY with your AWS credentials or pass the credentials in explicitly.  Explictly-passed credentials will take precedence.
 
 - In the Spark root directory, run the example as
 
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
 
-    	bin/run-example streaming.KinesisWordCountASL [Kinesis stream name] [endpoint URL]
+    	bin/run-example streaming.KinesisWordCountASL [app name] [stream name] [endpoint URL] [region name] [aws access key id] [aws secret key id]
 
 	</div>
 	<div data-lang="java" markdown="1">
 
-        bin/run-example streaming.JavaKinesisWordCountASL [Kinesis stream name] [endpoint URL]
+        bin/run-example streaming.JavaKinesisWordCountASL [app name] [stream name] [endpoint URL] [region name] [aws access key id] [aws secret key id]
 
 	</div>
 	</div>
@@ -136,7 +143,7 @@ To run the example,
 
 - To generate random string data to put onto the Kinesis stream, in another terminal, run the associated Kinesis data producer.
 
-		bin/run-example streaming.KinesisWordCountProducerASL [Kinesis stream name] [endpoint URL] 1000 10
+		bin/run-example streaming.KinesisWordCountProducerASL [stream name] [endpoint URL] [aws access key id] [aws secret key id] 1000 10
 
 	This will push 1000 lines per second of 10 random numbers per line to the Kinesis stream.  This data should then be received and processed by the running example.
 
