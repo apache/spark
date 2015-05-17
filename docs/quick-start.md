@@ -95,40 +95,6 @@ We can chain together transformations and actions:
 {% endhighlight %}
 
 </div>
-<div data-lang="r" markdown="1">
-
-    ./bin/sparkR
-
-Spark's primary abstraction is a distributed collection of items called a Resilient Distributed Dataset (RDD). RDDs can be created from Hadoop InputFormats (such as HDFS files) or by transforming other RDDs. Let's make a new RDD from the text of the README file in the Spark source directory:
-
-{% highlight r %}
-> textFile <- textFile(sc, "README.md")
-{% endhighlight %}
-
-RDDs have _[actions](programming-guide.html#actions)_, which return values, and _[transformations](programming-guide.html#transformations)_, which return pointers to new RDDs. Let's start with a few actions:
-
-{% highlight r %}
-> count(textFile) # Number of items in this RDD
-[1] 98
-
-> first(textFile) # First item in this RDD
-[1] "# Apache Spark"
-{% endhighlight %}
-
-Now let's use a transformation. We will use the [`filter`](programming-guide.html#transformations) transformation to return a new RDD with a subset of the items in the file.
-
-{% highlight r %}
-> linesWithSpark <- filterRDD(textFile, function(line) { length(grep("Spark", line)) > 0 })
-{% endhighlight %}
-
-We can chain together transformations and actions:
-
-{% highlight r %}
-> count(filterRDD(textFile, function(line) { length(grep("Spark", line)) > 0 })) # How many lines contain "Spark"?
-[1] 19
-{% endhighlight %}
-
-</div>
 </div>
 
 
@@ -194,7 +160,7 @@ For example, we'll define a `max` function to make this code easier to understan
 One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
 
 {% highlight python %}
->>> wordCounts = textFile.flatMap(lambda line: line.split()).} map(lambda word: (word, 1)).reduceByKey(lambda a, b: a+b)
+>>> wordCounts = textFile.flatMap(lambda line: line.split()).map(lambda word: (word, 1)).reduceByKey(lambda a, b: a+b)
 {% endhighlight %}
 
 Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations) and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (string, int) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
@@ -205,48 +171,6 @@ Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map
 {% endhighlight %}
 
 </div>
-<div data-lang="r" markdown="1">
-
-{% highlight r %}
-> reduce(map(textFile, function(line) { length(strsplit(line, " ")[[1]]) }), function(a, b) {max(a, b)})
-[1] 14
-{% endhighlight %}
-
-This first maps a line to an integer value, creating a new RDD. `reduce` is called on that RDD to find the largest line count. The arguments to `map` and `reduce` are R [anonymous functions](http://adv-r.had.co.nz/Functional-programming.html#anonymous-functions),
-but we can also pass any top-level R function we want.
-For example, we'll define a `mymax` function to make this code easier to understand:
-
-{% highlight r %}
-> mymax <- function(a, b) { max(a, b) }
-> reduce(map(textFile, function(line) { length(strsplit(line, " ")[[1]]) }), mymax)
-[1] 14
-{% endhighlight %}
-
-One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
-
-{% highlight r %}
-> wordCounts <- reduceByKey(
-    map(
-      flatMap(textFile, function(line) strsplit(line, " ")[[1]]),
-      function(word) list(word, 1)),
-    "+", 2)
-{% endhighlight %}
-
-Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations) and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (string, numeric) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
-
-{% highlight r %}
-> collect(wordCounts)
-[[1]]
-[[1]][[1]]
-[1] "Alternatively,"
-
-[[1]][[2]]
-[1] 1
-...
-{% endhighlight %}
-
-</div>
-
 </div>
 
 ## Caching
@@ -287,24 +211,6 @@ a cluster, as described in the [programming guide](programming-guide.html#initia
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
 that these same functions can be used on very large data sets, even when they are striped across
 tens or hundreds of nodes. You can also do this interactively by connecting `bin/pyspark` to
-a cluster, as described in the [programming guide](programming-guide.html#initializing-spark).
-
-</div>
-<div data-lang="r" markdown="1">
-
-{% highlight r %}
-> cache(linesWithSpark)
-
-> count(linesWithSpark)
-[1] 19
-
-> count(linesWithSpark)
-[1] 19
-{% endhighlight %}
-
-It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
-that these same functions can be used on very large data sets, even when they are striped across
-tens or hundreds of nodes. You can also do this interactively by connecting `bin/sparkR` to
 a cluster, as described in the [programming guide](programming-guide.html#initializing-spark).
 
 </div>
@@ -527,47 +433,6 @@ Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
 </div>
-<div data-lang="r" markdown="1">
-
-Now we will show how to write an application using the R API (SparkR).
-
-As an example, we'll create a simple Spark application, `SimpleApp.R`:
-
-{% highlight r %}
-"""SimpleApp.R"""
-library(SparkR)
-
-logFile <- "YOUR_SPARK_HOME/README.md"  # Should be some file on your system
-sc <- sparkR.init("local", "Simple App")
-logData <- cache(textFile(sc, logFile))
-
-numAs <- count(filterRDD(logData, function(line) {length(grep("a", line)) > 0}))
-numBs <- count(filterRDD(logData, function(line) {length(grep("b", line)) > 0}))
-
-cat("Lines with a:", numAs, ", lines with b:", numBs, "\n")
-{% endhighlight %}
-
-
-This program just counts the number of lines containing 'a' and the number containing 'b' in a
-text file.
-Note that you'll need to replace YOUR_SPARK_HOME with the location where Spark is installed.
-As with the Scala and Java examples, we use a SparkContext to create RDDs.
-We can pass Python functions to Spark, which are automatically serialized along with any variables
-that they reference.
-
-We can run this application using the `bin/spark-submit` script:
-
-{% highlight bash %}
-# Use spark-submit to run your application
-$ YOUR_SPARK_HOME/bin/spark-submit \
-  --master local[4] \
-  SimpleApp.R
-...
-Lines with a: 60 , Lines with b: 29
-{% endhighlight %}
-
-</div>
-
 </div>
 
 # Where to Go from Here
@@ -591,5 +456,5 @@ You can run them as follows:
 ./bin/spark-submit examples/src/main/python/pi.py
 
 # For R examples, use spark-submit directly:
-./bin/spark-submit examples/src/main/r/pi.R
+./bin/spark-submit examples/src/main/r/dataframe.R
 {% endhighlight %}

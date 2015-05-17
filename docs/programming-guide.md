@@ -105,28 +105,6 @@ from pyspark import SparkContext, SparkConf
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-Spark {{site.SPARK_VERSION}} works with R 3.1 or higher. 
-
-To run Spark applications in R, use the `bin/spark-submit` script located in the Spark directory.
-This script will load Spark's Java/Scala libraries and allow you to submit applications to a cluster.
-You can also use `bin/sparkR` to launch an interactive R shell.
-
-If you wish to access HDFS data, you need to use a build of Spark linking
-to your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
-[Prebuilt packages](http://spark.apache.org/downloads.html) are also available on the Spark homepage
-for common HDFS versions.
-
-Finally, you need to import the SparkR library into your program. Add the following line:
-
-{% highlight r %}
-library(SparkR)
-{% endhighlight %}
-
-</div>
-
 </div>
 
 
@@ -171,17 +149,6 @@ that contains information about your application.
 {% highlight python %}
 conf = SparkConf().setAppName(appName).setMaster(master)
 sc = SparkContext(conf=conf)
-{% endhighlight %}
-
-</div>
-
-<div data-lang="r"  markdown="1">
-
-The first thing a Spark program must do is to create a SparkContext object, which tells Spark
-how to access a cluster.
-
-{% highlight r %}
-sc = sparkR.init(master, appName)
 {% endhighlight %}
 
 </div>
@@ -279,23 +246,6 @@ your notebook before you start to try Spark from the IPython notebook.
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-In the SparkR shell, a special interpreter-aware SparkContext is already created for you, in the
-variable called `sc`. Making your own SparkContext will not work. You can set which master the
-context connects to using the `--master` argument. You can also add dependencies
-(e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
-to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. SonaType)
-can be passed to the `--repositories` argument. For example, to run `bin/sparkR` on exactly four cores, use:
-
-{% highlight bash %}
-$ ./bin/sparkR --master local[4]
-{% endhighlight %}
-
-For a complete list of options, run `bin/sparkR --help`. Behind the scenes,
-`sparkR` invokes the more general [`spark-submit` script](submitting-applications.html).
-
-</div>
 </div>
 
 # Resilient Distributed Datasets (RDDs)
@@ -350,20 +300,6 @@ distData = sc.parallelize(data)
 {% endhighlight %}
 
 Once created, the distributed dataset (`distData`) can be operated on in parallel. For example, we can call `distData.reduce(lambda a, b: a + b)` to add up the elements of the list.
-We describe operations on distributed datasets later on.
-
-</div>
-
-<div data-lang="r"  markdown="1">
-
-Parallelized collections are created by calling `SparkContext`'s `parallelize` method on an existing collection in your driver program. The elements of the collection are copied to form a distributed dataset that can be operated on in parallel. For example, here is how to create a parallelized collection holding the numbers 1 to 5:
-
-{% highlight r %}
-data <- c(1, 2, 3, 4, 5)
-distData <- parallelize(sc, data)
-{% endhighlight %}
-
-Once created, the distributed dataset (`distData`) can be operated on in parallel. For example, we can call `reduce(distData, "+")` to add up the elements of the list.
 We describe operations on distributed datasets later on.
 
 </div>
@@ -541,27 +477,6 @@ the [Converter examples]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main
 for examples of using Cassandra / HBase ```InputFormat``` and ```OutputFormat``` with custom converters.
 
 </div>
-<div data-lang="r"  markdown="1">
-
-SparkR can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html).
-
-Text file RDDs can be created using `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3n://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
-
-{% highlight r %}
-distFile <- textFile(sc, "data.txt")
-{% endhighlight %}
-
-Once created, `distFile` can be acted on by dataset operations. For example, we can add up the sizes of all the lines using the `map` and `reduce` operations as follows: `reduce(map(distFile, length), "+")`.
-
-Some notes on reading files with Spark:
-
-* If using a path on the local filesystem, the file must also be accessible at the same path on worker nodes. Either copy the file to all workers or use a network-mounted shared file system.
-
-* All of Spark's file-based input methods, including `textFile`, support running on directories, compressed files, and wildcards as well. For example, you can use `textFile(sc, "/my/directory")`, `textFile(sc, "/my/directory/*.txt")`, and `textFile(sc, "/my/directory/*.gz")`.
-
-* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 64MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
-
-</div>
 </div>
 
 ## RDD Operations
@@ -654,34 +569,6 @@ If we also wanted to use `lineLengths` again later, we could add:
 
 {% highlight python %}
 lineLengths.persist()
-{% endhighlight %}
-
-before the `reduce`, which would cause `lineLengths` to be saved in memory after the first time it is computed.
-
-</div>
-
-<div data-lang="r" markdown="1">
-
-To illustrate RDD basics, consider the simple program below:
-
-{% highlight r %}
-lines <- textFile(sc, "data.txt")
-lineLengths <- map(lines, length)
-totalLength <- reduce(lineLengths, "+")
-{% endhighlight %}
-
-The first line defines a base RDD from an external file. This dataset is not loaded in memory or
-otherwise acted on: `lines` is merely a pointer to the file.
-The second line defines `lineLengths` as the result of a `map` transformation. Again, `lineLengths`
-is *not* immediately computed, due to laziness.
-Finally, we run `reduce`, which is an action. At this point Spark breaks the computation into tasks
-to run on separate machines, and each machine runs both its part of the map and a local reduction,
-returning only its answer to the driver program.
-
-If we also wanted to use `lineLengths` again later, we could add:
-
-{% highlight r %}
-persist(lineLengths)
 {% endhighlight %}
 
 before the `reduce`, which would cause `lineLengths` to be saved in memory after the first time it is computed.
@@ -855,29 +742,6 @@ def doStuff(self, rdd):
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-Spark's API relies heavily on passing functions in the driver program to run on the cluster.
-There are three recommended ways to do this:
-
-* [Anonymous functions](http://adv-r.had.co.nz/Functional-programming.html#anonymous-functions),
-  for simple functions that can be written as an anonymous function.
-* Top-level functions in a module.
-
-For example, to pass a longer function, consider the code below:
-
-{% highlight r %}
-"""MyScript.R"""
-myFunc <- function(s) {
-    words = strsplit(s, " ")[[1]]
-    length(words)
-}
-
-sc <- sparkR.init(...)
-map(textFile(sc, "file.txt"), myFunc)
-{% endhighlight %}
-</div>
-
 </div>
 
 ### Understanding closures <a name="ClosuresLink"></a>
@@ -923,18 +787,6 @@ rdd.foreach(lambda x: counter += x)
 
 print("Counter value: " + counter)
 
-{% endhighlight %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% highlight r %}
-counter <- 0
-rdd <- parallelize(sc, data)
-
-# Wrong: Don't do this!!
-rdd.foreach(function(x){ counter = counter + x })
-
-cat("Counter value: ", counter)
 {% endhighlight %}
 </div>
 
@@ -1051,30 +903,6 @@ counts = pairs.reduceByKey(lambda a, b: a + b)
 
 We could also use `counts.sortByKey()`, for example, to sort the pairs alphabetically, and finally
 `counts.collect()` to bring them back to the driver program as a list of objects.
-
-</div>
-
-<div data-lang="r" markdown="1">
-
-While most Spark operations work on RDDs containing any type of objects, a few special operations are
-only available on RDDs of key-value pairs.
-The most common ones are distributed "shuffle" operations, such as grouping or aggregating the elements
-by a key.
-
-In R, these operations work on RDDs containing built-in R list such as `list(1, 2)`.
-Simply create such lists and then call your desired operation.
-
-For example, the following code uses the `reduceByKey` operation on key-value pairs to count how
-many times each line of text occurs in a file:
-
-{% highlight r %}
-lines <- textFile(sc, "data.txt")
-pairs <- map(lines, function(s) list(s, 1))
-counts <- reduceByKey(pairs, "+")
-{% endhighlight %}
-
-We could also use `sortByKey(counts)`, for example, to sort the pairs alphabetically, and finally
-`collect(counts)` to bring them back to the driver program as a list of objects.
 
 </div>
 
@@ -1493,15 +1321,6 @@ broadcastVar.value();
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-> broadcastVar <- broadcast(sc, c(1, 2, 3))
-> value(broadcastVar)
-[1] 1 2 3
-{% endhighlight %}
-
-</div>
 </div>
 
 After the broadcast variable is created, it should be used instead of the value `v` in any functions
@@ -1761,7 +1580,7 @@ For Python examples, use `spark-submit` instead:
 
 For R examples, use `spark-submit` instead:
 
-    ./bin/spark-submit examples/src/main/r/pi.R
+    ./bin/spark-submit examples/src/main/r/dataframe.R
 
 For help on optimizing your programs, the [configuration](configuration.html) and
 [tuning](tuning.html) guides provide information on best practices. They are especially important for
