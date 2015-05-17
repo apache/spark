@@ -25,7 +25,6 @@ import java.net.{Socket, URL}
 import java.util.concurrent.atomic.AtomicReference
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -76,6 +75,8 @@ private[spark] class ApplicationMaster(
   // Fields used in cluster mode.
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
+  private var delegationTokenRenewerOption: Option[AMDelegationTokenRenewer] = None
+
   final def run(): Int = {
     try {
       val appAttemptId = client.getAttemptId()
@@ -90,53 +91,54 @@ private[spark] class ApplicationMaster(
 
         // Propagate the application ID so that YarnClusterSchedulerBackend can pick it up.
         System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
+
+        // Propagate the attempt if, so that in case of event logging,
+        // different attempt's logs gets created in different directory
+        System.setProperty("spark.yarn.app.attemptId", appAttemptId.getAttemptId().toString())
       }
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
 
       val fs = FileSystem.get(yarnConf)
-      val cleanupHook = new Runnable {
-        override def run() {
-          // If the SparkContext is still registered, shut it down as a best case effort in case
-          // users do not call sc.stop or do System.exit().
-          val sc = sparkContextRef.get()
-          if (sc != null) {
-            logInfo("Invoking sc stop from shutdown hook")
-            sc.stop()
-          }
-          val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
-          val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
 
-          if (!finished) {
-            // This happens when the user application calls System.exit(). We have the choice
-            // of either failing or succeeding at this point. We report success to avoid
-            // retrying applications that have succeeded (System.exit(0)), which means that
-            // applications that explicitly exit with a non-zero status will also show up as
-            // succeeded in the RM UI.
-            finish(finalStatus,
-              ApplicationMaster.EXIT_SUCCESS,
-              "Shutdown hook called before final status was reported.")
-          }
+      // This shutdown hook should run *after* the SparkContext is shut down.
+      Utils.addShutdownHook(Utils.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1) { () =>
+        val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
+        val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
 
-          if (!unregistered) {
-            // we only want to unregister if we don't want the RM to retry
-            if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
-              unregister(finalStatus, finalMsg)
-              cleanupStagingDir(fs)
-            }
+        if (!finished) {
+          // This happens when the user application calls System.exit(). We have the choice
+          // of either failing or succeeding at this point. We report success to avoid
+          // retrying applications that have succeeded (System.exit(0)), which means that
+          // applications that explicitly exit with a non-zero status will also show up as
+          // succeeded in the RM UI.
+          finish(finalStatus,
+            ApplicationMaster.EXIT_SUCCESS,
+            "Shutdown hook called before final status was reported.")
+        }
+
+        if (!unregistered) {
+          // we only want to unregister if we don't want the RM to retry
+          if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
+            unregister(finalStatus, finalMsg)
+            cleanupStagingDir(fs)
           }
         }
       }
-
-      // Use higher priority than FileSystem.
-      assert(ApplicationMaster.SHUTDOWN_HOOK_PRIORITY > FileSystem.SHUTDOWN_HOOK_PRIORITY)
-      ShutdownHookManager
-        .get().addShutdownHook(cleanupHook, ApplicationMaster.SHUTDOWN_HOOK_PRIORITY)
 
       // Call this to force generation of secret so it gets populated into the
       // Hadoop UGI. This has to happen before the startUserApplication which does a
       // doAs in order for the credentials to be passed on to the executor containers.
       val securityMgr = new SecurityManager(sparkConf)
+
+      // If the credentials file config is present, we must periodically renew tokens. So create
+      // a new AMDelegationTokenRenewer
+      if (sparkConf.contains("spark.yarn.credentials.file")) {
+        delegationTokenRenewerOption = Some(new AMDelegationTokenRenewer(sparkConf, yarnConf))
+        // If a principal and keytab have been set, use that to create new credentials for executors
+        // periodically
+        delegationTokenRenewerOption.foreach(_.scheduleLoginFromKeytab())
+      }
 
       if (isClusterMode) {
         runDriver(securityMgr)
@@ -202,6 +204,7 @@ private[spark] class ApplicationMaster(
           logDebug("shutting down user thread")
           userClassThread.interrupt()
         }
+        if (!inShutdown) delegationTokenRenewerOption.foreach(_.stop())
       }
     }
   }
@@ -221,9 +224,11 @@ private[spark] class ApplicationMaster(
     val sc = sparkContextRef.get()
 
     val appId = client.getAttemptId().getApplicationId().toString()
+    val attemptId = client.getAttemptId().getAttemptId().toString()
     val historyAddress =
       sparkConf.getOption("spark.yarn.historyServer.address")
-        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}" }
+        .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
+        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
         .getOrElse("")
 
     allocator = client.register(yarnConf,
@@ -247,12 +252,12 @@ private[spark] class ApplicationMaster(
       host: String,
       port: String,
       isClusterMode: Boolean): Unit = {
-    val driverEndpont = rpcEnv.setupEndpointRef(
+    val driverEndpoint = rpcEnv.setupEndpointRef(
       SparkEnv.driverActorSystemName,
       RpcAddress(host, port.toInt),
       YarnSchedulerBackend.ENDPOINT_NAME)
     amEndpoint =
-      rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverEndpont, isClusterMode))
+      rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverEndpoint, isClusterMode))
   }
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
@@ -280,7 +285,8 @@ private[spark] class ApplicationMaster(
   }
 
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
-    rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, 0, sparkConf, securityMgr)
+    val port = sparkConf.getInt("spark.yarn.am.port", 0)
+    rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, port, sparkConf, securityMgr)
     waitForSparkDriver()
     addAmIpFilter()
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
@@ -295,7 +301,7 @@ private[spark] class ApplicationMaster(
 
     // we want to be reasonably responsive without causing too many requests to RM.
     val schedulerInterval =
-      sparkConf.getLong("spark.yarn.scheduler.heartbeat.interval-ms", 5000)
+      sparkConf.getTimeAsMs("spark.yarn.scheduler.heartbeat.interval-ms", "5s")
 
     // must be <= expiryInterval / 2.
     val interval = math.max(0, math.min(expiryInterval / 2, schedulerInterval))
@@ -372,13 +378,7 @@ private[spark] class ApplicationMaster(
   private def waitForSparkContextInitialized(): SparkContext = {
     logInfo("Waiting for spark context initialization")
     sparkContextRef.synchronized {
-      val waitTries = sparkConf.getOption("spark.yarn.applicationMaster.waitTries")
-        .map(_.toLong * 10000L)
-      if (waitTries.isDefined) {
-        logWarning(
-          "spark.yarn.applicationMaster.waitTries is deprecated, use spark.yarn.am.waitTime")
-      }
-      val totalWaitTime = sparkConf.getLong("spark.yarn.am.waitTime", waitTries.getOrElse(100000L))
+      val totalWaitTime = sparkConf.getTimeAsMs("spark.yarn.am.waitTime", "100s")
       val deadline = System.currentTimeMillis() + totalWaitTime
 
       while (sparkContextRef.get() == null && System.currentTimeMillis < deadline && !finished) {
@@ -403,8 +403,8 @@ private[spark] class ApplicationMaster(
 
     // Spark driver should already be up since it launched us, but we don't want to
     // wait forever, so wait 100 seconds max to match the cluster mode setting.
-    val totalWaitTime = sparkConf.getLong("spark.yarn.am.waitTime", 100000L)
-    val deadline = System.currentTimeMillis + totalWaitTime
+    val totalWaitTimeMs = sparkConf.getTimeAsMs("spark.yarn.am.waitTime", "100s")
+    val deadline = System.currentTimeMillis + totalWaitTimeMs
 
     while (!driverUp && !finished && System.currentTimeMillis < deadline) {
       try {
@@ -512,6 +512,7 @@ private[spark] class ApplicationMaster(
 
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
+
     }
 
     override def receive: PartialFunction[Any, Unit] = {
@@ -550,8 +551,6 @@ private[spark] class ApplicationMaster(
 }
 
 object ApplicationMaster extends Logging {
-
-  val SHUTDOWN_HOOK_PRIORITY: Int = 30
 
   // exit codes for different causes, no reason behind the values
   private val EXIT_SUCCESS = 0

@@ -63,6 +63,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var action: SparkSubmitAction = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
   var proxyUser: String = null
+  var principal: String = null
+  var keytab: String = null
 
   // Standalone cluster mode only
   var supervise: Boolean = false
@@ -77,12 +79,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
     Option(propertiesFile).foreach { filename =>
       Utils.getPropertiesFromFile(filename).foreach { case (k, v) =>
-        if (k.startsWith("spark.")) {
-          defaultProperties(k) = v
-          if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
-        } else {
-          SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
-        }
+        defaultProperties(k) = v
+        if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
       }
     }
     defaultProperties
@@ -97,6 +95,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
   // Populate `sparkProperties` map from properties file
   mergeDefaultSparkProperties()
+  // Remove keys that don't start with "spark." from `sparkProperties`.
+  ignoreNonSparkProperties()
   // Use `sparkProperties` map along with env vars to fill in any missing parameters
   loadEnvironmentArguments()
 
@@ -113,6 +113,18 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     defaultSparkProperties.foreach { case (k, v) =>
       if (!sparkProperties.contains(k)) {
         sparkProperties(k) = v
+      }
+    }
+  }
+
+  /**
+   * Remove keys that don't start with "spark." from `sparkProperties`.
+   */
+  private def ignoreNonSparkProperties(): Unit = {
+    sparkProperties.foreach { case (k, v) =>
+      if (!k.startsWith("spark.")) {
+        sparkProperties -= k
+        SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
       }
     }
   }
@@ -231,8 +243,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
 
   private def validateKillArguments(): Unit = {
-    if (!master.startsWith("spark://")) {
-      SparkSubmit.printErrorAndExit("Killing submissions is only supported in standalone mode!")
+    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
+      SparkSubmit.printErrorAndExit(
+        "Killing submissions is only supported in standalone or Mesos mode!")
     }
     if (submissionToKill == null) {
       SparkSubmit.printErrorAndExit("Please specify a submission to kill.")
@@ -240,9 +253,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
 
   private def validateStatusRequestArguments(): Unit = {
-    if (!master.startsWith("spark://")) {
+    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
       SparkSubmit.printErrorAndExit(
-        "Requesting submission statuses is only supported in standalone mode!")
+        "Requesting submission statuses is only supported in standalone or Mesos mode!")
     }
     if (submissionToRequestStatusFor == null) {
       SparkSubmit.printErrorAndExit("Please specify a submission to request status for.")
@@ -382,6 +395,12 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       case PROXY_USER =>
         proxyUser = value
 
+      case PRINCIPAL =>
+        principal = value
+
+      case KEYTAB =>
+        keytab = value
+
       case HELP =>
         printUsageAndExit(0)
 
@@ -475,6 +494,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
+        |
+        | Spark standalone or Mesos with cluster deploy mode only:
         |  --supervise                 If given, restarts the driver on failure.
         |  --kill SUBMISSION_ID        If given, kills the driver specified.
         |  --status SUBMISSION_ID      If given, requests the status of the driver specified.
@@ -482,14 +503,24 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         | Spark standalone and Mesos only:
         |  --total-executor-cores NUM  Total cores for all executors.
         |
+        | Spark standalone and YARN only:
+        |  --executor-cores NUM        Number of cores per executor. (Default: 1 in YARN mode,
+        |                              or all available cores on the worker in standalone mode)
+        |
         | YARN-only:
         |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode
         |                              (Default: 1).
-        |  --executor-cores NUM        Number of cores per executor (Default: 1).
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
         |  --num-executors NUM         Number of executors to launch (Default: 2).
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
         |                              working directory of each executor.
+        |  --principal PRINCIPAL       Principal to be used to login to KDC, while running on
+        |                              secure HDFS.
+        |  --keytab KEYTAB             The full path to the file that contains the keytab for the
+        |                              principal specified above. This keytab will be copied to
+        |                              the node running the Application Master via the Secure
+        |                              Distributed Cache, for renewing the login tickets and the
+        |                              delegation tokens periodically.
       """.stripMargin
     )
     SparkSubmit.exitFn()

@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Naive Bayes - MLlib
+title: Isotonic regression - MLlib
 displayTitle: <a href="mllib-guide.html">MLlib</a> - Regression
 ---
 

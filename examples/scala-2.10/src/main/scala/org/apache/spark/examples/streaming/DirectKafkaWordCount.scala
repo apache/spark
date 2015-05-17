@@ -41,7 +41,7 @@ object DirectKafkaWordCount {
         |  <brokers> is a list of one or more Kafka brokers
         |  <topics> is a list of one or more kafka topics to consume from
         |
-        """".stripMargin)
+        """.stripMargin)
       System.exit(1)
     }
 

@@ -25,10 +25,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 @BeanInfo
-case class TokenizerTestData(rawText: String, wantedTokens: Seq[String]) {
-  /** Constructor used in [[org.apache.spark.ml.feature.JavaTokenizerSuite]] */
-  def this(rawText: String, wantedTokens: Array[String]) = this(rawText, wantedTokens.toSeq)
-}
+case class TokenizerTestData(rawText: String, wantedTokens: Array[String])
 
 class RegexTokenizerSuite extends FunSuite with MLlibTestSparkContext {
   import org.apache.spark.ml.feature.RegexTokenizerSuite._
@@ -46,14 +43,14 @@ class RegexTokenizerSuite extends FunSuite with MLlibTestSparkContext {
       .setOutputCol("tokens")
 
     val dataset0 = sqlContext.createDataFrame(Seq(
-      TokenizerTestData("Test for tokenization.", Seq("Test", "for", "tokenization", ".")),
-      TokenizerTestData("Te,st. punct", Seq("Te", ",", "st", ".", "punct"))
+      TokenizerTestData("Test for tokenization.", Array("Test", "for", "tokenization", ".")),
+      TokenizerTestData("Te,st. punct", Array("Te", ",", "st", ".", "punct"))
     ))
     testRegexTokenizer(tokenizer, dataset0)
 
     val dataset1 = sqlContext.createDataFrame(Seq(
-      TokenizerTestData("Test for tokenization.", Seq("Test", "for", "tokenization")),
-      TokenizerTestData("Te,st. punct", Seq("punct"))
+      TokenizerTestData("Test for tokenization.", Array("Test", "for", "tokenization")),
+      TokenizerTestData("Te,st. punct", Array("punct"))
     ))
 
     tokenizer.setMinTokenLength(3)
@@ -64,8 +61,8 @@ class RegexTokenizerSuite extends FunSuite with MLlibTestSparkContext {
       .setGaps(true)
       .setMinTokenLength(0)
     val dataset2 = sqlContext.createDataFrame(Seq(
-      TokenizerTestData("Test for tokenization.", Seq("Test", "for", "tokenization.")),
-      TokenizerTestData("Te,st.  punct", Seq("Te,st.", "", "punct"))
+      TokenizerTestData("Test for tokenization.", Array("Test", "for", "tokenization.")),
+      TokenizerTestData("Te,st.  punct", Array("Te,st.", "", "punct"))
     ))
     testRegexTokenizer(tokenizer, dataset2)
   }

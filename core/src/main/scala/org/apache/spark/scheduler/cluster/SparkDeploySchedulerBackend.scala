@@ -82,12 +82,11 @@ private[spark] class SparkDeploySchedulerBackend(
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
-    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      appUIAddress, sc.eventLogDir, sc.eventLogCodec)
-
+    val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
+    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,
+      command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
-
     waitForRegistration()
   }
 
@@ -119,9 +118,12 @@ private[spark] class SparkDeploySchedulerBackend(
     notifyContext()
     if (!stopping) {
       logError("Application has been killed. Reason: " + reason)
-      scheduler.error(reason)
-      // Ensure the application terminates, as we can no longer run jobs.
-      sc.stop()
+      try {
+        scheduler.error(reason)
+      } finally {
+        // Ensure the application terminates, as we can no longer run jobs.
+        sc.stop()
+      }
     }
   }
 

@@ -18,14 +18,16 @@
 import numpy as np
 from numpy import array
 
+from pyspark import RDD
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import SparseVector, Vectors, _convert_to_vector
 from pyspark.mllib.util import Saveable, Loader
 
 __all__ = ['LabeledPoint', 'LinearModel',
            'LinearRegressionModel', 'LinearRegressionWithSGD',
            'RidgeRegressionModel', 'RidgeRegressionWithSGD',
-           'LassoModel', 'LassoWithSGD']
+           'LassoModel', 'LassoWithSGD', 'IsotonicRegressionModel',
+           'IsotonicRegression']
 
 
 class LabeledPoint(object):
@@ -108,7 +110,8 @@ class LinearRegressionModel(LinearRegressionModelBase):
     ...     LabeledPoint(3.0, [2.0]),
     ...     LabeledPoint(2.0, [3.0])
     ... ]
-    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), initialWeights=np.array([1.0]))
+    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
+    ...     initialWeights=np.array([1.0]))
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
@@ -135,12 +138,13 @@ class LinearRegressionModel(LinearRegressionModelBase):
     ...     LabeledPoint(3.0, SparseVector(1, {0: 2.0})),
     ...     LabeledPoint(2.0, SparseVector(1, {0: 3.0}))
     ... ]
-    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
+    ...     initialWeights=array([1.0]))
     >>> abs(lrm.predict(array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
-    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=100, step=1.0,
+    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10, step=1.0,
     ...    miniBatchFraction=1.0, initialWeights=array([1.0]), regParam=0.1, regType="l2",
     ...    intercept=True, validateData=True)
     >>> abs(lrm.predict(array([0.0])) - 0) < 0.5
@@ -170,7 +174,7 @@ def _regression_train_wrapper(train_func, modelClass, data, initial_weights):
     from pyspark.mllib.classification import LogisticRegressionModel
     first = data.first()
     if not isinstance(first, LabeledPoint):
-        raise ValueError("data should be an RDD of LabeledPoint, but got %s" % first)
+        raise TypeError("data should be an RDD of LabeledPoint, but got %s" % type(first))
     if initial_weights is None:
         initial_weights = [0.0] * len(data.first().features)
     if (modelClass == LogisticRegressionModel):
@@ -238,7 +242,7 @@ class LassoModel(LinearRegressionModelBase):
     ...     LabeledPoint(3.0, [2.0]),
     ...     LabeledPoint(2.0, [3.0])
     ... ]
-    >>> lrm = LassoWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> lrm = LassoWithSGD.train(sc.parallelize(data), iterations=10, initialWeights=array([1.0]))
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
@@ -265,12 +269,13 @@ class LassoModel(LinearRegressionModelBase):
     ...     LabeledPoint(3.0, SparseVector(1, {0: 2.0})),
     ...     LabeledPoint(2.0, SparseVector(1, {0: 3.0}))
     ... ]
-    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
+    ...     initialWeights=array([1.0]))
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
-    >>> lrm = LassoWithSGD.train(sc.parallelize(data), iterations=100, step=1.0,
+    >>> lrm = LassoWithSGD.train(sc.parallelize(data), iterations=10, step=1.0,
     ...     regParam=0.01, miniBatchFraction=1.0, initialWeights=array([1.0]), intercept=True,
     ...     validateData=True)
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
@@ -321,7 +326,8 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     ...     LabeledPoint(3.0, [2.0]),
     ...     LabeledPoint(2.0, [3.0])
     ... ]
-    >>> lrm = RidgeRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> lrm = RidgeRegressionWithSGD.train(sc.parallelize(data), iterations=10,
+    ...     initialWeights=array([1.0]))
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
@@ -348,12 +354,13 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     ...     LabeledPoint(3.0, SparseVector(1, {0: 2.0})),
     ...     LabeledPoint(2.0, SparseVector(1, {0: 3.0}))
     ... ]
-    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
+    ...     initialWeights=array([1.0]))
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
-    >>> lrm = RidgeRegressionWithSGD.train(sc.parallelize(data), iterations=100, step=1.0,
+    >>> lrm = RidgeRegressionWithSGD.train(sc.parallelize(data), iterations=10, step=1.0,
     ...     regParam=0.01, miniBatchFraction=1.0, initialWeights=array([1.0]), intercept=True,
     ...     validateData=True)
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
@@ -391,12 +398,79 @@ class RidgeRegressionWithSGD(object):
         return _regression_train_wrapper(train, RidgeRegressionModel, data, initialWeights)
 
 
+class IsotonicRegressionModel(Saveable, Loader):
+
+    """Regression model for isotonic regression.
+
+    >>> data = [(1, 0, 1), (2, 1, 1), (3, 2, 1), (1, 3, 1), (6, 4, 1), (17, 5, 1), (16, 6, 1)]
+    >>> irm = IsotonicRegression.train(sc.parallelize(data))
+    >>> irm.predict(3)
+    2.0
+    >>> irm.predict(5)
+    16.5
+    >>> irm.predict(sc.parallelize([3, 5])).collect()
+    [2.0, 16.5]
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> irm.save(sc, path)
+    >>> sameModel = IsotonicRegressionModel.load(sc, path)
+    >>> sameModel.predict(3)
+    2.0
+    >>> sameModel.predict(5)
+    16.5
+    >>> try:
+    ...     os.removedirs(path)
+    ... except OSError:
+    ...     pass
+    """
+
+    def __init__(self, boundaries, predictions, isotonic):
+        self.boundaries = boundaries
+        self.predictions = predictions
+        self.isotonic = isotonic
+
+    def predict(self, x):
+        if isinstance(x, RDD):
+            return x.map(lambda v: self.predict(v))
+        return np.interp(x, self.boundaries, self.predictions)
+
+    def save(self, sc, path):
+        java_boundaries = _py2java(sc, self.boundaries.tolist())
+        java_predictions = _py2java(sc, self.predictions.tolist())
+        java_model = sc._jvm.org.apache.spark.mllib.regression.IsotonicRegressionModel(
+            java_boundaries, java_predictions, self.isotonic)
+        java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.regression.IsotonicRegressionModel.load(
+            sc._jsc.sc(), path)
+        py_boundaries = _java2py(sc, java_model.boundaryVector()).toArray()
+        py_predictions = _java2py(sc, java_model.predictionVector()).toArray()
+        return IsotonicRegressionModel(py_boundaries, py_predictions, java_model.isotonic)
+
+
+class IsotonicRegression(object):
+    """
+    Run IsotonicRegression algorithm to obtain isotonic regression model.
+
+    :param data:            RDD of (label, feature, weight) tuples.
+    :param isotonic:        Whether this is isotonic or antitonic.
+    """
+    @classmethod
+    def train(cls, data, isotonic=True):
+        """Train a isotonic regression model on the given data."""
+        boundaries, predictions = callMLlibFunc("trainIsotonicRegressionModel",
+                                                data.map(_convert_to_vector), bool(isotonic))
+        return IsotonicRegressionModel(boundaries.toArray(), predictions.toArray(), isotonic)
+
+
 def _test():
     import doctest
     from pyspark import SparkContext
     import pyspark.mllib.regression
     globs = pyspark.mllib.regression.__dict__.copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    globs['sc'] = SparkContext('local[2]', 'PythonTest', batchSize=2)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:

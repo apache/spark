@@ -25,8 +25,11 @@ import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.FunSuite
 import org.scalatest.Matchers._
 
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
+import org.apache.spark.sql.catalyst.expressions.mathfuncs._
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
 
@@ -58,6 +61,10 @@ class ExpressionEvaluationBaseSuite extends FunSuite {
 }
 
 class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
+
+  def create_row(values: Any*): Row = {
+    new GenericRow(values.map(CatalystTypeConverters.convertToCatalyst).toArray)
+  }
 
   test("literals") {
     checkEvaluation(Literal(1), 1)
@@ -233,6 +240,16 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(MaxOf(2, Literal.create(null, IntegerType)), 2)
   }
 
+  test("MinOf") {
+    checkEvaluation(MinOf(1, 2), 1)
+    checkEvaluation(MinOf(2, 1), 1)
+    checkEvaluation(MinOf(1L, 2L), 1L)
+    checkEvaluation(MinOf(2L, 1L), 1L)
+
+    checkEvaluation(MinOf(Literal.create(null, IntegerType), 1), 1)
+    checkEvaluation(MinOf(1, Literal.create(null, IntegerType)), 1)
+  }
+
   test("LIKE literal Regular Expression") {
     checkEvaluation(Literal.create(null, StringType).like("a"), null)
     checkEvaluation(Literal.create("a", StringType).like(Literal.create(null, StringType)), null)
@@ -255,24 +272,23 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
 
   test("LIKE Non-literal Regular Expression") {
     val regEx = 'a.string.at(0)
-    checkEvaluation("abcd" like regEx, null, new GenericRow(Array[Any](null)))
-    checkEvaluation("abdef" like regEx, true, new GenericRow(Array[Any]("abdef")))
-    checkEvaluation("a_%b" like regEx, true, new GenericRow(Array[Any]("a\\__b")))
-    checkEvaluation("addb" like regEx, true, new GenericRow(Array[Any]("a_%b")))
-    checkEvaluation("addb" like regEx, false, new GenericRow(Array[Any]("a\\__b")))
-    checkEvaluation("addb" like regEx, false, new GenericRow(Array[Any]("a%\\%b")))
-    checkEvaluation("a_%b" like regEx, true, new GenericRow(Array[Any]("a%\\%b")))
-    checkEvaluation("addb" like regEx, true, new GenericRow(Array[Any]("a%")))
-    checkEvaluation("addb" like regEx, false, new GenericRow(Array[Any]("**")))
-    checkEvaluation("abc" like regEx, true, new GenericRow(Array[Any]("a%")))
-    checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("b%")))
-    checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("bc%")))
-    checkEvaluation("a\nb" like regEx, true, new GenericRow(Array[Any]("a_b")))
-    checkEvaluation("ab" like regEx, true, new GenericRow(Array[Any]("a%b")))
-    checkEvaluation("a\nb" like regEx, true, new GenericRow(Array[Any]("a%b")))
+    checkEvaluation("abcd" like regEx, null, create_row(null))
+    checkEvaluation("abdef" like regEx, true, create_row("abdef"))
+    checkEvaluation("a_%b" like regEx, true, create_row("a\\__b"))
+    checkEvaluation("addb" like regEx, true, create_row("a_%b"))
+    checkEvaluation("addb" like regEx, false, create_row("a\\__b"))
+    checkEvaluation("addb" like regEx, false, create_row("a%\\%b"))
+    checkEvaluation("a_%b" like regEx, true, create_row("a%\\%b"))
+    checkEvaluation("addb" like regEx, true, create_row("a%"))
+    checkEvaluation("addb" like regEx, false, create_row("**"))
+    checkEvaluation("abc" like regEx, true, create_row("a%"))
+    checkEvaluation("abc" like regEx, false, create_row("b%"))
+    checkEvaluation("abc" like regEx, false, create_row("bc%"))
+    checkEvaluation("a\nb" like regEx, true, create_row("a_b"))
+    checkEvaluation("ab" like regEx, true, create_row("a%b"))
+    checkEvaluation("a\nb" like regEx, true, create_row("a%b"))
 
-    checkEvaluation(Literal.create(null, StringType) like regEx, null,
-      new GenericRow(Array[Any]("bc%")))
+    checkEvaluation(Literal.create(null, StringType) like regEx, null, create_row("bc%"))
   }
 
   test("RLIKE literal Regular Expression") {
@@ -303,14 +319,14 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
 
   test("RLIKE Non-literal Regular Expression") {
     val regEx = 'a.string.at(0)
-    checkEvaluation("abdef" rlike regEx, true, new GenericRow(Array[Any]("abdef")))
-    checkEvaluation("abbbbc" rlike regEx, true, new GenericRow(Array[Any]("a.*c")))
-    checkEvaluation("fofo" rlike regEx, true, new GenericRow(Array[Any]("^fo")))
-    checkEvaluation("fo\no" rlike regEx, true, new GenericRow(Array[Any]("^fo\no$")))
-    checkEvaluation("Bn" rlike regEx, true, new GenericRow(Array[Any]("^Ba*n")))
+    checkEvaluation("abdef" rlike regEx, true, create_row("abdef"))
+    checkEvaluation("abbbbc" rlike regEx, true, create_row("a.*c"))
+    checkEvaluation("fofo" rlike regEx, true, create_row("^fo"))
+    checkEvaluation("fo\no" rlike regEx, true, create_row("^fo\no$"))
+    checkEvaluation("Bn" rlike regEx, true, create_row("^Ba*n"))
 
     intercept[java.util.regex.PatternSyntaxException] {
-      evaluate("abbbbc" rlike regEx, new GenericRow(Array[Any]("**")))
+      evaluate("abbbbc" rlike regEx, create_row("**"))
     }
   }
 
@@ -753,7 +769,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   test("null checking") {
-    val row = new GenericRow(Array[Any]("^Ba*n", null, true, null))
+    val row = create_row("^Ba*n", null, true, null)
     val c1 = 'a.string.at(0)
     val c2 = 'a.string.at(1)
     val c3 = 'a.boolean.at(2)
@@ -793,7 +809,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   test("case when") {
-    val row = new GenericRow(Array[Any](null, false, true, "a", "b", "c"))
+    val row = create_row(null, false, true, "a", "b", "c")
     val c1 = 'a.boolean.at(0)
     val c2 = 'a.boolean.at(1)
     val c3 = 'a.boolean.at(2)
@@ -835,14 +851,40 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     assert(CaseWhen(Seq(c2, c4_notNull, c3, c5)).nullable === true)
   }
 
+  test("case key when") {
+    val row = create_row(null, 1, 2, "a", "b", "c")
+    val c1 = 'a.int.at(0)
+    val c2 = 'a.int.at(1)
+    val c3 = 'a.int.at(2)
+    val c4 = 'a.string.at(3)
+    val c5 = 'a.string.at(4)
+    val c6 = 'a.string.at(5)
+
+    val literalNull = Literal.create(null, BooleanType)
+    val literalInt = Literal(1)
+    val literalString = Literal("a")
+
+    checkEvaluation(CaseKeyWhen(c1, Seq(c2, c4, c5)), "b", row)
+    checkEvaluation(CaseKeyWhen(c1, Seq(c2, c4, literalNull, c5, c6)), "b", row)
+    checkEvaluation(CaseKeyWhen(c2, Seq(literalInt, c4, c5)), "a", row)
+    checkEvaluation(CaseKeyWhen(c2, Seq(c1, c4, c5)), "b", row)
+    checkEvaluation(CaseKeyWhen(c4, Seq(literalString, c2, c3)), 1, row)
+    checkEvaluation(CaseKeyWhen(c4, Seq(c1, c3, c5, c2, Literal(3))), 3, row)
+
+    checkEvaluation(CaseKeyWhen(literalInt, Seq(c2, c4, c5)), "a", row)
+    checkEvaluation(CaseKeyWhen(literalString, Seq(c5, c2, c4, c3)), 2, row)
+    checkEvaluation(CaseKeyWhen(literalInt, Seq(c5, c2, c4, c3)), null, row)
+    checkEvaluation(CaseKeyWhen(literalNull, Seq(c5, c2, c1, c3)), 2, row)
+  }
+
   test("complex type") {
-    val row = new GenericRow(Array[Any](
-      "^Ba*n",                                  // 0
-      null.asInstanceOf[String],                // 1
-      new GenericRow(Array[Any]("aa", "bb")),   // 2
-      Map("aa"->"bb"),                          // 3
-      Seq("aa", "bb")                           // 4
-    ))
+    val row = create_row(
+      "^Ba*n",                                // 0
+      null.asInstanceOf[UTF8String],          // 1
+      create_row("aa", "bb"),                 // 2
+      Map("aa"->"bb"),                        // 3
+      Seq("aa", "bb")                         // 4
+    )
 
     val typeS = StructType(
       StructField("a", StringType, true) :: StructField("b", StringType, true) :: Nil
@@ -850,56 +892,81 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     val typeMap = MapType(StringType, StringType)
     val typeArray = ArrayType(StringType)
 
-    checkEvaluation(GetItem(BoundReference(3, typeMap, true),
+    checkEvaluation(GetMapValue(BoundReference(3, typeMap, true),
       Literal("aa")), "bb", row)
-    checkEvaluation(GetItem(Literal.create(null, typeMap), Literal("aa")), null, row)
+    checkEvaluation(GetMapValue(Literal.create(null, typeMap), Literal("aa")), null, row)
     checkEvaluation(
-      GetItem(Literal.create(null, typeMap), Literal.create(null, StringType)), null, row)
-    checkEvaluation(GetItem(BoundReference(3, typeMap, true),
+      GetMapValue(Literal.create(null, typeMap), Literal.create(null, StringType)), null, row)
+    checkEvaluation(GetMapValue(BoundReference(3, typeMap, true),
       Literal.create(null, StringType)), null, row)
 
-    checkEvaluation(GetItem(BoundReference(4, typeArray, true),
+    checkEvaluation(GetArrayItem(BoundReference(4, typeArray, true),
       Literal(1)), "bb", row)
-    checkEvaluation(GetItem(Literal.create(null, typeArray), Literal(1)), null, row)
+    checkEvaluation(GetArrayItem(Literal.create(null, typeArray), Literal(1)), null, row)
     checkEvaluation(
-      GetItem(Literal.create(null, typeArray), Literal.create(null, IntegerType)), null, row)
-    checkEvaluation(GetItem(BoundReference(4, typeArray, true),
+      GetArrayItem(Literal.create(null, typeArray), Literal.create(null, IntegerType)), null, row)
+    checkEvaluation(GetArrayItem(BoundReference(4, typeArray, true),
       Literal.create(null, IntegerType)), null, row)
 
-    def quickBuildGetField(expr: Expression, fieldName: String): StructGetField = {
+    def getStructField(expr: Expression, fieldName: String): ExtractValue = {
       expr.dataType match {
         case StructType(fields) =>
           val field = fields.find(_.name == fieldName).get
-          StructGetField(expr, field, fields.indexOf(field))
+          GetStructField(expr, field, fields.indexOf(field))
       }
     }
 
-    def quickResolve(u: UnresolvedGetField): StructGetField = {
-      quickBuildGetField(u.child, u.fieldName)
+    def quickResolve(u: UnresolvedExtractValue): ExtractValue = {
+      ExtractValue(u.child, u.extraction, _ == _)
     }
 
-    checkEvaluation(quickBuildGetField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
-    checkEvaluation(quickBuildGetField(Literal.create(null, typeS), "a"), null, row)
+    checkEvaluation(getStructField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
+    checkEvaluation(getStructField(Literal.create(null, typeS), "a"), null, row)
 
     val typeS_notNullable = StructType(
       StructField("a", StringType, nullable = false)
         :: StructField("b", StringType, nullable = false) :: Nil
     )
 
-    assert(quickBuildGetField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
-    assert(quickBuildGetField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable
+    assert(getStructField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
+    assert(getStructField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable
       === false)
 
-    assert(quickBuildGetField(Literal.create(null, typeS), "a").nullable === true)
-    assert(quickBuildGetField(Literal.create(null, typeS_notNullable), "a").nullable === true)
+    assert(getStructField(Literal.create(null, typeS), "a").nullable === true)
+    assert(getStructField(Literal.create(null, typeS_notNullable), "a").nullable === true)
 
-    checkEvaluation('c.map(typeMap).at(3).getItem("aa"), "bb", row)
-    checkEvaluation('c.array(typeArray.elementType).at(4).getItem(1), "bb", row)
+    checkEvaluation(quickResolve('c.map(typeMap).at(3).getItem("aa")), "bb", row)
+    checkEvaluation(quickResolve('c.array(typeArray.elementType).at(4).getItem(1)), "bb", row)
     checkEvaluation(quickResolve('c.struct(typeS).at(2).getField("a")), "aa", row)
   }
 
+  test("error message of ExtractValue") {
+    val structType = StructType(StructField("a", StringType, true) :: Nil)
+    val arrayStructType = ArrayType(structType)
+    val arrayType = ArrayType(StringType)
+    val otherType = StringType
+
+    def checkErrorMessage(
+        childDataType: DataType,
+        fieldDataType: DataType,
+        errorMesage: String): Unit = {
+      val e = intercept[org.apache.spark.sql.AnalysisException] {
+        ExtractValue(
+          Literal.create(null, childDataType),
+          Literal.create(null, fieldDataType),
+          _ == _)
+      }
+      assert(e.getMessage().contains(errorMesage))
+    }
+
+    checkErrorMessage(structType, IntegerType, "Field name should be String Literal")
+    checkErrorMessage(arrayStructType, BooleanType, "Field name should be String Literal")
+    checkErrorMessage(arrayType, StringType, "Array index should be integral type")
+    checkErrorMessage(otherType, StringType, "Can't extract value from")
+  }
+
   test("arithmetic") {
-    val row = new GenericRow(Array[Any](1, 2, 3, null))
+    val row = create_row(1, 2, 3, null)
     val c1 = 'a.int.at(0)
     val c2 = 'a.int.at(1)
     val c3 = 'a.int.at(2)
@@ -924,7 +991,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   test("fractional arithmetic") {
-    val row = new GenericRow(Array[Any](1.1, 2.0, 3.1, null))
+    val row = create_row(1.1, 2.0, 3.1, null)
     val c1 = 'a.double.at(0)
     val c2 = 'a.double.at(1)
     val c3 = 'a.double.at(2)
@@ -948,7 +1015,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   test("BinaryComparison") {
-    val row = new GenericRow(Array[Any](1, 2, 3, null, 3, null))
+    val row = create_row(1, 2, 3, null, 3, null)
     val c1 = 'a.int.at(0)
     val c2 = 'a.int.at(1)
     val c3 = 'a.int.at(2)
@@ -978,7 +1045,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   test("StringComparison") {
-    val row = new GenericRow(Array[Any]("abc", null))
+    val row = create_row("abc", null)
     val c1 = 'a.string.at(0)
     val c2 = 'a.string.at(1)
 
@@ -999,7 +1066,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   test("Substring") {
-    val row = new GenericRow(Array[Any]("example", "example".toArray.map(_.toByte)))
+    val row = create_row("example", "example".toArray.map(_.toByte))
 
     val s = 'a.string.at(0)
 
@@ -1043,7 +1110,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
 
     // substring(null, _, _) -> null
     checkEvaluation(Substring(s, Literal.create(100, IntegerType), Literal.create(4, IntegerType)),
-      null, new GenericRow(Array[Any](null)))
+      null, create_row(null))
 
     // substring(_, null, _) -> null
     checkEvaluation(Substring(s, Literal.create(null, IntegerType), Literal.create(4, IntegerType)),
@@ -1092,20 +1159,20 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   test("SQRT") {
     val inputSequence = (1 to (1<<24) by 511).map(_ * (1L<<24))
     val expectedResults = inputSequence.map(l => math.sqrt(l.toDouble))
-    val rowSequence = inputSequence.map(l => new GenericRow(Array[Any](l.toDouble)))
+    val rowSequence = inputSequence.map(l => create_row(l.toDouble))
     val d = 'a.double.at(0)
 
     for ((row, expected) <- rowSequence zip expectedResults) {
       checkEvaluation(Sqrt(d), expected, row)
     }
 
-    checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, new GenericRow(Array[Any](null)))
+    checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, create_row(null))
     checkEvaluation(Sqrt(-1), null, EmptyRow)
     checkEvaluation(Sqrt(-1.5), null, EmptyRow)
   }
 
   test("Bitwise operations") {
-    val row = new GenericRow(Array[Any](1, 2, 3, null))
+    val row = create_row(1, 2, 3, null)
     val c1 = 'a.int.at(0)
     val c2 = 'a.int.at(1)
     val c3 = 'a.int.at(2)
@@ -1137,6 +1204,158 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(c1 | c2, 3, row)
     checkEvaluation(c1 ^ c2, 3, row)
     checkEvaluation(~c1, -2, row)
+  }
+
+  /**
+   * Used for testing math functions for DataFrames. 
+   * @param c The DataFrame function
+   * @param f The functions in scala.math
+   * @param domain The set of values to run the function with
+   * @param expectNull Whether the given values should return null or not
+   * @tparam T Generic type for primitives
+   */
+  def unaryMathFunctionEvaluation[@specialized(Int, Double, Float, Long) T](
+      c: Expression => Expression, 
+      f: T => T,
+      domain: Iterable[T] = (-20 to 20).map(_ * 0.1),
+      expectNull: Boolean = false): Unit = {
+    if (expectNull) {
+      domain.foreach { value =>
+        checkEvaluation(c(Literal(value)), null, EmptyRow)
+      }
+    } else {
+      domain.foreach { value =>
+        checkEvaluation(c(Literal(value)), f(value), EmptyRow)
+      }
+    }
+    checkEvaluation(c(Literal.create(null, DoubleType)), null, create_row(null))
+  }
+
+  test("sin") {
+    unaryMathFunctionEvaluation(Sin, math.sin)
+  }
+
+  test("asin") {
+    unaryMathFunctionEvaluation(Asin, math.asin, (-10 to 10).map(_ * 0.1))
+    unaryMathFunctionEvaluation(Asin, math.asin, (11 to 20).map(_ * 0.1), true)
+  }
+
+  test("sinh") {
+    unaryMathFunctionEvaluation(Sinh, math.sinh)
+  }
+
+  test("cos") {
+    unaryMathFunctionEvaluation(Cos, math.cos)
+  }
+
+  test("acos") {
+    unaryMathFunctionEvaluation(Acos, math.acos, (-10 to 10).map(_ * 0.1))
+    unaryMathFunctionEvaluation(Acos, math.acos, (11 to 20).map(_ * 0.1), true)
+  }
+
+  test("cosh") {
+    unaryMathFunctionEvaluation(Cosh, math.cosh)
+  }
+
+  test("tan") {
+    unaryMathFunctionEvaluation(Tan, math.tan)
+  }
+
+  test("atan") {
+    unaryMathFunctionEvaluation(Atan, math.atan)
+  }
+
+  test("tanh") {
+    unaryMathFunctionEvaluation(Tanh, math.tanh)
+  }
+
+  test("toDegrees") {
+    unaryMathFunctionEvaluation(ToDegrees, math.toDegrees)
+  }
+
+  test("toRadians") {
+    unaryMathFunctionEvaluation(ToRadians, math.toRadians)
+  }
+
+  test("cbrt") {
+    unaryMathFunctionEvaluation(Cbrt, math.cbrt)
+  }
+
+  test("ceil") {
+    unaryMathFunctionEvaluation(Ceil, math.ceil)
+  }
+
+  test("floor") {
+    unaryMathFunctionEvaluation(Floor, math.floor)
+  }
+
+  test("rint") {
+    unaryMathFunctionEvaluation(Rint, math.rint)
+  }
+
+  test("exp") {
+    unaryMathFunctionEvaluation(Exp, math.exp)
+  }
+
+  test("expm1") {
+    unaryMathFunctionEvaluation(Expm1, math.expm1)
+  }
+
+  test("signum") {
+    unaryMathFunctionEvaluation[Double](Signum, math.signum)
+  }
+
+  test("log") {
+    unaryMathFunctionEvaluation(Log, math.log, (0 to 20).map(_ * 0.1))
+    unaryMathFunctionEvaluation(Log, math.log, (-5 to -1).map(_ * 0.1), true)
+  }
+
+  test("log10") {
+    unaryMathFunctionEvaluation(Log10, math.log10, (0 to 20).map(_ * 0.1))
+    unaryMathFunctionEvaluation(Log10, math.log10, (-5 to -1).map(_ * 0.1), true)
+  }
+
+  test("log1p") {
+    unaryMathFunctionEvaluation(Log1p, math.log1p, (-1 to 20).map(_ * 0.1))
+    unaryMathFunctionEvaluation(Log1p, math.log1p, (-10 to -2).map(_ * 1.0), true)
+  }
+
+  /**
+   * Used for testing math functions for DataFrames.
+   * @param c The DataFrame function
+   * @param f The functions in scala.math
+   * @param domain The set of values to run the function with
+   */
+  def binaryMathFunctionEvaluation(
+      c: (Expression, Expression) => Expression,
+      f: (Double, Double) => Double,
+      domain: Iterable[(Double, Double)] = (-20 to 20).map(v => (v * 0.1, v * -0.1)),
+      expectNull: Boolean = false): Unit = {
+    if (expectNull) {
+      domain.foreach { case (v1, v2) =>
+        checkEvaluation(c(v1, v2), null, create_row(null))
+      }
+    } else {
+      domain.foreach { case (v1, v2) =>
+        checkEvaluation(c(v1, v2), f(v1 + 0.0, v2 + 0.0), EmptyRow)
+        checkEvaluation(c(v2, v1), f(v2 + 0.0, v1 + 0.0), EmptyRow)
+      }
+    }
+    checkEvaluation(c(Literal.create(null, DoubleType), 1.0), null, create_row(null))
+    checkEvaluation(c(1.0, Literal.create(null, DoubleType)), null, create_row(null))
+  }
+
+  test("pow") {
+    binaryMathFunctionEvaluation(Pow, math.pow, (-5 to 5).map(v => (v * 1.0, v * 1.0)))
+    binaryMathFunctionEvaluation(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), true)
+  }
+
+  test("hypot") {
+    binaryMathFunctionEvaluation(Hypot, math.hypot)
+  }
+
+  test("atan2") {
+    binaryMathFunctionEvaluation(Atan2, math.atan2)
   }
 }
 

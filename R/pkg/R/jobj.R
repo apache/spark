@@ -18,6 +18,9 @@
 # References to objects that exist on the JVM backend
 # are maintained using the jobj. 
 
+#' @include generics.R
+NULL
+
 # Maintain a reference count of Java object references
 # This allows us to GC the java object when it is safe
 .validJobjs <- new.env(parent = emptyenv())

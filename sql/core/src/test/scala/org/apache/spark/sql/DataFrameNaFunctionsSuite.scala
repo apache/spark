@@ -154,4 +154,38 @@ class DataFrameNaFunctionsSuite extends QueryTest {
       ))),
       Row("test", null, 1, 2.2))
   }
+
+  test("replace") {
+    val input = createDF()
+
+    // Replace two numeric columns: age and height
+    val out = input.na.replace(Seq("age", "height"), Map(
+      16 -> 61,
+      60 -> 6,
+      164.3 -> 461.3  // Alice is really tall
+    ))
+
+    checkAnswer(
+      out,
+      Row("Bob", 61, 176.5) ::
+        Row("Alice", null, 461.3) ::
+        Row("David", 6, null) ::
+        Row("Amy", null, null) ::
+        Row(null, null, null) :: Nil)
+
+    // Replace only the age column
+    val out1 = input.na.replace("age", Map(
+      16 -> 61,
+      60 -> 6,
+      164.3 -> 461.3  // Alice is really tall
+    ))
+
+    checkAnswer(
+      out1,
+      Row("Bob", 61, 176.5) ::
+        Row("Alice", null, 164.3) ::
+        Row("David", 6, null) ::
+        Row("Amy", null, null) ::
+        Row(null, null, null) :: Nil)
+  }
 }

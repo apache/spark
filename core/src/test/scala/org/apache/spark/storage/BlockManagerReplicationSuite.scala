@@ -50,7 +50,7 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
   val allStores = new ArrayBuffer[BlockManager]
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
-  conf.set("spark.kryoserializer.buffer.mb", "1")
+  conf.set("spark.kryoserializer.buffer", "1m")
   val serializer = new KryoSerializer(conf)
 
   // Implicitly convert strings to BlockIds for test clarity.
@@ -76,7 +76,7 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
     conf.set("spark.storage.unrollMemoryThreshold", "512")
 
     // to make a replication attempt to inactive store fail fast
-    conf.set("spark.core.connection.ack.wait.timeout", "1")
+    conf.set("spark.core.connection.ack.wait.timeout", "1s")
     // to make cached peers refresh frequently
     conf.set("spark.storage.cachedPeersTtl", "10")
 

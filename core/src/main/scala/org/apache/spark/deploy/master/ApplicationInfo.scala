@@ -28,7 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.ApplicationDescription
 import org.apache.spark.util.Utils
 
-private[deploy] class ApplicationInfo(
+private[spark] class ApplicationInfo(
     val startTime: Long,
     val id: String,
     val desc: ApplicationDescription,
@@ -75,9 +75,11 @@ private[deploy] class ApplicationInfo(
     }
   }
 
-  private[master] def addExecutor(worker: WorkerInfo, cores: Int, useID: Option[Int] = None): 
-  ExecutorDesc = {
-    val exec = new ExecutorDesc(newExecutorId(useID), this, worker, cores, desc.memoryPerSlave)
+  private[master] def addExecutor(
+      worker: WorkerInfo,
+      cores: Int,
+      useID: Option[Int] = None): ExecutorDesc = {
+    val exec = new ExecutorDesc(newExecutorId(useID), this, worker, cores, desc.memoryPerExecutorMB)
     executors(exec.id) = exec
     coresGranted += cores
     exec

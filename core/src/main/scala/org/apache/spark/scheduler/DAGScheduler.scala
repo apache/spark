@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
 import java.util.Properties
-import java.util.concurrent.{TimeUnit, Executors}
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
@@ -28,12 +28,15 @@ import scala.language.existentials
 import scala.language.postfixOps
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.SerializationUtils
+
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
+import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 
@@ -129,7 +132,7 @@ class DAGScheduler(
   private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)
 
   private val messageScheduler =
-    Executors.newScheduledThreadPool(1, Utils.namedThreadFactory("dag-scheduler-message"))
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
   private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
@@ -166,7 +169,7 @@ class DAGScheduler(
       taskMetrics: Array[(Long, Int, Int, TaskMetrics)], // (taskId, stageId, stateAttempt, metrics)
       blockManagerId: BlockManagerId): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
-    blockManagerMaster.driverEndpoint.askWithReply[Boolean](
+    blockManagerMaster.driverEndpoint.askWithRetry[Boolean](
       BlockManagerHeartbeat(blockManagerId), 600 seconds)
   }
 
@@ -509,7 +512,8 @@ class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
     eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter, properties))
+      jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter,
+      SerializationUtils.clone(properties)))
     waiter
   }
 
@@ -546,7 +550,8 @@ class DAGScheduler(
     val partitions = (0 until rdd.partitions.size).toArray
     val jobId = nextJobId.getAndIncrement()
     eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions, allowLocal = false, callSite, listener, properties))
+      jobId, rdd, func2, partitions, allowLocal = false, callSite, listener,
+      SerializationUtils.clone(properties)))
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 
@@ -643,8 +648,15 @@ class DAGScheduler(
     try {
       val rdd = job.finalStage.rdd
       val split = rdd.partitions(job.partitions(0))
-      val taskContext = new TaskContextImpl(job.finalStage.id, job.partitions(0), taskAttemptId = 0,
-        attemptNumber = 0, runningLocally = true)
+      val taskMemoryManager = new TaskMemoryManager(env.executorMemoryManager)
+      val taskContext =
+        new TaskContextImpl(
+          job.finalStage.id,
+          job.partitions(0),
+          taskAttemptId = 0,
+          attemptNumber = 0,
+          taskMemoryManager = taskMemoryManager,
+          runningLocally = true)
       TaskContext.setTaskContext(taskContext)
       try {
         val result = job.func(taskContext, rdd.iterator(split, taskContext))
@@ -652,6 +664,16 @@ class DAGScheduler(
       } finally {
         taskContext.markTaskCompleted()
         TaskContext.unset()
+        // Note: this memory freeing logic is duplicated in Executor.run(); when changing this,
+        // make sure to update both copies.
+        val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
+        if (freedMemory > 0) {
+          if (sc.getConf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false)) {
+            throw new SparkException(s"Managed memory leak detected; size = $freedMemory bytes")
+          } else {
+            logError(s"Managed memory leak detected; size = $freedMemory bytes")
+          }
+        }
       }
     } catch {
       case e: Exception =>
@@ -686,8 +708,11 @@ class DAGScheduler(
   private[scheduler] def handleJobGroupCancelled(groupId: String) {
     // Cancel all jobs belonging to this job group.
     // First finds all active jobs with this group id, and then kill stages for them.
-    val activeInGroup = activeJobs.filter(activeJob =>
-      Option(activeJob.properties).exists(_.get(SparkContext.SPARK_JOB_GROUP_ID) == groupId))
+    val activeInGroup = activeJobs.filter { activeJob =>
+      Option(activeJob.properties).exists {
+        _.getProperty(SparkContext.SPARK_JOB_GROUP_ID) == groupId
+      }
+    }
     val jobIds = activeInGroup.map(_.jobId)
     jobIds.foreach(handleJobCancellation(_, "part of cancelled job group %s".format(groupId)))
     submitWaitingStages()
@@ -818,12 +843,7 @@ class DAGScheduler(
       }
     }
 
-    val properties = if (jobIdToActiveJob.contains(jobId)) {
-      jobIdToActiveJob(stage.jobId).properties
-    } else {
-      // this stage will be assigned to "default" pool
-      null
-    }
+    val properties = jobIdToActiveJob.get(stage.jobId).map(_.properties).orNull
 
     runningStages += stage
     // SparkListenerStageSubmitted should be posted before testing whether tasks are
@@ -1379,6 +1399,7 @@ class DAGScheduler(
 
   def stop() {
     logInfo("Stopping DAGScheduler")
+    messageScheduler.shutdownNow()
     eventProcessLoop.stop()
     taskScheduler.stop()
   }

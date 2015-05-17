@@ -17,6 +17,9 @@
 
 # group.R - GroupedData class and methods implemented in S4 OO classes
 
+#' @include generics.R jobj.R schema.R column.R
+NULL
+
 setOldClass("jobj")
 
 #' @title S4 class that represents a GroupedData
@@ -53,6 +56,7 @@ setMethod("show", "GroupedData",
 #'
 #' @param x a GroupedData
 #' @return a DataFrame
+#' @rdname agg
 #' @export
 #' @examples
 #' \dontrun{
@@ -80,8 +84,6 @@ setMethod("count",
 #'  df2 <- agg(df, age = "sum")  # new column name will be created as 'SUM(age#0)'
 #'  df2 <- agg(df, ageSum = sum(df$age)) # Creates a new column named ageSum
 #' }
-setGeneric("agg", function (x, ...) { standardGeneric("agg") })
-
 setMethod("agg",
           signature(x = "GroupedData"),
           function(x, ...) {
@@ -100,15 +102,20 @@ setMethod("agg",
                 }
               }
               jcols <- lapply(cols, function(c) { c@jc })
-              # the GroupedData.agg(col, cols*) API does not contain grouping Column
-              sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "aggWithGrouping",
-                                 x@sgd, listToSeq(jcols))
+              sdf <- callJMethod(x@sgd, "agg", jcols[[1]], listToSeq(jcols[-1]))
             } else {
               stop("agg can only support Column or character")
             }
             dataFrame(sdf)
           })
 
+#' @rdname agg
+#' @aliases agg
+setMethod("summarize",
+          signature(x = "GroupedData"),
+          function(x, ...) {
+            agg(x, ...)
+          })
 
 # sum/mean/avg/min/max
 methods <- c("sum", "mean", "avg", "min", "max")

@@ -80,7 +80,7 @@ class JdbcRDDSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
       (r: ResultSet) => { r.getInt(1) } ).cache()
 
     assert(rdd.count === 100)
-    assert(rdd.reduce(_+_) === 10100)
+    assert(rdd.reduce(_ + _) === 10100)
   }
   
   test("large id overflow") {
@@ -92,7 +92,7 @@ class JdbcRDDSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
       1131544775L, 567279358897692673L, 20,
       (r: ResultSet) => { r.getInt(1) } ).cache()
     assert(rdd.count === 100)
-    assert(rdd.reduce(_+_) === 5050)
+    assert(rdd.reduce(_ + _) === 5050)
   }
 
   after {

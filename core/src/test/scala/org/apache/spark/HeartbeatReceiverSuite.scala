@@ -48,7 +48,7 @@ class HeartbeatReceiverSuite extends FunSuite with LocalSparkContext {
 
     val metrics = new TaskMetrics
     val blockManagerId = BlockManagerId("executor-1", "localhost", 12345)
-    val response = receiverRef.askWithReply[HeartbeatResponse](
+    val response = receiverRef.askWithRetry[HeartbeatResponse](
       Heartbeat("executor-1", Array(1L -> metrics), blockManagerId))
 
     verify(scheduler).executorHeartbeatReceived(
@@ -71,7 +71,7 @@ class HeartbeatReceiverSuite extends FunSuite with LocalSparkContext {
 
     val metrics = new TaskMetrics
     val blockManagerId = BlockManagerId("executor-1", "localhost", 12345)
-    val response = receiverRef.askWithReply[HeartbeatResponse](
+    val response = receiverRef.askWithRetry[HeartbeatResponse](
       Heartbeat("executor-1", Array(1L -> metrics), blockManagerId))
 
     verify(scheduler).executorHeartbeatReceived(

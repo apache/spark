@@ -87,6 +87,18 @@ test_that("combineByKey for doubles", {
   expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
 })
 
+test_that("combineByKey for characters", {
+  stringKeyRDD <- parallelize(sc,
+                              list(list("max", 1L), list("min", 2L),
+                                   list("other", 3L), list("max", 4L)), 2L)
+  reduced <- combineByKey(stringKeyRDD,
+                          function(x) { x }, "+", "+", 2L)
+  actual <- collect(reduced)
+
+  expected <- list(list("max", 5L), list("min", 2L), list("other", 3L))
+  expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
+})
+
 test_that("aggregateByKey", {
   # test aggregateByKey for int keys
   rdd <- parallelize(sc, list(list(1, 1), list(1, 2), list(2, 3), list(2, 4)))

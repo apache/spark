@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Connection, DriverManager, PreparedStatement}
-import org.apache.spark.{Logging, Partition}
-import org.apache.spark.sql._
-import org.apache.spark.sql.sources.LogicalRelation
+import java.sql.{Connection, Driver, DriverManager, DriverPropertyInfo, PreparedStatement, SQLFeatureNotSupportedException}
+import java.util.Properties
 
-import org.apache.spark.sql.jdbc.{JDBCPartitioningInfo, JDBCRelation, JDBCPartition}
+import scala.collection.mutable
+
+import org.apache.spark.Logging
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 package object jdbc {
   private[sql] object JDBCWriteDetails extends Logging {
@@ -56,9 +57,14 @@ package object jdbc {
      * non-Serializable.  Instead, we explicitly close over all variables that
      * are used.
      */
-    def savePartition(url: String, table: String, iterator: Iterator[Row],
-        rddSchema: StructType, nullTypes: Array[Int]): Iterator[Byte] = {
-      val conn = DriverManager.getConnection(url)
+    def savePartition(
+        url: String,
+        table: String,
+        iterator: Iterator[Row],
+        rddSchema: StructType,
+        nullTypes: Array[Int],
+        properties: Properties): Iterator[Byte] = {
+      val conn = DriverManager.getConnection(url, properties)
       var committed = false
       try {
         conn.setAutoCommit(false) // Everything in the same db transaction.
@@ -151,7 +157,11 @@ package object jdbc {
     /**
      * Saves the RDD to the database in a single transaction.
      */
-    def saveTable(df: DataFrame, url: String, table: String) {
+    def saveTable(
+        df: DataFrame,
+        url: String,
+        table: String,
+        properties: Properties = new Properties()) {
       val quirks = DriverQuirks.get(url)
       var nullTypes: Array[Int] = df.schema.fields.map(field => {
         var nullType: Option[Int] = quirks.getJDBCType(field.dataType)._2
@@ -177,9 +187,65 @@ package object jdbc {
 
       val rddSchema = df.schema
       df.foreachPartition { iterator =>
-        JDBCWriteDetails.savePartition(url, table, iterator, rddSchema, nullTypes)
+        JDBCWriteDetails.savePartition(url, table, iterator, rddSchema, nullTypes, properties)
       }
     }
 
   }
+
+  private [sql] class DriverWrapper(val wrapped: Driver) extends Driver {
+    override def acceptsURL(url: String): Boolean = wrapped.acceptsURL(url)
+
+    override def jdbcCompliant(): Boolean = wrapped.jdbcCompliant()
+
+    override def getPropertyInfo(url: String, info: Properties): Array[DriverPropertyInfo] = {
+      wrapped.getPropertyInfo(url, info)
+    }
+
+    override def getMinorVersion: Int = wrapped.getMinorVersion
+
+    def getParentLogger: java.util.logging.Logger =
+      throw new SQLFeatureNotSupportedException(
+        s"${this.getClass().getName}.getParentLogger is not yet implemented.")
+
+    override def connect(url: String, info: Properties): Connection = wrapped.connect(url, info)
+
+    override def getMajorVersion: Int = wrapped.getMajorVersion
+  }
+
+  /**
+   * java.sql.DriverManager is always loaded by bootstrap classloader,
+   * so it can't load JDBC drivers accessible by Spark ClassLoader.
+   *
+   * To solve the problem, drivers from user-supplied jars are wrapped
+   * into thin wrapper.
+   */
+  private [sql] object DriverRegistry extends Logging {
+
+    private val wrapperMap: mutable.Map[String, DriverWrapper] = mutable.Map.empty
+
+    def register(className: String): Unit = {
+      val cls = Utils.getContextOrSparkClassLoader.loadClass(className)
+      if (cls.getClassLoader == null) {
+        logTrace(s"$className has been loaded with bootstrap ClassLoader, wrapper is not required")
+      } else if (wrapperMap.get(className).isDefined) {
+        logTrace(s"Wrapper for $className already exists")
+      } else {
+        synchronized {
+          if (wrapperMap.get(className).isEmpty) {
+            val wrapper = new DriverWrapper(cls.newInstance().asInstanceOf[Driver])
+            DriverManager.registerDriver(wrapper)
+            wrapperMap(className) = wrapper
+            logTrace(s"Wrapper for $className registered")
+          }
+        }
+      }
+    }
+    
+    def getDriverClassName(url: String): String = DriverManager.getDriver(url) match {
+      case wrapper: DriverWrapper => wrapper.wrapped.getClass.getCanonicalName
+      case driver => driver.getClass.getCanonicalName  
+    }
+  }
+
 } // package object jdbc

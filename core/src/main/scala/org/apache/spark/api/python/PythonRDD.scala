@@ -604,7 +604,7 @@ private[spark] object PythonRDD extends Logging {
    * The thread will terminate after all the data are sent or any exceptions happen.
    */
   private def serveIterator[T](items: Iterator[T], threadName: String): Int = {
-    val serverSocket = new ServerSocket(0, 1)
+    val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
     // Close the socket if no connection in 3 seconds
     serverSocket.setSoTimeout(3000)
 

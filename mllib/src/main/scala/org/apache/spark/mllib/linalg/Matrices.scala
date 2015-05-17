@@ -87,6 +87,9 @@ sealed trait Matrix extends Serializable {
   /** A human readable representation of the matrix */
   override def toString: String = toBreeze.toString()
 
+  /** A human readable representation of the matrix with maximum lines and width */
+  def toString(maxLines: Int, maxLineWidth: Int): String = toBreeze.toString(maxLines, maxLineWidth)
+
   /** Map the values of this matrix using a function. Generates a new matrix. Performs the
     * function on only the backing array. For example, an operation such as addition or
     * subtraction will only be performed on the non-zero values in a `SparseMatrix`. */
@@ -270,7 +273,8 @@ class DenseMatrix(
 
   override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone())
 
-  private[mllib] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f))
+  private[mllib] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
+    isTransposed)
 
   private[mllib] def update(f: Double => Double): DenseMatrix = {
     val len = values.length
@@ -532,7 +536,7 @@ class SparseMatrix(
   }
 
   private[mllib] def map(f: Double => Double) =
-    new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.map(f))
+    new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.map(f), isTransposed)
 
   private[mllib] def update(f: Double => Double): SparseMatrix = {
     val len = values.length

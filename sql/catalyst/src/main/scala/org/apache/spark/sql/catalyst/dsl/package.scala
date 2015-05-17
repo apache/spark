@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedGetField, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedExtractValue, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
@@ -100,8 +100,9 @@ package object dsl {
     def isNull: Predicate = IsNull(expr)
     def isNotNull: Predicate = IsNotNull(expr)
 
-    def getItem(ordinal: Expression): Expression = GetItem(expr, ordinal)
-    def getField(fieldName: String): UnresolvedGetField = UnresolvedGetField(expr, fieldName)
+    def getItem(ordinal: Expression): UnresolvedExtractValue = UnresolvedExtractValue(expr, ordinal)
+    def getField(fieldName: String): UnresolvedExtractValue =
+      UnresolvedExtractValue(expr, Literal(fieldName))
 
     def cast(to: DataType): Expression = Cast(expr, to)
 
@@ -278,24 +279,19 @@ package object dsl {
     def sfilter[T1](arg1: Symbol)(udf: (T1) => Boolean): LogicalPlan =
       Filter(ScalaUdf(udf, BooleanType, Seq(UnresolvedAttribute(arg1.name))), logicalPlan)
 
-    def sample(
-        fraction: Double,
-        withReplacement: Boolean = true,
-        seed: Int = (math.random * 1000).toInt): LogicalPlan =
-      Sample(fraction, withReplacement, seed, logicalPlan)
-
+    // TODO specify the output column names
     def generate(
         generator: Generator,
         join: Boolean = false,
         outer: Boolean = false,
         alias: Option[String] = None): LogicalPlan =
-      Generate(generator, join, outer, None, logicalPlan)
+      Generate(generator, join = join, outer = outer, alias, Nil, logicalPlan)
 
     def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
       InsertIntoTable(
-        analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite)
+        analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite, false)
 
-    def analyze: LogicalPlan = EliminateSubQueries(analysis.SimpleAnalyzer(logicalPlan))
+    def analyze: LogicalPlan = EliminateSubQueries(analysis.SimpleAnalyzer.execute(logicalPlan))
   }
 
   object plans {  // scalastyle:ignore

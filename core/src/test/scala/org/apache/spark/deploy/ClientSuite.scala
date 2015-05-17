@@ -46,5 +46,4 @@ class ClientSuite extends FunSuite with Matchers {
     // Invalid syntax.
     ClientArguments.isValidJarUrl("hdfs:") should be (false)
   }
-
 }

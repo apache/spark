@@ -38,11 +38,10 @@ import org.apache.spark.sql.{SQLContext, Row}
  * are drawn from each Gaussian i=1..k with probability w(i); mu(i) and sigma(i) are 
  * the respective mean and covariance for each Gaussian distribution i=1..k. 
  * 
- * @param weight Weights for each Gaussian distribution in the mixture, where weight(i) is
- *               the weight for Gaussian i, and weight.sum == 1
- * @param mu Means for each Gaussian in the mixture, where mu(i) is the mean for Gaussian i
- * @param sigma Covariance maxtrix for each Gaussian in the mixture, where sigma(i) is the
- *              covariance matrix for Gaussian i
+ * @param weights Weights for each Gaussian distribution in the mixture, where weights(i) is
+ *                the weight for Gaussian i, and weights.sum == 1
+ * @param gaussians Array of MultivariateGaussian where gaussians(i) represents
+ *                  the Multivariate Gaussian (Normal) Distribution for Gaussian i
  */
 @Experimental
 class GaussianMixtureModel(

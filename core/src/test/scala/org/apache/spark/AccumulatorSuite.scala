@@ -27,19 +27,20 @@ import org.scalatest.Matchers
 class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
 
 
-  implicit def setAccum[A] = new AccumulableParam[mutable.Set[A], A] {
-    def addInPlace(t1: mutable.Set[A], t2: mutable.Set[A]) : mutable.Set[A] = {
-      t1 ++= t2
-      t1
+  implicit def setAccum[A]: AccumulableParam[mutable.Set[A], A] =
+    new AccumulableParam[mutable.Set[A], A] {
+      def addInPlace(t1: mutable.Set[A], t2: mutable.Set[A]) : mutable.Set[A] = {
+        t1 ++= t2
+        t1
+      }
+      def addAccumulator(t1: mutable.Set[A], t2: A) : mutable.Set[A] = {
+        t1 += t2
+        t1
+      }
+      def zero(t: mutable.Set[A]) : mutable.Set[A] = {
+        new mutable.HashSet[A]()
+      }
     }
-    def addAccumulator(t1: mutable.Set[A], t2: A) : mutable.Set[A] = {
-      t1 += t2
-      t1
-    }
-    def zero(t: mutable.Set[A]) : mutable.Set[A] = {
-      new mutable.HashSet[A]()
-    }
-  }
 
   test ("basic accumulation"){
     sc = new SparkContext("local", "test")
@@ -49,11 +50,10 @@ class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
     d.foreach{x => acc += x}
     acc.value should be (210)
 
-
-    val longAcc = sc.accumulator(0l)
+    val longAcc = sc.accumulator(0L)
     val maxInt = Integer.MAX_VALUE.toLong
     d.foreach{x => longAcc += maxInt + x}
-    longAcc.value should be (210l + maxInt * 20)
+    longAcc.value should be (210L + maxInt * 20)
   }
 
   test ("value not assignable from tasks") {

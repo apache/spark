@@ -85,7 +85,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     val stopperReturned = new Semaphore(0)
 
     class BlockingListener extends SparkListener {
-      override def onJobEnd(jobEnd: SparkListenerJobEnd) = {
+      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
         listenerStarted.release()
         listenerWait.acquire()
         drained = true
@@ -206,8 +206,9 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     sc.addSparkListener(new StatsReportListener)
     // just to make sure some of the tasks take a noticeable amount of time
     val w = { i: Int =>
-      if (i == 0)
+      if (i == 0) {
         Thread.sleep(100)
+      }
       i
     }
 
@@ -247,12 +248,12 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
       */
 
       taskInfoMetrics.foreach { case (taskInfo, taskMetrics) =>
-        taskMetrics.resultSize should be > (0l)
+        taskMetrics.resultSize should be > (0L)
         if (stageInfo.rddInfos.exists(info => info.name == d2.name || info.name == d3.name)) {
           taskMetrics.inputMetrics should not be ('defined)
           taskMetrics.outputMetrics should not be ('defined)
           taskMetrics.shuffleWriteMetrics should be ('defined)
-          taskMetrics.shuffleWriteMetrics.get.shuffleBytesWritten should be > (0l)
+          taskMetrics.shuffleWriteMetrics.get.shuffleBytesWritten should be > (0L)
         }
         if (stageInfo.rddInfos.exists(_.name == d4.name)) {
           taskMetrics.shuffleReadMetrics should be ('defined)
@@ -260,7 +261,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
           sm.totalBlocksFetched should be (128)
           sm.localBlocksFetched should be (128)
           sm.remoteBlocksFetched should be (0)
-          sm.remoteBytesRead should be (0l)
+          sm.remoteBytesRead should be (0L)
         }
       }
     }
@@ -406,12 +407,12 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     val startedGettingResultTasks = new mutable.HashSet[Int]()
     val endedTasks = new mutable.HashSet[Int]()
 
-    override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
+    override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
       startedTasks += taskStart.taskInfo.index
       notify()
     }
 
-    override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
+    override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
       endedTasks += taskEnd.taskInfo.index
       notify()
     }
@@ -425,7 +426,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
    * A simple listener that throws an exception on job end.
    */
   private class BadListener extends SparkListener {
-    override def onJobEnd(jobEnd: SparkListenerJobEnd) = { throw new Exception }
+    override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = { throw new Exception }
   }
 
 }
@@ -438,10 +439,10 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
  */
 private class BasicJobCounter extends SparkListener {
   var count = 0
-  override def onJobEnd(job: SparkListenerJobEnd) = count += 1
+  override def onJobEnd(job: SparkListenerJobEnd): Unit = count += 1
 }
 
 private class ListenerThatAcceptsSparkConf(conf: SparkConf) extends SparkListener {
   var count = 0
-  override def onJobEnd(job: SparkListenerJobEnd) = count += 1
+  override def onJobEnd(job: SparkListenerJobEnd): Unit = count += 1
 }

@@ -24,7 +24,7 @@ import sys
 import tempfile
 import array as pyarray
 
-from numpy import array, array_equal
+from numpy import array, array_equal, zeros, inf
 from py4j.protocol import Py4JJavaError
 
 if sys.version_info[:2] <= (2, 6):
@@ -36,17 +36,18 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
+from pyspark import SparkContext
 from pyspark.mllib.common import _to_java_object_rdd
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
-    DenseMatrix, Vectors, Matrices
+    DenseMatrix, SparseMatrix, Vectors, Matrices
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
 from pyspark.mllib.feature import Word2Vec
 from pyspark.mllib.feature import IDF
+from pyspark.mllib.feature import StandardScaler
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import SQLContext
-from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
 _have_scipy = False
 try:
@@ -57,6 +58,12 @@ except:
     pass
 
 ser = PickleSerializer()
+sc = SparkContext('local[4]', "MLlib tests")
+
+
+class MLlibTestCase(unittest.TestCase):
+    def setUp(self):
+        self.sc = sc
 
 
 def _squared_distance(a, b):
@@ -66,16 +73,16 @@ def _squared_distance(a, b):
         return b.squared_distance(a)
 
 
-class VectorTests(PySparkTestCase):
+class VectorTests(MLlibTestCase):
 
     def _test_serialize(self, v):
         self.assertEqual(v, ser.loads(ser.dumps(v)))
         jvec = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(v)))
-        nv = ser.loads(str(self.sc._jvm.SerDe.dumps(jvec)))
+        nv = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jvec)))
         self.assertEqual(v, nv)
         vs = [v] * 100
         jvecs = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(vs)))
-        nvs = ser.loads(str(self.sc._jvm.SerDe.dumps(jvecs)))
+        nvs = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jvecs)))
         self.assertEqual(vs, nvs)
 
     def test_serialize(self):
@@ -85,6 +92,9 @@ class VectorTests(PySparkTestCase):
         self._test_serialize(SparseVector(4, {1: 1, 3: 2}))
         self._test_serialize(SparseVector(3, {}))
         self._test_serialize(DenseMatrix(2, 3, range(6)))
+        sm1 = SparseMatrix(
+            3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0])
+        self._test_serialize(sm1)
 
     def test_dot(self):
         sv = SparseVector(4, {1: 1, 3: 2})
@@ -134,8 +144,10 @@ class VectorTests(PySparkTestCase):
         self.assertEquals(sv[-1], 2)
         self.assertEquals(sv[-2], 0)
         self.assertEquals(sv[-4], 0)
-        for ind in [4, -5, 7.8]:
+        for ind in [4, -5]:
             self.assertRaises(ValueError, sv.__getitem__, ind)
+        for ind in [7.8, '1']:
+            self.assertRaises(TypeError, sv.__getitem__, ind)
 
     def test_matrix_indexing(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
@@ -144,8 +156,95 @@ class VectorTests(PySparkTestCase):
             for j in range(2):
                 self.assertEquals(mat[i, j], expected[i][j])
 
+    def test_sparse_matrix(self):
+        # Test sparse matrix creation.
+        sm1 = SparseMatrix(
+            3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0])
+        self.assertEquals(sm1.numRows, 3)
+        self.assertEquals(sm1.numCols, 4)
+        self.assertEquals(sm1.colPtrs.tolist(), [0, 2, 2, 4, 4])
+        self.assertEquals(sm1.rowIndices.tolist(), [1, 2, 1, 2])
+        self.assertEquals(sm1.values.tolist(), [1.0, 2.0, 4.0, 5.0])
 
-class ListTests(PySparkTestCase):
+        # Test indexing
+        expected = [
+            [0, 0, 0, 0],
+            [1, 0, 4, 0],
+            [2, 0, 5, 0]]
+
+        for i in range(3):
+            for j in range(4):
+                self.assertEquals(expected[i][j], sm1[i, j])
+        self.assertTrue(array_equal(sm1.toArray(), expected))
+
+        # Test conversion to dense and sparse.
+        smnew = sm1.toDense().toSparse()
+        self.assertEquals(sm1.numRows, smnew.numRows)
+        self.assertEquals(sm1.numCols, smnew.numCols)
+        self.assertTrue(array_equal(sm1.colPtrs, smnew.colPtrs))
+        self.assertTrue(array_equal(sm1.rowIndices, smnew.rowIndices))
+        self.assertTrue(array_equal(sm1.values, smnew.values))
+
+        sm1t = SparseMatrix(
+            3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0],
+            isTransposed=True)
+        self.assertEquals(sm1t.numRows, 3)
+        self.assertEquals(sm1t.numCols, 4)
+        self.assertEquals(sm1t.colPtrs.tolist(), [0, 2, 3, 5])
+        self.assertEquals(sm1t.rowIndices.tolist(), [0, 1, 2, 0, 2])
+        self.assertEquals(sm1t.values.tolist(), [3.0, 2.0, 4.0, 9.0, 8.0])
+
+        expected = [
+            [3, 2, 0, 0],
+            [0, 0, 4, 0],
+            [9, 0, 8, 0]]
+
+        for i in range(3):
+            for j in range(4):
+                self.assertEquals(expected[i][j], sm1t[i, j])
+        self.assertTrue(array_equal(sm1t.toArray(), expected))
+
+    def test_dense_matrix_is_transposed(self):
+        mat1 = DenseMatrix(3, 2, [0, 4, 1, 6, 3, 9], isTransposed=True)
+        mat = DenseMatrix(3, 2, [0, 1, 3, 4, 6, 9])
+        self.assertEquals(mat1, mat)
+
+        expected = [[0, 4], [1, 6], [3, 9]]
+        for i in range(3):
+            for j in range(2):
+                self.assertEquals(mat1[i, j], expected[i][j])
+        self.assertTrue(array_equal(mat1.toArray(), expected))
+
+        sm = mat1.toSparse()
+        self.assertTrue(array_equal(sm.rowIndices, [1, 2, 0, 1, 2]))
+        self.assertTrue(array_equal(sm.colPtrs, [0, 2, 5]))
+        self.assertTrue(array_equal(sm.values, [1, 3, 4, 6, 9]))
+
+    def test_parse_vector(self):
+        a = DenseVector([3, 4, 6, 7])
+        self.assertTrue(str(a), '[3.0,4.0,6.0,7.0]')
+        self.assertTrue(Vectors.parse(str(a)), a)
+        a = SparseVector(4, [0, 2], [3, 4])
+        self.assertTrue(str(a), '(4,[0,2],[3.0,4.0])')
+        self.assertTrue(Vectors.parse(str(a)), a)
+        a = SparseVector(10, [0, 1], [4, 5])
+        self.assertTrue(SparseVector.parse(' (10, [0,1 ],[ 4.0,5.0] )'), a)
+
+    def test_norms(self):
+        a = DenseVector([0, 2, 3, -1])
+        self.assertAlmostEqual(a.norm(2), 3.742, 3)
+        self.assertTrue(a.norm(1), 6)
+        self.assertTrue(a.norm(inf), 3)
+        a = SparseVector(4, [0, 2], [3, -4])
+        self.assertAlmostEqual(a.norm(2), 5)
+        self.assertTrue(a.norm(1), 7)
+        self.assertTrue(a.norm(inf), 4)
+
+        tmp = SparseVector(4, [0, 2], [3, 0])
+        self.assertEqual(tmp.numNonzeros(), 1)
+
+
+class ListTests(MLlibTestCase):
 
     """
     Test MLlib algorithms on plain lists, to make sure they're passed through
@@ -160,7 +259,8 @@ class ListTests(PySparkTestCase):
             [1.1, 0],
             [1.2, 0],
         ]
-        clusters = KMeans.train(self.sc.parallelize(data), 2, initializationMode="k-means||")
+        clusters = KMeans.train(self.sc.parallelize(data), 2, initializationMode="k-means||",
+                                initializationSteps=7, epsilon=1e-4)
         self.assertEquals(clusters.predict(data[0]), clusters.predict(data[1]))
         self.assertEquals(clusters.predict(data[2]), clusters.predict(data[3]))
 
@@ -170,9 +270,11 @@ class ListTests(PySparkTestCase):
         Y = range(0, 100, 10)
         data = [[x, y] for x, y in zip(X, Y)]
         clusters1 = KMeans.train(self.sc.parallelize(data),
-                                 3, initializationMode="k-means||", seed=42)
+                                 3, initializationMode="k-means||",
+                                 seed=42, initializationSteps=7, epsilon=1e-4)
         clusters2 = KMeans.train(self.sc.parallelize(data),
-                                 3, initializationMode="k-means||", seed=42)
+                                 3, initializationMode="k-means||",
+                                 seed=42, initializationSteps=7, epsilon=1e-4)
         centers1 = clusters1.centers
         centers2 = clusters2.centers
         for c1, c2 in zip(centers1, centers2):
@@ -188,7 +290,7 @@ class ListTests(PySparkTestCase):
             [-6, -7],
         ])
         clusters = GaussianMixture.train(data, 2, convergenceTol=0.001,
-                                         maxIterations=100, seed=56)
+                                         maxIterations=10, seed=56)
         labels = clusters.predict(data).collect()
         self.assertEquals(labels[0], labels[1])
         self.assertEquals(labels[2], labels[3])
@@ -199,9 +301,9 @@ class ListTests(PySparkTestCase):
         y = range(0, 100, 10)
         data = self.sc.parallelize([[a, b] for a, b in zip(x, y)])
         clusters1 = GaussianMixture.train(data, 5, convergenceTol=0.001,
-                                          maxIterations=100, seed=63)
+                                          maxIterations=10, seed=63)
         clusters2 = GaussianMixture.train(data, 5, convergenceTol=0.001,
-                                          maxIterations=100, seed=63)
+                                          maxIterations=10, seed=63)
         for c1, c2 in zip(clusters1.weights, clusters2.weights):
             self.assertEquals(round(c1, 7), round(c2, 7))
 
@@ -220,13 +322,13 @@ class ListTests(PySparkTestCase):
 
         temp_dir = tempfile.mkdtemp()
 
-        lr_model = LogisticRegressionWithSGD.train(rdd)
+        lr_model = LogisticRegressionWithSGD.train(rdd, iterations=10)
         self.assertTrue(lr_model.predict(features[0]) <= 0)
         self.assertTrue(lr_model.predict(features[1]) > 0)
         self.assertTrue(lr_model.predict(features[2]) <= 0)
         self.assertTrue(lr_model.predict(features[3]) > 0)
 
-        svm_model = SVMWithSGD.train(rdd)
+        svm_model = SVMWithSGD.train(rdd, iterations=10)
         self.assertTrue(svm_model.predict(features[0]) <= 0)
         self.assertTrue(svm_model.predict(features[1]) > 0)
         self.assertTrue(svm_model.predict(features[2]) <= 0)
@@ -240,7 +342,7 @@ class ListTests(PySparkTestCase):
 
         categoricalFeaturesInfo = {0: 3}  # feature 0 has 3 categories
         dt_model = DecisionTree.trainClassifier(
-            rdd, numClasses=2, categoricalFeaturesInfo=categoricalFeaturesInfo)
+            rdd, numClasses=2, categoricalFeaturesInfo=categoricalFeaturesInfo, maxBins=4)
         self.assertTrue(dt_model.predict(features[0]) <= 0)
         self.assertTrue(dt_model.predict(features[1]) > 0)
         self.assertTrue(dt_model.predict(features[2]) <= 0)
@@ -252,7 +354,8 @@ class ListTests(PySparkTestCase):
         self.assertEqual(same_dt_model.toDebugString(), dt_model.toDebugString())
 
         rf_model = RandomForest.trainClassifier(
-            rdd, numClasses=2, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=100)
+            rdd, numClasses=2, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=10,
+            maxBins=4, seed=1)
         self.assertTrue(rf_model.predict(features[0]) <= 0)
         self.assertTrue(rf_model.predict(features[1]) > 0)
         self.assertTrue(rf_model.predict(features[2]) <= 0)
@@ -264,7 +367,7 @@ class ListTests(PySparkTestCase):
         self.assertEqual(same_rf_model.toDebugString(), rf_model.toDebugString())
 
         gbt_model = GradientBoostedTrees.trainClassifier(
-            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4)
         self.assertTrue(gbt_model.predict(features[0]) <= 0)
         self.assertTrue(gbt_model.predict(features[1]) > 0)
         self.assertTrue(gbt_model.predict(features[2]) <= 0)
@@ -293,19 +396,19 @@ class ListTests(PySparkTestCase):
         rdd = self.sc.parallelize(data)
         features = [p.features.tolist() for p in data]
 
-        lr_model = LinearRegressionWithSGD.train(rdd)
+        lr_model = LinearRegressionWithSGD.train(rdd, iterations=10)
         self.assertTrue(lr_model.predict(features[0]) <= 0)
         self.assertTrue(lr_model.predict(features[1]) > 0)
         self.assertTrue(lr_model.predict(features[2]) <= 0)
         self.assertTrue(lr_model.predict(features[3]) > 0)
 
-        lasso_model = LassoWithSGD.train(rdd)
+        lasso_model = LassoWithSGD.train(rdd, iterations=10)
         self.assertTrue(lasso_model.predict(features[0]) <= 0)
         self.assertTrue(lasso_model.predict(features[1]) > 0)
         self.assertTrue(lasso_model.predict(features[2]) <= 0)
         self.assertTrue(lasso_model.predict(features[3]) > 0)
 
-        rr_model = RidgeRegressionWithSGD.train(rdd)
+        rr_model = RidgeRegressionWithSGD.train(rdd, iterations=10)
         self.assertTrue(rr_model.predict(features[0]) <= 0)
         self.assertTrue(rr_model.predict(features[1]) > 0)
         self.assertTrue(rr_model.predict(features[2]) <= 0)
@@ -313,35 +416,35 @@ class ListTests(PySparkTestCase):
 
         categoricalFeaturesInfo = {0: 2}  # feature 0 has 2 categories
         dt_model = DecisionTree.trainRegressor(
-            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, maxBins=4)
         self.assertTrue(dt_model.predict(features[0]) <= 0)
         self.assertTrue(dt_model.predict(features[1]) > 0)
         self.assertTrue(dt_model.predict(features[2]) <= 0)
         self.assertTrue(dt_model.predict(features[3]) > 0)
 
         rf_model = RandomForest.trainRegressor(
-            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=100, seed=1)
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=10, maxBins=4, seed=1)
         self.assertTrue(rf_model.predict(features[0]) <= 0)
         self.assertTrue(rf_model.predict(features[1]) > 0)
         self.assertTrue(rf_model.predict(features[2]) <= 0)
         self.assertTrue(rf_model.predict(features[3]) > 0)
 
         gbt_model = GradientBoostedTrees.trainRegressor(
-            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4)
         self.assertTrue(gbt_model.predict(features[0]) <= 0)
         self.assertTrue(gbt_model.predict(features[1]) > 0)
         self.assertTrue(gbt_model.predict(features[2]) <= 0)
         self.assertTrue(gbt_model.predict(features[3]) > 0)
 
         try:
-            LinearRegressionWithSGD.train(rdd, initialWeights=array([1.0, 1.0]))
-            LassoWithSGD.train(rdd, initialWeights=array([1.0, 1.0]))
-            RidgeRegressionWithSGD.train(rdd, initialWeights=array([1.0, 1.0]))
+            LinearRegressionWithSGD.train(rdd, initialWeights=array([1.0, 1.0]), iterations=10)
+            LassoWithSGD.train(rdd, initialWeights=array([1.0, 1.0]), iterations=10)
+            RidgeRegressionWithSGD.train(rdd, initialWeights=array([1.0, 1.0]), iterations=10)
         except ValueError:
             self.fail()
 
 
-class StatTests(PySparkTestCase):
+class StatTests(MLlibTestCase):
     # SPARK-4023
     def test_col_with_different_rdds(self):
         # numpy
@@ -363,15 +466,15 @@ class StatTests(PySparkTestCase):
         self.assertEqual(10, len(summary.normL1()))
         self.assertEqual(10, len(summary.normL2()))
 
-        data2 = self.sc.parallelize(xrange(10)).map(lambda x: Vectors.dense(x))
+        data2 = self.sc.parallelize(range(10)).map(lambda x: Vectors.dense(x))
         summary2 = Statistics.colStats(data2)
         self.assertEqual(array([45.0]), summary2.normL1())
         import math
-        expectedNormL2 = math.sqrt(sum(map(lambda x: x*x, xrange(10))))
+        expectedNormL2 = math.sqrt(sum(map(lambda x: x*x, range(10))))
         self.assertTrue(math.fabs(summary2.normL2()[0] - expectedNormL2) < 1e-14)
 
 
-class VectorUDTTests(PySparkTestCase):
+class VectorUDTTests(MLlibTestCase):
 
     dv0 = DenseVector([])
     dv1 = DenseVector([1.0, 2.0])
@@ -389,11 +492,11 @@ class VectorUDTTests(PySparkTestCase):
     def test_infer_schema(self):
         sqlCtx = SQLContext(self.sc)
         rdd = self.sc.parallelize([LabeledPoint(1.0, self.dv1), LabeledPoint(0.0, self.sv1)])
-        srdd = sqlCtx.inferSchema(rdd)
-        schema = srdd.schema
+        df = rdd.toDF()
+        schema = df.schema
         field = [f for f in schema.fields if f.name == "features"][0]
         self.assertEqual(field.dataType, self.udt)
-        vectors = srdd.map(lambda p: p.features).collect()
+        vectors = df.map(lambda p: p.features).collect()
         self.assertEqual(len(vectors), 2)
         for v in vectors:
             if isinstance(v, SparseVector):
@@ -401,11 +504,11 @@ class VectorUDTTests(PySparkTestCase):
             elif isinstance(v, DenseVector):
                 self.assertEqual(v, self.dv1)
             else:
-                raise ValueError("expecting a vector but got %r of type %r" % (v, type(v)))
+                raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
-class SciPyTests(PySparkTestCase):
+class SciPyTests(MLlibTestCase):
 
     """
     Test both vector operations and MLlib algorithms with SciPy sparse matrices,
@@ -546,7 +649,7 @@ class SciPyTests(PySparkTestCase):
         self.assertTrue(dt_model.predict(features[3]) > 0)
 
 
-class ChiSqTestTests(PySparkTestCase):
+class ChiSqTestTests(MLlibTestCase):
     def test_goodness_of_fit(self):
         from numpy import inf
 
@@ -644,13 +747,13 @@ class ChiSqTestTests(PySparkTestCase):
         self.assertIsNotNone(chi[1000])
 
 
-class SerDeTest(PySparkTestCase):
+class SerDeTest(MLlibTestCase):
     def test_to_java_object_rdd(self):  # SPARK-6660
-        data = RandomRDDs.uniformRDD(self.sc, 10, 5, seed=0L)
+        data = RandomRDDs.uniformRDD(self.sc, 10, 5, seed=0)
         self.assertEqual(_to_java_object_rdd(data).count(), 10)
 
 
-class FeatureTest(PySparkTestCase):
+class FeatureTest(MLlibTestCase):
     def test_idf_model(self):
         data = [
             Vectors.dense([1, 2, 6, 0, 2, 3, 1, 1, 0, 0, 3]),
@@ -663,13 +766,8 @@ class FeatureTest(PySparkTestCase):
         self.assertEqual(len(idf), 11)
 
 
-class Word2VecTests(PySparkTestCase):
+class Word2VecTests(MLlibTestCase):
     def test_word2vec_setters(self):
-        data = [
-            ["I", "have", "a", "pen"],
-            ["I", "like", "soccer", "very", "much"],
-            ["I", "live", "in", "Tokyo"]
-        ]
         model = Word2Vec() \
             .setVectorSize(2) \
             .setLearningRate(0.01) \
@@ -697,9 +795,33 @@ class Word2VecTests(PySparkTestCase):
         model = Word2Vec().fit(self.sc.parallelize(data))
         self.assertEquals(len(model.getVectors()), 3)
 
+
+class StandardScalerTests(MLlibTestCase):
+    def test_model_setters(self):
+        data = [
+            [1.0, 2.0, 3.0],
+            [2.0, 3.0, 4.0],
+            [3.0, 4.0, 5.0]
+        ]
+        model = StandardScaler().fit(self.sc.parallelize(data))
+        self.assertIsNotNone(model.setWithMean(True))
+        self.assertIsNotNone(model.setWithStd(True))
+        self.assertEqual(model.transform([1.0, 2.0, 3.0]), DenseVector([-1.0, -1.0, -1.0]))
+
+    def test_model_transform(self):
+        data = [
+            [1.0, 2.0, 3.0],
+            [2.0, 3.0, 4.0],
+            [3.0, 4.0, 5.0]
+        ]
+        model = StandardScaler().fit(self.sc.parallelize(data))
+        self.assertEqual(model.transform([1.0, 2.0, 3.0]), DenseVector([1.0, 2.0, 3.0]))
+
+
 if __name__ == "__main__":
     if not _have_scipy:
-        print "NOTE: Skipping SciPy tests as it does not seem to be installed"
+        print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     unittest.main()
     if not _have_scipy:
-        print "NOTE: SciPy tests were skipped as it does not seem to be installed"
+        print("NOTE: SciPy tests were skipped as it does not seem to be installed")
+    sc.stop()

@@ -40,8 +40,8 @@ class Identifiable(object):
 
     def __init__(self):
         #: A unique id for the object. The default implementation
-        #: concatenates the class name, "-", and 8 random hex chars.
-        self.uid = type(self).__name__ + "-" + uuid.uuid4().hex[:8]
+        #: concatenates the class name, "_", and 8 random hex chars.
+        self.uid = type(self).__name__ + "_" + uuid.uuid4().hex[:8]
 
     def __repr__(self):
         return self.uid

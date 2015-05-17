@@ -61,7 +61,7 @@ private[rest] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
     assertProperty[Boolean](key, "boolean", _.toBoolean)
 
   private def assertPropertyIsNumeric(key: String): Unit =
-    assertProperty[Int](key, "numeric", _.toInt)
+    assertProperty[Double](key, "numeric", _.toDouble)
 
   private def assertPropertyIsMemory(key: String): Unit =
     assertProperty[Int](key, "memory", Utils.memoryStringToMb)

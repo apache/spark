@@ -48,9 +48,9 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 </tr>
 <tr>
   <td><code>spark.yarn.am.waitTime</code></td>
-  <td>100000</td>
+  <td>100s</td>
   <td>
-    In yarn-cluster mode, time in milliseconds for the application master to wait for the
+    In yarn-cluster mode, time for the application master to wait for the
     SparkContext to be initialized. In yarn-client mode, time for the application master to wait
     for the driver to connect to it.
   </td>
@@ -87,7 +87,8 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.historyServer.address</code></td>
   <td>(none)</td>
   <td>
-    The address of the Spark history server (i.e. host.com:18080). The address should not contain a scheme (http://). Defaults to not being set since the history server is an optional service. This address is given to the YARN ResourceManager when the Spark application finishes to link the application from the ResourceManager UI to the Spark history server UI.
+    The address of the Spark history server (i.e. host.com:18080). The address should not contain a scheme (http://). Defaults to not being set since the history server is an optional service. This address is given to the YARN ResourceManager when the Spark application finishes to link the application from the ResourceManager UI to the Spark history server UI. 
+    For this property, YARN properties can be used as variables, and these are substituted by Spark at runtime. For eg, if the Spark history server runs on the same node as the YARN ResourceManager, it can be set to `${hadoopconf-yarn.resourcemanager.hostname}:18080`. 
   </td>
 </tr>
 <tr>
@@ -130,6 +131,13 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>AM memory * 0.07, with minimum of 384 </td>
   <td>
     Same as <code>spark.yarn.driver.memoryOverhead</code>, but for the Application Master in client mode.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.am.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the YARN Application Master to listen on. In YARN client mode, this is used to communicate between the Spark driver running on a gateway and the Application Master running on YARN. In YARN cluster mode, this is used for the dynamic executor feature, where it handles the kill from the scheduler backend.
   </td>
 </tr>
 <tr>
@@ -189,6 +197,13 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.am.extraLibraryPath</code></td>
+  <td>(none)</td>
+  <td>
+    Set a special library path to use when launching the application master in client mode.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.maxAppAttempts</code></td>
   <td>yarn.resourcemanager.am.max-attempts in YARN</td>
   <td>
@@ -205,12 +220,25 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   Otherwise, the client process will exit after submission.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.executor.nodeLabelExpression</code></td>
+  <td>(none)</td>
+  <td>
+  A YARN node label expression that restricts the set of nodes executors will be scheduled on.
+  Only versions of YARN greater than or equal to 2.6 support node label expressions, so when
+  running against earlier versions, this property will be ignored.
+  </td>
+</tr>
 </table>
 
 # Launching Spark on YARN
 
 Ensure that `HADOOP_CONF_DIR` or `YARN_CONF_DIR` points to the directory which contains the (client side) configuration files for the Hadoop cluster.
-These configs are used to write to the dfs and connect to the YARN ResourceManager.
+These configs are used to write to the dfs and connect to the YARN ResourceManager. The
+configuration contained in this directory will be distributed to the YARN cluster so that all
+containers used by the application use the same configuration. If the configuration references
+Java system properties or environment variables not managed by YARN, they should also be set in the
+Spark application's configuration (driver, executors, and the AM when running in client mode).
 
 There are two deploy modes that can be used to launch Spark applications on YARN. In yarn-cluster mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In yarn-client mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
 

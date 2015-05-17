@@ -204,7 +204,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
           if (string == null || string.isEmpty) {
             defaultPartName
           } else {
-            FileUtils.escapePathName(string)
+            FileUtils.escapePathName(string, defaultPartName)
           }
         s"/$col=$colString"
       }.mkString

@@ -54,38 +54,14 @@ infer_type <- function(x) {
       # StructType
       types <- lapply(x, infer_type)
       fields <- lapply(1:length(x), function(i) {
-        list(name = names[[i]], type = types[[i]], nullable = TRUE)
+        structField(names[[i]], types[[i]], TRUE)
       })
-      list(type = "struct", fields = fields)
+      do.call(structType, fields)
     }
   } else if (length(x) > 1) {
     list(type = "array", elementType = type, containsNull = TRUE)
   } else {
     type
-  }
-}
-
-#' dump the schema into JSON string
-tojson <- function(x) {
-  if (is.list(x)) {
-    names <- names(x)
-    if (!is.null(names)) {
-      items <- lapply(names, function(n) {
-        safe_n <- gsub('"', '\\"', n)
-        paste(tojson(safe_n), ':', tojson(x[[n]]), sep = '')
-      })
-      d <- paste(items, collapse = ', ')
-      paste('{', d, '}', sep = '')
-    } else {
-      l <- paste(lapply(x, tojson), collapse = ', ')
-      paste('[', l, ']', sep = '')
-    }
-  } else if (is.character(x)) {
-    paste('"', x, '"', sep = '')
-  } else if (is.logical(x)) {
-    if (x) "true" else "false"
-  } else {
-    stop(paste("unexpected type:", class(x)))
   }
 }
 
@@ -134,7 +110,7 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
     stop(paste("unexpected type:", class(data)))
   }
 
-  if (is.null(schema) || is.null(names(schema))) {
+  if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
     row <- first(rdd)
     names <- if (is.null(schema)) {
       names(row)
@@ -143,7 +119,7 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
     }
     if (is.null(names)) {
       names <- lapply(1:length(row), function(x) {
-       paste("_", as.character(x), sep = "")
+        paste("_", as.character(x), sep = "")
       })
     }
 
@@ -159,38 +135,36 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
 
     types <- lapply(row, infer_type)
     fields <- lapply(1:length(row), function(i) {
-      list(name = names[[i]], type = types[[i]], nullable = TRUE)
+      structField(names[[i]], types[[i]], TRUE)
     })
-    schema <- list(type = "struct", fields = fields)
+    schema <- do.call(structType, fields)
   }
 
-  stopifnot(class(schema) == "list")
-  stopifnot(schema$type == "struct")
-  stopifnot(class(schema$fields) == "list")
-  schemaString <- tojson(schema)
+  stopifnot(class(schema) == "structType")
+  # schemaString <- tojson(schema)
 
   jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
   srdd <- callJMethod(jrdd, "rdd")
   sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "createDF",
-                     srdd, schemaString, sqlContext)
+                     srdd, schema$jobj, sqlContext)
   dataFrame(sdf)
 }
 
-#' toDF
-#'
-#' Converts an RDD to a DataFrame by infer the types.
-#'
-#' @param x An RDD
-#'
-#' @rdname DataFrame
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
-#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
-#' df <- toDF(rdd)
-#' }
+# toDF
+#
+# Converts an RDD to a DataFrame by infer the types.
+#
+# @param x An RDD
+#
+# @rdname DataFrame
+# @export
+# @examples
+#\dontrun{
+# sc <- sparkR.init()
+# sqlContext <- sparkRSQL.init(sc)
+# rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
+# df <- toDF(rdd)
+# }
 
 setGeneric("toDF", function(x, ...) { standardGeneric("toDF") })
 
@@ -233,23 +207,23 @@ jsonFile <- function(sqlContext, path) {
 }
 
 
-#' JSON RDD
-#'
-#' Loads an RDD storing one JSON object per string as a DataFrame.
-#'
-#' @param sqlContext SQLContext to use
-#' @param rdd An RDD of JSON string
-#' @param schema A StructType object to use as schema
-#' @param samplingRatio The ratio of simpling used to infer the schema
-#' @return A DataFrame
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
-#' rdd <- texFile(sc, "path/to/json")
-#' df <- jsonRDD(sqlContext, rdd)
-#' }
+# JSON RDD
+#
+# Loads an RDD storing one JSON object per string as a DataFrame.
+#
+# @param sqlContext SQLContext to use
+# @param rdd An RDD of JSON string
+# @param schema A StructType object to use as schema
+# @param samplingRatio The ratio of simpling used to infer the schema
+# @return A DataFrame
+# @export
+# @examples
+#\dontrun{
+# sc <- sparkR.init()
+# sqlContext <- sparkRSQL.init(sc)
+# rdd <- texFile(sc, "path/to/json")
+# df <- jsonRDD(sqlContext, rdd)
+# }
 
 # TODO: support schema
 jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
@@ -446,7 +420,7 @@ clearCache <- function(sqlContext) {
 #' \dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' df <- loadDF(sqlContext, path, "parquet")
+#' df <- read.df(sqlContext, path, "parquet")
 #' registerTempTable(df, "table")
 #' dropTempTable(sqlContext, "table")
 #' }
@@ -475,16 +449,23 @@ dropTempTable <- function(sqlContext, tableName) {
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' df <- load(sqlContext, "path/to/file.json", source = "json")
+#' df <- read.df(sqlContext, "path/to/file.json", source = "json")
 #' }
 
-loadDF <- function(sqlContext, path = NULL, source = NULL, ...) {
+read.df <- function(sqlContext, path = NULL, source = NULL, ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
     options[['path']] <- path
   }
   sdf <- callJMethod(sqlContext, "load", source, options)
   dataFrame(sdf)
+}
+
+#' @aliases loadDF
+#' @export
+
+loadDF <- function(sqlContext, path = NULL, source = NULL, ...) {
+  read.df(sqlContext, path, source, ...)
 }
 
 #' Create an external table

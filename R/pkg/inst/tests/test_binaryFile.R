@@ -27,7 +27,7 @@ test_that("saveAsObjectFile()/objectFile() following textFile() works", {
   fileName2 <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName1)
 
-  rdd <- textFile(sc, fileName1)
+  rdd <- textFile(sc, fileName1, 1)
   saveAsObjectFile(rdd, fileName2)
   rdd <- objectFile(sc, fileName2)
   expect_equal(collect(rdd), as.list(mockFile))
@@ -40,7 +40,7 @@ test_that("saveAsObjectFile()/objectFile() works on a parallelized list", {
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
 
   l <- list(1, 2, 3)
-  rdd <- parallelize(sc, l)
+  rdd <- parallelize(sc, l, 1)
   saveAsObjectFile(rdd, fileName)
   rdd <- objectFile(sc, fileName)
   expect_equal(collect(rdd), l)

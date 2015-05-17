@@ -73,20 +73,26 @@ private[ui] class StageTableBase(
   }
 
   private def makeDescription(s: StageInfo): Seq[Node] = {
-    // scalastyle:off
-    val killLink = if (killEnabled) {
-      val killLinkUri = "%s/stages/stage/kill?id=%s&terminate=true"
-        .format(UIUtils.prependBaseUri(basePath), s.stageId)
-      val confirm = "return window.confirm('Are you sure you want to kill stage %s ?');"
-        .format(s.stageId)
-      <span class="kill-link">
-        (<a href={killLinkUri} onclick={confirm}>kill</a>)
-      </span>
-    }
-    // scalastyle:on
+    val basePathUri = UIUtils.prependBaseUri(basePath)
 
-    val nameLinkUri ="%s/stages/stage?id=%s&attempt=%s"
-      .format(UIUtils.prependBaseUri(basePath), s.stageId, s.attemptId)
+    val killLink = if (killEnabled) {
+      val confirm =
+        s"if (window.confirm('Are you sure you want to kill stage ${s.stageId} ?')) " +
+        "{ this.parentNode.submit(); return true; } else { return false; }"
+      // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
+      /*
+      val killLinkUri = s"$basePathUri/stages/stage/kill/"
+      <form action={killLinkUri} method="POST" style="display:inline">
+        <input type="hidden" name="id" value={s.stageId.toString}/>
+        <input type="hidden" name="terminate" value="true"/>
+        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
+      </form>
+       */
+      val killLinkUri = s"$basePathUri/stages/stage/kill/?id=${s.stageId}&terminate=true"
+      <a href={killLinkUri} onclick={confirm} class="kill-link">(kill)</a>
+    }
+
+    val nameLinkUri = s"$basePathUri/stages/stage?id=${s.stageId}&attempt=${s.attemptId}"
     val nameLink = <a href={nameLinkUri}>{s.name}</a>
 
     val cachedRddInfos = s.rddInfos.filter(_.numCachedPartitions > 0)
@@ -98,11 +104,9 @@ private[ui] class StageTableBase(
       <div class="stage-details collapsed">
         {if (cachedRddInfos.nonEmpty) {
           Text("RDD: ") ++
-          // scalastyle:off
           cachedRddInfos.map { i =>
-            <a href={"%s/storage/rdd?id=%d".format(UIUtils.prependBaseUri(basePath), i.id)}>{i.name}</a>
+            <a href={s"$basePathUri/storage/rdd?id=${i.id}"}>{i.name}</a>
           }
-          // scalastyle:on
         }}
         <pre>{s.details}</pre>
       </div>
@@ -117,10 +121,23 @@ private[ui] class StageTableBase(
     <div>{stageDesc.getOrElse("")} {killLink} {nameLink} {details}</div>
   }
 
+  protected def missingStageRow(stageId: Int): Seq[Node] = {
+    <td>{stageId}</td> ++
+    {if (isFairScheduler) {<td>-</td>} else Seq.empty} ++
+    <td>No data available for this stage</td> ++ // Description
+    <td></td> ++ // Submitted
+    <td></td> ++ // Duration
+    <td></td> ++ // Tasks: Succeeded/Total
+    <td></td> ++ // Input
+    <td></td> ++ // Output
+    <td></td> ++ // Shuffle Read
+    <td></td> // Shuffle Write
+  }
+
   protected def stageRow(s: StageInfo): Seq[Node] = {
     val stageDataOption = listener.stageIdToData.get((s.stageId, s.attemptId))
     if (stageDataOption.isEmpty) {
-      return <td>{s.stageId}</td><td>No data available for this stage</td>
+      return missingStageRow(s.stageId)
     }
 
     val stageData = stageDataOption.get
@@ -175,7 +192,8 @@ private[ui] class StageTableBase(
   }
 
   /** Render an HTML row that represents a stage */
-  private def renderStageRow(s: StageInfo): Seq[Node] = <tr>{stageRow(s)}</tr>
+  private def renderStageRow(s: StageInfo): Seq[Node] =
+    <tr id={"stage-" + s.stageId + "-" + s.attemptId}>{stageRow(s)}</tr>
 }
 
 private[ui] class FailedStageTable(
