@@ -39,7 +39,5 @@ The table below outlines the MLlib models that can be exported to PMML and their
   </tbody>
 </table>
 
-## Example: exporting KMeansModel
-Same applies to other models...
+## Examples
 
-## Example: exporting a model to String, file ...
