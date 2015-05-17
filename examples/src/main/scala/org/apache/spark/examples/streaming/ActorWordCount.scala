@@ -23,7 +23,7 @@ import scala.util.Random
 
 import akka.actor.{Actor, ActorRef, Props, actorRef2Scala}
 
-import org.apache.spark.{SparkConf, SecurityManager}
+import org.apache.spark.{util, SparkConf, SecurityManager}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext.toPairDStreamFunctions
 import org.apache.spark.util.AkkaUtils
@@ -55,7 +55,10 @@ class FeederActor extends Actor {
     override def run() {
       while (true) {
         Thread.sleep(500)
-        receivers.foreach(_ ! makeMessage)
+        import scala.concurrent.duration._
+        val t = scala.concurrent.duration.FiniteDuration(1 ,MILLISECONDS)
+
+        receivers.foreach(m => AkkaUtils.askWithReply(makeMessage(),m,1,0l,t))
       }
     }
   }.start()
