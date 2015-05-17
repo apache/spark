@@ -52,4 +52,16 @@ class MesosSchedulerUtilsSuite extends FlatSpec with Matchers with MockitoSugar 
     calculateTotalMemory(f.sc) shouldBe 1536
   }
 
+  it should "parse a non-empty constraint string correctly" in new MesosSchedulerUtils {
+    val expectedMap = Map(
+      "tachyon" -> Set("true"),
+      "zone" -> Set("us-east-1a", "us-east-1b")
+    )
+    parseConstraintString("tachyon:true;zone:us-east-1a,us-east-1b") should be (expectedMap)
+  }
+
+  it should "parse an empty constraint string correctly" in new MesosSchedulerUtils {
+    parseConstraintString("") should be (Map())
+  }
+
 }
