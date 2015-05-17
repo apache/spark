@@ -124,7 +124,7 @@ private[spark] class MesosSchedulerBackend(
       .setType(Value.Type.SCALAR)
       .setScalar(
         Value.Scalar.newBuilder()
-          .setValue(MemoryUtils.calculateTotalMemory(sc)).build())
+          .setValue(calculateTotalMemory(sc)).build())
       .build()
     val executorInfo = MesosExecutorInfo.newBuilder()
       .setExecutorId(ExecutorID.newBuilder().setValue(execId).build())
@@ -194,7 +194,7 @@ private[spark] class MesosSchedulerBackend(
         val mem = getResource(o.getResourcesList, "mem")
         val cpus = getResource(o.getResourcesList, "cpus")
         val slaveId = o.getSlaveId.getValue
-        (mem >= MemoryUtils.calculateTotalMemory(sc) &&
+        (mem >= calculateTotalMemory(sc) &&
           // need at least 1 for executor, 1 for task
           cpus >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)) ||
           (slaveIdsWithExecutors.contains(slaveId) &&

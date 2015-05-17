@@ -17,18 +17,17 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import java.util.{List => JList}
 import java.util.concurrent.CountDownLatch
-
-import com.google.common.base.Splitter
+import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 
+import com.google.common.base.Splitter
 import org.apache.mesos.Protos._
-import org.apache.mesos.{Protos, MesosSchedulerDriver, Scheduler}
-import org.apache.spark.Logging
+import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler}
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkContext}
 
 
 /**
@@ -185,6 +184,15 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     offers: JList[Offer],
     offerConstraints: Map[String, Set[String]]): mutable.Buffer[Offer] = offers.filter { o =>
     matchesAttributeRequirements(offerConstraints, (o.getAttributesList map getAttribute).toMap)
+  }
+
+  // These defaults copied from YARN
+  val OVERHEAD_FRACTION = 0.10
+  val OVERHEAD_MINIMUM = 384
+
+  private[mesos] def calculateTotalMemory(sc: SparkContext): Int = {
+    sc.conf.getInt("spark.mesos.executor.memoryOverhead",
+      math.max(OVERHEAD_FRACTION * sc.executorMemory, OVERHEAD_MINIMUM).toInt) + sc.executorMemory
   }
 
 }
