@@ -600,7 +600,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       StructType(
         StructField("a", ArrayType(IntegerType, containsNull = true), nullable = true) :: Nil)
     assert(df1.schema === expectedSchema1)
-    df1.write.mode(SaveMode.Overwrite).parquet("arrayInParquet")
+    df1.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable("arrayInParquet")
 
     val df2 =
       createDataFrame(Tuple1(Seq(2, 3)) :: Nil).toDF("a")
