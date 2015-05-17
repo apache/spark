@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.expressions._
  *       over(
  *       partitionBy("k1")
  *       .orderBy("k2", "k3")
- *       .row
+ *       .rows
  *       .following(1)).as("avg_value"),
  *     max("value")
  *       .over(
@@ -53,7 +53,13 @@ import org.apache.spark.sql.catalyst.expressions._
  *
  * }}}
  *
- *
+ * @param column The bounded the aggregate/window function
+ * @param partitionSpec The partition of the window
+ * @param orderSpec The ordering of the window
+ * @param frame The Window Frame type
+ * @param bindLower A hint of when call the methods `.preceding(n)` `.currentRow()` `.following()`
+ *                  if bindLower == true, then we will set the lower bound, otherwise, we should
+ *                  set the upper bound for the Row/Range Frame.
  */
 @Experimental
 class WindowFunctionDefinition protected[sql](
@@ -183,15 +189,15 @@ class WindowFunctionDefinition protected[sql](
 
   /**
    * Returns a new [[WindowFunctionDefinition]], with position specified preceding of CURRENT_ROW.
-   * It can be either Lower or Upper Bound position, depends on whether the `and` method called.
+   * It can be either Lower or Upper Bound position depends on the semantic context.
    * For example:
    * {{{
    *   // [CURRENT_ROW - 1, ~)
-   *   df.over(partitionBy("k1").orderBy("k2").row.preceding(1))
+   *   df.over(partitionBy("k1").orderBy("k2").rows.preceding(1))
    *   // [CURRENT_ROW - 3, CURRENT_ROW - 1]
-   *   df.over(partitionBy("k1").orderBy("k2").row.between.preceding(3).and.preceding(1))
+   *   df.over(partitionBy("k1").orderBy("k2").rows.between.preceding(3).and.preceding(1))
    *   // (~, CURRENT_ROW - 1]
-   *   df.over(partitionBy("k1").orderBy("k2").row.between.unboundedPreceding.and.preceding(1))
+   *   df.over(partitionBy("k1").orderBy("k2").rows.between.unboundedPreceding.and.preceding(1))
    * }}}
    * @group window_funcs
    */
@@ -212,7 +218,7 @@ class WindowFunctionDefinition protected[sql](
    * For example:
    * {{{
    *   // (~, CURRENT_ROW]
-   *   df.over(partitionBy("k1").orderBy("k2").row.between.unboundedPreceding.and.currentRow)
+   *   df.over(partitionBy("k1").orderBy("k2").rows.between.unboundedPreceding.and.currentRow)
    * }}}
    * @group window_funcs
    */
@@ -230,7 +236,7 @@ class WindowFunctionDefinition protected[sql](
    * For example:
    * {{{
    *   // [CURRENT_ROW, ~)
-   *   df.over(partitionBy("k1").orderBy("k2").row.between.currentRow.and.unboundedFollowing)
+   *   df.over(partitionBy("k1").orderBy("k2").rows.between.currentRow.and.unboundedFollowing)
    * }}}
    * @group window_funcs
    */
@@ -245,13 +251,13 @@ class WindowFunctionDefinition protected[sql](
 
   /**
    * Returns a new [[WindowFunctionDefinition]], with position as CURRENT_ROW.
-   * It can be either Lower or Upper Bound position, depends on whether the `and` method called.
+   * It can be either Lower or Upper Bound position, depends on the semantic context.
    * For example:
    * {{{
    *   // [CURRENT_ROW, ~)
-   *   df.over(partitionBy("k1").orderBy("k2").row.between.currentRow.and.unboundedFollowing)
+   *   df.over(partitionBy("k1").orderBy("k2").rows.between.currentRow.and.unboundedFollowing)
    *   // [CURRENT_ROW - 3, CURRENT_ROW]
-   *   df.over(partitionBy("k1").orderBy("k2").row.between.preceding(3).and.currentRow)
+   *   df.over(partitionBy("k1").orderBy("k2").rows.between.preceding(3).and.currentRow)
    * }}}
    * @group window_funcs
    */
@@ -268,15 +274,15 @@ class WindowFunctionDefinition protected[sql](
 
   /**
    * Returns a new [[WindowFunctionDefinition]], with position specified following of CURRENT_ROW.
-   * It can be either Lower or Upper Bound position, depends on whether the `and` method called.
+   * It can be either Lower or Upper Bound position, depends on the semantic context.
    * For example:
    * {{{
    *   // [CURRENT_ROW + 1, ~)
-   *   df.over(partitionBy("k1").orderBy("k2").row.following(1))
+   *   df.over(partitionBy("k1").orderBy("k2").rows.following(1))
    *   // [CURRENT_ROW + 1, CURRENT_ROW + 3]
-   *   df.over(partitionBy("k1").orderBy("k2").row.between.following(1).and.following(3))
+   *   df.over(partitionBy("k1").orderBy("k2").rows.between.following(1).and.following(3))
    *   // [CURRENT_ROW + 1, ~)
-   *   df.over(partitionBy("k1").orderBy("k2").row.between.following(1).and.unboundedFollowing)
+   *   df.over(partitionBy("k1").orderBy("k2").rows.between.following(1).and.unboundedFollowing)
    * }}}
    * @group window_funcs
    */
