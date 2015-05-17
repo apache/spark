@@ -111,7 +111,7 @@ class DagBag(object):
                 orm_dag = DagModel.get_current(dag.parent_dag.dag_id)
             else:
                 orm_dag = DagModel.get_current(dag_id)
-            if dag.last_loaded < (
+            if orm_dag and dag.last_loaded < (
                     orm_dag.last_expired or datetime(2100, 1, 1)):
                 self.process_file(
                     filepath=orm_dag.fileloc, only_if_updated=False)
