@@ -5,6 +5,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - PMML model export
 ---
 
 MLlib supports model export to Predictive Model Markup Language ([PMML](http://en.wikipedia.org/wiki/Predictive_Model_Markup_Language)) format.
+
 The table below outlines the MLlib models that can be exported to PMML and their equivalent PMML format.
 
 <table class="table">
@@ -14,12 +15,21 @@ The table below outlines the MLlib models that can be exported to PMML and their
   <tbody>
     <tr>
       <td>KMeansModel</td><td>ClusteringModel</td>
+    </tr>    
+    <tr>
+      <td>LinearRegressionModel</td><td>RegressionModel (functionName="regression")</td>
     </tr>
     <tr>
-      <td>LogisticRegressionModel</td><td>RegressionModel</td>
+      <td>RidgeRegressionModel</td><td>RegressionModel (functionName="regression")</td>
     </tr>
     <tr>
-      <td>SVMModel</td><td>RegressionModel</td>
+      <td>LassoModel</td><td>RegressionModel (functionName="regression")</td>
+    </tr>
+    <tr>
+      <td>SVMModel</td><td>RegressionModel (functionName="classification" normalizationMethod="none")</td>
+    </tr>
+    <tr>
+      <td>LogisticRegressionModel</td><td>RegressionModel (functionName="classification" normalizationMethod="logit")</td>
     </tr>
   </tbody>
 </table>
