@@ -78,6 +78,13 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
     valueObjectDeserialized = false
   }
 
+  /**
+   * When `value()` is called at the first time, it needs to deserialize `valueObject` from
+   * `valueBytes`. It may cost dozens of seconds for a large instance. So when calling `value` at
+   * the first time, the caller should avoid to block other threads.
+   *
+   * After the first time, `value()` is trivial and just returns the deserialized `valueObject`.
+   */
   def value(): T = {
     if (valueObjectDeserialized) {
       valueObject
