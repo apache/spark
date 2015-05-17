@@ -18,14 +18,17 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
-import org.apache.spark.sql.hive.{MetastoreRelation, HiveShim}
+import org.apache.spark.sql.catalyst.errors.DialectException
+import org.apache.spark.sql.DefaultDialect
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
+import org.apache.spark.sql.hive.MetastoreRelation
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.{HiveQLDialect, HiveShim}
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -44,6 +47,9 @@ case class Order(
     city: String,
     state: String,
     month: Int)
+
+/** A SQL Dialect for testing purpose, and it can not be nested type */
+class MyDialect extends DefaultDialect
 
 /**
  * A collection of hive query tests where we generate the answers ourselves instead of depending on
@@ -227,6 +233,35 @@ class SQLQuerySuite extends QueryTest {
     sql("DROP TABLE ctas1")
 
     setConf("spark.sql.hive.convertCTAS", originalConf)
+  }
+
+  test("SQL Dialect Switching") {
+    assert(getSQLDialect().getClass === classOf[HiveQLDialect])
+    setConf("spark.sql.dialect", classOf[MyDialect].getCanonicalName())
+    assert(getSQLDialect().getClass === classOf[MyDialect])
+    assert(sql("SELECT 1").collect() === Array(Row(1)))
+
+    // set the dialect back to the DefaultSQLDialect
+    sql("SET spark.sql.dialect=sql")
+    assert(getSQLDialect().getClass === classOf[DefaultDialect])
+    sql("SET spark.sql.dialect=hiveql")
+    assert(getSQLDialect().getClass === classOf[HiveQLDialect])
+
+    // set invalid dialect
+    sql("SET spark.sql.dialect.abc=MyTestClass")
+    sql("SET spark.sql.dialect=abc")
+    intercept[Exception] {
+      sql("SELECT 1")
+    }
+    // test if the dialect set back to HiveQLDialect
+    getSQLDialect().getClass === classOf[HiveQLDialect]
+
+    sql("SET spark.sql.dialect=MyTestClass")
+    intercept[DialectException] {
+      sql("SELECT 1")
+    }
+    // test if the dialect set back to HiveQLDialect
+    assert(getSQLDialect().getClass === classOf[HiveQLDialect])
   }
 
   test("CTAS with serde") {
