@@ -74,7 +74,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     >>> predictions[2]
     Row(user=2, item=0, prediction=-1.15...)
     """
-    _java_class = "org.apache.spark.ml.recommendation.ALS"
+
     # a placeholder to make it appear in the generated doc
     rank = Param(Params._dummy(), "rank", "rank of the factorization")
     numUserBlocks = Param(Params._dummy(), "numUserBlocks", "number of user blocks")
@@ -97,6 +97,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
                  ratingCol="rating", nonnegative=false, checkpointInterval=10)
         """
         super(ALS, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
         self.rank = Param(self, "rank", "rank of the factorization")
         self.numUserBlocks = Param(self, "numUserBlocks", "number of user blocks")
         self.numItemBlocks = Param(self, "numItemBlocks", "number of item blocks")

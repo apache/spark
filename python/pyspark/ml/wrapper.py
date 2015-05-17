@@ -181,7 +181,7 @@ class JavaModel(Model, JavaTransformer):
         return that
 
     def _call_java(self, name, *args):
-        m = getattr(self._java_model, name)
+        m = getattr(self._java_obj, name)
         sc = SparkContext._active_spark_context
         java_args = [_py2java(sc, arg) for arg in args]
         return _java2py(sc, m(*java_args))
