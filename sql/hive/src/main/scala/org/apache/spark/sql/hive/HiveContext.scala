@@ -130,7 +130,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * custom appenders that are used by log4j.
    */
   protected[hive] def hiveMetastoreSharedPrefixes: Seq[String] =
-    getConf("spark.sql.hive.metastore.sharedPrefixes", jdbcPrefixes).split(",")
+    getConf("spark.sql.hive.metastore.sharedPrefixes", jdbcPrefixes)
+      .split(",").filterNot(_ == "")
 
   private def jdbcPrefixes = Seq(
     "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc").mkString(",")
