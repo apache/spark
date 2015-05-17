@@ -39,7 +39,7 @@ public class JavaWord2VecSuite {
       RowFactory.create(Lists.newArrayList("Logistic regression models are neat".split(" ")))
     ));
     StructType schema = new StructType(new StructField[]{
-      new StructField("text", new ArrayType(StringType$.MODULE$, true), false, Metadata.empty())
+      new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
     });
     DataFrame documentDF = sqlContext.createDataFrame(jrdd, schema);
 

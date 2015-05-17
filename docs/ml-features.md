@@ -117,15 +117,22 @@ Word2Vec is implemented in [Word2Vec](api/scala/index.html#org.apache.spark.ml.f
 {% highlight scala %}
 import org.apache.spark.ml.feature.Word2Vec
 
+// Input data: Each row is a bag of words from a sentence or document.
 val documentDF = sqlContext.createDataFrame(Seq(
   "Hi I heard about Spark".split(" "),
   "I wish Java could use case classes".split(" "),
   "Logistic regression models are neat".split(" ")
-)).map(Tuple1.apply).toDF("text")
+).map(Tuple1.apply)).toDF("text")
 
-val word2Vec = new Word2Vec.setInputCol("text").setOutputCol("result").setVectorSize(3)
+// Learn a mapping from words to Vectors.
+val word2Vec = new Word2Vec()
+  .setInputCol("text")
+  .setOutputCol("result")
+  .setVectorSize(3)
+  .setMinCount(0)
 val model = word2Vec.fit(documentDF)
-val result = model.transform(documentDF).select("result").take(3).foreach(println)
+val result = model.transform(documentDF)
+result.select("result").take(3).foreach(println)
 {% endhighlight %}
 </div>
 
@@ -143,16 +150,19 @@ import org.apache.spark.sql.types.*;
 
 JavaSparkContext jsc = ...
 SQLContext sqlContext = ...
+
+// Input data: Each row is a bag of words from a sentence or document.
 JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
   RowFactory.create(Lists.newArrayList("Hi I heard about Spark".split(" "))),
   RowFactory.create(Lists.newArrayList("I wish Java could use case classes".split(" "))),
   RowFactory.create(Lists.newArrayList("Logistic regression models are neat".split(" ")))
 ));
 StructType schema = new StructType(new StructField[]{
-  new StructField("text", new ArrayType(StringType$.MODULE$, true), false, Metadata.empty())
+  new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
 });
 DataFrame documentDF = sqlContext.createDataFrame(jrdd, schema);
 
+// Learn a mapping from words to Vectors.
 Word2Vec word2Vec = new Word2Vec()
   .setInputCol("text")
   .setOutputCol("result")
@@ -160,7 +170,6 @@ Word2Vec word2Vec = new Word2Vec()
   .setMinCount(0);
 Word2VecModel model = word2Vec.fit(documentDF);
 DataFrame result = model.transform(documentDF);
-
 for (Row r: result.select("result").take(3)) {
   System.out.println(r);
 }
@@ -171,12 +180,14 @@ for (Row r: result.select("result").take(3)) {
 {% highlight python %}
 from pyspark.ml.feature import Word2Vec
 
+# Input data: Each row is a bag of words from a sentence or document.
 documentDF = sqlContext.createDataFrame([
   ("Hi I heard about Spark".split(" "), ),
   ("I wish Java could use case classes".split(" "), ),
   ("Logistic regression models are neat".split(" "), )
 ], ["text"])
-word2Vec = Word2Vec(vectorSize = 3, minCount = 0, inputCol = "text", outputCol = "result")
+# Learn a mapping from words to Vectors.
+word2Vec = Word2Vec(vectorSize=3, minCount=0, inputCol="text", outputCol="result")
 model = word2Vec.fit(documentDF)
 result = model.transform(documentDF)
 for feature in result.select("result").take(3):
