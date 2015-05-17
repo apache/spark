@@ -31,10 +31,12 @@ else:
     import unittest
 
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
-from pyspark.sql import DataFrame
+from pyspark.sql import DataFrame, SQLContext
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol
 from pyspark.ml import Estimator, Model, Pipeline, Transformer
+from pyspark.ml.feature import *
+from pyspark.mllib.linalg import DenseVector
 
 
 class MockDataset(DataFrame):
@@ -156,6 +158,47 @@ class ParamTests(PySparkTestCase):
             testParams.explainParams(),
             "\n".join(["inputCol: input column name (undefined)",
                        "maxIter: max number of iterations (>= 0) (default: 10, current: 100)"]))
+
+
+class FeatureTests(PySparkTestCase):
+
+    def test_binarizer(self):
+        b0 = Binarizer()
+        self.assertListEqual(b0.params, [b0.inputCol, b0.outputCol, b0.threshold])
+        self.assertTrue(all([~b0.isSet(p) for p in b0.params]))
+        self.assertTrue(b0.hasDefault(b0.threshold))
+        self.assertEqual(b0.getThreshold(), 0.0)
+        b0.setParams(inputCol="input", outputCol="output").setThreshold(1.0)
+        self.assertTrue(all([b0.isSet(p) for p in b0.params]))
+        self.assertEqual(b0.getThreshold(), 1.0)
+        self.assertEqual(b0.getInputCol(), "input")
+        self.assertEqual(b0.getOutputCol(), "output")
+
+        b0c = b0.copy({b0.threshold: 2.0})
+        self.assertEqual(b0c.uid, b0.uid)
+        self.assertListEqual(b0c.params, b0.params)
+        self.assertEqual(b0c.getThreshold(), 2.0)
+
+        b1 = Binarizer(threshold=2.0, inputCol="input", outputCol="output")
+        self.assertNotEqual(b1.uid, b0.uid)
+        self.assertEqual(b1.getThreshold(), 2.0)
+        self.assertEqual(b1.getInputCol(), "input")
+        self.assertEqual(b1.getOutputCol(), "output")
+
+    def test_idf(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            (DenseVector([1.0, 2.0]),),
+            (DenseVector([0.0, 1.0]),),
+            (DenseVector([3.0, 0.2]),)], ["tf"])
+        idf0 = IDF(inputCol="tf")
+        self.assertListEqual(idf0.params, [idf0.inputCol, idf0.minDocFreq, idf0.outputCol])
+        idf0m = idf0.fit(dataset, {idf0.outputCol: "idf"})
+        self.assertEqual(idf0m.uid, idf0.uid,
+                         "Model should inherit the UID from its parent estimator.")
+        self.assertEqual(idf0m.getOutputCol(), "idf")
+        output = idf0m.transform(dataset, {idf0m.outputCol: "features"})
+        self.assertIsNone(output.head().features)
 
 
 if __name__ == "__main__":

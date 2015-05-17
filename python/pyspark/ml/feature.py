@@ -43,7 +43,6 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
     1.0
     """
 
-    _java_class = "org.apache.spark.ml.feature.Binarizer"
     # a placeholder to make it appear in the generated doc
     threshold = Param(Params._dummy(), "threshold",
                       "threshold in binary classification prediction, in range [0, 1]")
@@ -54,6 +53,7 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
         __init__(self, threshold=0.0, inputCol=None, outputCol=None)
         """
         super(Binarizer, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Binarizer", self.uid)
         self.threshold = Param(self, "threshold",
                                "threshold in binary classification prediction, in range [0, 1]")
         self._setDefault(threshold=0.0)
@@ -217,8 +217,6 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
     DenseVector([0.2877, 0.0])
     """
 
-    _java_class = "org.apache.spark.ml.feature.IDF"
-
     # a placeholder to make it appear in the generated doc
     minDocFreq = Param(Params._dummy(), "minDocFreq",
                        "minimum of documents in which a term should appear for filtering")
@@ -229,6 +227,7 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
         __init__(self, minDocFreq=0, inputCol=None, outputCol=None)
         """
         super(IDF, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IDF", self.uid)
         self.minDocFreq = Param(self, "minDocFreq",
                                 "minimum of documents in which a term should appear for filtering")
         self._setDefault(minDocFreq=0)

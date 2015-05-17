@@ -48,6 +48,8 @@ class Param(object):
     def __eq__(self, other):
         if isinstance(other, Param):
             return self.parent == other.parent and self.name == other.name
+        else:
+            return False
 
 
 class Params(Identifiable):
@@ -70,9 +72,9 @@ class Params(Identifiable):
     @property
     def params(self):
         """
-        Returns all params as a namedtuple, ordered by name. The
-        default implementation uses :py:func:`dir` to get all
-        attributes of type :py:class:`Param`.
+        Returns all params ordered by name. The default implementation
+        uses :py:func:`dir` to get all attributes of type
+        :py:class:`Param`.
         """
         if self._params is None:
             self._params = list(filter(lambda attr: isinstance(attr, Param),
@@ -170,18 +172,17 @@ class Params(Identifiable):
 
     def copy(self, extra={}):
         """
-        Creates a copy of this instance with a randomly generated uid
-        and some extra params. The default implementation creates a
-        shallow copy using :py:func:`copy.copy`, creates a deep copy of
-        the embedded paramMap, and then copies the embedded and extra
-        parameters over and returns the new instance.
+        Creates a copy of this instance with the same uid and some
+        extra params. The default implementation creates a
+        shallow copy using :py:func:`copy.copy`, and then copies the
+        embedded and extra parameters over and returns the copy.
         Subclasses should override this method if the default approach
         is not sufficient.
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """
         that = copy.copy(self)
-        that._paramMap = copy.deepcopy(self.extractParamMap(extra))
+        that._paramMap = self.extractParamMap(extra)
         return that
 
     def _shouldOwn(self, param):
