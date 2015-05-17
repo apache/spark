@@ -61,7 +61,7 @@ class RegexTokenizer(override val uid: String)
    * Default: 1, to avoid returning empty strings
    * @group param
    */
-  val minTokenLength: IntParam = new IntParam(this, "minLength", "minimum token length (>= 0)",
+  val minTokenLength: IntParam = new IntParam(this, "minTokenLength", "minimum token length (>= 0)",
     ParamValidators.gtEq(0))
 
   /** @group setParam */

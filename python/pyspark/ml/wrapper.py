@@ -51,7 +51,7 @@ class JavaWrapper(Params):
     _java_obj = None
 
     @staticmethod
-    def _new_java_obj(self, java_class, *args):
+    def _new_java_obj(java_class, *args):
         """
         Construct a new Java object.
         """
