@@ -196,17 +196,9 @@ class Pipeline(Estimator):
         return PipelineModel(transformers)
 
     def copy(self, extra={}):
-        """
-        Creates a copy of this instance with a randomly generated uid
-        and some extra params. This copies each of the component
-        stages, creates a deep copy of the embedded paramMap, and
-        copies the embedded and extra parameters over.
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
-        """
-        paramMap = self.extractParamMap(extra)
-        stages = [stage.copy(extra) for stage in paramMap[self.stages]]
-        return Pipeline().setStages(stages)
+        that = Params.copy(self, extra)
+        stages = [stage.copy(extra) for stage in that.getStages()]
+        return that.setStages(stages)
 
 
 @inherit_doc
@@ -225,14 +217,6 @@ class PipelineModel(Model):
         return dataset
 
     def copy(self, extra={}):
-        """
-        Creates a copy of this instance with a randomly generated uid
-        and some extra params. This copies each of the component
-        stages, creates a deep copy of the embedded paramMap, and
-        copies the embedded and extra parameters over.
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
-        """
         stages = [stage.copy(extra) for stage in self.stages]
         return PipelineModel(stages)
 

@@ -229,15 +229,6 @@ class CrossValidator(Estimator):
         return CrossValidatorModel(bestModel)
 
     def copy(self, extra={}):
-        """
-        Creates a copy of this instance with a randomly generated uid
-        and some extra params. This copies the underlying estimator,
-        evaluator, and estimatorParamMap, creates a deep copy of the
-        embedded paramMap, and copies the embedded and extra parameters
-        over.
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
-        """
         newCV = Params.copy(self, extra)
         if self.isSet(self.estimator):
             newCV.setEstimator(self.getEstimator().copy(extra))
