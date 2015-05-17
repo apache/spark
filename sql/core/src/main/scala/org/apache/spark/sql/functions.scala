@@ -364,6 +364,11 @@ object functions {
   def coalesce(e: Column*): Column = Coalesce(e.map(_.expr))
 
   /**
+   * Creates a new row for each element in the given array or map column.
+   */
+   def explode(e: Column): Column = Explode(e.expr)
+
+  /**
    * Converts a string exprsesion to lower case.
    *
    * @group normal_funcs

@@ -94,7 +94,7 @@ private[spark] abstract class WebUI(
   }
 
   /** Detach a handler from this UI. */
-  protected def detachHandler(handler: ServletContextHandler) {
+  def detachHandler(handler: ServletContextHandler) {
     handlers -= handler
     serverInfo.foreach { info =>
       info.rootHandler.removeHandler(handler)
