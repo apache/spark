@@ -34,7 +34,7 @@ The table below outlines the MLlib models that can be exported to PMML and their
       <td>SVMModel</td><td>RegressionModel (functionName="classification" normalizationMethod="none")</td>
     </tr>
     <tr>
-      <td>LogisticRegressionModel</td><td>RegressionModel (functionName="classification" normalizationMethod="logit")</td>
+      <td>Binary LogisticRegressionModel</td><td>RegressionModel (functionName="classification" normalizationMethod="logit")</td>
     </tr>
   </tbody>
 </table>
