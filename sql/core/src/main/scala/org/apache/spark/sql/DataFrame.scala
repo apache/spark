@@ -1063,7 +1063,7 @@ class DataFrame private[sql](
 
     val ret: Seq[Row] = if (outputCols.nonEmpty) {
       val aggExprs = statistics.flatMap { case (_, colToAgg) =>
-        outputCols.map(c => Column(colToAgg(Column(c).expr)).as(c))
+        outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), DoubleType)).as(c))
       }
 
       val row = agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
