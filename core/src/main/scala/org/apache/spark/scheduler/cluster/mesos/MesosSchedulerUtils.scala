@@ -164,13 +164,18 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     if (constraintsVal.isEmpty) {
       Map()
     } else {
-      Map() ++ mapAsScalaMap(splitter.split(constraintsVal)).map {
-        case (k, v) =>
-          if (v == null) {
-            (k, Set[String]())
-          } else {
-            (k, v.split(',').toSet)
-          }
+      try {
+        Map() ++ mapAsScalaMap(splitter.split(constraintsVal)).map {
+          case (k, v) =>
+            if (v == null) {
+              (k, Set[String]())
+            } else {
+              (k, v.split(',').toSet)
+            }
+        }
+      } catch {
+        case e: Throwable =>
+          throw new IllegalArgumentException(s"Bad constraint string: $constraintsVal", e)
       }
     }
   }
