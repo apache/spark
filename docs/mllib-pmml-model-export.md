@@ -4,6 +4,11 @@ title: PMML model export - MLlib
 displayTitle: <a href="mllib-guide.html">MLlib</a> - PMML model export
 ---
 
+* Table of contents
+{:toc}
+
+## MLlib supported models
+
 MLlib supports model export to Predictive Model Markup Language ([PMML](http://en.wikipedia.org/wiki/Predictive_Model_Markup_Language)) format.
 
 The table below outlines the MLlib models that can be exported to PMML and their equivalent PMML format.
@@ -33,3 +38,8 @@ The table below outlines the MLlib models that can be exported to PMML and their
     </tr>
   </tbody>
 </table>
+
+## Example: exporting KMeansModel
+Same applies to other models...
+
+## Example: exporting a model to String, file ...
