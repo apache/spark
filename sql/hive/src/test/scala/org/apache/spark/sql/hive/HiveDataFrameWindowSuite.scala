@@ -29,8 +29,8 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
     checkAnswer(
       df.select(
-        lead("key").over(w).toColumn,
-        lead("value").over(w).toColumn),
+        lead("key").over(w),
+        lead("value").over(w)),
       Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
   }
 
@@ -40,8 +40,8 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
     checkAnswer(
       df.select(
-        lead("key").over(w).toColumn,
-        lead("value").over(w).toColumn),
+        lead("key").over(w),
+        lead("value").over(w)),
       Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
   }
 
@@ -49,10 +49,9 @@ class HiveDataFrameWindowSuite extends QueryTest {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     checkAnswer(
       df.select(
-        lead("value").over
-          .partitionBy($"key")
-          .orderBy($"value")
-          .toColumn),
+        lead("value").over(
+          partitionBy($"key")
+          .orderBy($"value"))),
       Row("1") :: Row("2") :: Row(null) :: Row(null) :: Nil)
   }
 
@@ -60,10 +59,9 @@ class HiveDataFrameWindowSuite extends QueryTest {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     checkAnswer(
       df.select(
-        lead("value").over
-          .partitionBy($"key")
-          .orderBy($"value")
-          .toColumn),
+        lead("value").over(
+          partitionBy($"key")
+          .orderBy($"value"))),
       Row("1") :: Row("2") :: Row(null) :: Row(null) :: Nil)
   }
 
@@ -72,10 +70,9 @@ class HiveDataFrameWindowSuite extends QueryTest {
                  (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     checkAnswer(
       df.select(
-        lead("value", 2, "n/a").over
-          .partitionBy("key")
-          .orderBy("value")
-          .toColumn),
+        lead("value", 2, "n/a").over(
+          partitionBy("key")
+          .orderBy("value"))),
       Row("1") :: Row("1") :: Row("2") :: Row("n/a")
         :: Row("n/a") :: Row("n/a") :: Row("n/a") :: Nil)
   }
@@ -85,24 +82,25 @@ class HiveDataFrameWindowSuite extends QueryTest {
                  (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     checkAnswer(
       df.select(
-        lead("value", 2, "n/a").over
-          .partitionBy($"key")
-          .orderBy($"value")
-          .toColumn),
+        lead("value", 2, "n/a").over(
+          partitionBy($"key")
+          .orderBy($"value"))),
       Row("1") :: Row("1") :: Row("2") :: Row("n/a")
         :: Row("n/a") :: Row("n/a") :: Row("n/a") :: Nil)
   }
 
-  test("aggregation in a Row window") {
+  test("aggregation in a row window") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     checkAnswer(
       df.select(
-        avg("key").over
-          .partitionBy($"key")
-          .orderBy($"value")
-          .rows
-          .preceding(1)
-          .toColumn),
+        avg("key").over(
+          partitionBy($"value")
+            .orderBy($"key")
+            .rows
+            .between
+            .preceding(1)
+            .and
+            .following(1))),
       Row(1.0) :: Row(1.0) :: Row(2.0) :: Row(2.0) :: Nil)
   }
 
@@ -110,13 +108,14 @@ class HiveDataFrameWindowSuite extends QueryTest {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     checkAnswer(
       df.select(
-        avg("key").over
-          .partitionBy($"value")
+        avg("key").over(
+          partitionBy($"value")
           .orderBy($"key")
+          .range
           .between
           .preceding(1)
-          .following(1)
-          .toColumn),
+          .and
+          .following(1))),
       Row(1.0) :: Row(1.0) :: Row(2.0) :: Row(2.0) :: Nil)
   }
 
@@ -124,19 +123,20 @@ class HiveDataFrameWindowSuite extends QueryTest {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     checkAnswer(
       df.select(
-        avg("key").over
-          .partitionBy($"value")
+        avg("key").over(
+          partitionBy($"value")
           .orderBy($"key")
           .rows
-          .preceding(1).toColumn,
-        sum("key").over
-          .partitionBy($"value")
+          .preceding(1)),
+        sum("key").over(
+          partitionBy($"value")
           .orderBy($"key")
+          .range
           .between
           .preceding(1)
-          .following(1)
-          .toColumn),
-      Row(1.0, 1) :: Row(1.0, 2) :: Row(2.0, 2) :: Row(2.0, 4) :: Nil)
+          .and
+          .following(1))),
+      Row(1.0, 2) :: Row(1.0, 2) :: Row(2.0, 4) :: Row(2.0, 4) :: Nil)
   }
 
   test("Window function in Unspecified Window") {
@@ -145,9 +145,8 @@ class HiveDataFrameWindowSuite extends QueryTest {
     checkAnswer(
       df.select(
         $"key",
-        first("value").over
-          .partitionBy($"key")
-          .toColumn),
+        first("value").over(
+          partitionBy($"key"))),
       Row(1, "1") :: Row(2, "2") :: Row(2, "2") :: Nil)
   }
 
@@ -157,10 +156,9 @@ class HiveDataFrameWindowSuite extends QueryTest {
     checkAnswer(
       df.select(
         $"key",
-        first("value").over
-          .partitionBy($"key")
-          .orderBy($"value")
-          .toColumn),
+        first("value").over(
+          partitionBy($"key")
+          .orderBy($"value"))),
       Row(1, "1") :: Row(2, "2") :: Row(2, "2") :: Nil)
   }
 
@@ -170,13 +168,14 @@ class HiveDataFrameWindowSuite extends QueryTest {
     checkAnswer(
       df.select(
         $"key",
-        first("value").over
-          .partitionBy($"value")
+        first("value").over(
+          partitionBy($"value")
           .orderBy($"key")
+          .range
           .between
           .preceding(1)
-          .following(1)
-          .toColumn),
+          .and
+          .following(1))),
       Row(1, "1") :: Row(2, "2") :: Row(2, "3") :: Nil)
   }
 
@@ -185,12 +184,11 @@ class HiveDataFrameWindowSuite extends QueryTest {
     checkAnswer(
       df.select(
         $"key",
-        first("value").over
-          .partitionBy($"value")
+        first("value").over(
+          partitionBy($"value")
           .orderBy($"key")
           .rows
-          .preceding(1)
-          .toColumn),
+          .preceding(1))),
         Row(1, "1") :: Row(2, "2") :: Row(2, "3") :: Nil)
   }
 
@@ -199,37 +197,95 @@ class HiveDataFrameWindowSuite extends QueryTest {
     checkAnswer(
       df.select(
         $"key",
-        last("value").over
-          .partitionBy($"value")
+        last("value").over(
+          partitionBy($"value")
           .orderBy($"key")
           .rows
-          .following(1)
-          .toColumn),
+          .following(1))),
         Row(1, "1") :: Row(2, "2") :: Row(2, "3") :: Nil)
   }
 
-  test("Multiple aggregate functions") {
-    val df = Seq((1, "1"), (2, "2"), (2, "3")).toDF("key", "value")
+  test("Multiple aggregate functions in row window") {
+    val df = Seq((1, "1"), (1, "2"), (3, "2"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    checkAnswer(
+      df.select(
+        avg("key").over(
+          partitionBy($"key")
+            .orderBy($"value")
+            .rows
+            .preceding(1)),
+        avg("key").over(
+          partitionBy($"key")
+            .orderBy($"value")
+            .rows
+            .between
+            .currentRow
+            .and
+            .currentRow),
+        avg("key").over(
+          partitionBy($"key")
+            .orderBy($"value")
+            .rows
+            .between
+            .preceding(2)
+            .and
+            .preceding(1))),
+      Row(1.0, 1.0, 1.0) ::
+      Row(1.0, 1.0, 1.0) ::
+      Row(1.0, 1.0, 1.0) ::
+      Row(2.0, 2.0, 2.0) ::
+      Row(2.0, 2.0, 2.0) ::
+      Row(3.0, 3.0, 3.0) :: Nil)
+  }
+
+  test("Multiple aggregate functions in range window") {
+    val df = Seq((1, "1"), (2, "2"), (2, "2"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     checkAnswer(
       df.select(
         $"key",
-        last("value").over
-          .partitionBy($"value")
-          .orderBy($"key")
-          .rows
-          .following(1)
-          .toColumn
+        last("value").over(
+          partitionBy($"value")
+            .orderBy($"key")
+            .range
+            .following(1))
           .equalTo("2")
           .as("last_v"),
         avg("key")
-          .over
-          .partitionBy("value")
-          .orderBy("key")
-          .between
-          .preceding(2)
-          .following(1)
-          .toColumn.as("avg_key")
+          .over(
+            partitionBy("value")
+              .orderBy("key")
+              .range
+              .between
+              .preceding(2)
+              .and
+              .following(1))
+          .as("avg_key1"),
+        avg("key")
+          .over(
+            partitionBy("value")
+              .orderBy("key")
+              .range
+              .between
+              .currentRow
+              .and
+              .following(1))
+          .as("avg_key2"),
+        avg("key")
+          .over(
+            partitionBy("value")
+              .orderBy("key")
+              .range
+              .between
+              .preceding(1)
+              .and
+              .currentRow)
+          .as("avg_key3")
       ),
-      Row(1, false, 1.0) :: Row(2, false, 2.0) :: Row(2, true, 2.0) :: Nil)
+      Row(1, false, 1.0, 1.0, 1.0) ::
+      Row(1, false, 1.0, 1.0, 1.0) ::
+      Row(2, true, 2.0, 2.0, 2.0) ::
+      Row(2, true, 2.0, 2.0, 2.0) ::
+      Row(2, true, 2.0, 2.0, 2.0) ::
+      Row(2, true, 2.0, 2.0, 2.0) :: Nil)
   }
 }
