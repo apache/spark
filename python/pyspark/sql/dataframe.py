@@ -599,11 +599,11 @@ class DataFrame(object):
         +-------+---+
         |summary|age|
         +-------+---+
-        |  count|  2|
+        |  count|2.0|
         |   mean|3.5|
         | stddev|1.5|
-        |    min|  2|
-        |    max|  5|
+        |    min|2.0|
+        |    max|5.0|
         +-------+---+
         """
         jdf = self._jdf.describe(self._jseq(cols))

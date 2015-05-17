@@ -388,6 +388,11 @@ class DataFrameSuite extends QueryTest {
     val describeTwoCols = describeTestData.describe("age", "height")
     assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
     checkAnswer(describeTwoCols, describeResult)
+    // All aggregate value should have been cast to double, including `count`
+    describeTwoCols.collect().foreach { row =>
+      assert(row.get(1).isInstanceOf[Double], "expected double but found " + row.get(1).getClass)
+      assert(row.get(2).isInstanceOf[Double], "expected double but found " + row.get(2).getClass)
+    }
 
     val describeAllCols = describeTestData.describe()
     assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
