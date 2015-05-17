@@ -1586,7 +1586,6 @@ class DataFrame private[sql](
 
 
   /**
-   * :: Experimental ::
    * Adds the rows from this RDD to the specified table, optionally overwriting the existing data.
    * @group output
    */
@@ -1596,7 +1595,6 @@ class DataFrame private[sql](
   }
 
   /**
-   * :: Experimental ::
    * Adds the rows from this RDD to the specified table.
    * Throws an exception if the table already exists.
    * @group output
