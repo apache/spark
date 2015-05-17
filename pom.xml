@@ -148,8 +148,8 @@
     <avro.version>1.7.7</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <jets3t.version>0.7.1</jets3t.version>
-    <aws.java.sdk.version>1.8.3</aws.java.sdk.version>
-    <aws.kinesis.client.version>1.1.0</aws.kinesis.client.version>
+    <aws.java.sdk.version>1.9.16</aws.java.sdk.version>
+    <aws.kinesis.client.version>1.2.1</aws.kinesis.client.version>
     <commons.httpclient.version>4.3.2</commons.httpclient.version>
     <commons.math3.version>3.4.1</commons.math3.version>
     <test_classpath_file>${project.build.directory}/spark-test-classpath.txt</test_classpath_file>
