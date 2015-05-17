@@ -112,7 +112,7 @@ especially when the number of training examples is small.
 
 ### Optimization
 
-Under the hood, linear methods use convex optimization methods to optimize the objective functions.  MLlib uses two methods, SGD and L-BFGS, described in the [optimization section](mllib-optimization.html).  Currently, most algorithm APIs support Stochastic Gradient Descent (SGD), and a few support L-BFGS. Refer to [this optimization section](mllib-optimization.html#Choosing-an-Optimization-Method) for guidelines on choosing between optimization methods.
+Under the hood, linear methods use convex optimization methods to optimize the objective functions.  MLlib uses three methods, SGD, L-BFGS, and TRON, described in the [optimization section](mllib-optimization.html).  Currently, most algorithm APIs support Stochastic Gradient Descent (SGD), and a few support L-BFGS or TRON. Refer to [this optimization section](mllib-optimization.html#Choosing-an-Optimization-Method) for guidelines on choosing between optimization methods.
 
 ## Classification
 

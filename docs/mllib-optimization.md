@@ -138,11 +138,30 @@ vertical scalability issue (the number of training features) when computing the 
 explicitly in Newton's method. As a result, L-BFGS often achieves rapider convergence compared with 
 other first-order optimization. 
 
+### Trust region Newton method (TRON)
+[TRON](http://www.csie.ntu.edu.tw/~cjlin/papers/spark-liblinear/spark-liblinear.pdf)
+is an optimization algorithm in the family of truncated Newton methods to solve 
+twice-differentiable, unconstrained convex optimization problems.
+It approximates the objective function locally as a quadratic function by using the exact Hessian.
+To avoid vertical scalability issue (the number of training features) when computing the
+Hessian matrix,
+TRON uses the [conjugate gradient method](http://en.wikipedia.org/wiki/Conjugate_gradient_method)
+that only requires the result of the Hessian-vector products instead of explicitly computing the
+Hessian matrix in solving the quadratic sub-problem.
+With careful implementation of the Hessian-vector product function, the scalability issue can be
+avoided.
+As a result of using more accurate approximation, TRON enjoys faster theoretical and practical
+convergence in comparison with quasi-Newton methods and first-order optimization methods.
+However, the applicability of TRON is more restrictive due to the requirement of
+twice-differentiability.
+Note that due to this requirement, L2-regularization is directly built in the optimization
+procedure, and other regularizers are not supported.
+
 ### Choosing an Optimization Method
 
-[Linear methods](mllib-linear-methods.html) use optimization internally, and some linear methods in MLlib support both SGD and L-BFGS.
+[Linear methods](mllib-linear-methods.html) use optimization internally, and some linear methods in MLlib support SGD, L-BFGS and TRON.
 Different optimization methods can have different convergence guarantees depending on the properties of the objective function, and we cannot cover the literature here.
-In general, when L-BFGS is available, we recommend using it instead of SGD since L-BFGS tends to converge faster (in fewer iterations).
+In general, when TRON or L-BFGS is available, we recommend using them instead of SGD since they tend to converge faster (in fewer iterations).
 
 ## Implementation in MLlib
 
@@ -380,3 +399,100 @@ loss of objective function of regularization for L-BFGS by ignoring the part of 
 only for gradient decent such as adaptive step size stuff. We will refactorize
 this into regularizer to replace updater to separate the logic between 
 regularization and step update later. 
+
+### TRON
+TRON is currently only a low-level optimization primitive in `MLlib`. If you want to use TRON in various 
+ML algorithms such as Linear Regression, and Logistic Regression, you have to pass the gradient and the Hessian of the objective
+function into optimizer yourself instead of using the training APIs like 
+[LogisticRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD).
+See the example below.
+
+TRON does not require a parameter of the regularization updater since the L2 regularizer is built
+in the optimization procedure.
+This is due to the restriction that TRON can only solve twice-differentiable convex optimization problems.
+
+The TRON method
+[TRON.runTRON](api/scala/index.html#org.apache.spark.mllib.optimization.TRON)
+has the following parameters:
+
+* `Gradient` is a class that computes the gradient of the objective function
+being optimized, i.e., with respect to a single training example, at the
+current parameter value. MLlib includes gradient classes for common loss
+functions, e.g., hinge, logistic, least-squares.  The gradient class takes as
+input a training example, its label, and the current parameter value. 
+* `Hessian` is a class that computes the Hessian-vector products of the objective function
+being optimized with any given vector, i.e., with respect to a single training example, at the
+current parameter value. MLlib includes Hessian classes for logistic loss
+function.  The hessian class takes as
+input a training example, its label, the current parameter value, and the vector for the product.
+* `maxNumIterations` is the maximal number of iterations that TRON can be run.
+* `regParam` is the regularization parameter for L2 regularization.
+
+The `return` is a tuple containing two elements. The first element is a column matrix
+containing weights for every feature, and the second element is an array containing 
+the loss computed for every iteration.
+
+Here is an example to train binary logistic regression with L2 regularization using
+TRON optimizer.
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+import org.apache.spark.SparkContext
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.classification.LogisticRegressionModel
+import org.apache.spark.mllib.optimization.{TRON, LogisticGradient, LogisticHessian}
+
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+val numFeatures = data.take(1)(0).features.size
+
+// Split data into training (60%) and test (40%).
+val splits = data.randomSplit(Array(0.6, 0.4), seed = 11L)
+
+// Append 1 into the training data as intercept.
+val training = splits(0).map(x => (x.label, MLUtils.appendBias(x.features))).cache()
+
+val test = splits(1)
+
+// Run training algorithm to build the model
+val convergenceTol = 1e-4
+val maxNumIterations = 20
+val regParam = 0.1
+val initialWeightsWithIntercept = Vectors.dense(new Array[Double](numFeatures + 1))
+
+val (weightsWithIntercept, loss) = TRON.runTRON(
+  training,
+  new LogisticGradient(),
+  new LogisticHessian(),
+  convergenceTol,
+  maxNumIterations,
+  regParam,
+  initialWeightsWithIntercept)
+
+val model = new LogisticRegressionModel(
+  Vectors.dense(weightsWithIntercept.toArray.slice(0, weightsWithIntercept.size - 1)),
+  weightsWithIntercept(weightsWithIntercept.size - 1))
+
+// Clear the default threshold.
+model.clearThreshold()
+
+// Compute raw scores on the test set.
+val scoreAndLabels = test.map { point =>
+  val score = model.predict(point.features)
+  (score, point.label)
+}
+
+// Get evaluation metrics.
+val metrics = new BinaryClassificationMetrics(scoreAndLabels)
+val auROC = metrics.areaUnderROC()
+
+println("Loss of each step in training process")
+loss.foreach(println)
+println("Area under ROC = " + auROC)
+{% endhighlight %}
+</div>
+
+</div>
