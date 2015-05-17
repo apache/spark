@@ -27,22 +27,30 @@ import org.apache.spark.sql.catalyst.expressions._
  * A set of methods for window function definition for aggregate expressions.
  * For example:
  * {{{
+ *   // predefine a window
+ *   val w = partitionBy("name").orderBy("id")
+ *
  *   df.select(
+ *     first("value")
+ *       over(w).as("first_value"),
+ *     last("value")
+ *       over(w).as("last_value"),
  *     avg("value")
- *       .over
- *       .partitionBy("k1")
+ *       over(
+ *       partitionBy("k1")
  *       .orderBy("k2", "k3")
  *       .row
- *       .following(1)
- *       .toColumn.as("avg_value"),
+ *       .following(1)).as("avg_value"),
  *     max("value")
- *       .over
- *       .partitionBy("k2")
+ *       .over(
+ *       partitionBy("k2")
  *       .orderBy("k3")
+ *       .range
  *       .between
  *       .preceding(4)
- *       .following(3)
- *       .toColumn.as("max_value"))
+ *       .and
+ *       .following(3)).as("max_value"))
+ *
  * }}}
  *
  *
@@ -63,8 +71,8 @@ class WindowFunctionDefinition protected[sql](
    * Returns a new [[WindowFunctionDefinition]] partitioned by the specified column.
    * {{{
    *   // The following 2 are equivalent
-   *   df.over.partitionBy("k1", "k2", ...)
-   *   df.over.partitionBy($"K1", $"k2", ...)
+   *   df.over(partitionBy("k1", "k2", ...))
+   *   df.over(partitionBy($"K1", $"k2", ...))
    * }}}
    * @group window_funcs
    */
@@ -76,7 +84,7 @@ class WindowFunctionDefinition protected[sql](
   /**
    * Returns a new [[WindowFunctionDefinition]] partitioned by the specified column. For example:
    * {{{
-   *   df.over.partitionBy($"col1", $"col2")
+   *   df.over(partitionBy($"col1", $"col2"))
    * }}}
    * @group window_funcs
    */
@@ -90,8 +98,8 @@ class WindowFunctionDefinition protected[sql](
    * the partition.
    * {{{
    *   // The following 2 are equivalent
-   *   df.over.partitionBy("k1").orderBy("k2", "k3")
-   *   df.over.partitionBy("k1").orderBy($"k2", $"k3")
+   *   df.over(partitionBy("k1").orderBy("k2", "k3"))
+   *   df.over(partitionBy("k1").orderBy($"k2", $"k3"))
    * }}}
    * @group window_funcs
    */
@@ -104,7 +112,7 @@ class WindowFunctionDefinition protected[sql](
    * Returns a new [[WindowFunctionDefinition]] sorted by the specified column within
    * the partition. For example
    * {{{
-   *   df.over.partitionBy("k1").orderBy($"k2", $"k3")
+   *   df.over(partitionBy("k1").orderBy($"k2", $"k3"))
    * }}}
    * @group window_funcs
    */
@@ -125,7 +133,7 @@ class WindowFunctionDefinition protected[sql](
    * which makes the usage more like the SQL.
    * For example:
    * {{{
-   *   df.over.partitionBy("k1").orderBy($"k2", $"k3").range.between
+   *   df.over(partitionBy("k1").orderBy($"k2", $"k3").range.between.preceding(1).and.currentRow)
    * }}}
    * @group window_funcs
    */
@@ -139,7 +147,7 @@ class WindowFunctionDefinition protected[sql](
    * upper bound.
    * For example:
    * {{{
-   *   df.over.partitionBy("k1").orderBy($"k2", $"k3").range.between.preceding(3).and
+   *   df.over(partitionBy("k1").orderBy($"k2", $"k3").range.between.preceding(3).and.currentRow)
    * }}}
    * @group window_funcs
    */
@@ -151,7 +159,7 @@ class WindowFunctionDefinition protected[sql](
    * Returns a new Ranged [[WindowFunctionDefinition]].
    * For example:
    * {{{
-   *   df.over.partitionBy("k1").orderBy($"k2", $"k3").range.between
+   *   df.over(partitionBy("k1").orderBy($"k2", $"k3").range.between.preceding(3).and.currentRow)
    * }}}
    * @group window_funcs
    */
@@ -164,7 +172,7 @@ class WindowFunctionDefinition protected[sql](
    * Returns a new [[WindowFunctionDefinition]], with fixed number of records.
    * For example:
    * {{{
-   *   df.over.partitionBy("k1").orderBy($"k2", $"k3").row
+   *   df.over(partitionBy("k1").orderBy($"k2", $"k3").rows)
    * }}}
    * @group window_funcs
    */
@@ -285,26 +293,7 @@ class WindowFunctionDefinition protected[sql](
   }
 
   /**
-   * Convert the window definition into a new Column.
-   * Currently, only aggregate expressions are supported for window function. For Example:
-   * {{{
-   *   df.select(
-   *     avg("value")
-   *       .over
-   *       .partitionBy("k1")
-   *       .orderBy($"k2", $"k3")
-   *       .row
-   *       .following(1)
-   *       .toColumn.as("avg_value"),
-   *     max("value")
-   *       .over
-   *       .partitionBy("k2")
-   *       .orderBy("k3")
-   *       .between
-   *       .preceding(4)
-   *       .following(3)
-   *       .toColumn.as("max_value"))
-   * }}}
+   * Convert the window definition into a Column object.
    * @group window_funcs
    */
   private[sql] def toColumn: Column = {
