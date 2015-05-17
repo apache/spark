@@ -159,9 +159,9 @@ object PartialAggregation {
             // Should trim aliases around `GetField`s. These aliases are introduced while
             // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
             // (Should we just turn `GetField` into a `NamedExpression`?)
-            namedGroupingExpressions
-              .get(e.transform { case Alias(g: ExtractValue, _) => g })
-              .map(_.toAttribute)
+            val ee = ExpressionEquality(e.transform { case Alias(g: ExtractValue, _) => g })
+            namedGroupingExpressions.find { case (k, v) => ExpressionEquality(k) == ee }
+              .map(_._2.toAttribute)
               .getOrElse(e)
         }).asInstanceOf[Seq[NamedExpression]]
 
