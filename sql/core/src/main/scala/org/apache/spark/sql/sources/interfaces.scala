@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import scala.collection.mutable
+import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
@@ -382,14 +383,13 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       leafDirs.clear()
       leafFiles.clear()
 
+      // We don't filter files/directories like _temporary/_SUCCESS here, as specific data sources
+      // may take advantages over them (e.g. Parquet _metadata and _common_metadata files).
       val statuses = paths.flatMap { path =>
         val hdfsPath = new Path(path)
         val fs = hdfsPath.getFileSystem(hadoopConf)
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        listLeafFilesAndDirs(fs, fs.getFileStatus(qualified)).filterNot { status =>
-          val name = status.getPath.getName
-          !status.isDir && (name.startsWith("_") || name.startsWith("."))
-        }
+        Try(fs.getFileStatus(qualified)).toOption.toArray.flatMap(listLeafFilesAndDirs(fs, _))
       }
 
       val (dirs, files) = statuses.partition(_.isDir)
@@ -402,6 +402,10 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     val cache = new FileStatusCache
     cache.refresh()
     cache
+  }
+
+  protected def cachedLeafStatuses(): Set[FileStatus] = {
+    fileStatusCache.leafFiles.values.toSet
   }
 
   final private[sql] def partitionSpec: PartitionSpec = {
@@ -481,7 +485,9 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     val inputStatuses = inputPaths.flatMap { input =>
       fileStatusCache.leafFiles.values.filter { status =>
         val path = new Path(input)
-        status.getPath.getParent == path || status.getPath == path
+        (status.getPath.getParent == path || status.getPath == path) &&
+          !status.getPath.getName.startsWith("_") &&
+          !status.getPath.getName.startsWith(".")
       }
     }
     buildScan(requiredColumns, filters, inputStatuses)

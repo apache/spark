@@ -175,8 +175,8 @@ private[sql] class ParquetRelation2(
   override def dataSchema: StructType = metadataCache.dataSchema
 
   override private[sql] def refresh(): Unit = {
-    metadataCache.refresh()
     super.refresh()
+    metadataCache.refresh()
   }
 
   // Parquet data source always uses Catalyst internal representations.
@@ -346,24 +346,11 @@ private[sql] class ParquetRelation2(
      * Refreshes `FileStatus`es, footers, partition spec, and table schema.
      */
     def refresh(): Unit = {
-      // Support either reading a collection of raw Parquet part-files, or a collection of folders
-      // containing Parquet files (e.g. partitioned Parquet table).
-      val baseStatuses = paths.distinct.flatMap { p =>
-        val path = new Path(p)
-        val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-        val qualified = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        Try(fs.getFileStatus(qualified)).toOption
-      }
-      assert(baseStatuses.forall(!_.isDir) || baseStatuses.forall(_.isDir))
-
       // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
-      val leaves = baseStatuses.flatMap { f =>
-        val fs = FileSystem.get(f.getPath.toUri, SparkHadoopUtil.get.conf)
-        SparkHadoopUtil.get.listLeafStatuses(fs, f.getPath).filter { f =>
-          isSummaryFile(f.getPath) ||
-            !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
-        }
-      }
+      val leaves = cachedLeafStatuses().filter { f =>
+        isSummaryFile(f.getPath) ||
+          !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
+      }.toArray
 
       dataStatuses = leaves.filterNot(f => isSummaryFile(f.getPath))
       metadataStatuses = leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
