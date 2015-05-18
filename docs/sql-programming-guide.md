@@ -573,37 +573,6 @@ for teenName in teenNames.collect():
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-Spark SQL can convert an RDD of list of objects to a DataFrame, inferring the datatypes. The keys of this list define the column names of the table, and the types are inferred by looking at the first row.  Since we currently only look at the first row, it is important that there is no missing data in the first row of the RDD. In future versions we
-plan to more completely infer the schema by looking at more data, similar to the inference that is
-performed on JSON files.
-
-{% highlight r %}
-# sc is an existing SparkContext.
-sqlContext <- sparkRSQL.init(sc)
-
-# Load a text file and convert each line to a Row.
-lines <- textFile(sc, "examples/src/main/resources/people.txt")
-parts <- map(lines, function(line) {strsplit(line, ",")[[1]] })
-people <- map(parts, function(l) {list(name=l[[1]], age=as.integer(l[[2]]))} )
-
-# Infer the schema, and register the DataFrame as a table.
-schemaPeople <- toDF(people)
-registerTempTable(schemaPeople, "people")
-
-# SQL can be run over DataFrames that have been registered as a table.
-teenagers <- sql(sqlContext, "SELECT name FROM people WHERE age >= 13 AND age <= 19")
-
-# The results of SQL queries are RDDs and support all the normal RDD operations.
-teenNames <- map(teenagers, function(p) { paste("Name:", p$name)})
-for (teenName in collect(teenNames)) {
-  cat(teenName, "\n")
-}
-{% endhighlight %}
-
-</div>
-
 </div>
 
 ### Programmatically Specifying the Schema
@@ -782,52 +751,6 @@ results = sqlContext.sql("SELECT name FROM people")
 names = results.map(lambda p: "Name: " + p.name)
 for name in names.collect():
   print name
-{% endhighlight %}
-
-</div>
-
-<div data-lang="r"  markdown="1">
-
-When it can not figure the schema automatically (for example,
-the structure of records is encoded in a string, or a text dataset will be parsed and
-fields will be projected differently for different users),
-a `DataFrame` can be created programmatically with three steps.
-
-1. Create an RDD of lists from the original RDD;
-2. Create the schema represented by a `StructType` matching the structure of
- lists in the RDD created in the step 1.
-3. Apply the schema to the RDD via `createDataFrame` method provided by `SQLContext`.
-
-For example:
-{% highlight r %}
-# sc is an existing SparkContext.
-sqlContext = sparkRSQL.init(sc)
-
-# Load a text file and convert each line to a tuple.
-lines <- textFile(sc, "examples/src/main/resources/people.txt")
-parts <- map(lines, function(line) {strsplit(line, ",")[[1]] })
-people <- map(parts, function(l) {list(name=l[[1]], age=as.integer(l[[2]]))} )
-
-# The schema is encoded in a string.
-schema <- list(type="struct", fields=list(
-   list(name="name", type="string", nullable=TRUE),
-   list(name="age", type="integer", nullable=TRUE)
-))
-
-# Apply the schema to the RDD.
-schemaPeople <- createDataFrame(sqlContext, people, schema)
-
-# Register the DataFrame as a table.
-registerTempTable(schemaPeople, "people")
-
-# SQL can be run over DataFrames that have been registered as a table.
-results <- sql(sqlContext, "SELECT name FROM people")
-
-# The results of SQL queries are RDDs and support all the normal RDD operations.
-teenNames <- map(teenagers, function(p) { paste("Name:", p$name)})
-for (teenName in collect(teenNames)) {
-  cat(teenName, "\n")
-}
 {% endhighlight %}
 
 </div>
@@ -1477,7 +1400,6 @@ Spark SQL can automatically infer the schema of a JSON dataset and load it as a 
 This conversion can be done using one of two methods in a `SQLContext`:
 
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
-* `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
 
 Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
 line must contain a separate, self-contained valid JSON object. As a consequence,
@@ -1504,11 +1426,6 @@ registerTempTable(people, "people")
 
 # SQL statements can be run by using the sql methods provided by `sqlContext`.
 teenagers <- sql(sqlContext, "SELECT name FROM people WHERE age >= 13 AND age <= 19")
-
-# Alternatively, a DataFrame can be created for a JSON dataset represented by
-# an RDD[String] storing one JSON object per string.
-anotherPeopleRDD <- parallelize(sc, list('{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}'))
-anotherPeople <- jsonRDD(sqlContext, anotherPeopleRDD)
 {% endhighlight %}
 </div>
 
