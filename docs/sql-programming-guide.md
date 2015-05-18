@@ -1265,12 +1265,7 @@ This command builds a new assembly jar that includes Hive. Note that this Hive a
 on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
 (SerDes) in order to access data stored in Hive.
 
-Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`. Please note when running 
-the query on YARN cluster (`yarn-cluster` mode),the `datanucleus` jars under `lib_managed/jars` directory 
-and `hive-site.xml` under `conf/` directory need to be available on driver and all executors launched by
-YARN cluster. The convenient way to do this is adding them through `--jars` option and `--file` option of
-spark-submit command.
-
+Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`. 
 
 <div class="codetabs">
 
