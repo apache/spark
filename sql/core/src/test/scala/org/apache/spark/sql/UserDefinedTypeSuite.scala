@@ -105,13 +105,13 @@ class UserDefinedTypeSuite extends QueryTest {
   test("UDTs with Parquet") {
     val tempDir = Utils.createTempDir()
     tempDir.delete()
-    pointsRDD.saveAsParquetFile(tempDir.getCanonicalPath)
+    pointsRDD.write.parquet(tempDir.getCanonicalPath)
   }
 
   test("Repartition UDTs with Parquet") {
     val tempDir = Utils.createTempDir()
     tempDir.delete()
-    pointsRDD.repartition(1).saveAsParquetFile(tempDir.getCanonicalPath)
+    pointsRDD.repartition(1).write.parquet(tempDir.getCanonicalPath)
   }
 
   // Tests to make sure that all operators correctly convert types on the way out.

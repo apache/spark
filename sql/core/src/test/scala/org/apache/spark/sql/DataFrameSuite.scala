@@ -460,14 +460,14 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("SPARK-7551: support backticks for DataFrame attribute resolution") {
-    val df = TestSQLContext.jsonRDD(TestSQLContext.sparkContext.makeRDD(
+    val df = TestSQLContext.read.json(TestSQLContext.sparkContext.makeRDD(
       """{"a.b": {"c": {"d..e": {"f": 1}}}}""" :: Nil))
     checkAnswer(
       df.select(df("`a.b`.c.`d..e`.`f`")),
       Row(1)
     )
 
-    val df2 = TestSQLContext.jsonRDD(TestSQLContext.sparkContext.makeRDD(
+    val df2 = TestSQLContext.read.json(TestSQLContext.sparkContext.makeRDD(
       """{"a  b": {"c": {"d  e": {"f": 1}}}}""" :: Nil))
     checkAnswer(
       df2.select(df2("`a  b`.c.d  e.f")),

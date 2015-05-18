@@ -241,6 +241,9 @@ class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     conf.set("spark.yarn.applicationMaster.waitTries", "42")
     assert(conf.getTimeAsSeconds("spark.yarn.am.waitTime") === 420)
+
+    conf.set("spark.kryoserializer.buffer.mb", "1.1")
+    assert(conf.getSizeAsKb("spark.kryoserializer.buffer") === 1100)
   }
 
   test("akka deprecated configs") {
