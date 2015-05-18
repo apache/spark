@@ -509,7 +509,7 @@ class Word2VecModel private[mllib] (
   def findSynonyms(vector: Vector, num: Int): Array[(String, Double)] = {
     require(num > 0, "Number of similar words should > 0")
 
-    val fVector = vector.toArray.map(_.toFloat)
+    val fVector = euclideanNormalize(vector.toArray.map(_.toFloat))
     val cosineVec = Array.fill[Float](numWords)(0)
     val alpha: Float = 1
     val beta: Float = 0
@@ -538,6 +538,22 @@ class Word2VecModel private[mllib] (
   def getVectors: Map[String, Array[Float]] = {
     wordIndex.map { case (word, ind) =>
       (word, wordVectors.slice(vectorSize * ind, vectorSize * ind + vectorSize))
+    }
+  }
+
+  /**
+   * Euclidean Normalization for a vector
+   * @param vector An array to be normalized
+   * @return a new normalized array
+   */
+  def euclideanNormalize(vector: Array[Float]):Array[Float] = {
+    val norm = blas.snrm2(vector.size, vector, 1)
+
+    if (norm == 0) {
+      Array.fill[Float](vector.size)(0)
+    } else {
+      blas.sscal(vector.size, 1/norm, vector, 1)
+      vector
     }
   }
 }
