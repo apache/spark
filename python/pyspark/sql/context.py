@@ -31,6 +31,7 @@ from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
 from pyspark.sql.types import Row, StringType, StructType, _verify_type, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter, _python_to_sql_converter
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.readwriter import DataFrameReader
 
 try:
     import pandas
@@ -545,6 +546,18 @@ class SQLContext(object):
     def clearCache(self):
         """Removes all cached tables from the in-memory cache. """
         self._ssql_ctx.clearCache()
+
+    @property
+    def read(self):
+        """
+        Returns a :class:`DataFrameReader` that can be used to read data
+        in as a :class:`DataFrame`.
+
+        ::note: Experimental
+
+        >>> sqlContext.read
+        """
+        return DataFrameReader(self)
 
 
 class HiveContext(SQLContext):
