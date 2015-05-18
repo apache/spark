@@ -23,8 +23,7 @@ import java.math.{BigDecimal => JBigDecimal}
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
-import com.google.common.cache.{CacheBuilder, Cache}
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
@@ -69,7 +68,7 @@ private[sql] object PartitioningUtils {
   private[sql] def parsePartitions(
       paths: Seq[Path],
       defaultPartitionName: String): PartitionSpec = {
-    val partitionValues = resolvePartitions(paths.map(parsePartition(_, defaultPartitionName)))
+    val partitionValues = resolvePartitions(paths.flatMap(parsePartition(_, defaultPartitionName)))
     val fields = {
       val (PartitionValues(columnNames, literals)) = partitionValues.head
       columnNames.zip(literals).map { case (name, Literal(_, dataType)) =>
@@ -103,13 +102,19 @@ private[sql] object PartitioningUtils {
    */
   private[sql] def parsePartition(
       path: Path,
-      defaultPartitionName: String): PartitionValues = {
+      defaultPartitionName: String): Option[PartitionValues] = {
     val columns = ArrayBuffer.empty[(String, Literal)]
     // Old Hadoop versions don't have `Path.isRoot`
     var finished = path.getParent == null
     var chopped = path
 
     while (!finished) {
+      // Sometimes (e.g., when speculative task is enabled), temporary directories may be left
+      // uncleaned.  Here we simply ignore them.
+      if (chopped.getName == "_temporary") {
+        return None
+      }
+
       val maybeColumn = parsePartitionColumn(chopped.getName, defaultPartitionName)
       maybeColumn.foreach(columns += _)
       chopped = chopped.getParent
@@ -117,7 +122,7 @@ private[sql] object PartitioningUtils {
     }
 
     val (columnNames, values) = columns.reverse.unzip
-    PartitionValues(columnNames, values)
+    Some(PartitionValues(columnNames, values))
   }
 
   private def parsePartitionColumn(

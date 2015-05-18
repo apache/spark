@@ -935,6 +935,7 @@ class DataFrame(object):
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
+
         >>> df4.replace(10, 20).show()
         +----+------+-----+
         | age|height| name|

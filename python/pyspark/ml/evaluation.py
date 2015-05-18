@@ -42,8 +42,6 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     0.83...
     """
 
-    _java_class = "org.apache.spark.ml.evaluation.BinaryClassificationEvaluator"
-
     # a placeholder to make it appear in the generated doc
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation (areaUnderROC|areaUnderPR)")
@@ -56,6 +54,8 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
                  metricName="areaUnderROC")
         """
         super(BinaryClassificationEvaluator, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.evaluation.BinaryClassificationEvaluator", self.uid)
         #: param for metric name in evaluation (areaUnderROC|areaUnderPR)
         self.metricName = Param(self, "metricName",
                                 "metric name in evaluation (areaUnderROC|areaUnderPR)")
@@ -68,7 +68,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         """
         Sets the value of :py:attr:`metricName`.
         """
-        self.paramMap[self.metricName] = value
+        self._paramMap[self.metricName] = value
         return self
 
     def getMetricName(self):
