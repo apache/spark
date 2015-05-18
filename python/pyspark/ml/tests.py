@@ -122,6 +122,16 @@ class TestParams(HasMaxIter, HasInputCol, HasSeed):
         self._setDefault(maxIter=10)
         self._set(seed=seed)
 
+class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
+    """
+    A subclass of Params mixed with HasMaxIter, HasInputCol and HasSeed.
+    """
+
+    def __init__(self, seed=None):
+        super(OtherTestParams, self).__init__()
+        self._setDefault(maxIter=10)
+        self._set(seed=seed)
+
 
 class ParamTests(PySparkTestCase):
 
@@ -168,6 +178,7 @@ class ParamTests(PySparkTestCase):
     def test_hasseed(self):
         noSeedSpecd = TestParams()
         withSeedSpecd = TestParams(seed=42)
+        other = OtherTestParams()
         # Check that we no longer use 42 as the magic number
         self.assertNotEqual(noSeedSpecd.getSeed(), 42)
         origSeed = noSeedSpecd.getSeed()
@@ -175,7 +186,8 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(noSeedSpecd.getSeed(), origSeed)
         # Check that a specified seed is honored
         self.assertEqual(withSeedSpecd.getSeed(), 42)
-
+        # Check that a different class has a different seed
+        self.assertNotEqual(other.getSeed(), oSeedSpeced.getSeed())
 
 if __name__ == "__main__":
     unittest.main()
