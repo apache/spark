@@ -1063,7 +1063,7 @@ class DataFrame private[sql](
 
     val ret: Seq[Row] = if (outputCols.nonEmpty) {
       val aggExprs = statistics.flatMap { case (_, colToAgg) =>
-        outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), DoubleType)).as(c))
+        outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), StringType)).as(c))
       }
 
       val row = agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
@@ -1077,9 +1077,9 @@ class DataFrame private[sql](
       statistics.map { case (name, _) => Row(name) }
     }
 
-    // The first column is string type, and the rest are double type.
+    // All columns are string type
     val schema = StructType(
-      StructField("summary", StringType) :: outputCols.map(StructField(_, DoubleType))).toAttributes
+      StructField("summary", StringType) :: outputCols.map(StructField(_, StringType))).toAttributes
     LocalRelation(schema, ret)
   }
 

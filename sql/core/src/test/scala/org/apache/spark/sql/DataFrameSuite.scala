@@ -370,14 +370,14 @@ class DataFrameSuite extends QueryTest {
       ("Amy",   24, 180)).toDF("name", "age", "height")
 
     val describeResult = Seq(
-      Row("count",   4,               4),
-      Row("mean",    33.0,            178.0),
-      Row("stddev",  16.583123951777, 10.0),
-      Row("min",     16,              164),
-      Row("max",     60,              192))
+      Row("count",   "4",               "4"),
+      Row("mean",    "33.0",            "178.0"),
+      Row("stddev",  "16.583123951777", "10.0"),
+      Row("min",     "16",              "164"),
+      Row("max",     "60",              "192"))
 
     val emptyDescribeResult = Seq(
-      Row("count",   0,    0),
+      Row("count",   "0",  "0"),
       Row("mean",    null, null),
       Row("stddev",  null, null),
       Row("min",     null, null),
@@ -388,10 +388,10 @@ class DataFrameSuite extends QueryTest {
     val describeTwoCols = describeTestData.describe("age", "height")
     assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
     checkAnswer(describeTwoCols, describeResult)
-    // All aggregate value should have been cast to double, including `count`
+    // All aggregate value should have been cast to string
     describeTwoCols.collect().foreach { row =>
-      assert(row.get(1).isInstanceOf[Double], "expected double but found " + row.get(1).getClass)
-      assert(row.get(2).isInstanceOf[Double], "expected double but found " + row.get(2).getClass)
+      assert(row.get(1).isInstanceOf[String], "expected string but found " + row.get(1).getClass)
+      assert(row.get(2).isInstanceOf[String], "expected string but found " + row.get(2).getClass)
     }
 
     val describeAllCols = describeTestData.describe()
