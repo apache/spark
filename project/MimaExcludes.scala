@@ -87,7 +87,20 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Vector.toSparse"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.Vector.numActives")
+              "org.apache.spark.mllib.linalg.Vector.numActives"),
+            // SPARK-7681 add SparseVector support for gemv
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.multiply"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.mllib.linalg.Matrix.multiply"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.DenseMatrix.multiply"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.mllib.linalg.DenseMatrix.multiply"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.SparseMatrix.multiply"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.mllib.linalg.SparseMatrix.multiply")
           ) ++ Seq(
             // Execution should never be included as its always internal.
             MimaBuild.excludeSparkPackage("sql.execution"),
@@ -173,6 +186,7 @@ object MimaExcludes {
               "org.apache.spark.mllib.linalg.Matrix.isTransposed"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.foreachActive"),
+            // SPARK-7681 add SparseVector support for gemv
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.multiply"),
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
