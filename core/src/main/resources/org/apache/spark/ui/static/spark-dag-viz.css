@@ -63,7 +63,7 @@
 }
 
 #dag-viz-graph svg.job g.cluster.stage.skipped rect {
-  stroke: #C4C4C4;
+  stroke: #ADADAD;
   stroke-width: 1px;
 }
 
