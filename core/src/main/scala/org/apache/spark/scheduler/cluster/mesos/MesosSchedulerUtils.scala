@@ -119,8 +119,8 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    * else if attribute name and value is specified, subset match is performed on slave attributes
    */
   private[mesos] def matchesAttributeRequirements(
-    slaveOfferConstraints: Map[String, Set[String]],
-    offerAttributes: Map[String, Set[String]]): Boolean =
+      slaveOfferConstraints: Map[String, Set[String]],
+      offerAttributes: Map[String, Set[String]]): Boolean =
     if (slaveOfferConstraints.isEmpty) {
       true
     } else {
@@ -186,18 +186,19 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    * @return Offers that match the constraints
    */
   private[mesos] def filterOffersByConstraints(
-    offers: JList[Offer],
-    offerConstraints: Map[String, Set[String]]): mutable.Buffer[Offer] = offers.filter { o =>
+      offers: JList[Offer],
+      offerConstraints: Map[String, Set[String]]): mutable.Buffer[Offer] = offers.filter { o =>
     matchesAttributeRequirements(offerConstraints, (o.getAttributesList map getAttribute).toMap)
   }
 
   // These defaults copied from YARN
-  val OVERHEAD_FRACTION = 0.10
-  val OVERHEAD_MINIMUM = 384
+  private val MEMORY_OVERHEAD_FRACTION = 0.10
+  private val MEMORY_OVERHEAD_MINIMUM = 384
 
   private[mesos] def calculateTotalMemory(sc: SparkContext): Int = {
     sc.conf.getInt("spark.mesos.executor.memoryOverhead",
-      math.max(OVERHEAD_FRACTION * sc.executorMemory, OVERHEAD_MINIMUM).toInt) + sc.executorMemory
+      math.max(MEMORY_OVERHEAD_FRACTION * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +
+      sc.executorMemory
   }
 
 }
