@@ -130,5 +130,5 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
 
 private object AsyncRDDActions {
   val futureExecutionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("AsyncRDDActions-future", 1024))
+    ThreadUtils.newDaemonCachedThreadPool("AsyncRDDActions-future", 128))
 }

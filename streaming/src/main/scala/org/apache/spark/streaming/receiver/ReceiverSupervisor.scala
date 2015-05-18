@@ -47,7 +47,7 @@ private[streaming] abstract class ReceiverSupervisor(
   receiver.attachExecutor(this)
 
   private val futureExecutionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("receiver-supervisor-future", 1024))
+    ThreadUtils.newDaemonCachedThreadPool("receiver-supervisor-future", 128))
 
   /** Receiver id */
   protected val streamId = receiver.streamId
