@@ -42,9 +42,10 @@ private[spark] class SparkDeploySchedulerBackend(
 
   private val registrationBarrier = new Semaphore(0)
 
-  private val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
-  private val totalExpectedCores = maxCores.getOrElse(0)
-
+  val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
+  val totalExpectedCores = maxCores.getOrElse(0)
+  val coresPerTask = scheduler.CPUS_PER_TASK
+    
   override def start() {
     super.start()
 
@@ -83,8 +84,8 @@ private[spark] class SparkDeploySchedulerBackend(
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
     val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
-    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,
-      command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
+    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
+      appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, coresPerTask)
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
     waitForRegistration()

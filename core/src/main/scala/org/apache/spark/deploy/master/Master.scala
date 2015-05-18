@@ -548,20 +548,27 @@ private[master] class Master(
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
     if (spreadOutApps) {
-      // Try to spread out each app among all the workers, until it has all its cores
-      for (app <- waitingApps if app.coresLeft > 0) {
+      // Try to spread out each app among all the nodes, until it has all its cores
+      for (app <- waitingApps if app.coresLeft >= app.desc.coresPerTask) {
+        val coreNumPerTask = app.desc.coresPerTask
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-            worker.coresFree >= app.desc.coresPerExecutor.getOrElse(1))
+            worker.coresFree >= math.max(app.desc.coresPerExecutor.getOrElse(1),
+              app.desc.coresPerTask))
           .sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
         var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
         var pos = 0
-        while (toAssign > 0) {
-          if (usableWorkers(pos).coresFree - assigned(pos) > 0) {
-            toAssign -= 1
-            assigned(pos) += 1
+        val availableWorkerSet = new HashSet[Int]
+        // Take into account the number of cores the application uses per task
+        // to avoid starving executors or wasting cluster resources (SPARK-5337)
+        while (toAssign >= coreNumPerTask && availableWorkerSet.size < usableWorkers.length) {
+          if (usableWorkers(pos).coresFree - assigned(pos) >= coreNumPerTask) {
+            toAssign -= coreNumPerTask
+            assigned(pos) += coreNumPerTask
+          } else {
+            availableWorkerSet += pos
           }
           pos = (pos + 1) % numUsable
         }
@@ -573,7 +580,7 @@ private[master] class Master(
     } else {
       // Pack each app into as few workers as possible until we've assigned all its cores
       for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
-        for (app <- waitingApps if app.coresLeft > 0) {
+        for (app <- waitingApps if app.coresLeft >= app.desc.coresPerTask) {
           allocateWorkerResourceToExecutors(app, app.coresLeft, worker)
         }
       }
@@ -590,9 +597,13 @@ private[master] class Master(
       app: ApplicationInfo,
       coresToAllocate: Int,
       worker: WorkerInfo): Unit = {
+    val cpuPerTask = app.desc.coresPerTask
     val memoryPerExecutor = app.desc.memoryPerExecutorMB
-    val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(coresToAllocate)
-    var coresLeft = coresToAllocate
+    var coresLeft = coresToAllocate - coresToAllocate % cpuPerTask
+    val maxCoresPerExecutor = app.desc.coresPerExecutor.getOrElse(coresLeft)
+    val coresPerExecutor = math.max(
+      maxCoresPerExecutor - maxCoresPerExecutor % cpuPerTask,
+      cpuPerTask)
     while (coresLeft >= coresPerExecutor && worker.memoryFree >= memoryPerExecutor) {
       val exec = app.addExecutor(worker, coresPerExecutor)
       coresLeft -= coresPerExecutor

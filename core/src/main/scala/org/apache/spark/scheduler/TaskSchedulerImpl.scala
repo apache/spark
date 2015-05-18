@@ -70,6 +70,18 @@ private[spark] class TaskSchedulerImpl(
   // CPUs to request per task
   val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
 
+  if (CPUS_PER_TASK < 1) {
+    throw new IllegalArgumentException(
+      s"spark.task.cpus must be greater than 0! (was $CPUS_PER_TASK)")
+  }
+
+  val maxCores = conf.get("spark.cores.max",  Int.MaxValue.toString).toInt
+
+  if (maxCores < CPUS_PER_TASK) {
+    throw new IllegalArgumentException(
+      s"spark.task.cpus ($CPUS_PER_TASK) should not be larger than spark.cores.max ($maxCores)")
+  }
+
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
   val activeTaskSets = new HashMap[String, TaskSetManager]

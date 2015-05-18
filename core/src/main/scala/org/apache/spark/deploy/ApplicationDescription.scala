@@ -28,7 +28,8 @@ private[spark] class ApplicationDescription(
     val eventLogDir: Option[URI] = None,
     // short name of compression codec used when writing event logs, if any (e.g. lzf)
     val eventLogCodec: Option[String] = None,
-    val coresPerExecutor: Option[Int] = None)
+    val coresPerExecutor: Option[Int] = None,
+    val coresPerTask: Int = 1)
   extends Serializable {
 
   val user = System.getProperty("user.name", "<unknown>")
