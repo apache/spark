@@ -31,7 +31,7 @@ The base class of local vectors is
 implementations: [`DenseVector`](api/scala/index.html#org.apache.spark.mllib.linalg.DenseVector) and
 [`SparseVector`](api/scala/index.html#org.apache.spark.mllib.linalg.SparseVector).  We recommend
 using the factory methods implemented in
-[`Vectors`](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) to create local vectors.
+[`Vectors`](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors$) to create local vectors.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -57,7 +57,7 @@ The base class of local vectors is
 implementations: [`DenseVector`](api/java/org/apache/spark/mllib/linalg/DenseVector.html) and
 [`SparseVector`](api/java/org/apache/spark/mllib/linalg/SparseVector.html).  We recommend
 using the factory methods implemented in
-[`Vectors`](api/java/org/apache/spark/mllib/linalg/Vector.html) to create local vectors.
+[`Vectors`](api/java/org/apache/spark/mllib/linalg/Vectors.html) to create local vectors.
 
 {% highlight java %}
 import org.apache.spark.mllib.linalg.Vector;
@@ -84,7 +84,7 @@ and the following as sparse vectors:
   with a single column
 
 We recommend using NumPy arrays over lists for efficiency, and using the factory methods implemented
-in [`Vectors`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Vector) to create sparse vectors.
+in [`Vectors`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Vectors) to create sparse vectors.
 
 {% highlight python %}
 import numpy as np
@@ -241,7 +241,7 @@ The base class of local matrices is
 [`Matrix`](api/scala/index.html#org.apache.spark.mllib.linalg.Matrix), and we provide one
 implementation: [`DenseMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.DenseMatrix).
 We recommend using the factory methods implemented
-in [`Matrices`](api/scala/index.html#org.apache.spark.mllib.linalg.Matrices) to create local
+in [`Matrices`](api/scala/index.html#org.apache.spark.mllib.linalg.Matrices$) to create local
 matrices.
 
 {% highlight scala %}

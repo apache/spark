@@ -21,7 +21,7 @@ from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml.param import Params
 from pyspark.ml.pipeline import Estimator, Transformer, Evaluator, Model
-from pyspark.mllib.common import inherit_doc
+from pyspark.mllib.common import inherit_doc, _java2py, _py2java
 
 
 def _jvm():
@@ -148,6 +148,12 @@ class JavaModel(Model, JavaTransformer):
 
     def _java_obj(self):
         return self._java_model
+
+    def _call_java(self, name, *args):
+        m = getattr(self._java_model, name)
+        sc = SparkContext._active_spark_context
+        java_args = [_py2java(sc, arg) for arg in args]
+        return _java2py(sc, m(*java_args))
 
 
 @inherit_doc

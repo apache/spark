@@ -22,7 +22,6 @@ import scala.language.postfixOps
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, TestSQLContext}
-import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 
 
@@ -63,7 +62,7 @@ class DataFrameSuite extends QueryTest {
     val df = Seq((1,(1,1))).toDF()
 
     checkAnswer(
-      df.groupBy("_1").agg(col("_1"), sum("_2._1")).toDF("key", "total"),
+      df.groupBy("_1").agg(sum("_2._1")).toDF("key", "total"),
       Row(1, 1) :: Nil)
   }
 
@@ -128,7 +127,7 @@ class DataFrameSuite extends QueryTest {
       df2
         .select('_1 as 'letter, 'number)
         .groupBy('letter)
-        .agg('letter, countDistinct('number)),
+        .agg(countDistinct('number)),
       Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
     )
   }
@@ -163,48 +162,6 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       testData.select('key).coalesce(1).select('key),
       testData.select('key).collect().toSeq)
-  }
-
-  test("groupBy") {
-    checkAnswer(
-      testData2.groupBy("a").agg($"a", sum($"b")),
-      Seq(Row(1, 3), Row(2, 3), Row(3, 3))
-    )
-    checkAnswer(
-      testData2.groupBy("a").agg($"a", sum($"b").as("totB")).agg(sum('totB)),
-      Row(9)
-    )
-    checkAnswer(
-      testData2.groupBy("a").agg(col("a"), count("*")),
-      Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil
-    )
-    checkAnswer(
-      testData2.groupBy("a").agg(Map("*" -> "count")),
-      Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil
-    )
-    checkAnswer(
-      testData2.groupBy("a").agg(Map("b" -> "sum")),
-      Row(1, 3) :: Row(2, 3) :: Row(3, 3) :: Nil
-    )
-
-    val df1 = Seq(("a", 1, 0, "b"), ("b", 2, 4, "c"), ("a", 2, 3, "d"))
-      .toDF("key", "value1", "value2", "rest")
-
-    checkAnswer(
-      df1.groupBy("key").min(),
-      df1.groupBy("key").min("value1", "value2").collect()
-    )
-    checkAnswer(
-      df1.groupBy("key").min("value2"),
-      Seq(Row("a", 0), Row("b", 4))
-    )
-  }
-
-  test("agg without groups") {
-    checkAnswer(
-      testData2.agg(sum('b)),
-      Row(9)
-    )
   }
 
   test("convert $\"attribute name\" into unresolved attribute") {
@@ -301,110 +258,6 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       mapData.toDF().limit(1),
       mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
-  }
-
-  test("average") {
-    checkAnswer(
-      testData2.agg(avg('a)),
-      Row(2.0))
-
-    // Also check mean
-    checkAnswer(
-      testData2.agg(mean('a)),
-      Row(2.0))
-
-    checkAnswer(
-      testData2.agg(avg('a), sumDistinct('a)), // non-partial
-      Row(2.0, 6.0) :: Nil)
-
-    checkAnswer(
-      decimalData.agg(avg('a)),
-      Row(new java.math.BigDecimal(2.0)))
-    checkAnswer(
-      decimalData.agg(avg('a), sumDistinct('a)), // non-partial
-      Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
-
-    checkAnswer(
-      decimalData.agg(avg('a cast DecimalType(10, 2))),
-      Row(new java.math.BigDecimal(2.0)))
-    // non-partial
-    checkAnswer(
-      decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))),
-      Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
-  }
-
-  test("null average") {
-    checkAnswer(
-      testData3.agg(avg('b)),
-      Row(2.0))
-
-    checkAnswer(
-      testData3.agg(avg('b), countDistinct('b)),
-      Row(2.0, 1))
-
-    checkAnswer(
-      testData3.agg(avg('b), sumDistinct('b)), // non-partial
-      Row(2.0, 2.0))
-  }
-
-  test("zero average") {
-    checkAnswer(
-      emptyTableData.agg(avg('a)),
-      Row(null))
-
-    checkAnswer(
-      emptyTableData.agg(avg('a), sumDistinct('b)), // non-partial
-      Row(null, null))
-  }
-
-  test("count") {
-    assert(testData2.count() === testData2.map(_ => 1).count())
-
-    checkAnswer(
-      testData2.agg(count('a), sumDistinct('a)), // non-partial
-      Row(6, 6.0))
-  }
-
-  test("null count") {
-    checkAnswer(
-      testData3.groupBy('a).agg('a, count('b)),
-      Seq(Row(1,0), Row(2, 1))
-    )
-
-    checkAnswer(
-      testData3.groupBy('a).agg('a, count('a + 'b)),
-      Seq(Row(1,0), Row(2, 1))
-    )
-
-    checkAnswer(
-      testData3.agg(count('a), count('b), count(lit(1)), countDistinct('a), countDistinct('b)),
-      Row(2, 1, 2, 2, 1)
-    )
-
-    checkAnswer(
-      testData3.agg(count('b), countDistinct('b), sumDistinct('b)), // non-partial
-      Row(1, 1, 2)
-    )
-  }
-
-  test("zero count") {
-    assert(emptyTableData.count() === 0)
-
-    checkAnswer(
-      emptyTableData.agg(count('a), sumDistinct('a)), // non-partial
-      Row(0, null))
-  }
-
-  test("zero sum") {
-    checkAnswer(
-      emptyTableData.agg(sum('a)),
-      Row(null))
-  }
-
-  test("zero sum distinct") {
-    checkAnswer(
-      emptyTableData.agg(sumDistinct('a)),
-      Row(null))
   }
 
   test("except") {
@@ -603,5 +456,80 @@ class DataFrameSuite extends QueryTest {
     assert(complexData.filter(complexData("a")(0) === 2).count() == 1)
     assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
     assert(complexData.filter(complexData("s")("key") === 1).count() == 1)
+    assert(complexData.filter(complexData("m")(complexData("s")("value")) === 1).count() == 1)
+  }
+
+  test("SPARK-7551: support backticks for DataFrame attribute resolution") {
+    val df = TestSQLContext.read.json(TestSQLContext.sparkContext.makeRDD(
+      """{"a.b": {"c": {"d..e": {"f": 1}}}}""" :: Nil))
+    checkAnswer(
+      df.select(df("`a.b`.c.`d..e`.`f`")),
+      Row(1)
+    )
+
+    val df2 = TestSQLContext.read.json(TestSQLContext.sparkContext.makeRDD(
+      """{"a  b": {"c": {"d  e": {"f": 1}}}}""" :: Nil))
+    checkAnswer(
+      df2.select(df2("`a  b`.c.d  e.f")),
+      Row(1)
+    )
+
+    def checkError(testFun: => Unit): Unit = {
+      val e = intercept[org.apache.spark.sql.AnalysisException] {
+        testFun
+      }
+      assert(e.getMessage.contains("syntax error in attribute name:"))
+    }
+    checkError(df("`abc.`c`"))
+    checkError(df("`abc`..d"))
+    checkError(df("`a`.b."))
+    checkError(df("`a.b`.c.`d"))
+  }
+
+  test("SPARK-7324 dropDuplicates") {
+    val testData = TestSQLContext.sparkContext.parallelize(
+      (2, 1, 2) :: (1, 1, 1) ::
+      (1, 2, 1) :: (2, 1, 2) ::
+      (2, 2, 2) :: (2, 2, 1) ::
+      (2, 1, 1) :: (1, 1, 2) ::
+      (1, 2, 2) :: (1, 2, 1) :: Nil).toDF("key", "value1", "value2")
+
+    checkAnswer(
+      testData.dropDuplicates(),
+      Seq(Row(2, 1, 2), Row(1, 1, 1), Row(1, 2, 1),
+        Row(2, 2, 2), Row(2, 1, 1), Row(2, 2, 1),
+        Row(1, 1, 2), Row(1, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("key", "value1")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value1", "value2")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("key")),
+      Seq(Row(2, 1, 2), Row(1, 1, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value1")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value2")),
+      Seq(Row(2, 1, 2), Row(1, 1, 1)))
+  }
+
+  test("SPARK-7276: Project collapse for continuous select") {
+    var df = testData
+    for (i <- 1 to 5) {
+      df = df.select($"*")
+    }
+
+    import org.apache.spark.sql.catalyst.plans.logical.Project
+    // make sure df have at most two Projects
+    val p = df.logicalPlan.asInstanceOf[Project].child.asInstanceOf[Project]
+    assert(!p.child.isInstanceOf[Project])
   }
 }

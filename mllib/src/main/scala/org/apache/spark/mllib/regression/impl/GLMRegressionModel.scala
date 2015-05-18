@@ -60,7 +60,7 @@ private[regression] object GLMRegressionModel {
       val data = Data(weights, intercept)
       val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
       // TODO: repartition with 1 partition after SPARK-5532 gets fixed
-      dataRDD.saveAsParquetFile(Loader.dataPath(path))
+      dataRDD.write.parquet(Loader.dataPath(path))
     }
 
     /**

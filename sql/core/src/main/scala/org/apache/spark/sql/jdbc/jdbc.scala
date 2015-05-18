@@ -57,9 +57,14 @@ package object jdbc {
      * non-Serializable.  Instead, we explicitly close over all variables that
      * are used.
      */
-    def savePartition(url: String, table: String, iterator: Iterator[Row],
-        rddSchema: StructType, nullTypes: Array[Int]): Iterator[Byte] = {
-      val conn = DriverManager.getConnection(url)
+    def savePartition(
+        url: String,
+        table: String,
+        iterator: Iterator[Row],
+        rddSchema: StructType,
+        nullTypes: Array[Int],
+        properties: Properties): Iterator[Byte] = {
+      val conn = DriverManager.getConnection(url, properties)
       var committed = false
       try {
         conn.setAutoCommit(false) // Everything in the same db transaction.
@@ -152,10 +157,14 @@ package object jdbc {
     /**
      * Saves the RDD to the database in a single transaction.
      */
-    def saveTable(df: DataFrame, url: String, table: String) {
+    def saveTable(
+        df: DataFrame,
+        url: String,
+        table: String,
+        properties: Properties = new Properties()) {
       val quirks = DriverQuirks.get(url)
-      var nullTypes: Array[Int] = df.schema.fields.map(field => {
-        var nullType: Option[Int] = quirks.getJDBCType(field.dataType)._2
+      val nullTypes: Array[Int] = df.schema.fields.map { field =>
+        val nullType: Option[Int] = quirks.getJDBCType(field.dataType)._2
         if (nullType.isEmpty) {
           field.dataType match {
             case IntegerType => java.sql.Types.INTEGER
@@ -174,11 +183,11 @@ package object jdbc {
               s"Can't translate null value for field $field")
           }
         } else nullType.get
-      }).toArray
+      }
 
       val rddSchema = df.schema
       df.foreachPartition { iterator =>
-        JDBCWriteDetails.savePartition(url, table, iterator, rddSchema, nullTypes)
+        JDBCWriteDetails.savePartition(url, table, iterator, rddSchema, nullTypes, properties)
       }
     }
 

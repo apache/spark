@@ -367,11 +367,18 @@ val people = sc.textFile("examples/src/main/resources/people.txt").map(_.split("
 people.registerTempTable("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
-val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+val teenagers = sqlContext.sql("SELECT name, age FROM people WHERE age >= 13 AND age <= 19")
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
-// The columns of a row in the result can be accessed by ordinal.
+// The columns of a row in the result can be accessed by field index:
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
+
+// or by field name:
+teenagers.map(t => "Name: " + t.getAs[String]("name")).collect().foreach(println)
+
+// row.getValuesMap[T] retrieves multiple columns at once into a Map[String, T]
+teenagers.map(_.getValuesMap[Any](List("name", "age"))).collect().foreach(println)
+// Map("name" -> "Justin", "age" -> 19)
 {% endhighlight %}
 
 </div>
@@ -470,7 +477,7 @@ parts = lines.map(lambda l: l.split(","))
 people = parts.map(lambda p: Row(name=p[0], age=int(p[1])))
 
 # Infer the schema, and register the DataFrame as a table.
-schemaPeople = sqlContext.inferSchema(people)
+schemaPeople = sqlContext.createDataFrame(people)
 schemaPeople.registerTempTable("people")
 
 # SQL can be run over DataFrames that have been registered as a table.
@@ -538,7 +545,7 @@ peopleDataFrame.registerTempTable("people")
 val results = sqlContext.sql("SELECT name FROM people")
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
-// The columns of a row in the result can be accessed by ordinal.
+// The columns of a row in the result can be accessed by field index or by field name.
 results.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
 
@@ -1599,6 +1606,64 @@ options.
 
 # Migration Guide
 
+## Upgrading from Spark SQL 1.3 to 1.4
+
+Based on user feedback, we changed the default behavior of `DataFrame.groupBy().agg()` to retain the grouping columns in the resulting `DataFrame`. To keep the behavior in 1.3, set `spark.sql.retainGroupColumns` to `false`.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+
+// In 1.3.x, in order for the grouping column "department" to show up,
+// it must be included explicitly as part of the agg function call.
+df.groupBy("department").agg($"department", max("age"), sum("expense"))
+
+// In 1.4+, grouping column "department" is included automatically.
+df.groupBy("department").agg(max("age"), sum("expense"))
+
+// Revert to 1.3 behavior (not retaining grouping column) by:
+sqlContext.setConf("spark.sql.retainGroupColumns", "false")
+
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+
+// In 1.3.x, in order for the grouping column "department" to show up,
+// it must be included explicitly as part of the agg function call.
+df.groupBy("department").agg(col("department"), max("age"), sum("expense"));
+
+// In 1.4+, grouping column "department" is included automatically.
+df.groupBy("department").agg(max("age"), sum("expense"));
+
+// Revert to 1.3 behavior (not retaining grouping column) by:
+sqlContext.setConf("spark.sql.retainGroupColumns", "false");
+
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+
+import pyspark.sql.functions as func
+
+# In 1.3.x, in order for the grouping column "department" to show up,
+# it must be included explicitly as part of the agg function call.
+df.groupBy("department").agg("department"), func.max("age"), func.sum("expense"))
+
+# In 1.4+, grouping column "department" is included automatically.
+df.groupBy("department").agg(func.max("age"), func.sum("expense"))
+
+# Revert to 1.3.x behavior (not retaining grouping column) by:
+sqlContext.setConf("spark.sql.retainGroupColumns", "false")
+
+{% endhighlight %}
+</div>
+
+</div>
+
+
 ## Upgrading from Spark SQL 1.0-1.2 to 1.3
 
 In Spark 1.3 we removed the "Alpha" label from Spark SQL and as part of this did a cleanup of the
@@ -1656,7 +1721,7 @@ moved into the udf object in `SQLContext`.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% highlight java %}
+{% highlight scala %}
 
 sqlContext.udf.register("strLen", (s: String) => s.length())
 

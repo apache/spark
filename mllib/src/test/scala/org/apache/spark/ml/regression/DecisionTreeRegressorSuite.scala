@@ -85,7 +85,7 @@ private[ml] object DecisionTreeRegressorSuite extends FunSuite {
     val newTree = dt.fit(newData)
     // Use parent, fittingParamMap from newTree since these are not checked anyways.
     val oldTreeAsNew = DecisionTreeRegressionModel.fromOld(
-      oldTree, newTree.parent, categoricalFeatures)
+      oldTree, newTree.parent.asInstanceOf[DecisionTreeRegressor], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
   }
 }

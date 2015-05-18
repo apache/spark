@@ -26,6 +26,7 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction}
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -50,9 +51,11 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
  * Currently, this class only supports binary classification.
  */
 @AlphaComponent
-class LogisticRegression
+class LogisticRegression(override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams with Logging {
+
+  def this() = this(Identifiable.randomUID("logreg"))
 
   /**
    * Set the regularization parameter.
@@ -175,7 +178,7 @@ class LogisticRegression
        * }}}
        */
       initialWeightsWithIntercept.toArray(numFeatures)
-        = Math.log(histogram(1).toDouble / histogram(0).toDouble)
+        = math.log(histogram(1).toDouble / histogram(0).toDouble)
     }
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
@@ -213,7 +216,7 @@ class LogisticRegression
       (weightsWithIntercept, 0.0)
     }
 
-    new LogisticRegressionModel(this, weights.compressed, intercept)
+    new LogisticRegressionModel(uid, weights.compressed, intercept)
   }
 }
 
@@ -224,7 +227,7 @@ class LogisticRegression
  */
 @AlphaComponent
 class LogisticRegressionModel private[ml] (
-    override val parent: LogisticRegression,
+    override val uid: String,
     val weights: Vector,
     val intercept: Double)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
@@ -258,7 +261,8 @@ class LogisticRegressionModel private[ml] (
     rawPrediction match {
       case dv: DenseVector =>
         var i = 0
-        while (i < dv.size) {
+        val size = dv.size
+        while (i < size) {
           dv.values(i) = 1.0 / (1.0 + math.exp(-dv.values(i)))
           i += 1
         }
@@ -275,7 +279,7 @@ class LogisticRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LogisticRegressionModel = {
-    copyValues(new LogisticRegressionModel(parent, weights, intercept), extra)
+    copyValues(new LogisticRegressionModel(uid, weights, intercept), extra)
   }
 
   override protected def raw2prediction(rawPrediction: Vector): Double = {
@@ -285,7 +289,7 @@ class LogisticRegressionModel private[ml] (
     } else if (t == 1.0) {
       Double.PositiveInfinity
     } else {
-      Math.log(t / (1.0 - t))
+      math.log(t / (1.0 - t))
     }
     if (rawPrediction(1) > rawThreshold) 1 else 0
   }
@@ -357,7 +361,8 @@ private[classification] class MultiClassSummarizer extends Serializable {
   def histogram: Array[Long] = {
     val result = Array.ofDim[Long](numClasses)
     var i = 0
-    while (i < result.length) {
+    val len = result.length
+    while (i < len) {
       result(i) = distinctMap.getOrElse(i, 0L)
       i += 1
     }
@@ -480,7 +485,8 @@ private class LogisticAggregator(
       var i = 0
       val localThisGradientSumArray = this.gradientSumArray
       val localOtherGradientSumArray = other.gradientSumArray
-      while (i < localThisGradientSumArray.length) {
+      val len = localThisGradientSumArray.length
+      while (i < len) {
         localThisGradientSumArray(i) += localOtherGradientSumArray(i)
         i += 1
       }
