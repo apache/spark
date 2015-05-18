@@ -23,12 +23,10 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.parquet.ParquetTest
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
-// TODO Don't extend ParquetTest
-// This test suite extends ParquetTest for some convenient utility methods. These methods should be
-// moved to some more general places, maybe QueryTest.
-class HadoopFsRelationTest extends QueryTest with ParquetTest {
+abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   override val sqlContext: SQLContext = TestHive
 
   import sqlContext._
