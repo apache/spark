@@ -163,8 +163,8 @@ package object jdbc {
         table: String,
         properties: Properties = new Properties()) {
       val quirks = DriverQuirks.get(url)
-      var nullTypes: Array[Int] = df.schema.fields.map(field => {
-        var nullType: Option[Int] = quirks.getJDBCType(field.dataType)._2
+      val nullTypes: Array[Int] = df.schema.fields.map { field =>
+        val nullType: Option[Int] = quirks.getJDBCType(field.dataType)._2
         if (nullType.isEmpty) {
           field.dataType match {
             case IntegerType => java.sql.Types.INTEGER
@@ -183,7 +183,7 @@ package object jdbc {
               s"Can't translate null value for field $field")
           }
         } else nullType.get
-      }).toArray
+      }
 
       val rddSchema = df.schema
       df.foreachPartition { iterator =>

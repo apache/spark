@@ -340,7 +340,7 @@ private[sql] class ParquetRelation2(
 
     // Schema of the actual Parquet files, without partition columns discovered from partition
     // directory paths.
-    var dataSchema: StructType = _
+    var dataSchema: StructType = null
 
     // Schema of the whole table, including partition columns.
     var schema: StructType = _
@@ -379,19 +379,23 @@ private[sql] class ParquetRelation2(
         f -> new Footer(f.getPath, parquetMetadata)
       }.seq.toMap
 
-      dataSchema = {
-        val dataSchema0 =
-          maybeDataSchema
-            .orElse(readSchema())
-            .orElse(maybeMetastoreSchema)
-            .getOrElse(sys.error("Failed to get the schema."))
-
-        // If this Parquet relation is converted from a Hive Metastore table, must reconcile case
-        // case insensitivity issue and possible schema mismatch (probably caused by schema
-        // evolution).
-        maybeMetastoreSchema
-          .map(ParquetRelation2.mergeMetastoreParquetSchema(_, dataSchema0))
-          .getOrElse(dataSchema0)
+      // If we already get the schema, don't need to re-compute it since the schema merging is
+      // time-consuming.
+      if (dataSchema == null) {
+        dataSchema = {
+          val dataSchema0 =
+            maybeDataSchema
+              .orElse(readSchema())
+              .orElse(maybeMetastoreSchema)
+              .getOrElse(sys.error("Failed to get the schema."))
+        
+          // If this Parquet relation is converted from a Hive Metastore table, must reconcile case
+          // case insensitivity issue and possible schema mismatch (probably caused by schema
+          // evolution).
+          maybeMetastoreSchema
+            .map(ParquetRelation2.mergeMetastoreParquetSchema(_, dataSchema0))
+            .getOrElse(dataSchema0)
+        }
       }
     }
 

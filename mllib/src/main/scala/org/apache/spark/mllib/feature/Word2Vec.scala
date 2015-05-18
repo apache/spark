@@ -580,7 +580,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val dataArray = model.toSeq.map { case (w, v) => Data(w, v) }
-      sc.parallelize(dataArray.toSeq, 1).toDF().saveAsParquetFile(Loader.dataPath(path))
+      sc.parallelize(dataArray.toSeq, 1).toDF().write.parquet(Loader.dataPath(path))
     }
   }
 

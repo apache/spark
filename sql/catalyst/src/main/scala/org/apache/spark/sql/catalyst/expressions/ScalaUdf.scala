@@ -956,7 +956,7 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
   }
 
   // scalastyle:on
-
-  override def eval(input: Row): Any = CatalystTypeConverters.convertToCatalyst(f(input), dataType)
+  val converter = CatalystTypeConverters.createToCatalystConverter(dataType)
+  override def eval(input: Row): Any = converter(f(input))
 
 }

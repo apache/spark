@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql
 
+import java.util.Properties
+
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.jdbc.{JDBCWriteDetails, JdbcUtils}
 import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
 
 
 /**
  * :: Experimental ::
  * Interface used to write a [[DataFrame]] to external storage systems (e.g. file systems,
- * key-value stores, etc).
+ * key-value stores, etc). Use [[DataFrame.write]] to access this.
  *
  * @since 1.4.0
  */
@@ -55,7 +58,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def mode(saveMode: String): DataFrameWriter = {
-    saveMode.toLowerCase match {
+    this.mode = saveMode.toLowerCase match {
       case "overwrite" => SaveMode.Overwrite
       case "append" => SaveMode.Append
       case "ignore" => SaveMode.Ignore
@@ -110,6 +113,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * Partitions the output by the given columns on the file system. If specified, the output is
    * laid out on the file system similar to Hive's partitioning scheme.
    *
+   * This is only applicable for Parquet at the moment.
+   *
    * @since 1.4.0
    */
   @scala.annotation.varargs
@@ -159,6 +164,52 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         extraOptions.toMap,
         df.logicalPlan)
     df.sqlContext.executePlan(cmd).toRdd
+  }
+
+  /**
+   * Saves the content of the [[DataFrame]] to a external database table via JDBC. In the case the
+   * table already exists in the external database, behavior of this function depends on the
+   * save mode, specified by the `mode` function (default to throwing an exception).
+   *
+   * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
+   * your external database systems.
+   *
+   * @param url JDBC database url of the form `jdbc:subprotocol:subname`
+   * @param table Name of the table in the external database.
+   * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
+   *                             tag/value. Normally at least a "user" and "password" property
+   *                             should be included.
+   */
+  def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
+    val conn = JdbcUtils.createConnection(url, connectionProperties)
+
+    try {
+      var tableExists = JdbcUtils.tableExists(conn, table)
+
+      if (mode == SaveMode.Ignore && tableExists) {
+        return
+      }
+
+      if (mode == SaveMode.ErrorIfExists && tableExists) {
+        sys.error(s"Table $table already exists.")
+      }
+
+      if (mode == SaveMode.Overwrite && tableExists) {
+        JdbcUtils.dropTable(conn, table)
+        tableExists = false
+      }
+
+      // Create the table if the table didn't exist.
+      if (!tableExists) {
+        val schema = JDBCWriteDetails.schemaString(df, url)
+        val sql = s"CREATE TABLE $table ($schema)"
+        conn.prepareStatement(sql).executeUpdate()
+      }
+    } finally {
+      conn.close()
+    }
+
+    JDBCWriteDetails.saveTable(df, url, table, connectionProperties)
   }
 
   /**
