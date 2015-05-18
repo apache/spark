@@ -84,7 +84,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>
     The initial interval in which the Spark application master eagerly heartbeats to the YARN ResourceManager
     when there are pending container allocation requests. It should be no larger than
-    <code>spark.yarn.scheduler.heartbeat.interval-ms</code>. The allocation interval will double on
+    <code>spark.yarn.scheduler.heartbeat.interval-ms</code>. The allocation interval will doubled on
     successive eager heartbeats if pending containers still exist, until
     <code>spark.yarn.scheduler.heartbeat.interval-ms</code> is reached.
   </td>
