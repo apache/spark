@@ -17,7 +17,7 @@
                 <th></th>
                 <th>DAG</th>
                 <th>Owner</th>
-                <th>Instances States</th>
+                <th style="padding-left: 5px;">Statuses<img id="loading" width="15" src="{{ url_for("static", filename="loading.gif") }}"></th>
                 <th class="text-center">Links</th>
             </tr>
         </thead>
@@ -46,7 +46,7 @@
                     {% endif %}
                 </td>
                     <td>{{ dag.owner if dag else orm_dags[dag_id].owners }}</td>
-                <td style="padding:0px; width:90px; height:10px;">
+                <td style="padding:0px; width:100px; height:10px;">
                     <svg height="10" width="10" id='{{ dag.dag_id }}' style="display: block;"></svg>
                 </td>
                 <td class="text-center" style="width:160px;">
@@ -164,6 +164,7 @@ console.log($().jquery);
                       .style("stroke-width", stroke_width);
                 }
               });
+            d3.select("#loading").remove();
         }
 
         $("circle").tooltip({

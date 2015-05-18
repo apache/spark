@@ -105,6 +105,9 @@ table.dataframe {
 table.dataframe tbody tr td {
     padding: 2px;
 }
+table thead th {
+    background-color: #F3F3F3;
+}
 table.dataframe.dataTable thead > tr > th {
     padding: 10px 20px 10px 10px;
 }
