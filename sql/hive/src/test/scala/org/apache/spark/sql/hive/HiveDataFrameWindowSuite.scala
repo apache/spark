@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{AnalysisException, Row, QueryTest}
+import org.apache.spark.sql.{Row, QueryTest}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 
 class HiveDataFrameWindowSuite extends QueryTest {
@@ -59,7 +60,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     checkAnswer(
       df.select(
-        lead("value").over(
+        lag("value").over(
           partitionBy($"key")
           .orderBy($"value"))),
       Row("1") :: Row("2") :: Row(null) :: Row(null) :: Nil)
@@ -82,15 +83,56 @@ class HiveDataFrameWindowSuite extends QueryTest {
                  (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     checkAnswer(
       df.select(
-        lead("value", 2, "n/a").over(
+        lag("value", 2, "n/a").over(
           partitionBy($"key")
           .orderBy($"value"))),
       Row("1") :: Row("1") :: Row("2") :: Row("n/a")
         :: Row("n/a") :: Row("n/a") :: Row("n/a") :: Nil)
   }
 
+  test("rank functions in unspecific window") {
+    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    df.registerTempTable("window_table")
+    checkAnswer(
+      df.select(
+        $"key",
+        ntile("key").over(
+          partitionBy("value")
+            .orderBy("key")),
+        ntile($"key").over(
+          partitionBy("value")
+            .orderBy("key")),
+        rowNumber().over(
+          partitionBy("value")
+            .orderBy("key")),
+        denseRank().over(
+          partitionBy("value")
+            .orderBy("key")),
+        rank().over(
+          partitionBy("value")
+            .orderBy("key")),
+        cumeDist().over(
+          partitionBy("value")
+            .orderBy("key")),
+        percentRank().over(
+          partitionBy("value")
+            .orderBy("key"))),
+      sql(
+        s"""SELECT
+           |key,
+           |ntile(key) over (partition by value order by key),
+           |ntile(key) over (partition by value order by key),
+           |row_number() over (partition by value order by key),
+           |dense_rank() over (partition by value order by key),
+           |rank() over (partition by value order by key),
+           |cume_dist() over (partition by value order by key),
+           |percent_rank() over (partition by value order by key)
+           |FROM window_table""".stripMargin).collect)
+  }
+
   test("aggregation in a row window") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    df.registerTempTable("window_table")
     checkAnswer(
       df.select(
         avg("key").over(
@@ -106,6 +148,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
   test("aggregation in a Range window") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    df.registerTempTable("window_table")
     checkAnswer(
       df.select(
         avg("key").over(
@@ -119,68 +162,9 @@ class HiveDataFrameWindowSuite extends QueryTest {
       Row(1.0) :: Row(1.0) :: Row(2.0) :: Row(2.0) :: Nil)
   }
 
-  test("multiple aggregate function in window") {
-    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    checkAnswer(
-      df.select(
-        avg("key").over(
-          partitionBy($"value")
-          .orderBy($"key")
-          .rows
-          .preceding(1)),
-        sum("key").over(
-          partitionBy($"value")
-          .orderBy($"key")
-          .range
-          .between
-          .preceding(1)
-          .and
-          .following(1))),
-      Row(1.0, 2) :: Row(1.0, 2) :: Row(2.0, 4) :: Row(2.0, 4) :: Nil)
-  }
-
-  test("Window function in Unspecified Window") {
-    val df = Seq((1, "1"), (2, "2"), (2, "3")).toDF("key", "value")
-
-    checkAnswer(
-      df.select(
-        $"key",
-        first("value").over(
-          partitionBy($"key"))),
-      Row(1, "1") :: Row(2, "2") :: Row(2, "2") :: Nil)
-  }
-
-  test("Window function in Unspecified Window #2") {
-    val df = Seq((1, "1"), (2, "2"), (2, "3")).toDF("key", "value")
-
-    checkAnswer(
-      df.select(
-        $"key",
-        first("value").over(
-          partitionBy($"key")
-          .orderBy($"value"))),
-      Row(1, "1") :: Row(2, "2") :: Row(2, "2") :: Nil)
-  }
-
-  test("Aggregate function in Range Window") {
-    val df = Seq((1, "1"), (2, "2"), (2, "3")).toDF("key", "value")
-
-    checkAnswer(
-      df.select(
-        $"key",
-        first("value").over(
-          partitionBy($"value")
-          .orderBy($"key")
-          .range
-          .between
-          .preceding(1)
-          .and
-          .following(1))),
-      Row(1, "1") :: Row(2, "2") :: Row(2, "3") :: Nil)
-  }
-
   test("Aggregate function in Row preceding Window") {
     val df = Seq((1, "1"), (2, "2"), (2, "3")).toDF("key", "value")
+    df.registerTempTable("window_table")
     checkAnswer(
       df.select(
         $"key",
@@ -194,6 +178,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
   test("Aggregate function in Row following Window") {
     val df = Seq((1, "1"), (2, "2"), (2, "3")).toDF("key", "value")
+    df.registerTempTable("window_table")
     checkAnswer(
       df.select(
         $"key",
@@ -207,6 +192,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
   test("Multiple aggregate functions in row window") {
     val df = Seq((1, "1"), (1, "2"), (3, "2"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    df.registerTempTable("window_table")
     checkAnswer(
       df.select(
         avg("key").over(
@@ -240,6 +226,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
   test("Multiple aggregate functions in range window") {
     val df = Seq((1, "1"), (2, "2"), (2, "2"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    df.registerTempTable("window_table")
     checkAnswer(
       df.select(
         $"key",

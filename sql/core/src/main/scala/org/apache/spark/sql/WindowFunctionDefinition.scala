@@ -333,10 +333,6 @@ class WindowFunctionDefinition protected[sql](
       case wf: WindowFunction => WindowExpression(
         wf,
         WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case aggr: AggregateExpression =>
-        throw new UnsupportedOperationException(
-          """Only support Aggregate Functions:
-            | avg, sum, count, first, last, min, max for now""".stripMargin)
       case x =>
         throw new UnsupportedOperationException(s"We don't support $x in window operation.")
     }
