@@ -353,8 +353,8 @@ class UserDefinedFunction(object):
         ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
         jdt = ssql_ctx.parseDataType(self.returnType.json())
         fname = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
-        judf = sc._jvm.UserDefinedPythonFunction(fname, bytearray(pickled_command), env,
-                                                 includes, sc.pythonExec, broadcast_vars,
+        judf = sc._jvm.UserDefinedPythonFunction(fname, bytearray(pickled_command), env, includes,
+                                                 sc.pythonExec, sc.pythonVer, broadcast_vars,
                                                  sc._javaAccumulator, jdt)
         return judf
 

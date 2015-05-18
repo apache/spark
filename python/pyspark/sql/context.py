@@ -157,6 +157,7 @@ class SQLContext(object):
                                             env,
                                             includes,
                                             self._sc.pythonExec,
+                                            self._sc.pythonVer,
                                             bvars,
                                             self._sc._javaAccumulator,
                                             returnType.json())
