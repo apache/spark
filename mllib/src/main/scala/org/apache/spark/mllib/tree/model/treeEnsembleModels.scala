@@ -414,7 +414,7 @@ private[tree] object TreeEnsembleModel extends Logging {
       val dataRDD = sc.parallelize(model.trees.zipWithIndex).flatMap { case (tree, treeId) =>
         tree.topNode.subtreeIterator.toSeq.map(node => NodeData(treeId, node))
       }.toDF()
-      dataRDD.saveAsParquetFile(Loader.dataPath(path))
+      dataRDD.write.parquet(Loader.dataPath(path))
     }
 
     /**
