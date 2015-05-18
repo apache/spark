@@ -371,6 +371,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   private class FileStatusCache {
     var leafFiles = mutable.Map.empty[Path, FileStatus]
 
+    var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
+
     var leafDirs = mutable.Map.empty[Path, FileStatus]
 
     def refresh(): Unit = {
@@ -395,6 +397,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       val (dirs, files) = statuses.partition(_.isDir)
       leafDirs ++= dirs.map(d => d.getPath -> d).toMap
       leafFiles ++= files.map(f => f.getPath -> f).toMap
+      leafDirToChildrenFiles ++= files.groupBy(_.getPath.getParent)
     }
   }
 
@@ -483,13 +486,19 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       filters: Array[Filter],
       inputPaths: Array[String]): RDD[Row] = {
     val inputStatuses = inputPaths.flatMap { input =>
-      fileStatusCache.leafFiles.values.filter { status =>
-        val path = new Path(input)
-        (status.getPath.getParent == path || status.getPath == path) &&
-          !status.getPath.getName.startsWith("_") &&
-          !status.getPath.getName.startsWith(".")
+      val path = new Path(input)
+
+      // First assumes `input` is a directory path, and tries to get all files contained in it.
+      fileStatusCache.leafDirToChildrenFiles.getOrElse(
+        path,
+        // Otherwise, `input` might be a file path
+        fileStatusCache.leafFiles.get(path).toArray
+      ).filter { status =>
+        val name = status.getPath.getName
+        !name.startsWith("_") && !name.startsWith(".")
       }
     }
+
     buildScan(requiredColumns, filters, inputStatuses)
   }
 

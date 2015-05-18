@@ -17,20 +17,16 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.Logging
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.rdd.{UnionRDD, RDD}
-import org.apache.spark.sql.Row
+import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.types.{StructType, UTF8String, StringType}
-import org.apache.spark.sql._
+import org.apache.spark.sql.types.{StringType, StructType, UTF8String}
+import org.apache.spark.sql.{SaveMode, Strategy, execution, sources}
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
