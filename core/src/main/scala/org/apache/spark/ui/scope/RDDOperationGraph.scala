@@ -116,8 +116,8 @@ private[ui] object RDDOperationGraph extends Logging {
         // which may be nested inside of other clusters
         val rddScopes = rdd.scope.map { scope => scope.getAllScopes }.getOrElse(Seq.empty)
         val rddClusters = rddScopes.map { scope =>
-          val clusterId = scope.name + "_" + scope.id
-          val clusterName = scope.name
+          val clusterId = scope.id
+          val clusterName = scope.name.replaceAll("\\n", "\\\\n")
           clusters.getOrElseUpdate(clusterId, new RDDOperationCluster(clusterId, clusterName))
         }
         // Build the cluster hierarchy for this RDD
@@ -177,7 +177,7 @@ private[ui] object RDDOperationGraph extends Logging {
 
   /** Return the dot representation of a node in an RDDOperationGraph. */
   private def makeDotNode(node: RDDOperationNode): String = {
-    s"""${node.id} [label="${node.name} (${node.id})"]"""
+    s"""${node.id} [label="${node.name} [${node.id}]"]"""
   }
 
   /** Return the dot representation of a subgraph in an RDDOperationGraph. */
