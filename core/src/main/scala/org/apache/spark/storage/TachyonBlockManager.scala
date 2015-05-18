@@ -21,14 +21,13 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.{Date, Random}
-
 import com.google.common.io.ByteStreams
 import tachyon.client.{ReadType, WriteType, TachyonFS, TachyonFile}
 import tachyon.TachyonURI
-
 import org.apache.spark.{SparkException, SparkConf, Logging}
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.util.Utils
+import scala.util.control.NonFatal
 
 
 /**
@@ -97,7 +96,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     try {
       os.write(bytes.array())
     } catch {
-      case e : Exception => 
+      case NonFatal(e) => 
         logWarning(s"Failed to put byes of block $blockId into Tachyon", e)
         os.cancel()
     } finally {
@@ -111,7 +110,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     try {
       blockManager.dataSerializeStream(blockId, os, values)
     } catch {
-      case e : Exception => 
+      case NonFatal(e) => 
         logWarning(s"Failed to put values of block $blockId into Tachyon", e)
         os.cancel()
     } finally {
@@ -134,7 +133,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
       ByteStreams.readFully(is, bs)
       Some(ByteBuffer.wrap(bs))
     } catch {
-      case e: Exception =>
+      case NonFatal(e) =>
         logWarning(s"Failed to get bytes of block $blockId from Tachyon", e)
         None
     } finally {
@@ -218,7 +217,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
             tachyonDir = client.getFile(path)
           }
         } catch {
-          case e: Exception =>
+          case NonFatal(e) =>
             logWarning("Attempt " + tries + " to create tachyon dir " + tachyonDir + " failed", e)
         }
       }
@@ -240,7 +239,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
           Utils.deleteRecursively(tachyonDir, client)
         }
       } catch {
-        case e: Exception =>
+        case NonFatal(e) =>
           logError("Exception while deleting tachyon spark dir: " + tachyonDir, e)
       }
     }

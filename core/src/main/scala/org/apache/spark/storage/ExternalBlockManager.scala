@@ -32,7 +32,7 @@ import java.nio.ByteBuffer
  */
 private[spark] abstract class ExternalBlockManager {
 
-  var blockManager: BlockManager = _
+  protected var blockManager: BlockManager = _
 
   override def toString: String = {"External Block Store"}
 

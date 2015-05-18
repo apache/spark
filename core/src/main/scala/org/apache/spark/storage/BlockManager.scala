@@ -492,7 +492,7 @@ private[spark] class BlockManager(
           if (externalBlockStore.contains(blockId)) {
             val result = if (asBlockResult) {
               externalBlockStore.getValues(blockId)
-              .map(new BlockResult(_, DataReadMethod.Memory, info.size))
+                .map(new BlockResult(_, DataReadMethod.Memory, info.size))
             } else {
               externalBlockStore.getBytes(blockId)
             }
