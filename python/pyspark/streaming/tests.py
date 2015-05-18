@@ -41,8 +41,8 @@ from pyspark.streaming.kafka import Broker, KafkaUtils, OffsetRange, TopicAndPar
 
 class PySparkStreamingTestCase(unittest.TestCase):
 
-    timeout = 4  # seconds
-    duration = .2
+    timeout = 10  # seconds
+    duration = .5
 
     @classmethod
     def setUpClass(cls):
@@ -379,7 +379,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
 class WindowFunctionTests(PySparkStreamingTestCase):
 
-    timeout = 5
+    timeout = 15
 
     def test_window(self):
         input = [range(1), range(2), range(3), range(4), range(5)]
