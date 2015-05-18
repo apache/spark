@@ -410,6 +410,9 @@ class Word2Vec extends Serializable with Logging {
       i += 1
     }
 
+    require(word2VecMap.size > 0, "The word2vec map should not be empty. You may need to check " +
+      "the setting of minCount, which could be large enough to remove all your words in sentences.")
+
     new Word2VecModel(word2VecMap.toMap)
   }
 
