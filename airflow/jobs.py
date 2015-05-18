@@ -313,8 +313,6 @@ class SchedulerJob(BaseJob):
         session.merge(db_dag)
         session.commit()
 
-        logging.debug("Calling the executor's heartbeat")
-        executor.heartbeat()
         session.close()
 
     def _execute(self):
@@ -365,7 +363,9 @@ class SchedulerJob(BaseJob):
                     self.process_dag(dag, executor)
                 except Exception as e:
                     logging.exception(e)
-            logging.debug("Done scheduling all DAGs")
+            logging.debug(
+                "Done qeuing tasks, calling the executor's heartbeat")
+            executor.heartbeat()
             self.heartbeat()
         executor.end()
 
