@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import java.text.{SimpleDateFormat}
 
 import scala.collection.immutable.HashSet
 
@@ -412,6 +413,40 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     val d1 = DateUtils.fromJavaDate(Date.valueOf("1970-01-01"))
     val d2 = DateUtils.fromJavaDate(Date.valueOf("1970-01-02"))
     checkEvaluation(Literal(d1) < Literal(d2), true)
+  }
+
+  test("java date conversion before and after epoch") {
+
+    def checkFromToJavaDate(d1: Date) = {
+      val d2 = DateUtils.toJavaDate(DateUtils.fromJavaDate(d1))
+      checkEvaluation(d2.toString, d1.toString)
+    }
+
+    val df1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val df2 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z")
+
+    checkFromToJavaDate(Date.valueOf("1969-01-01"))
+
+    checkFromToJavaDate(new Date(df1.parse("1969-01-01 00:00:00").getTime))
+    checkFromToJavaDate(new Date(df2.parse("1969-01-01 00:00:00 UTC").getTime))
+
+    checkFromToJavaDate(new Date(df1.parse("1969-01-01 00:00:01").getTime))
+    checkFromToJavaDate(new Date(df2.parse("1969-01-01 00:00:01 UTC").getTime))
+
+    checkFromToJavaDate(new Date(df1.parse("1970-01-01 00:00:00").getTime))
+    checkFromToJavaDate(new Date(df2.parse("1970-01-01 00:00:00 UTC").getTime))
+
+    checkFromToJavaDate(new Date(df1.parse("1970-01-01 00:00:01").getTime))
+    checkFromToJavaDate(new Date(df2.parse("1970-01-01 00:00:01 UTC").getTime))
+
+    checkFromToJavaDate(new Date(df1.parse("1969-12-31 23:59:59").getTime))
+    checkFromToJavaDate(new Date(df2.parse("1969-12-31 23:59:59 UTC").getTime))
+
+    checkFromToJavaDate(new Date(df1.parse("1776-07-04 10:30:00").getTime))
+    checkFromToJavaDate(new Date(df2.parse("1776-07-04 18:30:00 UTC").getTime))
+
+    checkFromToJavaDate(new Date(df1.parse("1989-11-09 11:59:59").getTime))
+    checkFromToJavaDate(new Date(df2.parse("1989-11-09 19:59:59 UTC").getTime))
   }
 
   test("casting to fixed-precision decimals") {
