@@ -12,6 +12,7 @@ from hive_service import ThriftHive
 import pyhs2
 
 from airflow.hooks.base_hook import BaseHook
+from airflow.utils import TemporaryDirectory
 
 
 class HiveCliHook(BaseHook):
@@ -39,26 +40,28 @@ class HiveCliHook(BaseHook):
         if schema:
             hql = "USE {schema};\n{hql}".format(**locals())
 
-        with NamedTemporaryFile() as f:
-            f.write(hql)
-            f.flush()
-            fname = f.name
-            hive_cmd = ['hive', '-f', fname]
-            if self.hive_cli_params:
-                hive_params_list = self.hive_cli_params.split()
-                hive_cmd.extend(hive_params_list)
-            sp = subprocess.Popen(
-                hive_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT)
-            all_err = ''
-            self.sp = sp
-            for line in iter(sp.stdout.readline, ''):
-                logging.info(line.strip())
-            sp.wait()
+        with TemporaryDirectory(prefix='airflow_hiveop_') as tmp_dir:
+            with NamedTemporaryFile(dir=tmp_dir) as f:
+                f.write(hql)
+                f.flush()
+                fname = f.name
+                hive_cmd = ['hive', '-f', fname]
+                if self.hive_cli_params:
+                    hive_params_list = self.hive_cli_params.split()
+                    hive_cmd.extend(hive_params_list)
+                sp = subprocess.Popen(
+                    hive_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    cwd=tmp_dir)
+                all_err = ''
+                self.sp = sp
+                for line in iter(sp.stdout.readline, ''):
+                    logging.info(line.strip())
+                sp.wait()
 
-            if sp.returncode:
-                raise Exception(all_err)
+                if sp.returncode:
+                    raise Exception(all_err)
 
     def load_file(
             self,
