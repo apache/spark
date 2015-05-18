@@ -517,6 +517,18 @@ class RDDTests(ReusedPySparkTestCase):
         subset = data.takeSample(False, 10)
         self.assertEqual(len(subset), 10)
 
+    def test_range(self):
+        data1 = self.sc.range(-2, 2, 2, 4).collect()
+        self.assertEqual(len(data1), 2)
+        data2 = self.sc.range(-2, 2).collect()
+        self.assertEqual(len(data2), 4)
+        data3 = self.sc.range(100000000000, -100000000000, -100000000001).collect()
+        self.assertEqual(len(data3), 2)
+        data4 = self.sc.range(1, -1, 1).collect()
+        self.assertEqual(len(data4), 0)
+        data5 = self.sc.range(-1, 1000000000000, 1000000000000).collect()
+        self.assertEqual(len(data5), 2)
+
     def test_aggregate_by_key(self):
         data = self.sc.parallelize([(1, 1), (1, 1), (3, 2), (5, 1), (5, 3)], 2)
 

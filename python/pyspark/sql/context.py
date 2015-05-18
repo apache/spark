@@ -139,8 +139,17 @@ class SQLContext(object):
         """
         if numPartitions is None:
             numPartitions = self._sc.defaultParallelism
-        jdf = self._ssql_ctx.range(int(start), int(end), int(step), int(numPartitions))
-        return DataFrame(jdf, self)
+        if step == 0:
+            raise ValueError("step cannot be 0")
+        def _slong(num):
+            """Return a JVM Scala Long from a int/long"""
+            return self._jvm.PythonUtils.toScalaLong(num)
+        def _sint(num):
+            """Return a JVM Scala Int from a int/long"""
+            return self._jvm.PythonUtils.toScalaInt(num)
+
+        df = self._ssql_ctx.range(_slong(start), _slong(end), _slong(step), _sint(numPartitions))
+        return DataFrame(df, self)
 
     @ignore_unicode_prefix
     def registerFunction(self, name, f, returnType=StringType()):
