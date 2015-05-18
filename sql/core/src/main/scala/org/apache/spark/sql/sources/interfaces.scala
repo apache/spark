@@ -481,7 +481,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     })
   }
 
-  private[sources] final def buildScan(
+  private[sources] def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String]): RDD[Row] = {
