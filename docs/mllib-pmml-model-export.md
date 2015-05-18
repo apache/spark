@@ -60,7 +60,7 @@ val numIterations = 20
 val clusters = KMeans.train(parsedData, numClusters, numIterations)
 
 // Export to PMML
-println("PMML export = " + clusters.toPMML)
+println("PMML Model:\n" + clusters.toPMML)
 {% endhighlight %}
 
 As well as exporting the PMML model to a String (`model.toPMML` as in the example above), you can export the PMML model to other formats:
