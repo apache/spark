@@ -55,7 +55,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         ...
     TypeError: Method setParams forces keyword arguments.
     """
-    _java_class = "org.apache.spark.ml.classification.LogisticRegression"
+
     # a placeholder to make it appear in the generated doc
     elasticNetParam = \
         Param(Params._dummy(), "elasticNetParam",
@@ -75,6 +75,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                  threshold=0.5, probabilityCol="probability")
         """
         super(LogisticRegression, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.LogisticRegression", self.uid)
         #: param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty
         #  is an L2 penalty. For alpha = 1, it is an L1 penalty.
         self.elasticNetParam = \
@@ -111,7 +113,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         Sets the value of :py:attr:`elasticNetParam`.
         """
-        self.paramMap[self.elasticNetParam] = value
+        self._paramMap[self.elasticNetParam] = value
         return self
 
     def getElasticNetParam(self):
@@ -124,7 +126,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         Sets the value of :py:attr:`fitIntercept`.
         """
-        self.paramMap[self.fitIntercept] = value
+        self._paramMap[self.fitIntercept] = value
         return self
 
     def getFitIntercept(self):
@@ -137,7 +139,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         Sets the value of :py:attr:`threshold`.
         """
-        self.paramMap[self.threshold] = value
+        self._paramMap[self.threshold] = value
         return self
 
     def getThreshold(self):
@@ -208,7 +210,6 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     1.0
     """
 
-    _java_class = "org.apache.spark.ml.classification.DecisionTreeClassifier"
     # a placeholder to make it appear in the generated doc
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
@@ -224,6 +225,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini")
         """
         super(DecisionTreeClassifier, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.DecisionTreeClassifier", self.uid)
         #: param for Criterion used for information gain calculation (case-insensitive).
         self.impurity = \
             Param(self, "impurity",
@@ -256,7 +259,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         """
         Sets the value of :py:attr:`impurity`.
         """
-        self.paramMap[self.impurity] = value
+        self._paramMap[self.impurity] = value
         return self
 
     def getImpurity(self):
@@ -299,7 +302,6 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     1.0
     """
 
-    _java_class = "org.apache.spark.ml.classification.RandomForestClassifier"
     # a placeholder to make it appear in the generated doc
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
@@ -325,6 +327,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                  numTrees=20, featureSubsetStrategy="auto", seed=42)
         """
         super(RandomForestClassifier, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.RandomForestClassifier", self.uid)
         #: param for Criterion used for information gain calculation (case-insensitive).
         self.impurity = \
             Param(self, "impurity",
@@ -370,7 +374,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         """
         Sets the value of :py:attr:`impurity`.
         """
-        self.paramMap[self.impurity] = value
+        self._paramMap[self.impurity] = value
         return self
 
     def getImpurity(self):
@@ -383,7 +387,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         """
         Sets the value of :py:attr:`subsamplingRate`.
         """
-        self.paramMap[self.subsamplingRate] = value
+        self._paramMap[self.subsamplingRate] = value
         return self
 
     def getSubsamplingRate(self):
@@ -396,7 +400,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         """
         Sets the value of :py:attr:`numTrees`.
         """
-        self.paramMap[self.numTrees] = value
+        self._paramMap[self.numTrees] = value
         return self
 
     def getNumTrees(self):
@@ -409,7 +413,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         """
         Sets the value of :py:attr:`featureSubsetStrategy`.
         """
-        self.paramMap[self.featureSubsetStrategy] = value
+        self._paramMap[self.featureSubsetStrategy] = value
         return self
 
     def getFeatureSubsetStrategy(self):
@@ -452,7 +456,6 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     1.0
     """
 
-    _java_class = "org.apache.spark.ml.classification.GBTClassifier"
     # a placeholder to make it appear in the generated doc
     lossType = Param(Params._dummy(), "lossType",
                      "Loss function which GBT tries to minimize (case-insensitive). " +
@@ -476,6 +479,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                  lossType="logistic", maxIter=20, stepSize=0.1)
         """
         super(GBTClassifier, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.GBTClassifier", self.uid)
         #: param for Loss function which GBT tries to minimize (case-insensitive).
         self.lossType = Param(self, "lossType",
                               "Loss function which GBT tries to minimize (case-insensitive). " +
@@ -517,7 +522,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         """
         Sets the value of :py:attr:`lossType`.
         """
-        self.paramMap[self.lossType] = value
+        self._paramMap[self.lossType] = value
         return self
 
     def getLossType(self):
@@ -530,7 +535,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         """
         Sets the value of :py:attr:`subsamplingRate`.
         """
-        self.paramMap[self.subsamplingRate] = value
+        self._paramMap[self.subsamplingRate] = value
         return self
 
     def getSubsamplingRate(self):
@@ -543,7 +548,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         """
         Sets the value of :py:attr:`stepSize`.
         """
-        self.paramMap[self.stepSize] = value
+        self._paramMap[self.stepSize] = value
         return self
 
     def getStepSize(self):
