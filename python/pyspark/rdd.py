@@ -820,6 +820,14 @@ class RDD(object):
         as its result value to avoid object allocation; however, it should not
         modify C{t2}.
 
+        Currently, this implementation only works correctly if the fold operation
+        is commutative -- if op(a,b) == op(b,a) for any a and b. For example,
+        sc.parallelize(...).fold(0,lambda a,b:a+1) should return the count of
+        elements in the RDD, but currently does not work as intended. However,
+        sc.parallelize(...).fold(0,lambda a,b:a+b) works as intended to return
+        the sum of elements. In effect, it acts like a reduce operation with a
+        default value. See SPARK-6416.
+
         >>> from operator import add
         >>> sc.parallelize([1, 2, 3, 4, 5]).fold(0, add)
         15
