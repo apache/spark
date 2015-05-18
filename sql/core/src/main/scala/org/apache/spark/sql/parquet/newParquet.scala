@@ -234,15 +234,15 @@ private[sql] class ParquetRelation2(
   override def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
-      inputPaths: Array[String]): RDD[Row] = {
+      inputFiles: Array[FileStatus]): RDD[Row] = {
 
     val job = new Job(SparkHadoopUtil.get.conf)
     val conf = ContextUtil.getConfiguration(job)
 
     ParquetInputFormat.setReadSupportClass(job, classOf[RowReadSupport])
 
-    if (inputPaths.nonEmpty) {
-      FileInputFormat.setInputPaths(job, inputPaths.map(new Path(_)): _*)
+    if (inputFiles.nonEmpty) {
+      FileInputFormat.setInputPaths(job, inputFiles.map(_.getPath): _*)
     }
 
     // Try to push down filters when filter push-down is enabled.
@@ -269,10 +269,7 @@ private[sql] class ParquetRelation2(
     val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, "true").toBoolean
     conf.set(SQLConf.PARQUET_CACHE_METADATA, useMetadataCache.toString)
 
-    val inputFileStatuses =
-      metadataCache.dataStatuses.filter(f => inputPaths.contains(f.getPath.toString))
-
-    val footers = inputFileStatuses.map(metadataCache.footers)
+    val footers = inputFiles.map(metadataCache.footers)
 
     // TODO Stop using `FilteringParquetRowInputFormat` and overriding `getPartition`.
     // After upgrading to Parquet 1.6.0, we should be able to stop caching `FileStatus` objects and
@@ -287,7 +284,7 @@ private[sql] class ParquetRelation2(
 
       val cacheMetadata = useMetadataCache
 
-      @transient val cachedStatuses = inputFileStatuses.map { f =>
+      @transient val cachedStatuses = inputFiles.map { f =>
         // In order to encode the authority of a Path containing special characters such as /,
         // we need to use the string returned by the URI of the path to create a new Path.
         val pathWithAuthority = new Path(f.getPath.toUri.toString)
