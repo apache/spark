@@ -372,7 +372,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
     var leafDirs = mutable.Map.empty[Path, FileStatus]
 
-    def refresh() = {
+    def refresh(): Unit = {
       def listLeafFilesAndDirs(fs: FileSystem, status: FileStatus): Set[FileStatus] = {
         val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
         val leafDirs = if (dirs.isEmpty) Set(status) else Set.empty[FileStatus]
