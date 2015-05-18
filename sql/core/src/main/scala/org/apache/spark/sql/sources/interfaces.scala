@@ -478,8 +478,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String]): RDD[Row] = {
-    val inputStatuses = inputPaths.flatMap { path =>
-      fileStatusCache.leafFiles.values.filter(_.getPath.getParent == new Path(path))
+    val inputStatuses = inputPaths.flatMap { input =>
+      fileStatusCache.leafFiles.values.filter { status =>
+        val path = new Path(input)
+        status.getPath.getParent == path || status.getPath == path
+      }
     }
     buildScan(requiredColumns, filters, inputStatuses)
   }
