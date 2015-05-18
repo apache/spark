@@ -195,7 +195,7 @@ private[orc] case class OrcTableScan(
     attributes: Seq[Attribute],
     @transient relation: OrcRelation,
     filters: Array[Filter],
-    inputPaths: Array[FileStatus])
+    @transient inputPaths: Array[FileStatus])
   extends Logging
   with HiveInspectors {
 
