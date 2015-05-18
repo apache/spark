@@ -132,11 +132,12 @@ class KafkaUtils(object):
         .. note:: Experimental
 
         Create a RDD from Kafka using offset ranges for each topic and partition.
+
         :param sc:  SparkContext object
         :param kafkaParams: Additional params for Kafka
         :param offsetRanges:  list of offsetRange to specify topic:partition:[start, end) to consume
         :param leaders: Kafka brokers for each TopicAndPartition in offsetRanges.  May be an empty
-                        map, in which case leaders will be looked up on the driver.
+            map, in which case leaders will be looked up on the driver.
         :param keyDecoder:  A function used to decode key (default is utf8_decoder)
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
         :return: A RDD object

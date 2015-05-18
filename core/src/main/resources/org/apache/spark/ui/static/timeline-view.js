@@ -133,6 +133,57 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
   });
 }
 
+function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, maxFinishTime) {
+  var groups = new vis.DataSet(groupArray);
+  var items = new vis.DataSet(eventObjArray);
+  var container = $("#task-assignment-timeline")[0]
+  var options = {
+    groupOrder: function(a, b) {
+      return a.value - b.value
+    },
+    editable: false,
+    align: 'left',
+    selectable: false,
+    showCurrentTime: false,
+    min: minLaunchTime,
+    max: maxFinishTime,
+    zoomable: false
+  };
+
+  var taskTimeline = new vis.Timeline(container)
+  taskTimeline.setOptions(options);
+  taskTimeline.setGroups(groups);
+  taskTimeline.setItems(items);
+
+  // If a user zooms while a tooltip is displayed, the user may zoom such that the cursor is no
+  // longer over the task that the tooltip corresponds to. So, when a user zooms, we should hide
+  // any currently displayed tooltips.
+  var currentDisplayedTooltip = null;
+  $("#task-assignment-timeline").on({
+    "mouseenter": function() {
+      currentDisplayedTooltip = this;
+    },
+    "mouseleave": function() {
+      currentDisplayedTooltip = null;
+    }
+  }, ".task-assignment-timeline-content");
+  taskTimeline.on("rangechange", function(prop) {
+    if (currentDisplayedTooltip !== null) {
+      $(currentDisplayedTooltip).tooltip("hide");
+    }
+  });
+
+  setupZoomable("#task-assignment-timeline-zoom-lock", taskTimeline);
+
+  $("span.expand-task-assignment-timeline").click(function() {
+    $("#task-assignment-timeline").toggleClass("collapsed");
+
+     // Switch the class of the arrow from open to closed.
+    $(this).find(".expand-task-assignment-timeline-arrow").toggleClass("arrow-open");
+    $(this).find(".expand-task-assignment-timeline-arrow").toggleClass("arrow-closed");
+  });
+}
+
 function setupExecutorEventAction() {
   $(".item.box.executor").each(function () {
     $(this).hover(
@@ -147,7 +198,7 @@ function setupExecutorEventAction() {
 }
 
 function setupZoomable(id, timeline) {
-  $(id + '>input[type="checkbox"]').click(function() {
+  $(id + ' > input[type="checkbox"]').click(function() {
     if (this.checked) {
       timeline.setOptions({zoomable: true});
     } else {
@@ -155,7 +206,7 @@ function setupZoomable(id, timeline) {
     }
   });
 
-  $(id + ">span").click(function() {
+  $(id + " > span").click(function() {
     $(this).parent().find('input:checkbox').trigger('click');
   });
 }

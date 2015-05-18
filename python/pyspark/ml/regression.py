@@ -33,8 +33,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     Linear regression.
 
     The learning objective is to minimize the squared error, with regularization.
-    The specific squared error loss function used is:
-      L = 1/2n ||A weights - y||^2^
+    The specific squared error loss function used is: L = 1/2n ||A weights - y||^2^
 
     This support multiple types of regularization:
      - none (a.k.a. ordinary least squares)
@@ -51,6 +50,10 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     -1.0
+    >>> model.weights
+    DenseVector([1.0])
+    >>> model.intercept
+    0.0
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
@@ -59,7 +62,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         ...
     TypeError: Method setParams forces keyword arguments.
     """
-    _java_class = "org.apache.spark.ml.regression.LinearRegression"
+
     # a placeholder to make it appear in the generated doc
     elasticNetParam = \
         Param(Params._dummy(), "elasticNetParam",
@@ -74,6 +77,8 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6)
         """
         super(LinearRegression, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.LinearRegression", self.uid)
         #: param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty
         #  is an L2 penalty. For alpha = 1, it is an L1 penalty.
         self.elasticNetParam = \
@@ -102,7 +107,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         """
         Sets the value of :py:attr:`elasticNetParam`.
         """
-        self.paramMap[self.elasticNetParam] = value
+        self._paramMap[self.elasticNetParam] = value
         return self
 
     def getElasticNetParam(self):
@@ -116,6 +121,20 @@ class LinearRegressionModel(JavaModel):
     """
     Model fitted by LinearRegression.
     """
+
+    @property
+    def weights(self):
+        """
+        Model weights.
+        """
+        return self._call_java("weights")
+
+    @property
+    def intercept(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("intercept")
 
 
 class TreeRegressorParams(object):
@@ -161,7 +180,6 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     1.0
     """
 
-    _java_class = "org.apache.spark.ml.regression.DecisionTreeRegressor"
     # a placeholder to make it appear in the generated doc
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
@@ -173,10 +191,12 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance")
         """
         super(DecisionTreeRegressor, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.DecisionTreeRegressor", self.uid)
         #: param for Criterion used for information gain calculation (case-insensitive).
         self.impurity = \
             Param(self, "impurity",
@@ -195,9 +215,8 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                   impurity="variance"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="variance")
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance")
         Sets params for the DecisionTreeRegressor.
         """
         kwargs = self.setParams._input_kwargs
@@ -210,7 +229,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`impurity`.
         """
-        self.paramMap[self.impurity] = value
+        self._paramMap[self.impurity] = value
         return self
 
     def getImpurity(self):
@@ -248,7 +267,6 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     0.5
     """
 
-    _java_class = "org.apache.spark.ml.regression.RandomForestRegressor"
     # a placeholder to make it appear in the generated doc
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
@@ -268,12 +286,14 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance",
                  numTrees=20, featureSubsetStrategy="auto", seed=42):
         """
-        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance",
-                 numTrees=20, featureSubsetStrategy="auto", seed=42)
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
+                 impurity="variance", numTrees=20, featureSubsetStrategy="auto", seed=42)
         """
         super(RandomForestRegressor, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.RandomForestRegressor", self.uid)
         #: param for Criterion used for information gain calculation (case-insensitive).
         self.impurity = \
             Param(self, "impurity",
@@ -303,9 +323,9 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=42,
                   impurity="variance", numTrees=20, featureSubsetStrategy="auto"):
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=42,
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=42, \
                   impurity="variance", numTrees=20, featureSubsetStrategy="auto")
         Sets params for linear regression.
         """
@@ -319,7 +339,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`impurity`.
         """
-        self.paramMap[self.impurity] = value
+        self._paramMap[self.impurity] = value
         return self
 
     def getImpurity(self):
@@ -332,7 +352,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`subsamplingRate`.
         """
-        self.paramMap[self.subsamplingRate] = value
+        self._paramMap[self.subsamplingRate] = value
         return self
 
     def getSubsamplingRate(self):
@@ -345,7 +365,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`numTrees`.
         """
-        self.paramMap[self.numTrees] = value
+        self._paramMap[self.numTrees] = value
         return self
 
     def getNumTrees(self):
@@ -358,7 +378,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`featureSubsetStrategy`.
         """
-        self.paramMap[self.featureSubsetStrategy] = value
+        self._paramMap[self.featureSubsetStrategy] = value
         return self
 
     def getFeatureSubsetStrategy(self):
@@ -396,7 +416,6 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     1.0
     """
 
-    _java_class = "org.apache.spark.ml.regression.GBTRegressor"
     # a placeholder to make it appear in the generated doc
     lossType = Param(Params._dummy(), "lossType",
                      "Loss function which GBT tries to minimize (case-insensitive). " +
@@ -414,12 +433,13 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="squared",
                  maxIter=20, stepSize=0.1):
         """
-        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="squared",
-                 maxIter=20, stepSize=0.1)
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
+                 lossType="squared", maxIter=20, stepSize=0.1)
         """
         super(GBTRegressor, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         #: param for Loss function which GBT tries to minimize (case-insensitive).
         self.lossType = Param(self, "lossType",
                               "Loss function which GBT tries to minimize (case-insensitive). " +
@@ -445,9 +465,9 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   lossType="squared", maxIter=20, stepSize=0.1):
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   lossType="squared", maxIter=20, stepSize=0.1)
         Sets params for Gradient Boosted Tree Regression.
         """
@@ -461,7 +481,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         """
         Sets the value of :py:attr:`lossType`.
         """
-        self.paramMap[self.lossType] = value
+        self._paramMap[self.lossType] = value
         return self
 
     def getLossType(self):
@@ -474,7 +494,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         """
         Sets the value of :py:attr:`subsamplingRate`.
         """
-        self.paramMap[self.subsamplingRate] = value
+        self._paramMap[self.subsamplingRate] = value
         return self
 
     def getSubsamplingRate(self):
@@ -487,7 +507,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         """
         Sets the value of :py:attr:`stepSize`.
         """
-        self.paramMap[self.stepSize] = value
+        self._paramMap[self.stepSize] = value
         return self
 
     def getStepSize(self):

@@ -122,7 +122,8 @@ private object BucketizerSuite extends FunSuite {
   def linearSearchForBuckets(splits: Array[Double], feature: Double): Double = {
     require(feature >= splits.head)
     var i = 0
-    while (i < splits.length - 1) {
+    val n = splits.length - 1
+    while (i < n) {
       if (feature < splits(i + 1)) return i
       i += 1
     }
@@ -138,7 +139,8 @@ private object BucketizerSuite extends FunSuite {
           s" ${splits.mkString(", ")}")
     }
     var i = 0
-    while (i < splits.length - 1) {
+    val n = splits.length - 1
+    while (i < n) {
       // Split i should fall in bucket i.
       testFeature(splits(i), i)
       // Value between splits i,i+1 should be in i, which is also true if the (i+1)-th split is inf.

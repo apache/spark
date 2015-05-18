@@ -98,7 +98,16 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
     var x = d3.scale.linear().domain([minX, maxX]).range([0, width]);
     var y = d3.scale.linear().domain([minY, maxY]).range([height, 0]);
 
-    var xAxis = d3.svg.axis().scale(x).orient("bottom").tickFormat(function(d) { return timeFormat[d]; });
+    var xAxis = d3.svg.axis().scale(x).orient("bottom").tickFormat(function(d) {
+        var formattedDate = timeFormat[d];
+        var dotIndex = formattedDate.indexOf('.');
+        if (dotIndex >= 0) {
+            // Remove milliseconds
+            return formattedDate.substring(0, dotIndex);
+        } else {
+            return formattedDate;
+        }
+    });
     var formatYValue = d3.format(",.2f");
     var yAxis = d3.svg.axis().scale(y).orient("left").ticks(5).tickFormat(formatYValue);
 
@@ -137,6 +146,12 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
         .attr("class", "line")
         .attr("d", line);
 
+    // If the user click one point in the graphs, jump to the batch row and highlight it. And
+    // recovery the batch row after 3 seconds if necessary.
+    // We need to remember the last clicked batch so that we can recovery it.
+    var lastClickedBatch = null;
+    var lastTimeout = null;
+
     // Add points to the line. However, we make it invisible at first. But when the user moves mouse
     // over a point, it will be displayed with its detail.
     svg.selectAll(".point")
@@ -145,6 +160,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
             .attr("stroke", "white") // white and opacity = 0 make it invisible
             .attr("fill", "white")
             .attr("opacity", "0")
+            .style("cursor", "pointer")
             .attr("cx", function(d) { return x(d.x); })
             .attr("cy", function(d) { return y(d.y); })
             .attr("r", function(d) { return 3; })
@@ -166,7 +182,29 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
                     .attr("opacity", "0");
             })
             .on("click", function(d) {
-                window.location.href = "batch/?id=" + d.x;
+                if (lastTimeout != null) {
+                    window.clearTimeout(lastTimeout);
+                }
+                if (lastClickedBatch != null) {
+                    clearBatchRow(lastClickedBatch);
+                    lastClickedBatch = null;
+                }
+                lastClickedBatch = d.x;
+                highlightBatchRow(lastClickedBatch)
+                lastTimeout = window.setTimeout(function () {
+                    lastTimeout = null;
+                    if (lastClickedBatch != null) {
+                        clearBatchRow(lastClickedBatch);
+                        lastClickedBatch = null;
+                    }
+                }, 3000); // Clean up after 3 seconds
+
+                var batchSelector = $("#batch-" + d.x);
+                var topOffset = batchSelector.offset().top - 15;
+                if (topOffset < 0) {
+                    topOffset = 0;
+                }
+                $('html,body').animate({scrollTop: topOffset}, 200);
             });
 }
 
@@ -209,6 +247,9 @@ function drawHistogram(id, values, minY, maxY, unitY, batchInterval) {
     svg.append("g")
         .attr("class", "x axis")
         .call(xAxis)
+        .append("text")
+            .attr("transform", "translate(" + (margin.left + width - 40) + ", 15)")
+            .text("#batches");
 
     svg.append("g")
         .attr("class", "y axis")
@@ -252,28 +293,16 @@ function drawHistogram(id, values, minY, maxY, unitY, batchInterval) {
 }
 
 $(function() {
-    function getParameterFromURL(param)
-    {
-        var parameters = window.location.search.substring(1); // Remove "?"
-        var keyValues = parameters.split('&');
-        for (var i = 0; i < keyValues.length; i++)
-        {
-            var paramKeyValue = keyValues[i].split('=');
-            if (paramKeyValue[0] == param)
-            {
-                return paramKeyValue[1];
-            }
-        }
-    }
-
-    var status = getParameterFromURL("show-streams-detail") == "true";
+    var status = window.localStorage && window.localStorage.getItem("show-streams-detail") == "true";
 
     $("span.expand-input-rate").click(function() {
         status = !status;
         $("#inputs-table").toggle('collapsed');
         // Toggle the class of the arrow between open and closed
         $(this).find('.expand-input-rate-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
-        window.history.pushState('', document.title, window.location.pathname + '?show-streams-detail=' + status);
+        if (window.localStorage) {
+            window.localStorage.setItem("show-streams-detail", "" + status);
+        }
     });
 
     if (status) {
@@ -282,3 +311,11 @@ $(function() {
         $(this).find('.expand-input-rate-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
     }
 });
+
+function highlightBatchRow(batch) {
+    $("#batch-" + batch).parent().addClass("batch-table-cell-highlight");
+}
+
+function clearBatchRow(batch) {
+    $("#batch-" + batch).parent().removeClass("batch-table-cell-highlight");
+}

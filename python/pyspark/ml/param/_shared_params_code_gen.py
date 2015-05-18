@@ -83,7 +83,7 @@ def _gen_param_code(name, doc, defaultValueStr):
         """
         Sets the value of :py:attr:`$name`.
         """
-        self.paramMap[self.$name] = value
+        self._paramMap[self.$name] = value
         return self
 
     def get$Name(self):
@@ -109,6 +109,9 @@ if __name__ == "__main__":
         ("featuresCol", "features column name", "'features'"),
         ("labelCol", "label column name", "'label'"),
         ("predictionCol", "prediction column name", "'prediction'"),
+        ("probabilityCol", "Column name for predicted class conditional probabilities. " +
+         "Note: Not all models output well-calibrated probability estimates! These probabilities " +
+         "should be treated as confidences, not precise probabilities.", "'probability'"),
         ("rawPredictionCol", "raw prediction (a.k.a. confidence) column name", "'rawPrediction'"),
         ("inputCol", "input column name", None),
         ("inputCols", "input column names", None),
@@ -156,6 +159,7 @@ if __name__ == "__main__":
     for name, doc in decisionTreeParams:
         variable = paramTemplate.replace("$name", name).replace("$doc", doc)
         dummyPlaceholders += variable.replace("$owner", "Params._dummy()") + "\n    "
+        realParams += "#: param for " + doc + "\n        "
         realParams += "self." + variable.replace("$owner", "self") + "\n        "
         dtParamMethods += _gen_param_code(name, doc, None) + "\n"
     code.append(decisionTreeCode.replace("$dummyPlaceHolders", dummyPlaceholders)

@@ -36,7 +36,7 @@ import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
+import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode, sources}
 import org.apache.spark.util.Utils
 
 /* Implicit conversions */
@@ -244,7 +244,9 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           val useCached =
             parquetRelation.paths.toSet == pathsInMetastore.toSet &&
             logical.schema.sameType(metastoreSchema) &&
-            parquetRelation.maybePartitionSpec == partitionSpecInMetastore
+            parquetRelation.partitionSpec == partitionSpecInMetastore.getOrElse {
+              PartitionSpec(StructType(Nil), Array.empty[sources.Partition])
+            }
 
           if (useCached) {
             Some(logical)
@@ -256,7 +258,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         case other =>
           logWarning(
             s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} should be stored " +
-              s"as Parquet. However, we are getting a ${other} from the metastore cache. " +
+              s"as Parquet. However, we are getting a $other from the metastore cache. " +
               s"This cached entry will be invalidated.")
           cachedDataSourceTables.invalidate(tableIdentifier)
           None
@@ -278,8 +280,9 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
       val cached = getCached(tableIdentifier, paths, metastoreSchema, Some(partitionSpec))
       val parquetRelation = cached.getOrElse {
-        val created =
-          LogicalRelation(ParquetRelation2(paths, parquetOptions, None, Some(partitionSpec))(hive))
+        val created = LogicalRelation(
+          new ParquetRelation2(
+            paths.toArray, None, Some(partitionSpec), parquetOptions)(hive))
         cachedDataSourceTables.put(tableIdentifier, created)
         created
       }
@@ -290,8 +293,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
       val cached = getCached(tableIdentifier, paths, metastoreSchema, None)
       val parquetRelation = cached.getOrElse {
-        val created =
-          LogicalRelation(ParquetRelation2(paths, parquetOptions)(hive))
+        val created = LogicalRelation(
+          new ParquetRelation2(paths.toArray, None, None, parquetOptions)(hive))
         cachedDataSourceTables.put(tableIdentifier, created)
         created
       }

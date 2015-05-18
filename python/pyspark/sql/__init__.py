@@ -55,8 +55,9 @@ del modname, sys
 
 from pyspark.sql.types import Row
 from pyspark.sql.context import SQLContext, HiveContext
-from pyspark.sql.dataframe import DataFrame, GroupedData, Column, SchemaRDD, DataFrameNaFunctions
-from pyspark.sql.dataframe import DataFrameStatFunctions
+from pyspark.sql.column import Column
+from pyspark.sql.dataframe import DataFrame, SchemaRDD, DataFrameNaFunctions, DataFrameStatFunctions
+from pyspark.sql.group import GroupedData
 
 __all__ = [
     'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row',

@@ -273,7 +273,8 @@ class DenseMatrix(
 
   override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone())
 
-  private[mllib] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f))
+  private[mllib] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
+    isTransposed)
 
   private[mllib] def update(f: Double => Double): DenseMatrix = {
     val len = values.length
@@ -535,7 +536,7 @@ class SparseMatrix(
   }
 
   private[mllib] def map(f: Double => Double) =
-    new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.map(f))
+    new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.map(f), isTransposed)
 
   private[mllib] def update(f: Double => Double): SparseMatrix = {
     val len = values.length
