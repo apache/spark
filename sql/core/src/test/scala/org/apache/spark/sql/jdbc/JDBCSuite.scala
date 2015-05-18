@@ -35,6 +35,13 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
 
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
 
+  val testH2Dialect = new JdbcDialect {
+    def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
+    override def getCatalystType(
+        sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
+      Some(StringType)
+  }
+
   before {
     Class.forName("org.h2.Driver")
     // Extra properties that will be specified for our database. We need these to test
@@ -353,4 +360,46 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         """.stripMargin.replaceAll("\n", " "))
     }
   }
+
+  test("Remap types via JdbcDialects") {
+    JdbcDialects.registerDialect(testH2Dialect)
+    val df = TestSQLContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
+    assert(df.schema.filter(
+      _.dataType != org.apache.spark.sql.types.StringType
+    ).isEmpty)
+    val rows = df.collect()
+    assert(rows(0).get(0).isInstanceOf[String])
+    assert(rows(0).get(1).isInstanceOf[String])
+    JdbcDialects.unregisterDialect(testH2Dialect)
+  }
+
+  test("Default jdbc dialect registration") {
+    assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
+    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
+    assert(JdbcDialects.get("test.invalid") == NoopDialect)
+  }
+
+  test("Dialect unregister") {
+    JdbcDialects.registerDialect(testH2Dialect)
+    JdbcDialects.unregisterDialect(testH2Dialect)
+    assert(JdbcDialects.get(urlWithUserAndPass) == NoopDialect)
+  }
+
+  test("Aggregated dialects") {
+    val agg = new AggregatedDialect(List(new JdbcDialect {
+      def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2:")
+      override def getCatalystType(
+          sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
+        if (sqlType % 2 == 0) {
+          Some(LongType)
+        } else {
+          None
+        }
+    }, testH2Dialect))
+    assert(agg.canHandle("jdbc:h2:xxx"))
+    assert(!agg.canHandle("jdbc:h2"))
+    assert(agg.getCatalystType(0,"",1,null) == Some(LongType))
+    assert(agg.getCatalystType(1,"",1,null) == Some(StringType))
+  }
+
 }
