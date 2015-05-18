@@ -187,7 +187,7 @@ class ParamTests(PySparkTestCase):
         # Check that a specified seed is honored
         self.assertEqual(withSeedSpecd.getSeed(), 42)
         # Check that a different class has a different seed
-        self.assertNotEqual(other.getSeed(), oSeedSpeced.getSeed())
+        self.assertNotEqual(other.getSeed(), noSeedSpecd.getSeed())
 
 if __name__ == "__main__":
     unittest.main()

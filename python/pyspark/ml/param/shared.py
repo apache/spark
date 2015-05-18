@@ -19,10 +19,6 @@
 
 from pyspark.ml.param import Param, Params
 
-import random
-
-import sys
-
 
 class HasMaxIter(Params):
     """
@@ -174,8 +170,7 @@ class HasProbabilityCol(Params):
         super(HasProbabilityCol, self).__init__()
         #: param for Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
         self.probabilityCol = Param(self, "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
-        if 'probability' is not None:
-            self._setDefault(probabilityCol='probability')
+        self._setDefault(probabilityCol='probability')
 
     def setProbabilityCol(self, value):
         """
@@ -366,7 +361,7 @@ class HasSeed(Params):
         super(HasSeed, self).__init__()
         #: param for random seed
         self.seed = Param(self, "seed", "random seed")
-        self._setDefault(seed=random.randint(0, sys.maxsize))
+        self._setDefault(seed=hash(type(self).name))
 
     def setSeed(self, value):
         """
@@ -452,11 +447,17 @@ class DecisionTreeParams(Params):
 
     def __init__(self):
         super(DecisionTreeParams, self).__init__()
+        #: param for Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
         self.maxDepth = Param(self, "maxDepth", "Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.")
+        #: param for Max number of bins for discretizing continuous features.  Must be >=2 and >= number of categories for any categorical feature.
         self.maxBins = Param(self, "maxBins", "Max number of bins for discretizing continuous features.  Must be >=2 and >= number of categories for any categorical feature.")
+        #: param for Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than minInstancesPerNode, the split will be discarded as invalid. Should be >= 1.
         self.minInstancesPerNode = Param(self, "minInstancesPerNode", "Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than minInstancesPerNode, the split will be discarded as invalid. Should be >= 1.")
+        #: param for Minimum information gain for a split to be considered at a tree node.
         self.minInfoGain = Param(self, "minInfoGain", "Minimum information gain for a split to be considered at a tree node.")
+        #: param for Maximum memory in MB allocated to histogram aggregation.
         self.maxMemoryInMB = Param(self, "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation.")
+        #: param for If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.
         self.cacheNodeIds = Param(self, "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.")
         
     def setMaxDepth(self, value):
