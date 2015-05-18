@@ -526,7 +526,10 @@ private[spark] object BLAS extends Serializable with Logging {
     val xValues = x.values
     val yValues = y.values
 
-    scal(beta, y)
+    if (alpha == 0.0) {
+      scal(beta, y)
+      return
+    }
 
     if (A.isTransposed) {
       var rowCounterForA = 0
@@ -537,7 +540,7 @@ private[spark] object BLAS extends Serializable with Logging {
           sum += xValues(k) * Avals(xIndices(k) + rowCounterForA * nA)
           k += 1
         }
-        yValues(rowCounterForA) += sum * alpha
+        yValues(rowCounterForA) = sum * alpha + beta * yValues(rowCounterForA)
         rowCounterForA += 1
       }
     } else {
@@ -549,7 +552,7 @@ private[spark] object BLAS extends Serializable with Logging {
           sum += xValues(k) * Avals(xIndices(k) * mA + rowCounterForA)
           k += 1
         }
-        yValues(rowCounterForA) += sum * alpha
+        yValues(rowCounterForA) = sum * alpha + beta * yValues(rowCounterForA)
         rowCounterForA += 1
       }
     }
@@ -578,7 +581,10 @@ private[spark] object BLAS extends Serializable with Logging {
     val Arows = if (!A.isTransposed) A.rowIndices else A.colPtrs
     val Acols = if (!A.isTransposed) A.colPtrs else A.rowIndices
 
-    scal(beta, y)
+    if (alpha == 0.0) {
+      scal(beta, y)
+      return
+    }
 
     if (A.isTransposed) {
       var rowCounter = 0
@@ -594,10 +600,12 @@ private[spark] object BLAS extends Serializable with Logging {
           }
           k += 1
         }
-        yValues(rowCounter) += sum * alpha
+        yValues(rowCounter) = sum * alpha + beta * yValues(rowCounter)
         rowCounter += 1
       }
     } else {
+      scal(beta, y)
+
       var colCounterForA = 0
       var k = 0
       while (colCounterForA < nA && k < xNnz) {
@@ -605,10 +613,10 @@ private[spark] object BLAS extends Serializable with Logging {
           var i = Acols(colCounterForA)
           val indEnd = Acols(colCounterForA + 1)
 
-          val xVal = xValues(k) * alpha
+          val xTemp = xValues(k) * alpha
           while (i < indEnd) {
             val rowIndex = Arows(i)
-            yValues(rowIndex) += Avals(i) * xVal
+            yValues(Arows(i)) += Avals(i) * xTemp
             i += 1
           }
           k += 1

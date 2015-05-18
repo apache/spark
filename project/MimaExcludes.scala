@@ -172,7 +172,11 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.isTransposed"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.Matrix.foreachActive")
+              "org.apache.spark.mllib.linalg.Matrix.foreachActive"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.multiply"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.mllib.linalg.Matrix.multiply")
           ) ++ Seq(
             // SPARK-5540
             ProblemFilters.exclude[MissingMethodProblem](
