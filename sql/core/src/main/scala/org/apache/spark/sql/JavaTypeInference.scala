@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql
 
 import java.beans.Introspector
 import java.lang.{Iterable => JIterable}
