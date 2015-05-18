@@ -894,8 +894,8 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * {{{
    *   val w = partitionBy("name").orderBy("id")
    *   df.select(
-   *     sum("price").over(w).range.preceding(2),
-   *     avg("price").over(w).range.preceding(4),
+   *     sum("price").over(w.range.preceding(2)),
+   *     avg("price").over(w.range.preceding(4)),
    *     avg("price").over(partitionBy("name").orderBy("id).range.preceding(1))
    *   )
    * }}}
