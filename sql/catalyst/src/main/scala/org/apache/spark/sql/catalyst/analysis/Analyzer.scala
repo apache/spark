@@ -149,8 +149,8 @@ class Analyzer(
      * @return the attributes of non selected specified via bitmask (with the bit set to 1)
      */
     private def buildNonSelectExprSet(bitmask: Int, exprs: Seq[Expression])
-    : OpenHashSet[Expression] = {
-      val set = new OpenHashSet[Expression](2)
+    : ExpressionSet = {
+      val set = new ExpressionSet()
 
       var bit = exprs.length - 1
       while (bit >= 0) {
