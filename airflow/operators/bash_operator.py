@@ -1,25 +1,10 @@
 import logging
-import errno
-from tempfile import (gettempdir, mkdtemp, NamedTemporaryFile)
-import shutil
 from subprocess import Popen, STDOUT, PIPE
-from contextlib import contextmanager
+from tempfile import gettempdir, NamedTemporaryFile
 
 from airflow.models import BaseOperator
-from airflow.utils import apply_defaults
+from airflow.utils import apply_defaults, TemporaryDirectory
 
-@contextmanager
-def TemporaryDirectory(suffix='',prefix=None, dir=None):
-    name = mkdtemp(suffix=suffix, prefix=prefix, dir=dir)
-    try:
-        yield name
-    finally:
-            try:
-                shutil.rmtree(name)
-            except OSError as exc:
-                # ENOENT - no such file or directory
-                if exc.errno != errno.ENOENT:
-                    raise
 
 class BashOperator(BaseOperator):
     '''

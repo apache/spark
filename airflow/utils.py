@@ -2,13 +2,18 @@ from copy import copy
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import errno
 from functools import wraps
 import imp
 import inspect
 import logging
 import os
 import re
+import shutil
 import smtplib
+from tempfile import mkdtemp
+
+from contextlib import contextmanager
 
 from sqlalchemy import event, exc
 from sqlalchemy.pool import Pool
@@ -317,6 +322,7 @@ def send_MIME_email(e_from, e_to, mime_msg):
     s.sendmail(e_from, e_to, mime_msg.as_string())
     s.quit()
 
+
 def import_module_attrs(parent_module_globals, module_attrs_dict):
     '''
     Attemps to import a set of modules and specified attributes in the
@@ -342,6 +348,7 @@ def import_module_attrs(parent_module_globals, module_attrs_dict):
             logging.warning("Couldn't import module " + mod)
     return imported_attrs
 
+
 def is_in(obj, l):
     """
     Checks whether an object is one of the item in the list.
@@ -352,3 +359,17 @@ def is_in(obj, l):
         if item is obj:
             return True
     return False
+
+
+@contextmanager
+def TemporaryDirectory(suffix='', prefix=None, dir=None):
+    name = mkdtemp(suffix=suffix, prefix=prefix, dir=dir)
+    try:
+        yield name
+    finally:
+            try:
+                shutil.rmtree(name)
+            except OSError as e:
+                # ENOENT - no such file or directory
+                if e.errno != errno.ENOENT:
+                    raise e
