@@ -176,7 +176,15 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.multiply"),
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
-              "org.apache.spark.mllib.linalg.Matrix.multiply")
+              "org.apache.spark.mllib.linalg.Matrix.multiply"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.DenseMatrix.multiply"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.mllib.linalg.DenseMatrix.multiply"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.SparseMatrix.multiply"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.mllib.linalg.SparseMatrix.multiply")
           ) ++ Seq(
             // SPARK-5540
             ProblemFilters.exclude[MissingMethodProblem](
