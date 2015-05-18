@@ -73,11 +73,21 @@ private[spark] class YarnClusterSchedulerBackend(
       yarnClientOpt.foreach { yarnClient =>
         yarnClient.init(yarnConf)
         yarnClient.start()
+
+        // For newer versions of YARN, we can find the HTTP address for a given node by getting a
+        // container report for a given container. But container reports came only in Hadoop 2.4,
+        // so we basically have to get the node reports for all nodes and find the one which runs
+        // this container. For that we have to compare the node's host against the current host.
+        // Since the host can have multiple addresses, we need to compare against all of them to
+        // find out if one matches.
+
+        // Get all the addresses of this node.
         val addresses =
           NetworkInterface.getNetworkInterfaces.asScala
             .flatMap(_.getInetAddresses.asScala)
             .toSeq
 
+        // Find a node report that matches one of the addresses
         val nodeReport =
           yarnClient.getNodeReports(NodeState.RUNNING).asScala.find { x =>
             val host = x.getNodeId.getHost
@@ -87,6 +97,8 @@ private[spark] class YarnClusterSchedulerBackend(
                 address.getCanonicalHostName == host
             }
           }
+
+        // Build the HTTP address for the node and build the URL for the logs.
         nodeReport.foreach { report =>
           val httpAddress = report.getHttpAddress
           // lookup appropriate http scheme for container log urls
@@ -97,7 +109,7 @@ private[spark] class YarnClusterSchedulerBackend(
           val user = Utils.getCurrentUserName()
           val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
           val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
-          logInfo(s"Base URL for logs: $baseUrl")
+          logDebug(s"Base URL for logs: $baseUrl")
           driverLogs = Some(
             Map("stderr" -> s"$baseUrl/stderr?start=0", "stdout" -> s"$baseUrl/stdout?start=0"))
         }
