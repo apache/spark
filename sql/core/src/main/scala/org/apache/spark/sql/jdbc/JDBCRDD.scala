@@ -29,7 +29,16 @@ import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources._
 
+/**
+ * Data corresponding to one partition of a JDBCRDD.
+ */
+private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
+  override def index: Int = idx
+}
+
+
 private[sql] object JDBCRDD extends Logging {
+
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
    * the DriverQuirks class corresponding to your database driver returns null.
@@ -168,6 +177,7 @@ private[sql] object JDBCRDD extends Logging {
       DriverManager.getConnection(url, properties)
     }
   }
+
   /**
    * Build and return JDBCRDD from the given information.
    *
@@ -193,18 +203,14 @@ private[sql] object JDBCRDD extends Logging {
       requiredColumns: Array[String],
       filters: Array[Filter],
       parts: Array[Partition]): RDD[Row] = {
-
-    val prunedSchema = pruneSchema(schema, requiredColumns)
-
-    return new
-        JDBCRDD(
-          sc,
-          getConnector(driver, url, properties),
-          prunedSchema,
-          fqTable,
-          requiredColumns,
-          filters,
-          parts)
+    new JDBCRDD(
+      sc,
+      getConnector(driver, url, properties),
+      pruneSchema(schema, requiredColumns),
+      fqTable,
+      requiredColumns,
+      filters,
+      parts)
   }
 }
 
@@ -294,7 +300,7 @@ private[sql] class JDBCRDD(
   abstract class JDBCConversion
   case object BooleanConversion extends JDBCConversion
   case object DateConversion extends JDBCConversion
-  case object DecimalConversion extends JDBCConversion
+  case class  DecimalConversion(precisionInfo: Option[(Int, Int)]) extends JDBCConversion
   case object DoubleConversion extends JDBCConversion
   case object FloatConversion extends JDBCConversion
   case object IntegerConversion extends JDBCConversion
@@ -311,8 +317,8 @@ private[sql] class JDBCRDD(
     schema.fields.map(sf => sf.dataType match {
       case BooleanType           => BooleanConversion
       case DateType              => DateConversion
-      case DecimalType.Unlimited => DecimalConversion
-      case DecimalType.Fixed(d)  => DecimalConversion
+      case DecimalType.Unlimited => DecimalConversion(None)
+      case DecimalType.Fixed(d)  => DecimalConversion(Some(d))
       case DoubleType            => DoubleConversion
       case FloatType             => FloatConversion
       case IntegerType           => IntegerConversion
@@ -369,7 +375,22 @@ private[sql] class JDBCRDD(
               } else {
                 mutableRow.update(i, null)
               }
-            case DecimalConversion    =>
+            // When connecting with Oracle DB through JDBC, the precision and scale of BigDecimal
+            // object returned by ResultSet.getBigDecimal is not correctly matched to the table
+            // schema reported by ResultSetMetaData.getPrecision and ResultSetMetaData.getScale.
+            // If inserting values like 19999 into a column with NUMBER(12, 2) type, you get through
+            // a BigDecimal object with scale as 0. But the dataframe schema has correct type as
+            // DecimalType(12, 2). Thus, after saving the dataframe into parquet file and then
+            // retrieve it, you will get wrong result 199.99.
+            // So it is needed to set precision and scale for Decimal based on JDBC metadata.
+            case DecimalConversion(Some((p, s))) =>
+              val decimalVal = rs.getBigDecimal(pos)
+              if (decimalVal == null) {
+                mutableRow.update(i, null)
+              } else {
+                mutableRow.update(i, Decimal(decimalVal, p, s))
+              }
+            case DecimalConversion(None) =>
               val decimalVal = rs.getBigDecimal(pos)
               if (decimalVal == null) {
                 mutableRow.update(i, null)

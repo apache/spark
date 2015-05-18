@@ -48,7 +48,7 @@ else:
     from urllib.request import urlopen, Request
     from urllib.error import HTTPError
 
-SPARK_EC2_VERSION = "1.2.1"
+SPARK_EC2_VERSION = "1.3.1"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 VALID_SPARK_VERSIONS = set([
@@ -65,6 +65,8 @@ VALID_SPARK_VERSIONS = set([
     "1.1.1",
     "1.2.0",
     "1.2.1",
+    "1.3.0",
+    "1.3.1",
 ])
 
 SPARK_TACHYON_MAP = {
@@ -75,6 +77,8 @@ SPARK_TACHYON_MAP = {
     "1.1.1": "0.5.0",
     "1.2.0": "0.5.0",
     "1.2.1": "0.5.0",
+    "1.3.0": "0.5.0",
+    "1.3.1": "0.5.0",
 }
 
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION

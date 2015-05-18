@@ -162,7 +162,7 @@ class CachedTableSuite extends QueryTest {
   test("REFRESH TABLE also needs to recache the data (data source tables)") {
     val tempPath: File = Utils.createTempDir()
     tempPath.delete()
-    table("src").save(tempPath.toString, "parquet", SaveMode.Overwrite)
+    table("src").write.mode(SaveMode.Overwrite).parquet(tempPath.toString)
     sql("DROP TABLE IF EXISTS refreshTable")
     createExternalTable("refreshTable", tempPath.toString, "parquet")
     checkAnswer(
@@ -172,7 +172,7 @@ class CachedTableSuite extends QueryTest {
     sql("CACHE TABLE refreshTable")
     assertCached(table("refreshTable"))
     // Append new data.
-    table("src").save(tempPath.toString, "parquet", SaveMode.Append)
+    table("src").write.mode(SaveMode.Append).parquet(tempPath.toString)
     // We are still using the old data.
     assertCached(table("refreshTable"))
     checkAnswer(
