@@ -17,7 +17,7 @@
 
 package org.apache.spark.io
 
-import java.io.{InputStream, OutputStream}
+import java.io.{IOException, InputStream, OutputStream}
 
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
@@ -154,8 +154,53 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
     val blockSize = conf.getSizeAsBytes("spark.io.compression.snappy.blockSize", "32k").toInt
-    new SnappyOutputStream(s, blockSize)
+    new SnappyOutputStreamWrapper(new SnappyOutputStream(s, blockSize))
   }
 
   override def compressedInputStream(s: InputStream): InputStream = new SnappyInputStream(s)
+}
+
+/**
+ * Wrapper over [[SnappyOutputStream]] which guards against write-after-close and double-close
+ * issues. See SPARK-7660 for more details. This wrapping can be removed if we upgrade to a version
+ * of snappy-java that contains the fix for https://github.com/xerial/snappy-java/issues/107.
+ */
+private final class SnappyOutputStreamWrapper(os: SnappyOutputStream) extends OutputStream {
+
+  private[this] var closed: Boolean = false
+
+  override def write(b: Int): Unit = {
+    if (closed) {
+      throw new IOException("Stream is closed")
+    }
+    os.write(b)
+  }
+
+  override def write(b: Array[Byte]): Unit = {
+    if (closed) {
+      throw new IOException("Stream is closed")
+    }
+    os.write(b)
+  }
+
+  override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+    if (closed) {
+      throw new IOException("Stream is closed")
+    }
+    os.write(b, off, len)
+  }
+
+  override def flush(): Unit = {
+    if (closed) {
+      throw new IOException("Stream is closed")
+    }
+    os.flush()
+  }
+
+  override def close(): Unit = {
+    if (!closed) {
+      closed = true
+      os.close()
+    }
+  }
 }
