@@ -22,7 +22,7 @@ import java.util.Properties
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{SaveMode, Row}
 import org.apache.spark.sql.test._
 import org.apache.spark.sql.types._
 
@@ -90,64 +90,66 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
   test("Basic CREATE") {
     val df = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
 
-    df.createJDBCTable(url, "TEST.BASICCREATETEST", false)
-    assert(2 == TestSQLContext.jdbc(url, "TEST.BASICCREATETEST").count)
-    assert(2 == TestSQLContext.jdbc(url, "TEST.BASICCREATETEST").collect()(0).length)
+    df.write.jdbc(url, "TEST.BASICCREATETEST", new Properties)
+    assert(2 == TestSQLContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count)
+    assert(2 ==
+      TestSQLContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).collect()(0).length)
   }
 
   test("CREATE with overwrite") {
     val df = TestSQLContext.createDataFrame(sc.parallelize(arr2x3), schema3)
     val df2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
 
-    df.createJDBCTable(url1, "TEST.DROPTEST", false, properties)
-    assert(2 == TestSQLContext.jdbc(url1, "TEST.DROPTEST", properties).count)
-    assert(3 == TestSQLContext.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
+    df.write.jdbc(url1, "TEST.DROPTEST", properties)
+    assert(2 == TestSQLContext.read.jdbc(url1, "TEST.DROPTEST", properties).count)
+    assert(3 == TestSQLContext.read.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
 
-    df2.createJDBCTable(url1, "TEST.DROPTEST", true, properties)
-    assert(1 == TestSQLContext.jdbc(url1, "TEST.DROPTEST", properties).count)
-    assert(2 == TestSQLContext.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
+    df2.write.mode(SaveMode.Overwrite).jdbc(url1, "TEST.DROPTEST", properties)
+    assert(1 == TestSQLContext.read.jdbc(url1, "TEST.DROPTEST", properties).count)
+    assert(2 == TestSQLContext.read.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
   }
 
   test("CREATE then INSERT to append") {
     val df = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
     val df2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
 
-    df.createJDBCTable(url, "TEST.APPENDTEST", false)
-    df2.insertIntoJDBC(url, "TEST.APPENDTEST", false)
-    assert(3 == TestSQLContext.jdbc(url, "TEST.APPENDTEST").count)
-    assert(2 == TestSQLContext.jdbc(url, "TEST.APPENDTEST").collect()(0).length)
+    df.write.jdbc(url, "TEST.APPENDTEST", new Properties)
+    df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties)
+    assert(3 == TestSQLContext.read.jdbc(url, "TEST.APPENDTEST", new Properties).count)
+    assert(2 ==
+      TestSQLContext.read.jdbc(url, "TEST.APPENDTEST", new Properties).collect()(0).length)
   }
 
   test("CREATE then INSERT to truncate") {
     val df = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
     val df2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
 
-    df.createJDBCTable(url1, "TEST.TRUNCATETEST", false, properties)
-    df2.insertIntoJDBC(url1, "TEST.TRUNCATETEST", true, properties)
-    assert(1 == TestSQLContext.jdbc(url1, "TEST.TRUNCATETEST", properties).count)
-    assert(2 == TestSQLContext.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
+    df.write.jdbc(url1, "TEST.TRUNCATETEST", properties)
+    df2.write.mode(SaveMode.Overwrite).jdbc(url1, "TEST.TRUNCATETEST", properties)
+    assert(1 == TestSQLContext.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count)
+    assert(2 == TestSQLContext.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
   }
 
   test("Incompatible INSERT to append") {
     val df = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
     val df2 = TestSQLContext.createDataFrame(sc.parallelize(arr2x3), schema3)
 
-    df.createJDBCTable(url, "TEST.INCOMPATIBLETEST", false)
+    df.write.jdbc(url, "TEST.INCOMPATIBLETEST", new Properties)
     intercept[org.apache.spark.SparkException] {
-      df2.insertIntoJDBC(url, "TEST.INCOMPATIBLETEST", true)
+      df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties)
     }
   }
-  
+
   test("INSERT to JDBC Datasource") {
     TestSQLContext.sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
-    assert(2 == TestSQLContext.jdbc(url1, "TEST.PEOPLE1", properties).count)
-    assert(2 == TestSQLContext.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
+    assert(2 == TestSQLContext.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
+    assert(2 == TestSQLContext.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
   }
-  
+
   test("INSERT to JDBC Datasource with overwrite") {
     TestSQLContext.sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
     TestSQLContext.sql("INSERT OVERWRITE TABLE PEOPLE1 SELECT * FROM PEOPLE")
-    assert(2 == TestSQLContext.jdbc(url1, "TEST.PEOPLE1", properties).count)
-    assert(2 == TestSQLContext.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
+    assert(2 == TestSQLContext.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
+    assert(2 == TestSQLContext.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
   } 
 }

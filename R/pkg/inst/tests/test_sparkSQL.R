@@ -530,6 +530,7 @@ test_that("column operators", {
   c2 <- (- c + 1 - 2) * 3 / 4.0
   c3 <- (c + c2 - c2) * c2 %% c2
   c4 <- (c > c2) & (c2 <= c3) | (c == c2) & (c2 != c3)
+  c5 <- c2 ^ c3 ^ c4
 })
 
 test_that("column functions", {
@@ -538,6 +539,29 @@ test_that("column functions", {
   c3 <- lower(c) + upper(c) + first(c) + last(c)
   c4 <- approxCountDistinct(c) + countDistinct(c) + cast(c, "string")
   c5 <- n(c) + n_distinct(c)
+  c5 <- acos(c) + asin(c) + atan(c) + cbrt(c) 
+  c6 <- ceiling(c) + cos(c) + cosh(c) + exp(c) + expm1(c)
+  c7 <- floor(c) + log(c) + log10(c) + log1p(c) + rint(c)
+  c8 <- sign(c) + sin(c) + sinh(c) + tan(c) + tanh(c)
+  c9 <- toDegrees(c) + toRadians(c)
+})
+
+test_that("column binary mathfunctions", {
+  lines <- c("{\"a\":1, \"b\":5}",
+             "{\"a\":2, \"b\":6}",
+             "{\"a\":3, \"b\":7}",
+             "{\"a\":4, \"b\":8}")
+  jsonPathWithDup <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(lines, jsonPathWithDup)
+  df <- jsonFile(sqlCtx, jsonPathWithDup)
+  expect_equal(collect(select(df, atan2(df$a, df$b)))[1, "ATAN2(a, b)"], atan2(1, 5))
+  expect_equal(collect(select(df, atan2(df$a, df$b)))[2, "ATAN2(a, b)"], atan2(2, 6))
+  expect_equal(collect(select(df, atan2(df$a, df$b)))[3, "ATAN2(a, b)"], atan2(3, 7))
+  expect_equal(collect(select(df, atan2(df$a, df$b)))[4, "ATAN2(a, b)"], atan2(4, 8))
+  expect_equal(collect(select(df, hypot(df$a, df$b)))[1, "HYPOT(a, b)"], sqrt(1^2 + 5^2))
+  expect_equal(collect(select(df, hypot(df$a, df$b)))[2, "HYPOT(a, b)"], sqrt(2^2 + 6^2))
+  expect_equal(collect(select(df, hypot(df$a, df$b)))[3, "HYPOT(a, b)"], sqrt(3^2 + 7^2))
+  expect_equal(collect(select(df, hypot(df$a, df$b)))[4, "HYPOT(a, b)"], sqrt(4^2 + 8^2))
 })
 
 test_that("string operators", {
