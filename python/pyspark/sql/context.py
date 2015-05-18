@@ -141,9 +141,11 @@ class SQLContext(object):
             numPartitions = self._sc.defaultParallelism
         if step == 0:
             raise ValueError("step cannot be 0")
+
         def _slong(num):
             """Return a JVM Scala Long from a int/long"""
             return self._jvm.PythonUtils.toScalaLong(num)
+
         def _sint(num):
             """Return a JVM Scala Int from a int/long"""
             return self._jvm.PythonUtils.toScalaInt(num)
