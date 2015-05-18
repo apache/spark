@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import scala.util.Random
 
 import com.amazonaws.auth.{DefaultAWSCredentialsProviderChain, BasicAWSCredentials}
+import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.model.PutRecordRequest
@@ -45,7 +46,6 @@ import org.apache.spark.streaming.kinesis.KinesisUtils
  *   <stream-name> name of the Kinesis stream (ie. mySparkStream)
  *   <endpoint-url> endpoint of the Kinesis service
  *     (e.g. https://kinesis.us-east-1.amazonaws.com)
- *   <region-name> region name for DynamoDB and CloudWatch backing services (e.g. us-east-1)
  *
  *
  * Example:
@@ -54,10 +54,10 @@ import org.apache.spark.streaming.kinesis.KinesisUtils
  *      $ export AWS_SECRET_KEY=<your-secret-key>
  *
  *      # run the example
- *      $ SPARK_HOME/bin/run-example   streaming.KinesisWordCountASL myAppName  mySparkStream \
- *        https://kinesis.us-east-1.amazonaws.com  us-east-1
+ *      $ SPARK_HOME/bin/run-example  streaming.KinesisWordCountASL myAppName  mySparkStream \
+ *              https://kinesis.us-east-1.amazonaws.com
  *
- * There is a companion helper class called KinesisWordCountProducerASL which puts dummy data
+ * There is a companion helper class called KinesisWordProducerASL which puts dummy data
  * onto the Kinesis stream.
  *
  * This code uses the DefaultAWSCredentialsProviderChain to find credentials
@@ -71,24 +71,21 @@ import org.apache.spark.streaming.kinesis.KinesisUtils
  *
  * See http://spark.apache.org/docs/latest/streaming-kinesis-integration.html for more details on
  * the Kinesis Spark Streaming integration.
- *
  */
 object KinesisWordCountASL extends Logging {
   def main(args: Array[String]) {
     // Check that all required args were passed in.
-    if (args.length < 4) {
+    if (args.length != 3) {
       System.err.println(
         """
           |Usage: KinesisWordCountASL <app-name> <stream-name> <endpoint-url> <region-name>
-          |                               <access-key-id> <secret-key>
+          |
           |    <app-name> is the name of the consumer app, used to track the read data in DynamoDB
           |    <stream-name> is the name of the Kinesis stream
           |    <endpoint-url> is the endpoint of the Kinesis service
           |                   (e.g. https://kinesis.us-east-1.amazonaws.com)
-          |    <region-name> region name for DynamoDB + CloudWatch backing services
-          |                  (e.g. us-east-1)
           |
-          |Generate input data for Kinesis stream using the example KinesisWordCountProducerASL.
+          |Generate input data for Kinesis stream using the example KinesisWordProducerASL.
           |See http://spark.apache.org/docs/latest/streaming-kinesis-integration.html for more
           |details.
         """.stripMargin)
@@ -98,7 +95,7 @@ object KinesisWordCountASL extends Logging {
     StreamingExamples.setStreamingLogLevels()
 
     // Populate the appropriate variables from the given args
-    val Array(appName, streamName, endpointUrl, regionName) = args
+    val Array(appName, streamName, endpointUrl) = args
 
 
     // Determine the number of shards from the stream using the low-level Kinesis Client
@@ -124,6 +121,10 @@ object KinesisWordCountASL extends Logging {
     // Kinesis checkpoint interval is the interval at which the DynamoDB is updated with information
     //on sequence number of records that have been received. Same as batchInterval for this example.
     val kinesisCheckpointInterval = batchInterval
+
+    // Get the region name from the endpoint URL to save Kinesis Client Library metadata in
+    // DynamoDB of the same region as the Kinesis stream
+    val regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName()
 
     // Setup the SparkConfig and StreamingContext
     val sparkConfig = new SparkConf().setAppName("KinesisWordCountASL")
@@ -154,8 +155,9 @@ object KinesisWordCountASL extends Logging {
 }
 
 /**
- * Usage: KinesisWordCountProducerASL <stream-name> <endpoint-url> \
+ * Usage: KinesisWordProducerASL <stream-name> <endpoint-url> \
  *   <records-per-sec> <words-per-record>
+ *
  *   <stream-name> is the name of the Kinesis stream (ie. mySparkStream)
  *   <endpoint-url> is the endpoint of the Kinesis service
  *     (ie. https://kinesis.us-east-1.amazonaws.com)
@@ -163,16 +165,16 @@ object KinesisWordCountASL extends Logging {
  *   <words-per-record> is the rate of records per second to put onto the stream
  *
  * Example:
- *    $ SPARK_HOME/bin/run-example \
- *         org.apache.spark.examples.streaming.KinesisWordCountProducerASL mySparkStream \
- *         https://kinesis.us-east-1.amazonaws.com 10 5
+ *    $ SPARK_HOME/bin/run-example streaming.KinesisWordProducerASL mySparkStream \
+ *         https://kinesis.us-east-1.amazonaws.com us-east-1 10 5
  */
-object KinesisWordCountProducerASL {
+object KinesisWordProducerASL {
   def main(args: Array[String]) {
-    if (args.length < 6) {
+    if (args.length != 4) {
       System.err.println(
         """
-          |Usage: KinesisWordCountProducerASL <stream-name> <endpoint-url> <records-per-sec> <words-per-record>
+          |Usage: KinesisWordProducerASL <stream-name> <endpoint-url> <records-per-sec> <words-per-record>
+          |
           |    <stream-name> is the name of the Kinesis stream
           |    <endpoint-url> is the endpoint of the Kinesis service
           |                   (e.g. https://kinesis.us-east-1.amazonaws.com)

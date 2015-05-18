@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import com.amazonaws.regions.RegionUtils;
 import org.apache.log4j.Logger;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.FlatMapFunction;
@@ -40,44 +41,41 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionIn
 import com.google.common.collect.Lists;
 
 /**
- * Java-friendly Kinesis Spark Streaming WordCount example
- * <p/>
- * See http://spark.apache.org/docs/latest/streaming-kinesis-integration.html for more details
- * on the Kinesis Spark Streaming integration.
- * <p/>
+ * Consumes messages from a Amazon Kinesis streams and does wordcount.
+ *
  * This example spins up 1 Kinesis Receiver per shard for the given stream.
  * It then starts pulling from the last checkpointed sequence number of the given stream.
- * <p/>
- * Valid endpoint urls:  http://docs.aws.amazon.com/general/latest/gr/rande.html#ak_region
- * <p/>
- * This code uses the DefaultAWSCredentialsProviderChain and searches for credentials
- * in the following order of precedence:
- * <p/>
- * Environment Variables - AWS_ACCESS_KEY_ID and AWS_SECRET_KEY
- * Java System Properties - aws.accessKeyId and aws.secretKey
- * Credential profiles file - default location (~/.aws/credentials) shared by all AWS SDKs
- * Instance profile credentials - delivered through the Amazon EC2 metadata service
- * <p/>
+ *
  * Usage: JavaKinesisWordCountASL [app-name] [stream-name] [endpoint-url] [region-name]
- * [stream-name] is the name of the Kinesis stream (ie. mySparkStream)
- * [endpoint-url] is the endpoint of the Kinesis service
- * (ie. https://kinesis.us-east-1.amazonaws.com)
- * <p/>
+ *   [app-name] is the name of the consumer app, used to track the read data in DynamoDB
+ *   [stream-name] name of the Kinesis stream (ie. mySparkStream)
+ *   [endpoint-url] endpoint of the Kinesis service
+ *     (e.g. https://kinesis.us-east-1.amazonaws.com)
+ *
+ *
  * Example:
- * # export AWS keys if necessary
- * $ export AWS_ACCESS_KEY_ID=[your-access-key]
- * $ export AWS_SECRET_KEY=[your-secret-key]
- * <p/>
- * # run the example
- * $ SPARK_HOME/bin/run-example \
- * org.apache.spark.examples.streaming.JavaKinesisWordCountASL mySparkStream \
- * https://kinesis.us-east-1.amazonaws.com
- * <p/>
- * Note that number of workers/threads should be 1 more than the number of receivers.
- * This leaves one thread available for actually processing the data.
- * <p/>
- * There is a companion helper class called KinesisWordCountProducerASL which puts dummy data
+ *      # export AWS keys if necessary
+ *      $ export AWS_ACCESS_KEY_ID=[your-access-key]
+ *      $ export AWS_SECRET_KEY=<your-secret-key>
+ *
+ *      # run the example
+ *      $ SPARK_HOME/bin/run-example   streaming.JavaKinesisWordCountASL myAppName  mySparkStream \
+ *             https://kinesis.us-east-1.amazonaws.com
+ *
+ * There is a companion helper class called KinesisWordProducerASL which puts dummy data
  * onto the Kinesis stream.
+ *
+ * This code uses the DefaultAWSCredentialsProviderChain to find credentials
+ * in the following order:
+ *    Environment Variables - AWS_ACCESS_KEY_ID and AWS_SECRET_KEY
+ *    Java System Properties - aws.accessKeyId and aws.secretKey
+ *    Credential profiles file - default location (~/.aws/credentials) shared by all AWS SDKs
+ *    Instance profile credentials - delivered through the Amazon EC2 metadata service
+ * For more information, see
+ * http://docs.aws.amazon.com/AWSSdkDocsJava/latest/DeveloperGuide/credentials.html
+ *
+ * See http://spark.apache.org/docs/latest/streaming-kinesis-integration.html for more details on
+ * the Kinesis Spark Streaming integration.
  */
 public final class JavaKinesisWordCountASL { // needs to be public for access from run-example
   private static final Pattern WORD_SEPARATOR = Pattern.compile(" ");
@@ -85,16 +83,14 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
 
   public static void main(String[] args) {
     // Check that all required args were passed in.
-    if (args.length < 4) {
+    if (args.length != 3) {
       System.err.println(
-          "Usage: JavaKinesisWordCountASL <stream-name> <endpoint-url>\n" +
+          "Usage: JavaKinesisWordCountASL <stream-name> <endpoint-url>\n\n" +
           "    <app-name> is the name of the app, used to track the read data in DynamoDB\n" +
           "    <stream-name> is the name of the Kinesis stream\n" +
           "    <endpoint-url> is the endpoint of the Kinesis service\n" +
           "                   (e.g. https://kinesis.us-east-1.amazonaws.com)\n" +
-          "    <region-name> region for DynamoDB+CloudWatch backing services\n" +
-          "                  (e.g. us-east-1)\n" +
-          "Generate data for the Kinesis stream using the example KinesisWordCountProducerASL.\n" +
+          "Generate data for the Kinesis stream using the example KinesisWordProducerASL.\n" +
           "See http://spark.apache.org/docs/latest/streaming-kinesis-integration.html for more\n" +
           "details.\n"
       );
@@ -107,7 +103,6 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
     String kinesisAppName = args[0];
     String streamName = args[1];
     String endpointUrl = args[2];
-    String regionName = args[3];
 
     // Create a Kinesis client in order to determine the number of shards for the given stream
     AmazonKinesisClient kinesisClient =
@@ -127,7 +122,11 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
     Duration batchInterval = new Duration(2000);
 
     // Kinesis checkpoint interval.  Same as batchInterval for this example.
-    Duration checkpointInterval = batchInterval;
+    Duration kinesisCheckpointInterval = batchInterval;
+
+    // Get the region name from the endpoint URL to save Kinesis Client Library metadata in
+    // DynamoDB of the same region as the Kinesis stream
+    String regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName();
 
     // Setup the Spark config and StreamingContext
     SparkConf sparkConfig = new SparkConf().setAppName("JavaKinesisWordCountASL");
@@ -138,7 +137,7 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
     for (int i = 0; i < numStreams; i++) {
       streamsList.add(
           KinesisUtils.createStream(jssc, kinesisAppName, streamName, endpointUrl, regionName,
-              InitialPositionInStream.LATEST, checkpointInterval, StorageLevel.MEMORY_AND_DISK_2())
+              InitialPositionInStream.LATEST, kinesisCheckpointInterval, StorageLevel.MEMORY_AND_DISK_2())
       );
     }
 
