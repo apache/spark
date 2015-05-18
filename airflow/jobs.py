@@ -226,11 +226,11 @@ class SchedulerJob(BaseJob):
         session = settings.Session()
 
         db_dag = session.query(
-            DagModel).filter(DagModel.dag_id==dag.dag_id).first()
+            DagModel).filter(DagModel.dag_id == dag.dag_id).first()
         last_scheduler_run = db_dag.last_scheduler_run or datetime(2000, 1, 1)
         secs_since_last = (
             datetime.now() - last_scheduler_run).total_seconds()
-        #if db_dag.scheduler_lock or
+        # if db_dag.scheduler_lock or
         if secs_since_last < self.heartrate:
             session.commit()
             session.close()
@@ -306,8 +306,8 @@ class SchedulerJob(BaseJob):
         logging.debug("Unlocking DAG (scheduler_lock)")
         db_dag = (
             session.query(DagModel)
-                .filter(DagModel.dag_id==dag.dag_id)
-                .first()
+            .filter(DagModel.dag_id == dag.dag_id)
+            .first()
         )
         db_dag.scheduler_lock = False
         session.merge(db_dag)
@@ -365,8 +365,13 @@ class SchedulerJob(BaseJob):
                     logging.exception(e)
             logging.debug(
                 "Done qeuing tasks, calling the executor's heartbeat")
-            executor.heartbeat()
-            self.heartbeat()
+            try:
+                # We really just want the scheduler to never ever stop.
+                executor.heartbeat()
+                self.heartbeat()
+            except Exception as e:
+                logging.exception(e)
+                logging.error("Tachycardia!")
         executor.end()
 
     def heartbeat_callback(self):
