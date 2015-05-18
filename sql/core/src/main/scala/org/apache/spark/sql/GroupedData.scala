@@ -74,7 +74,6 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
       case "avg" | "average" | "mean" => Average
       case "max" => Max
       case "min" => Min
-      case "stddev" => Stddev
       case "sum" => Sum
       case "count" | "size" =>
         // Turn count(*) into count(1)
@@ -246,19 +245,6 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
   def min(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames:_*)(Min)
   }
-
-  /**
-   * Compute the standard deviation value for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the stddev values for them.
-   *
-   * @since 1.4.0
-   */
-  @scala.annotation.varargs
-  def stddev(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames:_*)(Stddev)
-  }
-
 
   /**
    * Compute the sum for each numeric columns for each group.

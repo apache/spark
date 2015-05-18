@@ -372,8 +372,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   test("aggregates with nulls") {
     checkAnswer(
-      sql("SELECT MIN(a), MAX(a), AVG(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
-      Row(1, 3, 2, 1, 6, 3)
+      sql("SELECT MIN(a), MAX(a), AVG(a), SUM(a), COUNT(a) FROM nullInts"),
+      Row(1, 3, 2, 6, 3)
     )
   }
 
@@ -577,13 +577,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
           |SELECT COUNT(a), COUNT(b), COUNT(1), COUNT(DISTINCT a), COUNT(DISTINCT b) FROM testData3
         """.stripMargin),
       Row(2, 1, 2, 2, 1))
-  }
-
-  test("stddev") {
-    checkAnswer(
-      sql("SELECT STDDEV(a) FROM testData2"),
-      Row(math.sqrt(4/5.0))
-    )
   }
 
   test("inner join where, one match per row") {

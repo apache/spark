@@ -176,27 +176,6 @@ class DataFrameAggregateSuite extends QueryTest {
       Row(0, null))
   }
 
-  test("stddev") {
-    val testData2ADev = math.sqrt(4/5.0)
-    checkAnswer(
-      testData2.agg(stddev('a)),
-      Row(testData2ADev))
-
-    checkAnswer(
-      decimalData.agg(stddev('a), sumDistinct('a)), // non-partial
-      Row(testData2ADev, new java.math.BigDecimal(6)) :: Nil)
-  }
-
-   test("zero stddev") {
-    val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
-    assert(emptyTableData.count() == 0)
-
-    checkAnswer(
-    emptyTableData.agg(stddev('a)),
-    Row(null)
-    )
-  }
-
   test("zero sum") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
