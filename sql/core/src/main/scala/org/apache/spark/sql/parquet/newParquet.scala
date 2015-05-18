@@ -197,7 +197,7 @@ private[sql] class ParquetRelation2(
         classOf[ParquetOutputCommitter])
 
     conf.setClass(
-      "mapred.output.committer.class",
+      SQLConf.OUTPUT_COMMITTER_CLASS,
       committerClass,
       classOf[ParquetOutputCommitter])
 

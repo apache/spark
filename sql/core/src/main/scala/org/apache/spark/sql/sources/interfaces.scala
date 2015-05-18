@@ -527,7 +527,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
   /**
    * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
-   * be put here.  For example, user defined output committer can be configured here.
+   * be put here.  For example, user defined output committer can be configured here
+   * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
    *
    * Note that the only side effect expected here is mutating `job` via its setters.  Especially,
    * Spark SQL caches [[BaseRelation]] instances for performance, mutating relation internal states
