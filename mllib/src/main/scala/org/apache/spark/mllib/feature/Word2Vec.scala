@@ -521,7 +521,7 @@ class Word2VecModel private[mllib] (
     val updatedCosines = new Array[Double](numWords)
     var ind = 0
     while (ind < numWords) {
-      updatedCosines(ind) = cosineVec(ind) / wordVecNorms(ind)
+      updatedCosines(ind) = if (wordVecNorms(ind) == 0) 0.0 else cosineVec(ind) / wordVecNorms(ind)
       ind += 1
     }
     wordList.zip(updatedCosines)

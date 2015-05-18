@@ -55,8 +55,23 @@ class Word2VecSuite extends FunSuite with MLlibTestSparkContext {
     assert(syms(1)._1 == "japan")
   }
 
-  test("model load / save") {
+  test("Word2VecModel for norm equals to 0") {
+    val num = 4
+    val word2VecMap = Map(
+      ("china", Array(0.50f, 0.50f, 0.50f, 0.50f)),
+      ("japan", Array(0.40f, 0.50f, 0.50f, 0.50f)),
+      ("taiwan", Array(0.60f, 0.50f, 0.50f, 0.50f)),
+      ("korea", Array(0.45f, 0.60f, 0.60f, 0.60f)),
+      ("us", Array(0.00f, 0.00f, 0.00f, 0.00f))
+    )
+    val model = new Word2VecModel(word2VecMap)
+    val syms = model.findSynonyms("china", num)
+    assert(syms.length == num)
+    assert(!syms.last._2.isNaN)
+    assert(syms.last._2 == 0)
+  }
 
+  test("model load / save") {
     val word2VecMap = Map(
       ("china", Array(0.50f, 0.50f, 0.50f, 0.50f)),
       ("japan", Array(0.40f, 0.50f, 0.50f, 0.50f)),
