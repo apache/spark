@@ -25,18 +25,18 @@ import scala.concurrent.{ExecutionContext, Await, Future}
 import scala.concurrent.duration._
 import scala.util.Random
 
+import akka.actor.{ActorSystem, Props}
 import sun.nio.ch.DirectBuffer
 
 import org.apache.spark._
-import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
+import org.apache.spark.executor._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
-import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.serializer.{SerializerInstance, Serializer}
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.util._
@@ -49,8 +49,11 @@ private[spark] case class ArrayValues(buffer: Array[Any]) extends BlockValues
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
     val data: Iterator[Any],
-    val readMethod: DataReadMethod.Value,
-    val bytes: Long)
+    readMethod: DataReadMethod.Value,
+    bytes: Long) {
+  val inputMetrics = new InputMetrics(readMethod)
+  inputMetrics.incBytesRead(bytes)
+}
 
 /**
  * Manager running on every node (driver and executors) which provides interfaces for putting and
@@ -60,7 +63,7 @@ private[spark] class BlockResult(
  */
 private[spark] class BlockManager(
     executorId: String,
-    rpcEnv: RpcEnv,
+    actorSystem: ActorSystem,
     val master: BlockManagerMaster,
     defaultSerializer: Serializer,
     maxMemory: Long,
@@ -80,11 +83,20 @@ private[spark] class BlockManager(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
 
   // Actual storage of where blocks are kept
-  private var externalBlockStoreInitialized = false
+  private var tachyonInitialized = false
   private[spark] val memoryStore = new MemoryStore(this, maxMemory)
   private[spark] val diskStore = new DiskStore(this, diskBlockManager)
-  private[spark] lazy val externalBlockStore: ExternalBlockStore =
-    new ExternalBlockStore(this, executorId)
+  private[spark] val diskNoSerStore = new DiskNoSerStore(this, diskBlockManager)
+  private[spark] lazy val tachyonStore: TachyonStore = {
+    val storeDir = conf.get("spark.tachyonStore.baseDir", "/tmp_spark_tachyon")
+    val appFolderName = conf.get("spark.tachyonStore.folderName")
+    val tachyonStorePath = s"$storeDir/$appFolderName/${this.executorId}"
+    val tachyonMaster = conf.get("spark.tachyonStore.url",  "tachyon://localhost:19998")
+    val tachyonBlockManager =
+      new TachyonBlockManager(this, tachyonStorePath, tachyonMaster)
+    tachyonInitialized = true
+    new TachyonStore(this, tachyonBlockManager)
+  }
 
   private[spark]
   val externalShuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
@@ -113,8 +125,7 @@ private[spark] class BlockManager(
   // standard BlockTransferService to directly connect to other Executors.
   private[spark] val shuffleClient = if (externalShuffleServiceEnabled) {
     val transConf = SparkTransportConf.fromSparkConf(conf, numUsableCores)
-    new ExternalShuffleClient(transConf, securityManager, securityManager.isAuthenticationEnabled(),
-      securityManager.isSaslEncryptionEnabled())
+    new ExternalShuffleClient(transConf, securityManager, securityManager.isAuthenticationEnabled())
   } else {
     blockTransferService
   }
@@ -128,9 +139,9 @@ private[spark] class BlockManager(
   // Whether to compress shuffle output temporarily spilled to disk
   private val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
 
-  private val slaveEndpoint = rpcEnv.setupEndpoint(
-    "BlockManagerEndpoint" + BlockManager.ID_GENERATOR.next,
-    new BlockManagerSlaveEndpoint(rpcEnv, this, mapOutputTracker))
+  private val slaveActor = actorSystem.actorOf(
+    Props(new BlockManagerSlaveActor(this, mapOutputTracker)),
+    name = "BlockManagerActor" + BlockManager.ID_GENERATOR.next)
 
   // Pending re-registration action being executed asynchronously or null if none is pending.
   // Accesses should synchronize on asyncReregisterLock.
@@ -159,7 +170,7 @@ private[spark] class BlockManager(
    */
   def this(
       execId: String,
-      rpcEnv: RpcEnv,
+      actorSystem: ActorSystem,
       master: BlockManagerMaster,
       serializer: Serializer,
       conf: SparkConf,
@@ -168,7 +179,7 @@ private[spark] class BlockManager(
       blockTransferService: BlockTransferService,
       securityManager: SecurityManager,
       numUsableCores: Int) = {
-    this(execId, rpcEnv, master, serializer, BlockManager.getMaxMemory(conf),
+    this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf),
       conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager, numUsableCores)
   }
 
@@ -178,7 +189,7 @@ private[spark] class BlockManager(
    * where it is only learned after registration with the TaskScheduler).
    *
    * This method initializes the BlockTransferService and ShuffleClient, registers with the
-   * BlockManagerMaster, starts the BlockManagerWorker endpoint, and registers with a local shuffle
+   * BlockManagerMaster, starts the BlockManagerWorker actor, and registers with a local shuffle
    * service if configured.
    */
   def initialize(appId: String): Unit = {
@@ -194,7 +205,7 @@ private[spark] class BlockManager(
       blockManagerId
     }
 
-    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
+    master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
 
     // Register Executors' configuration with the local shuffle service, if one should exist.
     if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
@@ -257,7 +268,7 @@ private[spark] class BlockManager(
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
     logInfo("BlockManager re-registering with master")
-    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
+    master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
     reportAllBlocks()
   }
 
@@ -295,7 +306,7 @@ private[spark] class BlockManager(
    */
   override def getBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
-      shuffleManager.shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
+      shuffleManager.shuffleBlockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
     } else {
       val blockBytesOpt = doGetLocal(blockId, asBlockResult = false)
         .asInstanceOf[Option[ByteBuffer]]
@@ -317,14 +328,15 @@ private[spark] class BlockManager(
 
   /**
    * Get the BlockStatus for the block identified by the given ID, if it exists.
-   * NOTE: This is mainly for testing, and it doesn't fetch information from external block store.
+   * NOTE: This is mainly for testing, and it doesn't fetch information from Tachyon.
    */
   def getStatus(blockId: BlockId): Option[BlockStatus] = {
     blockInfo.get(blockId).map { info =>
       val memSize = if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
       val diskSize = if (diskStore.contains(blockId)) diskStore.getSize(blockId) else 0L
-      // Assume that block is not in external block store
-      BlockStatus(info.level, memSize, diskSize, 0L)
+      val diskNoSerSize = if (diskNoSerStore.contains(blockId)) diskNoSerStore.getSize(blockId) else 0L
+      // Assume that block is not in Tachyon
+      BlockStatus(info.level, memSize, if(diskSize==0L) diskNoSerSize else diskSize, 0L)
     }
   }
 
@@ -373,10 +385,10 @@ private[spark] class BlockManager(
     if (info.tellMaster) {
       val storageLevel = status.storageLevel
       val inMemSize = Math.max(status.memSize, droppedMemorySize)
-      val inExternalBlockStoreSize = status.externalBlockStoreSize
+      val inTachyonSize = status.tachyonSize
       val onDiskSize = status.diskSize
       master.updateBlockInfo(
-        blockManagerId, blockId, storageLevel, inMemSize, onDiskSize, inExternalBlockStoreSize)
+        blockManagerId, blockId, storageLevel, inMemSize, onDiskSize, inTachyonSize)
     } else {
       true
     }
@@ -394,17 +406,18 @@ private[spark] class BlockManager(
           BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
         case level =>
           val inMem = level.useMemory && memoryStore.contains(blockId)
-          val inExternalBlockStore = level.useOffHeap && externalBlockStore.contains(blockId)
-          val onDisk = level.useDisk && diskStore.contains(blockId)
+          val inTachyon = level.useOffHeap && tachyonStore.contains(blockId)
+          val onDisk = level.useDisk && (diskStore.contains(blockId)||diskNoSerStore.contains(blockId))
           val deserialized = if (inMem) level.deserialized else false
-          val replication = if (inMem || inExternalBlockStore || onDisk) level.replication else 1
-          val storageLevel =
-            StorageLevel(onDisk, inMem, inExternalBlockStore, deserialized, replication)
+          val replication = if (inMem || inTachyon || onDisk) level.replication else 1
+          val storageLevel = StorageLevel(onDisk, inMem, inTachyon, deserialized, replication)
           val memSize = if (inMem) memoryStore.getSize(blockId) else 0L
-          val externalBlockStoreSize =
-            if (inExternalBlockStore) externalBlockStore.getSize(blockId) else 0L
-          val diskSize = if (onDisk) diskStore.getSize(blockId) else 0L
-          BlockStatus(storageLevel, memSize, diskSize, externalBlockStoreSize)
+          val tachyonSize = if (inTachyon) tachyonStore.getSize(blockId) else 0L
+          val diskSize =
+            if (onDisk && diskStore.contains(blockId)) diskStore.getSize(blockId)
+            else if(onDisk && diskNoSerStore.contains(blockId)) diskNoSerStore.getSize(blockId)
+            else 0L
+          BlockStatus(storageLevel, memSize, diskSize, tachyonSize)
       }
     }
   }
@@ -435,11 +448,14 @@ private[spark] class BlockManager(
     // As an optimization for map output fetches, if the block is for a shuffle, return it
     // without acquiring a lock; the disk store never deletes (recent) items so this should work
     if (blockId.isShuffle) {
-      val shuffleBlockResolver = shuffleManager.shuffleBlockResolver
-      // TODO: This should gracefully handle case where local block is not available. Currently
-      // downstream code will throw an exception.
-      Option(
-        shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId]).nioByteBuffer())
+      val shuffleBlockManager = shuffleManager.shuffleBlockManager
+      shuffleBlockManager.getBytes(blockId.asInstanceOf[ShuffleBlockId]) match {
+        case Some(bytes) =>
+          Some(bytes)
+        case None =>
+          throw new BlockException(
+            blockId, s"Block $blockId not found on disk, though it should be")
+      }
     } else {
       doGetLocal(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
     }
@@ -485,11 +501,11 @@ private[spark] class BlockManager(
           }
         }
 
-        // Look for the block in external block store
+        // Look for the block in Tachyon
         if (level.useOffHeap) {
-          logDebug(s"Getting block $blockId from ExternalBlockStore")
-          if (externalBlockStore.contains(blockId)) {
-            externalBlockStore.getBytes(blockId) match {
+          logDebug(s"Getting block $blockId from tachyon")
+          if (tachyonStore.contains(blockId)) {
+            tachyonStore.getBytes(blockId) match {
               case Some(bytes) =>
                 if (!asBlockResult) {
                   return Some(bytes)
@@ -498,65 +514,110 @@ private[spark] class BlockManager(
                     dataDeserialize(blockId, bytes), DataReadMethod.Memory, info.size))
                 }
               case None =>
-                logDebug(s"Block $blockId not found in externalBlockStore")
+                logDebug(s"Block $blockId not found in tachyon")
             }
           }
         }
 
         // Look for block on disk, potentially storing it back in memory if required
         if (level.useDisk) {
-          logDebug(s"Getting block $blockId from disk")
-          val bytes: ByteBuffer = diskStore.getBytes(blockId) match {
-            case Some(b) => b
-            case None =>
-              throw new BlockException(
-                blockId, s"Block $blockId not found on disk, though it should be")
-          }
-          assert(0 == bytes.position())
-
-          if (!level.useMemory) {
-            // If the block shouldn't be stored in memory, we can just return it
-            if (asBlockResult) {
-              return Some(new BlockResult(dataDeserialize(blockId, bytes), DataReadMethod.Disk,
-                info.size))
-            } else {
-              return Some(bytes)
+          if (diskStore.contains(blockId)) {
+            logDebug(s"Getting block $blockId from disk")
+            val bytes: ByteBuffer = diskStore.getBytes(blockId) match {
+              case Some(b) => b
+              case None =>
+                throw new BlockException(
+                  blockId, s"Block $blockId not found on disk, though it should be")
             }
-          } else {
-            // Otherwise, we also have to store something in the memory store
-            if (!level.deserialized || !asBlockResult) {
-              /* We'll store the bytes in memory if the block's storage level includes
+            assert(0 == bytes.position())
+
+            if (!level.useMemory) {
+              // If the block shouldn't be stored in memory, we can just return it
+              if (asBlockResult) {
+                return Some(new BlockResult(dataDeserialize(blockId, bytes), DataReadMethod.Disk,
+                  info.size))
+              } else {
+                return Some(bytes)
+              }
+            } else {
+              // Otherwise, we also have to store something in the memory store
+              if (!level.deserialized || !asBlockResult) {
+                /* We'll store the bytes in memory if the block's storage level includes
                * "memory serialized", or if it should be cached as objects in memory
                * but we only requested its serialized bytes. */
-              memoryStore.putBytes(blockId, bytes.limit, () => {
-                // https://issues.apache.org/jira/browse/SPARK-6076
-                // If the file size is bigger than the free memory, OOM will happen. So if we cannot
-                // put it into MemoryStore, copyForMemory should not be created. That's why this
-                // action is put into a `() => ByteBuffer` and created lazily.
                 val copyForMemory = ByteBuffer.allocate(bytes.limit)
                 copyForMemory.put(bytes)
-              })
-              bytes.rewind()
-            }
-            if (!asBlockResult) {
-              return Some(bytes)
-            } else {
-              val values = dataDeserialize(blockId, bytes)
-              if (level.deserialized) {
-                // Cache the values before returning them
-                val putResult = memoryStore.putIterator(
-                  blockId, values, level, returnValues = true, allowPersistToDisk = false)
-                // The put may or may not have succeeded, depending on whether there was enough
-                // space to unroll the block. Either way, the put here should return an iterator.
-                putResult.data match {
-                  case Left(it) =>
-                    return Some(new BlockResult(it, DataReadMethod.Disk, info.size))
-                  case _ =>
-                    // This only happens if we dropped the values back to disk (which is never)
-                    throw new SparkException("Memory store did not return an iterator!")
-                }
+                memoryStore.putBytes(blockId, copyForMemory, level)
+                bytes.rewind()
+              }
+              if (!asBlockResult) {
+                return Some(bytes)
               } else {
-                return Some(new BlockResult(values, DataReadMethod.Disk, info.size))
+                val values = dataDeserialize(blockId, bytes)
+                if (level.deserialized) {
+                  // Cache the values before returning them
+                  val putResult = memoryStore.putIterator(
+                    blockId, values, level, returnValues = true, allowPersistToDisk = false)
+                  // The put may or may not have succeeded, depending on whether there was enough
+                  // space to unroll the block. Either way, the put here should return an iterator.
+                  putResult.data match {
+                    case Left(it) =>
+                      return Some(new BlockResult(it, DataReadMethod.Disk, info.size))
+                    case _ =>
+                      // This only happens if we dropped the values back to disk (which is never)
+                      throw new SparkException("Memory store did not return an iterator!")
+                  }
+                } else {
+                  return Some(new BlockResult(values, DataReadMethod.Disk, info.size))
+                }
+              }
+            }
+          }
+          else{
+            logDebug(s"Flint: Getting block $blockId from disk")
+            val bytes: Iterator[Any] = diskNoSerStore.getValues(blockId) match {
+              case Some(b) => b
+              case None =>
+                throw new BlockException(
+                  blockId, s"Flint: Block $blockId not found on disk, though it should be")
+            }
+            assert(!bytes.isEmpty)
+
+            if (!level.useMemory) {
+              // If the block shouldn't be stored in memory, we can just return it
+              if (asBlockResult) {
+                return Some(bytes, DataReadMethod.Disk, info.size)
+              } else {
+                return Some(bytes)
+              }
+            } else {
+              // Otherwise, we also have to store something in the memory store
+              if (!level.deserialized || !asBlockResult) {
+                /* We'll store the bytes in memory if the block's storage level includes
+               * "memory serialized", or if it should be cached as objects in memory
+               * but we only requested its serialized bytes. */
+                memoryStore.putIterator(blockId, bytes, level, false)
+              }
+              if (!asBlockResult) {
+                return Some(bytes)
+              } else {
+                val values = bytes
+                if (level.deserialized) {
+                  // Cache the values before returning them
+                  val putResult = memoryStore.putIterator(
+                    blockId, values, level, returnValues = true, allowPersistToDisk = false)
+                  // The put may or may not have succeeded, depending on whether there was enough
+                  // space to unroll the block. Either way, the put here should return an iterator.
+                  putResult.data match {
+                    case Left(it) =>
+                      return Some(new BlockResult(it, DataReadMethod.Disk, info.size))
+                    case _ =>
+                      // This only happens if we dropped the values back to disk (which is never)
+                      throw new SparkException("Flint: Memory store did not return an iterator!")
+                  }
+                } else {
+                  return Some(new BlockResult(values, DataReadMethod.Disk, info.size))
+                }
               }
             }
           }
@@ -643,13 +704,13 @@ private[spark] class BlockManager(
   def getDiskWriter(
       blockId: BlockId,
       file: File,
-      serializerInstance: SerializerInstance,
+      serializer: Serializer,
       bufferSize: Int,
       writeMetrics: ShuffleWriteMetrics): BlockObjectWriter = {
     val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
     val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
-    new DiskBlockObjectWriter(blockId, file, serializerInstance, bufferSize, compressStream,
-      syncWrites, writeMetrics)
+    new DiskBlockObjectWriter(blockId, file, serializer, bufferSize, compressStream, syncWrites,
+      writeMetrics)
   }
 
   /**
@@ -770,11 +831,14 @@ private[spark] class BlockManager(
             // We will drop it to disk later if the memory store can't hold it.
             (true, memoryStore)
           } else if (putLevel.useOffHeap) {
-            // Use external block store
-            (false, externalBlockStore)
+            // Use tachyon for off-heap storage
+            (false, tachyonStore)
           } else if (putLevel.useDisk) {
             // Don't get back the bytes from put unless we replicate them
-            (putLevel.replication > 1, diskStore)
+            if(!putLevel.deserialized)
+              (putLevel.replication > 1, diskStore)
+            else
+              (putLevel.replication > 1, diskNoSerStore)
           } else {
             assert(putLevel == StorageLevel.NONE)
             throw new BlockException(
@@ -806,7 +870,7 @@ private[spark] class BlockManager(
 
         val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
         if (putBlockStatus.storageLevel != StorageLevel.NONE) {
-          // Now that the block is in either the memory, externalBlockStore, or disk store,
+          // Now that the block is in either the memory, tachyon, or disk store,
           // let other threads read it, and tell the master about it.
           marked = true
           putBlockInfo.markReady(size)
@@ -839,15 +903,19 @@ private[spark] class BlockManager(
           }
         case _ =>
           val remoteStartTime = System.currentTimeMillis
-          // Serialize the block if not already done
-          if (bytesAfterPut == null) {
-            if (valuesAfterPut == null) {
-              throw new SparkException(
-                "Underlying put returned neither an Iterator nor bytes! This shouldn't happen.")
+          if (!putLevel.deserialized) {
+            // Serialize the block if not already done
+            if (bytesAfterPut == null) {
+              if (valuesAfterPut == null) {
+                throw new SparkException(
+                  "Underlying put returned neither an Iterator nor bytes! This shouldn't happen.")
+              }
+              bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
             }
-            bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
+            replicate(blockId, bytesAfterPut, putLevel)
+          } else{
+            //replicate(blockId, result, putLevel)
           }
-          replicate(blockId, bytesAfterPut, putLevel)
           logDebug("Put block %s remotely took %s"
             .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
       }
@@ -993,23 +1061,15 @@ private[spark] class BlockManager(
     putIterator(blockId, Iterator(value), level, tellMaster)
   }
 
-  def dropFromMemory(
-      blockId: BlockId,
-      data: Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {
-    dropFromMemory(blockId, () => data)
-  }
-
   /**
    * Drop a block from memory, possibly putting it on disk if applicable. Called when the memory
    * store reaches its limit and needs to free up space.
-   *
-   * If `data` is not put on disk, it won't be created.
    *
    * Return the block status if the given block has been updated, else None.
    */
   def dropFromMemory(
       blockId: BlockId,
-      data: () => Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {
+      data: Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {
 
     logInfo(s"Dropping block $blockId from memory")
     val info = blockInfo.get(blockId).orNull
@@ -1033,7 +1093,7 @@ private[spark] class BlockManager(
         // Drop to disk, if storage level requires
         if (level.useDisk && !diskStore.contains(blockId)) {
           logInfo(s"Writing block $blockId to disk")
-          data() match {
+          data match {
             case Left(elements) =>
               diskStore.putArray(blockId, elements, level, returnValues = false)
             case Right(bytes) =>
@@ -1084,7 +1144,7 @@ private[spark] class BlockManager(
    * Remove all blocks belonging to the given broadcast.
    */
   def removeBroadcast(broadcastId: Long, tellMaster: Boolean): Int = {
-    logDebug(s"Removing broadcast $broadcastId")
+    logInfo(s"Removing broadcast $broadcastId")
     val blocksToRemove = blockInfo.keys.collect {
       case bid @ BroadcastBlockId(`broadcastId`, _) => bid
     }
@@ -1096,18 +1156,17 @@ private[spark] class BlockManager(
    * Remove a block from both memory and disk.
    */
   def removeBlock(blockId: BlockId, tellMaster: Boolean = true): Unit = {
-    logDebug(s"Removing block $blockId")
+    logInfo(s"Removing block $blockId")
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
         // Removals are idempotent in disk store and memory store. At worst, we get a warning.
         val removedFromMemory = memoryStore.remove(blockId)
         val removedFromDisk = diskStore.remove(blockId)
-        val removedFromExternalBlockStore =
-          if (externalBlockStoreInitialized) externalBlockStore.remove(blockId) else false
-        if (!removedFromMemory && !removedFromDisk && !removedFromExternalBlockStore) {
+        val removedFromTachyon = if (tachyonInitialized) tachyonStore.remove(blockId) else false
+        if (!removedFromMemory && !removedFromDisk && !removedFromTachyon) {
           logWarning(s"Block $blockId could not be removed as it was not found in either " +
-            "the disk, memory, or external block store")
+            "the disk, memory, or tachyon store")
         }
         blockInfo.remove(blockId)
         if (tellMaster && info.tellMaster) {
@@ -1141,7 +1200,7 @@ private[spark] class BlockManager(
           val level = info.level
           if (level.useMemory) { memoryStore.remove(id) }
           if (level.useDisk) { diskStore.remove(id) }
-          if (level.useOffHeap) { externalBlockStore.remove(id) }
+          if (level.useOffHeap) { tachyonStore.remove(id) }
           iterator.remove()
           logInfo(s"Dropped block $id")
         }
@@ -1217,12 +1276,12 @@ private[spark] class BlockManager(
       shuffleClient.close()
     }
     diskBlockManager.stop()
-    rpcEnv.stop(slaveEndpoint)
+    actorSystem.stop(slaveActor)
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()
-    if (externalBlockStoreInitialized) {
-      externalBlockStore.clear()
+    if (tachyonInitialized) {
+      tachyonStore.clear()
     }
     metadataCleaner.cancel()
     broadcastCleaner.cancel()
@@ -1257,10 +1316,10 @@ private[spark] object BlockManager extends Logging {
     }
   }
 
-  def blockIdsToHosts(
+  def blockIdsToBlockManagers(
       blockIds: Array[BlockId],
       env: SparkEnv,
-      blockManagerMaster: BlockManagerMaster = null): Map[BlockId, Seq[String]] = {
+      blockManagerMaster: BlockManagerMaster = null): Map[BlockId, Seq[BlockManagerId]] = {
 
     // blockManagerMaster != null is used in tests
     assert(env != null || blockManagerMaster != null)
@@ -1270,10 +1329,24 @@ private[spark] object BlockManager extends Logging {
       blockManagerMaster.getLocations(blockIds)
     }
 
-    val blockManagers = new HashMap[BlockId, Seq[String]]
+    val blockManagers = new HashMap[BlockId, Seq[BlockManagerId]]
     for (i <- 0 until blockIds.length) {
-      blockManagers(blockIds(i)) = blockLocations(i).map(_.host)
+      blockManagers(blockIds(i)) = blockLocations(i)
     }
     blockManagers.toMap
+  }
+
+  def blockIdsToExecutorIds(
+      blockIds: Array[BlockId],
+      env: SparkEnv,
+      blockManagerMaster: BlockManagerMaster = null): Map[BlockId, Seq[String]] = {
+    blockIdsToBlockManagers(blockIds, env, blockManagerMaster).mapValues(s => s.map(_.executorId))
+  }
+
+  def blockIdsToHosts(
+      blockIds: Array[BlockId],
+      env: SparkEnv,
+      blockManagerMaster: BlockManagerMaster = null): Map[BlockId, Seq[String]] = {
+    blockIdsToBlockManagers(blockIds, env, blockManagerMaster).mapValues(s => s.map(_.host))
   }
 }

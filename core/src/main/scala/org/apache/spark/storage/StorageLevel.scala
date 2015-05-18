@@ -150,6 +150,8 @@ object StorageLevel {
   val MEMORY_AND_DISK_2 = new StorageLevel(true, true, false, true, 2)
   val MEMORY_AND_DISK_SER = new StorageLevel(true, true, false, false)
   val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, false, 2)
+  val DISK_ONLY_NOSER = new StorageLevel(true, false, false, true)
+  val DISK_ONLY_NOSER_2 = new StorageLevel(true, false, false, true, 2)
   val OFF_HEAP = new StorageLevel(false, false, true, false)
 
   /**
@@ -169,6 +171,8 @@ object StorageLevel {
     case "MEMORY_AND_DISK_2" => MEMORY_AND_DISK_2
     case "MEMORY_AND_DISK_SER" => MEMORY_AND_DISK_SER
     case "MEMORY_AND_DISK_SER_2" => MEMORY_AND_DISK_SER_2
+    case "DISK_ONLY_NOSER" => DISK_ONLY_NOSER
+    case "DISK_ONLY_NOSER_2" => DISK_ONLY_NOSER_2
     case "OFF_HEAP" => OFF_HEAP
     case _ => throw new IllegalArgumentException(s"Invalid StorageLevel: $s")
   }
