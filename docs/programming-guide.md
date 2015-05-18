@@ -41,11 +41,10 @@ In addition, if you wish to access an HDFS cluster, you need to add a dependency
     artifactId = hadoop-client
     version = <your-hdfs-version>
 
-Finally, you need to import some Spark classes and implicit conversions into your program. Add the following lines:
+Finally, you need to import some Spark classes into your program. Add the following lines:
 
 {% highlight scala %}
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
 {% endhighlight %}
 
@@ -821,9 +820,7 @@ by a key.
 
 In Scala, these operations are automatically available on RDDs containing
 [Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) objects
-(the built-in tuples in the language, created by simply writing `(a, b)`), as long as you
-import `org.apache.spark.SparkContext._` in your program to enable Spark's implicit
-conversions. The key-value pair operations are available in the
+(the built-in tuples in the language, created by simply writing `(a, b)`). The key-value pair operations are available in the
 [PairRDDFunctions](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions) class,
 which automatically wraps around an RDD of tuples if you import the conversions.
 
