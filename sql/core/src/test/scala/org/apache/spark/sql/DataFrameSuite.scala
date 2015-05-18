@@ -532,4 +532,51 @@ class DataFrameSuite extends QueryTest {
     val p = df.logicalPlan.asInstanceOf[Project].child.asInstanceOf[Project]
     assert(!p.child.isInstanceOf[Project])
   }
+
+  test("SPARK-7324 dropDuplicates") {
+    val testData = TestSQLContext.sparkContext.parallelize(
+      (2, 1, 2) :: (1, 1, 1) ::
+      (1, 2, 1) :: (2, 1, 2) ::
+      (2, 2, 2) :: (2, 2, 1) ::
+      (2, 1, 1) :: (1, 1, 2) ::
+      (1, 2, 2) :: (1, 2, 1) :: Nil).toDF("key", "value1", "value2")
+
+    checkAnswer(
+      testData.dropDuplicates(),
+      Seq(Row(2, 1, 2), Row(1, 1, 1), Row(1, 2, 1),
+        Row(2, 2, 2), Row(2, 1, 1), Row(2, 2, 1),
+        Row(1, 1, 2), Row(1, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("key", "value1")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value1", "value2")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("key")),
+      Seq(Row(2, 1, 2), Row(1, 1, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value1")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value2")),
+      Seq(Row(2, 1, 2), Row(1, 1, 1)))
+  }
+
+  test("SPARK-7276: Project collapse for continuous select") {
+    var df = testData
+    for (i <- 1 to 5) {
+      df = df.select($"*")
+    }
+
+    import org.apache.spark.sql.catalyst.plans.logical.Project
+    // make sure df have at most two Projects
+    val p = df.logicalPlan.asInstanceOf[Project].child.asInstanceOf[Project]
+    assert(!p.child.isInstanceOf[Project])
+  }
 }
