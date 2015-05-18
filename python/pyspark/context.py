@@ -318,6 +318,22 @@ class SparkContext(object):
         with SparkContext._lock:
             SparkContext._active_spark_context = None
 
+    def range(self, start, end, step=1, numSlices=None):
+        """
+        Create a new RDD of int containing elements from `start` to `end`
+        (exclusive), increased by `step` every element.
+
+        :param start: the start value
+        :param end: the end value (exclusive)
+        :param step: the incremental step (default: 1)
+        :param numSlices: the number of partitions of the new RDD
+        :return: An RDD of int
+
+        >>> sc.range(1, 7, 2).collect()
+        [1, 3, 5]
+        """
+        return self.parallelize(xrange(start, end, step), numSlices)
+
     def parallelize(self, c, numSlices=None):
         """
         Distribute a local Python collection to form an RDD. Using xrange
