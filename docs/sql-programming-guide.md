@@ -1265,7 +1265,7 @@ This command builds a new assembly jar that includes Hive. Note that this Hive a
 on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
 (SerDes) in order to access data stored in Hive.
 
-Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`. 
+Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
 <div class="codetabs">
 
