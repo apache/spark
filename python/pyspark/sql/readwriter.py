@@ -54,7 +54,7 @@ class DataFrameReader(object):
         if schema is not None:
             if not isinstance(schema, StructType):
                 raise TypeError("schema should be StructType")
-            jschema = self.sqlContext._ssql_ctx.parseDataType(schema.json())
+            jschema = self._sqlContext._ssql_ctx.parseDataType(schema.json())
             jreader = jreader.schema(jschema)
         for k in options:
             jreader = jreader.option(k, options[k])
@@ -79,7 +79,7 @@ class DataFrameReader(object):
         >>> shutil.rmtree(jsonFile)
         >>> with open(jsonFile, 'w') as f:
         ...     f.writelines(jsonStrings)
-        >>> df1 = sqlContext.jsonFile(jsonFile)
+        >>> df1 = sqlContext.read.json(jsonFile)
         >>> df1.printSchema()
         root
          |-- field1: long (nullable = true)
@@ -92,7 +92,7 @@ class DataFrameReader(object):
         ...     StructField("field2", StringType()),
         ...     StructField("field3",
         ...         StructType([StructField("field5", ArrayType(IntegerType()))]))])
-        >>> df2 = sqlContext.jsonFile(jsonFile, schema)
+        >>> df2 = sqlContext.read.json(jsonFile, schema)
         >>> df2.printSchema()
         root
          |-- field2: string (nullable = true)
@@ -103,7 +103,7 @@ class DataFrameReader(object):
         if schema is None:
             jdf = self._jreader.json(path)
         else:
-            jschema = self.sqlContext._ssql_ctx.parseDataType(schema.json())
+            jschema = self._sqlContext._ssql_ctx.parseDataType(schema.json())
             jdf = self._jreader.schema(jschema).json(path)
         return self._df(jdf)
 
@@ -181,7 +181,8 @@ class DataFrameWriter(object):
     """
     def __init__(self, df):
         self._df = df
-        self._jwrite = df._df.write()
+        self._sqlContext = df.sql_ctx
+        self._jwrite = df._jdf.write()
 
     def save(self, path=None, format=None, mode="error", **options):
         """

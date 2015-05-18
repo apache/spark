@@ -557,6 +557,7 @@ class SQLContext(object):
         ::note: Experimental
 
         >>> sqlContext.read
+        <pyspark.sql.readwriter.DataFrameReader object at ...>
         """
         return DataFrameReader(self)
 

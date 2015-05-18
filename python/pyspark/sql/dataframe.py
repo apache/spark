@@ -193,6 +193,11 @@ class DataFrame(object):
         into external storage.
 
         :return :class:`DataFrameWriter`
+
+        ::note: Experimental
+
+        >>> df.write
+        <pyspark.sql.readwriter.DataFrameWriter object at ...>
         """
         return DataFrameWriter(self)
 
