@@ -335,4 +335,31 @@ public abstract class AbstractBytesToBytesMapSuite {
       map.free();
     }
   }
+
+  @Test
+  public void initialCapacityBoundsChecking() {
+    try {
+      new BytesToBytesMap(memoryManager, 0);
+      Assert.fail("Expected IllegalArgumentException to be thrown");
+    } catch (IllegalArgumentException e) {
+      // expected exception
+    }
+
+    try {
+      new BytesToBytesMap(memoryManager, BytesToBytesMap.MAX_CAPACITY + 1);
+      Assert.fail("Expected IllegalArgumentException to be thrown");
+    } catch (IllegalArgumentException e) {
+      // expected exception
+    }
+
+   // Can allocate _at_ the max capacity
+   new BytesToBytesMap(memoryManager, BytesToBytesMap.MAX_CAPACITY);
+  }
+
+  @Test
+  public void resizingLargeMap() {
+    // As long as a map's capacity is below the max, we should be able to resize up to the max
+    BytesToBytesMap map = new BytesToBytesMap(memoryManager, BytesToBytesMap.MAX_CAPACITY - 64);
+    map.growAndRehash();
+  }
 }

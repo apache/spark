@@ -38,9 +38,8 @@ import org.apache.spark.unsafe.memory.*;
  * This is backed by a power-of-2-sized hash table, using quadratic probing with triangular numbers,
  * which is guaranteed to exhaust the space.
  * <p>
- * The map can support up to 2^31 keys because we use 32 bit MurmurHash. If the key cardinality is
- * higher than this, you should probably be using sorting instead of hashing for better cache
- * locality.
+ * The map can support up to 2^30 keys. If the key cardinality is higher than this, you should
+ * probably be using sorting instead of hashing for better cache locality.
  * <p>
  * This class is not thread safe.
  */
@@ -80,6 +79,12 @@ public final class BytesToBytesMap {
    * pages, so this limits the maximum entry size.
    */
   private static final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
+
+  /**
+   * The maximum number of keys that BytesToBytesMap supports.
+   */
+  @VisibleForTesting
+  static final int MAX_CAPACITY = (1 << 30);
 
   // This choice of page table size and page size means that we can address up to 500 gigabytes
   // of memory.
@@ -150,6 +155,13 @@ public final class BytesToBytesMap {
     this.loadFactor = loadFactor;
     this.loc = new Location();
     this.enablePerfMetrics = enablePerfMetrics;
+    if (initialCapacity <= 0) {
+      throw new IllegalArgumentException("Initial capacity must be greater than 0");
+    }
+    if (initialCapacity > MAX_CAPACITY) {
+      throw new IllegalArgumentException(
+        "Initial capacity " + initialCapacity + " exceeds maximum capacity of " + MAX_CAPACITY);
+    }
     allocate(initialCapacity);
   }
 
@@ -417,6 +429,9 @@ public final class BytesToBytesMap {
       isDefined = true;
       assert (keyLengthBytes % 8 == 0);
       assert (valueLengthBytes % 8 == 0);
+      if (size == MAX_CAPACITY) {
+        throw new IllegalStateException("BytesToBytesMap has reached maximum capacity");
+      }
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
@@ -468,7 +483,7 @@ public final class BytesToBytesMap {
       longArray.set(pos * 2 + 1, keyHashcode);
       updateAddressesAndSizes(storedKeyAddress);
       isDefined = true;
-      if (size > growthThreshold) {
+      if (size > growthThreshold && size < MAX_CAPACITY) {
         growAndRehash();
       }
     }
@@ -481,7 +496,9 @@ public final class BytesToBytesMap {
    * @param capacity the new map capacity
    */
   private void allocate(int capacity) {
-    capacity = Math.max((int) Math.min(Integer.MAX_VALUE, nextPowerOf2(capacity)), 64);
+    assert (capacity >= 0);
+    // The capacity needs to be divisible by 64 so that our bit set can be sized properly
+    capacity = Math.max((int) Math.min(MAX_CAPACITY, nextPowerOf2(capacity)), 64);
     longArray = new LongArray(memoryManager.allocate(capacity * 8 * 2));
     bitset = new BitSet(MemoryBlock.fromLongArray(new long[capacity / 64]));
 
@@ -556,7 +573,8 @@ public final class BytesToBytesMap {
   /**
    * Grows the size of the hash table and re-hash everything.
    */
-  private void growAndRehash() {
+  @VisibleForTesting
+  void growAndRehash() {
     long resizeStartTime = -1;
     if (enablePerfMetrics) {
       resizeStartTime = System.nanoTime();
@@ -567,7 +585,7 @@ public final class BytesToBytesMap {
     final int oldCapacity = (int) oldBitSet.capacity();
 
     // Allocate the new data structures
-    allocate(Math.min(Integer.MAX_VALUE, growthStrategy.nextCapacity(oldCapacity)));
+    allocate(Math.min(growthStrategy.nextCapacity(oldCapacity), MAX_CAPACITY));
 
     // Re-mask (we don't recompute the hashcode because we stored all 32 bits of it)
     for (int pos = oldBitSet.nextSetBit(0); pos >= 0; pos = oldBitSet.nextSetBit(pos + 1)) {
