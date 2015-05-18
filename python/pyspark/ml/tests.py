@@ -116,7 +116,6 @@ class TestParams(HasMaxIter, HasInputCol, HasSeed):
     """
     A subclass of Params mixed with HasMaxIter, HasInputCol and HasSeed.
     """
-
     def __init__(self, seed=None):
         super(TestParams, self).__init__()
         self._setDefault(maxIter=10)
@@ -126,7 +125,6 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
     """
     A subclass of Params mixed with HasMaxIter, HasInputCol and HasSeed.
     """
-
     def __init__(self, seed=None):
         super(OtherTestParams, self).__init__()
         self._setDefault(maxIter=10)

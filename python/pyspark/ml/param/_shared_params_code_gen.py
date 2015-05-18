@@ -119,7 +119,7 @@ if __name__ == "__main__":
         ("outputCol", "output column name", None),
         ("numFeatures", "number of features", None),
         ("checkpointInterval", "checkpoint interval (>= 1)", None),
-        ("seed", "random seed", "hash(type(self).name)"),
+        ("seed", "random seed", "hash(type(self).__name__)"),
         ("tol", "the convergence tolerance for iterative algorithms", None),
         ("stepSize", "Step size to be used for each iteration of optimization.", None)]
     code = []

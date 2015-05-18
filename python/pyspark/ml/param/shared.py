@@ -361,7 +361,7 @@ class HasSeed(Params):
         super(HasSeed, self).__init__()
         #: param for random seed
         self.seed = Param(self, "seed", "random seed")
-        self._setDefault(seed=hash(type(self).name))
+        self._setDefault(seed=hash(type(self).__name__))
 
     def setSeed(self, value):
         """

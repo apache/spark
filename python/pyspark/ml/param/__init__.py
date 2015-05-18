@@ -126,7 +126,7 @@ class Params(Identifiable):
         default value. Raises an error if neither is set.
         """
         if isinstance(param, Param):
-            if param in self.paramMap:
+            if param in self.paramMap and self.paramMap[param]:
                 return self.paramMap[param]
             else:
                 return self.defaultParamMap[param]
