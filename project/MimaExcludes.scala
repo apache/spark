@@ -137,6 +137,14 @@ object MimaExcludes {
             // implementing this interface in Java. Note that ShuffleWriter is private[spark].
             ProblemFilters.exclude[IncompatibleTemplateDefProblem](
               "org.apache.spark.shuffle.ShuffleWriter")
+          ) ++ Seq(
+            // SPARK-6888 make jdbc driver handling user definable
+            // This patch renames some classes to API friendly names.
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.DriverQuirks$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.DriverQuirks"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.PostgresQuirks"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.NoQuirks"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.MySQLQuirks")
           )
 
         case v if v.startsWith("1.3") =>
