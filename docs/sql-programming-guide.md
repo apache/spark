@@ -1267,6 +1267,7 @@ on all of the worker nodes, as they will need access to the Hive serialization a
 
 Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
+
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
