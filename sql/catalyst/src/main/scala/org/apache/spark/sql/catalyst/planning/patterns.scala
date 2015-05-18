@@ -190,7 +190,7 @@ object PartialAggregation2 {
           // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
           // (Should we just turn `GetField` into a `NamedExpression`?)
           substitutions
-            .get(e.transform { case Alias(g: GetField, _) => g })
+            .get(e.transform { case Alias(g: ExtractValue, _) => g })
             .map(_.toAttribute)
             .getOrElse(e)
       }).asInstanceOf[Seq[NamedExpression]]

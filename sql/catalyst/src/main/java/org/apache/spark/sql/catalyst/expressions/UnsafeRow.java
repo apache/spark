@@ -339,6 +339,16 @@ public final class UnsafeRow extends BaseMutableRow {
   }
 
   @Override
+  public MutableRow makeMutable() {
+      GenericMutableRow mr = new GenericMutableRow(this.size());
+      for (int i = 0; i < mr.size(); ++i) {
+          mr.update(i, get(i));
+      }
+
+      return mr;
+  }
+
+    @Override
   public boolean anyNull() {
     return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes);
   }

@@ -170,7 +170,7 @@ case class AggregatePreShuffle(
     }
   }
 
-  override def execute(): RDD[Row] = attachTree(this, "execute") {
+  override def doExecute(): RDD[Row] = attachTree(this, "execute") {
     if (groupingExpressions.length == 0) {
       child.execute().mapPartitions { iter =>
         // the input is every single row
@@ -251,7 +251,7 @@ case class AggregatePostShuffle(
     ClusteredDistribution(groupingExpressions) :: Nil
   }
 
-  override def execute(): RDD[Row] = attachTree(this, "execute") {
+  override def doExecute(): RDD[Row] = attachTree(this, "execute") {
     if (groupingExpressions.length == 0) {
       child.execute().mapPartitions { iter =>
         // The input Row in the format of (AggregateBuffers)
@@ -351,7 +351,7 @@ case class DistinctAggregate(
     BindReferences.bindReference(_: Expression, childOutput)
   }
 
-  override def execute(): RDD[Row] = attachTree(this, "execute") {
+  override def doExecute(): RDD[Row] = attachTree(this, "execute") {
     if (groupingExpressions.length == 0) {
       child.execute().mapPartitions { iter =>
         // initialize the aggregate functions for input rows
