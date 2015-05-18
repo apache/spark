@@ -228,9 +228,6 @@ class DagModelView(SuperUserMixin, ModelView):
             .filter(~models.DagModel.is_subdag)
         )
 
-mv = DagModelView(
-    models.DagModel, Session, name="DAGs", category="Admin")
-
 
 class HomeView(AdminIndexView):
     @expose("/")
@@ -247,7 +244,7 @@ class HomeView(AdminIndexView):
         dags = {dag.dag_id: dag for dag in dags if not dag.parent_dag}
         all_dag_ids = sorted(set(orm_dags.keys()) | set(dags.keys()))
         return self.render(
-            'airflow/local_dags.html',
+            'airflow/dags.html',
             dags=dags,
             orm_dags=orm_dags,
             all_dag_ids=all_dag_ids)
@@ -257,7 +254,6 @@ admin = Admin(
     name="Airflow",
     index_view=HomeView(name="DAGs"),
     template_mode='bootstrap3')
-admin.add_view(mv)
 
 
 class Airflow(BaseView):
@@ -572,7 +568,6 @@ class Airflow(BaseView):
             title="Airflow - Chart",
             sql=sql,
             label=chart.label)
-
 
     @expose('/dag_stats')
     @login_required
@@ -1470,6 +1465,10 @@ class TaskInstanceModelView(ModelViewOnly):
     page_size = 100
 mv = TaskInstanceModelView(
     models.TaskInstance, Session, name="Task Instances", category="Browse")
+admin.add_view(mv)
+
+mv = DagModelView(
+    models.DagModel, Session, name="DAGs", category="Admin")
 admin.add_view(mv)
 
 
