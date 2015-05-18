@@ -260,7 +260,8 @@ class BLASSuite extends FunSuite {
     val dA2 =
       new DenseMatrix(4, 3, Array(0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 3.0), true)
     val sA2 =
-      new SparseMatrix(4, 3, Array(0, 1, 2, 3, 4), Array(1, 0, 1, 2), Array(2.0, 1.0, 1.0, 3.0), true)
+      new SparseMatrix(4, 3, Array(0, 1, 2, 3, 4), Array(1, 0, 1, 2), Array(2.0, 1.0, 1.0, 3.0),
+        true)
  
     val dx = new DenseVector(Array(1.0, 2.0, 3.0))
     val sx = dx.toSparse
