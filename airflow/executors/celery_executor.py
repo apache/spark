@@ -60,12 +60,17 @@ class CeleryExecutor(BaseExecutor):
         logging.debug(
             "Inquiring about {} celery task(s)".format(len(self.tasks)))
         for key, async in self.tasks.items():
-            if self.last_state[key] != async.state:
-                if async.state == celery_states.SUCCESS:
+            state = async.state
+            if self.last_state[key] != state:
+                if state == celery_states.SUCCESS:
                     self.success(key)
                     del self.tasks[key]
                     del self.last_state[key]
-                elif async.state == celery_states.FAILURE:
+                elif state == celery_states.FAILURE:
+                    self.fail(key)
+                    del self.tasks[key]
+                    del self.last_state[key]
+                elif state == celery_states.REVOKED:
                     self.fail(key)
                     del self.tasks[key]
                     del self.last_state[key]
