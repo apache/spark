@@ -147,7 +147,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
         .attr("d", line);
 
     // If the user click one point in the graphs, jump to the batch row and highlight it. And
-    // recovery the batch row after 5 seconds if necessary.
+    // recovery the batch row after 3 seconds if necessary.
     // We need to remember the last clicked batch so that we can recovery it.
     var lastClickedBatch = null;
     var lastTimeout = null;
@@ -197,7 +197,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
                         clearBatchRow(lastClickedBatch);
                         lastClickedBatch = null;
                     }
-                }, 5000); // Clean up after 5 seconds
+                }, 3000); // Clean up after 3 seconds
 
                 var batchSelector = $("#batch-" + d.x);
                 var topOffset = batchSelector.offset().top - 15;
