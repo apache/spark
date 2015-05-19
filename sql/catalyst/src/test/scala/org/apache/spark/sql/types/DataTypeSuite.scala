@@ -37,9 +37,9 @@ class DataTypeSuite extends FunSuite {
   test("extract fields from a StructType") {
     val struct = StructType(
       StructField("a", IntegerType, true) ::
-        StructField("b", LongType, false) ::
-        StructField("c", StringType, true) ::
-        StructField("d", FloatType, true) :: Nil)
+      StructField("b", LongType, false) ::
+      StructField("c", StringType, true) ::
+      StructField("d", FloatType, true) :: Nil)
 
     assert(StructField("b", LongType, false) === struct("b"))
 
@@ -49,7 +49,7 @@ class DataTypeSuite extends FunSuite {
 
     val expectedStruct = StructType(
       StructField("b", LongType, false) ::
-        StructField("d", FloatType, true) :: Nil)
+      StructField("d", FloatType, true) :: Nil)
 
     assert(expectedStruct === struct(Set("b", "d")))
     intercept[IllegalArgumentException] {
@@ -60,7 +60,7 @@ class DataTypeSuite extends FunSuite {
   test("extract field index from a StructType") {
     val struct = StructType(
       StructField("a", LongType) ::
-        StructField("b", FloatType) :: Nil)
+      StructField("b", FloatType) :: Nil)
 
     assert(struct.fieldIndex("a") === 0)
     assert(struct.fieldIndex("b") === 1)
@@ -72,8 +72,8 @@ class DataTypeSuite extends FunSuite {
 
   test("mapFields returns map of name to StructField") {
     val struct = StructType(
-      StructField("a", LongType) ::
-        StructField("b", FloatType) :: Nil)
+      StructField("a", LongType) :: 
+      StructField("b", FloatType) :: Nil)
 
     val mapped = StructType.mapFields(struct.fields)
 
@@ -82,21 +82,17 @@ class DataTypeSuite extends FunSuite {
       "b" -> StructField("b", FloatType))
 
     assert(mapped == expected)
-
-
   }
 
   test("merge where right is empty") {
     val left = StructType(
       StructField("a", LongType) ::
-        StructField("b", FloatType) :: Nil)
+      StructField("b", FloatType) :: Nil)
 
     val right = StructType(List())
-
     val merged = left.merge(right)
-
+    
     assert(merged === left)
-
   }
 
   test("merge where left is empty") {
@@ -105,7 +101,7 @@ class DataTypeSuite extends FunSuite {
 
     val right = StructType(
       StructField("a", LongType) ::
-        StructField("b", FloatType) :: Nil)
+      StructField("b", FloatType) :: Nil)
 
     val merged = left.merge(right)
 
@@ -116,35 +112,32 @@ class DataTypeSuite extends FunSuite {
   test("merge where both are non-empty") {
     val left = StructType(
       StructField("a", LongType) ::
-        StructField("b", FloatType) :: Nil)
+      StructField("b", FloatType) :: Nil)
 
     val right = StructType(
       StructField("c", LongType) :: Nil)
 
     val expected = StructType(
       StructField("a", LongType) ::
-        StructField("b", FloatType) ::
-        StructField("c", LongType) :: Nil)
+      StructField("b", FloatType) ::
+      StructField("c", LongType) :: Nil)
 
     val merged = left.merge(right)
 
     assert(merged === expected)
-
   }
 
   test("merge where right contains type conflict") {
     val left = StructType(
       StructField("a", LongType) ::
-        StructField("b", FloatType) :: Nil)
+      StructField("b", FloatType) :: Nil)
 
     val right = StructType(
       StructField("b", LongType) :: Nil)
-
-
+    
     intercept[SparkException] {
       left.merge(right)
     }
-
   }
 
   def checkDataTypeJsonRepr(dataType: DataType): Unit = {
@@ -208,9 +201,9 @@ class DataTypeSuite extends FunSuite {
   checkDefaultSize(structType, 812)
 
   def checkEqualsIgnoreCompatibleNullability(
-                                              from: DataType,
-                                              to: DataType,
-                                              expected: Boolean): Unit = {
+      from: DataType,
+      to: DataType,
+      expected: Boolean): Unit = {
     val testName =
       s"equalsIgnoreCompatibleNullability: (from: ${from}, to: ${to})"
     test(testName) {
@@ -257,11 +250,11 @@ class DataTypeSuite extends FunSuite {
     expected = false)
   checkEqualsIgnoreCompatibleNullability(
     from = MapType(StringType, ArrayType(IntegerType, true), valueContainsNull = true),
-    to = MapType(StringType, ArrayType(IntegerType, false), valueContainsNull = true),
+    to = MapType(StringType,  ArrayType(IntegerType, false), valueContainsNull = true),
     expected = false)
   checkEqualsIgnoreCompatibleNullability(
     from = MapType(StringType, ArrayType(IntegerType, false), valueContainsNull = true),
-    to = MapType(StringType, ArrayType(IntegerType, true), valueContainsNull = true),
+    to = MapType(StringType,  ArrayType(IntegerType, true), valueContainsNull = true),
     expected = true)
 
 
@@ -284,9 +277,9 @@ class DataTypeSuite extends FunSuite {
   checkEqualsIgnoreCompatibleNullability(
     from = StructType(
       StructField("a", StringType, nullable = false) ::
-        StructField("b", StringType, nullable = true) :: Nil),
+      StructField("b", StringType, nullable = true) :: Nil),
     to = StructType(
       StructField("a", StringType, nullable = false) ::
-        StructField("b", StringType, nullable = false) :: Nil),
+      StructField("b", StringType, nullable = false) :: Nil),
     expected = false)
 }
