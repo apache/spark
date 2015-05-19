@@ -186,6 +186,7 @@ object KinesisWordProducerASL {
       System.exit(1)
     }
 
+    // Set default log4j logging level to WARN to hide Spark logs
     StreamingExamples.setStreamingLogLevels()
 
     // Populate the appropriate variables from the given args
@@ -221,7 +222,7 @@ object KinesisWordProducerASL {
       val records = (1 to recordsPerSecond.toInt).foreach { recordNum =>
         // Randomly generate wordsPerRecord number of words
         val data = (1 to wordsPerRecord.toInt).map(x => {
-          /* Get a random index to a word */
+          // Get a random index to a word
           val randomWordIdx = Random.nextInt(randomWords.size)
           val randomWord = randomWords(randomWordIdx)
 
@@ -257,7 +258,7 @@ object KinesisWordProducerASL {
  *  This has been lifted from the examples/ project to remove the circular dependency.
  */
 private[streaming] object StreamingExamples extends Logging {
-  /** Set reasonable logging levels for streaming if the user has not configured log4j. */
+  // Set reasonable logging levels for streaming if the user has not configured log4j.
   def setStreamingLogLevels() {
     val log4jInitialized = Logger.getRootLogger.getAllAppenders.hasMoreElements
     if (!log4jInitialized) {

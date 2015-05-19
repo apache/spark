@@ -97,6 +97,7 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
       System.exit(1);
     }
 
+    // Set default log4j logging level to WARN to hide Spark logs
     StreamingExamples.setStreamingLogLevels();
 
     // Populate the appropriate variables from the given args
@@ -165,14 +166,17 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
           public Tuple2<String, Integer> call(String s) {
             return new Tuple2<String, Integer>(s, 1);
           }
-        }).reduceByKey(new Function2<Integer, Integer, Integer>() {
-      @Override
-      public Integer call(Integer i1, Integer i2) {
-        return i1 + i2;
-      }
-    });
+        }
+    ).reduceByKey(
+        new Function2<Integer, Integer, Integer>() {
+          @Override
+          public Integer call(Integer i1, Integer i2) {
+            return i1 + i2;
+          }
+        }
+    );
 
-        /* Print the first 10 wordCounts */
+    // Print the first 10 wordCounts
     wordCounts.print();
 
     // Start the streaming context and await termination
