@@ -438,19 +438,7 @@ class SQLContext(object):
 
         Optionally, a schema can be provided as the schema of the returned DataFrame.
         """
-        if path is not None:
-            options["path"] = path
-        if source is None:
-            source = self.getConf("spark.sql.sources.default",
-                                  "org.apache.spark.sql.parquet")
-        if schema is None:
-            df = self._ssql_ctx.load(source, options)
-        else:
-            if not isinstance(schema, StructType):
-                raise TypeError("schema should be StructType")
-            scala_datatype = self._ssql_ctx.parseDataType(schema.json())
-            df = self._ssql_ctx.load(source, scala_datatype, options)
-        return DataFrame(df, self)
+        return self.read.load(path, source, schema, **options)
 
     def createExternalTable(self, tableName, path=None, source=None,
                             schema=None, **options):
