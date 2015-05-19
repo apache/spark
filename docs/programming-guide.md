@@ -48,6 +48,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
 {% endhighlight %}
 
+(If the Spark version is prior to 1.3.0, user needs to explicitly import org.apache.spark.SparkContext._ to allow the implicit conversions.)
+
 </div>
 
 <div data-lang="java"  markdown="1">
