@@ -191,7 +191,7 @@ word2Vec = Word2Vec(vectorSize=3, minCount=0, inputCol="text", outputCol="result
 model = word2Vec.fit(documentDF)
 result = model.transform(documentDF)
 for feature in result.select("result").take(3):
-  print feature
+  print(feature)
 {% endhighlight %}
 </div>
 </div>
