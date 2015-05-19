@@ -150,7 +150,7 @@ class Params(Identifiable):
         default value. Raises an error if neither is set.
         """
         param = self._resolveParam(param)
-        if param in self._paramMap and self.paramMap[param]:
+        if param in self._paramMap:
             return self._paramMap[param]
         else:
             return self._defaultParamMap[param]
