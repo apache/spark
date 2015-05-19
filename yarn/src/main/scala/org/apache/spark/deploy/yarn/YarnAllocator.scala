@@ -127,6 +127,9 @@ private[yarn] class YarnAllocator(
     }
   }
 
+  // Maintain the list of hosts which are blacklisted.
+  private var hostBlacklist: Seq[String] = Nil
+
   def getNumExecutorsRunning: Int = numExecutorsRunning
 
   def getNumExecutorsFailed: Int = numExecutorsFailed
@@ -170,6 +173,14 @@ private[yarn] class YarnAllocator(
     } else {
       logWarning(s"Attempted to kill unknown executor $executorId!")
     }
+  }
+
+  def updateHostBlacklist(blacklist: Seq[String]): Unit = synchronized {
+    val blacklistAdditions = blacklist.toSet -- hostBlacklist.toSet
+    val blacklistRemovals = hostBlacklist.toSet -- blacklist.toSet
+
+    amClient.updateBlacklist(blacklistAdditions.toSeq, blacklistRemovals.toSeq)
+    hostBlacklist = blacklist
   }
 
   /**

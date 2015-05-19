@@ -81,8 +81,8 @@ private[spark] class ExecutorBlacklistTracker(conf: SparkConf) extends SparkList
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
     taskEnd.reason match {
-      case e: FetchFailed | ExceptionFailure | TaskResultLost |
-              ExecutorLostFailure | UnknownReason =>
+      case _: FetchFailed | _: ExceptionFailure | TaskResultLost |
+          _: ExecutorLostFailure | UnknownReason =>
         val numFailures = executorIdToTaskFailures.getOrElseUpdate(
           taskEnd.taskInfo.executorId, 0) + 1
         executorIdToTaskFailures.put(taskEnd.taskInfo.executorId, numFailures)
@@ -107,13 +107,13 @@ private[spark] class ExecutorBlacklistTracker(conf: SparkConf) extends SparkList
     val failedExecutors = executorIdToTaskFailures.filter(_._2 >= executorFaultThreshold)
     if (!failedExecutors.isEmpty) {
       val avgNumFailed = executorIdToTaskFailures.values.sum.toDouble / executorBlacklist.size
-      for ( (executorId, numFailed) <- failedExecutors) {
+      for ((executorId, numFailed) <- failedExecutors) {
         // If the number of failure task is more than average blacklist threshold of average
         // failed number and current executor blacklist is less than the max fraction of number
         // executors
         if ((numFailed.toDouble > avgNumFailed * (1 + avgBlacklistThreshold)) &&
           (executorBlacklist.size.toDouble < numExecutorsRegistered * maxBlacklistFraction)) {
-          executorBlacklist.add((executorId, System.currentTimeMillis()))
+          executorBlacklist.add((executorId, clock.getTimeMillis()))
           executorIdToTaskFailures -= executorId
         }
       }
@@ -126,7 +126,7 @@ private[spark] class ExecutorBlacklistTracker(conf: SparkConf) extends SparkList
 
     while (loop) {
       Option(executorBlacklist.peek()) match {
-        case (executorId, addedTime) =>
+        case Some((executorId, addedTime)) =>
           if ((now - addedTime) > executorFaultTimeoutWindowInMinutes * 60 * 1000) {
             executorBlacklist.poll()
           } else {
