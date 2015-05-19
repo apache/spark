@@ -221,18 +221,13 @@ case class HiveScriptIOSchema (
   }
 
   def parseAttrs(attrs: Seq[Expression]): (Seq[String], Seq[DataType]) = {
-                                                
-    val columns = attrs.map {
-      case aref: AttributeReference => aref.name
-      case e: NamedExpression => e.name
-      case _ => null
+    val columns = attrs.zipWithIndex.map {
+      case (aref: AttributeReference, _) => aref.name
+      case (e: NamedExpression, _) => e.name
+      case (o, index) => "c_$index"
     }
  
-    val columnTypes = attrs.map {
-      case aref: AttributeReference => aref.dataType
-      case e: NamedExpression => e.dataType
-      case _ =>  null
-    }
+    val columnTypes = attrs.map(_.dataType)
 
     (columns, columnTypes)
   }
