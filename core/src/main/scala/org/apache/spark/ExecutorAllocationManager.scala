@@ -349,7 +349,8 @@ private[spark] class ExecutorAllocationManager(
       return 0
     }
 
-    val addRequestAcknowledged = testing || client.requestTotalExecutors(numExecutorsTarget)
+    val addRequestAcknowledged = testing ||
+      client.requestTotalExecutors(numExecutorsTarget, listener.preferredNodeLocations, Nil)
     if (addRequestAcknowledged) {
       val executorsString = "executor" + { if (delta > 1) "s" else "" }
       logInfo(s"Requesting $delta new $executorsString because tasks are backlogged" +
@@ -519,6 +520,9 @@ private[spark] class ExecutorAllocationManager(
     // Number of tasks currently running on the cluster.  Should be 0 when no stages are active.
     private var numRunningTasks: Int = _
 
+    // stageId to preferredLocation map, maintain the preferred node location of each stage
+    private val stageIdToPreferredLocations = new mutable.HashMap[Int, mutable.HashSet[String]]
+
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
       initializing = false
       val stageId = stageSubmitted.stageInfo.stageId
@@ -526,6 +530,12 @@ private[spark] class ExecutorAllocationManager(
       allocationManager.synchronized {
         stageIdToNumTasks(stageId) = numTasks
         allocationManager.onSchedulerBacklogged()
+
+        val preferredLocations = stageIdToPreferredLocations.getOrElseUpdate(stageId,
+          new mutable.HashSet[String]())
+        stageSubmitted.stageInfo.rddInfos.foreach { rddInfo =>
+          rddInfo.preferredNodeLocations.foreach { l => preferredLocations += l }
+        }
       }
     }
 
@@ -534,6 +544,7 @@ private[spark] class ExecutorAllocationManager(
       allocationManager.synchronized {
         stageIdToNumTasks -= stageId
         stageIdToTaskIndices -= stageId
+        stageIdToPreferredLocations -= stageId
 
         // If this is the last stage with pending tasks, mark the scheduler queue as empty
         // This is needed in case the stage is aborted for any reason
@@ -636,6 +647,10 @@ private[spark] class ExecutorAllocationManager(
      */
     def isExecutorIdle(executorId: String): Boolean = {
       !executorIdToTaskIds.contains(executorId)
+    }
+
+    def preferredNodeLocations: Seq[String] = allocationManager.synchronized {
+      stageIdToPreferredLocations.values.flatMap(x => x).toSet.toSeq
     }
   }
 

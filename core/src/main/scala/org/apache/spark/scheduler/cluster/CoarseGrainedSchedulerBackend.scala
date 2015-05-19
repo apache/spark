@@ -66,6 +66,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
 
+  protected var preferredNodeLocations: Seq[String] = Nil
+
+  protected var blacklist: Seq[String] = Nil
+
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
 
@@ -331,7 +335,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Request an additional number of executors from the cluster manager.
    * @return whether the request is acknowledged.
    */
-  final override def requestExecutors(numAdditionalExecutors: Int): Boolean = synchronized {
+  final override def requestExecutors(numAdditionalExecutors: Int,
+      preferredNodeLocations: Seq[String], blacklist: Seq[String]): Boolean = synchronized {
     if (numAdditionalExecutors < 0) {
       throw new IllegalArgumentException(
         "Attempted to request a negative number of additional executor(s) " +
@@ -339,6 +344,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
     logInfo(s"Requesting $numAdditionalExecutors additional executor(s) from the cluster manager")
     logDebug(s"Number of pending executors is now $numPendingExecutors")
+    this.preferredNodeLocations = preferredNodeLocations
+    this.blacklist = blacklist
+
     numPendingExecutors += numAdditionalExecutors
     // Account for executors pending to be added or removed
     val newTotal = numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size
@@ -350,12 +358,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * result in canceling pending requests or filing additional requests.
    * @return whether the request is acknowledged.
    */
-  final override def requestTotalExecutors(numExecutors: Int): Boolean = synchronized {
+  final override def requestTotalExecutors(numExecutors: Int,
+      preferredNodeLocations: Seq[String], blacklist: Seq[String]): Boolean = synchronized {
     if (numExecutors < 0) {
       throw new IllegalArgumentException(
         "Attempted to request a negative number of executor(s) " +
           s"$numExecutors from the cluster manager. Please specify a positive number!")
     }
+
+    this.preferredNodeLocations = preferredNodeLocations
+    this.blacklist = blacklist
+
     numPendingExecutors =
       math.max(numExecutors - numExistingExecutors + executorsPendingToRemove.size, 0)
     doRequestTotalExecutors(numExecutors)

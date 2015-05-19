@@ -28,13 +28,15 @@ private[spark] trait ExecutorAllocationClient {
    * This can result in canceling pending requests or filing additional requests.
    * @return whether the request is acknowledged by the cluster manager.
    */
-  private[spark] def requestTotalExecutors(numExecutors: Int): Boolean
+  private[spark] def requestTotalExecutors(numExecutors: Int,
+    preferredNodeLocations: Seq[String], blacklist: Seq[String]): Boolean
 
   /**
    * Request an additional number of executors from the cluster manager.
    * @return whether the request is acknowledged by the cluster manager.
    */
-  def requestExecutors(numAdditionalExecutors: Int): Boolean
+  def requestExecutors(numAdditionalExecutors: Int,
+    preferredNodeLocations: Seq[String], blacklist: Seq[String]): Boolean
 
   /**
    * Request that the cluster manager kill the specified executors.
