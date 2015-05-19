@@ -217,11 +217,11 @@ abstract class DStream[T: ClassTag] (
       case StreamingContextState.INITIALIZED =>
         // good to go
       case StreamingContextState.ACTIVE =>
-        throw new SparkException(
+        throw new IllegalStateException(
           "Adding new inputs, transformations, and output operations after " +
             "starting a context is not supported")
       case StreamingContextState.STOPPED =>
-        throw new SparkException(
+        throw new IllegalStateException(
           "Adding new inputs, transformations, and output operations after " +
             "stopping a context is not supported")
     }

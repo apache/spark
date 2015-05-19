@@ -155,7 +155,7 @@ class StreamingContext private[streaming] (
       cp_.graph.restoreCheckpointData()
       cp_.graph
     } else {
-      assert(batchDur_ != null, "Batch duration for streaming context cannot be null")
+      require(batchDur_ != null, "Batch duration for streaming context cannot be null")
       val newGraph = new DStreamGraph()
       newGraph.setBatchDuration(batchDur_)
       newGraph
@@ -457,7 +457,7 @@ class StreamingContext private[streaming] (
       directory, FileInputDStream.defaultFilter : Path => Boolean, newFilesOnly=true, conf)
     val data = br.map { case (k, v) =>
       val bytes = v.getBytes
-      assert(bytes.length == recordLength, "Byte array does not have correct length")
+      require(bytes.length == recordLength, "Byte array does not have correct length")
       bytes
     }
     data
@@ -520,10 +520,10 @@ class StreamingContext private[streaming] (
   }
 
   private def validate() {
-    assert(graph != null, "Graph is null")
+    require(graph != null, "Graph is null")
     graph.validate()
 
-    assert(
+    require(
       checkpointDir == null || checkpointDuration != null,
       "Checkpoint directory has been set, but the graph checkpointing interval has " +
         "not been set. Please use StreamingContext.checkpoint() to set the interval."
@@ -669,7 +669,7 @@ object StreamingContext extends Logging {
   private def assertNoOtherContextIsActive(): Unit = {
     ACTIVATION_LOCK.synchronized {
       if (activeContext.get() != null) {
-        throw new SparkException(
+        throw new IllegalStateException(
           "Only one StreamingContext may be started in this JVM. " +
             "Currently running StreamingContext was started at" +
             activeContext.get.startSite.get.longForm)
