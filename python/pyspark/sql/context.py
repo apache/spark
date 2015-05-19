@@ -122,6 +122,37 @@ class SQLContext(object):
         """Returns a :class:`UDFRegistration` for UDF registration."""
         return UDFRegistration(self)
 
+    def range(self, start, end, step=1, numPartitions=None):
+        """
+        Create a :class:`DataFrame` with single LongType column named `id`,
+        containing elements in a range from `start` to `end` (exclusive) with
+        step value `step`.
+
+        :param start: the start value
+        :param end: the end value (exclusive)
+        :param step: the incremental step (default: 1)
+        :param numPartitions: the number of partitions of the DataFrame
+        :return: A new DataFrame
+
+        >>> sqlContext.range(1, 7, 2).collect()
+        [Row(id=1), Row(id=3), Row(id=5)]
+        """
+        if numPartitions is None:
+            numPartitions = self._sc.defaultParallelism
+        if step == 0:
+            raise ValueError("step cannot be 0")
+
+        def _slong(num):
+            """Return a JVM Scala Long from a int/long"""
+            return self._jvm.PythonUtils.toScalaLong(num)
+
+        def _sint(num):
+            """Return a JVM Scala Int from a int/long"""
+            return self._jvm.PythonUtils.toScalaInt(num)
+
+        df = self._ssql_ctx.range(_slong(start), _slong(end), _slong(step), _sint(numPartitions))
+        return DataFrame(df, self)
+
     @ignore_unicode_prefix
     def registerFunction(self, name, f, returnType=StringType()):
         """Registers a lambda function as a UDF so it can be used in SQL statements.

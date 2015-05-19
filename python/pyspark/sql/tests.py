@@ -507,6 +507,18 @@ class SQLTests(ReusedPySparkTestCase):
 
         shutil.rmtree(tmpPath)
 
+    def test_range(self):
+        df1 = self.sqlCtx.range(-2, 2, 2, 4)
+        self.assertEqual([Row(id=-2), Row(id=0)], df1.collect())
+        df2 = self.sqlCtx.range(-2, 2)
+        self.assertEqual([Row(id=-2), Row(id=-1), Row(id=0), Row(id=1)], df2.collect())
+        df3 = self.sqlCtx.range(100000000000, -100000000000, -100000000001)
+        self.assertEqual([Row(id=100000000000), Row(id=-1)], df3.collect())
+        df4 = self.sqlCtx.range(1, -1, 1)
+        self.assertEqual([], df4.collect())
+        df5 = self.sqlCtx.range(-1, 1000000000000, 1000000000000)
+        self.assertEqual([Row(id=-1), Row(id=999999999999)], df5.collect())
+
     def test_help_command(self):
         # Regression test for SPARK-5464
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])

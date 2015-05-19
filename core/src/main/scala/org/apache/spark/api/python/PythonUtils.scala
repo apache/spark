@@ -60,4 +60,32 @@ private[spark] object PythonUtils {
   def toScalaMap[K, V](jm: java.util.Map[K, V]): Map[K, V] = {
     jm.toMap
   }
+
+  /**
+   * Convert java Integer into Scala Long (for calling API with varargs)
+   */
+  def toScalaLong(ji: java.lang.Integer): Long = {
+    ji.toLong
+  }
+
+  /**
+   * Convert java Long into Scala Long (for calling API with varargs)
+   */
+  def toScalaLong(jl: java.lang.Long): Long = {
+    jl.toLong
+  }
+
+  /**
+   * Convert java Integer into Scala Int (for calling API with varargs)
+   */
+  def toScalaInt(ji: java.lang.Integer): Int = {
+    ji.toInt
+  }
+
+  /**
+   * Convert java Long into Scala Int (for calling API with varargs)
+   */
+  def toScalaInt(jl: java.lang.Long): Int = {
+    jl.toInt
+  }
 }
