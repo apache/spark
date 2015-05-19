@@ -84,7 +84,7 @@ def _gen_param_code(name, doc, defaultValueStr):
         """
         Sets the value of :py:attr:`$name`.
         """
-        self.paramMap[self.$name] = value
+        self._paramMap[self.$name] = value
         return self
 
     def get$Name(self):

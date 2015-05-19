@@ -87,7 +87,14 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Vector.toSparse"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.Vector.numActives")
+              "org.apache.spark.mllib.linalg.Vector.numActives"),
+            // SPARK-7681 add SparseVector support for gemv
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.multiply"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.DenseMatrix.multiply"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.SparseMatrix.multiply")
           ) ++ Seq(
             // Execution should never be included as its always internal.
             MimaBuild.excludeSparkPackage("sql.execution"),
@@ -137,6 +144,14 @@ object MimaExcludes {
             // implementing this interface in Java. Note that ShuffleWriter is private[spark].
             ProblemFilters.exclude[IncompatibleTemplateDefProblem](
               "org.apache.spark.shuffle.ShuffleWriter")
+          ) ++ Seq(
+            // SPARK-6888 make jdbc driver handling user definable
+            // This patch renames some classes to API friendly names.
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.DriverQuirks$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.DriverQuirks"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.PostgresQuirks"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.NoQuirks"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.MySQLQuirks")
           )
 
         case v if v.startsWith("1.3") =>
@@ -172,7 +187,14 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.isTransposed"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.Matrix.foreachActive")
+              "org.apache.spark.mllib.linalg.Matrix.foreachActive"),
+            // SPARK-7681 add SparseVector support for gemv
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.multiply"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.DenseMatrix.multiply"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.SparseMatrix.multiply")
           ) ++ Seq(
             // SPARK-5540
             ProblemFilters.exclude[MissingMethodProblem](

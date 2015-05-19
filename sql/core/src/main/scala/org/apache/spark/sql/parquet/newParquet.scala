@@ -23,12 +23,11 @@ import scala.collection.JavaConversions._
 import scala.util.Try
 
 import com.google.common.base.Objects
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import parquet.filter2.predicate.FilterApi
-import parquet.format.converter.ParquetMetadataConverter
 import parquet.hadoop._
 import parquet.hadoop.metadata.CompressionCodecName
 import parquet.hadoop.util.ContextUtil
@@ -175,8 +174,8 @@ private[sql] class ParquetRelation2(
   override def dataSchema: StructType = metadataCache.dataSchema
 
   override private[sql] def refresh(): Unit = {
-    metadataCache.refresh()
     super.refresh()
+    metadataCache.refresh()
   }
 
   // Parquet data source always uses Catalyst internal representations.
@@ -197,7 +196,7 @@ private[sql] class ParquetRelation2(
         classOf[ParquetOutputCommitter])
 
     conf.setClass(
-      "mapred.output.committer.class",
+      SQLConf.OUTPUT_COMMITTER_CLASS,
       committerClass,
       classOf[ParquetOutputCommitter])
 
@@ -234,15 +233,15 @@ private[sql] class ParquetRelation2(
   override def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
-      inputPaths: Array[String]): RDD[Row] = {
+      inputFiles: Array[FileStatus]): RDD[Row] = {
 
     val job = new Job(SparkHadoopUtil.get.conf)
     val conf = ContextUtil.getConfiguration(job)
 
     ParquetInputFormat.setReadSupportClass(job, classOf[RowReadSupport])
 
-    if (inputPaths.nonEmpty) {
-      FileInputFormat.setInputPaths(job, inputPaths.map(new Path(_)): _*)
+    if (inputFiles.nonEmpty) {
+      FileInputFormat.setInputPaths(job, inputFiles.map(_.getPath): _*)
     }
 
     // Try to push down filters when filter push-down is enabled.
@@ -269,10 +268,7 @@ private[sql] class ParquetRelation2(
     val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, "true").toBoolean
     conf.set(SQLConf.PARQUET_CACHE_METADATA, useMetadataCache.toString)
 
-    val inputFileStatuses =
-      metadataCache.dataStatuses.filter(f => inputPaths.contains(f.getPath.toString))
-
-    val footers = inputFileStatuses.map(metadataCache.footers)
+    val footers = inputFiles.map(f => metadataCache.footers(f.getPath))
 
     // TODO Stop using `FilteringParquetRowInputFormat` and overriding `getPartition`.
     // After upgrading to Parquet 1.6.0, we should be able to stop caching `FileStatus` objects and
@@ -287,7 +283,7 @@ private[sql] class ParquetRelation2(
 
       val cacheMetadata = useMetadataCache
 
-      @transient val cachedStatuses = inputFileStatuses.map { f =>
+      @transient val cachedStatuses = inputFiles.map { f =>
         // In order to encode the authority of a Path containing special characters such as /,
         // we need to use the string returned by the URI of the path to create a new Path.
         val pathWithAuthority = new Path(f.getPath.toUri.toString)
@@ -333,7 +329,7 @@ private[sql] class ParquetRelation2(
     private var commonMetadataStatuses: Array[FileStatus] = _
 
     // Parquet footer cache.
-    var footers: Map[FileStatus, Footer] = _
+    var footers: Map[Path, Footer] = _
 
     // `FileStatus` objects of all data files (Parquet part-files).
     var dataStatuses: Array[FileStatus] = _
@@ -349,35 +345,30 @@ private[sql] class ParquetRelation2(
      * Refreshes `FileStatus`es, footers, partition spec, and table schema.
      */
     def refresh(): Unit = {
-      // Support either reading a collection of raw Parquet part-files, or a collection of folders
-      // containing Parquet files (e.g. partitioned Parquet table).
-      val baseStatuses = paths.distinct.flatMap { p =>
-        val path = new Path(p)
-        val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-        val qualified = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        Try(fs.getFileStatus(qualified)).toOption
-      }
-      assert(baseStatuses.forall(!_.isDir) || baseStatuses.forall(_.isDir))
-
       // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
-      val leaves = baseStatuses.flatMap { f =>
-        val fs = FileSystem.get(f.getPath.toUri, SparkHadoopUtil.get.conf)
-        SparkHadoopUtil.get.listLeafStatuses(fs, f.getPath).filter { f =>
-          isSummaryFile(f.getPath) ||
-            !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
-        }
-      }
+      val leaves = cachedLeafStatuses().filter { f =>
+        isSummaryFile(f.getPath) ||
+          !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
+      }.toArray
 
       dataStatuses = leaves.filterNot(f => isSummaryFile(f.getPath))
       metadataStatuses = leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
       commonMetadataStatuses =
         leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)
 
-      footers = (dataStatuses ++ metadataStatuses ++ commonMetadataStatuses).par.map { f =>
-        val parquetMetadata = ParquetFileReader.readFooter(
-          SparkHadoopUtil.get.conf, f, ParquetMetadataConverter.NO_FILTER)
-        f -> new Footer(f.getPath, parquetMetadata)
-      }.seq.toMap
+      footers = {
+        val conf = SparkHadoopUtil.get.conf
+        val taskSideMetaData = conf.getBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true)
+        val rawFooters = if (shouldMergeSchemas) {
+          ParquetFileReader.readAllFootersInParallel(
+            conf, seqAsJavaList(leaves), taskSideMetaData)
+        } else {
+          ParquetFileReader.readAllFootersInParallelUsingSummaryFiles(
+            conf, seqAsJavaList(leaves), taskSideMetaData)
+        }
+
+        rawFooters.map(footer => footer.getFile -> footer).toMap
+      }
 
       // If we already get the schema, don't need to re-compute it since the schema merging is
       // time-consuming.
@@ -448,7 +439,7 @@ private[sql] class ParquetRelation2(
         "No schema defined, " +
           s"and no Parquet data file or summary file found under ${paths.mkString(", ")}.")
 
-      ParquetRelation2.readSchema(filesToTouch.map(footers.apply), sqlContext)
+      ParquetRelation2.readSchema(filesToTouch.map(f => footers.apply(f.getPath)), sqlContext)
     }
   }
 }
