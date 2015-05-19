@@ -267,7 +267,7 @@ class ReliableKafkaReceiver[
           }
         } catch {
           case e: Exception =>
-            logError("Error handling message", e)
+            reportError("Error handling message", e)
         }
       }
     }
