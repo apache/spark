@@ -261,7 +261,7 @@ df = sqlContext.createDataFrame(
 px = PolynomialExpansion(degree=2, inputCol="features", outputCol="polyFeatures")
 polyDF = px.transform(df)
 for expanded in polyDF.select("polyFeatures").take(3):
-  print expanded
+  print(expanded)
 {% endhighlight %}
 </div>
 </div>
