@@ -187,14 +187,7 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.isTransposed"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.Matrix.foreachActive"),
-            // SPARK-7681 add SparseVector support for gemv
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.Matrix.multiply"),
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.DenseMatrix.multiply"),
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.SparseMatrix.multiply")
+              "org.apache.spark.mllib.linalg.Matrix.foreachActive")
           ) ++ Seq(
             // SPARK-5540
             ProblemFilters.exclude[MissingMethodProblem](
