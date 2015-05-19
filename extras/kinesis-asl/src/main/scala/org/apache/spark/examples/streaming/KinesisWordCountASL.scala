@@ -189,15 +189,14 @@ object KinesisWordProducerASL {
     StreamingExamples.setStreamingLogLevels()
 
     // Populate the appropriate variables from the given args
-    val Array(stream, endpoint, recordsPerSecond, wordsPerRecord)
-      = args
+    val Array(stream, endpoint, recordsPerSecond, wordsPerRecord) = args
 
     // Generate the records and return the totals
     val totals = generate(stream, endpoint, recordsPerSecond.toInt,
         wordsPerRecord.toInt)
 
     // Print the array of (word, total) tuples
-    println("Totals")
+    println("Totals for the words sent")
     totals.foreach(println(_))
   }
 
