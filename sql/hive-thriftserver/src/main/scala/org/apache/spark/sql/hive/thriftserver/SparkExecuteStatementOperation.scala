@@ -33,6 +33,8 @@ import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.api.FieldSchema
+import org.apache.hadoop.hive.ql.metadata.Hive
+import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hadoop.security.UserGroupInformation
@@ -149,8 +151,9 @@ private[hive] class SparkExecuteStatementOperation(
       runInternal()
     } else {
       val parentSessionState = SessionState.get()
-      val hiveConf = new HiveConf(getParentSession().getHiveConf())
+      val hiveConf = getConfigForOperation()
       val sparkServiceUGI = ShimLoader.getHadoopShims.getUGIForConf(hiveConf)
+      val sessionHive = getCurrentHive()
 
       // Runnable impl to call runInternal asynchronously,
       // from a different thread
@@ -161,6 +164,7 @@ private[hive] class SparkExecuteStatementOperation(
             override def run(): Object = {
 
               // User information is part of the metastore client member in Hive
+              Hive.set(sessionHive)
               SessionState.setCurrentSessionState(parentSessionState)
               try {
                 runInternal()
@@ -268,6 +272,44 @@ private[hive] class SparkExecuteStatementOperation(
       if (backgroundHandle != null) {
         backgroundHandle.cancel(true)
       }
+    }
+  }
+
+  /**
+   * If there are query specific settings to overlay, then create a copy of config
+   * There are two cases we need to clone the session config that's being passed to hive driver
+   * 1. Async query -
+   *    If the client changes a config setting, that shouldn't reflect in the execution already underway
+   * 2. confOverlay -
+   *    The query specific settings should only be applied to the query config and not session
+   * @return new configuration
+   * @throws HiveSQLException
+   */
+  private def getConfigForOperation(): HiveConf = {
+    var sqlOperationConf = getParentSession().getHiveConf()
+    if (!getConfOverlay().isEmpty() || runInBackground) {
+      // clone the partent session config for this query
+      sqlOperationConf = new HiveConf(sqlOperationConf)
+
+      // apply overlay query specific settings, if any
+      getConfOverlay().foreach { case (k, v) =>
+        try {
+          sqlOperationConf.verifyAndSet(k, v)
+        } catch {
+          case e: IllegalArgumentException =>
+            throw new HiveSQLException("Error applying statement specific settings", e)
+        }
+      }
+    }
+    return sqlOperationConf
+  }
+
+  private def getCurrentHive(): Hive = {
+    try {
+      return Hive.get()
+    } catch {
+      case e: HiveException =>
+        throw new HiveSQLException("Failed to get current Hive object", e);
     }
   }
 }
