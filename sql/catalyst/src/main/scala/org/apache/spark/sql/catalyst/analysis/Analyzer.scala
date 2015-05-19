@@ -576,13 +576,21 @@ class Analyzer(
     /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
     private object AliasedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
-        case Alias(g: Generator, name) if g.elementTypes.size > 1 => {
-          // In project, we named a default single name for TGF during parser (as normal UDF),
-          // but the TGF is supposed to has multiple output columns.
+        case Alias(g: Generator, name)
+          if g.elementTypes.size > 1 && java.util.regex.Pattern.matches("_c[0-9]+", name) => {
+          // Assume the default name given by parser is "_c[0-9]+",
+          // TODO in long term, move the naming logic from Parser to Analyzer.
+          // In projection, Parser gave default name for TGF as does for normal UDF,
+          // but the TGF probably have multiple output columns/names.
           //    e.g. SELECT explode(map(key, value)) FROM src;
-          // Let's simply ignore the given name for this case.
+          // Let's simply ignore the default given name for this case.
           Some((g, Nil))
         }
+        case Alias(g: Generator, name) if g.elementTypes.size > 1 =>
+          // If not given the default names, and the TGF with multiple output columns
+          failAnalysis(
+            s"""Expect multiple names given for ${g.getClass.getName},
+               |but only single name '${name}' specified""".stripMargin)
         case Alias(g: Generator, name) => Some((g, name :: Nil))
         case MultiAlias(g: Generator, names) => Some(g, names)
         case _ => None

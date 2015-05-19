@@ -560,7 +560,22 @@ class SQLQuerySuite extends QueryTest {
     jsonRDD(rdd).registerTempTable("data")
     checkAnswer(sql("SELECT explode(map(1, 1)) FROM data LIMIT 1"), Row(1, 1) :: Nil)
     checkAnswer(sql("SELECT explode(map(1, 1)) as (k1, k2) FROM data LIMIT 1"), Row(1, 1) :: Nil)
-    checkAnswer(sql("SELECT explode(array(1, 1)) FROM data LIMIT 1"), Row(1) :: Nil)
+    intercept[AnalysisException] {
+      sql("SELECT explode(map(1, 1)) as k1 FROM data LIMIT 1")
+    }
+
+    intercept[AnalysisException] {
+      sql("SELECT explode(map(1, 1)) as (k1, k2, k3) FROM data LIMIT 1")
+    }
+  }
+
+  // TGF with non-TGF in project is allowed in Spark SQL, but not in Hive
+  test("TGF with non-TGF in projection") {
+    val rdd = sparkContext.makeRDD( """{"a": "1", "b":"1"}""" :: Nil)
+    jsonRDD(rdd).registerTempTable("data")
+    checkAnswer(
+      sql("SELECT explode(map(a, b)) as (k1, k2), a, b FROM data"),
+      Row("1", "1", "1", "1") :: Nil)
   }
 
   test("logical.Project should not be resolved if it contains aggregates or generators") {
