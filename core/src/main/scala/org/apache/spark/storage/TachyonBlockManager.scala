@@ -21,13 +21,17 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.{Date, Random}
+
+import scala.util.control.NonFatal
+
 import com.google.common.io.ByteStreams
+
 import tachyon.client.{ReadType, WriteType, TachyonFS, TachyonFile}
 import tachyon.TachyonURI
+
 import org.apache.spark.{SparkException, SparkConf, Logging}
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.util.Utils
-import scala.util.control.NonFatal
 
 
 /**
@@ -97,7 +101,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
       os.write(bytes.array())
     } catch {
       case NonFatal(e) => 
-        logWarning(s"Failed to put byes of block $blockId into Tachyon", e)
+        logWarning(s"Failed to put bytes of block $blockId into Tachyon", e)
         os.cancel()
     } finally {
       os.close()
@@ -124,9 +128,6 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
       return None
     }
     val is = file.getInStream(ReadType.CACHE)
-    if (is == null) {
-      return None
-    }
     try {
       val size = file.length
       val bs = new Array[Byte](size.asInstanceOf[Int])
@@ -147,10 +148,9 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
       return None
     }
     val is = file.getInStream(ReadType.CACHE)
-    if (is == null) {
-      return None
+    Option(is).map { is =>
+      blockManager.dataDeserializeStream(blockId, is)
     }
-    Some(blockManager.dataDeserializeStream(blockId, is))
   }
 
   override def getSize(blockId: BlockId): Long = {

@@ -17,8 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{BufferedOutputStream, BufferedInputStream, ByteArrayOutputStream, File,
-  InputStream, OutputStream}
+import java.io._
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -500,7 +499,7 @@ private[spark] class BlockManager(
               case Some(values) =>
                 return result
               case None =>
-                logDebug(s"Block $blockId not found in externalBlockStore")
+                logDebug(s"Block $blockId not found in ExternalBlockStore")
             }
           }
         }

@@ -18,9 +18,11 @@
 package org.apache.spark.storage
 
 import java.nio.ByteBuffer
+
+import scala.util.control.NonFatal
+
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
-import scala.util.control.NonFatal
 
 
 /**
@@ -40,7 +42,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
       externalBlockManager.map(_.getSize(blockId)).getOrElse(0)
     } catch {
       case NonFatal(t) =>
-        logError(s"Error in getSize from $blockId", t)
+        logError(s"Error in getSize($blockId)", t)
         0L
     }
   }
@@ -86,12 +88,12 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
           blockId, Utils.bytesToString(size), finishTime - startTime))
         PutResult(size, data)
       } else {
-        logError(s"Error in putValues $blockId : no ExternalBlockManager exists!")
+        logError(s"Error in putValues($blockId): no ExternalBlockManager has been configured")
         PutResult(-1, null, Seq((blockId, BlockStatus.empty)))
       }
     } catch {
       case NonFatal(t) =>
-        logError(s"Error in putValues $blockId", t)
+        logError(s"Error in putValues($blockId)", t)
         PutResult(-1, null, Seq((blockId, BlockStatus.empty)))
     }
   }
@@ -105,8 +107,6 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
     try {
       val startTime = System.currentTimeMillis
       if (externalBlockManager.isDefined) {
-        // So that we do not modify the input offsets !
-        // duplicate does not copy buffer, so inexpensive
         val byteBuffer = bytes.duplicate()
         byteBuffer.rewind()
         externalBlockManager.get.putBytes(blockId, byteBuffer)
@@ -121,12 +121,12 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
           blockId, Utils.bytesToString(size), finishTime - startTime))
         PutResult(size, data)
       } else {
-        logError(s"Error in putBytes $blockId : no ExternalBlockManager exists!")
+        logError(s"Error in putBytes($blockId): no ExternalBlockManager has been configured")
         PutResult(-1, null, Seq((blockId, BlockStatus.empty)))
       }
     } catch {
       case NonFatal(t) =>
-        logError(s"Error in putBytes $blockId", t)
+        logError(s"Error in putBytes($blockId)", t)
         PutResult(-1, null, Seq((blockId, BlockStatus.empty)))
     }
   }
@@ -137,7 +137,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
       externalBlockManager.map(_.removeBlock(blockId)).getOrElse(true)
     } catch {
       case NonFatal(t) =>
-        logError(s"Error in removing $blockId", t)
+        logError(s"Error in removeBlock($blockId)", t)
         true
     }
   }
@@ -147,7 +147,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
       externalBlockManager.flatMap(_.getValues(blockId))
     } catch {
       case NonFatal(t) =>
-        logError(s"Error in getValues from $blockId", t)
+        logError(s"Error in getValues($blockId)", t)
         None
     }
   }
@@ -157,7 +157,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
       externalBlockManager.flatMap(_.getBytes(blockId))
     } catch {
       case NonFatal(t) =>
-        logError(s"Error in getBytes from $blockId", t)
+        logError(s"Error in getBytes($blockId)", t)
         None
     }
   }
@@ -166,13 +166,13 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
     try {
       val ret = externalBlockManager.map(_.blockExists(blockId)).getOrElse(false)
       if (!ret) {
-        logInfo(s"remove block $blockId")
+        logInfo(s"Remove block $blockId")
         blockManager.removeBlock(blockId, true)
       }
       ret
     } catch {
       case NonFatal(t) =>
-        logError(s"Error in getBytes from $blockId", t)
+        logError(s"Error in getBytes($blockId)", t)
         false
     }
   }
