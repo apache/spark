@@ -91,15 +91,9 @@ object MimaExcludes {
             // SPARK-7681 add SparseVector support for gemv
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.multiply"),
-            ProblemFilters.exclude[IncompatibleMethTypeProblem](
-              "org.apache.spark.mllib.linalg.Matrix.multiply"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.DenseMatrix.multiply"),
-            ProblemFilters.exclude[IncompatibleMethTypeProblem](
-              "org.apache.spark.mllib.linalg.DenseMatrix.multiply"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.SparseMatrix.multiply"),
-            ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.mllib.linalg.SparseMatrix.multiply")
           ) ++ Seq(
             // Execution should never be included as its always internal.
@@ -189,15 +183,9 @@ object MimaExcludes {
             // SPARK-7681 add SparseVector support for gemv
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.multiply"),
-            ProblemFilters.exclude[IncompatibleMethTypeProblem](
-              "org.apache.spark.mllib.linalg.Matrix.multiply"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.DenseMatrix.multiply"),
-            ProblemFilters.exclude[IncompatibleMethTypeProblem](
-              "org.apache.spark.mllib.linalg.DenseMatrix.multiply"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.SparseMatrix.multiply"),
-            ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.mllib.linalg.SparseMatrix.multiply")
           ) ++ Seq(
             // SPARK-5540
