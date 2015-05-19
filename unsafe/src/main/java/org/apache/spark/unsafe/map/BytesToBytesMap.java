@@ -38,7 +38,7 @@ import org.apache.spark.unsafe.memory.*;
  * This is backed by a power-of-2-sized hash table, using quadratic probing with triangular numbers,
  * which is guaranteed to exhaust the space.
  * <p>
- * The map can support up to 2^30 keys. If the key cardinality is higher than this, you should
+ * The map can support up to 2^29 keys. If the key cardinality is higher than this, you should
  * probably be using sorting instead of hashing for better cache locality.
  * <p>
  * This class is not thread safe.
@@ -81,10 +81,13 @@ public final class BytesToBytesMap {
   private static final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
 
   /**
-   * The maximum number of keys that BytesToBytesMap supports.
+   * The maximum number of keys that BytesToBytesMap supports. The hash table has to be
+   * power-of-2-sized and its backing Java array can contain at most (1 << 30) elements, since
+   * that's the largest power-of-2 that's less than Integer.MAX_VALUE. We need two long array
+   * entries per key, giving us a maximum capacity of (1 << 29).
    */
   @VisibleForTesting
-  static final int MAX_CAPACITY = (1 << 30);
+  static final int MAX_CAPACITY = (1 << 29);
 
   // This choice of page table size and page size means that we can address up to 500 gigabytes
   // of memory.
@@ -499,7 +502,8 @@ public final class BytesToBytesMap {
     assert (capacity >= 0);
     // The capacity needs to be divisible by 64 so that our bit set can be sized properly
     capacity = Math.max((int) Math.min(MAX_CAPACITY, nextPowerOf2(capacity)), 64);
-    longArray = new LongArray(memoryManager.allocate(capacity * 8 * 2));
+    assert (capacity <= MAX_CAPACITY);
+    longArray = new LongArray(memoryManager.allocate(capacity * 8L * 2));
     bitset = new BitSet(MemoryBlock.fromLongArray(new long[capacity / 64]));
 
     this.growthThreshold = (int) (capacity * loadFactor);

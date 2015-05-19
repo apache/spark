@@ -25,26 +25,40 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+import static org.mockito.AdditionalMatchers.geq;
+import static org.mockito.Mockito.*;
 
 import org.apache.spark.unsafe.array.ByteArrayMethods;
+import org.apache.spark.unsafe.memory.*;
 import org.apache.spark.unsafe.PlatformDependent;
 import static org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET;
 import static org.apache.spark.unsafe.PlatformDependent.LONG_ARRAY_OFFSET;
 
-import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
-import org.apache.spark.unsafe.memory.MemoryAllocator;
-import org.apache.spark.unsafe.memory.MemoryLocation;
-import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
 public abstract class AbstractBytesToBytesMapSuite {
 
   private final Random rand = new Random(42);
 
   private TaskMemoryManager memoryManager;
+  private TaskMemoryManager sizeLimitedMemoryManager;
 
   @Before
   public void setup() {
     memoryManager = new TaskMemoryManager(new ExecutorMemoryManager(getMemoryAllocator()));
+    // Mocked memory manager for tests that check the maximum array size, since actually allocating
+    // such large arrays will cause us to run out of memory in our tests.
+    sizeLimitedMemoryManager = spy(memoryManager);
+    when(sizeLimitedMemoryManager.allocate(geq(1L << 20))).thenAnswer(new Answer<MemoryBlock>() {
+      @Override
+      public MemoryBlock answer(InvocationOnMock invocation) throws Throwable {
+        if (((Long) invocation.getArguments()[0] / 8) > Integer.MAX_VALUE) {
+          throw new OutOfMemoryError("Requested array size exceeds VM limit");
+        }
+        return memoryManager.allocate(1L << 20);
+      }
+    });
   }
 
   @After
@@ -339,27 +353,31 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Test
   public void initialCapacityBoundsChecking() {
     try {
-      new BytesToBytesMap(memoryManager, 0);
+      new BytesToBytesMap(sizeLimitedMemoryManager, 0);
       Assert.fail("Expected IllegalArgumentException to be thrown");
     } catch (IllegalArgumentException e) {
       // expected exception
     }
 
     try {
-      new BytesToBytesMap(memoryManager, BytesToBytesMap.MAX_CAPACITY + 1);
+      new BytesToBytesMap(sizeLimitedMemoryManager, BytesToBytesMap.MAX_CAPACITY + 1);
       Assert.fail("Expected IllegalArgumentException to be thrown");
     } catch (IllegalArgumentException e) {
       // expected exception
     }
 
    // Can allocate _at_ the max capacity
-   new BytesToBytesMap(memoryManager, BytesToBytesMap.MAX_CAPACITY);
+    BytesToBytesMap map =
+      new BytesToBytesMap(sizeLimitedMemoryManager, BytesToBytesMap.MAX_CAPACITY);
+    map.free();
   }
 
   @Test
   public void resizingLargeMap() {
     // As long as a map's capacity is below the max, we should be able to resize up to the max
-    BytesToBytesMap map = new BytesToBytesMap(memoryManager, BytesToBytesMap.MAX_CAPACITY - 64);
+    BytesToBytesMap map =
+      new BytesToBytesMap(sizeLimitedMemoryManager, BytesToBytesMap.MAX_CAPACITY - 64);
     map.growAndRehash();
+    map.free();
   }
 }
