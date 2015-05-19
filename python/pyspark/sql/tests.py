@@ -117,6 +117,11 @@ class SQLTests(ReusedPySparkTestCase):
         ReusedPySparkTestCase.tearDownClass()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 
+    def test_range(self):
+        self.assertEqual(self.sqlCtx.range(1, 1).count(), 0)
+        self.assertEqual(self.sqlCtx.range(1, 0, -1).count(), 1)
+        self.assertEqual(self.sqlCtx.range(0, 1 << 40, 1 << 39).count(), 2)
+
     def test_explode(self):
         from pyspark.sql.functions import explode
         d = [Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"})]
