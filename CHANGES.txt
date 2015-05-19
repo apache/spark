@@ -3,6 +3,41 @@ Spark Change Log
 
 Release 1.4.0
 
+  [HOTFIX] Revert "[SPARK-7092] Update spark scala version to 2.11.6"
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-19 02:28:41 -0700
+  Commit: 31f5d53
+
+  Revert "Preparing Spark release v1.4.0-rc1"
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-19 02:27:14 -0700
+  Commit: 586ede6
+
+  Revert "Preparing development version 1.4.1-SNAPSHOT"
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-19 02:27:07 -0700
+  Commit: e7309ec
+
+  Fixing a few basic typos in the Programming Guide.
+  Mike Dusenberry <dusenberrymw@gmail.com>
+  2015-05-19 08:59:45 +0100
+  Commit: 0748263, github.com/apache/spark/pull/6240
+
+  Preparing development version 1.4.1-SNAPSHOT
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-19 07:13:24 +0000
+  Commit: a1d896b
+
+  Preparing Spark release v1.4.0-rc1
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-19 07:13:24 +0000
+  Commit: 79fb01a
+
+  Updating CHANGES.txt for Spark 1.4
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-19 00:12:20 -0700
+  Commit: 30bf333
+
   Revert "Preparing Spark release v1.4.0-rc1"
   Patrick Wendell <patrick@databricks.com>
   2015-05-19 00:10:39 -0700
