@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -24,8 +24,7 @@ import shutil
 import subprocess
 from collections import namedtuple
 
-SPARK_PROJ_ROOT = \
-    os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
+SPARK_PROJ_ROOT = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
 USER_HOME_DIR = os.environ.get("HOME")
 
 SBT_MAVEN_PROFILE_ARGS_ENV = "SBT_MAVEN_PROFILES_ARGS"
