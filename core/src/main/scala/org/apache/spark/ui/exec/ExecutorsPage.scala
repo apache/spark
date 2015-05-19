@@ -25,7 +25,6 @@ import scala.xml.Node
 import org.apache.spark.status.api.v1.ExecutorSummary
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
-import org.apache.spark.storage.StorageStatus
 
 // This isn't even used anymore -- but we need to keep it b/c of a MiMa false positive
 private[ui] case class ExecutorSummaryInfo(
@@ -42,7 +41,6 @@ private[ui] case class ExecutorSummaryInfo(
     totalInputBytes: Long,
     totalShuffleRead: Long,
     totalShuffleWrite: Long,
-    isAlive: Boolean, 
     maxMemory: Long,
     executorLogs: Map[String, String])
 
@@ -54,11 +52,12 @@ private[ui] class ExecutorsPage(
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val storageStatusList = listener.storageStatusList ++ listener.removedExecutorStorageStatusList
+    val storageStatusList = listener.storageStatusList
     val maxMem = storageStatusList.map(_.maxMem).sum
     val memUsed = storageStatusList.map(_.memUsed).sum
     val diskUsed = storageStatusList.map(_.diskUsed).sum
-    val execInfo = for (status <- storageStatusList) yield getExecInfo(status)
+    val execInfo = for (statusId <- 0 until storageStatusList.size) yield
+      ExecutorsPage.getExecInfo(listener, statusId)
     val execInfoSorted = execInfo.sortBy(_.id)
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
 
@@ -85,7 +84,6 @@ private[ui] class ExecutorsPage(
               Shuffle Write
             </span>
           </th>
-          <th>Executor Status</th>
           {if (logsExist) <th class="sorttable_nosort">Logs</th> else Seq.empty}
           {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
         </thead>
@@ -146,9 +144,6 @@ private[ui] class ExecutorsPage(
       <td sorttable_customkey={info.totalShuffleWrite.toString}>
         {Utils.bytesToString(info.totalShuffleWrite)}
       </td>
-      <td sorttable_customkey={info.isAlive.toString}>
-      {if(info.isAlive) "Alive" else "Killed"}
-      </td>
       {
         if (logsExist) {
           <td>
@@ -181,7 +176,8 @@ private[ui] class ExecutorsPage(
 
 private[spark] object ExecutorsPage {
   /** Represent an executor's info as a map given a storage status index */
-  private def getExecInfo(status: StorageStatus): ExecutorSummaryInfo = {
+  def getExecInfo(listener: ExecutorsListener, statusId: Int): ExecutorSummary = {
+    val status = listener.storageStatusList(statusId)
     val execId = status.blockManagerId.executorId
     val hostPort = status.blockManagerId.hostPort
     val rddBlocks = status.numBlocks
@@ -196,7 +192,6 @@ private[spark] object ExecutorsPage {
     val totalInputBytes = listener.executorToInputBytes.getOrElse(execId, 0L)
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
-    val isAlive = listener.storageStatusList.contains(status)
     val executorLogs = listener.executorToLogUrls.getOrElse(execId, Map.empty)
 
     new ExecutorSummary(
@@ -213,7 +208,6 @@ private[spark] object ExecutorsPage {
       totalInputBytes,
       totalShuffleRead,
       totalShuffleWrite,
-      isAlive, 
       maxMem,
       executorLogs
     )
