@@ -19,6 +19,7 @@ import sys
 import decimal
 import time
 import datetime
+import calendar
 import keyword
 import warnings
 import json
@@ -638,6 +639,8 @@ def _need_python_to_sql_conversion(dataType):
     elif isinstance(dataType, MapType):
         return _need_python_to_sql_conversion(dataType.keyType) or \
             _need_python_to_sql_conversion(dataType.valueType)
+    elif isinstance(dataType, TimestampType):
+        return True
     elif isinstance(dataType, UserDefinedType):
         return True
     else:
@@ -691,6 +694,16 @@ def _python_to_sql_converter(dataType):
         key_converter = _python_to_sql_converter(dataType.keyType)
         value_converter = _python_to_sql_converter(dataType.valueType)
         return lambda m: dict([(key_converter(k), value_converter(v)) for k, v in m.items()])
+
+    elif isinstance(dataType, TimestampType):
+
+        def to_posix_timstamp(dt):
+            if dt.tzinfo is None:
+                return time.mktime(dt.timetuple()) + dt.microsecond / 1e6
+            else:
+                return calendar.timegm(dt.utctimetuple()) + dt.microsecond / 1e6
+        return to_posix_timstamp
+
     elif isinstance(dataType, UserDefinedType):
         return lambda obj: dataType.serialize(obj)
     else:

@@ -26,6 +26,7 @@ import shutil
 import tempfile
 import pickle
 import functools
+import time
 import datetime
 
 import py4j
@@ -44,6 +45,20 @@ from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type
 from pyspark.tests import ReusedPySparkTestCase
 from pyspark.sql.functions import UserDefinedFunction
+
+
+class UTC(datetime.tzinfo):
+    """UTC"""
+    ZERO = datetime.timedelta(0)
+
+    def utcoffset(self, dt):
+        return self.ZERO
+
+    def tzname(self, dt):
+        return "UTC"
+
+    def dst(self, dt):
+        return self.ZERO
 
 
 class ExamplePointUDT(UserDefinedType):
@@ -570,6 +585,20 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(1, df.filter(df.time == time).count())
         self.assertEqual(0, df.filter(df.date > date).count())
         self.assertEqual(0, df.filter(df.time > time).count())
+
+    def test_time_with_timezone(self):
+        now = datetime.datetime.now()
+        ts = time.mktime(now.timetuple()) + now.microsecond / 1e6
+        # class in __main__ is not serializable
+        from pyspark.sql.tests import UTC
+        utc = UTC()
+        utcnow = datetime.datetime.fromtimestamp(ts, utc)
+        df = self.sqlCtx.createDataFrame([(now, utcnow)])
+        now1, utcnow1 = df.first()
+        # Spark SQL does not support microsecond, the error should be
+        # less than 1 millisecond
+        self.assertTrue(now1 - now < datetime.timedelta(0.001))
+        self.assertTrue(utcnow1 - now < datetime.timedelta(0.001))
 
     def test_dropna(self):
         schema = StructType([
