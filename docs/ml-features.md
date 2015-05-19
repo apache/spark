@@ -116,7 +116,7 @@ idf = IDF(inputCol="rawFeatures", outputCol="features")
 idfModel = idf.fit(featurizedData)
 rescaledData = idfModel.transform(featurizedData)
 for features_label in rescaledData.select("features", "label").take(3):
-  print features_label
+  print(features_label)
 {% endhighlight %}
 </div>
 </div>
@@ -282,7 +282,7 @@ sentenceDataFrame = sqlContext.createDataFrame([
 tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
 wordsDataFrame = tokenizer.transform(sentenceDataFrame)
 for words_label in wordsDataFrame.select("words", "label").take(3):
-  print words_label
+  print(words_label)
 {% endhighlight %}
 </div>
 </div>
@@ -368,7 +368,7 @@ binarizer = Binarizer(threshold=0.5, inputCol="feature", outputCol="binarized_fe
 binarizedDataFrame = binarizer.transform(continuousDataFrame)
 binarizedFeatures = binarizedDataFrame.select("binarized_feature")
 for binarized_feature, in binarizedFeatures.collect():
-  print binarized_feature
+  print(binarized_feature)
 {% endhighlight %}
 </div>
 </div>
@@ -781,7 +781,6 @@ scalerModel = scaler.fit(dataFrame)
 
 # Normalize each feature to have unit standard deviation.
 scaledData = scalerModel.transform(dataFrame)
->>>>>>> Added Normalizer, StandardScaler to ml-features doc, plus small Java unit tests
 {% endhighlight %}
 </div>
 </div>
