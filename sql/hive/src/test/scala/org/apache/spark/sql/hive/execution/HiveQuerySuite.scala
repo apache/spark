@@ -291,6 +291,29 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       assert(x._1 == x._2.asInstanceOf[Double]))
   }
 
+  // `Math.exp(1.0)` has different result for different jdk version, so not use createQueryTest
+  test("udf_java_method") {
+    val res = sql(
+      """
+        |SELECT java_method("java.lang.String", "valueOf", 1),
+        |       java_method("java.lang.String", "isEmpty"),
+        |       java_method("java.lang.Math", "max", 2, 3),
+        |       java_method("java.lang.Math", "min", 2, 3),
+        |       java_method("java.lang.Math", "round", 2.5),
+        |       java_method("java.lang.Math", "exp", 1.0),
+        |       java_method("java.lang.Math", "floor", 1.9)
+        |FROM src tablesample (1 rows)
+      """.stripMargin).collect().head
+    Seq(
+      "1",
+      true,
+      java.lang.Math.max(2, 3),
+      java.lang.Math.min(2, 3),
+      java.lang.Math.round(2.5),
+      java.lang.Math.exp(1.0),
+      java.lang.Math.floor(1.9)).zip(res.toSeq).foreach( x => assert(x._1 == x._2))
+  }
+
   createQueryTest("modulus",
     "SELECT 11 % 10, IF((101.1 % 100.0) BETWEEN 1.01 AND 1.11, \"true\", \"false\"), " +
       "(101 / 2) % 10 FROM src LIMIT 1")

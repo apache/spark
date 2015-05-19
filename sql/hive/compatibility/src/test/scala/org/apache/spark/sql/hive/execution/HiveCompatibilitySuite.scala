@@ -877,7 +877,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_int",
     "udf_isnotnull",
     "udf_isnull",
-    "udf_java_method",
     "udf_lcase",
     "udf_length",
     "udf_lessthan",
