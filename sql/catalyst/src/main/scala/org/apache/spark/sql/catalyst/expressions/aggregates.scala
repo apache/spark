@@ -92,7 +92,7 @@ abstract class AggregateFunction
 
 case class Min(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = child.nullable
   override def dataType: DataType = child.dataType
   override def toString: String = s"MIN($child)"
 
@@ -123,7 +123,7 @@ case class MinFunction(expr: Expression, base: AggregateExpression) extends Aggr
 
 case class Max(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = child.nullable
   override def dataType: DataType = child.dataType
   override def toString: String = s"MAX($child)"
 
@@ -311,7 +311,7 @@ case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
 
 case class Average(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = child.nullable
 
   override def dataType: DataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
@@ -354,7 +354,7 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
 
 case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = child.nullable
 
   override def dataType: DataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
@@ -477,7 +477,7 @@ case class CombineSetsAndSumFunction(
 }
 
 case class First(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
-  override def nullable: Boolean = true
+  override def nullable: Boolean = child.nullable
   override def dataType: DataType = child.dataType
   override def toString: String = s"FIRST($child)"
 
@@ -492,7 +492,7 @@ case class First(child: Expression) extends PartialAggregate with trees.UnaryNod
 
 case class Last(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
   override def references: AttributeSet = child.references
-  override def nullable: Boolean = true
+  override def nullable: Boolean = child.nullable
   override def dataType: DataType = child.dataType
   override def toString: String = s"LAST($child)"
 
