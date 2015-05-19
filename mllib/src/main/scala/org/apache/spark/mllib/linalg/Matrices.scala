@@ -88,7 +88,7 @@ sealed trait Matrix extends Serializable {
     BLAS.gemv(1.0, this, y, 0.0, output)
     output
   }
- 
+
   /** A human readable representation of the matrix */
   override def toString: String = toBreeze.toString()
 
