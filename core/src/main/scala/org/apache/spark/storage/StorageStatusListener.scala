@@ -32,10 +32,15 @@ import org.apache.spark.scheduler._
 class StorageStatusListener extends SparkListener {
   // This maintains only blocks that are cached (i.e. storage level is not StorageLevel.NONE)
   private[storage] val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
+  private[storage] val removedExecutorIdToStorageStatus = mutable.Map[String, StorageStatus]()
 
   def storageStatusList: Seq[StorageStatus] = synchronized {
     executorIdToStorageStatus.values.toSeq
   }
+  def removedExecutorStorageStatusList: Seq[StorageStatus] = synchronized{
+    removedExecutorIdToStorageStatus.values.toSeq
+  }
+ 
 
   /** Update storage status list to reflect updated block statuses */
   private def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
@@ -87,6 +92,8 @@ class StorageStatusListener extends SparkListener {
   override def onBlockManagerRemoved(blockManagerRemoved: SparkListenerBlockManagerRemoved) {
     synchronized {
       val executorId = blockManagerRemoved.blockManagerId.executorId
+      removedExecutorIdToStorageStatus.put(executorId,
+          executorIdToStorageStatus.get(executorId).get)
       executorIdToStorageStatus.remove(executorId)
     }
   }
