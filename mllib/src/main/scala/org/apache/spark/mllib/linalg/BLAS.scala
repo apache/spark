@@ -659,10 +659,7 @@ private[spark] object BLAS extends Serializable with Logging {
         rowCounter += 1
       }
     } else {
-      // Scale vector first if `beta` is not equal to 0.0
-      if (beta != 0.0) {
-        scal(beta, y)
-      }
+      scal(beta, y)
       // Perform matrix-vector multiplication and add to y
       var colCounterForA = 0
       while (colCounterForA < nA) {
