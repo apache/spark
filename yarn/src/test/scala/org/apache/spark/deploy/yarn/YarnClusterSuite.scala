@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
+import scala.io.Source
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.ByteStreams
@@ -33,7 +34,8 @@ import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException, TestUtils}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.scheduler.{SparkListenerJobStart, SparkListener, SparkListenerExecutorAdded}
+import org.apache.spark.scheduler.{SparkListenerApplicationStart, SparkListener,
+  SparkListenerExecutorAdded}
 import org.apache.spark.util.Utils
 
 /**
@@ -290,9 +292,13 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
 private[spark] class SaveExecutorInfo extends SparkListener {
   val addedExecutorInfos = mutable.Map[String, ExecutorInfo]()
-
+  var driverLogs: Option[collection.Map[String, String]] = None
   override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
     addedExecutorInfos(executor.executorId) = executor.executorInfo
+  }
+
+  override def onApplicationStart(appStart: SparkListenerApplicationStart): Unit = {
+    driverLogs = appStart.driverLogs
   }
 }
 
@@ -314,26 +320,40 @@ private object YarnClusterDriver extends Logging with Matchers {
     val sc = new SparkContext(new SparkConf()
       .set("spark.extraListeners", classOf[SaveExecutorInfo].getName)
       .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
+    val conf = sc.getConf
     val status = new File(args(0))
     var result = "failure"
     try {
       val data = sc.parallelize(1 to 4, 4).collect().toSet
       assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
       data should be (Set(1, 2, 3, 4))
+
+      // verify log urls are present
+      val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]
+      assert(listeners.size === 1)
+      val listener = listeners(0)
+      val executorInfos = listener.addedExecutorInfos.values
+      assert(executorInfos.nonEmpty)
+      executorInfos.foreach { info =>
+        assert(info.logUrlMap.nonEmpty)
+      }
+
+      // YARN does some weird redirects after the app is done, so check before it is complete.
+      if (conf.get("spark.master") == "yarn-cluster") {
+        val driverLogs = listener.driverLogs.get
+        assert(driverLogs.size === 2)
+        assert(driverLogs.containsKey("stderr"))
+        assert(driverLogs.containsKey("stdout"))
+        val stderr = driverLogs("stderr") // YARN puts everything in stderr.
+        val lines = Source.fromURL(stderr).getLines()
+        // Look for a line that contains YarnClusterSchedulerBackend, since that is guaranteed in
+        // cluster mode.
+        assert(lines.exists(_.contains("YarnClusterSchedulerBackend")))
+      }
       result = "success"
     } finally {
       sc.stop()
       Files.write(result, status, UTF_8)
-    }
-
-    // verify log urls are present
-    val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]
-    assert(listeners.size === 1)
-    val listener = listeners(0)
-    val executorInfos = listener.addedExecutorInfos.values
-    assert(executorInfos.nonEmpty)
-    executorInfos.foreach { info =>
-      assert(info.logUrlMap.nonEmpty)
     }
   }
 
