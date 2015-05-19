@@ -48,7 +48,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
 {% endhighlight %}
 
-(If the Spark version is prior to 1.3.0, user needs to explicitly import org.apache.spark.SparkContext._ to allow the implicit conversions.)
+(Before Spark 1.3.0, you need to explicitly import `import org.apache.spark.SparkContext._` to enable essential implicit conversions.)
 
 </div>
 
