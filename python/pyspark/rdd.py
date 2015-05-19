@@ -704,7 +704,11 @@ class RDD(object):
                     out.write(s.encode('utf-8'))
                 out.close()
             Thread(target=pipe_objs, args=[pipe.stdin]).start()
-            return (x.rstrip(b'\n').decode('utf-8') for x in iter(pipe.stdout.readline, b''))
+            result = (x.rstrip(b'\n').decode('utf-8') for x in iter(pipe.stdout.readline, b''))
+            pipe.wait()
+            if pipe.returncode:
+                raise Exception("Pipe function `%s' exited with error code %d" %(command, pipe.returncode) )
+            return result
         return self.mapPartitions(func)
 
     def foreach(self, f):
