@@ -19,7 +19,7 @@ package org.apache.spark.ui
 
 import java.util.Date
 
-import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo, JsonRootResource, UIRoot}
+import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo, ApiRootResource, UIRoot}
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
@@ -64,7 +64,7 @@ private[spark] class SparkUI private (
     attachTab(new ExecutorsTab(this))
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
     attachHandler(createRedirectHandler("/", "/jobs", basePath = basePath))
-    attachHandler(JsonRootResource.getJsonServlet(this))
+    attachHandler(ApiRootResource.getApiServlet(this))
     // This should be POST only, but, the YARN AM proxy won't proxy POSTs
     attachHandler(createRedirectHandler(
       "/stages/stage/kill", "/stages", stagesTab.handleKillRequest,

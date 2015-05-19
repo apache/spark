@@ -17,11 +17,13 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStreamWriter}
+import java.io.{FileInputStream, BufferedOutputStream, File, FileOutputStream, OutputStreamWriter}
 import java.net.URI
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipInputStream
 
 import scala.io.Source
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
@@ -333,6 +335,86 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       list.size should be (0)
     }
     assert(!log2.exists())
+  }
+
+  test("Event log copy") {
+
+    def getFileContent(file: File): Array[Byte] = {
+      val buff = new Array[Byte](file.length().toInt)
+      val in = new FileInputStream(file)
+      try {
+        in.read(buff)
+      } finally {
+        in.close()
+      }
+      buff
+    }
+
+    def unzipToDir(zipFile: File, outputDir: File): Unit = {
+      val zipStream = new ZipInputStream(new FileInputStream(zipFile))
+      try {
+        val buffer = new Array[Byte](128)
+        var entry = zipStream.getNextEntry
+        while (entry != null) {
+          val unzippedFile = new File(outputDir, entry.getName)
+          val ostream = new BufferedOutputStream(new FileOutputStream(unzippedFile))
+          try {
+            var dataRemains = true
+            while (dataRemains) {
+              val read = zipStream.read(buffer)
+              if (read > 0) ostream.write(buffer, 0, read) else dataRemains = false
+            }
+          } finally {
+            ostream.close()
+          }
+          zipStream.closeEntry()
+          entry = zipStream.getNextEntry
+        }
+      } finally {
+        zipStream.close()
+      }
+    }
+
+    val provider = new FsHistoryProvider(createTestConf())
+    val log1 = newLogFile("downloadApp1", Some("attempt1"), inProgress = false)
+    writeFile(log1, true, None,
+      SparkListenerApplicationStart("downloadApp1", Some("downloadApp1"), System
+        .currentTimeMillis() - 400, "test", Some("attempt1")),
+      SparkListenerApplicationEnd(System.currentTimeMillis() - 200)
+    )
+    val log1Buffer = getFileContent(log1)
+    val log2 = newLogFile("downloadApp1", Some("attempt2"), inProgress = false)
+    writeFile(log2, true, None,
+      SparkListenerApplicationStart("downloadApp1", Some("downloadApp1"), System
+        .currentTimeMillis() - 100, "test", Some("attempt2")),
+      SparkListenerApplicationEnd(System.currentTimeMillis())
+    )
+    val log2Buffer = getFileContent(log2)
+    provider.checkForLogs()
+    var inputDir: File = null
+    var outputDir: File = null
+    try {
+      inputDir = Utils.createTempDir()
+      Utils.chmod700(inputDir)
+      outputDir = Utils.createTempDir()
+      Utils.chmod700(outputDir)
+      provider.copyApplicationEventLogs("downloadApp1", inputDir)
+      val zipFile = inputDir.listFiles.headOption
+      zipFile.foreach { file =>
+        unzipToDir(file, outputDir)
+      }
+      var filesCompared = 0
+      outputDir.listFiles().foreach { outputFile =>
+        val bufferToCompare = if (outputFile.getName == log1.getName) log1Buffer else log2Buffer
+        val result = getFileContent(outputFile)
+        result should equal (bufferToCompare)
+        filesCompared += 1
+      }
+      assert(filesCompared === 2)
+    } finally {
+      if (inputDir != null) Utils.deleteRecursively(inputDir)
+      if (outputDir != null) Utils.deleteRecursively(outputDir)
+    }
   }
 
   /**

@@ -19,7 +19,7 @@ package org.apache.spark.deploy.master.ui
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.status.api.v1.{ApplicationsListResource, ApplicationInfo, JsonRootResource, UIRoot}
+import org.apache.spark.status.api.v1.{ApplicationsListResource, ApplicationInfo, ApiRootResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.RpcUtils
@@ -47,7 +47,7 @@ class MasterWebUI(val master: Master, requestedPort: Int)
     attachPage(new HistoryNotFoundPage(this))
     attachPage(masterPage)
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
-    attachHandler(JsonRootResource.getJsonServlet(this))
+    attachHandler(ApiRootResource.getApiServlet(this))
     attachHandler(createRedirectHandler(
       "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST")))
     attachHandler(createRedirectHandler(

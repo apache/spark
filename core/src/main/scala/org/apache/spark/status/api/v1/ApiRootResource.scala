@@ -39,7 +39,7 @@ import org.apache.spark.ui.SparkUI
  * HistoryServerSuite.
  */
 @Path("/v1")
-private[v1] class JsonRootResource extends UIRootFromServletContext {
+private[v1] class ApiRootResource extends UIRootFromServletContext {
 
   @Path("applications")
   def getApplicationList(): ApplicationListResource = {
@@ -164,13 +164,22 @@ private[v1] class JsonRootResource extends UIRootFromServletContext {
     }
   }
 
+  @Path("applications/{appId}/{attemptId}/download")
+  def getEventLogs(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): EventLogDownloadResource = {
+    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+      new EventLogDownloadResource(ui, appId)
+    }
+  }
+
 }
 
-private[spark] object JsonRootResource {
+private[spark] object ApiRootResource {
 
-  def getJsonServlet(uiRoot: UIRoot): ServletContextHandler = {
+  def getApiServlet(uiRoot: UIRoot): ServletContextHandler = {
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
-    jerseyContext.setContextPath("/json")
+    jerseyContext.setContextPath("/api")
     val holder:ServletHolder = new ServletHolder(classOf[ServletContainer])
     holder.setInitParameter("com.sun.jersey.config.property.resourceConfigClass",
       "com.sun.jersey.api.core.PackagesResourceConfig")

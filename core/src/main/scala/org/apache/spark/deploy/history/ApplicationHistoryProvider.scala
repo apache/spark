@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.history
 
+import java.io.File
+
 import org.apache.spark.ui.SparkUI
 
 private[spark] case class ApplicationAttemptInfo(
@@ -61,5 +63,11 @@ private[history] abstract class ApplicationHistoryProvider {
    * @return A map with the configuration data. Data is show in the order returned by the map.
    */
   def getConfig(): Map[String, String] = Map()
+
+  /**
+   * Get the event logs for the given application. The event logs are compressed into a zip file
+   * and copied into the directory passed in.
+   */
+  def copyApplicationEventLogs(appId: String, directory: File) = { }
 
 }

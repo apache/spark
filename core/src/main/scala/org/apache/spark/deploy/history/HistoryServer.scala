@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.history
 
+import java.io.File
 import java.util.NoSuchElementException
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
@@ -25,7 +26,7 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.status.api.v1.{ApplicationInfo, ApplicationsListResource, JsonRootResource, UIRoot}
+import org.apache.spark.status.api.v1.{ApplicationInfo, ApplicationsListResource, ApiRootResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{SignalLogger, Utils}
@@ -125,7 +126,7 @@ class HistoryServer(
   def initialize() {
     attachPage(new HistoryPage(this))
 
-    attachHandler(JsonRootResource.getJsonServlet(this))
+    attachHandler(ApiRootResource.getApiServlet(this))
 
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
 
@@ -171,6 +172,11 @@ class HistoryServer(
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
+
+  def copyEventLogsToDirectory(appId: String, destDir: File): Unit = {
+    provider.copyApplicationEventLogs(appId, destDir)
+  }
+
 
   /**
    * Returns the provider configuration to show in the listing page.

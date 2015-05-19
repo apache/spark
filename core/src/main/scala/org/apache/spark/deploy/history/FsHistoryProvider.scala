@@ -17,8 +17,10 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{BufferedInputStream, FileNotFoundException, IOException, InputStream}
+import java.io.{FileOutputStream, File, BufferedInputStream, FileNotFoundException,
+  IOException, InputStream}
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
 
@@ -218,6 +220,47 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case e: Exception => logError("Exception in checking for event log updates", e)
     }
   }
+
+  override def copyApplicationEventLogs(appId: String, directory: File): Unit = {
+    val buffer = new Array[Byte](64 * 1024)
+    /**
+     * Copy the data from the path specified into a new [[ZipEntry]] with the remotePath's name.
+     */
+    def copyToZipStream(remotePath: Path, zipStream: ZipOutputStream): Unit = {
+      val inputStream = fs.open(remotePath, 1 * 1024 * 1024) // 1MB Buffer
+      zipStream.putNextEntry(new ZipEntry(remotePath.getName))
+      var dataRemaining = true
+      while (dataRemaining) {
+        val length = inputStream.read(buffer)
+        if (length != -1) {
+          zipStream.write(buffer, 0, length)
+        } else {
+          dataRemaining = false
+        }
+      }
+      zipStream.closeEntry()
+      inputStream.close()
+    }
+
+    applications.get(appId).foreach { appInfo =>
+      val outFile = new File(directory, s"eventLogs-$appId.zip")
+      val zipStream = new ZipOutputStream(new FileOutputStream(outFile))
+      appInfo.attempts.foreach { attempt =>
+        val remotePath = new Path(logDir, attempt.logPath)
+        if (isLegacyLogDirectory(fs.getFileStatus(remotePath))) {
+          val filesIter = fs.listFiles(remotePath, true)
+          while (filesIter.hasNext) {
+            copyToZipStream(filesIter.next().getPath, zipStream)
+          }
+        } else {
+          copyToZipStream(remotePath, zipStream)
+        }
+      }
+      zipStream.finish()
+      zipStream.close()
+    }
+  }
+
 
   /**
    * Replay the log files in the list and merge the list of old applications with new ones
