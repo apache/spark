@@ -608,10 +608,10 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    * @since 1.4.0
    */
   def buildScan(
-    requiredColumns: Array[String],
-    filters: Array[Filter],
-    inputFiles: Array[FileStatus],
-    broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputFiles: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
     buildScan(requiredColumns, filters, inputFiles)
   }
 

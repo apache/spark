@@ -120,7 +120,7 @@ private[sql] class ParquetRelation2(
     private val maybeDataSchema: Option[StructType],
     private val maybePartitionSpec: Option[PartitionSpec],
     parameters: Map[String, String])(
-    @transient val sqlContext: SQLContext)
+    val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec)
   with Logging {
 
