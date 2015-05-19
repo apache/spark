@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.Logging
-import org.apache.spark.rdd.{RDD, UnionRDD}
+import org.apache.spark.{Logging, TaskContext}
+import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -184,7 +184,10 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         }
       }
 
-      dataRows.mapPartitions { iterator =>
+      // Since we know for sure that this closure is serializable, we can avoid the overhead
+      // of cleaning a closure for each RDD by creating our own MapPartitionsRDD. Functionally
+      // this is equivalent to calling `dataRows.mapPartitions(mapPartitionsFunc)` (SPARK-7718).
+      val mapPartitionsFunc = (_: TaskContext, _: Int, iterator: Iterator[Row]) => {
         val dataTypes = requiredColumns.map(schema(_).dataType)
         val mutableRow = new SpecificMutableRow(dataTypes)
         iterator.map { dataRow =>
@@ -196,6 +199,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
           mutableRow.asInstanceOf[expressions.Row]
         }
       }
+      new MapPartitionsRDD(dataRows, mapPartitionsFunc, preservesPartitioning = false)
+
     } else {
       dataRows
     }
