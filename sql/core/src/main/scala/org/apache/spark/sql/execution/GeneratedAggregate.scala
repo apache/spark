@@ -214,18 +214,19 @@ case class GeneratedAggregate(
       }.toMap
 
     val namedGroups = groupingExpressions.zipWithIndex.map {
-      case (ne: NamedExpression, _) => (ne, ne)
-      case (e, i) => (e, Alias(e, s"GroupingExpr$i")())
+      case (ne: NamedExpression, _) => (ne, ne.toAttribute)
+      case (e, i) => (e, Alias(e, s"GroupingExpr$i")().toAttribute)
     }
-
-    val groupMap: Map[Expression, Attribute] =
-      namedGroups.map { case (k, v) => k -> v.toAttribute}.toMap
 
     // The set of expressions that produce the final output given the aggregation buffer and the
     // grouping expressions.
     val resultExpressions = aggregateExpressions.map(_.transform {
       case e: Expression if resultMap.contains(new TreeNodeRef(e)) => resultMap(new TreeNodeRef(e))
-      case e: Expression if groupMap.contains(e) => groupMap(e)
+      case e: Expression =>
+        namedGroups
+          .find { case (expr, _) => expr semanticEquals e }
+          .map(_._2)
+          .getOrElse(e)
     })
 
     val aggregationBufferSchema: StructType = StructType.fromAttributes(computationSchema)
@@ -265,7 +266,7 @@ case class GeneratedAggregate(
       val resultProjectionBuilder =
         newMutableProjection(
           resultExpressions,
-          (namedGroups.map(_._2.toAttribute) ++ computationSchema).toSeq)
+          namedGroups.map(_._2) ++ computationSchema)
       log.info(s"Result Projection: ${resultExpressions.mkString(",")}")
 
       val joinedRow = new JoinedRow3

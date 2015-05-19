@@ -136,12 +136,17 @@ abstract class Expression extends TreeNode[Expression] {
    * cosmetically (i.e. capitalization of names in attributes may be different).
    */
   def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass && {
+    def checkSemantic(elements1: Seq[Any], elements2: Seq[Any]): Boolean = {
+      elements1.length == elements2.length && elements1.zip(elements2).forall {
+        case (e1: Expression, e2: Expression) => e1 semanticEquals e2
+        case (Some(e1: Expression), Some(e2: Expression)) => e1 semanticEquals e2
+        case (t1: Traversable[_], t2: Traversable[_]) => checkSemantic(t1.toSeq, t2.toSeq)
+        case (i1, i2) => i1 == i2
+      }
+    }
     val elements1 = this.productIterator.toSeq
     val elements2 = other.asInstanceOf[Product].productIterator.toSeq
-    elements1.length == elements2.length && elements1.zip(elements2).forall {
-      case (e1: Expression, e2: Expression) => e1 semanticEquals e2
-      case (i1, i2) => i1 == i2
-    }
+    checkSemantic(elements1, elements2)
   }
 
   /**

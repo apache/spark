@@ -143,11 +143,11 @@ object PartialAggregation {
         // We need to pass all grouping expressions though so the grouping can happen a second
         // time. However some of them might be unnamed so we alias them allowing them to be
         // referenced in the second aggregation.
-        val namedGroupingExpressions: Map[Expression, NamedExpression] =
+        val namedGroupingExpressions: Seq[(Expression, NamedExpression)] =
           groupingExpressions.filter(!_.isInstanceOf[Literal]).map {
             case n: NamedExpression => (n, n)
             case other => (other, Alias(other, "PartialGroup")())
-          }.toMap
+          }
 
         // Replace aggregations with a new expression that computes the result from the already
         // computed partial evaluations and grouping values.
@@ -161,16 +161,15 @@ object PartialAggregation {
             // (Should we just turn `GetField` into a `NamedExpression`?)
             val trimmed = e.transform { case Alias(g: ExtractValue, _) => g }
             namedGroupingExpressions
-              .find { case (k, v) => k semanticEquals trimmed }
+              .find { case (expr, _) => expr semanticEquals trimmed }
               .map(_._2.toAttribute)
               .getOrElse(e)
         }).asInstanceOf[Seq[NamedExpression]]
 
-        val partialComputation =
-          (namedGroupingExpressions.values ++
-            partialEvaluations.values.flatMap(_.partialEvaluations)).toSeq
+        val partialComputation = namedGroupingExpressions.map(_._2) ++
+          partialEvaluations.values.flatMap(_.partialEvaluations)
 
-        val namedGroupingAttributes = namedGroupingExpressions.values.map(_.toAttribute).toSeq
+        val namedGroupingAttributes = namedGroupingExpressions.map(_._2.toAttribute)
 
         Some(
           (namedGroupingAttributes,
