@@ -370,14 +370,14 @@ class DataFrameSuite extends QueryTest {
       ("Amy",   24, 180)).toDF("name", "age", "height")
 
     val describeResult = Seq(
-      Row("count",   4,               4),
-      Row("mean",    33.0,            178.0),
-      Row("stddev",  16.583123951777, 10.0),
-      Row("min",     16,              164),
-      Row("max",     60,              192))
+      Row("count",   "4",               "4"),
+      Row("mean",    "33.0",            "178.0"),
+      Row("stddev",  "16.583123951777", "10.0"),
+      Row("min",     "16",              "164"),
+      Row("max",     "60",              "192"))
 
     val emptyDescribeResult = Seq(
-      Row("count",   0,    0),
+      Row("count",   "0",  "0"),
       Row("mean",    null, null),
       Row("stddev",  null, null),
       Row("min",     null, null),
@@ -388,6 +388,11 @@ class DataFrameSuite extends QueryTest {
     val describeTwoCols = describeTestData.describe("age", "height")
     assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
     checkAnswer(describeTwoCols, describeResult)
+    // All aggregate value should have been cast to string
+    describeTwoCols.collect().foreach { row =>
+      assert(row.get(1).isInstanceOf[String], "expected string but found " + row.get(1).getClass)
+      assert(row.get(2).isInstanceOf[String], "expected string but found " + row.get(2).getClass)
+    }
 
     val describeAllCols = describeTestData.describe()
     assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
@@ -456,5 +461,120 @@ class DataFrameSuite extends QueryTest {
     assert(complexData.filter(complexData("a")(0) === 2).count() == 1)
     assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
     assert(complexData.filter(complexData("s")("key") === 1).count() == 1)
+    assert(complexData.filter(complexData("m")(complexData("s")("value")) === 1).count() == 1)
+  }
+
+  test("SPARK-7551: support backticks for DataFrame attribute resolution") {
+    val df = TestSQLContext.read.json(TestSQLContext.sparkContext.makeRDD(
+      """{"a.b": {"c": {"d..e": {"f": 1}}}}""" :: Nil))
+    checkAnswer(
+      df.select(df("`a.b`.c.`d..e`.`f`")),
+      Row(1)
+    )
+
+    val df2 = TestSQLContext.read.json(TestSQLContext.sparkContext.makeRDD(
+      """{"a  b": {"c": {"d  e": {"f": 1}}}}""" :: Nil))
+    checkAnswer(
+      df2.select(df2("`a  b`.c.d  e.f")),
+      Row(1)
+    )
+
+    def checkError(testFun: => Unit): Unit = {
+      val e = intercept[org.apache.spark.sql.AnalysisException] {
+        testFun
+      }
+      assert(e.getMessage.contains("syntax error in attribute name:"))
+    }
+    checkError(df("`abc.`c`"))
+    checkError(df("`abc`..d"))
+    checkError(df("`a`.b."))
+    checkError(df("`a.b`.c.`d"))
+  }
+
+  test("SPARK-7324 dropDuplicates") {
+    val testData = TestSQLContext.sparkContext.parallelize(
+      (2, 1, 2) :: (1, 1, 1) ::
+      (1, 2, 1) :: (2, 1, 2) ::
+      (2, 2, 2) :: (2, 2, 1) ::
+      (2, 1, 1) :: (1, 1, 2) ::
+      (1, 2, 2) :: (1, 2, 1) :: Nil).toDF("key", "value1", "value2")
+
+    checkAnswer(
+      testData.dropDuplicates(),
+      Seq(Row(2, 1, 2), Row(1, 1, 1), Row(1, 2, 1),
+        Row(2, 2, 2), Row(2, 1, 1), Row(2, 2, 1),
+        Row(1, 1, 2), Row(1, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("key", "value1")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value1", "value2")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("key")),
+      Seq(Row(2, 1, 2), Row(1, 1, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value1")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value2")),
+      Seq(Row(2, 1, 2), Row(1, 1, 1)))
+  }
+
+  test("SPARK-7276: Project collapse for continuous select") {
+    var df = testData
+    for (i <- 1 to 5) {
+      df = df.select($"*")
+    }
+
+    import org.apache.spark.sql.catalyst.plans.logical.Project
+    // make sure df have at most two Projects
+    val p = df.logicalPlan.asInstanceOf[Project].child.asInstanceOf[Project]
+    assert(!p.child.isInstanceOf[Project])
+  }
+
+  test("SPARK-7150 range api") {
+    // numSlice is greater than length
+    val res1 = TestSQLContext.range(0, 10, 1, 15).select("id")
+    assert(res1.count == 10)
+    assert(res1.agg(sum("id")).as("sumid").collect() === Seq(Row(45)))
+
+    val res2 = TestSQLContext.range(3, 15, 3, 2).select("id")
+    assert(res2.count == 4)
+    assert(res2.agg(sum("id")).as("sumid").collect() === Seq(Row(30)))
+
+    val res3 = TestSQLContext.range(1, -2).select("id")
+    assert(res3.count == 0)
+
+    // start is positive, end is negative, step is negative
+    val res4 = TestSQLContext.range(1, -2, -2, 6).select("id")
+    assert(res4.count == 2)
+    assert(res4.agg(sum("id")).as("sumid").collect() === Seq(Row(0)))
+
+    // start, end, step are negative
+    val res5 = TestSQLContext.range(-3, -8, -2, 1).select("id")
+    assert(res5.count == 3)
+    assert(res5.agg(sum("id")).as("sumid").collect() === Seq(Row(-15)))
+
+    // start, end are negative, step is positive
+    val res6 = TestSQLContext.range(-8, -4, 2, 1).select("id")
+    assert(res6.count == 2)
+    assert(res6.agg(sum("id")).as("sumid").collect() === Seq(Row(-14)))
+
+    val res7 = TestSQLContext.range(-10, -9, -20, 1).select("id")
+    assert(res7.count == 0)
+
+    val res8 = TestSQLContext.range(Long.MinValue, Long.MaxValue, Long.MaxValue, 100).select("id")
+    assert(res8.count == 3)
+    assert(res8.agg(sum("id")).as("sumid").collect() === Seq(Row(-3)))
+
+    val res9 = TestSQLContext.range(Long.MaxValue, Long.MinValue, Long.MinValue, 100).select("id")
+    assert(res9.count == 2)
+    assert(res9.agg(sum("id")).as("sumid").collect() === Seq(Row(Long.MaxValue - 1)))
   }
 }

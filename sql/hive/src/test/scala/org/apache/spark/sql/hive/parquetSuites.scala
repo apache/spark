@@ -21,16 +21,15 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{QueryTest, SQLConf}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
 import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.sources.{InsertIntoDataSource, LogicalRelation}
 import org.apache.spark.sql.parquet.{ParquetRelation2, ParquetTableScan}
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.sources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{QueryTest, SQLConf, SaveMode}
 import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
@@ -151,9 +150,9 @@ class ParquetMetastoreSuiteBase extends ParquetPartitioningTest {
     }
 
     val rdd1 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
-    jsonRDD(rdd1).registerTempTable("jt")
+    read.json(rdd1).registerTempTable("jt")
     val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":[$i, null]}"""))
-    jsonRDD(rdd2).registerTempTable("jt_array")
+    read.json(rdd2).registerTempTable("jt_array")
 
     setConf("spark.sql.hive.convertMetastoreParquet", "true")
   }
@@ -292,10 +291,10 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
     )
 
     table("test_parquet_ctas").queryExecution.optimizedPlan match {
-      case LogicalRelation(p: ParquetRelation2) => // OK
-      case _ =>
-        fail(
-          s"test_parquet_ctas should be converted to ${classOf[ParquetRelation2].getCanonicalName}")
+      case LogicalRelation(_: ParquetRelation2) => // OK
+      case _ => fail(
+        "test_parquet_ctas should be converted to " +
+          s"${classOf[ParquetRelation2].getCanonicalName}")
     }
 
     sql("DROP TABLE IF EXISTS test_parquet_ctas")
@@ -316,12 +315,10 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
 
     val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
     df.queryExecution.executedPlan match {
-      case ExecutedCommand(
-        InsertIntoDataSource(
-          LogicalRelation(r: ParquetRelation2), query, overwrite)) => // OK
+      case ExecutedCommand(InsertIntoHadoopFsRelation(_: ParquetRelation2, _, _, _)) => // OK
       case o => fail("test_insert_parquet should be converted to a " +
         s"${classOf[ParquetRelation2].getCanonicalName} and " +
-        s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan." +
+        s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan. " +
         s"However, found a ${o.toString} ")
     }
 
@@ -348,9 +345,7 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
 
     val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt_array")
     df.queryExecution.executedPlan match {
-      case ExecutedCommand(
-        InsertIntoDataSource(
-          LogicalRelation(r: ParquetRelation2), query, overwrite)) => // OK
+      case ExecutedCommand(InsertIntoHadoopFsRelation(r: ParquetRelation2, _, _, _)) => // OK
       case o => fail("test_insert_parquet should be converted to a " +
         s"${classOf[ParquetRelation2].getCanonicalName} and " +
         s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan." +
@@ -622,16 +617,16 @@ class ParquetSourceSuiteBase extends ParquetPartitioningTest {
     sql("drop table if exists spark_6016_fix")
 
     // Create a DataFrame with two partitions. So, the created table will have two parquet files.
-    val df1 = jsonRDD(sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i}"""), 2))
-    df1.saveAsTable("spark_6016_fix", "parquet", SaveMode.Overwrite)
+    val df1 = read.json(sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i}"""), 2))
+    df1.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable("spark_6016_fix")
     checkAnswer(
       sql("select * from spark_6016_fix"),
       (1 to 10).map(i => Row(i))
     )
 
     // Create a DataFrame with four partitions. So, the created table will have four parquet files.
-    val df2 = jsonRDD(sparkContext.parallelize((1 to 10).map(i => s"""{"b":$i}"""), 4))
-    df2.saveAsTable("spark_6016_fix", "parquet", SaveMode.Overwrite)
+    val df2 = read.json(sparkContext.parallelize((1 to 10).map(i => s"""{"b":$i}"""), 4))
+    df2.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable("spark_6016_fix")
     // For the bug of SPARK-6016, we are caching two outdated footers for df1. Then,
     // since the new table has four parquet files, we are trying to read new footers from two files
     // and then merge metadata in footers of these four (two outdated ones and two latest one),
@@ -668,7 +663,7 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
         StructField("a", arrayType1, nullable = true) :: Nil)
     assert(df.schema === expectedSchema1)
 
-    df.saveAsTable("alwaysNullable", "parquet")
+    df.write.format("parquet").saveAsTable("alwaysNullable")
 
     val mapType2 = MapType(IntegerType, IntegerType, valueContainsNull = true)
     val arrayType2 = ArrayType(IntegerType, containsNull = true)
@@ -693,11 +688,11 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
 
     val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
     val df2 = df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").max("y.int")
-    intercept[RuntimeException](df2.saveAsParquetFile(filePath))
+    intercept[Throwable](df2.write.parquet(filePath))
 
     val df3 = df2.toDF("str", "max_int")
-    df3.saveAsParquetFile(filePath2)
-    val df4 = parquetFile(filePath2)
+    df3.write.parquet(filePath2)
+    val df4 = read.parquet(filePath2)
     checkAnswer(df4, Row("1", 1) :: Row("2", 2) :: Row("3", 3) :: Nil)
     assert(df4.columns === Array("str", "max_int"))
   }
@@ -736,14 +731,14 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
       sparkContext.makeRDD(1 to 10)
         .map(i => ParquetData(i, s"part-$p"))
         .toDF()
-        .saveAsParquetFile(partDir.getCanonicalPath)
+        .write.parquet(partDir.getCanonicalPath)
     }
 
     sparkContext
       .makeRDD(1 to 10)
       .map(i => ParquetData(i, s"part-1"))
       .toDF()
-      .saveAsParquetFile(new File(normalTableDir, "normal").getCanonicalPath)
+      .write.parquet(new File(normalTableDir, "normal").getCanonicalPath)
 
     partitionedTableDirWithKey = Utils.createTempDir()
 
@@ -752,7 +747,7 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
       sparkContext.makeRDD(1 to 10)
         .map(i => ParquetDataWithKey(p, i, s"part-$p"))
         .toDF()
-        .saveAsParquetFile(partDir.getCanonicalPath)
+        .write.parquet(partDir.getCanonicalPath)
     }
 
     partitionedTableDirWithKeyAndComplexTypes = Utils.createTempDir()
@@ -762,7 +757,7 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
       sparkContext.makeRDD(1 to 10).map { i =>
         ParquetDataWithKeyAndComplexTypes(
           p, i, s"part-$p", StructContainer(i, f"${i}_string"), 1 to i)
-      }.toDF().saveAsParquetFile(partDir.getCanonicalPath)
+      }.toDF().write.parquet(partDir.getCanonicalPath)
     }
 
     partitionedTableDirWithComplexTypes = Utils.createTempDir()
@@ -771,7 +766,7 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
       val partDir = new File(partitionedTableDirWithComplexTypes, s"p=$p")
       sparkContext.makeRDD(1 to 10).map { i =>
         ParquetDataWithComplexTypes(i, s"part-$p", StructContainer(i, f"${i}_string"), 1 to i)
-      }.toDF().saveAsParquetFile(partDir.getCanonicalPath)
+      }.toDF().write.parquet(partDir.getCanonicalPath)
     }
   }
 

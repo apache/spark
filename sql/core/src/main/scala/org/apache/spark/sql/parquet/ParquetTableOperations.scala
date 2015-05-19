@@ -674,7 +674,7 @@ private[parquet] object FileSystemHelper {
   def findMaxTaskId(pathStr: String, conf: Configuration): Int = {
     val files = FileSystemHelper.listFiles(pathStr, conf)
     // filename pattern is part-r-<int>.parquet
-    val nameP = new scala.util.matching.Regex("""part-r-(\d{1,}).parquet""", "taskid")
+    val nameP = new scala.util.matching.Regex("""part-.-(\d{1,}).*""", "taskid")
     val hiddenFileP = new scala.util.matching.Regex("_.*")
     files.map(_.getName).map {
       case nameP(taskid) => taskid.toInt

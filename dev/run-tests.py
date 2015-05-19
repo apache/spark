@@ -91,9 +91,9 @@ def set_sbt_maven_profile_args():
     sbt_maven_profile_args_base = ["-Pkinesis-asl"]
 
     sbt_maven_profile_arg_dict = {
-        "hadoop1.0" : ["-Dhadoop.version=1.0.4"],
-        "hadoop2.0" : ["-Dhadoop.version=2.0.0-mr1-cdh4.1.1"],
-        "hadoop2.2" : ["-Pyarn", "-Phadoop-2.2", "-Dhadoop.version=2.2.0"],
+        "hadoop1.0" : ["-Phadoop-1", "-Dhadoop.version=1.0.4"],
+        "hadoop2.0" : ["-Phadoop-1", "-Dhadoop.version=2.0.0-mr1-cdh4.1.1"],
+        "hadoop2.2" : ["-Pyarn", "-Phadoop-2.2"],
         "hadoop2.3" : ["-Pyarn", "-Phadoop-2.3", "-Dhadoop.version=2.3.0"],
     }
 

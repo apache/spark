@@ -30,6 +30,8 @@ import org.apache.spark.sql.types.NumericType
 /**
  * :: Experimental ::
  * A set of methods for aggregations on a [[DataFrame]], created by [[DataFrame.groupBy]].
+ *
+ * @since 1.3.0
  */
 @Experimental
 class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) {
@@ -94,6 +96,8 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    *     "expense" -> "sum"
    *   )
    * }}}
+   *
+   * @since 1.3.0
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
     agg((aggExpr +: aggExprs).toMap)
@@ -111,6 +115,8 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    *     "expense" -> "sum"
    *   ))
    * }}}
+   *
+   * @since 1.3.0
    */
   def agg(exprs: Map[String, String]): DataFrame = {
     exprs.map { case (colName, expr) =>
@@ -129,6 +135,8 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    *   import com.google.common.collect.ImmutableMap;
    *   df.groupBy("department").agg(ImmutableMap.of("age", "max", "expense", "sum"));
    * }}}
+   *
+   * @since 1.3.0
    */
   def agg(exprs: java.util.Map[String, String]): DataFrame = {
     agg(exprs.toMap)
@@ -146,12 +154,24 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    *
    *   // Scala:
    *   import org.apache.spark.sql.functions._
-   *   df.groupBy("department").agg($"department", max($"age"), sum($"expense"))
+   *   df.groupBy("department").agg(max("age"), sum("expense"))
    *
    *   // Java:
    *   import static org.apache.spark.sql.functions.*;
-   *   df.groupBy("department").agg(col("department"), max(col("age")), sum(col("expense")));
+   *   df.groupBy("department").agg(max("age"), sum("expense"));
    * }}}
+   *
+   * Note that before Spark 1.4, the default behavior is to NOT retain grouping columns. To change
+   * to that behavior, set config variable `spark.sql.retainGroupColumns` to `false`.
+   * {{{
+   *   // Scala, 1.3.x:
+   *   df.groupBy("department").agg($"department", max("age"), sum("expense"))
+   *
+   *   // Java, 1.3.x:
+   *   df.groupBy("department").agg(col("department"), max("age"), sum("expense"));
+   * }}}
+   *
+   * @since 1.3.0
    */
   @scala.annotation.varargs
   def agg(expr: Column, exprs: Column*): DataFrame = {
@@ -173,6 +193,8 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
   /**
    * Count the number of rows for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
+   *
+   * @since 1.3.0
    */
   def count(): DataFrame = Seq(Alias(Count(Literal(1)), "count")())
 
@@ -180,6 +202,8 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    * When specified columns are given, only compute the average values for them.
+   *
+   * @since 1.3.0
    */
   @scala.annotation.varargs
   def mean(colNames: String*): DataFrame = {
@@ -190,6 +214,8 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    * Compute the max value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    * When specified columns are given, only compute the max values for them.
+   *
+   * @since 1.3.0
    */
   @scala.annotation.varargs
   def max(colNames: String*): DataFrame = {
@@ -200,6 +226,8 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    * Compute the mean value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    * When specified columns are given, only compute the mean values for them.
+   *
+   * @since 1.3.0
    */
   @scala.annotation.varargs
   def avg(colNames: String*): DataFrame = {
@@ -210,6 +238,8 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    * Compute the min value for each numeric column for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    * When specified columns are given, only compute the min values for them.
+   *
+   * @since 1.3.0
    */
   @scala.annotation.varargs
   def min(colNames: String*): DataFrame = {
@@ -220,6 +250,8 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    * Compute the sum for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    * When specified columns are given, only compute the sum for them.
+   *
+   * @since 1.3.0
    */
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = {

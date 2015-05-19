@@ -72,6 +72,20 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @SuppressWarnings("unchecked")
   @Test
+  public void testContextState() {
+    List<List<Integer>> inputData = Arrays.asList(Arrays.asList(1, 2, 3, 4));
+    Assert.assertTrue(ssc.getState() == StreamingContextState.INITIALIZED);
+    JavaDStream<Integer> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaTestUtils.attachTestOutputStream(stream);
+    Assert.assertTrue(ssc.getState() == StreamingContextState.INITIALIZED);
+    ssc.start();
+    Assert.assertTrue(ssc.getState() == StreamingContextState.ACTIVE);
+    ssc.stop();
+    Assert.assertTrue(ssc.getState() == StreamingContextState.STOPPED);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
   public void testCount() {
     List<List<Integer>> inputData = Arrays.asList(
         Arrays.asList(1,2,3,4),
@@ -1752,29 +1766,10 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertTrue("old context not recovered", !newContextCreated.get());
     ssc.stop();
 
-    // Function to create JavaStreamingContext using existing JavaSparkContext
-    // without any output operations (used to detect the new context)
-    Function<JavaSparkContext, JavaStreamingContext> creatingFunc2 =
-        new Function<JavaSparkContext, JavaStreamingContext>() {
-          public JavaStreamingContext call(JavaSparkContext context) {
-            newContextCreated.set(true);
-            return new JavaStreamingContext(context, Seconds.apply(1));
-          }
-        };
-
+    newContextCreated.set(false);
     JavaSparkContext sc = new JavaSparkContext(conf);
-    newContextCreated.set(false);
-    ssc = JavaStreamingContext.getOrCreate(emptyDir.getAbsolutePath(), creatingFunc2, sc);
-    Assert.assertTrue("new context not created", newContextCreated.get());
-    ssc.stop(false);
-
-    newContextCreated.set(false);
-    ssc = JavaStreamingContext.getOrCreate(corruptedCheckpointDir, creatingFunc2, sc, true);
-    Assert.assertTrue("new context not created", newContextCreated.get());
-    ssc.stop(false);
-
-    newContextCreated.set(false);
-    ssc = JavaStreamingContext.getOrCreate(checkpointDir, creatingFunc2, sc);
+    ssc = JavaStreamingContext.getOrCreate(checkpointDir, creatingFunc,
+        new org.apache.hadoop.conf.Configuration());
     Assert.assertTrue("old context not recovered", !newContextCreated.get());
     ssc.stop();
   }

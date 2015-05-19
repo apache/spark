@@ -27,18 +27,19 @@ from pyspark import SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
-from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
+from pyspark.sql.column import Column, _to_java_column, _to_seq
 
 
 __all__ = [
     'approxCountDistinct',
+    'coalesce',
     'countDistinct',
     'monotonicallyIncreasingId',
     'rand',
     'randn',
     'sparkPartitionId',
-    'coalesce',
-    'udf']
+    'udf',
+    'when']
 
 
 def _create_function(name, doc=""):
@@ -168,6 +169,26 @@ def approxCountDistinct(col, rsd=None):
     return Column(jc)
 
 
+def explode(col):
+    """Returns a new row for each element in the given array or map.
+
+    >>> from pyspark.sql import Row
+    >>> eDF = sqlContext.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
+    >>> eDF.select(explode(eDF.intlist).alias("anInt")).collect()
+    [Row(anInt=1), Row(anInt=2), Row(anInt=3)]
+
+    >>> eDF.select(explode(eDF.mapfield).alias("key", "value")).show()
+    +---+-----+
+    |key|value|
+    +---+-----+
+    |  a|    b|
+    +---+-----+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.explode(_to_java_column(col))
+    return Column(jc)
+
+
 def coalesce(*cols):
     """Returns the first column that is not null.
 
@@ -291,6 +312,27 @@ def struct(*cols):
     return Column(jc)
 
 
+def when(condition, value):
+    """Evaluates a list of conditions and returns one of multiple possible result expressions.
+    If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
+
+    :param condition: a boolean :class:`Column` expression.
+    :param value: a literal value, or a :class:`Column` expression.
+
+    >>> df.select(when(df['age'] == 2, 3).otherwise(4).alias("age")).collect()
+    [Row(age=3), Row(age=4)]
+
+    >>> df.select(when(df.age == 2, df.age + 1).alias("age")).collect()
+    [Row(age=3), Row(age=None)]
+    """
+    sc = SparkContext._active_spark_context
+    if not isinstance(condition, Column):
+        raise TypeError("condition should be a Column")
+    v = value._jc if isinstance(value, Column) else value
+    jc = sc._jvm.functions.when(condition._jc, v)
+    return Column(jc)
+
+
 class UserDefinedFunction(object):
     """
     User defined function in Python
@@ -311,8 +353,8 @@ class UserDefinedFunction(object):
         ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
         jdt = ssql_ctx.parseDataType(self.returnType.json())
         fname = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
-        judf = sc._jvm.UserDefinedPythonFunction(fname, bytearray(pickled_command), env,
-                                                 includes, sc.pythonExec, broadcast_vars,
+        judf = sc._jvm.UserDefinedPythonFunction(fname, bytearray(pickled_command), env, includes,
+                                                 sc.pythonExec, sc.pythonVer, broadcast_vars,
                                                  sc._javaAccumulator, jdt)
         return judf
 
