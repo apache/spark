@@ -688,6 +688,46 @@ class DataFrame private[sql](
   def groupBy(cols: Column*): GroupedData = new GroupedData(this, cols.map(_.expr))
 
   /**
+   * Rollup the [[DataFrame]] using the specified columns, so we can run aggregation on them.
+   * See [[GroupedData]] for all the available aggregate functions.
+   *
+   * {{{
+   *   // Compute the average for all numeric columns rolluped by department and group.
+   *   df.rollup($"department", $"group").avg()
+   *
+   *   // Compute the max age and average salary, rolluped by department and gender.
+   *   df.rollup($"department", $"gender").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   * @group dfops
+   * @since 1.4.0
+   */
+  @scala.annotation.varargs
+  def rollup(cols: Column*): GroupedData = new RollupedData(this, cols.map(_.expr))
+
+  /**
+   * Cube the [[DataFrame]] using the specified columns, so we can run aggregation on them.
+   * See [[GroupedData]] for all the available aggregate functions.
+   *
+   * {{{
+   *   // Compute the average for all numeric columns cubed by department and group.
+   *   df.cube($"department", $"group").avg()
+   *
+   *   // Compute the max age and average salary, cubed by department and gender.
+   *   df.cube($"department", $"gender").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   * @group dfops
+   * @since 1.4.0
+   */
+  @scala.annotation.varargs
+  def cube(cols: Column*): GroupedData = new CubedData(this, cols.map(_.expr))
+
+  /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
    * See [[GroupedData]] for all the available aggregate functions.
    *
@@ -711,6 +751,58 @@ class DataFrame private[sql](
   def groupBy(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
     new GroupedData(this, colNames.map(colName => resolve(colName)))
+  }
+
+  /**
+   * Rollup the [[DataFrame]] using the specified columns, so we can run aggregation on them.
+   * See [[GroupedData]] for all the available aggregate functions.
+   *
+   * This is a variant of groupBy that can only group by existing columns using column names
+   * (i.e. cannot construct expressions).
+   *
+   * {{{
+   *   // Compute the average for all numeric columns rolluped by department and group.
+   *   df.rollup("department", "group").avg()
+   *
+   *   // Compute the max age and average salary, rolluped by department and gender.
+   *   df.rollup($"department", $"gender").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   * @group dfops
+   * @since 1.4.0
+   */
+  @scala.annotation.varargs
+  def rollup(col1: String, cols: String*): GroupedData = {
+    val colNames: Seq[String] = col1 +: cols
+    new RollupedData(this, colNames.map(colName => resolve(colName)))
+  }
+
+  /**
+   * Cube the [[DataFrame]] using the specified columns, so we can run aggregation on them.
+   * See [[GroupedData]] for all the available aggregate functions.
+   *
+   * This is a variant of groupBy that can only group by existing columns using column names
+   * (i.e. cannot construct expressions).
+   *
+   * {{{
+   *   // Compute the average for all numeric columns cubed by department and group.
+   *   df.cube("department", "group").avg()
+   *
+   *   // Compute the max age and average salary, cubed by department and gender.
+   *   df.cube($"department", $"gender").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   * @group dfops
+   * @since 1.4.0
+   */
+  @scala.annotation.varargs
+  def cube(col1: String, cols: String*): GroupedData = {
+    val colNames: Seq[String] = col1 +: cols
+    new CubedData(this, colNames.map(colName => resolve(colName)))
   }
 
   /**

@@ -23,7 +23,7 @@ import scala.language.implicitConversions
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.logical.{Rollup, Cube, Aggregate}
 import org.apache.spark.sql.types.NumericType
 
 
@@ -36,13 +36,22 @@ import org.apache.spark.sql.types.NumericType
 @Experimental
 class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) {
 
-  private[sql] implicit def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
-    val namedGroupingExprs = groupingExprs.map {
-      case expr: NamedExpression => expr
-      case expr: Expression => Alias(expr, expr.prettyString)()
+  protected def aggregateExpressions(aggrExprs: Seq[NamedExpression])
+  : Seq[NamedExpression] = {
+    if (df.sqlContext.conf.dataFrameRetainGroupColumns) {
+      val retainedExprs = groupingExprs.map {
+        case expr: NamedExpression => expr
+        case expr: Expression => Alias(expr, expr.prettyString)()
+      }
+      retainedExprs ++ aggrExprs
+    } else {
+      aggrExprs
     }
+  }
+
+  protected[sql] implicit def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
     DataFrame(
-      df.sqlContext, Aggregate(groupingExprs, namedGroupingExprs ++ aggExprs, df.logicalPlan))
+      df.sqlContext, Aggregate(groupingExprs, aggregateExpressions(aggExprs), df.logicalPlan))
   }
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => Expression)
@@ -175,18 +184,9 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    */
   @scala.annotation.varargs
   def agg(expr: Column, exprs: Column*): DataFrame = {
-    val aggExprs = (expr +: exprs).map(_.expr).map {
+    (expr +: exprs).map(_.expr).map {
       case expr: NamedExpression => expr
       case expr: Expression => Alias(expr, expr.prettyString)()
-    }
-    if (df.sqlContext.conf.dataFrameRetainGroupColumns) {
-      val retainedExprs = groupingExprs.map {
-        case expr: NamedExpression => expr
-        case expr: Expression => Alias(expr, expr.prettyString)()
-      }
-      DataFrame(df.sqlContext, Aggregate(groupingExprs, retainedExprs ++ aggExprs, df.logicalPlan))
-    } else {
-      DataFrame(df.sqlContext, Aggregate(groupingExprs, aggExprs, df.logicalPlan))
     }
   }
 
@@ -256,5 +256,38 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames:_*)(Sum)
-  }    
+  }
+
+}
+
+/**
+ * :: Experimental ::
+ * A set of methods for aggregations on a [[DataFrame]] cube, created by [[DataFrame.cube]].
+ *
+ * @since 1.4.0
+ */
+@Experimental
+class CubedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression])
+  extends GroupedData(df, groupingExprs) {
+
+  protected[sql] implicit override def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
+    DataFrame(
+      df.sqlContext, Cube(groupingExprs, df.logicalPlan, aggregateExpressions(aggExprs)))
+  }
+}
+
+/**
+ * :: Experimental ::
+ * A set of methods for aggregations on a [[DataFrame]] rollup, created by [[DataFrame.rollup]].
+ *
+ * @since 1.4.0
+ */
+@Experimental
+class RollupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression])
+  extends GroupedData(df, groupingExprs) {
+
+  protected[sql] implicit override def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
+    DataFrame(
+      df.sqlContext, Rollup(groupingExprs, df.logicalPlan, aggregateExpressions(aggExprs)))
+  }
 }
