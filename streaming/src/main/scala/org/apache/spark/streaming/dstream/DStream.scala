@@ -539,7 +539,7 @@ abstract class DStream[T: ClassTag] (
 
   /** Return a new DStream containing only the elements that satisfy a predicate. */
   def filter(filterFunc: T => Boolean): DStream[T] = ssc.withScope {
-    new FilteredDStream(this, filterFunc)
+    new FilteredDStream(this, context.sparkContext.clean(filterFunc))
   }
 
   /**
@@ -576,7 +576,8 @@ abstract class DStream[T: ClassTag] (
    * of this DStream.
    */
   def reduce(reduceFunc: (T, T) => T): DStream[T] = ssc.withScope {
-    this.map(x => (null, x)).reduceByKey(reduceFunc, 1).map(_._2)
+    val cleanedReduceFunc = context.sparkContext.clean(reduceFunc)
+    this.map(x => (null, x)).reduceByKey(cleanedReduceFunc, 1).map(_._2)
   }
 
   /**
@@ -607,7 +608,7 @@ abstract class DStream[T: ClassTag] (
    */
   @deprecated("use foreachRDD", "0.9.0")
   def foreach(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
-    this.foreachRDD(foreachFunc)
+    this.foreachRDD(context.sparkContext.clean(foreachFunc))
   }
 
   /**
@@ -616,7 +617,7 @@ abstract class DStream[T: ClassTag] (
    */
   @deprecated("use foreachRDD", "0.9.0")
   def foreach(foreachFunc: (RDD[T], Time) => Unit): Unit = ssc.withScope {
-    this.foreachRDD(foreachFunc)
+    this.foreachRDD(context.sparkContext.clean(foreachFunc))
   }
 
   /**
@@ -624,7 +625,8 @@ abstract class DStream[T: ClassTag] (
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
   def foreachRDD(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
-    this.foreachRDD((r: RDD[T], t: Time) => foreachFunc(r))
+    val cleanedForeachFunc = context.sparkContext.clean(foreachFunc, false)
+    this.foreachRDD((r: RDD[T], t: Time) => cleanedForeachFunc(r))
   }
 
   /**
@@ -788,9 +790,10 @@ abstract class DStream[T: ClassTag] (
       windowDuration: Duration,
       slideDuration: Duration
     ): DStream[T] = ssc.withScope {
-      this.map(x => (1, x))
-          .reduceByKeyAndWindow(reduceFunc, invReduceFunc, windowDuration, slideDuration, 1)
-          .map(_._2)
+    val cleanedReduceFunc = context.sparkContext.clean(reduceFunc)
+    val cleanedInvReduceFunc = context.sparkContext.clean(invReduceFunc)
+    this.map(x => (1, x)).reduceByKeyAndWindow(
+      cleanedReduceFunc, cleanedInvReduceFunc, windowDuration, slideDuration, 1).map(_._2)
   }
 
   /**
