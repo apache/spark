@@ -34,6 +34,7 @@ from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 from pyspark.sql import DataFrame, SQLContext
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
+from pyspark.ml.util import keyword_only
 from pyspark.ml import Estimator, Model, Pipeline, Transformer
 from pyspark.ml.feature import *
 from pyspark.mllib.linalg import DenseVector
@@ -115,22 +116,42 @@ class TestParams(HasMaxIter, HasInputCol, HasSeed):
     """
     A subclass of Params mixed with HasMaxIter, HasInputCol and HasSeed.
     """
+    @keyword_only
     def __init__(self, seed=None):
         super(TestParams, self).__init__()
         self._setDefault(maxIter=10)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
+    @keyword_only
+    def setParams(self, seed=None):
+        """
+        setParams(self, seed=None)
+        Sets params for this test.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
 
 class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
     """
     A subclass of Params mixed with HasMaxIter, HasInputCol and HasSeed.
     """
+    @keyword_only
     def __init__(self, seed=None):
         super(OtherTestParams, self).__init__()
         self._setDefault(maxIter=10)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, seed=None):
+        """
+        setParams(self, seed=None)
+        Sets params for this test.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
 
 
 class ParamTests(PySparkTestCase):
