@@ -417,7 +417,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
 
   test("java date conversion before and after epoch") {
 
-    def checkFromToJavaDate(d1: Date) = {
+    def checkFromToJavaDate(d1: Date): Unit = {
       val d2 = DateUtils.toJavaDate(DateUtils.fromJavaDate(d1))
       checkEvaluation(d2.toString, d1.toString)
     }
