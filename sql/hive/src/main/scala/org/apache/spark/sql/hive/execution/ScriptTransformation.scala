@@ -197,7 +197,8 @@ case class HiveScriptIOSchema (
     val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
     val inInfo: TableDesc =
       if (inputSerdeClass != "") {
-        getTableDescFromSerDe(inputSerdeClass, columns, columnTypes, inputSerdeProps, inputRowFormat)
+        getTableDescFromSerDe(inputSerdeClass, columns, columnTypes, inputSerdeProps,
+          inputRowFormat)
       } else {
         PlanUtils.getTableDesc(defaultSerdeClass, fieldSeparator.toString, columns.mkString(","),
           columnTypesNames, false, true)
