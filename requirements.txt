@@ -1,5 +1,6 @@
 boto
 celery
+celery[redis]
 chartkick
 coverage
 dill
@@ -21,6 +22,7 @@ pyhive
 PySmbClient
 python-dateutil
 pyhs2
+redis
 requests
 setproctitle
 statsd
