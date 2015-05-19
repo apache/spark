@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
@@ -33,7 +34,10 @@ import org.apache.spark.sql.types._
  * A feature transformer that merges multiple columns into a vector column.
  */
 @AlphaComponent
-class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
+class VectorAssembler(override val uid: String)
+  extends Transformer with HasInputCols with HasOutputCol {
+
+  def this() = this(Identifiable.randomUID("va"))
 
   /** @group setParam */
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)

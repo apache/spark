@@ -294,8 +294,8 @@ setMethod("registerTempTable",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlCtx <- sparkRSQL.init(sc)
-#' df <- loadDF(sqlCtx, path, "parquet")
-#' df2 <- loadDF(sqlCtx, path2, "parquet")
+#' df <- read.df(sqlCtx, path, "parquet")
+#' df2 <- read.df(sqlCtx, path2, "parquet")
 #' registerTempTable(df, "table1")
 #' insertInto(df2, "table1", overwrite = TRUE)
 #'}
@@ -473,14 +473,14 @@ setMethod("distinct",
             dataFrame(sdf)
           })
 
-#' SampleDF
+#' Sample
 #'
 #' Return a sampled subset of this DataFrame using a random seed.
 #'
 #' @param x A SparkSQL DataFrame
 #' @param withReplacement Sampling with replacement or not
 #' @param fraction The (rough) sample target fraction
-#' @rdname sampleDF
+#' @rdname sample
 #' @aliases sample_frac
 #' @export
 #' @examples
@@ -489,10 +489,10 @@ setMethod("distinct",
 #' sqlCtx <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlCtx, path)
-#' collect(sampleDF(df, FALSE, 0.5)) 
-#' collect(sampleDF(df, TRUE, 0.5))
+#' collect(sample(df, FALSE, 0.5)) 
+#' collect(sample(df, TRUE, 0.5))
 #'}
-setMethod("sampleDF",
+setMethod("sample",
           # TODO : Figure out how to send integer as java.lang.Long to JVM so
           # we can send seed as an argument through callJMethod
           signature(x = "DataFrame", withReplacement = "logical",
@@ -503,13 +503,13 @@ setMethod("sampleDF",
             dataFrame(sdf)
           })
 
-#' @rdname sampleDF
-#' @aliases sampleDF
+#' @rdname sample
+#' @aliases sample
 setMethod("sample_frac",
           signature(x = "DataFrame", withReplacement = "logical",
                     fraction = "numeric"),
           function(x, withReplacement, fraction) {
-            sampleDF(x, withReplacement, fraction)
+            sample(x, withReplacement, fraction)
           })
 
 #' Count
@@ -1303,7 +1303,7 @@ setMethod("except",
 #' @param source A name for external data source
 #' @param mode One of 'append', 'overwrite', 'error', 'ignore'
 #'
-#' @rdname saveAsTable
+#' @rdname write.df 
 #' @export
 #' @examples
 #'\dontrun{
@@ -1311,9 +1311,9 @@ setMethod("except",
 #' sqlCtx <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlCtx, path)
-#' saveAsTable(df, "myfile")
+#' write.df(df, "myfile", "parquet", "overwrite")
 #' }
-setMethod("saveDF",
+setMethod("write.df",
           signature(df = "DataFrame", path = 'character', source = 'character',
                     mode = 'character'),
           function(df, path = NULL, source = NULL, mode = "append", ...){
@@ -1334,6 +1334,15 @@ setMethod("saveDF",
             callJMethod(df@sdf, "save", source, jmode, options)
           })
 
+#' @rdname write.df
+#' @aliases saveDF
+#' @export
+setMethod("saveDF",
+          signature(df = "DataFrame", path = 'character', source = 'character',
+                    mode = 'character'),
+          function(df, path = NULL, source = NULL, mode = "append", ...){
+            write.df(df, path, source, mode, ...)
+          })
 
 #' saveAsTable
 #'

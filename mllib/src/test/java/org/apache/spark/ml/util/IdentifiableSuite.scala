@@ -15,44 +15,26 @@
  * limitations under the License.
  */
 
+package org.apache.spark.ml.util
 
-.graph {
-  font: 10px sans-serif;
+import org.scalatest.FunSuite
+
+class IdentifiableSuite extends FunSuite {
+
+  import IdentifiableSuite.Test
+
+  test("Identifiable") {
+    val test0 = new Test("test_0")
+    assert(test0.uid === "test_0")
+
+    val test1 = new Test
+    assert(test1.uid.startsWith("test_"))
+  }
 }
 
-.axis path, .axis line {
-  fill: none;
-  stroke: gray;
-  shape-rendering: crispEdges;
-}
+object IdentifiableSuite {
 
-.axis text {
-  fill: gray;
-}
-
-.tooltip-inner {
-  max-width: 500px !important; // Make sure we only have one line tooltip
-}
-
-.line {
-  fill: none;
-  stroke: #0088cc;
-  stroke-width: 1.5px;
-}
-
-.bar rect {
-  fill: #0088cc;
-  shape-rendering: crispEdges;
-}
-
-.bar rect:hover {
-  fill: #00c2ff;
-}
-
-.timeline {
-  width: 500px;
-}
-
-.histogram {
-  width: auto;
+  class Test(override val uid: String) extends Identifiable {
+    def this() = this(Identifiable.randomUID("test"))
+  }
 }

@@ -35,6 +35,7 @@ import parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
@@ -113,24 +114,24 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
       withTempPath { dir =>
         val data = makeDecimalRDD(DecimalType(precision, scale))
-        data.saveAsParquetFile(dir.getCanonicalPath)
-        checkAnswer(parquetFile(dir.getCanonicalPath), data.collect().toSeq)
+        data.write.parquet(dir.getCanonicalPath)
+        checkAnswer(read.parquet(dir.getCanonicalPath), data.collect().toSeq)
       }
     }
 
     // Decimals with precision above 18 are not yet supported
-    intercept[RuntimeException] {
+    intercept[Throwable] {
       withTempPath { dir =>
-        makeDecimalRDD(DecimalType(19, 10)).saveAsParquetFile(dir.getCanonicalPath)
-        parquetFile(dir.getCanonicalPath).collect()
+        makeDecimalRDD(DecimalType(19, 10)).write.parquet(dir.getCanonicalPath)
+        read.parquet(dir.getCanonicalPath).collect()
       }
     }
 
     // Unlimited-length decimals are not yet supported
-    intercept[RuntimeException] {
+    intercept[Throwable] {
       withTempPath { dir =>
-        makeDecimalRDD(DecimalType.Unlimited).saveAsParquetFile(dir.getCanonicalPath)
-        parquetFile(dir.getCanonicalPath).collect()
+        makeDecimalRDD(DecimalType.Unlimited).write.parquet(dir.getCanonicalPath)
+        read.parquet(dir.getCanonicalPath).collect()
       }
     }
   }
@@ -145,8 +146,8 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
     withTempPath { dir =>
       val data = makeDateRDD()
-      data.saveAsParquetFile(dir.getCanonicalPath)
-      checkAnswer(parquetFile(dir.getCanonicalPath), data.collect().toSeq)
+      data.write.parquet(dir.getCanonicalPath)
+      checkAnswer(read.parquet(dir.getCanonicalPath), data.collect().toSeq)
     }
   }
 
@@ -282,7 +283,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     withTempDir { dir =>
       val path = new Path(dir.toURI.toString, "part-r-0.parquet")
       makeRawParquetFile(path)
-      checkAnswer(parquetFile(path.toString), (0 until 10).map { i =>
+      checkAnswer(read.parquet(path.toString), (0 until 10).map { i =>
         Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
       })
     }
@@ -310,8 +311,8 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
   test("save - overwrite") {
     withParquetFile((1 to 10).map(i => (i, i.toString))) { file =>
       val newData = (11 to 20).map(i => (i, i.toString))
-      newData.toDF().save("org.apache.spark.sql.parquet", SaveMode.Overwrite, Map("path" -> file))
-      checkAnswer(parquetFile(file), newData.map(Row.fromTuple))
+      newData.toDF().write.format("parquet").mode(SaveMode.Overwrite).save(file)
+      checkAnswer(read.parquet(file), newData.map(Row.fromTuple))
     }
   }
 
@@ -319,8 +320,8 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     val data = (1 to 10).map(i => (i, i.toString))
     withParquetFile(data) { file =>
       val newData = (11 to 20).map(i => (i, i.toString))
-      newData.toDF().save("org.apache.spark.sql.parquet", SaveMode.Ignore, Map("path" -> file))
-      checkAnswer(parquetFile(file), data.map(Row.fromTuple))
+      newData.toDF().write.format("parquet").mode(SaveMode.Ignore).save(file)
+      checkAnswer(read.parquet(file), data.map(Row.fromTuple))
     }
   }
 
@@ -329,8 +330,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     withParquetFile(data) { file =>
       val newData = (11 to 20).map(i => (i, i.toString))
       val errorMessage = intercept[Throwable] {
-        newData.toDF().save(
-          "org.apache.spark.sql.parquet", SaveMode.ErrorIfExists, Map("path" -> file))
+        newData.toDF().write.format("parquet").mode(SaveMode.ErrorIfExists).save(file)
       }.getMessage
       assert(errorMessage.contains("already exists"))
     }
@@ -340,8 +340,8 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     val data = (1 to 10).map(i => (i, i.toString))
     withParquetFile(data) { file =>
       val newData = (11 to 20).map(i => (i, i.toString))
-      newData.toDF().save("org.apache.spark.sql.parquet", SaveMode.Append, Map("path" -> file))
-      checkAnswer(parquetFile(file), (data ++ newData).map(Row.fromTuple))
+      newData.toDF().write.format("parquet").mode(SaveMode.Append).save(file)
+      checkAnswer(read.parquet(file), (data ++ newData).map(Row.fromTuple))
     }
   }
 
@@ -373,7 +373,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
         path,
         new Footer(path, new ParquetMetadata(fileMetadata, Nil)) :: Nil)
 
-      assertResult(parquetFile(path.toString).schema) {
+      assertResult(read.parquet(path.toString).schema) {
         StructType(
           StructField("a", BooleanType, nullable = false) ::
           StructField("b", IntegerType, nullable = false) ::
@@ -391,7 +391,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       sqlContext.udf.register("div0", (x: Int) => x / 0)
       withTempPath { dir =>
         intercept[org.apache.spark.SparkException] {
-          sqlContext.sql("select div0(1)").saveAsParquetFile(dir.getCanonicalPath)
+          sqlContext.sql("select div0(1)").write.parquet(dir.getCanonicalPath)
         }
         val path = new Path(dir.getCanonicalPath, "_temporary")
         val fs = path.getFileSystem(configuration)
@@ -419,11 +419,11 @@ class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterA
   test("SPARK-6330 regression test") {
     // In 1.3.0, save to fs other than file: without configuring core-site.xml would get:
     // IllegalArgumentException: Wrong FS: hdfs://..., expected: file:///
-    intercept[java.io.FileNotFoundException] {
-      sqlContext.parquetFile("file:///nonexistent")
+    intercept[Throwable] {
+      sqlContext.read.parquet("file:///nonexistent")
     }
     val errorMessage = intercept[Throwable] {
-      sqlContext.parquetFile("hdfs://nonexistent")
+      sqlContext.read.parquet("hdfs://nonexistent")
     }.toString
     assert(errorMessage.contains("UnknownHostException"))
   }

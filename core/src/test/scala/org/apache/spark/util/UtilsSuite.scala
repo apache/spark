@@ -367,51 +367,58 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
   }
 
   test("resolveURI") {
-    def assertResolves(before: String, after: String, testWindows: Boolean = false): Unit = {
+    def assertResolves(before: String, after: String): Unit = {
       // This should test only single paths
       assume(before.split(",").length === 1)
       // Repeated invocations of resolveURI should yield the same result
-      def resolve(uri: String): String = Utils.resolveURI(uri, testWindows).toString
+      def resolve(uri: String): String = Utils.resolveURI(uri).toString
       assert(resolve(after) === after)
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
       // Also test resolveURIs with single paths
-      assert(new URI(Utils.resolveURIs(before, testWindows)) === new URI(after))
-      assert(new URI(Utils.resolveURIs(after, testWindows)) === new URI(after))
+      assert(new URI(Utils.resolveURIs(before)) === new URI(after))
+      assert(new URI(Utils.resolveURIs(after)) === new URI(after))
     }
-    val cwd = System.getProperty("user.dir")
+    val rawCwd = System.getProperty("user.dir")
+    val cwd = if (Utils.isWindows) s"/$rawCwd".replace("\\", "/") else rawCwd
     assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
     assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:/root/spark.jar#app.jar")
     assertResolves("spark.jar", s"file:$cwd/spark.jar")
-    assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar#app.jar")
-    assertResolves("C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt", testWindows = true)
-    intercept[IllegalArgumentException] { Utils.resolveURI("file:foo") }
-    intercept[IllegalArgumentException] { Utils.resolveURI("file:foo:baby") }
+    assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar%23app.jar")
+    assertResolves("path to/file.txt", s"file:$cwd/path%20to/file.txt")
+    if (Utils.isWindows) {
+      assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt")
+      assertResolves("C:\\path to\\file.txt", "file:/C:/path%20to/file.txt")
+    }
+    assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt")
+    assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt")
+    assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt")
+    assertResolves("file:foo", s"file:foo")
+    assertResolves("file:foo:baby", s"file:foo:baby")
   }
 
   test("resolveURIs with multiple paths") {
-    def assertResolves(before: String, after: String, testWindows: Boolean = false): Unit = {
+    def assertResolves(before: String, after: String): Unit = {
       assume(before.split(",").length > 1)
-      assert(Utils.resolveURIs(before, testWindows) === after)
-      assert(Utils.resolveURIs(after, testWindows) === after)
+      assert(Utils.resolveURIs(before) === after)
+      assert(Utils.resolveURIs(after) === after)
       // Repeated invocations of resolveURIs should yield the same result
-      def resolve(uri: String): String = Utils.resolveURIs(uri, testWindows)
+      def resolve(uri: String): String = Utils.resolveURIs(uri)
       assert(resolve(after) === after)
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
     }
-    val cwd = System.getProperty("user.dir")
+    val rawCwd = System.getProperty("user.dir")
+    val cwd = if (Utils.isWindows) s"/$rawCwd".replace("\\", "/") else rawCwd
     assertResolves("jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
     assertResolves("file:/jar1,file:/jar2", "file:/jar1,file:/jar2")
     assertResolves("hdfs:/jar1,file:/jar2,jar3", s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
-    assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5",
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5")
-    assertResolves("hdfs:/jar1,file:/jar2,jar3,C:\\pi.py#py.pi",
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi", testWindows = true)
+    assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5,path to/jar6",
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4%23jar5,file:$cwd/path%20to/jar6")
+    if (Utils.isWindows) {
+      assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
+        s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
+    }
   }
 
   test("nonLocalPaths") {
@@ -425,6 +432,8 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
     assert(Utils.nonLocalPaths("file:/spark.jar,local:/smart.jar,family.py") === Array.empty)
     assert(Utils.nonLocalPaths("local:/spark.jar,file:/smart.jar,family.py") === Array.empty)
     assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar") ===
+      Array("hdfs:/spark.jar", "s3:/smart.jar"))
+    assert(Utils.nonLocalPaths("hdfs:/spark.jar,path to/a.jar,s3:/smart.jar") ===
       Array("hdfs:/spark.jar", "s3:/smart.jar"))
     assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar,local.py,file:/hello/pi.py") ===
       Array("hdfs:/spark.jar", "s3:/smart.jar"))
@@ -547,7 +556,12 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
     val targetDir = new File(tempDir, "target-dir")
     Files.write("some text", sourceFile, UTF_8)
 
-    val path = new Path("file://" + sourceDir.getAbsolutePath)
+    val path =
+      if (Utils.isWindows) {
+        new Path("file:/" + sourceDir.getAbsolutePath.replace("\\", "/"))
+      } else {
+        new Path("file://" + sourceDir.getAbsolutePath)
+      }
     val conf = new Configuration()
     val fs = Utils.getHadoopFileSystem(path.toString, conf)
 
@@ -567,7 +581,12 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
     val destInnerFile = new File(destInnerDir, sourceFile.getName)
     assert(destInnerFile.isFile())
 
-    val filePath = new Path("file://" + sourceFile.getAbsolutePath)
+    val filePath =
+      if (Utils.isWindows) {
+        new Path("file:/" + sourceFile.getAbsolutePath.replace("\\", "/"))
+      } else {
+        new Path("file://" + sourceFile.getAbsolutePath)
+      }
     val testFileDir = new File(tempDir, "test-filename")
     val testFileName = "testFName"
     val testFilefs = Utils.getHadoopFileSystem(filePath.toString, conf)
