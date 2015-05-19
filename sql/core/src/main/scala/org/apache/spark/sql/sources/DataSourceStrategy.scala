@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.{StringType, StructType, UTF8String}
 import org.apache.spark.sql.{SaveMode, Strategy, execution, sources}
+import org.apache.spark.util.Utils
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
@@ -199,7 +200,13 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
           mutableRow.asInstanceOf[expressions.Row]
         }
       }
-      new MapPartitionsRDD(dataRows, mapPartitionsFunc, preservesPartitioning = false)
+
+      // This is an internal RDD whose call site the user should not be concerned with
+      // Since we create many of these (one per partition), the time spent on computing
+      // the call site may add up.
+      Utils.withDummyCallSite(dataRows.sparkContext) {
+        new MapPartitionsRDD(dataRows, mapPartitionsFunc, preservesPartitioning = false)
+      }
 
     } else {
       dataRows
