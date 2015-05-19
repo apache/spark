@@ -131,7 +131,8 @@ df.show();
 
 <div data-lang="python"  markdown="1">
 {% highlight python %}
-sqlContext <- sparkRSQL.init(sc)
+from pyspark.sql import SQLContext
+sqlContext = SQLContext(sc)
 
 df = sqlContext.jsonFile("examples/src/main/resources/people.json")
 
@@ -1179,14 +1180,10 @@ df3.printSchema()
 # sqlContext from the previous example is used in this example.
 
 # Create a simple DataFrame, stored into a partition directory
-rdd1 <- map(parallelize(sc, 1:5), function(i){ list(single = i, double = i * 2)})
-df1 <- createDataFrame(sqlContext, rdd1)
 saveDF(df1, "data/test_table/key=1", "parquet", "overwrite")
 
 # Create another DataFrame in a new partition directory,
 # adding a new column and dropping an existing column
-rdd2 <- map(parallelize(sc, 6:11), function(i){ list(single=i, triple=i*3)})
-df2 <- createDataFrame(sqlContext, rdd2)
 saveDF(df2, "data/test_table/key=2", "parquet", "overwrite")
 
 # Read the partitioned table
