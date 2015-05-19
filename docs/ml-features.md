@@ -268,5 +268,88 @@ for binarized_feature, in binarizedFeatures.collect():
 </div>
 </div>
 
+## PolynomialExpansion
+
+[Polynomial expansion](http://en.wikipedia.org/wiki/Polynomial_expansion) is the process of expanding your features into a polynomial space, which is formulated by an n-degree combination of original dimensions. A [PolynomialExpansion](api/scala/index.html#org.apache.spark.ml.feature.PolynomialExpansion) class provides this functionality.  The example below shows how to expand your features into a 3-degree polynomial space.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+import org.apache.spark.ml.feature.PolynomialExpansion
+import org.apache.spark.mllib.linalg.Vectors
+
+val data = Array(
+  Vectors.dense(-2.0, 2.3),
+  Vectors.dense(0.0, 0.0),
+  Vectors.dense(0.6, -1.1)
+)
+val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+val polynomialExpansion = new PolynomialExpansion()
+  .setInputCol("features")
+  .setOutputCol("polyFeatures")
+  .setDegree(3)
+val polyDF = polynomialExpansion.transform(df)
+polyDF.select("polyFeatures").take(3).foreach(println)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+import com.google.common.collect.Lists;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.VectorUDT;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+JavaSparkContext jsc = ...
+SQLContext jsql = ...
+PolynomialExpansion polyExpansion = new PolynomialExpansion()
+  .setInputCol("features")
+  .setOutputCol("polyFeatures")
+  .setDegree(3);
+JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
+  RowFactory.create(Vectors.dense(-2.0, 2.3)),
+  RowFactory.create(Vectors.dense(0.0, 0.0)),
+  RowFactory.create(Vectors.dense(0.6, -1.1))
+));
+StructType schema = new StructType(new StructField[] {
+  new StructField("features", new VectorUDT(), false, Metadata.empty()),
+});
+DataFrame df = jsql.createDataFrame(data, schema);
+DataFrame polyDF = polyExpansion.transform(df);
+Row[] row = polyDF.select("polyFeatures").take(3);
+for (Row r : row) {
+  System.out.println(r.get(0));
+}
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+from pyspark.ml.feature import PolynomialExpansion
+from pyspark.mllib.linalg import Vectors
+
+df = sqlContext.createDataFrame(
+  [(Vectors.dense([-2.0, 2.3]), ),
+  (Vectors.dense([0.0, 0.0]), ),
+  (Vectors.dense([0.6, -1.1]), )],
+  ["features"])
+px = PolynomialExpansion(degree=2, inputCol="features", outputCol="polyFeatures")
+polyDF = px.transform(df)
+for expanded in polyDF.select("polyFeatures").take(3):
+  print(expanded)
+{% endhighlight %}
+</div>
+</div>
+
 # Feature Selectors
 
