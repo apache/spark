@@ -213,12 +213,12 @@ object KinesisWordProducerASL {
     kinesisClient.setEndpoint(endpoint)
 
     println(s"Putting records onto stream $stream and endpoint $endpoint at a rate of" +
-        s" $recordsPerSecond records per second and $wordsPerRecord words per record");
+        s" $recordsPerSecond records per second and $wordsPerRecord words per record")
   
     // Iterate and put records onto the stream per the given recordPerSec and wordsPerRecord
-    for (i <- 1 to 5) {
+    for (i <- 1 to 10) {
       // Generate recordsPerSec records to put onto the stream
-      val records = (1 to recordsPerSecond.toInt).map { recordNum =>
+      val records = (1 to recordsPerSecond.toInt).foreach { recordNum =>
         // Randomly generate wordsPerRecord number of words
         val data = (1 to wordsPerRecord.toInt).map(x => {
           /* Get a random index to a word */
@@ -237,10 +237,10 @@ object KinesisWordProducerASL {
         // Create a PutRecordRequest with an Array[Byte] version of the data
         val putRecordRequest = new PutRecordRequest().withStreamName(stream)
             .withPartitionKey(partitionKey)
-            .withData(ByteBuffer.wrap(data.getBytes()));
+            .withData(ByteBuffer.wrap(data.getBytes()))
 
         // Put the record onto the stream and capture the PutRecordResult
-        val putRecordResult = kinesisClient.putRecord(putRecordRequest);
+        val putRecordResult = kinesisClient.putRecord(putRecordRequest)
       }
 
       // Sleep for a second
