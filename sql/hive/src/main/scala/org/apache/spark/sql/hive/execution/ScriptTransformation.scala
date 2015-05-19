@@ -85,19 +85,21 @@ case class ScriptTransformation(
 
       val iterator: Iterator[Row] = new Iterator[Row] with HiveInspectors {
         var cacheRow: Row = null
-        var eof: Boolean = false
         val writable = scriptOutputReader.createRow()
 
-        override def hasNext: Boolean = !eof
+        override def hasNext: Boolean = {
+          cacheRow = deserialize()
+          cacheRow != null
+        }
 
         def deserialize(): Row = {
-          if (cacheRow != null) return cacheRow
-
+          if (cacheRow != null) {
+            return cacheRow
+          }
           val mutableRow = new SpecificMutableRow(output.map(_.dataType))
           val bytes = scriptOutputReader.next(writable)
 
           if (bytes <= 0) {
-            eof = true
             return null
           }
 
@@ -121,12 +123,9 @@ case class ScriptTransformation(
           if (!hasNext) {
             throw new NoSuchElementException
           }
- 
-          val ret = deserialize()
-          if (!eof) {
-            cacheRow = null
-            cacheRow = deserialize()
-          }
+
+          val ret = cacheRow
+          cacheRow = null
           ret
         }
       }
