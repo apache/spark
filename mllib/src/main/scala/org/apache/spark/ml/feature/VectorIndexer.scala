@@ -17,6 +17,10 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.{Map => JMap}
+
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
@@ -247,6 +251,16 @@ class VectorIndexerModel private[ml] (
     val numFeatures: Int,
     val categoryMaps: Map[Int, Map[Double, Int]])
   extends Model[VectorIndexerModel] with VectorIndexerParams {
+
+  /** Java-friendly version of [[categoryMaps]] */
+  def javaCategoryMaps: JMap[java.lang.Integer, JMap[java.lang.Double, java.lang.Integer]] = {
+    categoryMaps.map { case (feature, catMap) =>
+      val jCatMap: JMap[java.lang.Double, java.lang.Integer] = catMap.map { case (cat, idx) =>
+        (cat.asInstanceOf[java.lang.Double], idx.asInstanceOf[java.lang.Integer])
+      }.asJava
+      (feature.asInstanceOf[java.lang.Integer], jCatMap)
+    }.asJava
+  }
 
   /**
    * Pre-computed feature attributes, with some missing info.
