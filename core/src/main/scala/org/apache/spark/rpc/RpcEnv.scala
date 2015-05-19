@@ -18,7 +18,10 @@
 package org.apache.spark.rpc
 
 import java.net.URI
+import java.util.concurrent.TimeoutException
 
+import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
@@ -94,7 +97,7 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
    * Retrieve the [[RpcEndpointRef]] represented by `uri`. This is a blocking action.
    */
   def setupEndpointRefByURI(uri: String): RpcEndpointRef = {
-    Await.result(asyncSetupEndpointRefByURI(uri), defaultLookupTimeout)
+    defaultLookupTimeout.awaitResult(asyncSetupEndpointRefByURI(uri))
   }
 
   /**
@@ -180,5 +183,91 @@ private[spark] object RpcAddress {
   def fromSparkURL(sparkUrl: String): RpcAddress = {
     val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
     RpcAddress(host, port)
+  }
+}
+
+
+/**
+ * Associates a timeout with a description so that a when a TimeoutException occurs, additional
+ * context about the timeout can be amended to the exception message.
+ * @param timeout timeout duration in seconds
+ * @param description description to be displayed in a timeout exception
+ */
+private[spark] class RpcTimeout(timeout: FiniteDuration, description: String) {
+
+  /** Get the timeout duration */
+  def duration: FiniteDuration = timeout
+
+  /** Get the message associated with this timeout */
+  def message: String = description
+
+  /** Amends the standard message of TimeoutException to include the description */
+  def amend(te: TimeoutException): TimeoutException = {
+    new TimeoutException(te.getMessage() + " " + description)
+  }
+
+  /** Wait on a future result to catch and amend a TimeoutException */
+  def awaitResult[T](future: Future[T]): T = {
+    try {
+      Await.result(future, duration)
+    }
+    catch {
+      case te: TimeoutException => throw amend(te)
+    }
+  }
+}
+
+
+/**
+ * Create an RpcTimeout using a configuration property that controls the timeout duration so when
+ * a TimeoutException is thrown, the property key will be indicated in the message.
+ */
+object RpcTimeout {
+
+  private[this] val messagePrefix = "This timeout is controlled by "
+
+  /**
+   * Lookup the timeout property in the configuration and create
+   * a RpcTimeout with the property key in the description.
+   * @param conf configuration properties containing the timeout
+   * @param timeoutProp property key for the timeout in seconds
+   * @throws NoSuchElementException if property is not set
+   */
+  def apply(conf: SparkConf, timeoutProp: String): RpcTimeout = {
+    val timeout = { conf.getTimeAsSeconds(timeoutProp) seconds }
+    new RpcTimeout(timeout, messagePrefix + timeoutProp)
+  }
+
+  /**
+   * Lookup the timeout property in the configuration and create
+   * a RpcTimeout with the property key in the description.
+   * Uses the given default value if property is not set
+   * @param conf configuration properties containing the timeout
+   * @param timeoutProp property key for the timeout in seconds
+   * @param defaultValue default timeout value in seconds if property not found
+   */
+  def apply(conf: SparkConf, timeoutProp: String, defaultValue: String): RpcTimeout = {
+    val timeout = { conf.getTimeAsSeconds(timeoutProp, defaultValue) seconds }
+    new RpcTimeout(timeout, messagePrefix + timeoutProp)
+  }
+
+  /**
+   * Lookup prioritized list of timeout properties in the configuration
+   * and create a RpcTimeout with the first set property key in the
+   * description.
+   * Uses the given default value if property is not set
+   * @param conf configuration properties containing the timeout
+   * @param timeoutPropList prioritized list of property keys for the timeout in seconds
+   * @param defaultValue default timeout value in seconds if no properties found
+   */
+  def apply(conf: SparkConf, timeoutPropList: Seq[String], defaultValue: String): RpcTimeout = {
+    require(timeoutPropList.nonEmpty)
+
+    // Find the first set property or use the default value with the first property
+    val foundProp = timeoutPropList.view.map(x => (x, conf.getOption(x))).filter(_._2.isDefined).
+      map(y => (y._1, y._2.get)).headOption.getOrElse(timeoutPropList.head, defaultValue)
+
+    val timeout = { Utils.timeStringAsSeconds(foundProp._2) seconds }
+    new RpcTimeout(timeout, messagePrefix + foundProp._1)
   }
 }

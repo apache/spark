@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.worker.ui
 
-import scala.concurrent.Await
 import scala.xml.Node
 
 import akka.pattern.ask
@@ -36,14 +35,16 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
   private val timeout = parent.timeout
 
   override def renderJson(request: HttpServletRequest): JValue = {
-    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
-    val workerState = Await.result(stateFuture, timeout)
+    val stateFuture = (workerActor ? RequestWorkerState)(timeout.duration).
+      mapTo[WorkerStateResponse]
+    val workerState = timeout.awaitResult(stateFuture)
     JsonProtocol.writeWorkerState(workerState)
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
-    val workerState = Await.result(stateFuture, timeout)
+    val stateFuture = (workerActor ? RequestWorkerState)(timeout.duration).
+      mapTo[WorkerStateResponse]
+    val workerState = timeout.awaitResult(stateFuture)
 
     val executorHeaders = Seq("ExecutorID", "Cores", "State", "Memory", "Job Details", "Logs")
     val runningExecutors = workerState.executors

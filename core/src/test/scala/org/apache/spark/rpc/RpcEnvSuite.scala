@@ -155,6 +155,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     })
 
     val conf = new SparkConf()
+    val shortProp = "spark.rpc.short.timeout"
     conf.set("spark.rpc.retry.wait", "0")
     conf.set("spark.rpc.numRetries", "1")
     val anotherEnv = createRpcEnv(conf, "remote", 13345)
@@ -162,9 +163,15 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "ask-timeout")
     try {
       val e = intercept[Exception] {
-        rpcEndpointRef.askWithRetry[String]("hello", 1 millis)
+        rpcEndpointRef.askWithRetry[String]("hello", new RpcTimeout(1 millis, shortProp))
       }
       assert(e.isInstanceOf[TimeoutException] || e.getCause.isInstanceOf[TimeoutException])
+      e match {
+        case te: TimeoutException =>
+          assert(te.getMessage().contains(shortProp))
+        case e: Exception =>
+          assert(e.getCause().getMessage().contains(shortProp))
+      }
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
@@ -536,6 +543,22 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
+    }
+  }
+
+  test("construction of RpcTimeout using properties") {
+    val conf = new SparkConf
+
+    val testProp = "spark.ask.test.timeout"
+    val testDurationSeconds = 30
+
+    conf.set(testProp, testDurationSeconds.toString + "s")
+
+    val rt = RpcTimeout(conf, testProp)
+    assert( testDurationSeconds === rt.duration.toSeconds )
+
+    val ex = intercept[Throwable] {
+      RpcTimeout(conf, "spark.ask.invalid.timeout")
     }
   }
 
