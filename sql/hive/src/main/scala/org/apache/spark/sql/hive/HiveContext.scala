@@ -270,7 +270,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /* An analyzer that uses the Hive metastore. */
   @transient
-  override protected[sql] lazy val analyzer =
+  override protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, functionRegistry, caseSensitive = false) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
