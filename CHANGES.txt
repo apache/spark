@@ -3,6 +3,76 @@ Spark Change Log
 
 Release 1.4.0
 
+  Revert "Preparing Spark release v1.4.0-rc1"
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-19 00:10:39 -0700
+  Commit: b0c63d2
+
+  Revert "Preparing development version 1.4.1-SNAPSHOT"
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-19 00:10:37 -0700
+  Commit: 198a186
+
+  [SPARK-7581] [ML] [DOC] User guide for spark.ml PolynomialExpansion
+  Xusen Yin <yinxusen@gmail.com>
+  2015-05-19 00:06:33 -0700
+  Commit: 38a3fc8, github.com/apache/spark/pull/6113
+
+  [HOTFIX] Fixing style failures in Kinesis source
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-19 00:02:06 -0700
+  Commit: de60c2e
+
+  Preparing development version 1.4.1-SNAPSHOT
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-19 06:06:41 +0000
+  Commit: 40190ce
+
+  Preparing Spark release v1.4.0-rc1
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-19 06:06:40 +0000
+  Commit: 38ccef3
+
+  Revert "Preparing Spark release v1.4.0-rc1"
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-18 23:06:15 -0700
+  Commit: 152b029
+
+  Revert "Preparing development version 1.4.1-SNAPSHOT"
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-18 23:06:13 -0700
+  Commit: 4d098bc
+
+  [HOTFIX]: Java 6 Build Breaks
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-19 06:00:13 +0000
+  Commit: be1fc93
+
+  Preparing development version 1.4.1-SNAPSHOT
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-19 05:01:11 +0000
+  Commit: 758ca74
+
+  Preparing Spark release v1.4.0-rc1
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-19 05:01:11 +0000
+  Commit: e8e97e3
+
+  [SPARK-7687] [SQL] DataFrame.describe() should cast all aggregates to String
+  Josh Rosen <joshrosen@databricks.com>
+  2015-05-18 21:53:44 -0700
+  Commit: 99436bd, github.com/apache/spark/pull/6218
+
+  CHANGES.txt and changelist updaets for Spark 1.4.
+  Patrick Wendell <patrick@databricks.com>
+  2015-05-18 21:44:13 -0700
+  Commit: 914ecd0
+
+  [SPARK-7150] SparkContext.range() and SQLContext.range()
+  Daoyuan Wang <daoyuan.wang@intel.com>, Davies Liu <davies@databricks.com>
+  2015-05-18 21:43:12 -0700
+  Commit: 7fcbb2c, github.com/apache/spark/pull/6081
+
   Version updates for Spark 1.4.0
   Patrick Wendell <patrick@databricks.com>
   2015-05-18 21:38:37 -0700
