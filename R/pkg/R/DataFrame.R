@@ -1474,6 +1474,14 @@ setMethod("dropna",
             dataFrame(sdf)
           })
 
+#' @aliases dropna
+#' @export
+setMethod("na.omit",
+          signature(x = "DataFrame"),
+          function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
+            dropna(x, how, minNonNulls, cols)
+          })
+
 #' fillna
 #'
 #' Replace null values.
@@ -1501,6 +1509,7 @@ setMethod("dropna",
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlCtx, path)
 #' fillna(df, 1)
+#' fillna(df, list("age" = 20, "name" = "unknown"))
 #' }
 setMethod("fillna",
           signature(x = "DataFrame"),

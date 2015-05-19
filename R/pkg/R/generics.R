@@ -403,6 +403,13 @@ setGeneric("dropna",
              standardGeneric("dropna") 
            })
 
+#' @rdname nafunctions
+#' @export
+setGeneric("na.omit",
+           function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) { 
+             standardGeneric("na.omit") 
+           })
+
 #' @rdname schema
 #' @export
 setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
