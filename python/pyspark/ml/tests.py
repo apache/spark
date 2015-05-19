@@ -120,6 +120,7 @@ class TestParams(HasMaxIter, HasInputCol, HasSeed):
         self._setDefault(maxIter=10)
         self._set(seed=seed)
 
+
 class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
     """
     A subclass of Params mixed with HasMaxIter, HasInputCol and HasSeed.
@@ -187,6 +188,7 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(withSeedSpecd.getSeed(), 42)
         # Check that a different class has a different seed
         self.assertNotEqual(other.getSeed(), noSeedSpecd.getSeed())
+
 
 class FeatureTests(PySparkTestCase):
 
