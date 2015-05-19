@@ -183,6 +183,173 @@ for words_label in wordsDataFrame.select("words", "label").take(3):
 </div>
 </div>
 
+## Binarizer
+
+Binarization is the process of thresholding numerical features to binary features. As some probabilistic estimators make assumption that the input data is distributed according to [Bernoulli distribution](http://en.wikipedia.org/wiki/Bernoulli_distribution), a binarizer is useful for pre-processing the input data with continuous numerical features.
+
+A simple [Binarizer](api/scala/index.html#org.apache.spark.ml.feature.Binarizer) class provides this functionality. Besides the common parameters of `inputCol` and `outputCol`, `Binarizer` has the parameter `threshold` used for binarizing continuous numerical features. The features greater than the threshold, will be binarized to 1.0. The features equal to or less than the threshold, will be binarized to 0.0. The example below shows how to binarize numerical features.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+import org.apache.spark.ml.feature.Binarizer
+import org.apache.spark.sql.DataFrame
+
+val data = Array(
+  (0, 0.1),
+  (1, 0.8),
+  (2, 0.2)
+)
+val dataFrame: DataFrame = sqlContext.createDataFrame(data).toDF("label", "feature")
+
+val binarizer: Binarizer = new Binarizer()
+  .setInputCol("feature")
+  .setOutputCol("binarized_feature")
+  .setThreshold(0.5)
+
+val binarizedDataFrame = binarizer.transform(dataFrame)
+val binarizedFeatures = binarizedDataFrame.select("binarized_feature")
+binarizedFeatures.collect().foreach(println)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+import com.google.common.collect.Lists;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.Binarizer;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+  RowFactory.create(0, 0.1),
+  RowFactory.create(1, 0.8),
+  RowFactory.create(2, 0.2)
+));
+StructType schema = new StructType(new StructField[]{
+  new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
+  new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
+});
+DataFrame continuousDataFrame = jsql.createDataFrame(jrdd, schema);
+Binarizer binarizer = new Binarizer()
+  .setInputCol("feature")
+  .setOutputCol("binarized_feature")
+  .setThreshold(0.5);
+DataFrame binarizedDataFrame = binarizer.transform(continuousDataFrame);
+DataFrame binarizedFeatures = binarizedDataFrame.select("binarized_feature");
+for (Row r : binarizedFeatures.collect()) {
+  Double binarized_value = r.getDouble(0);
+  System.out.println(binarized_value);
+}
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+from pyspark.ml.feature import Binarizer
+
+continuousDataFrame = sqlContext.createDataFrame([
+  (0, 0.1),
+  (1, 0.8),
+  (2, 0.2)
+], ["label", "feature"])
+binarizer = Binarizer(threshold=0.5, inputCol="feature", outputCol="binarized_feature")
+binarizedDataFrame = binarizer.transform(continuousDataFrame)
+binarizedFeatures = binarizedDataFrame.select("binarized_feature")
+for binarized_feature, in binarizedFeatures.collect():
+  print binarized_feature
+{% endhighlight %}
+</div>
+</div>
+
+## PolynomialExpansion
+
+[Polynomial expansion](http://en.wikipedia.org/wiki/Polynomial_expansion) is the process of expanding your features into a polynomial space, which is formulated by an n-degree combination of original dimensions. A [PolynomialExpansion](api/scala/index.html#org.apache.spark.ml.feature.PolynomialExpansion) class provides this functionality.  The example below shows how to expand your features into a 3-degree polynomial space.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+import org.apache.spark.ml.feature.PolynomialExpansion
+import org.apache.spark.mllib.linalg.Vectors
+
+val data = Array(
+  Vectors.dense(-2.0, 2.3),
+  Vectors.dense(0.0, 0.0),
+  Vectors.dense(0.6, -1.1)
+)
+val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+val polynomialExpansion = new PolynomialExpansion()
+  .setInputCol("features")
+  .setOutputCol("polyFeatures")
+  .setDegree(3)
+val polyDF = polynomialExpansion.transform(df)
+polyDF.select("polyFeatures").take(3).foreach(println)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+import com.google.common.collect.Lists;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.VectorUDT;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+JavaSparkContext jsc = ...
+SQLContext jsql = ...
+PolynomialExpansion polyExpansion = new PolynomialExpansion()
+  .setInputCol("features")
+  .setOutputCol("polyFeatures")
+  .setDegree(3);
+JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
+  RowFactory.create(Vectors.dense(-2.0, 2.3)),
+  RowFactory.create(Vectors.dense(0.0, 0.0)),
+  RowFactory.create(Vectors.dense(0.6, -1.1))
+));
+StructType schema = new StructType(new StructField[] {
+  new StructField("features", new VectorUDT(), false, Metadata.empty()),
+});
+DataFrame df = jsql.createDataFrame(data, schema);
+DataFrame polyDF = polyExpansion.transform(df);
+Row[] row = polyDF.select("polyFeatures").take(3);
+for (Row r : row) {
+  System.out.println(r.get(0));
+}
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+from pyspark.ml.feature import PolynomialExpansion
+from pyspark.mllib.linalg import Vectors
+
+df = sqlContext.createDataFrame(
+  [(Vectors.dense([-2.0, 2.3]), ),
+  (Vectors.dense([0.0, 0.0]), ),
+  (Vectors.dense([0.6, -1.1]), )],
+  ["features"])
+px = PolynomialExpansion(degree=2, inputCol="features", outputCol="polyFeatures")
+polyDF = px.transform(df)
+for expanded in polyDF.select("polyFeatures").take(3):
+  print(expanded)
+{% endhighlight %}
+</div>
+</div>
 
 # Feature Selectors
 

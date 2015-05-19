@@ -1071,7 +1071,7 @@ for details.
 </tr>
 <tr>
   <td> <b>saveAsSequenceFile</b>(<i>path</i>) <br /> (Java and Scala) </td>
-  <td> Write the elements of the dataset as a Hadoop SequenceFile in a given path in the local filesystem, HDFS or any other Hadoop-supported file system. This is available on RDDs of key-value pairs that either implement Hadoop's Writable interface. In Scala, it is also
+  <td> Write the elements of the dataset as a Hadoop SequenceFile in a given path in the local filesystem, HDFS or any other Hadoop-supported file system. This is available on RDDs of key-value pairs that implement Hadoop's Writable interface. In Scala, it is also
    available on types that are implicitly convertible to Writable (Spark includes conversions for basic types like Int, Double, String, etc). </td>
 </tr>
 <tr>
@@ -1122,7 +1122,7 @@ ordered data following shuffle then it's possible to use:
 * `sortBy` to make a globally ordered RDD
 
 Operations which can cause a shuffle include **repartition** operations like
-[`repartition`](#RepartitionLink), and [`coalesce`](#CoalesceLink), **'ByKey** operations
+[`repartition`](#RepartitionLink) and [`coalesce`](#CoalesceLink), **'ByKey** operations
 (except for counting) like [`groupByKey`](#GroupByLink) and [`reduceByKey`](#ReduceByLink), and
 **join** operations like [`cogroup`](#CogroupLink) and [`join`](#JoinLink).
 
@@ -1138,7 +1138,7 @@ read the relevant sorted blocks.
         
 Certain shuffle operations can consume significant amounts of heap memory since they employ 
 in-memory data structures to organize records before or after transferring them. Specifically, 
-`reduceByKey` and `aggregateByKey` create these structures on the map side and `'ByKey` operations 
+`reduceByKey` and `aggregateByKey` create these structures on the map side, and `'ByKey` operations 
 generate these on the reduce side. When data does not fit in memory Spark will spill these tables 
 to disk, incurring the additional overhead of disk I/O and increased garbage collection.
 

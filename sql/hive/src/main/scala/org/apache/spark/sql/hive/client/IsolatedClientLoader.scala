@@ -56,8 +56,7 @@ private[hive] object IsolatedClientLoader {
         (if (version.hasBuiltinsJar) "hive-builtins" :: Nil else Nil))
         .map(a => s"org.apache.hive:$a:${version.fullVersion}") :+
         "com.google.guava:guava:14.0.1" :+
-        "org.apache.hadoop:hadoop-client:2.4.0" :+
-        "mysql:mysql-connector-java:5.1.12"
+        "org.apache.hadoop:hadoop-client:2.4.0"
 
     val classpath = quietly {
       SparkSubmitUtils.resolveMavenCoordinates(
@@ -106,7 +105,9 @@ private[hive] class IsolatedClientLoader(
     val config: Map[String, String] = Map.empty,
     val isolationOn: Boolean = true,
     val rootClassLoader: ClassLoader = ClassLoader.getSystemClassLoader.getParent.getParent,
-    val baseClassLoader: ClassLoader = Thread.currentThread().getContextClassLoader)
+    val baseClassLoader: ClassLoader = Thread.currentThread().getContextClassLoader,
+    val sharedPrefixes: Seq[String] = Seq.empty,
+    val barrierPrefixes: Seq[String] = Seq.empty)
   extends Logging {
 
   // Check to make sure that the root classloader does not know about Hive.
@@ -122,13 +123,14 @@ private[hive] class IsolatedClientLoader(
     name.startsWith("scala.") ||
     name.startsWith("com.google") ||
     name.startsWith("java.lang.") ||
-    name.startsWith("java.net")
+    name.startsWith("java.net") ||
+    sharedPrefixes.exists(name.startsWith)
 
   /** True if `name` refers to a spark class that must see specific version of Hive. */
   protected def isBarrierClass(name: String): Boolean =
-    name.startsWith("org.apache.spark.sql.hive.execution.PairSerDe") ||
     name.startsWith(classOf[ClientWrapper].getName) ||
-    name.startsWith(classOf[ReflectionMagic].getName)
+    name.startsWith(classOf[ReflectionMagic].getName) ||
+    barrierPrefixes.exists(name.startsWith)
 
   protected def classToPath(name: String): String =
     name.replaceAll("\\.", "/") + ".class"

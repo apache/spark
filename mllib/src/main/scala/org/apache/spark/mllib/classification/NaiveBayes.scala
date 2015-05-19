@@ -147,7 +147,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
       // Create Parquet data.
       val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      dataRDD.saveAsParquetFile(dataPath(path))
+      dataRDD.write.parquet(dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
@@ -193,7 +193,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
       // Create Parquet data.
       val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      dataRDD.saveAsParquetFile(dataPath(path))
+      dataRDD.write.parquet(dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): NaiveBayesModel = {

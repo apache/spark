@@ -77,13 +77,11 @@ sealed trait Matrix extends Serializable {
     C
   }
 
-  /** Convenience method for `Matrix`-`DenseVector` multiplication. */
+  /** Convenience method for `Matrix`-`DenseVector` multiplication. For binary compatibility. */
   def multiply(y: DenseVector): DenseVector = {
-    val output = new DenseVector(new Array[Double](numRows))
-    BLAS.gemv(1.0, this, y, 0.0, output)
-    output
+    multiply(y.asInstanceOf[Vector])
   }
- 
+
   /** Convenience method for `Matrix`-`Vector` multiplication. */
   def multiply(y: Vector): DenseVector = {
     val output = new DenseVector(new Array[Double](numRows))

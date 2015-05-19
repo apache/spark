@@ -253,20 +253,6 @@ public class UnsafeShuffleWriterSuite {
   }
 
   @Test
-  public void writeEmptyIterator() throws Exception {
-    final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    writer.write(Collections.<Product2<Object, Object>>emptyIterator());
-    final Option<MapStatus> mapStatus = writer.stop(true);
-    assertTrue(mapStatus.isDefined());
-    assertTrue(mergedOutputFile.exists());
-    assertArrayEquals(new long[NUM_PARTITITONS], partitionSizesInMergedFile);
-    assertEquals(0, taskMetrics.shuffleWriteMetrics().get().shuffleRecordsWritten());
-    assertEquals(0, taskMetrics.shuffleWriteMetrics().get().shuffleBytesWritten());
-    assertEquals(0, taskMetrics.diskBytesSpilled());
-    assertEquals(0, taskMetrics.memoryBytesSpilled());
-  }
-
-  @Test
   public void writeWithoutSpilling() throws Exception {
     // In this example, each partition should have exactly one record:
     final ArrayList<Product2<Object, Object>> dataToWrite =

@@ -23,7 +23,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, FileOutputFormat}
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter, FileOutputFormat}
 import org.apache.hadoop.util.Shell
 import parquet.hadoop.util.ContextUtil
 
@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
+import org.apache.spark.sql.{SQLConf, DataFrame, SQLContext, SaveMode}
 
 private[sql] case class InsertIntoDataSource(
     logicalRelation: LogicalRelation,
@@ -58,8 +58,8 @@ private[sql] case class InsertIntoDataSource(
   }
 }
 
-private[sql] case class InsertIntoFSBasedRelation(
-    @transient relation: FSBasedRelation,
+private[sql] case class InsertIntoHadoopFsRelation(
+    @transient relation: HadoopFsRelation,
     @transient query: LogicalPlan,
     partitionColumns: Array[String],
     mode: SaveMode)
@@ -102,7 +102,7 @@ private[sql] case class InsertIntoFSBasedRelation(
         insert(new DefaultWriterContainer(relation, job), df)
       } else {
         val writerContainer = new DynamicPartitionWriterContainer(
-          relation, job, partitionColumns, "__HIVE_DEFAULT_PARTITION__")
+          relation, job, partitionColumns, PartitioningUtils.DEFAULT_PARTITION_NAME)
         insertWithDynamicPartitions(sqlContext, writerContainer, df, partitionColumns)
       }
     }
@@ -234,7 +234,7 @@ private[sql] case class InsertIntoFSBasedRelation(
 }
 
 private[sql] abstract class BaseWriterContainer(
-    @transient val relation: FSBasedRelation,
+    @transient val relation: HadoopFsRelation,
     @transient job: Job)
   extends SparkHadoopMapReduceUtil
   with Logging
@@ -261,7 +261,7 @@ private[sql] abstract class BaseWriterContainer(
 
   protected val dataSchema = relation.dataSchema
 
-  protected val outputWriterClass: Class[_ <: OutputWriter] = relation.outputWriterClass
+  protected var outputWriterFactory: OutputWriterFactory = _
 
   private var outputFormatClass: Class[_ <: OutputFormat[_, _]] = _
 
@@ -269,7 +269,7 @@ private[sql] abstract class BaseWriterContainer(
     setupIDs(0, 0, 0)
     setupConf()
     taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
-    relation.prepareForWrite(job)
+    outputWriterFactory = relation.prepareJobForWrite(job)
     outputFormatClass = job.getOutputFormatClass
     outputCommitter = newOutputCommitter(taskAttemptContext)
     outputCommitter.setupJob(jobContext)
@@ -287,23 +287,38 @@ private[sql] abstract class BaseWriterContainer(
   protected def getWorkPath: String = {
     outputCommitter match {
       // FileOutputCommitter writes to a temporary location returned by `getWorkPath`.
-      case f: FileOutputCommitter => f.getWorkPath.toString
+      case f: MapReduceFileOutputCommitter => f.getWorkPath.toString
       case _ => outputPath
     }
   }
 
   private def newOutputCommitter(context: TaskAttemptContext): OutputCommitter = {
     val committerClass = context.getConfiguration.getClass(
-      "mapred.output.committer.class", null, classOf[OutputCommitter])
+      SQLConf.OUTPUT_COMMITTER_CLASS, null, classOf[OutputCommitter])
 
     Option(committerClass).map { clazz =>
-      val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
-      ctor.newInstance(new Path(outputPath), context)
+      // Every output format based on org.apache.hadoop.mapreduce.lib.output.OutputFormat
+      // has an associated output committer. To override this output committer,
+      // we will first try to use the output committer set in SQLConf.OUTPUT_COMMITTER_CLASS.
+      // If a data source needs to override the output committer, it needs to set the
+      // output committer in prepareForWrite method.
+      if (classOf[MapReduceFileOutputCommitter].isAssignableFrom(clazz)) {
+        // The specified output committer is a FileOutputCommitter.
+        // So, we will use the FileOutputCommitter-specified constructor.
+        val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
+        ctor.newInstance(new Path(outputPath), context)
+      } else {
+        // The specified output committer is just a OutputCommitter.
+        // So, we will use the no-argument constructor.
+        val ctor = clazz.getDeclaredConstructor()
+        ctor.newInstance()
+      }
     }.getOrElse {
+      // If output committer class is not set, we will use the one associated with the
+      // file output format.
       outputFormatClass.newInstance().getOutputCommitter(context)
     }
   }
-
 
   private def setupIDs(jobId: Int, splitId: Int, attemptId: Int): Unit = {
     this.jobId = SparkHadoopWriter.createJobID(new Date, jobId)
@@ -346,16 +361,15 @@ private[sql] abstract class BaseWriterContainer(
 }
 
 private[sql] class DefaultWriterContainer(
-    @transient relation: FSBasedRelation,
+    @transient relation: HadoopFsRelation,
     @transient job: Job)
   extends BaseWriterContainer(relation, job) {
 
   @transient private var writer: OutputWriter = _
 
   override protected def initWriters(): Unit = {
-    writer = outputWriterClass.newInstance()
     taskAttemptContext.getConfiguration.set("spark.sql.sources.output.path", outputPath)
-    writer.init(getWorkPath, dataSchema, taskAttemptContext)
+    writer = outputWriterFactory.newInstance(getWorkPath, dataSchema, taskAttemptContext)
   }
 
   override def outputWriterForRow(row: Row): OutputWriter = writer
@@ -372,7 +386,7 @@ private[sql] class DefaultWriterContainer(
 }
 
 private[sql] class DynamicPartitionWriterContainer(
-    @transient relation: FSBasedRelation,
+    @transient relation: HadoopFsRelation,
     @transient job: Job,
     partitionColumns: Array[String],
     defaultPartitionName: String)
@@ -398,12 +412,10 @@ private[sql] class DynamicPartitionWriterContainer(
 
     outputWriters.getOrElseUpdate(partitionPath, {
       val path = new Path(getWorkPath, partitionPath)
-      val writer = outputWriterClass.newInstance()
       taskAttemptContext.getConfiguration.set(
         "spark.sql.sources.output.path",
         new Path(outputPath, partitionPath).toString)
-      writer.init(path.toString, dataSchema, taskAttemptContext)
-      writer
+      outputWriterFactory.newInstance(path.toString, dataSchema, taskAttemptContext)
     })
   }
 
