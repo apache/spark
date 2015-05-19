@@ -486,7 +486,7 @@ public final class BytesToBytesMap {
       longArray.set(pos * 2 + 1, keyHashcode);
       updateAddressesAndSizes(storedKeyAddress);
       isDefined = true;
-      if (size > growthThreshold && size < MAX_CAPACITY) {
+      if (size > growthThreshold && longArray.size() < MAX_CAPACITY) {
         growAndRehash();
       }
     }
