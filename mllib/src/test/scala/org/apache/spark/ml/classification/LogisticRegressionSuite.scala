@@ -83,6 +83,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.getRawPredictionCol === "rawPrediction")
     assert(model.getProbabilityCol === "probability")
     assert(model.intercept !== 0.0)
+    assert(model.hasParent)
   }
 
   test("logistic regression doesn't fit intercept when fitIntercept is off") {
