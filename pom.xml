@@ -1799,9 +1799,9 @@
         <property><name>scala-2.11</name></property>
       </activation>
       <properties>
-        <scala.version>2.11.6</scala.version>
+        <scala.version>2.11.2</scala.version>
         <scala.binary.version>2.11</scala.binary.version>
-        <jline.version>2.12.1</jline.version>
+        <jline.version>2.12</jline.version>
         <jline.groupid>jline</jline.groupid>
       </properties>
     </profile>
