@@ -607,7 +607,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    *
    * @since 1.4.0
    */
-  def buildScan(
+  private[sql] def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputFiles: Array[FileStatus],

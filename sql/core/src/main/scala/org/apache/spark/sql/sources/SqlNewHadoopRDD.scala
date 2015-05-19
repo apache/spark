@@ -67,7 +67,7 @@ private[spark] class SqlNewHadoopPartition(
  * @param conf The Hadoop configuration.
  */
 @DeveloperApi
-class SqlNewHadoopRDD[K, V](
+private[sql] class SqlNewHadoopRDD[K, V](
     @transient sc : SparkContext,
     broadcastedConf: Broadcast[SerializableWritable[Configuration]],
     @transient initDriverSideJobFuncOpt: Option[Job => Unit],
