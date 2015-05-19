@@ -531,7 +531,7 @@ class Analyzer(
         var resolvedGenerator: Generate = null
 
         val newProjectList = projectList.flatMap {
-          case AliasedGenerator(generator, names) if generator.childrenResolved =>
+          case AliasedResolvedGenerator(generator, names) =>
             if (resolvedGenerator != null) {
               failAnalysis(
                 s"Only one generator allowed per select but ${resolvedGenerator.nodeName} and " +
@@ -558,11 +558,11 @@ class Analyzer(
         }
     }
 
-    /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
-    private object AliasedGenerator {
+    /** Extracts a resolved [[Generator]] expression and any names assigned by aliases to their output. */
+    private object AliasedResolvedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
-        case Alias(g: Generator, name)
-          if g.elementTypes.size > 1 && java.util.regex.Pattern.matches("_c[0-9]+", name) => {
+        case Alias(g: Generator, name) if g.childrenResolved &&
+          g.elementTypes.size > 1 && java.util.regex.Pattern.matches("_c[0-9]+", name) => {
           // Assume the default name given by parser is "_c[0-9]+",
           // TODO in long term, move the naming logic from Parser to Analyzer.
           // In projection, Parser gave default name for TGF as does for normal UDF,
@@ -576,8 +576,17 @@ class Analyzer(
           failAnalysis(
             s"""Expect multiple names given for ${g.getClass.getName},
                |but only single name '${name}' specified""".stripMargin)
-        case Alias(g: Generator, name) => Some((g, name :: Nil))
-        case MultiAlias(g: Generator, names) => Some(g, names)
+        case Alias(g: Generator, name) if g.childrenResolved => Some((g, name :: Nil))
+        case MultiAlias(g: Generator, names) if g.childrenResolved =>
+          if (names == Nil) {
+            g match {
+              case Explode(child) if child.dataType.isInstanceOf[StructType] =>
+                Some(g, child.dataType.asInstanceOf[StructType].fieldNames)
+              case _ => Some(g, Nil)
+            }
+          } else {
+            Some(g, names)
+          }
         case _ => None
       }
     }

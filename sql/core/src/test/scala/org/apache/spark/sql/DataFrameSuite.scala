@@ -132,6 +132,18 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("struct type explode") {
+    val df1 = complexData.select(explode('s))
+    assert(df1.schema.map(_.name) === Seq("key", "value"))
+    assert(df1.schema.map(_.dataType) === Seq(IntegerType, StringType))
+    checkAnswer(df1, Row(1, "1") :: Row(2, "2") :: Nil)
+
+    val df2 = complexData.select(explode('s).as(Seq("i", "s")))
+    assert(df2.schema.map(_.name) === Seq("i", "s"))
+    assert(df2.schema.map(_.dataType) === Seq(IntegerType, StringType))
+    checkAnswer(df2, Row(1, "1") :: Row(2, "2") :: Nil)
+  }
+
   test("selectExpr") {
     checkAnswer(
       testData.selectExpr("abs(key)", "value"),

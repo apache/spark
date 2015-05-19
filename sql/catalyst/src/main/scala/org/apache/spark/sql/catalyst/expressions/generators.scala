@@ -91,24 +91,33 @@ case class Explode(child: Expression)
   extends Generator with trees.UnaryNode[Expression] {
 
   override lazy val resolved =
-    child.resolved &&
-    (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType])
+    child.resolved && (
+    child.dataType.isInstanceOf[ArrayType] ||
+    child.dataType.isInstanceOf[MapType] ||
+    child.dataType.isInstanceOf[StructType])
 
   override def elementTypes: Seq[(DataType, Boolean)] = child.dataType match {
     case ArrayType(et, containsNull) => (et, containsNull) :: Nil
     case MapType(kt, vt, valueContainsNull) => (kt, false) :: (vt, valueContainsNull) :: Nil
+    case StructType(fields) => fields.map(f => (f.dataType, f.nullable))
   }
 
-  override def eval(input: Row): TraversableOnce[Row] = {
-    child.dataType match {
-      case ArrayType(_, _) =>
-        val inputArray = child.eval(input).asInstanceOf[Seq[Any]]
-        if (inputArray == null) Nil else inputArray.map(v => new GenericRow(Array(v)))
-      case MapType(_, _, _) =>
-        val inputMap = child.eval(input).asInstanceOf[Map[Any,Any]]
-        if (inputMap == null) Nil else inputMap.map { case (k,v) => new GenericRow(Array(k,v)) }
+  private lazy val f = child.dataType match {
+    case ArrayType(_, _) => (input: Row) => {
+      val inputArray = child.eval(input).asInstanceOf[Seq[Any]]
+      if (inputArray == null) Nil else inputArray.map(v => new GenericRow(Array(v)))
+    }
+    case MapType(_, _, _) => (input: Row) => {
+      val inputMap = child.eval(input).asInstanceOf[Map[Any,Any]]
+      if (inputMap == null) Nil else inputMap.map { case (k,v) => new GenericRow(Array(k,v)) }
+    }
+    case StructType(_) => (input: Row) => {
+      val inputStruct = child.eval(input).asInstanceOf[Row]
+      if (inputStruct == null) Nil else Seq(inputStruct)
     }
   }
+
+  override def eval(input: Row): TraversableOnce[Row] = f(input)
 
   override def toString: String = s"explode($child)"
 }
