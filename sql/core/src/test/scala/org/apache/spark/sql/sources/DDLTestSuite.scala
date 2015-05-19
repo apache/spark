@@ -64,7 +64,7 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
 }
 
 class DDLTestSuite extends DataSourceTest {
-  import caseInsensisitiveContext._
+  import caseInsensitiveContext._
 
   before {
       sql(
@@ -99,4 +99,10 @@ class DDLTestSuite extends DataSourceTest {
         Row("arrayType", "array<string>", ""),
         Row("structType", "struct<f1:string,f2:int>", "")
       ))
+
+  test("SPARK-7686 DescribeCommand should have correct physical plan output attributes") {
+    val attributes = sql("describe ddlPeople").queryExecution.executedPlan.output
+    assert(attributes.map(_.name) === Seq("col_name", "data_type", "comment"))
+    assert(attributes.map(_.dataType).toSet === Set(StringType))
+  }
 }

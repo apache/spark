@@ -225,7 +225,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
       throw new SparkException("Input validation failed.")
     }
 
-    /*
+    /**
      * Scaling columns to unit variance as a heuristic to reduce the condition number:
      *
      * During the optimization process, the convergence (rate) depends on the condition number of

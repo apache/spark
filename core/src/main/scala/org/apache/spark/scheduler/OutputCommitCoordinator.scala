@@ -38,7 +38,7 @@ private case class AskPermissionToCommitOutput(stage: Int, task: Long, taskAttem
  * This class was introduced in SPARK-4879; see that JIRA issue (and the associated pull requests)
  * for an extensive design discussion.
  */
-private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
+private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean) extends Logging {
 
   // Initialized by SparkEnv
   var coordinatorRef: Option[RpcEndpointRef] = None
@@ -85,7 +85,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
     val msg = AskPermissionToCommitOutput(stage, partition, attempt)
     coordinatorRef match {
       case Some(endpointRef) =>
-        endpointRef.askWithReply[Boolean](msg)
+        endpointRef.askWithRetry[Boolean](msg)
       case None =>
         logError(
           "canCommit called after coordinator was stopped (is SparkEnv shutdown in progress)?")
@@ -129,9 +129,11 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
   }
 
   def stop(): Unit = synchronized {
-    coordinatorRef.foreach(_ send StopCoordinator)
-    coordinatorRef = None
-    authorizedCommittersByStage.clear()
+    if (isDriver) {
+      coordinatorRef.foreach(_ send StopCoordinator)
+      coordinatorRef = None
+      authorizedCommittersByStage.clear()
+    }
   }
 
   // Marked private[scheduler] instead of private so this can be mocked in tests

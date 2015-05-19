@@ -18,14 +18,12 @@
 package org.apache.spark.scheduler.local
 
 import java.nio.ByteBuffer
-import java.util.concurrent.TimeUnit
 
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
-import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
-import org.apache.spark.util.{ThreadUtils, Utils}
 
 private case class ReviveOffers()
 
@@ -46,9 +44,6 @@ private[spark] class LocalEndpoint(
     executorBackend: LocalBackend,
     private val totalCores: Int)
   extends ThreadSafeRpcEndpoint with Logging {
-
-  private val reviveThread =
-    ThreadUtils.newDaemonSingleThreadScheduledExecutor("local-revive-thread")
 
   private var freeCores = totalCores
 
@@ -79,27 +74,13 @@ private[spark] class LocalEndpoint(
       context.reply(true)
   }
 
-
   def reviveOffers() {
     val offers = Seq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
-    val tasks = scheduler.resourceOffers(offers).flatten
-    for (task <- tasks) {
+    for (task <- scheduler.resourceOffers(offers).flatten) {
       freeCores -= scheduler.CPUS_PER_TASK
       executor.launchTask(executorBackend, taskId = task.taskId, attemptNumber = task.attemptNumber,
         task.name, task.serializedTask)
     }
-    if (tasks.isEmpty && scheduler.activeTaskSets.nonEmpty) {
-      // Try to reviveOffer after 1 second, because scheduler may wait for locality timeout
-      reviveThread.schedule(new Runnable {
-        override def run(): Unit = Utils.tryLogNonFatalError {
-          Option(self).foreach(_.send(ReviveOffers))
-        }
-      }, 1000, TimeUnit.MILLISECONDS)
-    }
-  }
-
-  override def onStop(): Unit = {
-    reviveThread.shutdownNow()
   }
 }
 
@@ -123,7 +104,7 @@ private[spark] class LocalBackend(
   }
 
   override def stop() {
-    localEndpoint.sendWithReply(StopExecutor)
+    localEndpoint.ask(StopExecutor)
   }
 
   override def reviveOffers() {

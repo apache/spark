@@ -56,6 +56,12 @@ abstract class Generator extends Expression {
 
   /** Should be implemented by child classes to perform specific Generators. */
   override def eval(input: Row): TraversableOnce[Row]
+
+  /**
+   * Notifies that there are no more rows to process, clean up code, and additional
+   * rows can be made here.
+   */
+  def terminate(): TraversableOnce[Row] = Nil
 }
 
 /**

@@ -62,7 +62,7 @@ TESTS_TIMEOUT="150m" # format: http://linux.die.net/man/1/timeout
 PR_TESTS=(
   "pr_merge_ability"
   "pr_public_classes"
-  "pr_new_dependencies"
+# DISABLED (pwendell) "pr_new_dependencies"
 )
 
 function post_message () {

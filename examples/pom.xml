@@ -245,7 +245,7 @@
     <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>algebird-core_${scala.binary.version}</artifactId>
-      <version>0.8.1</version>
+      <version>0.9.0</version>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
@@ -389,11 +389,6 @@
           <groupId>org.apache.spark</groupId>
           <artifactId>spark-streaming-kinesis-asl_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.httpcomponents</groupId>
-          <artifactId>httpclient</artifactId>
-          <version>${commons.httpclient.version}</version>
         </dependency>
       </dependencies>
     </profile>

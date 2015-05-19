@@ -200,9 +200,7 @@ case class InsertIntoHiveTable(
           orderedPartitionSpec.put(entry.getName,partitionSpec.get(entry.getName).getOrElse(""))
       }
       val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols, partitionSpec)
-      catalog.synchronized {
-        catalog.client.validatePartitionNameCharacters(partVals)
-      }
+
       // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
       // which is currently considered as a Hive native command.
       val inheritTableSpecs = true
@@ -211,7 +209,7 @@ case class InsertIntoHiveTable(
       if (numDynamicPartitions > 0) {
         catalog.synchronized {
           catalog.client.loadDynamicPartitions(
-            outputPath,
+            outputPath.toString,
             qualifiedTableName,
             orderedPartitionSpec,
             overwrite,
@@ -224,31 +222,28 @@ case class InsertIntoHiveTable(
         // ifNotExists is only valid with static partition, refer to
         // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DML#LanguageManualDML-InsertingdataintoHiveTablesfromqueries
         // scalastyle:on
-        val oldPart = catalog.synchronized {
-          catalog.client.getPartition(
-            catalog.client.getTable(qualifiedTableName), partitionSpec, false)
-        }
-        if (oldPart == null || !ifNotExists) {
-          catalog.synchronized {
+        val oldPart =
+          catalog.client.getPartitionOption(
+            catalog.client.getTable(table.databaseName, table.tableName),
+            partitionSpec)
+
+        if (oldPart.isEmpty || !ifNotExists) {
             catalog.client.loadPartition(
-              outputPath,
+              outputPath.toString,
               qualifiedTableName,
               orderedPartitionSpec,
               overwrite,
               holdDDLTime,
               inheritTableSpecs,
               isSkewedStoreAsSubdir)
-          }
         }
       }
     } else {
-      catalog.synchronized {
-        catalog.client.loadTable(
-          outputPath,
-          qualifiedTableName,
-          overwrite,
-          holdDDLTime)
-      }
+      catalog.client.loadTable(
+        outputPath.toString, // TODO: URI
+        qualifiedTableName,
+        overwrite,
+        holdDDLTime)
     }
 
     // Invalidate the cache.
@@ -263,5 +258,7 @@ case class InsertIntoHiveTable(
 
   override def executeCollect(): Array[Row] = sideEffectResult.toArray
 
-  override def execute(): RDD[Row] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  protected override def doExecute(): RDD[Row] = {
+    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  }
 }

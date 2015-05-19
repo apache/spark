@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
 class QueryPartitionSuite extends QueryTest {
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
-  test("SPARK-5068: query data when path doesn't exists"){
+  test("SPARK-5068: query data when path doesn't exist"){
     val testData = TestHive.sparkContext.parallelize(
       (1 to 10).map(i => TestData(i, i.toString))).toDF()
     testData.registerTempTable("testData")
@@ -52,8 +52,9 @@ class QueryPartitionSuite extends QueryTest {
         ++ testData.toSchemaRDD.collect ++ testData.toSchemaRDD.collect)
 
     // delete the path of one partition
-    val folders = tmpDir.listFiles.filter(_.isDirectory)
-    Utils.deleteRecursively(folders(0))
+    tmpDir.listFiles
+      .find { f => f.isDirectory && f.getName().startsWith("ds=") }
+      .foreach { f => Utils.deleteRecursively(f) }
 
     // test for after delete the path
     checkAnswer(sql("select key,value from table_with_partition"),
