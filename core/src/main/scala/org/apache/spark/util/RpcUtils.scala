@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import scala.language.postfixOps
+import scala.concurrent.duration._
 
 import org.apache.spark.{SparkEnv, SparkConf}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
@@ -47,23 +48,13 @@ object RpcUtils {
 
   /** Returns the default Spark timeout to use for RPC ask operations. */
   def askTimeout(conf: SparkConf): RpcTimeout = {
-    try {
-      RpcTimeout(conf, "spark.rpc.askTimeout")
-    }
-    catch {
-      case _: Throwable =>
-        RpcTimeout(conf, "spark.network.timeout", "120s")
-    }
+    RpcTimeout(conf, Seq("spark.rpc.askTimeout",
+      "spark.network.timeout"), "120s")
   }
 
   /** Returns the default Spark timeout to use for RPC remote endpoint lookup. */
   def lookupTimeout(conf: SparkConf): RpcTimeout = {
-    try {
-      RpcTimeout(conf, "spark.rpc.lookupTimeout")
-    }
-    catch {
-      case _: Throwable =>
-        RpcTimeout(conf, "spark.network.timeout", "120s")
-    }
+    RpcTimeout(conf, Seq("spark.rpc.lookupTimeout",
+      "spark.network.timeout"), "120s")
   }
 }
