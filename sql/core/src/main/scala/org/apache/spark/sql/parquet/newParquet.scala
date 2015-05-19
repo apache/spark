@@ -23,6 +23,7 @@ import scala.collection.JavaConversions._
 import scala.util.Try
 
 import com.google.common.base.Objects
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
@@ -32,13 +33,14 @@ import parquet.hadoop._
 import parquet.hadoop.metadata.CompressionCodecName
 import parquet.hadoop.util.ContextUtil
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD._
-import org.apache.spark.rdd.{NewHadoopPartition, NewHadoopRDD, RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{Row, SQLConf, SQLContext}
-import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
+import org.apache.spark.{Partition => SparkPartition, SparkEnv, SerializableWritable, Logging, SparkException}
 
 private[sql] class DefaultSource extends HadoopFsRelationProvider {
   override def createRelation(
@@ -118,7 +120,7 @@ private[sql] class ParquetRelation2(
     private val maybeDataSchema: Option[StructType],
     private val maybePartitionSpec: Option[PartitionSpec],
     parameters: Map[String, String])(
-    val sqlContext: SQLContext)
+    @transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec)
   with Logging {
 
@@ -233,40 +235,20 @@ private[sql] class ParquetRelation2(
   override def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
-      inputFiles: Array[FileStatus]): RDD[Row] = {
-
-    val job = new Job(SparkHadoopUtil.get.conf)
-    val conf = ContextUtil.getConfiguration(job)
-
-    ParquetInputFormat.setReadSupportClass(job, classOf[RowReadSupport])
-
-    if (inputFiles.nonEmpty) {
-      FileInputFormat.setInputPaths(job, inputFiles.map(_.getPath): _*)
-    }
-
-    // Try to push down filters when filter push-down is enabled.
-    if (sqlContext.conf.parquetFilterPushDown) {
-      filters
-        // Collects all converted Parquet filter predicates. Notice that not all predicates can be
-        // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
-        // is used here.
-        .flatMap(ParquetFilters.createFilter(dataSchema, _))
-        .reduceOption(FilterApi.and)
-        .foreach(ParquetInputFormat.setFilterPredicate(conf, _))
-    }
-
-    conf.set(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA, {
-      val requestedSchema = StructType(requiredColumns.map(dataSchema(_)))
-      ParquetTypesConverter.convertToString(requestedSchema.toAttributes)
-    })
-
-    conf.set(
-      RowWriteSupport.SPARK_ROW_SCHEMA,
-      ParquetTypesConverter.convertToString(dataSchema.toAttributes))
-
-    // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
+      inputFiles: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
     val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, "true").toBoolean
-    conf.set(SQLConf.PARQUET_CACHE_METADATA, useMetadataCache.toString)
+    val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
+    // Create the function to set variable Parquet confs at both driver and executor side.
+    val initLocalJobFuncOpt =
+      ParquetRelation2.initializeLocalJobFunc(
+        requiredColumns,
+        filters,
+        dataSchema,
+        useMetadataCache,
+        parquetFilterPushDown) _
+    // Create the function to set input paths at the driver side.
+    val setInputPaths = ParquetRelation2.initializeDriverSideJobFunc(inputFiles) _
 
     val footers = inputFiles.map(f => metadataCache.footers(f.getPath))
 
@@ -274,12 +256,14 @@ private[sql] class ParquetRelation2(
     // After upgrading to Parquet 1.6.0, we should be able to stop caching `FileStatus` objects and
     // footers.  Especially when a global arbitrative schema (either from metastore or data source
     // DDL) is available.
-    new NewHadoopRDD(
-      sqlContext.sparkContext,
-      classOf[FilteringParquetRowInputFormat],
-      classOf[Void],
-      classOf[Row],
-      conf) {
+    new SqlNewHadoopRDD(
+      sc = sqlContext.sparkContext,
+      broadcastedConf = broadcastedConf,
+      initDriverSideJobFuncOpt = Some(setInputPaths),
+      initLocalJobFuncOpt = Some(initLocalJobFuncOpt),
+      inputFormatClass = classOf[FilteringParquetRowInputFormat],
+      keyClass = classOf[Void],
+      valueClass = classOf[Row]) {
 
       val cacheMetadata = useMetadataCache
 
@@ -311,11 +295,11 @@ private[sql] class ParquetRelation2(
           new FilteringParquetRowInputFormat
         }
 
-        val jobContext = newJobContext(getConf, jobId)
+        val jobContext = newJobContext(getConf(isDriverSide = true), jobId)
         val rawSplits = inputFormat.getSplits(jobContext)
 
         Array.tabulate[SparkPartition](rawSplits.size) { i =>
-          new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
+          new SqlNewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
         }
       }
     }.values
@@ -451,6 +435,49 @@ private[sql] object ParquetRelation2 extends Logging {
   // Hive Metastore schema, used when converting Metastore Parquet tables.  This option is only used
   // internally.
   private[sql] val METASTORE_SCHEMA = "metastoreSchema"
+
+  /** This closure sets various Parquet configurations at both driver side and executor side. */
+  private[parquet] def initializeLocalJobFunc(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      dataSchema: StructType,
+      useMetadataCache: Boolean,
+      parquetFilterPushDown: Boolean)(job: Job): Unit = {
+    val conf = job.getConfiguration
+    conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[RowReadSupport].getName())
+
+    // Try to push down filters when filter push-down is enabled.
+    if (parquetFilterPushDown) {
+      filters
+        // Collects all converted Parquet filter predicates. Notice that not all predicates can be
+        // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
+        // is used here.
+        .flatMap(ParquetFilters.createFilter(dataSchema, _))
+        .reduceOption(FilterApi.and)
+        .foreach(ParquetInputFormat.setFilterPredicate(conf, _))
+    }
+
+    conf.set(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA, {
+      val requestedSchema = StructType(requiredColumns.map(dataSchema(_)))
+      ParquetTypesConverter.convertToString(requestedSchema.toAttributes)
+    })
+
+    conf.set(
+      RowWriteSupport.SPARK_ROW_SCHEMA,
+      ParquetTypesConverter.convertToString(dataSchema.toAttributes))
+
+    // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
+    conf.set(SQLConf.PARQUET_CACHE_METADATA, useMetadataCache.toString)
+  }
+
+  /** This closure sets input paths at the driver side. */
+  private[parquet] def initializeDriverSideJobFunc(
+      inputFiles: Array[FileStatus])(job: Job): Unit = {
+    // We side the input paths at the driver side.
+    if (inputFiles.nonEmpty) {
+      FileInputFormat.setInputPaths(job, inputFiles.map(_.getPath): _*)
+    }
+  }
 
   private[parquet] def readSchema(
       footers: Seq[Footer], sqlContext: SQLContext): Option[StructType] = {
