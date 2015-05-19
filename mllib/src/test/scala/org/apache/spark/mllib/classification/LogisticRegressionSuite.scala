@@ -91,21 +91,22 @@ object LogisticRegressionSuite {
       seed: Int): Seq[LabeledPoint] = {
     val rnd = new Random(seed)
 
-    val xDim = xMean.size
+    val xDim = xMean.length
     val xWithInterceptsDim = if (addIntercept) xDim + 1 else xDim
-    val nClasses = weights.size / xWithInterceptsDim + 1
+    val nClasses = weights.length / xWithInterceptsDim + 1
 
     val x = Array.fill[Vector](nPoints)(Vectors.dense(Array.fill[Double](xDim)(rnd.nextGaussian())))
 
-    x.map(vector => {
+    x.foreach { vector =>
       // This doesn't work if `vector` is a sparse vector.
       val vectorArray = vector.toArray
       var i = 0
-      while (i < vectorArray.size) {
+      val len = vectorArray.length
+      while (i < len) {
         vectorArray(i) = vectorArray(i) * math.sqrt(xVariance(i)) + xMean(i)
         i += 1
       }
-    })
+    }
 
     val y = (0 until nPoints).map { idx =>
       val xArray = x(idx).toArray

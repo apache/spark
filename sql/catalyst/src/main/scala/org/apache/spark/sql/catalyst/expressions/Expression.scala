@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
@@ -65,7 +64,7 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns true if  all the children of this expression have been resolved to a specific schema
    * and false if any still contains any unresolved placeholders.
    */
-  def childrenResolved: Boolean = !children.exists(!_.resolved)
+  def childrenResolved: Boolean = children.forall(_.resolved)
 
   /**
    * Returns a string representation of this expression that does not have developer centric
@@ -77,6 +76,19 @@ abstract class Expression extends TreeNode[Expression] {
       case u: UnresolvedAttribute => PrettyAttribute(u.name)
     }.toString
   }
+
+  /**
+   * Returns true when two expressions will always compute the same result, even if they differ
+   * cosmetically (i.e. capitalization of names in attributes may be different).
+   */
+  def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass && {
+    val elements1 = this.productIterator.toSeq
+    val elements2 = other.asInstanceOf[Product].productIterator.toSeq
+    elements1.length == elements2.length && elements1.zip(elements2).forall {
+      case (e1: Expression, e2: Expression) => e1 semanticEquals e2
+      case (i1, i2) => i1 == i2
+    }
+  }
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
@@ -85,6 +97,8 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
   def symbol: String
 
   override def foldable: Boolean = left.foldable && right.foldable
+
+  override def nullable: Boolean = left.nullable || right.nullable
 
   override def toString: String = s"($left $symbol $right)"
 }

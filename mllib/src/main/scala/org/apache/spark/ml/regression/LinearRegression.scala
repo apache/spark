@@ -19,27 +19,28 @@ package org.apache.spark.ml.regression
 
 import scala.collection.mutable
 
-import breeze.linalg.{norm => brzNorm, DenseVector => BDV}
-import breeze.optimize.{LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
-import breeze.optimize.{CachedDiffFunction, DiffFunction}
+import breeze.linalg.{DenseVector => BDV, norm => brzNorm}
+import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 
+import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.param.{Params, ParamMap}
-import org.apache.spark.ml.param.shared.{HasTol, HasElasticNetParam, HasMaxIter, HasRegParam}
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
+import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared.{HasElasticNetParam, HasMaxIter, HasRegParam, HasTol}
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.StatCounter
-import org.apache.spark.Logging
 
 /**
  * Params for linear regression.
  */
-private[regression] trait LinearRegressionParams extends RegressorParams
+private[regression] trait LinearRegressionParams extends PredictorParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
 
 /**
@@ -58,8 +59,11 @@ private[regression] trait LinearRegressionParams extends RegressorParams
  *  - L2 + L1 (elastic net)
  */
 @AlphaComponent
-class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegressionModel]
+class LinearRegression(override val uid: String)
+  extends Regressor[Vector, LinearRegression, LinearRegressionModel]
   with LinearRegressionParams with Logging {
+
+  def this() = this(Identifiable.randomUID("linReg"))
 
   /**
    * Set the regularization parameter.
@@ -96,23 +100,25 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
   def setTol(value: Double): this.type = set(tol, value)
   setDefault(tol -> 1E-6)
 
-  override protected def train(dataset: DataFrame, paramMap: ParamMap): LinearRegressionModel = {
+  override protected def train(dataset: DataFrame): LinearRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist instances.
-    val instances = extractLabeledPoints(dataset, paramMap).map {
+    val instances = extractLabeledPoints(dataset).map {
       case LabeledPoint(label: Double, features: Vector) => (label, features)
     }
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (summarizer, statCounter) = instances.treeAggregate(
-      (new MultivariateOnlineSummarizer, new StatCounter))( {
-        case ((summarizer: MultivariateOnlineSummarizer, statCounter: StatCounter),
-        (label: Double, features: Vector)) =>
-          (summarizer.add(features), statCounter.merge(label))
-      }, {
-        case ((summarizer1: MultivariateOnlineSummarizer, statCounter1: StatCounter),
-        (summarizer2: MultivariateOnlineSummarizer, statCounter2: StatCounter)) =>
-          (summarizer1.merge(summarizer2), statCounter1.merge(statCounter2))
+      (new MultivariateOnlineSummarizer, new StatCounter))(
+        seqOp = (c, v) => (c, v) match {
+          case ((summarizer: MultivariateOnlineSummarizer, statCounter: StatCounter),
+          (label: Double, features: Vector)) =>
+            (summarizer.add(features), statCounter.merge(label))
+      },
+        combOp = (c1, c2) => (c1, c2) match {
+          case ((summarizer1: MultivariateOnlineSummarizer, statCounter1: StatCounter),
+          (summarizer2: MultivariateOnlineSummarizer, statCounter2: StatCounter)) =>
+            (summarizer1.merge(summarizer2), statCounter1.merge(statCounter2))
       })
 
     val numFeatures = summarizer.mean.size
@@ -125,7 +131,7 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
       logWarning(s"The standard deviation of the label is zero, so the weights will be zeros " +
         s"and the intercept will be the mean of the label; as a result, training is not needed.")
       if (handlePersistence) instances.unpersist()
-      return new LinearRegressionModel(this, paramMap, Vectors.sparse(numFeatures, Seq()), yMean)
+      return new LinearRegressionModel(uid, Vectors.sparse(numFeatures, Seq()), yMean)
     }
 
     val featuresMean = summarizer.mean.toArray
@@ -133,17 +139,17 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
 
     // Since we implicitly do the feature scaling when we compute the cost function
     // to improve the convergence, the effective regParam will be changed.
-    val effectiveRegParam = paramMap(regParam) / yStd
-    val effectiveL1RegParam = paramMap(elasticNetParam) * effectiveRegParam
-    val effectiveL2RegParam = (1.0 - paramMap(elasticNetParam)) * effectiveRegParam
+    val effectiveRegParam = $(regParam) / yStd
+    val effectiveL1RegParam = $(elasticNetParam) * effectiveRegParam
+    val effectiveL2RegParam = (1.0 - $(elasticNetParam)) * effectiveRegParam
 
     val costFun = new LeastSquaresCostFun(instances, yStd, yMean,
       featuresStd, featuresMean, effectiveL2RegParam)
 
-    val optimizer = if (paramMap(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
-      new BreezeLBFGS[BDV[Double]](paramMap(maxIter), 10, paramMap(tol))
+    val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
+      new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
     } else {
-      new BreezeOWLQN[Int, BDV[Double]](paramMap(maxIter), 10, effectiveL1RegParam, paramMap(tol))
+      new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, effectiveL1RegParam, $(tol))
     }
 
     val initialWeights = Vectors.zeros(numFeatures)
@@ -164,7 +170,8 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     val weights = {
       val rawWeights = state.x.toArray.clone()
       var i = 0
-      while (i < rawWeights.length) {
+      val len = rawWeights.length
+      while (i < len) {
         rawWeights(i) *= { if (featuresStd(i) != 0.0) yStd / featuresStd(i) else 0.0 }
         i += 1
       }
@@ -178,7 +185,7 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     if (handlePersistence) instances.unpersist()
 
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
-    new LinearRegressionModel(this, paramMap, weights.compressed, intercept)
+    copyValues(new LinearRegressionModel(uid, weights.compressed, intercept))
   }
 }
 
@@ -189,8 +196,7 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
  */
 @AlphaComponent
 class LinearRegressionModel private[ml] (
-    override val parent: LinearRegression,
-    override val fittingParamMap: ParamMap,
+    override val uid: String,
     val weights: Vector,
     val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
@@ -200,10 +206,8 @@ class LinearRegressionModel private[ml] (
     dot(features, weights) + intercept
   }
 
-  override protected def copy(): LinearRegressionModel = {
-    val m = new LinearRegressionModel(parent, fittingParamMap, weights, intercept)
-    Params.inheritValues(extractParamMap(), this, m)
-    m
+  override def copy(extra: ParamMap): LinearRegressionModel = {
+    copyValues(new LinearRegressionModel(uid, weights, intercept), extra)
   }
 }
 
@@ -243,7 +247,7 @@ class LinearRegressionModel private[ml] (
  *     + \bar{y} / \hat{y}||^2
  *   = 1/2n ||\sum_i w_i^\prime x_i - y / \hat{y} + offset||^2 = 1/2n diff^2
  * }}}
- * where w_i^\prime is the effective weights defined by w_i/\hat{x_i}, offset is
+ * where w_i^\prime^ is the effective weights defined by w_i/\hat{x_i}, offset is
  * {{{
  * - \sum_i (w_i/\hat{x_i})\bar{x_i} + \bar{y} / \hat{y}.
  * }}}, and diff is
@@ -307,7 +311,8 @@ private class LeastSquaresAggregator(
     val weightsArray = weights.toArray.clone()
     var sum = 0.0
     var i = 0
-    while (i < weightsArray.length) {
+    val len = weightsArray.length
+    while (i < len) {
       if (featuresStd(i) != 0.0) {
         weightsArray(i) /=  featuresStd(i)
         sum += weightsArray(i) * featuresMean(i)

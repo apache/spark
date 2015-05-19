@@ -77,7 +77,7 @@ private[sql] case class ParquetTableScan(
     }
   }.toArray
 
-  override def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[Row] = {
     import parquet.filter2.compat.FilterCompat.FilterPredicateCompat
 
     val sc = sqlContext.sparkContext
@@ -255,7 +255,7 @@ private[sql] case class InsertIntoParquetTable(
   /**
    * Inserts all rows into the Parquet file.
    */
-  override def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[Row] = {
     // TODO: currently we do not check whether the "schema"s are compatible
     // That means if one first creates a table and then INSERTs data with
     // and incompatible schema the execution will fail. It would be nice
@@ -674,7 +674,7 @@ private[parquet] object FileSystemHelper {
   def findMaxTaskId(pathStr: String, conf: Configuration): Int = {
     val files = FileSystemHelper.listFiles(pathStr, conf)
     // filename pattern is part-r-<int>.parquet
-    val nameP = new scala.util.matching.Regex("""part-r-(\d{1,}).parquet""", "taskid")
+    val nameP = new scala.util.matching.Regex("""part-.-(\d{1,}).*""", "taskid")
     val hiddenFileP = new scala.util.matching.Regex("_.*")
     files.map(_.getName).map {
       case nameP(taskid) => taskid.toInt

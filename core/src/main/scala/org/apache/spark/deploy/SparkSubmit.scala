@@ -332,6 +332,47 @@ object SparkSubmit {
       }
     }
 
+    // In yarn mode for a python app, add pyspark archives to files
+    // that can be distributed with the job
+    if (args.isPython && clusterManager == YARN) {
+      var pyArchives: String = null
+      val pyArchivesEnvOpt = sys.env.get("PYSPARK_ARCHIVES_PATH")
+      if (pyArchivesEnvOpt.isDefined) {
+        pyArchives = pyArchivesEnvOpt.get
+      } else {
+        if (!sys.env.contains("SPARK_HOME")) {
+          printErrorAndExit("SPARK_HOME does not exist for python application in yarn mode.")
+        }
+        val pythonPath = new ArrayBuffer[String]
+        for (sparkHome <- sys.env.get("SPARK_HOME")) {
+          val pyLibPath = Seq(sparkHome, "python", "lib").mkString(File.separator)
+          val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
+          if (!pyArchivesFile.exists()) {
+            printErrorAndExit("pyspark.zip does not exist for python application in yarn mode.")
+          }
+          val py4jFile = new File(pyLibPath, "py4j-0.8.2.1-src.zip")
+          if (!py4jFile.exists()) {
+            printErrorAndExit("py4j-0.8.2.1-src.zip does not exist for python application " +
+              "in yarn mode.")
+          }
+          pythonPath += pyArchivesFile.getAbsolutePath()
+          pythonPath += py4jFile.getAbsolutePath()
+        }
+        pyArchives = pythonPath.mkString(",")
+      }
+
+      pyArchives = pyArchives.split(",").map { localPath=>
+        val localURI = Utils.resolveURI(localPath)
+        if (localURI.getScheme != "local") {
+          args.files = mergeFileLists(args.files, localURI.toString)
+          new Path(localPath).getName
+        } else {
+          localURI.getPath
+        }
+      }.mkString(File.pathSeparator)
+      sysProps("spark.submit.pyArchives") = pyArchives
+    }
+
     // If we're running a R app, set the main class to our specific R runner
     if (args.isR && deployMode == CLIENT) {
       if (args.primaryResource == SPARKR_SHELL) {
@@ -701,7 +742,7 @@ object SparkSubmit {
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */
-private[deploy] object SparkSubmitUtils {
+private[spark] object SparkSubmitUtils {
 
   // Exposed for testing
   var printStream = SparkSubmit.printStream

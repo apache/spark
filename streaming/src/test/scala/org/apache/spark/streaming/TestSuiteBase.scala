@@ -73,9 +73,11 @@ class TestInputStream[T: ClassTag](ssc_ : StreamingContext, input: Seq[Seq[T]], 
  *
  * The buffer contains a sequence of RDD's, each containing a sequence of items
  */
-class TestOutputStream[T: ClassTag](parent: DStream[T],
-    val output: ArrayBuffer[Seq[T]] = ArrayBuffer[Seq[T]]())
-  extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
+class TestOutputStream[T: ClassTag](
+    parent: DStream[T],
+    val output: SynchronizedBuffer[Seq[T]] =
+      new ArrayBuffer[Seq[T]] with SynchronizedBuffer[Seq[T]]
+  ) extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.collect()
     output += collected
   }) {
@@ -95,8 +97,10 @@ class TestOutputStream[T: ClassTag](parent: DStream[T],
  * The buffer contains a sequence of RDD's, each containing a sequence of partitions, each
  * containing a sequence of items.
  */
-class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
-    val output: ArrayBuffer[Seq[Seq[T]]] = ArrayBuffer[Seq[Seq[T]]]())
+class TestOutputStreamWithPartitions[T: ClassTag](
+    parent: DStream[T],
+    val output: SynchronizedBuffer[Seq[Seq[T]]] =
+      new ArrayBuffer[Seq[Seq[T]]] with SynchronizedBuffer[Seq[Seq[T]]])
   extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.glom().collect().map(_.toSeq)
     output += collected
@@ -107,10 +111,6 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     ois.defaultReadObject()
     output.clear()
-  }
-
-  def toTestOutputStream: TestOutputStream[T] = {
-    new TestOutputStream[T](this.parent, this.output.map(_.flatten))
   }
 }
 
@@ -145,6 +145,40 @@ class BatchCounter(ssc: StreamingContext) {
 
   def getNumStartedBatches: Int = this.synchronized {
     numStartedBatches
+  }
+
+  /**
+   * Wait until `expectedNumCompletedBatches` batches are completed, or timeout. Return true if
+   * `expectedNumCompletedBatches` batches are completed. Otherwise, return false to indicate it's
+   * timeout.
+   *
+   * @param expectedNumCompletedBatches the `expectedNumCompletedBatches` batches to wait
+   * @param timeout the maximum time to wait in milliseconds.
+   */
+  def waitUntilBatchesCompleted(expectedNumCompletedBatches: Int, timeout: Long): Boolean =
+    waitUntilConditionBecomeTrue(numCompletedBatches >= expectedNumCompletedBatches, timeout)
+
+  /**
+   * Wait until `expectedNumStartedBatches` batches are completed, or timeout. Return true if
+   * `expectedNumStartedBatches` batches are completed. Otherwise, return false to indicate it's
+   * timeout.
+   *
+   * @param expectedNumStartedBatches the `expectedNumStartedBatches` batches to wait
+   * @param timeout the maximum time to wait in milliseconds.
+   */
+  def waitUntilBatchesStarted(expectedNumStartedBatches: Int, timeout: Long): Boolean =
+    waitUntilConditionBecomeTrue(numStartedBatches >= expectedNumStartedBatches, timeout)
+
+  private def waitUntilConditionBecomeTrue(condition: => Boolean, timeout: Long): Boolean = {
+    synchronized {
+      var now = System.currentTimeMillis()
+      val timeoutTick = now + timeout
+      while (!condition && timeoutTick > now) {
+        wait(timeoutTick - now)
+        now = System.currentTimeMillis()
+      }
+      condition
+    }
   }
 }
 
@@ -391,12 +425,21 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
     logInfo("--------------------------------")
 
     // Match the output with the expected output
-    assert(output.size === expectedOutput.size, "Number of outputs do not match")
     for (i <- 0 until output.size) {
       if (useSet) {
-        assert(output(i).toSet === expectedOutput(i).toSet)
+        assert(
+          output(i).toSet === expectedOutput(i).toSet,
+          s"Set comparison failed\n" +
+            s"Expected output (${expectedOutput.size} items):\n${expectedOutput.mkString("\n")}\n" +
+            s"Generated output (${output.size} items): ${output.mkString("\n")}"
+        )
       } else {
-        assert(output(i).toList === expectedOutput(i).toList)
+        assert(
+          output(i).toList === expectedOutput(i).toList,
+          s"Ordered list comparison failed\n" +
+            s"Expected output (${expectedOutput.size} items):\n${expectedOutput.mkString("\n")}\n" +
+            s"Generated output (${output.size} items): ${output.mkString("\n")}"
+        )
       }
     }
     logInfo("Output verified successfully")
