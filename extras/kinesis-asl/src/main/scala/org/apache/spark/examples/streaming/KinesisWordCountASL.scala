@@ -119,7 +119,8 @@ object KinesisWordCountASL extends Logging {
     val batchInterval = Milliseconds(2000)
 
     // Kinesis checkpoint interval is the interval at which the DynamoDB is updated with information
-    //on sequence number of records that have been received. Same as batchInterval for this example.
+    // on sequence number of records that have been received. Same as batchInterval for this 
+    // example.
     val kinesisCheckpointInterval = batchInterval
 
     // Get the region name from the endpoint URL to save Kinesis Client Library metadata in
@@ -173,7 +174,8 @@ object KinesisWordProducerASL {
     if (args.length != 4) {
       System.err.println(
         """
-          |Usage: KinesisWordProducerASL <stream-name> <endpoint-url> <records-per-sec> <words-per-record>
+          |Usage: KinesisWordProducerASL <stream-name> <endpoint-url> <records-per-sec>
+                                         <words-per-record>
           |
           |    <stream-name> is the name of the Kinesis stream
           |    <endpoint-url> is the endpoint of the Kinesis service
