@@ -69,7 +69,8 @@ class GroupedData protected[sql](
     df: DataFrame,
     groupingExprs: Seq[Expression],
     private val groupType: GroupedData.GroupType) {
-  private[sql] implicit def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
+
+  private[this] def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
     val aggregates = if (df.sqlContext.conf.dataFrameRetainGroupColumns) {
         val retainedExprs = groupingExprs.map {
           case expr: NamedExpression => expr
@@ -94,7 +95,7 @@ class GroupedData protected[sql](
   }
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => Expression)
-    : Seq[NamedExpression] = {
+    : DataFrame = {
 
     val columnExprs = if (colNames.isEmpty) {
       // No columns specified. Use all numeric columns.
@@ -111,10 +112,10 @@ class GroupedData protected[sql](
         namedExpr
       }
     }
-    columnExprs.map { c =>
+    toDF(columnExprs.map { c =>
       val a = f(c)
       Alias(a, a.prettyString)()
-    }
+    })
   }
 
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
@@ -167,10 +168,10 @@ class GroupedData protected[sql](
    * @since 1.3.0
    */
   def agg(exprs: Map[String, String]): DataFrame = {
-    exprs.map { case (colName, expr) =>
+    toDF(exprs.map { case (colName, expr) =>
       val a = strToExpr(expr)(df(colName).expr)
       Alias(a, a.prettyString)()
-    }.toSeq
+    }.toSeq)
   }
 
   /**
@@ -223,10 +224,10 @@ class GroupedData protected[sql](
    */
   @scala.annotation.varargs
   def agg(expr: Column, exprs: Column*): DataFrame = {
-    (expr +: exprs).map(_.expr).map {
+    toDF((expr +: exprs).map(_.expr).map {
       case expr: NamedExpression => expr
       case expr: Expression => Alias(expr, expr.prettyString)()
-    }
+    })
   }
 
   /**
@@ -235,7 +236,7 @@ class GroupedData protected[sql](
    *
    * @since 1.3.0
    */
-  def count(): DataFrame = Seq(Alias(Count(Literal(1)), "count")())
+  def count(): DataFrame = toDF(Seq(Alias(Count(Literal(1)), "count")()))
 
   /**
    * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
