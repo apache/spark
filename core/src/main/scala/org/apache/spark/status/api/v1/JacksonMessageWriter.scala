@@ -38,7 +38,7 @@ import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
  * Note that jersey automatically discovers this class based on its package and its annotations.
  */
 @Provider
-@Produces(Array(MediaType.APPLICATION_JSON, MediaType.APPLICATION_OCTET_STREAM))
+@Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class JacksonMessageWriter extends MessageBodyWriter[Object]{
 
   val mapper = new ObjectMapper() {
@@ -69,8 +69,6 @@ private[v1] class JacksonMessageWriter extends MessageBodyWriter[Object]{
       outputStream: OutputStream): Unit = {
     t match {
       case ErrorWrapper(err) => outputStream.write(err.getBytes())
-      case downloader @ EventLogDownloadResource(_) =>
-        downloader.getEventLogs(multivaluedMap, outputStream)
       case _ => mapper.writeValue(outputStream, t)
     }
   }
