@@ -30,6 +30,8 @@ class DataFrameReader(object):
     to access this.
 
     ::Note: Experimental
+
+    .. versionadded:: 1.4
     """
 
     def __init__(self, sqlContext):
@@ -178,6 +180,8 @@ class DataFrameWriter(object):
     to access this.
 
     ::Note: Experimental
+
+    .. versionadded:: 1.4
     """
     def __init__(self, df):
         self._df = df

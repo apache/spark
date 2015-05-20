@@ -47,6 +47,8 @@ class GroupedData(object):
     """
     A set of methods for aggregations on a :class:`DataFrame`,
     created by :func:`DataFrame.groupBy`.
+
+    .. versionadded:: 1.3
     """
 
     def __init__(self, jdf, sql_ctx):

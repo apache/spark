@@ -29,6 +29,7 @@ from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
+from pyspark.sql import since
 from pyspark.sql.types import _create_cls, _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
@@ -60,6 +61,8 @@ class DataFrame(object):
 
         people.filter(people.age > 30).join(department, people.deptId == department.id)) \
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
+
+    .. versionadded:: 1.3
     """
 
     def __init__(self, jdf, sql_ctx):
@@ -94,6 +97,7 @@ class DataFrame(object):
         return DataFrameNaFunctions(self)
 
     @property
+    @since(1.4)
     def stat(self):
         """Returns a :class:`DataFrameStatFunctions` for statistic functions.
         """
@@ -187,6 +191,7 @@ class DataFrame(object):
         return self.write.save(path, source, mode, **options)
 
     @property
+    @since(1.4)
     def write(self):
         """
         Interface for saving the content of the :class:`DataFrame` out
@@ -194,7 +199,7 @@ class DataFrame(object):
 
         :return :class:`DataFrameWriter`
 
-        ::note: Experimental
+        .. note:: Experimental
 
         >>> df.write
         <pyspark.sql.readwriter.DataFrameWriter object at ...>
@@ -398,6 +403,7 @@ class DataFrame(object):
         self._jdf.unpersist(blocking)
         return self
 
+    @since(1.4)
     def coalesce(self, numPartitions):
         """
         Returns a new :class:`DataFrame` that has exactly `numPartitions` partitions.
@@ -439,6 +445,7 @@ class DataFrame(object):
         rdd = self._jdf.sample(withReplacement, fraction, long(seed))
         return DataFrame(rdd, self.sql_ctx)
 
+    @since(1.4)
     def randomSplit(self, weights, seed=None):
         """Randomly splits this :class:`DataFrame` with the provided weights.
 
@@ -791,6 +798,7 @@ class DataFrame(object):
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
 
+    @since(1.4)
     def dropDuplicates(self, subset=None):
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only considering certain columns.
@@ -924,6 +932,7 @@ class DataFrame(object):
 
             return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
 
+    @since(1.4)
     def replace(self, to_replace, value, subset=None):
         """Returns a new :class:`DataFrame` replacing a value with another value.
 
@@ -999,6 +1008,7 @@ class DataFrame(object):
         return DataFrame(
             self._jdf.na().replace(self._jseq(subset), self._jmap(rep_dict)), self.sql_ctx)
 
+    @since(1.4)
     def corr(self, col1, col2, method=None):
         """
         Calculates the correlation of two columns of a DataFrame as a double value. Currently only
@@ -1020,6 +1030,7 @@ class DataFrame(object):
                              "coefficient is supported.")
         return self._jdf.stat().corr(col1, col2, method)
 
+    @since(1.4)
     def cov(self, col1, col2):
         """
         Calculate the sample covariance for the given columns, specified by their names, as a
@@ -1034,6 +1045,7 @@ class DataFrame(object):
             raise ValueError("col2 should be a string.")
         return self._jdf.stat().cov(col1, col2)
 
+    @since(1.4)
     def crosstab(self, col1, col2):
         """
         Computes a pair-wise frequency table of the given columns. Also known as a contingency
@@ -1055,6 +1067,7 @@ class DataFrame(object):
             raise ValueError("col2 should be a string.")
         return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sql_ctx)
 
+    @since(1.4)
     def freqItems(self, cols, support=None):
         """
         Finding frequent items for columns, possibly with false positives. Using the
@@ -1102,6 +1115,7 @@ class DataFrame(object):
                 for c in self.columns]
         return self.select(*cols)
 
+    @since(1.4)
     @ignore_unicode_prefix
     def drop(self, colName):
         """Returns a new :class:`DataFrame` that drops the specified column.

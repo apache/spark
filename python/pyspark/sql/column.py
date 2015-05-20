@@ -23,6 +23,7 @@ if sys.version >= '3':
 
 from pyspark.context import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
+from pyspark.sql import since
 from pyspark.sql.types import *
 
 __all__ = ["DataFrame", "Column", "SchemaRDD", "DataFrameNaFunctions",
@@ -114,6 +115,8 @@ class Column(object):
         # 2. Create from an expression
         df.colName + 1
         1 / df.colName
+
+    .. versionadded:: 1.3
     """
 
     def __init__(self, jc):
@@ -301,6 +304,7 @@ class Column(object):
         return (self >= lowerBound) & (self <= upperBound)
 
     @ignore_unicode_prefix
+    @since(1.4)
     def when(self, condition, value):
         """Evaluates a list of conditions and returns one of multiple possible result expressions.
         If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
@@ -319,6 +323,7 @@ class Column(object):
         return Column(jc)
 
     @ignore_unicode_prefix
+    @since(1.4)
     def otherwise(self, value):
         """Evaluates a list of conditions and returns one of multiple possible result expressions.
         If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
