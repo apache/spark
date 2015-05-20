@@ -377,9 +377,14 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
     def refresh(): Unit = {
       def listLeafFilesAndDirs(fs: FileSystem, status: FileStatus): Set[FileStatus] = {
-        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
-        val leafDirs = if (dirs.isEmpty) Set(status) else Set.empty[FileStatus]
-        files.toSet ++ leafDirs ++ dirs.flatMap(dir => listLeafFilesAndDirs(fs, dir))
+        def recurse(status: FileStatus): Set[FileStatus] = {
+          val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
+          val leafDirs = if (dirs.isEmpty) Set(status) else Set.empty[FileStatus]
+          files.toSet ++ leafDirs ++ dirs.flatMap(dir => recurse(dir))
+        }
+
+        val (childDirs, childFiles) = fs.listStatus(status.getPath).partition(_.isDir)
+        childFiles.toSet ++ childDirs.flatMap(recurse)
       }
 
       leafDirs.clear()
