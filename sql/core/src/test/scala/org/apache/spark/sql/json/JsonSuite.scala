@@ -25,7 +25,6 @@ import org.scalactic.Tolerance._
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.util.DateUtils
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.json.InferSchema.compatibleType
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.test.TestSQLContext
@@ -1072,6 +1071,18 @@ class JsonSuite extends QueryTest {
     // This is really a test that it doesn't throw an exception
     val emptySchema = InferSchema(empty, 1.0, "")
     assert(StructType(Seq()) === emptySchema)
+  }
+
+  test("SPARK-7565 MapType in JsonRDD") {
+    val schemaWithSimpleMap = StructType(
+      StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
+    val df = read.schema(schemaWithSimpleMap).json(mapType1)
+    val temp = Utils.createTempDir()
+    df.write.mode("overwrite").parquet(temp.getPath)
+
+    setConf("spark.sql.json.useJacksonStreamingAPI", "false")
+    val df2 = read.schema(schemaWithSimpleMap).json(mapType1)
+    df2.write.mode("overwrite").parquet(temp.getPath)
   }
 
 }

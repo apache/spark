@@ -512,28 +512,6 @@ class SQLTests(ReusedPySparkTestCase):
 
         shutil.rmtree(tmpPath)
 
-    def test_json_with_map(self):
-        # regression test for SPARK-7565
-        tmpPath = tempfile.mkdtemp()
-        shutil.rmtree(tmpPath)
-        rdd = self.sc.parallelize(['{"obj": {"a": "hello"}}', '{"obj": {"b": "world"}}'], 1)
-        schema = StructType([StructField("obj", MapType(StringType(), StringType()), True)])
-        df = self.sqlCtx.jsonRDD(rdd, schema)
-        rs = [({'a': 'hello'},), ({'b': 'world'},)]
-        self.assertEqual(rs, list(map(tuple, df.collect())))
-        df.write.parquet(tmpPath)
-        df2 = self.sqlCtx.read.parquet(tmpPath)
-        self.assertEqual(rs, list(map(tuple, df2.collect())))
-
-        self.sqlCtx.setConf("spark.sql.json.useJacksonStreamingAPI", "false")
-        df3 = self.sqlCtx.jsonRDD(rdd, schema)
-        self.assertEqual(rs, list(map(tuple, df3.collect())))
-        rs = list(map(tuple, df.collect()))
-        df.write.parquet(tmpPath, 'overwrite')
-        df4 = self.sqlCtx.read.parquet(tmpPath)
-        self.assertEqual(rs, list(map(tuple, df4.collect())))
-        shutil.rmtree(tmpPath)
-
     def test_help_command(self):
         # Regression test for SPARK-5464
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
