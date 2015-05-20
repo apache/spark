@@ -17,7 +17,7 @@
 
 package org.apache.spark.unsafe.memory;
 
-import java.lang.ref.SoftReference;
+import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
@@ -40,8 +40,8 @@ public class ExecutorMemoryManager {
   final boolean inHeap;
 
   @GuardedBy("this")
-  private final Map<Long, LinkedList<SoftReference<MemoryBlock>>> bufferPoolsBySize =
-    new HashMap<Long, LinkedList<SoftReference<MemoryBlock>>>();
+  private final Map<Long, LinkedList<WeakReference<MemoryBlock>>> bufferPoolsBySize =
+    new HashMap<Long, LinkedList<WeakReference<MemoryBlock>>>();
 
   private static final int POOLING_THRESHOLD_BYTES = 1024 * 1024;
 
@@ -73,10 +73,10 @@ public class ExecutorMemoryManager {
   MemoryBlock allocate(long size) throws OutOfMemoryError {
     if (shouldPool(size)) {
       synchronized (this) {
-        final LinkedList<SoftReference<MemoryBlock>> pool = bufferPoolsBySize.get(size);
+        final LinkedList<WeakReference<MemoryBlock>> pool = bufferPoolsBySize.get(size);
         if (pool != null) {
           while (!pool.isEmpty()) {
-            final SoftReference<MemoryBlock> blockReference = pool.pop();
+            final WeakReference<MemoryBlock> blockReference = pool.pop();
             final MemoryBlock memory = blockReference.get();
             if (memory != null) {
               assert (memory.size() == size);
@@ -96,12 +96,12 @@ public class ExecutorMemoryManager {
     final long size = memory.size();
     if (shouldPool(size)) {
       synchronized (this) {
-        LinkedList<SoftReference<MemoryBlock>> pool = bufferPoolsBySize.get(size);
+        LinkedList<WeakReference<MemoryBlock>> pool = bufferPoolsBySize.get(size);
         if (pool == null) {
-          pool = new LinkedList<SoftReference<MemoryBlock>>();
+          pool = new LinkedList<WeakReference<MemoryBlock>>();
           bufferPoolsBySize.put(size, pool);
         }
-        pool.add(new SoftReference<MemoryBlock>(memory));
+        pool.add(new WeakReference<MemoryBlock>(memory));
       }
     } else {
       allocator.free(memory);
