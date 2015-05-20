@@ -41,7 +41,7 @@ import org.apache.spark.util.{ManualClock, Utils}
 private[streaming] class DummyDStream(ssc: StreamingContext) extends DStream[Int](ssc) {
   override def dependencies: List[DStream[Int]] = List.empty
   override def slideDuration: Duration = Seconds(1)
-  override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.parallelize(1 to 10))
+  override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.emptyRDD[Int])
 }
 
 /**
@@ -50,7 +50,7 @@ private[streaming] class DummyDStream(ssc: StreamingContext) extends DStream[Int
 private[streaming] class DummyInputDStream(ssc: StreamingContext) extends InputDStream[Int](ssc) {
   override def start(): Unit = { }
   override def stop(): Unit = { }
-  override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.parallelize(1 to 10))
+  override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.emptyRDD[Int])
 }
 
 /**
