@@ -173,18 +173,35 @@ public final class BytesToBytesMap {
   public Iterator<Location> iterator() {
     return new Iterator<Location>() {
 
-      private int nextPos = bitset.nextSetBit(0);
+      private int cur = 0;
+
+      private int pageCur = 0;
+
+      private MemoryBlock currentPage;
+
+      private long addr;
 
       @Override
       public boolean hasNext() {
-        return nextPos != -1;
+        return cur != size;
       }
 
       @Override
       public Location next() {
-        final int pos = nextPos;
-        nextPos = bitset.nextSetBit(nextPos + 1);
-        return loc.with(pos, 0, true);
+        if (currentPage == null) {
+          currentPage = dataPages.get(pageCur++);
+          addr = currentPage.getBaseOffset();
+        }
+        long keySize = PlatformDependent.UNSAFE.getLong(memoryManager.getPage(addr), addr);
+        if (keySize == -1L) {
+          currentPage = dataPages.get(pageCur++);
+          addr = currentPage.getBaseOffset();
+        }
+        loc.with(addr, true);
+        addr += keySize + 8;
+        addr += PlatformDependent.UNSAFE.getLong(memoryManager.getPage(addr), addr) + 8;
+        cur++;
+        return loc;
       }
 
       @Override
@@ -291,6 +308,14 @@ public final class BytesToBytesMap {
       return this;
     }
 
+    Location with(long fullKeyAddress, boolean isDefined) {
+      this.isDefined = isDefined;
+      if (isDefined) {
+        updateAddressesAndSizes(fullKeyAddress);
+      }
+      return this;
+    }
+
     /**
      * Returns true if the key is defined at this position, and false otherwise.
      */
@@ -380,7 +405,13 @@ public final class BytesToBytesMap {
       bitset.set(pos);
 
       // If there's not enough space in the current page, allocate a new page:
-      if (currentDataPage == null || PAGE_SIZE_BYTES - pageCursor < requiredSize) {
+      if (currentDataPage == null || PAGE_SIZE_BYTES - pageCursor - 8 < requiredSize) {
+        if (currentDataPage != null) {
+          final Object pageBaseObject = currentDataPage.getBaseObject();
+          final long pageBaseOffset = currentDataPage.getBaseOffset();
+          final long lengthOffsetInPage = pageBaseOffset + pageCursor;
+          PlatformDependent.UNSAFE.putLong(pageBaseObject, lengthOffsetInPage, -1L);
+        }
         MemoryBlock newPage = memoryManager.allocatePage(PAGE_SIZE_BYTES);
         dataPages.add(newPage);
         pageCursor = 0;
