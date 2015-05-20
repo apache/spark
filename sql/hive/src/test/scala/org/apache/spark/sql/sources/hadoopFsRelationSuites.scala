@@ -444,6 +444,23 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       checkAnswer(df, partitionedTestDF.collect())
     }
   }
+
+  test("Partition column type casting") {
+    withTempPath { file =>
+      val input = partitionedTestDF.select('a, 'b, 'p1.cast(StringType).as('ps), 'p2)
+
+      input
+        .write
+        .format(dataSourceName)
+        .mode(SaveMode.Overwrite)
+        .partitionBy("ps", "p2")
+        .saveAsTable("t")
+
+      withTempTable("t") {
+        checkAnswer(table("t"), input.collect())
+      }
+    }
+  }
 }
 
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {

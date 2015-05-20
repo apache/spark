@@ -670,6 +670,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     catalog.createDataSourceTable(
       tableName = "wide_schema",
       userSpecifiedSchema = Some(schema),
+      partitionColumns = Array.empty[String],
       provider = "json",
       options = Map("path" -> "just a dummy path"),
       isExternal = false)
@@ -705,6 +706,48 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     sql(s"drop table $tableName")
   }
 
+  test("Saving partition columns information") {
+    val tableName = "t"
+    val expectedSchema = StructType(
+      Seq(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", DoubleType, nullable = false),
+        StructField("c", StringType, nullable = true)))
+
+    // Partition columns should always be nullable
+    val expectedPartitionColumns = StructType(
+      Seq(
+        StructField("b", DoubleType, nullable = true),
+        StructField("c", StringType, nullable = true)))
+
+    catalog.client.createTable(
+      HiveTable(
+        specifiedDatabase = Some("default"),
+        name = tableName,
+        schema = Seq.empty,
+        partitionColumns = Seq.empty,
+        properties = Map(
+          "spark.sql.sources.provider" -> "parquet",
+          "spark.sql.sources.schema" -> expectedSchema.json,
+          "EXTERNAL" -> "FALSE",
+          "spark.sql.sources.schema.partitionColumns.count" -> "2",
+          "spark.sql.sources.schema.partitionColumns.0" -> "b",
+          "spark.sql.sources.schema.partitionColumns.1" -> "c"),
+        tableType = ManagedTable,
+        serdeProperties = Map(
+          "path" -> catalog.hiveDefaultTableFilePath(tableName))))
+
+    invalidateTable(tableName)
+
+    // Comparing without nullability, since partition columns are always nullable
+    assert(table(tableName).schema.asNullable === expectedSchema.asNullable)
+    assertResult(expectedPartitionColumns) {
+      table(tableName).queryExecution.analyzed.collectFirst {
+        case LogicalRelation(relation: ParquetRelation2) =>
+          relation.partitionColumns
+      }.get
+    }
+  }
 
   test("insert into a table") {
     def createDF(from: Int, to: Int): DataFrame =

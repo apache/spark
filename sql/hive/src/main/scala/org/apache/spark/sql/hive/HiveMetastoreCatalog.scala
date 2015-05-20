@@ -66,11 +66,11 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         def schemaStringFromParts: Option[String] = {
           table.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
             val parts = (0 until numParts.toInt).map { index =>
-              val part = table.properties.get(s"spark.sql.sources.schema.part.${index}").orNull
+              val part = table.properties.get(s"spark.sql.sources.schema.part.$index").orNull
               if (part == null) {
                 throw new AnalysisException(
-                  s"Could not read schema from the metastore because it is corrupted " +
-                  s"(missing part ${index} of the schema).")
+                  "Could not read schema from the metastore because it is corrupted " +
+                    s"(missing part $index of the schema, $numParts parts are expected).")
               }
 
               part
@@ -89,6 +89,20 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         val userSpecifiedSchema =
           schemaString.map(s => DataType.fromJson(s).asInstanceOf[StructType])
 
+        val partitionColumns = {
+          // Versions earlier than 1.4.0 don't have this property.
+          val count = table.properties.getOrElse(
+            "spark.sql.sources.schema.partitionColumns.count", "0").toInt
+          (0 until count).map { index =>
+            table.properties.getOrElse(
+              s"spark.sql.sources.schema.partitionColumns.$index",
+              throw new AnalysisException(
+                s"Expecting $count partition columns, " +
+                  "but could not find partition column #$index from the metastore")
+            )
+          }
+        }
+
         // It does not appear that the ql client for the metastore has a way to enumerate all the
         // SerDe properties directly...
         val options = table.serdeProperties
@@ -97,7 +111,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           ResolvedDataSource(
             hive,
             userSpecifiedSchema,
-            Array.empty[String],
+            partitionColumns.toArray,
             table.properties("spark.sql.sources.provider"),
             options)
 
@@ -111,8 +125,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
   override def refreshTable(databaseName: String, tableName: String): Unit = {
     // refreshTable does not eagerly reload the cache. It just invalidate the cache.
     // Next time when we use the table, it will be populated in the cache.
-    // Since we also cache ParquetRealtions converted from Hive Parquet tables and
-    // adding converted ParquetRealtions into the cache is not defined in the load function
+    // Since we also cache ParquetRelations converted from Hive Parquet tables and
+    // adding converted ParquetRelations into the cache is not defined in the load function
     // of the cache (instead, we add the cache entry in convertToParquetRelation),
     // it is better at here to invalidate the cache to avoid confusing waring logs from the
     // cache loader (e.g. cannot find data source provider, which is only defined for
@@ -133,12 +147,17 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
   def createDataSourceTable(
       tableName: String,
       userSpecifiedSchema: Option[StructType],
+      partitionColumns: Array[String],
       provider: String,
       options: Map[String, String],
       isExternal: Boolean): Unit = {
     val (dbName, tblName) = processDatabaseAndTableName("default", tableName)
     val tableProperties = new scala.collection.mutable.HashMap[String, String]
     tableProperties.put("spark.sql.sources.provider", provider)
+
+    // Saves optional user specified schema.  Serialized JSON schema string may be too long to be
+    // stored into a single metastore SerDe property.  In this case, we split the JSON string and
+    // store each part as a separate SerDe property.
     if (userSpecifiedSchema.isDefined) {
       val threshold = conf.schemaStringLengthThreshold
       val schemaJsonString = userSpecifiedSchema.get.json
@@ -146,8 +165,23 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       val parts = schemaJsonString.grouped(threshold).toSeq
       tableProperties.put("spark.sql.sources.schema.numParts", parts.size.toString)
       parts.zipWithIndex.foreach { case (part, index) =>
-        tableProperties.put(s"spark.sql.sources.schema.part.${index}", part)
+        tableProperties.put(s"spark.sql.sources.schema.part.$index", part)
       }
+    }
+
+    // Saves partition columns into table properties.  Two things to note:
+    //
+    //  1. We save each column as a single property since column names may contain arbitrary
+    //     characters (i.e., in back-quoted column names).
+    //
+    //  2. We are not saving partition columns as standard Hive partition columns here, because
+    //     partition columns of a Spark SQL data source relation are not quite the same as standard
+    //     Hive partition columns.  For example, the former only supports dynamic partitions.
+    tableProperties.put(
+      "spark.sql.sources.schema.partitionColumns.count",
+      partitionColumns.length.toString)
+    partitionColumns.zipWithIndex.foreach { case (column, index) =>
+      tableProperties.put(s"spark.sql.sources.schema.partitionColumns.$index", column)
     }
 
     val tableType = if (isExternal) {
@@ -199,7 +233,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       val dataSourceTable =
         cachedDataSourceTables(QualifiedTableName(databaseName, tblName).toLowerCase)
       // Then, if alias is specified, wrap the table with a Subquery using the alias.
-      // Othersie, wrap the table with a Subquery using the table name.
+      // Otherwise, wrap the table with a Subquery using the table name.
       val withAlias =
         alias.map(a => Subquery(a, dataSourceTable)).getOrElse(
           Subquery(tableIdent.last, dataSourceTable))

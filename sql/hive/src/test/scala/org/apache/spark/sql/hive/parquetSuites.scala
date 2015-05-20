@@ -386,9 +386,9 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
   }
 
   test("Caching converted data source Parquet Relations") {
-    def checkCached(tableIdentifer: catalog.QualifiedTableName): Unit = {
+    def checkCached(tableIdentifier: catalog.QualifiedTableName): Unit = {
       // Converted test_parquet should be cached.
-      catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) match {
+      catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) match {
         case null => fail("Converted test_parquet should be cached in the cache.")
         case logical @ LogicalRelation(parquetRelation: ParquetRelation2) => // OK
         case other =>
@@ -414,30 +414,30 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
         |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
       """.stripMargin)
 
-    var tableIdentifer = catalog.QualifiedTableName("default", "test_insert_parquet")
+    var tableIdentifier = catalog.QualifiedTableName("default", "test_insert_parquet")
 
     // First, make sure the converted test_parquet is not cached.
-    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
     // Table lookup will make the table cached.
     table("test_insert_parquet")
-    checkCached(tableIdentifer)
+    checkCached(tableIdentifier)
     // For insert into non-partitioned table, we will do the conversion,
     // so the converted test_insert_parquet should be cached.
     invalidateTable("test_insert_parquet")
-    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
     sql(
       """
         |INSERT INTO TABLE test_insert_parquet
         |select a, b from jt
       """.stripMargin)
-    checkCached(tableIdentifer)
+    checkCached(tableIdentifier)
     // Make sure we can read the data.
     checkAnswer(
       sql("select * from test_insert_parquet"),
       sql("select a, b from jt").collect())
     // Invalidate the cache.
     invalidateTable("test_insert_parquet")
-    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
 
     // Create a partitioned table.
     sql(
@@ -454,8 +454,8 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
         |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
       """.stripMargin)
 
-    tableIdentifer = catalog.QualifiedTableName("default", "test_parquet_partitioned_cache_test")
-    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    tableIdentifier = catalog.QualifiedTableName("default", "test_parquet_partitioned_cache_test")
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
     sql(
       """
         |INSERT INTO TABLE test_parquet_partitioned_cache_test
@@ -464,18 +464,18 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
       """.stripMargin)
     // Right now, insert into a partitioned Parquet is not supported in data source Parquet.
     // So, we expect it is not cached.
-    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
     sql(
       """
         |INSERT INTO TABLE test_parquet_partitioned_cache_test
         |PARTITION (date='2015-04-02')
         |select a, b from jt
       """.stripMargin)
-    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
 
     // Make sure we can cache the partitioned table.
     table("test_parquet_partitioned_cache_test")
-    checkCached(tableIdentifer)
+    checkCached(tableIdentifier)
     // Make sure we can read the data.
     checkAnswer(
       sql("select STRINGField, date, intField from test_parquet_partitioned_cache_test"),
@@ -487,7 +487,7 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
         """.stripMargin).collect())
 
     invalidateTable("test_parquet_partitioned_cache_test")
-    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
 
     sql("DROP TABLE test_insert_parquet")
     sql("DROP TABLE test_parquet_partitioned_cache_test")

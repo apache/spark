@@ -120,11 +120,13 @@ trait HadoopFsRelationProvider {
    * Returns a new base relation with the given parameters, a user defined schema, and a list of
    * partition columns. Note: the parameters' keywords are case insensitive and this insensitivity
    * is enforced by the Map that is passed to the function.
+   *
+   * @param dataSchema Schema of data columns (i.e., columns that are not partition columns).
    */
   def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
-      schema: Option[StructType],
+      dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation
 }
@@ -416,8 +418,27 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   final private[sql] def partitionSpec: PartitionSpec = {
     if (_partitionSpec == null) {
       _partitionSpec = maybePartitionSpec
-        .map(spec => spec.copy(partitionColumns = spec.partitionColumns.asNullable))
-        .orElse(userDefinedPartitionColumns.map(PartitionSpec(_, Array.empty[Partition])))
+        .flatMap {
+          case spec if spec.partitions.nonEmpty =>
+            Some(spec.copy(partitionColumns = spec.partitionColumns.asNullable))
+          case _ =>
+            None
+        }
+        .orElse {
+          userDefinedPartitionColumns.map { partitionSchema =>
+            val spec = discoverPartitions()
+            val castedPartitions = spec.partitions.map { case p @ Partition(values, path) =>
+              val literals = values.toSeq.zip(spec.partitionColumns.map(_.dataType)).map {
+                case (value, dataType) => Literal.create(value, dataType)
+              }
+              val castedValues = partitionSchema.zip(literals).map { case (field, literal) =>
+                Cast(literal, field.dataType).eval()
+              }
+              p.copy(values = Row.fromSeq(castedValues))
+            }
+            PartitionSpec(partitionSchema, castedPartitions)
+          }
+        }
         .getOrElse {
           if (sqlContext.conf.partitionDiscoveryEnabled()) {
             discoverPartitions()

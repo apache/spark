@@ -245,12 +245,13 @@ private[sql] object ResolvedDataSource {
             SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray
           }
 
-          val dataSchema = StructType(schema.filterNot(f => partitionColumns.contains(f.name)))
+          val dataSchema =
+            StructType(schema.filterNot(f => partitionColumns.contains(f.name))).asNullable
 
           dataSource.createRelation(
             sqlContext,
             paths,
-            Some(schema),
+            Some(dataSchema),
             maybePartitionsSchema,
             caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.RelationProvider =>
