@@ -27,6 +27,16 @@ import org.apache.spark.rdd.RDD
  * :: Experimental ::
  * Kernel density estimation. Given a sample from a population, estimate its probability density
  * function at each of the given evaluation points using kernels. Only Gaussian kernel is supported.
+ *
+ * Scala example:
+ *
+ * {{{
+ * val sample = sc.parallelize(Seq(0.0, 1.0, 4.0, 4.0))
+ * val kd = new KernelDensity()
+ *   .setSample(sample)
+ *   .setBandwidth(3.0)
+ * val densities = kd.estimate(Array(-1.0, 2.0, 5.0))
+ * }}}
  */
 @Experimental
 class KernelDensity extends Serializable {
@@ -40,7 +50,7 @@ class KernelDensity extends Serializable {
   private var sample: RDD[Double] = _
 
   /**
-   * Sets bandwidth of the Gaussian kernel.
+   * Sets the bandwidth (standard deviation) of the Gaussian kernel (default: `1.0`).
    */
   def setBandwidth(bandwidth: Double): this.type = {
     require(bandwidth > 0, s"Bandwidth must be positive, but got $bandwidth.")
