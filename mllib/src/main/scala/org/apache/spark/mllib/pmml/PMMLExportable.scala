@@ -23,7 +23,7 @@ import javax.xml.transform.stream.StreamResult
 import org.jpmml.model.JAXBUtil
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.mllib.pmml.export.PMMLModelExportFactory
 
 /**
@@ -44,30 +44,38 @@ trait PMMLExportable {
   }
 
   /**
+   * :: Experimental ::
    * Export the model to a local file in PMML format
    */
+  @Experimental
   def toPMML(localPath: String): Unit = {
     toPMML(new StreamResult(new File(localPath)))
   }
 
   /**
+   * :: Experimental ::
    * Export the model to a directory on a distributed file system in PMML format
    */
+  @Experimental
   def toPMML(sc: SparkContext, path: String): Unit = {
     val pmml = toPMML()
     sc.parallelize(Array(pmml), 1).saveAsTextFile(path)
   }
 
   /**
+   * :: Experimental ::
    * Export the model to the OutputStream in PMML format
    */
+  @Experimental
   def toPMML(outputStream: OutputStream): Unit = {
     toPMML(new StreamResult(outputStream))
   }
 
   /**
+   * :: Experimental ::
    * Export the model to a String in PMML format
    */
+  @Experimental
   def toPMML(): String = {
     val writer = new StringWriter
     toPMML(new StreamResult(writer))
