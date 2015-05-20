@@ -122,7 +122,7 @@ class SQLContext(object):
         return self._ssql_ctx.getConf(key, defaultValue)
 
     @property
-    @since(1.3)
+    @since("1.3.1")
     def udf(self):
         """Returns a :class:`UDFRegistration` for UDF registration."""
         return UDFRegistration(self)
@@ -149,6 +149,7 @@ class SQLContext(object):
         return DataFrame(jdf, self)
 
     @ignore_unicode_prefix
+    @since(1.2)
     def registerFunction(self, name, f, returnType=StringType()):
         """Registers a lambda function as a UDF so it can be used in SQL statements.
 
@@ -358,6 +359,7 @@ class SQLContext(object):
         else:
             raise ValueError("Can only register DataFrame as table")
 
+    @since(1.0)
     def parquetFile(self, *paths):
         """Loads a Parquet file, returning the result as a :class:`DataFrame`.
 
@@ -376,6 +378,7 @@ class SQLContext(object):
         jdf = self._ssql_ctx.parquetFile(jpaths)
         return DataFrame(jdf, self)
 
+    @since(1.0)
     def jsonFile(self, path, schema=None, samplingRatio=1.0):
         """Loads a text file storing one JSON object per line as a :class:`DataFrame`.
 
@@ -416,6 +419,7 @@ class SQLContext(object):
         return DataFrame(df, self)
 
     @ignore_unicode_prefix
+    @since(1.0)
     def jsonRDD(self, rdd, schema=None, samplingRatio=1.0):
         """Loads an RDD storing one JSON object per string as a :class:`DataFrame`.
 
@@ -500,6 +504,7 @@ class SQLContext(object):
         return DataFrame(df, self)
 
     @ignore_unicode_prefix
+    @since(1.0)
     def sql(self, sqlQuery):
         """Returns a :class:`DataFrame` representing the result of the given query.
 
@@ -510,6 +515,7 @@ class SQLContext(object):
         """
         return DataFrame(self._ssql_ctx.sql(sqlQuery), self)
 
+    @since(1.0)
     def table(self, tableName):
         """Returns the specified table as a :class:`DataFrame`.
 
@@ -557,10 +563,12 @@ class SQLContext(object):
         else:
             return [name for name in self._ssql_ctx.tableNames(dbName)]
 
+    @since(1.0)
     def cacheTable(self, tableName):
         """Caches the specified table in-memory."""
         self._ssql_ctx.cacheTable(tableName)
 
+    @since(1.0)
     def uncacheTable(self, tableName):
         """Removes the specified table from the in-memory cache."""
         self._ssql_ctx.uncacheTable(tableName)

@@ -162,6 +162,7 @@ class Column(object):
     bitwiseAND = _bin_op("bitwiseAND")
     bitwiseXOR = _bin_op("bitwiseXOR")
 
+    @since(1.3)
     def getItem(self, key):
         """An expression that gets an item at position `ordinal` out of a list,
          or gets an item by key out of a dict.
@@ -182,6 +183,7 @@ class Column(object):
         """
         return self[key]
 
+    @since(1.3)
     def getField(self, name):
         """An expression that gets a field by name in a StructField.
 
@@ -214,6 +216,7 @@ class Column(object):
     endswith = _bin_op("endsWith")
 
     @ignore_unicode_prefix
+    @since(1.3)
     def substr(self, startPos, length):
         """
         Return a :class:`Column` which is a substring of the column
@@ -237,6 +240,7 @@ class Column(object):
     __getslice__ = substr
 
     @ignore_unicode_prefix
+    @since(1.3)
     def inSet(self, *cols):
         """ A boolean expression that is evaluated to true if the value of this
         expression is contained by the evaluated values of the arguments.
@@ -262,6 +266,7 @@ class Column(object):
     isNull = _unary_op("isNull", "True if the current expression is null.")
     isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
 
+    @since(1.3)
     def alias(self, *alias):
         """Returns this column aliased with a new name or names (in the case of expressions that
         return more than one column, such as explode).
@@ -277,6 +282,7 @@ class Column(object):
             return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
     @ignore_unicode_prefix
+    @since(1.3)
     def cast(self, dataType):
         """ Convert the column into type `dataType`
 
@@ -297,6 +303,7 @@ class Column(object):
         return Column(jc)
 
     @ignore_unicode_prefix
+    @since(1.3)
     def between(self, lowerBound, upperBound):
         """ A boolean expression that is evaluated to true if the value of this
         expression is between the given columns.

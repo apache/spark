@@ -352,6 +352,8 @@ def when(condition, value):
 class UserDefinedFunction(object):
     """
     User defined function in Python
+
+    .. versionadded:: 1.3
     """
     def __init__(self, func, returnType):
         self.func = func
