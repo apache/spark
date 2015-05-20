@@ -1,6 +1,7 @@
 import logging
 import json
 import re
+import fnmatch
 import ConfigParser
 from urlparse import urlparse
 
@@ -67,9 +68,9 @@ def _parse_s3_config(config_file_name, config_format='boto', profile=None):
 
 
 class S3Hook(BaseHook):
-    '''
+    """
     Interact with S3. This class is a wrapper around the boto library.
-    '''
+    """
     def __init__(
             self,
             s3_conn_id='s3_default'):
@@ -117,14 +118,16 @@ class S3Hook(BaseHook):
             raise Exception('Please provide a bucket_name')
         else:
             bucket_name = parsed_url.netloc
-            key = parsed_url.path
+            if parsed_url.path[0] == '/':
+                key = parsed_url.path[1:]
+            else:
+                key = parsed_url.path
             return (bucket_name, key)
 
     def get_conn(self):
-        '''
+        """
         Returns the boto S3Connection object.
-        '''
-        _s3_conn = self.get_connection(self.s3_conn_id)
+        """
         if self._creds_in_config_file:
             a_key, s_key = _parse_s3_config(self.s3_config_file,
                                             self.s3_config_format,
@@ -152,25 +155,25 @@ class S3Hook(BaseHook):
         return connection
 
     def check_for_bucket(self, bucket_name):
-        '''
+        """
         Check if bucket_name exists.
 
         :param bucket_name: the name of the bucket
         :type bucket_name: str
-        '''
+        """
         return self.connection.lookup(bucket_name) is not None
 
     def get_bucket(self, bucket_name):
-        '''
+        """
         Returns a boto.s3.bucket.Bucket object
 
         :param bucket_name: the name of the bucket
         :type bucket_name: str
-        '''
+        """
         return self.connection.get_bucket(bucket_name)
 
     def list_keys(self, bucket_name, prefix='', delimiter=''):
-        '''
+        """
         Lists keys in a bucket under prefix and not containing delimiter
 
         :param bucket_name: the name of the bucket
@@ -179,13 +182,13 @@ class S3Hook(BaseHook):
         :type prefix: str
         :param delimiter: the delimiter marks key hierarchy.
         :type delimiter: str
-        '''
+        """
         b = self.get_bucket(bucket_name)
         keylist = list(b.list(prefix=prefix, delimiter=delimiter))
         return [k.name for k in keylist] if keylist != [] else None
 
     def list_prefixes(self, bucket_name, prefix='', delimiter=''):
-        '''
+        """
         Lists prefixes in a bucket under prefix
 
         :param bucket_name: the name of the bucket
@@ -194,7 +197,7 @@ class S3Hook(BaseHook):
         :type prefix: str
         :param delimiter: the delimiter marks key hierarchy.
         :type delimiter: str
-        '''
+        """
         b = self.get_bucket(bucket_name)
         plist = b.list(prefix=prefix, delimiter=delimiter)
         prefix_names = [p.name for p in plist
@@ -202,32 +205,58 @@ class S3Hook(BaseHook):
         return prefix_names if prefix_names != [] else None
 
     def check_for_key(self, key, bucket_name=None):
-        '''
+        """
         Checks that a key exists in a bucket
-        '''
+        """
         if not bucket_name:
             (bucket_name, key) = self._parse_s3_url(key)
         bucket = self.get_bucket(bucket_name)
         return bucket.get_key(key) is not None
 
     def get_key(self, key, bucket_name=None):
-        '''
+        """
         Returns a boto.s3.key.Key object
 
         :param key: the path to the key
         :type key: str
         :param bucket_name: the name of the bucket
         :type bucket_name: str
-        '''
+        """
         if not bucket_name:
             (bucket_name, key) = self._parse_s3_url(key)
         bucket = self.get_bucket(bucket_name)
         return bucket.get_key(key)
 
+    def check_for_wildcard_key(self,
+                               wildcard_key, bucket_name=None, delimiter=''):
+        """
+        Checks that a key matching a wildcard expression exists in a bucket
+        """
+        return self.get_wildcard_key(wildcard_key=wildcard_key,
+                                     bucket_name=bucket_name,
+                                     delimiter=delimiter) is not None
+
+    def get_wildcard_key(self, wildcard_key, bucket_name=None, delimiter=''):
+        """
+        Returns a boto.s3.key.Key object matching the regular expression
+
+        :param regex_key: the path to the key
+        :type regex_key: str
+        :param bucket_name: the name of the bucket
+        :type bucket_name: str
+        """
+        if not bucket_name:
+            (bucket_name, wildcard_key) = self._parse_s3_url(wildcard_key)
+        bucket = self.get_bucket(bucket_name)
+        prefix = re.split(r'[*]', wildcard_key, 1)[0]
+        klist = self.list_keys(bucket_name, prefix=prefix, delimiter=delimiter)
+        key_matches = [k for k in klist if fnmatch.fnmatch(k, wildcard_key)]
+        return bucket.get_key(key_matches[0]) if key_matches else None
+
     def check_for_prefix(self, bucket_name, prefix, delimiter):
-        '''
+        """
         Checks that a prefix exists in a bucket
-        '''
+        """
         prefix = prefix + delimiter if prefix[-1] != delimiter else prefix
         prefix_split = re.split(r'(\w+[{d}])$'.format(d=delimiter), prefix, 1)
         previous_level = prefix_split[0]
