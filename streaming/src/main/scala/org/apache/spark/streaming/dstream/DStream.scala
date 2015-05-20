@@ -624,7 +624,7 @@ abstract class DStream[T: ClassTag] (
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
   def foreachRDD(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
-    val cleanedF = context.sparkContext.clean(foreachFunc)
+    val cleanedF = context.sparkContext.clean(foreachFunc, false)
     this.foreachRDD((r: RDD[T], t: Time) => cleanedF(r))
   }
 
