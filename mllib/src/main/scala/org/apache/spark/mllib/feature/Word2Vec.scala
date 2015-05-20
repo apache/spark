@@ -458,7 +458,8 @@ class Word2VecModel private[mllib] (
   lazy private val wordVectorsNormalized: Array[Float] = {
     val wordVectorsNormalized = new Array[Float](vectorSize * numWords)
     for (i <- 0 until numWords) {
-      Array.copy(euclideanNormalize(model.get(wordList(i)).get), 0, wordVectorsNormalized, i * vectorSize, vectorSize)
+      Array.copy(euclideanNormalize(model.get(wordList(i)).get), 0, wordVectorsNormalized,
+        i * vectorSize, vectorSize)
     }
     wordVectorsNormalized
   }
@@ -517,8 +518,8 @@ class Word2VecModel private[mllib] (
     val alpha: Float = 1
     val beta: Float = 0
 
-    blas.sgemv(
-      "T", vectorSize, numWords, alpha, wordVectorsNormalized, vectorSize, fVector, 1, beta, cosineVec, 1)
+    blas.sgemv("T", vectorSize, numWords, alpha, wordVectorsNormalized, vectorSize,
+      fVector, 1, beta, cosineVec, 1)
 
     wordList.zip(cosineVec.map(_.toDouble))
       .toSeq
