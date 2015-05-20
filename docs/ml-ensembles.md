@@ -15,7 +15,7 @@ ML supports the following ensemble algorithms: [`OneVsRest`](api/scala/index.htm
 
 [OneVsRest](http://en.wikipedia.org/wiki/Multiclass_classification#One-vs.-rest) is an example of a machine learning reduction for performing multiclass classification given a base classifier that can perform binary classification efficiently.
 
-[`OneVsRest`](api/scala/index.html#org.apache.spark.ml.classification.OneVsRest) is implemented as an `Estimator` takes as base classifier instances of [`Classifier`](api/scala/index.html#org.apache.spark.ml.classification.Classifier) and creates a binary classification problem for each of the k classes. The classifier for class i is trained to predict whether the label is i or not, distinguishing class i from all other classes.
+`OneVsRest` is implemented as an `Estimator` takes as base classifier instances of `Classifier` and creates a binary classification problem for each of the k classes. The classifier for class i is trained to predict whether the label is i or not, distinguishing class i from all other classes.
 
 Predictions are done by evaluating each binary classifier and the index of the most confident classifier is output as label.
 
