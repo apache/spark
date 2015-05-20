@@ -43,8 +43,10 @@ private[spark] case class Heartbeat(
  */
 private[spark] case object TaskSchedulerIsSet
 
-private[spark] case object ExpireDeadHosts 
-    
+private[spark] case object ExpireDeadHosts
+
+private[spark] case class RemoveExecutor(executorId: String)
+
 private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 
 /**
@@ -92,6 +94,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
   }
 
   override def receive: PartialFunction[Any, Unit] = {
+    case RemoveExecutor(executorId) =>
+      executorLastSeen.remove(executorId)
     case ExpireDeadHosts =>
       expireDeadHosts()
     case TaskSchedulerIsSet =>

@@ -154,8 +154,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
         context.reply(true)
 
-      case RemoveExecutor(executorId, reason) =>
-        removeExecutor(executorId, reason)
+      case RemoveExecutor(executorId, reason, isError) =>
+        removeExecutor(executorId, reason, isError)
         context.reply(true)
 
       case RetrieveSparkProps =>
@@ -210,7 +210,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     // Remove a disconnected slave from the cluster
-    def removeExecutor(executorId: String, reason: String): Unit = {
+    def removeExecutor(executorId: String, reason: String, isError: Boolean = true): Unit = {
       executorDataMap.get(executorId) match {
         case Some(executorInfo) =>
           // This must be synchronized because variables mutated
@@ -222,7 +222,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
-          scheduler.executorLost(executorId, SlaveLost(reason))
+          scheduler.executorLost(executorId, new ExecutorLossReason(reason, isError))
           listenerBus.post(
             SparkListenerExecutorRemoved(System.currentTimeMillis(), executorId, reason))
         case None => logError(s"Asked to remove non-existent executor $executorId")
@@ -287,9 +287,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   // Called by subclasses when notified of a lost worker
-  def removeExecutor(executorId: String, reason: String) {
+  def removeExecutor(executorId: String, reason: String, isError: Boolean = true) {
     try {
-      driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
+      driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason, isError))
     } catch {
       case e: Exception =>
         throw new SparkException("Error notifying standalone scheduler's driver endpoint", e)
@@ -370,7 +370,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Return whether the kill request is acknowledged.
    */
   final override def killExecutors(executorIds: Seq[String]): Boolean = synchronized {
-    logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
+    if (executorIds.size == 1) {
+      logInfo(s"Requesting cluster manager to kill executor ${executorIds.head}.")
+    } else if (executorIds.size > 1) {
+      logInfo(s"Requesting cluster manager to kill executors ${executorIds.mkString(", ")}")
+    } else {
+      // No executors to kill
+      return false
+    }
+
     val filteredExecutorIds = new ArrayBuffer[String]
     executorIds.foreach { id =>
       if (executorDataMap.contains(id)) {
@@ -386,7 +394,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     doRequestTotalExecutors(newTotal)
 
     executorsPendingToRemove ++= filteredExecutorIds
-    doKillExecutors(filteredExecutorIds)
+    val acked = doKillExecutors(filteredExecutorIds)
+    if (acked) {
+      // Remove executors from various data structures in advance so
+      // we do not generate a bunch of unexpected error messages
+      filteredExecutorIds.foreach { id =>
+        removeExecutor(id, "manually killed", isError = false)
+      }
+    }
+
+    acked
   }
 
   /**

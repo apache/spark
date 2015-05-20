@@ -120,6 +120,8 @@ class DAGScheduler(
 
   private [scheduler] val outputCommitCoordinator = env.outputCommitCoordinator
 
+  private val heartbeatReceiverRef = sc.heartbeatReceiverEndpoint
+
   // A closure serializer that we reuse.
   // This is only safe because DAGScheduler runs in a single thread.
   private val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
@@ -1169,6 +1171,7 @@ class DAGScheduler(
       failedEpoch(execId) = currentEpoch
       logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
       blockManagerMaster.removeExecutor(execId)
+      heartbeatReceiverRef.send(RemoveExecutor(execId))
 
       if (!env.blockManager.externalShuffleServiceEnabled || fetchFailed) {
         // TODO: This will be really slow if we keep accumulating shuffle map stages
