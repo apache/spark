@@ -70,8 +70,8 @@ class DStreamClosureSuite extends FunSuite with BeforeAndAfterAll {
   /**
    * Verify that the expected exception is thrown.
    *
-   * We use return statements as an indication that a closure is actually being cleaned
-   * We expect closure cleaner to find the return statements in the user provided closures
+   * We use return statements as an indication that a closure is actually being cleaned.
+   * We expect closure cleaner to find the return statements in the user provided closures.
    */
   private def expectCorrectException(body: => Unit): Unit = {
     try {
