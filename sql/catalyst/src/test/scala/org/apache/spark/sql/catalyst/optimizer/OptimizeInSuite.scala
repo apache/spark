@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedAt
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
 
 // For implicit conversions
