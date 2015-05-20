@@ -379,7 +379,7 @@ object functions {
    * @since 1.4.0
    */
   def lag(e: Column, offset: Int, defaultValue: Any): Column = {
-    UnresolvedWindowFunction("lag", e.expr :: Literal(offset) :: Literal(defaultValue) :: Nil)
+    WindowFunction.lag(e.expr, offset, Literal(defaultValue))
   }
 
   /**
@@ -435,7 +435,7 @@ object functions {
    * @since 1.4.0
    */
   def lead(e: Column, offset: Int, defaultValue: Any): Column = {
-    UnresolvedWindowFunction("lead", e.expr :: Literal(offset) :: Literal(defaultValue) :: Nil)
+    WindowFunction.lead(e.expr, offset, Literal(defaultValue))
   }
 
   /**
@@ -449,7 +449,7 @@ object functions {
    * @since 1.4.0
    */
   def ntile(n: Int): Column = {
-    UnresolvedWindowFunction("ntile", lit(n).expr :: Nil)
+    WindowFunction.ntile(n)
   }
 
   /**
@@ -461,7 +461,7 @@ object functions {
    * @since 1.4.0
    */
   def rowNumber(): Column = {
-    UnresolvedWindowFunction("row_number", Nil)
+    WindowFunction.rowNumber()
   }
 
   /**
@@ -478,7 +478,7 @@ object functions {
    * @since 1.4.0
    */
   def denseRank(): Column = {
-    UnresolvedWindowFunction("dense_rank", Nil)
+    WindowFunction.denseRank()
   }
 
   /**
@@ -495,7 +495,7 @@ object functions {
    * @since 1.4.0
    */
   def rank(): Column = {
-    UnresolvedWindowFunction("rank", Nil)
+    WindowFunction.rank()
   }
 
   /**
@@ -514,7 +514,7 @@ object functions {
    * @since 1.4.0
    */
   def cumeDist(): Column = {
-    UnresolvedWindowFunction("cume_dist", Nil)
+    WindowFunction.cumeDist()
   }
 
   /**
@@ -531,7 +531,7 @@ object functions {
    * @since 1.4.0
    */
   def percentRank(): Column = {
-    UnresolvedWindowFunction("percent_rank", Nil)
+    WindowFunction.percentRank()
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////

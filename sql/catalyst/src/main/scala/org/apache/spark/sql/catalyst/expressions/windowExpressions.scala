@@ -19,13 +19,20 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.types.{DataType, NumericType}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.{LeafNode, UnaryNode}
+import org.apache.spark.sql.types.{NumericType, DataType, LongType, IntegerType}
 
 /**
- * The trait of the Window Specification (specified in the OVER clause or WINDOW clause) for
- * Window Functions.
+ * The base class for all Window Specification for Window Functions.
  */
-sealed trait WindowSpec
+abstract class WindowSpec extends Expression {
+  self: Product =>
+  override def eval(input: Row): Any = throw new UnsupportedOperationException
+  override def nullable: Boolean = true
+  override def foldable: Boolean = false
+  override def dataType: DataType = throw new UnsupportedOperationException
+}
 
 /**
  * The specification for a window function.
@@ -36,7 +43,7 @@ sealed trait WindowSpec
 case class WindowSpecDefinition(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    frameSpecification: WindowFrame) extends Expression with WindowSpec {
+    frameSpecification: WindowFrame) extends WindowSpec {
 
   def validate: Option[String] = frameSpecification match {
     case UnspecifiedFrame =>
@@ -67,23 +74,42 @@ case class WindowSpecDefinition(
 
   override def children: Seq[Expression] = partitionSpec ++ orderSpec
 
-  override lazy val resolved: Boolean =
-    childrenResolved && frameSpecification.isInstanceOf[SpecifiedWindowFrame]
+  override def toString: String = {
+    val builder = new StringBuilder
+    builder.append("OVER (")
+    if (!partitionSpec.isEmpty) {
+      builder.append("PARTITION BY ")
+      builder.append(partitionSpec.mkString(","))
+    }
+    if (!partitionSpec.isEmpty && !orderSpec.isEmpty) {
+      builder.append(" ")
+    }
+    if (!orderSpec.isEmpty) {
+      builder.append("ORDER BY ")
+      builder.append(orderSpec.mkString(","))
+    }
+    if (!orderSpec.isEmpty && frameSpecification != UnspecifiedFrame) {
+      builder.append(" ")
+    }
+    if (frameSpecification != UnspecifiedFrame) {
+      builder.append(frameSpecification)
+    }
+    builder.append(")")
+    builder.toString
+  }
+}
 
-
-  override def toString: String = simpleString
-
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
-  override def nullable: Boolean = true
-  override def foldable: Boolean = false
-  override def dataType: DataType = throw new UnsupportedOperationException
+object WindowSpecDefinition {
+  val empty = WindowSpecDefinition(Nil, Nil, UnspecifiedFrame)
 }
 
 /**
  * A Window specification reference that refers to the [[WindowSpecDefinition]] defined
  * under the name `name`.
  */
-case class WindowSpecReference(name: String) extends WindowSpec
+case class WindowSpecReference(name: String) extends WindowSpec with LeafNode[Expression] {
+  override lazy val resolved: Boolean = false
+}
 
 /**
  * The trait used to represent the type of a Window Frame.
@@ -186,6 +212,18 @@ case object UnboundedFollowing extends FrameBoundary {
 }
 
 /**
+ * Helper extractor for making working with frame boundaries easier.
+ */
+object FrameBoundaryExtractor {
+  def unapply(boundary: FrameBoundary): Option[Int] = boundary match {
+    case CurrentRow => Some(0)
+    case ValuePreceding(offset) => Some(-offset)
+    case ValueFollowing(offset) => Some(offset)
+    case _ => None
+  }
+}
+
+/**
  * The trait used to represent the a Window Frame.
  */
 sealed trait WindowFrame
@@ -225,6 +263,11 @@ case class SpecifiedWindowFrame(
 }
 
 object SpecifiedWindowFrame {
+  def shift(offset: Int): SpecifiedWindowFrame = SpecifiedWindowFrame(RowFrame,
+    ValuePreceding(-offset), ValueFollowing(offset))
+  val rowRunning = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
+  val rangeRunning = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
+  val unbounded = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
   /**
    *
    * @param hasOrderSpecification If the window spec has order by expressions.
@@ -239,94 +282,21 @@ object SpecifiedWindowFrame {
       // the default frame is RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW.
       SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
     } else {
-      // Otherwise, the default frame is
-      // ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING.
-      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
+      unbounded
     }
   }
 }
 
-/**
- * Every window function needs to maintain a output buffer for its output.
- * It should expect that for a n-row window frame, it will be called n times
- * to retrieve value corresponding with these n rows.
- */
-trait WindowFunction extends Expression {
-  self: Product =>
-
-  def init(): Unit
-
-  def reset(): Unit
-
-  def prepareInputParameters(input: InternalRow): AnyRef
-
-  def update(input: AnyRef): Unit
-
-  def batchUpdate(inputs: Array[AnyRef]): Unit
-
-  def evaluate(): Unit
-
-  def get(index: Int): Any
-
-  def newInstance(): WindowFunction
-}
-
-case class UnresolvedWindowFunction(
-    name: String,
-    children: Seq[Expression])
-  extends Expression with WindowFunction {
-
-  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
-  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
-  override lazy val resolved = false
-
-  override def init(): Unit =
-    throw new UnresolvedException(this, "init")
-  override def reset(): Unit =
-    throw new UnresolvedException(this, "reset")
-  override def prepareInputParameters(input: InternalRow): AnyRef =
-    throw new UnresolvedException(this, "prepareInputParameters")
-  override def update(input: AnyRef): Unit =
-    throw new UnresolvedException(this, "update")
-  override def batchUpdate(inputs: Array[AnyRef]): Unit =
-    throw new UnresolvedException(this, "batchUpdate")
-  override def evaluate(): Unit =
-    throw new UnresolvedException(this, "evaluate")
-  override def get(index: Int): Any =
-    throw new UnresolvedException(this, "get")
-  // Unresolved functions are transient at compile time and don't get evaluated during execution.
-  override def eval(input: InternalRow = null): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
-
-  override def toString: String = s"'$name(${children.mkString(",")})"
-
-  override def newInstance(): WindowFunction =
-    throw new UnresolvedException(this, "newInstance")
-}
-
-case class UnresolvedWindowExpression(
-    child: UnresolvedWindowFunction,
-    windowSpec: WindowSpecReference) extends UnaryExpression {
-
-  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
-  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
-  override lazy val resolved = false
-
-  // Unresolved functions are transient at compile time and don't get evaluated during execution.
-  override def eval(input: InternalRow = null): Any =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
-}
-
 case class WindowExpression(
-    windowFunction: WindowFunction,
-    windowSpec: WindowSpecDefinition) extends Expression {
+    windowFunction: Expression,
+    windowSpec: WindowSpec = WindowSpecDefinition.empty,
+    fixedWindowFrame: WindowFrame = UnspecifiedFrame,
+    pivot: Boolean = false) extends Expression {
 
   override def children: Seq[Expression] =
     windowFunction :: windowSpec :: Nil
 
-  override def eval(input: InternalRow): Any =
+  override def eval(input: Row): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def dataType: DataType = windowFunction.dataType
@@ -334,4 +304,150 @@ case class WindowExpression(
   override def nullable: Boolean = windowFunction.nullable
 
   override def toString: String = s"$windowFunction $windowSpec"
+}
+
+/**
+ * A number of window functions imply the use of the window order specification. The Implied Order
+ * Spec allows the analyzer to define the order specification in such cases.
+ */
+trait ImpliedOrderSpec {
+  self: Expression =>
+  def defineOrderSpec(orderSpec: Seq[Expression]): Expression
+}
+
+/**
+ * A few of the more advanced window functions can be defined as a combination of two window
+ * functions with essentially different frame specifications, examples are: PERCENT_RANK, NTILE
+ * and CUME_DIST. The ComposedWindowFunction allows the analyzer to recognize such a situation.
+ */
+case class ComposedWindowFunction(child: Expression) extends Expression
+    with UnaryNode[Expression] {
+  override def dataType: DataType = child.dataType
+  override def foldable: Boolean = child.foldable
+  override def nullable: Boolean = child.nullable
+  override def toString: String = child.toString
+  override def eval(input: Row): Any = child.eval(input)
+}
+
+/**
+ * Base class for ranking expressions.
+ */
+abstract class RankLikeExpression extends AggregateExpression with ImpliedOrderSpec{
+  self: Product =>
+  override def dataType: DataType = LongType
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
+  override def toString: String = s"${this.nodeName}()"
+}
+
+/**
+ * Base class for a rank function. This function should always be evaluated in a running fashion:
+ * i.e. in a ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW frame.
+ */
+abstract class RankLikeFunction extends AggregateFunction {
+  self: Product =>
+  var counter: Long = 0L
+  var value: Long = 0L
+  var last: Row = EmptyRow
+  val extractor = new InterpretedProjection(children)
+  override def eval(input: Row): Any = value
+}
+
+/**
+ * Same as:
+ * COALESCE(COUNT(1) OVER (PARTITION BY ... ORDER BY ... RANGE
+ *   BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING ROW), 0) + 1
+ */
+case class Rank(children: Seq[Expression]) extends RankLikeExpression {
+  override def defineOrderSpec(children: Seq[Expression]): Rank = new Rank(children)
+  override def newInstance(): AggregateFunction = RankFunction(children, this)
+}
+
+case class RankFunction(override val children: Seq[Expression], base: AggregateExpression)
+    extends RankLikeFunction {
+  def update(input: Row): Unit = {
+    val current = extractor(input)
+    counter += 1
+    if (current != last) {
+      last = current
+      value = counter
+    }
+  }
+}
+
+case class DenseRank(children: Seq[Expression]) extends RankLikeExpression {
+  override def defineOrderSpec(children: Seq[Expression]): DenseRank = new DenseRank(children)
+  override def newInstance(): AggregateFunction = DenseRankFunction(children, this)
+}
+
+case class DenseRankFunction(override val children: Seq[Expression], base: AggregateExpression)
+    extends RankLikeFunction {
+  def update(input: Row): Unit = {
+    val current = extractor(input)
+    if (current != last) {
+      counter += 1
+      last = current
+      value = counter
+    }
+  }
+}
+
+object WindowFunction {
+  def count(spec: WindowSpec = WindowSpecDefinition.empty): WindowExpression =
+    WindowExpression(Count(Literal(1)), spec, SpecifiedWindowFrame.unbounded)
+
+  def rowNumber(spec: WindowSpec = WindowSpecDefinition.empty): WindowExpression =
+    WindowExpression(Count(Literal(1)), spec, SpecifiedWindowFrame.rowRunning)
+
+  def rank(spec: WindowSpec = WindowSpecDefinition.empty): WindowExpression =
+      WindowExpression(Rank(Nil), spec, SpecifiedWindowFrame.rowRunning)
+
+  def denseRank(spec: WindowSpec = WindowSpecDefinition.empty): WindowExpression =
+      WindowExpression(DenseRank(Nil), spec, SpecifiedWindowFrame.rowRunning)
+
+  def percentRank(spec: WindowSpec = WindowSpecDefinition.empty): ComposedWindowFunction = {
+    val rankMinusOne = Subtract(rank(spec), Literal(1))
+    val countMinusOne = Subtract(count(spec), Literal(1))
+    ComposedWindowFunction(Divide(rankMinusOne, countMinusOne))
+  }
+
+  def cumeDist(spec: WindowSpec = WindowSpecDefinition.empty): ComposedWindowFunction = {
+    // FIXME so it appears that Hive's CUME_DIST behaves a bit unexpected...
+    val rankInclCurrentValue = WindowExpression(Count(Literal(1)), spec,
+      SpecifiedWindowFrame.rangeRunning)
+    ComposedWindowFunction(Divide(rankInclCurrentValue, count(spec)))
+  }
+
+  def ntile(buckets: Int,
+    spec: WindowSpec = WindowSpecDefinition.empty): ComposedWindowFunction = {
+    val n = count(spec)
+    val bucketSize = Cast(Divide(n, Literal(buckets)), IntegerType)
+    val bucketSizePlusOne = Add(bucketSize, Literal(1))
+    val remainder = Remainder(n, Literal(buckets))
+    val threshold = Multiply(remainder, bucketSizePlusOne)
+    val rowNumberMinusOne = Subtract(rowNumber(spec), Literal(1))
+    ComposedWindowFunction(Add(Cast(If(LessThan(rowNumberMinusOne, threshold),
+      Divide(rowNumberMinusOne, bucketSizePlusOne),
+      Add(Divide(Subtract(rowNumberMinusOne, threshold), bucketSize), remainder)
+    ), IntegerType), Literal(1)))
+  }
+
+  def lead(expr: Expression, offset: Int = 1, default: Expression = null,
+    spec: WindowSpec = WindowSpecDefinition.empty): Expression = {
+    val we = WindowExpression(expr, spec, SpecifiedWindowFrame.shift(offset))
+    addDefaultToShift(we, default)
+  }
+
+  def lag(expr: Expression, offset: Int = 1, default: Expression = null,
+    spec: WindowSpec = WindowSpecDefinition.empty): Expression = {
+    val we = WindowExpression(expr, spec, SpecifiedWindowFrame.shift(-offset))
+    addDefaultToShift(we, default)
+  }
+
+  private def addDefaultToShift(we: WindowExpression, default: Expression): Expression = {
+    default match {
+      case null | Literal(null, _) => we
+      case _: Expression => ComposedWindowFunction(Coalesce(we :: default :: Nil))
+    }
+  }
 }
