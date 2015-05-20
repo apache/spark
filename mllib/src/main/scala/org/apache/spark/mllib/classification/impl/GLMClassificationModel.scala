@@ -75,7 +75,7 @@ private[classification] object GLMClassificationModel {
     def loadData(sc: SparkContext, path: String, modelClass: String): Data = {
       val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
-      val dataRDD = sqlContext.parquetFile(datapath)
+      val dataRDD = sqlContext.read.parquet(datapath)
       val dataArray = dataRDD.select("weights", "intercept", "threshold").take(1)
       assert(dataArray.size == 1, s"Unable to load $modelClass data from: $datapath")
       val data = dataArray(0)

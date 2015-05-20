@@ -68,7 +68,6 @@ private[feature] trait Word2VecBase extends Params
 
   setDefault(stepSize -> 0.025)
   setDefault(maxIter -> 1)
-  setDefault(seed -> 42L)
 
   /**
    * Validate and transform the input schema.

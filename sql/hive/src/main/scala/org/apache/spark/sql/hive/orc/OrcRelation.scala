@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.util.{Objects, Properties}
+import java.util.Properties
 
+import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
