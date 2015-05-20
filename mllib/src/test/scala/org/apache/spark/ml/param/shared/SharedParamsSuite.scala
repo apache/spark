@@ -24,9 +24,11 @@ import org.apache.spark.ml.param.Params
 class SharedParamsSuite extends FunSuite {
 
   test("outputCol") {
-    val obj = new Params with HasOutputCol {
-      override val uid = "obj"
-    }
+
+    class Obj(override val uid: String) extends Params with HasOutputCol
+
+    val obj = new Obj("obj")
+
     assert(obj.hasDefault(obj.outputCol))
     assert(obj.getOrDefault(obj.outputCol) === "obj__output")
   }
