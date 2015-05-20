@@ -53,10 +53,10 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   }
 
   def validate() {
-    require(master != null, "Checkpoint.master is null")
-    require(framework != null, "Checkpoint.framework is null")
-    require(graph != null, "Checkpoint.graph is null")
-    require(checkpointTime != null, "Checkpoint.checkpointTime is null")
+    assert(master != null, "Checkpoint.master is null")
+    assert(framework != null, "Checkpoint.framework is null")
+    assert(graph != null, "Checkpoint.graph is null")
+    assert(checkpointTime != null, "Checkpoint.checkpointTime is null")
     logInfo("Checkpoint for time " + checkpointTime + " validated")
   }
 }

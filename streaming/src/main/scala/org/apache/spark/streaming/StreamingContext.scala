@@ -155,7 +155,7 @@ class StreamingContext private[streaming] (
       cp_.graph.restoreCheckpointData()
       cp_.graph
     } else {
-      require(batchDur_ != null, "Batch duration for streaming context cannot be null")
+      require(batchDur_ != null, "Batch duration for StreamingContext cannot be null")
       val newGraph = new DStreamGraph()
       newGraph.setBatchDuration(batchDur_)
       newGraph
@@ -457,7 +457,8 @@ class StreamingContext private[streaming] (
       directory, FileInputDStream.defaultFilter : Path => Boolean, newFilesOnly=true, conf)
     val data = br.map { case (k, v) =>
       val bytes = v.getBytes
-      require(bytes.length == recordLength, "Byte array does not have correct length")
+      require(bytes.length == recordLength, "Byte array does not have correct length. " +
+        s"${bytes.length} did not equal recordLength: $recordLength")
       bytes
     }
     data
@@ -520,7 +521,7 @@ class StreamingContext private[streaming] (
   }
 
   private def validate() {
-    require(graph != null, "Graph is null")
+    assert(graph != null, "Graph is null")
     graph.validate()
 
     require(

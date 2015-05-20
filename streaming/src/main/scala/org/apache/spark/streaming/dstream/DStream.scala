@@ -238,8 +238,7 @@ abstract class DStream[T: ClassTag] (
 
     require(
      checkpointDuration == null || context.sparkContext.checkpointDir.isDefined,
-      "The checkpoint directory has not been set. Please use StreamingContext.checkpoint()" +
-      " or SparkContext.checkpoint() to set the checkpoint directory."
+      "The checkpoint directory has not been set. Please set it by StreamingContext.checkpoint()."
     )
 
     require(
@@ -253,7 +252,7 @@ abstract class DStream[T: ClassTag] (
       checkpointDuration == null || checkpointDuration.isMultipleOf(slideDuration),
       "The checkpoint interval for " + this.getClass.getSimpleName + " has been set to " +
         checkpointDuration + " which not a multiple of its slide time (" + slideDuration + "). " +
-        "Please set it to a multiple " + slideDuration + "."
+        "Please set it to a multiple of " + slideDuration + "."
     )
 
     require(
