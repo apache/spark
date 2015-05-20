@@ -90,6 +90,7 @@ private[sql] class DefaultSource extends RelationProvider {
     val lowerBound = parameters.getOrElse("lowerBound", null)
     val upperBound = parameters.getOrElse("upperBound", null)
     val numPartitions = parameters.getOrElse("numPartitions", null)
+    val fetchSize =  parameters.getOrElse("fetchSize", "0").toInt
 
     if (driver != null) DriverRegistry.register(driver)
 
@@ -110,7 +111,7 @@ private[sql] class DefaultSource extends RelationProvider {
     val parts = JDBCRelation.columnPartition(partitionInfo)
     val properties = new Properties() // Additional properties that we will pass to getConnection
     parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
-    JDBCRelation(url, table, parts, properties)(sqlContext)
+    JDBCRelation(url, table, parts, fetchSize, properties)(sqlContext)
   }
 }
 
@@ -118,6 +119,7 @@ private[sql] case class JDBCRelation(
     url: String,
     table: String,
     parts: Array[Partition],
+    fetchSize: Int,
     properties: Properties = new Properties())(@transient val sqlContext: SQLContext)
   extends BaseRelation
   with PrunedFilteredScan
@@ -138,7 +140,8 @@ private[sql] case class JDBCRelation(
       table,
       requiredColumns,
       filters,
-      parts)
+      parts,
+      fetchSize)
   }
   
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {

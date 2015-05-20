@@ -203,7 +203,8 @@ private[sql] object JDBCRDD extends Logging {
       fqTable: String,
       requiredColumns: Array[String],
       filters: Array[Filter],
-      parts: Array[Partition]): RDD[Row] = {
+      parts: Array[Partition],
+      fetchSize: Int): RDD[Row] = {
     new JDBCRDD(
       sc,
       getConnector(driver, url, properties),
@@ -211,7 +212,8 @@ private[sql] object JDBCRDD extends Logging {
       fqTable,
       requiredColumns,
       filters,
-      parts)
+      parts,
+      fetchSize)
   }
 }
 
@@ -227,7 +229,8 @@ private[sql] class JDBCRDD(
     fqTable: String,
     columns: Array[String],
     filters: Array[Filter],
-    partitions: Array[Partition])
+    partitions: Array[Partition],
+    fetchSize: Int)
   extends RDD[Row](sc, Nil) {
 
   /**
@@ -356,6 +359,7 @@ private[sql] class JDBCRDD(
     val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause"
     val stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
+    stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()
 
     val conversions = getConversions(schema)
