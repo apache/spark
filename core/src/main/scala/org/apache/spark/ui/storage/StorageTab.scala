@@ -35,6 +35,8 @@ private[ui] class StorageTab(parent: SparkUI) extends SparkUITab(parent, "storag
 /**
  * :: DeveloperApi ::
  * A SparkListener that prepares information to be displayed on the BlockManagerUI.
+ *
+ * This class is thread-safe (unlike JobProgressListener)
  */
 @DeveloperApi
 class StorageListener(storageStatusListener: StorageStatusListener) extends SparkListener {
@@ -43,7 +45,9 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
   def storageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
 
   /** Filter RDD info to include only those with cached partitions */
-  def rddInfoList: Seq[RDDInfo] = _rddInfoMap.values.filter(_.numCachedPartitions > 0).toSeq
+  def rddInfoList: Seq[RDDInfo] = synchronized {
+    _rddInfoMap.values.filter(_.numCachedPartitions > 0).toSeq
+  }
 
   /** Update the storage info of the RDDs whose blocks are among the given updated blocks */
   private def updateRDDInfo(updatedBlocks: Seq[(BlockId, BlockStatus)]): Unit = {

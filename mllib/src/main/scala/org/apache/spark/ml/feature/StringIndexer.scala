@@ -23,6 +23,7 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{NumericType, StringType, StructType}
@@ -58,7 +59,10 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
  * So the most frequent label gets index 0.
  */
 @AlphaComponent
-class StringIndexer extends Estimator[StringIndexerModel] with StringIndexerBase {
+class StringIndexer(override val uid: String) extends Estimator[StringIndexerModel]
+  with StringIndexerBase {
+
+  def this() = this(Identifiable.randomUID("strIdx"))
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -73,7 +77,7 @@ class StringIndexer extends Estimator[StringIndexerModel] with StringIndexerBase
       .map(_.getString(0))
       .countByValue()
     val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
-    copyValues(new StringIndexerModel(this, labels))
+    copyValues(new StringIndexerModel(uid, labels).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -87,7 +91,7 @@ class StringIndexer extends Estimator[StringIndexerModel] with StringIndexerBase
  */
 @AlphaComponent
 class StringIndexerModel private[ml] (
-    override val parent: StringIndexer,
+    override val uid: String,
     labels: Array[String]) extends Model[StringIndexerModel] with StringIndexerBase {
 
   private val labelToIndex: OpenHashMap[String, Double] = {

@@ -205,8 +205,10 @@ private[stat] object ChiSqTest extends Logging {
     val colSums = new Array[Double](numCols)
     val rowSums = new Array[Double](numRows)
     val colMajorArr = counts.toArray
+    val colMajorArrLen = colMajorArr.length
+
     var i = 0
-    while (i < colMajorArr.size) {
+    while (i < colMajorArrLen) {
       val elem = colMajorArr(i)
       if (elem < 0.0) {
         throw new IllegalArgumentException("Contingency table cannot contain negative entries.")
@@ -220,7 +222,7 @@ private[stat] object ChiSqTest extends Logging {
     // second pass to collect statistic
     var statistic = 0.0
     var j = 0
-    while (j < colMajorArr.size) {
+    while (j < colMajorArrLen) {
       val col = j / numRows
       val colSum = colSums(col)
       if (colSum == 0.0) {

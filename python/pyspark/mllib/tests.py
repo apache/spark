@@ -24,7 +24,7 @@ import sys
 import tempfile
 import array as pyarray
 
-from numpy import array, array_equal, zeros
+from numpy import array, array_equal, zeros, inf
 from py4j.protocol import Py4JJavaError
 
 if sys.version_info[:2] <= (2, 6):
@@ -92,6 +92,9 @@ class VectorTests(MLlibTestCase):
         self._test_serialize(SparseVector(4, {1: 1, 3: 2}))
         self._test_serialize(SparseVector(3, {}))
         self._test_serialize(DenseMatrix(2, 3, range(6)))
+        sm1 = SparseMatrix(
+            3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0])
+        self._test_serialize(sm1)
 
     def test_dot(self):
         sv = SparseVector(4, {1: 1, 3: 2})
@@ -217,6 +220,29 @@ class VectorTests(MLlibTestCase):
         self.assertTrue(array_equal(sm.colPtrs, [0, 2, 5]))
         self.assertTrue(array_equal(sm.values, [1, 3, 4, 6, 9]))
 
+    def test_parse_vector(self):
+        a = DenseVector([3, 4, 6, 7])
+        self.assertTrue(str(a), '[3.0,4.0,6.0,7.0]')
+        self.assertTrue(Vectors.parse(str(a)), a)
+        a = SparseVector(4, [0, 2], [3, 4])
+        self.assertTrue(str(a), '(4,[0,2],[3.0,4.0])')
+        self.assertTrue(Vectors.parse(str(a)), a)
+        a = SparseVector(10, [0, 1], [4, 5])
+        self.assertTrue(SparseVector.parse(' (10, [0,1 ],[ 4.0,5.0] )'), a)
+
+    def test_norms(self):
+        a = DenseVector([0, 2, 3, -1])
+        self.assertAlmostEqual(a.norm(2), 3.742, 3)
+        self.assertTrue(a.norm(1), 6)
+        self.assertTrue(a.norm(inf), 3)
+        a = SparseVector(4, [0, 2], [3, -4])
+        self.assertAlmostEqual(a.norm(2), 5)
+        self.assertTrue(a.norm(1), 7)
+        self.assertTrue(a.norm(inf), 4)
+
+        tmp = SparseVector(4, [0, 2], [3, 0])
+        self.assertEqual(tmp.numNonzeros(), 1)
+
 
 class ListTests(MLlibTestCase):
 
@@ -233,7 +259,8 @@ class ListTests(MLlibTestCase):
             [1.1, 0],
             [1.2, 0],
         ]
-        clusters = KMeans.train(self.sc.parallelize(data), 2, initializationMode="k-means||")
+        clusters = KMeans.train(self.sc.parallelize(data), 2, initializationMode="k-means||",
+                                initializationSteps=7, epsilon=1e-4)
         self.assertEquals(clusters.predict(data[0]), clusters.predict(data[1]))
         self.assertEquals(clusters.predict(data[2]), clusters.predict(data[3]))
 
@@ -243,9 +270,11 @@ class ListTests(MLlibTestCase):
         Y = range(0, 100, 10)
         data = [[x, y] for x, y in zip(X, Y)]
         clusters1 = KMeans.train(self.sc.parallelize(data),
-                                 3, initializationMode="k-means||", seed=42)
+                                 3, initializationMode="k-means||",
+                                 seed=42, initializationSteps=7, epsilon=1e-4)
         clusters2 = KMeans.train(self.sc.parallelize(data),
-                                 3, initializationMode="k-means||", seed=42)
+                                 3, initializationMode="k-means||",
+                                 seed=42, initializationSteps=7, epsilon=1e-4)
         centers1 = clusters1.centers
         centers2 = clusters2.centers
         for c1, c2 in zip(centers1, centers2):

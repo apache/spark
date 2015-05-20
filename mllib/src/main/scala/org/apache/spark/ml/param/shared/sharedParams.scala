@@ -128,10 +128,10 @@ private[ml] trait HasRawPredictionCol extends Params {
 private[ml] trait HasProbabilityCol extends Params {
 
   /**
-   * Param for column name for predicted class conditional probabilities.
+   * Param for Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities..
    * @group param
    */
-  final val probabilityCol: Param[String] = new Param[String](this, "probabilityCol", "column name for predicted class conditional probabilities")
+  final val probabilityCol: Param[String] = new Param[String](this, "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
 
   setDefault(probabilityCol, "probability")
 
@@ -178,7 +178,7 @@ private[ml] trait HasInputCols extends Params {
    * Param for input column names.
    * @group param
    */
-  final val inputCols: Param[Array[String]] = new Param[Array[String]](this, "inputCols", "input column names")
+  final val inputCols: StringArrayParam = new StringArrayParam(this, "inputCols", "input column names")
 
   /** @group getParam */
   final def getInputCols: Array[String] = $(inputCols)
@@ -232,7 +232,7 @@ private[ml] trait HasFitIntercept extends Params {
 }
 
 /**
- * (private[ml]) Trait for shared param seed (default: Utils.random.nextLong()).
+ * (private[ml]) Trait for shared param seed (default: this.getClass.getName.hashCode.toLong).
  */
 private[ml] trait HasSeed extends Params {
 
@@ -242,7 +242,7 @@ private[ml] trait HasSeed extends Params {
    */
   final val seed: LongParam = new LongParam(this, "seed", "random seed")
 
-  setDefault(seed, Utils.random.nextLong())
+  setDefault(seed, this.getClass.getName.hashCode.toLong)
 
   /** @group getParam */
   final def getSeed: Long = $(seed)

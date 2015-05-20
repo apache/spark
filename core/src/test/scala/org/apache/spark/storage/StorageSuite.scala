@@ -287,8 +287,8 @@ class StorageSuite extends FunSuite {
 
   // For testing StorageUtils.updateRddInfo
   private def stockRDDInfos: Seq[RDDInfo] = {
-    val info0 = new RDDInfo(0, "0", 10, memAndDisk)
-    val info1 = new RDDInfo(1, "1", 3, memAndDisk)
+    val info0 = new RDDInfo(0, "0", 10, memAndDisk, Seq(3))
+    val info1 = new RDDInfo(1, "1", 3, memAndDisk, Seq(4))
     Seq(info0, info1)
   }
 
