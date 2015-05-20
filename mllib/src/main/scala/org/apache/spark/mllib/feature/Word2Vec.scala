@@ -44,23 +44,13 @@ import org.apache.spark.sql.{SQLContext, Row}
 /**
  *  Entry in vocabulary 
  */
-private abstract class VocabWord {
-  def word: String
-  def cn: Int
-}
- 
-private case class VocabWordHS(
+private case class VocabWord(
   var word: String,
   var cn: Int,
   var point: Array[Int],
   var code: Array[Int],
   var codeLen:Int
-) extends VocabWord
- 
-private case class VocabWordNS(
-  var word: String,
-  var cn: Int
-) extends VocabWord
+)
  
 /**
  * :: Experimental ::
@@ -199,14 +189,19 @@ class Word2Vec extends Serializable with Logging {
       .reduceByKey(_ + _)
       .map{ x => 
         if (this.hs) {
-          VocabWordHS(
+          VocabWord(
             x._1,
             x._2,
             new Array[Int](MAX_CODE_LENGTH), 
             new Array[Int](MAX_CODE_LENGTH), 
-            0).asInstanceOf[VocabWord]
+            0)
         } else {
-          VocabWordNS(x._1, x._2).asInstanceOf[VocabWord]
+          VocabWord(
+            x._1,
+            x._2,
+            null,
+            null,
+            0)
         }
       }.filter(_.cn >= minCount)
       .collect()
@@ -320,7 +315,7 @@ class Word2Vec extends Serializable with Logging {
         i += 1
         b = parentNode(b)
       }
-      val vocabA = vocab(a).asInstanceOf[VocabWordHS]
+      val vocabA = vocab(a)
       vocabA.codeLen = i
       vocabA.point(0) = vocabSize - 2
       b = 0
@@ -428,7 +423,7 @@ class Word2Vec extends Serializable with Logging {
 
                     // Hierarchical softmax
                     if (this.hs) {
-                      val vocab = bcVocab.value(word).asInstanceOf[VocabWordHS]
+                      val vocab = bcVocab.value(word)
                       var d = 0
                       while (d < vocab.codeLen) {
                         val inner = vocab.point(d)
