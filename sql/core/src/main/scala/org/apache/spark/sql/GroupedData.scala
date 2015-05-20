@@ -27,11 +27,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{Rollup, Cube, Aggregate}
 import org.apache.spark.sql.types.NumericType
 
 /**
- * The Grouping Type
- */
-sealed private[sql] trait GroupType
-
-/**
  * Companion object for GroupedData
  */
 private[sql] object GroupedData {
@@ -39,8 +34,13 @@ private[sql] object GroupedData {
       df: DataFrame,
       groupingExprs: Seq[Expression],
       groupType: GroupType): GroupedData = {
-    new GroupedData(df, groupingExprs).withNewGroupType(groupType)
+    new GroupedData(df, groupingExprs, groupType: GroupType)
   }
+
+  /**
+   * The Grouping Type
+   */
+  private[sql] trait GroupType
 
   /**
    * To indicate it's the GroupBy
@@ -65,15 +65,10 @@ private[sql] object GroupedData {
  * @since 1.3.0
  */
 @Experimental
-class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) {
-
-  private var groupType: GroupType = _
-
-  private[sql] def withNewGroupType(groupType: GroupType): GroupedData = {
-    this.groupType = groupType
-    this
-  }
-
+class GroupedData protected[sql](
+    df: DataFrame,
+    groupingExprs: Seq[Expression],
+    private val groupType: GroupedData.GroupType) {
   private[sql] implicit def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
     val aggregates = if (df.sqlContext.conf.dataFrameRetainGroupColumns) {
         val retainedExprs = groupingExprs.map {
