@@ -40,9 +40,12 @@ class S3ToHiveTransfer(BaseOperator):
     :param headers: whether the file contains column names on the first
         line
     :type headers: bool
-    :param headers: whether the column names on the first line should be
+    :param check_headers: whether the column names on the first line should be
         checked against the keys of field_dict
-    :type headers: bool
+    :type check_headers: bool
+    :param wildcard_match: whether the s3_key should be interpreted as a Unix
+        wildcard pattern
+    :type wildcard_match: bool
     :param delimiter: field delimiter in the file
     :type delimiter: str
     :param s3_conn_id: source s3 connection
@@ -70,6 +73,7 @@ class S3ToHiveTransfer(BaseOperator):
             partition=None,
             headers=False,
             check_headers=False,
+            wildcard_match=False,
             s3_conn_id='s3_default',
             hive_cli_conn_id='hive_cli_default',
             *args, **kwargs):
@@ -83,6 +87,7 @@ class S3ToHiveTransfer(BaseOperator):
         self.partition = partition
         self.headers = headers
         self.check_headers = check_headers
+        self.wildcard_match = wildcard_match
         self.hive_cli_conn_id = hive_cli_conn_id
         self.s3_conn_id = s3_conn_id
 
@@ -90,12 +95,17 @@ class S3ToHiveTransfer(BaseOperator):
         self.hive = HiveCliHook(hive_cli_conn_id=self.hive_cli_conn_id)
         self.s3 = S3Hook(s3_conn_id=self.s3_conn_id)
         logging.info("Downloading S3 file")
-        if not self.s3.check_for_key(self.s3_key):
-            raise Exception("The key {0} does not exists".format(self.s3_key))
-        s3_key_object = self.s3.get_key(self.s3_key)
+        if self.wildcard_match:
+            if not self.s3.check_for_wildcard_key(self.s3_key):
+                raise Exception("No key matches {0}".format(self.s3_key))
+            s3_key_object = self.s3.get_wildcard_key(self.s3_key)
+        else:
+            if not self.s3.check_for_key(self.s3_key):
+                raise Exception("The key {0} does not exists".format(self.s3_key))
+            s3_key_object = self.s3.get_key(self.s3_key)
         with NamedTemporaryFile("w") as f:
-            logging.info("Dumping S3 file {0} contents to local"
-                         " file {1}".format(self.s3_key, f.name))
+            logging.info("Dumping S3 key {0} contents to local"
+                         " file {1}".format(s3_key_object.key, f.name))
             s3_key_object.get_contents_to_file(f)
             f.flush()
             self.s3.connection.close()

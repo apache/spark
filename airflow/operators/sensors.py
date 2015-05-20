@@ -230,6 +230,9 @@ class S3KeySensor(BaseSensorOperator):
     :type bucket_key: str
     :param bucket_name: Name of the S3 bucket
     :type bucket_name: str
+    :param wildcard_match: whether the bucket_key should be interpreted as a Unix
+        wildcard pattern
+    :type wildcard_match: bool
     """
     template_fields = ('bucket_key', 'bucket_name')
     __mapper_args__ = {
@@ -240,6 +243,7 @@ class S3KeySensor(BaseSensorOperator):
     def __init__(
             self, bucket_key,
             bucket_name=None,
+            wildcard_match=False,
             s3_conn_id='s3_default',
             *args, **kwargs):
         super(S3KeySensor, self).__init__(*args, **kwargs)
@@ -254,9 +258,13 @@ class S3KeySensor(BaseSensorOperator):
                 raise Exception('Please provide a bucket_name')
             else:
                 bucket_name = parsed_url.netloc
-                bucket_key = parsed_url.path
+                if parsed_url.path[0] == '/':
+                    bucket_key = parsed_url.path[1:]
+                else:
+                    bucket_key = parsed_url.path
         self.bucket_name = bucket_name
         self.bucket_key = bucket_key
+        self.wildcard_match = wildcard_match
         self.s3_conn_id = s3_conn_id
         session.commit()
         session.close()
@@ -265,7 +273,11 @@ class S3KeySensor(BaseSensorOperator):
         hook = hooks.S3Hook(s3_conn_id=self.s3_conn_id)
         full_url = "s3://" + self.bucket_name + self.bucket_key
         logging.info('Poking for key : {full_url}'.format(**locals()))
-        return hook.check_for_key(self.bucket_key, self.bucket_name)
+        if self.wildcard_match:
+            return hook.check_for_wildcard_key(self.bucket_key,
+                                               self.bucket_name)
+        else:
+            return hook.check_for_key(self.bucket_key, self.bucket_name)
 
 
 class S3PrefixSensor(BaseSensorOperator):
