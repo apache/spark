@@ -311,7 +311,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       java.lang.Math.min(2, 3).toString,
       java.lang.Math.round(2.5).toString,
       java.lang.Math.exp(1.0).toString,
-      java.lang.Math.floor(1.9).toString).zip(res.toSeq).foreach( x => assert(x._1 == x._2))
+      java.lang.Math.floor(1.9).toString).zip(res.toSeq).foreach(x => assert(x._1 == x._2))
   }
 
   createQueryTest("modulus",
