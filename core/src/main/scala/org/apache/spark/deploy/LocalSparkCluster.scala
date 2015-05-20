@@ -43,6 +43,7 @@ class LocalSparkCluster(
   private val localHostname = Utils.localHostName()
   private val masterActorSystems = ArrayBuffer[ActorSystem]()
   private val workerActorSystems = ArrayBuffer[ActorSystem]()
+  //exposed for testing
   var masterWebUIPort = -1
 
   def start(): Array[String] = {
