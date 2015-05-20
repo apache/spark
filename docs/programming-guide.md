@@ -41,13 +41,14 @@ In addition, if you wish to access an HDFS cluster, you need to add a dependency
     artifactId = hadoop-client
     version = <your-hdfs-version>
 
-Finally, you need to import some Spark classes and implicit conversions into your program. Add the following lines:
+Finally, you need to import some Spark classes into your program. Add the following lines:
 
 {% highlight scala %}
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
 {% endhighlight %}
+
+(Before Spark 1.3.0, you need to explicitly `import org.apache.spark.SparkContext._` to enable essential implicit conversions.)
 
 </div>
 
@@ -821,11 +822,9 @@ by a key.
 
 In Scala, these operations are automatically available on RDDs containing
 [Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) objects
-(the built-in tuples in the language, created by simply writing `(a, b)`), as long as you
-import `org.apache.spark.SparkContext._` in your program to enable Spark's implicit
-conversions. The key-value pair operations are available in the
+(the built-in tuples in the language, created by simply writing `(a, b)`). The key-value pair operations are available in the
 [PairRDDFunctions](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions) class,
-which automatically wraps around an RDD of tuples if you import the conversions.
+which automatically wraps around an RDD of tuples.
 
 For example, the following code uses the `reduceByKey` operation on key-value pairs to count how
 many times each line of text occurs in a file:
@@ -1071,7 +1070,7 @@ for details.
 </tr>
 <tr>
   <td> <b>saveAsSequenceFile</b>(<i>path</i>) <br /> (Java and Scala) </td>
-  <td> Write the elements of the dataset as a Hadoop SequenceFile in a given path in the local filesystem, HDFS or any other Hadoop-supported file system. This is available on RDDs of key-value pairs that either implement Hadoop's Writable interface. In Scala, it is also
+  <td> Write the elements of the dataset as a Hadoop SequenceFile in a given path in the local filesystem, HDFS or any other Hadoop-supported file system. This is available on RDDs of key-value pairs that implement Hadoop's Writable interface. In Scala, it is also
    available on types that are implicitly convertible to Writable (Spark includes conversions for basic types like Int, Double, String, etc). </td>
 </tr>
 <tr>
@@ -1122,7 +1121,7 @@ ordered data following shuffle then it's possible to use:
 * `sortBy` to make a globally ordered RDD
 
 Operations which can cause a shuffle include **repartition** operations like
-[`repartition`](#RepartitionLink), and [`coalesce`](#CoalesceLink), **'ByKey** operations
+[`repartition`](#RepartitionLink) and [`coalesce`](#CoalesceLink), **'ByKey** operations
 (except for counting) like [`groupByKey`](#GroupByLink) and [`reduceByKey`](#ReduceByLink), and
 **join** operations like [`cogroup`](#CogroupLink) and [`join`](#JoinLink).
 
@@ -1138,7 +1137,7 @@ read the relevant sorted blocks.
         
 Certain shuffle operations can consume significant amounts of heap memory since they employ 
 in-memory data structures to organize records before or after transferring them. Specifically, 
-`reduceByKey` and `aggregateByKey` create these structures on the map side and `'ByKey` operations 
+`reduceByKey` and `aggregateByKey` create these structures on the map side, and `'ByKey` operations 
 generate these on the reduce side. When data does not fit in memory Spark will spill these tables 
 to disk, incurring the additional overhead of disk I/O and increased garbage collection.
 

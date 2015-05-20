@@ -256,42 +256,108 @@ class BLASSuite extends FunSuite {
     val dA =
       new DenseMatrix(4, 3, Array(0.0, 1.0, 0.0, 0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 3.0))
     val sA = new SparseMatrix(4, 3, Array(0, 1, 3, 4), Array(1, 0, 2, 3), Array(1.0, 2.0, 1.0, 3.0))
-
-    val x = new DenseVector(Array(1.0, 2.0, 3.0))
+ 
+    val dA2 =
+      new DenseMatrix(4, 3, Array(0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 3.0), true)
+    val sA2 =
+      new SparseMatrix(4, 3, Array(0, 1, 2, 3, 4), Array(1, 0, 1, 2), Array(2.0, 1.0, 1.0, 3.0),
+        true)
+ 
+    val dx = new DenseVector(Array(1.0, 2.0, 3.0))
+    val sx = dx.toSparse
     val expected = new DenseVector(Array(4.0, 1.0, 2.0, 9.0))
 
-    assert(dA.multiply(x) ~== expected absTol 1e-15)
-    assert(sA.multiply(x) ~== expected absTol 1e-15)
-
+    assert(dA.multiply(dx) ~== expected absTol 1e-15)
+    assert(sA.multiply(dx) ~== expected absTol 1e-15)
+    assert(dA.multiply(sx) ~== expected absTol 1e-15)
+    assert(sA.multiply(sx) ~== expected absTol 1e-15)
+ 
     val y1 = new DenseVector(Array(1.0, 3.0, 1.0, 0.0))
     val y2 = y1.copy
     val y3 = y1.copy
     val y4 = y1.copy
+    val y5 = y1.copy
+    val y6 = y1.copy
+    val y7 = y1.copy
+    val y8 = y1.copy
+    val y9 = y1.copy
+    val y10 = y1.copy
+    val y11 = y1.copy
+    val y12 = y1.copy
+    val y13 = y1.copy
+    val y14 = y1.copy
+    val y15 = y1.copy
+    val y16 = y1.copy
+ 
     val expected2 = new DenseVector(Array(6.0, 7.0, 4.0, 9.0))
     val expected3 = new DenseVector(Array(10.0, 8.0, 6.0, 18.0))
 
-    gemv(1.0, dA, x, 2.0, y1)
-    gemv(1.0, sA, x, 2.0, y2)
-    gemv(2.0, dA, x, 2.0, y3)
-    gemv(2.0, sA, x, 2.0, y4)
+    gemv(1.0, dA, dx, 2.0, y1)
+    gemv(1.0, sA, dx, 2.0, y2)
+    gemv(1.0, dA, sx, 2.0, y3)
+    gemv(1.0, sA, sx, 2.0, y4)
+ 
+    gemv(1.0, dA2, dx, 2.0, y5)
+    gemv(1.0, sA2, dx, 2.0, y6)
+    gemv(1.0, dA2, sx, 2.0, y7)
+    gemv(1.0, sA2, sx, 2.0, y8)
+ 
+    gemv(2.0, dA, dx, 2.0, y9)
+    gemv(2.0, sA, dx, 2.0, y10)
+    gemv(2.0, dA, sx, 2.0, y11)
+    gemv(2.0, sA, sx, 2.0, y12)
+ 
+    gemv(2.0, dA2, dx, 2.0, y13)
+    gemv(2.0, sA2, dx, 2.0, y14)
+    gemv(2.0, dA2, sx, 2.0, y15)
+    gemv(2.0, sA2, sx, 2.0, y16)
+ 
     assert(y1 ~== expected2 absTol 1e-15)
     assert(y2 ~== expected2 absTol 1e-15)
-    assert(y3 ~== expected3 absTol 1e-15)
-    assert(y4 ~== expected3 absTol 1e-15)
+    assert(y3 ~== expected2 absTol 1e-15)
+    assert(y4 ~== expected2 absTol 1e-15)
+ 
+    assert(y5 ~== expected2 absTol 1e-15)
+    assert(y6 ~== expected2 absTol 1e-15)
+    assert(y7 ~== expected2 absTol 1e-15)
+    assert(y8 ~== expected2 absTol 1e-15)
+ 
+    assert(y9 ~== expected3 absTol 1e-15)
+    assert(y10 ~== expected3 absTol 1e-15)
+    assert(y11 ~== expected3 absTol 1e-15)
+    assert(y12 ~== expected3 absTol 1e-15)
+ 
+    assert(y13 ~== expected3 absTol 1e-15)
+    assert(y14 ~== expected3 absTol 1e-15)
+    assert(y15 ~== expected3 absTol 1e-15)
+    assert(y16 ~== expected3 absTol 1e-15)
+ 
     withClue("columns of A don't match the rows of B") {
       intercept[Exception] {
-        gemv(1.0, dA.transpose, x, 2.0, y1)
+        gemv(1.0, dA.transpose, dx, 2.0, y1)
+      }
+      intercept[Exception] {
+        gemv(1.0, sA.transpose, dx, 2.0, y1)
+      }
+      intercept[Exception] {
+        gemv(1.0, dA.transpose, sx, 2.0, y1)
+      }
+      intercept[Exception] {
+        gemv(1.0, sA.transpose, sx, 2.0, y1)
       }
     }
+ 
     val dAT =
       new DenseMatrix(3, 4, Array(0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 3.0))
     val sAT =
       new SparseMatrix(3, 4, Array(0, 1, 2, 3, 4), Array(1, 0, 1, 2), Array(2.0, 1.0, 1.0, 3.0))
-
+ 
     val dATT = dAT.transpose
     val sATT = sAT.transpose
 
-    assert(dATT.multiply(x) ~== expected absTol 1e-15)
-    assert(sATT.multiply(x) ~== expected absTol 1e-15)
+    assert(dATT.multiply(dx) ~== expected absTol 1e-15)
+    assert(sATT.multiply(dx) ~== expected absTol 1e-15)
+    assert(dATT.multiply(sx) ~== expected absTol 1e-15)
+    assert(sATT.multiply(sx) ~== expected absTol 1e-15)
   }
 }

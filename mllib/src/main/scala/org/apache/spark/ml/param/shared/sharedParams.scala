@@ -232,7 +232,7 @@ private[ml] trait HasFitIntercept extends Params {
 }
 
 /**
- * (private[ml]) Trait for shared param seed (default: Utils.random.nextLong()).
+ * (private[ml]) Trait for shared param seed (default: this.getClass.getName.hashCode.toLong).
  */
 private[ml] trait HasSeed extends Params {
 
@@ -242,7 +242,7 @@ private[ml] trait HasSeed extends Params {
    */
   final val seed: LongParam = new LongParam(this, "seed", "random seed")
 
-  setDefault(seed, Utils.random.nextLong())
+  setDefault(seed, this.getClass.getName.hashCode.toLong)
 
   /** @group getParam */
   final def getSeed: Long = $(seed)
