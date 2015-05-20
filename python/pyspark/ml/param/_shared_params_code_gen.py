@@ -56,9 +56,10 @@ def _gen_param_header(name, doc, defaultValueStr):
     def __init__(self):
         super(Has$Name, self).__init__()
         #: param for $doc
-        self.$name = Param(self, "$name", "$doc")
-        if $defaultValueStr is not None:
-            self._setDefault($name=$defaultValueStr)'''
+        self.$name = Param(self, "$name", "$doc")'''
+    if defaultValueStr is not None:
+        template += '''
+        self._setDefault($name=$defaultValueStr)'''
 
     Name = name[0].upper() + name[1:]
     return template \
@@ -118,7 +119,7 @@ if __name__ == "__main__":
         ("outputCol", "output column name", None),
         ("numFeatures", "number of features", None),
         ("checkpointInterval", "checkpoint interval (>= 1)", None),
-        ("seed", "random seed", None),
+        ("seed", "random seed", "hash(type(self).__name__)"),
         ("tol", "the convergence tolerance for iterative algorithms", None),
         ("stepSize", "Step size to be used for each iteration of optimization.", None)]
     code = []
