@@ -261,13 +261,9 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
 }
 
 /**
- * :: Experimental ::
  * A set of methods for aggregations on a [[DataFrame]] cube, created by [[DataFrame.cube]].
- *
- * @since 1.4.0
  */
-@Experimental
-class CubedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression])
+private[sql] class CubedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression])
   extends GroupedData(df, groupingExprs) {
 
   protected[sql] implicit override def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
@@ -277,13 +273,9 @@ class CubedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression])
 }
 
 /**
- * :: Experimental ::
  * A set of methods for aggregations on a [[DataFrame]] rollup, created by [[DataFrame.rollup]].
- *
- * @since 1.4.0
  */
-@Experimental
-class RollupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression])
+private[sql] class RollupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression])
   extends GroupedData(df, groupingExprs) {
 
   protected[sql] implicit override def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
