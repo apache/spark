@@ -25,7 +25,10 @@ import org.apache.spark.sql.hive.test.TestHive.implicits._
 
 case class TestData2Int(a: Int, b: Int)
 
-class HiveDataFrameAnalyticsSuiteSuite extends QueryTest {
+// TODO ideally we should put the test suite into the package `sql`, as
+// `hive` package is optional in compiling, however, `SQLContext.sql` doesn't
+// support the `cube` or `rollup` yet.
+class HiveDataFrameAnalyticsSuite extends QueryTest {
   val testData =
     TestHive.sparkContext.parallelize(
       TestData2Int(1, 2) ::
@@ -55,23 +58,5 @@ class HiveDataFrameAnalyticsSuiteSuite extends QueryTest {
       testData.cube("a", "b").agg(sum("b")),
       sql("select a, b, sum(b) from mytable group by a, b with cube").collect()
     )
-  }
-
-  test("spark.sql.retainGroupColumns config") {
-    val oldConf = conf.getConf("spark.sql.retainGroupColumns", "true")
-    try {
-      conf.setConf("spark.sql.retainGroupColumns", "false")
-      checkAnswer(
-        testData.rollup($"a" + $"b", $"b").agg(sum($"a" - $"b")),
-        sql("select sum(a-b) from mytable group by a + b, b with rollup").collect()
-      )
-
-      checkAnswer(
-        testData.cube($"a" + $"b", $"b").agg(sum($"a" - $"b")),
-        sql("select sum(a-b) from mytable group by a + b, b with cube").collect()
-      )
-    } finally {
-      conf.setConf("spark.sql.retainGroupColumns", oldConf)
-    }
   }
 }
