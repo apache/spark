@@ -558,7 +558,10 @@ class Analyzer(
         }
     }
 
-    /** Extracts a resolved [[Generator]] expression and any names assigned by aliases to their output. */
+    /**
+     * Extracts a resolved [[Generator]] expression and any names assigned by aliases
+     * to their output.
+     */
     private object AliasedResolvedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
         case Alias(g: Generator, name) if g.childrenResolved &&
