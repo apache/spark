@@ -1520,6 +1520,13 @@ that these options will be deprecated in future release as more optimizations ar
       Configures the number of partitions to use when shuffling data for joins or aggregations.
     </td>
   </tr>
+   <tr>
+    <td><code>spark.sql.planner.externalSort</code></td>
+    <td>false</td>
+    <td>
+      When true, performs sorts spilling to disk as needed otherwise sort each partition in memory.
+    </td>
+  </tr>
 </table>
 
 # Distributed SQL Engine
