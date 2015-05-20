@@ -1813,6 +1813,7 @@ class ContextTests(unittest.TestCase):
         with SparkContext() as sc:
             self.assertGreater(sc.startTime, 0)
 
+
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
 class SciPyTests(PySparkTestCase):
 
