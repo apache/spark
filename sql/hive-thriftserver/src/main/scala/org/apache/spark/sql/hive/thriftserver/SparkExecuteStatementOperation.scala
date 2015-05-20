@@ -154,6 +154,7 @@ private[hive] class SparkExecuteStatementOperation(
       val hiveConf = getConfigForOperation()
       val sparkServiceUGI = ShimLoader.getHadoopShims.getUGIForConf(hiveConf)
       val sessionHive = getCurrentHive()
+      val currentSqlSession = hiveContext.currentSession
 
       // Runnable impl to call runInternal asynchronously,
       // from a different thread
@@ -164,6 +165,7 @@ private[hive] class SparkExecuteStatementOperation(
             override def run(): Object = {
 
               // User information is part of the metastore client member in Hive
+              hiveContext.setSession(currentSqlSession)
               Hive.set(sessionHive)
               SessionState.setCurrentSessionState(parentSessionState)
               try {
