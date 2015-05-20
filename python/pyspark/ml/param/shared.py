@@ -32,8 +32,6 @@ class HasMaxIter(Params):
         super(HasMaxIter, self).__init__()
         #: param for max number of iterations (>= 0)
         self.maxIter = Param(self, "maxIter", "max number of iterations (>= 0)")
-        if None is not None:
-            self._setDefault(maxIter=None)
 
     def setMaxIter(self, value):
         """
@@ -61,8 +59,6 @@ class HasRegParam(Params):
         super(HasRegParam, self).__init__()
         #: param for regularization parameter (>= 0)
         self.regParam = Param(self, "regParam", "regularization parameter (>= 0)")
-        if None is not None:
-            self._setDefault(regParam=None)
 
     def setRegParam(self, value):
         """
@@ -90,8 +86,7 @@ class HasFeaturesCol(Params):
         super(HasFeaturesCol, self).__init__()
         #: param for features column name
         self.featuresCol = Param(self, "featuresCol", "features column name")
-        if 'features' is not None:
-            self._setDefault(featuresCol='features')
+        self._setDefault(featuresCol='features')
 
     def setFeaturesCol(self, value):
         """
@@ -119,8 +114,7 @@ class HasLabelCol(Params):
         super(HasLabelCol, self).__init__()
         #: param for label column name
         self.labelCol = Param(self, "labelCol", "label column name")
-        if 'label' is not None:
-            self._setDefault(labelCol='label')
+        self._setDefault(labelCol='label')
 
     def setLabelCol(self, value):
         """
@@ -148,8 +142,7 @@ class HasPredictionCol(Params):
         super(HasPredictionCol, self).__init__()
         #: param for prediction column name
         self.predictionCol = Param(self, "predictionCol", "prediction column name")
-        if 'prediction' is not None:
-            self._setDefault(predictionCol='prediction')
+        self._setDefault(predictionCol='prediction')
 
     def setPredictionCol(self, value):
         """
@@ -177,8 +170,7 @@ class HasProbabilityCol(Params):
         super(HasProbabilityCol, self).__init__()
         #: param for Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
         self.probabilityCol = Param(self, "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
-        if 'probability' is not None:
-            self._setDefault(probabilityCol='probability')
+        self._setDefault(probabilityCol='probability')
 
     def setProbabilityCol(self, value):
         """
@@ -206,8 +198,7 @@ class HasRawPredictionCol(Params):
         super(HasRawPredictionCol, self).__init__()
         #: param for raw prediction (a.k.a. confidence) column name
         self.rawPredictionCol = Param(self, "rawPredictionCol", "raw prediction (a.k.a. confidence) column name")
-        if 'rawPrediction' is not None:
-            self._setDefault(rawPredictionCol='rawPrediction')
+        self._setDefault(rawPredictionCol='rawPrediction')
 
     def setRawPredictionCol(self, value):
         """
@@ -235,8 +226,6 @@ class HasInputCol(Params):
         super(HasInputCol, self).__init__()
         #: param for input column name
         self.inputCol = Param(self, "inputCol", "input column name")
-        if None is not None:
-            self._setDefault(inputCol=None)
 
     def setInputCol(self, value):
         """
@@ -264,8 +253,6 @@ class HasInputCols(Params):
         super(HasInputCols, self).__init__()
         #: param for input column names
         self.inputCols = Param(self, "inputCols", "input column names")
-        if None is not None:
-            self._setDefault(inputCols=None)
 
     def setInputCols(self, value):
         """
@@ -293,8 +280,7 @@ class HasOutputCol(Params):
         super(HasOutputCol, self).__init__()
         #: param for output column name
         self.outputCol = Param(self, "outputCol", "output column name")
-        if self.uid + '__output' is not None:
-            self._setDefault(outputCol=self.uid + '__output')
+        self._setDefault(outputCol=self.uid + '__output')
 
     def setOutputCol(self, value):
         """
@@ -322,8 +308,6 @@ class HasNumFeatures(Params):
         super(HasNumFeatures, self).__init__()
         #: param for number of features
         self.numFeatures = Param(self, "numFeatures", "number of features")
-        if None is not None:
-            self._setDefault(numFeatures=None)
 
     def setNumFeatures(self, value):
         """
@@ -351,8 +335,6 @@ class HasCheckpointInterval(Params):
         super(HasCheckpointInterval, self).__init__()
         #: param for checkpoint interval (>= 1)
         self.checkpointInterval = Param(self, "checkpointInterval", "checkpoint interval (>= 1)")
-        if None is not None:
-            self._setDefault(checkpointInterval=None)
 
     def setCheckpointInterval(self, value):
         """
@@ -380,8 +362,7 @@ class HasSeed(Params):
         super(HasSeed, self).__init__()
         #: param for random seed
         self.seed = Param(self, "seed", "random seed")
-        if None is not None:
-            self._setDefault(seed=None)
+        self._setDefault(seed=hash(type(self).__name__))
 
     def setSeed(self, value):
         """
@@ -409,8 +390,6 @@ class HasTol(Params):
         super(HasTol, self).__init__()
         #: param for the convergence tolerance for iterative algorithms
         self.tol = Param(self, "tol", "the convergence tolerance for iterative algorithms")
-        if None is not None:
-            self._setDefault(tol=None)
 
     def setTol(self, value):
         """
@@ -438,8 +417,6 @@ class HasStepSize(Params):
         super(HasStepSize, self).__init__()
         #: param for Step size to be used for each iteration of optimization.
         self.stepSize = Param(self, "stepSize", "Step size to be used for each iteration of optimization.")
-        if None is not None:
-            self._setDefault(stepSize=None)
 
     def setStepSize(self, value):
         """

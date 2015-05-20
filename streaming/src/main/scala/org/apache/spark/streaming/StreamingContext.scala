@@ -255,7 +255,7 @@ class StreamingContext private[streaming] (
    *
    * Note: Return statements are NOT allowed in the given body.
    */
-  private[streaming] def withNamedScope[U](name: String)(body: => U): U = {
+  private def withNamedScope[U](name: String)(body: => U): U = {
     RDDOperationScope.withScope(sc, name, allowNesting = false, ignoreParent = false)(body)
   }
 
