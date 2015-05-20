@@ -88,6 +88,9 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
     })
 
     check("file:///", None)
+    check("file:///path/_temporary", None)
+    check("file:///path/_temporary/c=1.5", None)
+    check("file:///path/_temporary/path", None)
     check("file://path/a=10/_temporary/c=1.5", None)
     check("file://path/a=10/c=1.5/_temporary", None)
 
@@ -111,6 +114,23 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
     check(Seq(
       "hdfs://host:9000/path/a=10/b=20",
       "hdfs://host:9000/path/a=10.5/b=hello"),
+      PartitionSpec(
+        StructType(Seq(
+          StructField("a", FloatType),
+          StructField("b", StringType))),
+        Seq(
+          Partition(Row(10, "20"), "hdfs://host:9000/path/a=10/b=20"),
+          Partition(Row(10.5, "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
+
+    check(Seq(
+      "hdfs://host:9000/path/_temporary",
+      "hdfs://host:9000/path/a=10/b=20",
+      "hdfs://host:9000/path/a=10.5/b=hello",
+      "hdfs://host:9000/path/a=10.5/_temporary",
+      "hdfs://host:9000/path/a=10.5/b=hello/_temporary",
+      "hdfs://host:9000/path/_temporary/path",
+      "hdfs://host:9000/path/a=11/_temporary/path",
+      "hdfs://host:9000/path/a=10.5/b=world/_temporary/path"),
       PartitionSpec(
         StructType(Seq(
           StructField("a", FloatType),

@@ -72,19 +72,30 @@ private[sql] object PartitioningUtils {
   private[sql] def parsePartitions(
       paths: Seq[Path],
       defaultPartitionName: String): PartitionSpec = {
-    val partitionValues = resolvePartitions(paths.flatMap(parsePartition(_, defaultPartitionName)))
+    // First, we need to parse every partition's path and see if we can find partition values.
+    val pathsWithPartitionValues = paths.flatMap { path =>
+      parsePartition(path, defaultPartitionName) match {
+        case Some(partitionValues) => Some(path -> partitionValues)
+        case None => None
+      }
+    }
 
-    if (partitionValues.isEmpty) {
+    if (pathsWithPartitionValues.isEmpty) {
+      // This dataset is not partitioned.
       PartitionSpec.emptySpec
     } else {
+      // This dataset is partitioned. We need to first resolve type conflicts of
+      // those partition values belonging to the same partition column.
+      val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues.map(_._2))
+      // Create the StructType represents the partition columns.
       val fields = {
-        val (PartitionValues(columnNames, literals)) = partitionValues.head
+        val (PartitionValues(columnNames, literals)) = resolvedPartitionValues.head
         columnNames.zip(literals).map { case (name, Literal(_, dataType)) =>
           StructField(name, dataType, nullable = true)
         }
       }
-
-      val partitions = partitionValues.zip(paths).map {
+      // Finally, we create `Partition`'s based on path and resolved partition values.
+      val partitions = resolvedPartitionValues.zip(pathsWithPartitionValues.map(_._1)).map {
         case (PartitionValues(_, literals), path) =>
           Partition(Row(literals.map(_.value): _*), path.toString)
       }
