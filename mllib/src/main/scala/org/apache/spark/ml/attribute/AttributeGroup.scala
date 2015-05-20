@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField}
  * @param attrs optional array of attributes. Attribute will be copied with their corresponding
  *              indices in the array.
  */
-class AttributeGroup private (
+class AttributeGroup (
     val name: String,
     val numAttributes: Option[Int],
     attrs: Option[Array[Attribute]]) extends Serializable {

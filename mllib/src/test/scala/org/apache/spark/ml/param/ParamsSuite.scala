@@ -201,3 +201,17 @@ class ParamsSuite extends FunSuite {
     assert(inArray(1) && inArray(2) && !inArray(0))
   }
 }
+
+object ParamsSuite extends FunSuite {
+
+  /** Checks obj.params. */
+  def checkParams(obj: Params, expectedNumParams: Int): Unit = {
+    val params = obj.params
+    require(params.length === expectedNumParams,
+      s"Expect $expectedNumParams params but got ${params.length}: ${params.map(_.name).toSeq}.")
+    params.foreach { p =>
+      assert(p.parent === obj.uid)
+      assert(obj.getParam(p.name) === p)
+    }
+  }
+}
