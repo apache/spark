@@ -91,7 +91,7 @@ private[spark] class ExecutorAllocationManager(
 
   // How long there must be backlogged tasks for before an addition is triggered (seconds)
   private val schedulerBacklogTimeoutS = conf.getTimeAsSeconds(
-    "spark.dynamicAllocation.schedulerBacklogTimeout", "5s")
+    "spark.dynamicAllocation.schedulerBacklogTimeout", "1s")
 
   // Same as above, but used only after `schedulerBacklogTimeoutS` is exceeded
   private val sustainedSchedulerBacklogTimeoutS = conf.getTimeAsSeconds(
@@ -99,7 +99,7 @@ private[spark] class ExecutorAllocationManager(
 
   // How long an executor must be idle for before it is removed (seconds)
   private val executorIdleTimeoutS = conf.getTimeAsSeconds(
-    "spark.dynamicAllocation.executorIdleTimeout", "600s")
+    "spark.dynamicAllocation.executorIdleTimeout", "60s")
 
   // During testing, the methods to actually kill and add executors are mocked out
   private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
@@ -292,9 +292,8 @@ private[spark] class ExecutorAllocationManager(
   private def addExecutors(maxNumExecutorsNeeded: Int): Int = {
     // Do not request more executors if it would put our target over the upper bound
     if (numExecutorsTarget >= maxNumExecutors) {
-      val numExecutorsPending = numExecutorsTarget - executorIds.size
-      logDebug(s"Not adding executors because there are already ${executorIds.size} registered " +
-        s"and ${numExecutorsPending} pending executor(s) (limit $maxNumExecutors)")
+      logInfo(s"Not adding executors because our current target total " +
+        s"is already $numExecutorsTarget (limit $maxNumExecutors)")
       numExecutorsToAdd = 1
       return 0
     }
@@ -310,10 +309,17 @@ private[spark] class ExecutorAllocationManager(
     // Ensure that our target fits within configured bounds:
     numExecutorsTarget = math.max(math.min(numExecutorsTarget, maxNumExecutors), minNumExecutors)
 
+    val delta = numExecutorsTarget - oldNumExecutorsTarget
+
+    // If our target has not changed, do not send a message to the cluster manager
+    if (delta == 0) {
+      return 0
+    }
+
     val addRequestAcknowledged = testing || client.requestTotalExecutors(numExecutorsTarget)
     if (addRequestAcknowledged) {
-      val delta = numExecutorsTarget - oldNumExecutorsTarget
-      logInfo(s"Requesting $delta new executor(s) because tasks are backlogged" +
+      val executorsString = "executor" + { if (delta > 1) "s" else "" }
+      logInfo(s"Requesting $delta new $executorsString because tasks are backlogged" +
         s" (new desired total will be $numExecutorsTarget)")
       numExecutorsToAdd = if (delta == numExecutorsToAdd) {
         numExecutorsToAdd * 2
@@ -420,7 +426,7 @@ private[spark] class ExecutorAllocationManager(
    * This resets all variables used for adding executors.
    */
   private def onSchedulerQueueEmpty(): Unit = synchronized {
-    logDebug(s"Clearing timer to add executors because there are no more pending tasks")
+    logDebug("Clearing timer to add executors because there are no more pending tasks")
     addTime = NOT_SET
     numExecutorsToAdd = 1
   }
