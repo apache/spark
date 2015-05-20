@@ -34,7 +34,8 @@ object SSLSampleConfigs {
     conf.set("spark.ssl.trustStore", trustStorePath)
     conf.set("spark.ssl.trustStorePassword", "password")
     conf.set("spark.ssl.enabledAlgorithms",
-      "TLS_RSA_WITH_AES_128_CBC_SHA, SSL_RSA_WITH_DES_CBC_SHA")
+      "SSL_RSA_WITH_AES_128_CBC_SHA, SSL_RSA_WITH_DES_CBC_SHA, " +
+      "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_DES_CBC_SHA")
     conf.set("spark.ssl.protocol", "TLSv1")
     conf
   }
@@ -48,7 +49,8 @@ object SSLSampleConfigs {
     conf.set("spark.ssl.trustStore", trustStorePath)
     conf.set("spark.ssl.trustStorePassword", "password")
     conf.set("spark.ssl.enabledAlgorithms",
-      "TLS_RSA_WITH_AES_128_CBC_SHA, SSL_RSA_WITH_DES_CBC_SHA")
+      "SSL_RSA_WITH_AES_128_CBC_SHA, SSL_RSA_WITH_DES_CBC_SHA, " +
+      "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_DES_CBC_SHA")
     conf.set("spark.ssl.protocol", "TLSv1")
     conf
   }
