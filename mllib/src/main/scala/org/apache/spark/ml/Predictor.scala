@@ -18,6 +18,7 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
@@ -176,7 +177,7 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     if ($(predictionCol).nonEmpty) {
-      dataset.withColumn($(predictionCol), callUDF(predict _, DoubleType, col($(featuresCol))))
+      transformImpl(dataset)
     } else {
       this.logWarning(s"$uid: Predictor.transform() was called as NOOP" +
         " since no output columns were set.")
@@ -184,9 +185,45 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
     }
   }
 
+  protected def transformImpl(dataset: DataFrame): DataFrame = {
+    dataset.withColumn($(predictionCol), callUDF(predict _, DoubleType, col($(featuresCol))))
+  }
+
   /**
    * Predict label for the given features.
    * This internal method is used to implement [[transform()]] and output [[predictionCol]].
    */
   protected def predict(features: FeaturesType): Double
+}
+
+
+/**
+ * :: DeveloperApi ::
+ *
+ * Abstraction for a model for prediction tasks that will broadcast the model used to predict.
+ *
+ * @tparam FeaturesType  Type of features.
+ *                       E.g., [[org.apache.spark.mllib.linalg.VectorUDT]] for vector features.
+ * @tparam M  Specialization of [[PredictionModel]].  If you subclass this type, use this type
+ *            parameter to specify the concrete type for the corresponding model.
+ */
+@DeveloperApi
+abstract class PredictionModelBroadcasting[
+    FeaturesType, M <: PredictionModelBroadcasting[FeaturesType, M]
+  ]
+  extends PredictionModel[FeaturesType, M] {
+
+  protected def transformImpl(dataset: DataFrame, bcastModel: Broadcast[M]): DataFrame = {
+
+    dataset.withColumn($(predictionCol),
+      callUDF((features: FeaturesType) => predictWithBroadcastModel(features, bcastModel),
+        DoubleType, col($(featuresCol)))
+    )
+  }
+
+  /**
+   * Predict label for the given features using a broadcasted model.
+   * This internal method is used to implement [[transform()]] and output [[predictionCol]].
+   */
+  protected def predictWithBroadcastModel(features: FeaturesType, bcastModel: Broadcast[M]): Double
 }

@@ -20,7 +20,8 @@ package org.apache.spark.ml.classification
 import scala.collection.mutable
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.{PredictionModel, Predictor}
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.ml.{PredictionModelBroadcasting, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{RandomForestParams, TreeClassifierParams, DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
@@ -109,6 +110,7 @@ object RandomForestClassifier {
     RandomForestParams.supportedFeatureSubsetStrategies
 }
 
+
 /**
  * :: AlphaComponent ::
  *
@@ -122,7 +124,7 @@ object RandomForestClassifier {
 final class RandomForestClassificationModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel])
-  extends PredictionModel[Vector, RandomForestClassificationModel]
+  extends PredictionModelBroadcasting[Vector, RandomForestClassificationModel]
   with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
@@ -134,13 +136,28 @@ final class RandomForestClassificationModel private[ml] (
 
   override def treeWeights: Array[Double] = _treeWeights
 
+  override def transform(dataset: DataFrame): DataFrame = {
+    val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
+    transformImpl(dataset, bcastModel)
+  }
+
   override protected def predict(features: Vector): Double = {
-    // TODO: Override transform() to broadcast model.  SPARK-7127
     // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
+    // Predict without using a broadcasted mode
+    predictImpl(features, () => this)
+  }
+
+  override protected def predictWithBroadcastModel(features: Vector,
+      bcastModel: Broadcast[RandomForestClassificationModel]): Double = {
+    // Predict using the given broadcasted model
+    predictImpl(features, () => bcastModel.value)
+  }
+
+  protected def predictImpl(features: Vector, modelAccesor: () => TreeEnsembleModel): Double = {
     // Classifies using majority votes.
     // Ignore the weights since all are 1.0 for now.
     val votes = mutable.Map.empty[Int, Double]
-    _trees.view.foreach { tree =>
+    modelAccesor().trees.view.foreach { tree =>
       val prediction = tree.rootNode.predict(features).toInt
       votes(prediction) = votes.getOrElse(prediction, 0.0) + 1.0 // 1.0 = weight
     }
