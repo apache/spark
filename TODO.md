@@ -6,8 +6,7 @@ TODO
 * Charts: better error handling
 
 #### Command line
-* `airflow task_state dag_id task_id YYYY-MM-DD`
-* Backfill, better logging, prompt with details about what it's about to do
+* Backfill, better logging, prompt with details about what tasks are about to run
 
 #### More Operators!
 * PIG
@@ -18,7 +17,6 @@ TODO
 * Add a run_only_latest flag to BaseOperator, runs only most recent task instance where deps are met
 * Pickle all the THINGS!
 * Add priority_weight(Int) to BaseOperator, +@property subtree_priority
-* BaseExecutor parallelism limit
 * Distributed scheduler
 * Add decorator to timeout imports on master process [lib](https://github.com/pnpnpn/timeout-decorator)
 
