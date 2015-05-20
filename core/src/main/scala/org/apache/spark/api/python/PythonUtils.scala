@@ -50,8 +50,15 @@ private[spark] object PythonUtils {
   /**
    * Convert list of T into seq of T (for calling API with varargs)
    */
-  def toSeq[T](cols: JList[T]): Seq[T] = {
-    cols.toList.toSeq
+  def toSeq[T](vs: JList[T]): Seq[T] = {
+    vs.toList.toSeq
+  }
+
+  /**
+   * Convert list of T into array of T (for calling API with array)
+   */
+  def toArray[T](vs: JList[T]): Array[T] = {
+    vs.toArray().asInstanceOf[Array[T]]
   }
 
   /**

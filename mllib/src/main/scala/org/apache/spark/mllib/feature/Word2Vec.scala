@@ -158,6 +158,9 @@ class Word2Vec extends Serializable with Logging {
       .sortWith((a, b) => a.cn > b.cn)
     
     vocabSize = vocab.length
+    require(vocabSize > 0, "The vocabulary size should be > 0. You may need to check " +
+      "the setting of minCount, which could be large enough to remove all your words in sentences.")
+
     var a = 0
     while (a < vocabSize) {
       vocabHash += vocab(a).word -> a
