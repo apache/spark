@@ -377,14 +377,9 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
     def refresh(): Unit = {
       def listLeafFilesAndDirs(fs: FileSystem, status: FileStatus): Set[FileStatus] = {
-        def recurse(status: FileStatus): Set[FileStatus] = {
-          val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
-          val leafDirs = if (dirs.isEmpty) Set(status) else Set.empty[FileStatus]
-          files.toSet ++ leafDirs ++ dirs.flatMap(dir => recurse(dir))
-        }
-
-        val (childDirs, childFiles) = fs.listStatus(status.getPath).partition(_.isDir)
-        childFiles.toSet ++ childDirs.flatMap(recurse)
+        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
+        val leafDirs = if (dirs.isEmpty) Set(status) else Set.empty[FileStatus]
+        files.toSet ++ leafDirs ++ dirs.flatMap(dir => listLeafFilesAndDirs(fs, dir))
       }
 
       leafDirs.clear()
@@ -465,12 +460,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
   private def discoverPartitions(): PartitionSpec = {
     val leafDirs = fileStatusCache.leafDirs.keys.toSeq
-
-    if (leafDirs.nonEmpty) {
-      PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME)
-    } else {
-      PartitionSpec(StructType(Array.empty[StructField]), Array.empty[Partition])
-    }
+    PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME)
   }
 
   /**
