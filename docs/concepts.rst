@@ -34,3 +34,17 @@ While the task defines a start datetime and a schedule (say every hour
 or every day), a task instance represents a specific run of a task. A
 task instance will have a status of either "started", "retrying",
 "failed" or "success"
+
+Hooks
+'''''
+
+Hooks are interfaces to external platforms and databases like Hive, S3, MySQL,
+Postgres, HDFS, Pig and Cascading. Hooks implement a common interface when
+possible, and act as a building block for operators. They also use 
+the ``airflow.connection.Connection`` model to retrieve hostnames
+and authentication information. Hooks keeps authentication code and 
+information out of pipelines, centralized in the metadata database.
+
+Hooks are also very useful on their own to use in Python scripts, 
+Airflow airflow.operators.PythonOperator, and in interactive environment
+like iPython or Jupyter Notebook.
