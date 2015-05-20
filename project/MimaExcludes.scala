@@ -197,12 +197,7 @@ object MimaExcludes {
             // SPARK-2757
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.streaming.flume.sink.SparkAvroCallbackHandler." +
-                "removeAndGetProcessor"),
-            // SPARK-3586
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.streaming.StreamingContext.fileStream"),
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.streaming.StreamingContext.textFileStream")
+                "removeAndGetProcessor")
           ) ++ Seq(
             // SPARK-5123 (SparkSQL data type change) - alpha component only
             ProblemFilters.exclude[IncompatibleResultTypeProblem](

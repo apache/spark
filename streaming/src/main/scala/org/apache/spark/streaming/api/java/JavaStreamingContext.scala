@@ -351,7 +351,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cmk: ClassTag[K] = ClassTag(kClass)
     implicit val cmv: ClassTag[V] = ClassTag(vClass)
     implicit val cmf: ClassTag[F] = ClassTag(fClass)
-    def fn = (x: Path) => filter.call(x).booleanValue()
+    def fn: (Path) => Boolean = (x: Path) => filter.call(x).booleanValue()
     ssc.fileStream[K, V, F](directory, fn, newFilesOnly)
   }
 
@@ -415,7 +415,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cmk: ClassTag[K] = ClassTag(kClass)
     implicit val cmv: ClassTag[V] = ClassTag(vClass)
     implicit val cmf: ClassTag[F] = ClassTag(fClass)
-    def fn = (x: Path) => filter.call(x).booleanValue()
+    def fn: (Path) => Boolean = (x: Path) => filter.call(x).booleanValue()
     ssc.fileStream[K, V, F](directory, fn, newFilesOnly, conf)
   }
 

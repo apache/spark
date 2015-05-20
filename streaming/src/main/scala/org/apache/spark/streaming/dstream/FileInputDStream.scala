@@ -19,17 +19,16 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{FileNotFoundException, IOException, ObjectInputStream}
 
-import scala.collection.mutable
-import scala.reflect.ClassTag
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
-
-import org.apache.spark.{SparkConf, SerializableWritable}
+import org.apache.spark.SerializableWritable
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.util.{TimeStampedHashMap, Utils}
+
+import scala.collection.mutable
+import scala.reflect.ClassTag
 
 /**
  * This class represents an input stream that monitors a Hadoop-compatible filesystem for new
@@ -387,17 +386,17 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
   }
 }
 
-  private[streaming]
-  object FileInputDStream {
+private[streaming]
+object FileInputDStream {
 
-    def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
-    /**
-     * Calculate the number of last batches to remember, such that all the files selected in
-     * at least last minRememberDurationS duration can be remembered.
-     */
-    def calculateNumBatchesToRemember(batchDuration: Duration,
-                                      minRememberDurationS: Duration): Int = {
-      math.ceil(minRememberDurationS.milliseconds.toDouble / batchDuration.milliseconds).toInt
-    }
+  def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
+  
+  /**
+   * Calculate the number of last batches to remember, such that all the files selected in
+   * at least last minRememberDurationS duration can be remembered.
+   */
+  def calculateNumBatchesToRemember(batchDuration: Duration,
+                                    minRememberDurationS: Duration): Int = {
+    math.ceil(minRememberDurationS.milliseconds.toDouble / batchDuration.milliseconds).toInt
   }
-
+}

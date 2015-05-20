@@ -503,7 +503,7 @@ class StreamingContext private[streaming] (
    * file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    */
-  def textFileStream(directory: String): DStream[String] = {
+  def textFileStream(directory: String): DStream[String] =  withNamedScope("text file stream") {
     fileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
   }
 
@@ -520,7 +520,7 @@ class StreamingContext private[streaming] (
    */
   def textFileStream(
       directory: String,
-      depth: Int =0): DStream[String] = withNamedScope("text file stream") {
+      depth: Int): DStream[String] = withNamedScope("text file stream") {
     fileStream[LongWritable, Text, TextInputFormat](directory, depth).map(_._2.toString)
   }
 
@@ -546,11 +546,12 @@ class StreamingContext private[streaming] (
   def binaryRecordsStream(
       directory: String,
       recordLength: Int,
-      depth: Int = 1): DStream[Array[Byte]] = withNamedScope("binary records stream") {
+      depth: Int): DStream[Array[Byte]] = withNamedScope("binary records stream") {
     val conf = sc_.hadoopConfiguration
     conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
     val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](
-      directory, FileInputDStream.defaultFilter : Path => Boolean, newFilesOnly=true, conf, depth)
+      directory, FileInputDStream.defaultFilter : Path => Boolean,
+      newFilesOnly=true, conf, depth)
     val data = br.map { case (k, v) =>
       val bytes = v.getBytes
       assert(bytes.length == recordLength, "Byte array does not have correct length")
@@ -577,7 +578,7 @@ class StreamingContext private[streaming] (
   @Experimental
   def binaryRecordsStream(
       directory: String,
-      recordLength: Int): DStream[Array[Byte]] = {
+      recordLength: Int): DStream[Array[Byte]] = withNamedScope("binary records stream") {
       binaryRecordsStream(directory, recordLength, 1)
   }
 
