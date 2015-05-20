@@ -40,22 +40,22 @@ private[sql] object GroupedData {
   /**
    * The Grouping Type
    */
-  private[sql] trait GroupType
+  trait GroupType
 
   /**
    * To indicate it's the GroupBy
    */
-  private[sql] object GroupByType extends GroupType
+  object GroupByType extends GroupType
 
   /**
    * To indicate it's the CUBE
    */
-  private[sql] object CubeType extends GroupType
+  object CubeType extends GroupType
 
   /**
    * To indicate it's the ROLLUP
    */
-  private[sql] object RollupType extends GroupType
+  object RollupType extends GroupType
 }
 
 /**
