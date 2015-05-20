@@ -70,18 +70,18 @@ class DataTypeSuite extends FunSuite {
     }
   }
 
-  test("mapFields returns map of name to StructField") {
+  test("fieldsMap returns map of name to StructField") {
     val struct = StructType(
       StructField("a", LongType) :: 
       StructField("b", FloatType) :: Nil)
 
-    val mapped = StructType.mapFields(struct.fields)
+    val mapped = StructType.fieldsMap(struct.fields)
 
     val expected = Map(
       "a" -> StructField("a", LongType),
       "b" -> StructField("b", FloatType))
 
-    assert(mapped == expected)
+    assert(mapped === expected)
   }
 
   test("merge where right is empty") {
