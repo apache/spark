@@ -38,6 +38,8 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
 {
   private[streaming] def ssc = self.ssc
 
+  private[streaming] def sparkContext = self.context.sparkContext
+
   private[streaming] def defaultPartitioner(numPartitions: Int = self.ssc.sc.defaultParallelism) = {
     new HashPartitioner(numPartitions)
   }
@@ -98,8 +100,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
   def reduceByKey(
       reduceFunc: (V, V) => V,
       partitioner: Partitioner): DStream[(K, V)] = ssc.withScope {
-    val cleanedReduceFunc = ssc.sc.clean(reduceFunc)
-    combineByKey((v: V) => v, cleanedReduceFunc, cleanedReduceFunc, partitioner)
+    combineByKey((v: V) => v, reduceFunc, reduceFunc, partitioner)
   }
 
   /**
@@ -113,7 +114,15 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
       mergeCombiner: (C, C) => C,
       partitioner: Partitioner,
       mapSideCombine: Boolean = true): DStream[(K, C)] = ssc.withScope {
-    new ShuffledDStream[K, V, C](self, createCombiner, mergeValue, mergeCombiner, partitioner,
+    val cleanedCreateCombiner = sparkContext.clean(createCombiner)
+    val cleanedMergeValue = sparkContext.clean(mergeValue)
+    val cleanedMergeCombiner = sparkContext.clean(mergeCombiner)
+    new ShuffledDStream[K, V, C](
+      self,
+      cleanedCreateCombiner,
+      cleanedMergeValue,
+      cleanedMergeCombiner,
+      partitioner,
       mapSideCombine)
   }
 
@@ -264,10 +273,9 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
       slideDuration: Duration,
       partitioner: Partitioner
     ): DStream[(K, V)] = ssc.withScope {
-    val cleanedReduceFunc = ssc.sc.clean(reduceFunc)
-    self.reduceByKey(cleanedReduceFunc, partitioner)
+    self.reduceByKey(reduceFunc, partitioner)
         .window(windowDuration, slideDuration)
-        .reduceByKey(cleanedReduceFunc, partitioner)
+        .reduceByKey(reduceFunc, partitioner)
   }
 
   /**
@@ -385,8 +393,9 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
       updateFunc: (Seq[V], Option[S]) => Option[S],
       partitioner: Partitioner
     ): DStream[(K, S)] = ssc.withScope {
+    val cleanedUpdateF = sparkContext.clean(updateFunc)
     val newUpdateFunc = (iterator: Iterator[(K, Seq[V], Option[S])]) => {
-      iterator.flatMap(t => updateFunc(t._2, t._3).map(s => (t._1, s)))
+      iterator.flatMap(t => cleanedUpdateF(t._2, t._3).map(s => (t._1, s)))
     }
     updateStateByKey(newUpdateFunc, partitioner, true)
   }
@@ -428,8 +437,9 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
       partitioner: Partitioner,
       initialRDD: RDD[(K, S)]
     ): DStream[(K, S)] = ssc.withScope {
+    val cleanedUpdateF = sparkContext.clean(updateFunc)
     val newUpdateFunc = (iterator: Iterator[(K, Seq[V], Option[S])]) => {
-      iterator.flatMap(t => updateFunc(t._2, t._3).map(s => (t._1, s)))
+      iterator.flatMap(t => cleanedUpdateF(t._2, t._3).map(s => (t._1, s)))
     }
     updateStateByKey(newUpdateFunc, partitioner, true, initialRDD)
   }
@@ -463,7 +473,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * 'this' DStream without changing the key.
    */
   def mapValues[U: ClassTag](mapValuesFunc: V => U): DStream[(K, U)] = ssc.withScope {
-    new MapValuedDStream[K, V, U](self, mapValuesFunc)
+    new MapValuedDStream[K, V, U](self, sparkContext.clean(mapValuesFunc))
   }
 
   /**
@@ -473,7 +483,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
   def flatMapValues[U: ClassTag](
       flatMapValuesFunc: V => TraversableOnce[U]
     ): DStream[(K, U)] = ssc.withScope {
-    new FlatMapValuedDStream[K, V, U](self, flatMapValuesFunc)
+    new FlatMapValuedDStream[K, V, U](self, sparkContext.clean(flatMapValuesFunc))
   }
 
   /**
