@@ -48,7 +48,7 @@ class MasterWebUI(val master: Master, requestedPort: Int)
     attachPage(new HistoryNotFoundPage(this))
     attachPage(masterPage)
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
-    attachHandler(ApiRootResource.getJsonServlet(this))
+    attachHandler(ApiRootResource.getServletHandler(this))
     attachHandler(createRedirectHandler(
       "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST")))
     attachHandler(createRedirectHandler(
