@@ -166,23 +166,13 @@ private[streaming] class ReceiverSupervisorImpl(
     blockGenerator.stop()
     env.rpcEnv.stop(endpoint)
   }
- 
-  override protected def onReceiverRegister() {
+
+  override protected def onReceiverStart() {
     val msg = RegisterReceiver(
       streamId, receiver.getClass.getSimpleName, Utils.localHostName(), endpoint)
-    val ret = trackerEndpoint.askWithRetry[Boolean](msg)
-    if (!ret) {
-      throw new SparkException("ReceiverTracker is stopping and doesn't accept registeration " +
-        "from receivers.")
-    }
-  }
- 
-  override protected def onReceiverStart() {
-    val msg = ReceiverStarted(
-      streamId, receiver.getClass.getSimpleName, Utils.localHostName(), endpoint)
-    val ret = trackerEndpoint.askWithRetry[Boolean](msg)
-    if (!ret) {
-      throw new SparkException("ReceiverTracker is stopping and doesn't accept receiver started.")
+    val successful = trackerEndpoint.askWithRetry[Boolean](msg)
+    if (!successful) {
+      stop("Registered unsuccessfully", None)
     }
   }
 

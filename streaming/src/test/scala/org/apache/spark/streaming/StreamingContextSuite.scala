@@ -224,6 +224,19 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     }
   }
 
+  test("stop gracefully even if a receiver misses StopReceiver") {
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    sc = new SparkContext(conf)
+    ssc = new StreamingContext(sc, Milliseconds(100))
+    val input = ssc.receiverStream(new TestReceiver)
+    input.foreachRDD(_ => {})
+    ssc.start()
+    // Call `ssc.stop` at once so that it's possible that the receiver will miss "StopReceiver"
+    failAfter(30000 millis) {
+      ssc.stop(stopSparkContext = true, stopGracefully = true)
+    }
+  }
+
   test("stop slow receiver gracefully") {
     val conf = new SparkConf().setMaster(master).setAppName(appName)
     conf.set("spark.streaming.gracefulStopTimeout", "20000s")

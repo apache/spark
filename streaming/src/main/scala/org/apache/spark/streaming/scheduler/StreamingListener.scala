@@ -37,11 +37,7 @@ case class StreamingListenerBatchCompleted(batchInfo: BatchInfo) extends Streami
 
 @DeveloperApi
 case class StreamingListenerBatchStarted(batchInfo: BatchInfo) extends StreamingListenerEvent
- 
-@DeveloperApi
-case class StreamingListenerReceiverRegistered(receiverInfo: ReceiverInfo)
-  extends StreamingListenerEvent
- 
+
 @DeveloperApi
 case class StreamingListenerReceiverStarted(receiverInfo: ReceiverInfo)
   extends StreamingListenerEvent
@@ -61,10 +57,7 @@ case class StreamingListenerReceiverStopped(receiverInfo: ReceiverInfo)
  */
 @DeveloperApi
 trait StreamingListener {
- 
-  /** Called when a receiver has been registered */
-  def onReceiverRegistered(receiverRegistered: StreamingListenerReceiverRegistered) { }
- 
+
   /** Called when a receiver has been started */
   def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) { }
 
