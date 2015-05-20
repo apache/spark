@@ -144,7 +144,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     validateModelFit(pi, theta, model)
 
     val validationData = NaiveBayesSuite.generateNaiveBayesInput(
-      pi, theta, nPoints, 17, Bernoulli)
+      pi, theta, nPoints, 17, Multinomial)
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
