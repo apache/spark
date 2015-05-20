@@ -91,7 +91,6 @@
   <script src="{{ url_for('static', filename='jquery.dataTables.min.js') }}"></script>
   <script src="{{ url_for('static', filename='dataTables.bootstrap.js') }}"></script>
   <script>
-console.log($().jquery); 
       $('#dags').dataTable({
         "iDisplayLength": 100,
         "bSort": false,
@@ -163,7 +162,12 @@ console.log($().jquery);
                       .attr('fill-opacity', 0)
                       .style("stroke-width", stroke_width);
                 }
-              });
+              })
+              .style("opacity", 0)
+              .transition()
+              .duration(500)
+              .delay(function(d, i){return i*50;})
+              .style("opacity", 1);
             d3.select("#loading").remove();
         }
 

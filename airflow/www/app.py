@@ -576,14 +576,15 @@ class Airflow(BaseView):
         task_ids = []
         for dag in dagbag.dags.values():
             task_ids += dag.task_ids
-        data = {}
         TI = models.TaskInstance
         session = Session()
-        qry = session.query(
-            TI.dag_id,
-            TI.state,
-            sqla.func.count(TI.task_id)
-        ).filter(TI.task_id.in_(task_ids)).group_by(TI.dag_id, TI.state)
+        qry = (
+            session.query(TI.dag_id, TI.state, sqla.func.count(TI.task_id))
+            .filter(TI.task_id.in_(task_ids))
+            .group_by(TI.dag_id, TI.state)
+        )
+
+        data = {}
         for dag_id, state, count in qry:
             if dag_id not in data:
                 data[dag_id] = {}
