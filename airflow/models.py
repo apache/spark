@@ -82,7 +82,7 @@ class DagBag(object):
             self,
             dag_folder=None,
             executor=DEFAULT_EXECUTOR,
-            include_examples=True,
+            include_examples=conf.getboolean('core', 'LOAD_EXAMPLES'),
             sync_to_db=False):
 
         dag_folder = dag_folder or DAGS_FOLDER
