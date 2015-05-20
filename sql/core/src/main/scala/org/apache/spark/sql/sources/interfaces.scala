@@ -25,7 +25,9 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SerializableWritable
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
@@ -484,7 +486,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   private[sources] final def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
-      inputPaths: Array[String]): RDD[Row] = {
+      inputPaths: Array[String],
+      broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
     val inputStatuses = inputPaths.flatMap { input =>
       val path = new Path(input)
 
@@ -499,7 +502,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       }
     }
 
-    buildScan(requiredColumns, filters, inputStatuses)
+    buildScan(requiredColumns, filters, inputStatuses, broadcastedConf)
   }
 
   /**
@@ -581,6 +584,34 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       filters: Array[Filter],
       inputFiles: Array[FileStatus]): RDD[Row] = {
     buildScan(requiredColumns, inputFiles)
+  }
+
+  /**
+   * For a non-partitioned relation, this method builds an `RDD[Row]` containing all rows within
+   * this relation. For partitioned relations, this method is called for each selected partition,
+   * and builds an `RDD[Row]` containing all rows within that single partition.
+   *
+   * Note: This interface is subject to change in future.
+   *
+   * @param requiredColumns Required columns.
+   * @param filters Candidate filters to be pushed down. The actual filter should be the conjunction
+   *        of all `filters`.  The pushed down filters are currently purely an optimization as they
+   *        will all be evaluated again. This means it is safe to use them with methods that produce
+   *        false positives such as filtering partitions based on a bloom filter.
+   * @param inputFiles For a non-partitioned relation, it contains paths of all data files in the
+   *        relation. For a partitioned relation, it contains paths of all data files in a single
+   *        selected partition.
+   * @param broadcastedConf A shared broadcast Hadoop Configuration, which can be used to reduce the
+   *                        overhead of broadcasting the Configuration for every Hadoop RDD.
+   *
+   * @since 1.4.0
+   */
+  private[sql] def buildScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputFiles: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
+    buildScan(requiredColumns, filters, inputFiles)
   }
 
   /**
