@@ -17,6 +17,8 @@
 
 package org.apache.spark.serializer
 
+import java.io.ByteArrayOutputStream
+
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
@@ -318,6 +320,35 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
       classOf[RegistratorWithoutAutoReset].getName)
     val ser2 = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
     assert(!ser2.getAutoReset)
+  }
+
+  private def testSerializerInstanceReuse(autoReset: Boolean, referenceTracking: Boolean): Unit = {
+    val conf = new SparkConf(loadDefaults = false)
+      .set("spark.kryo.referenceTracking", referenceTracking.toString)
+    if (!autoReset) {
+      conf.set("spark.kryo.registrator", classOf[RegistratorWithoutAutoReset].getName)
+    }
+    val ser = new KryoSerializer(conf)
+    val serInstance = ser.newInstance().asInstanceOf[KryoSerializerInstance]
+    assert (serInstance.getAutoReset() === autoReset)
+    val obj = ("Hello", "World")
+    def serializeObjects(): Array[Byte] = {
+      val baos = new ByteArrayOutputStream()
+      val serStream = serInstance.serializeStream(baos)
+      serStream.writeObject(obj)
+      serStream.writeObject(obj)
+      serStream.close()
+      baos.toByteArray
+    }
+    val output1: Array[Byte] = serializeObjects()
+    val output2: Array[Byte] = serializeObjects()
+    assert (output1 === output2)
+  }
+
+  for (referenceTracking <- Set(true, false); autoReset <- Set(true, false)) {
+    test(s"instance reuse with autoReset = $autoReset, referenceTracking = $referenceTracking") {
+      testSerializerInstanceReuse(autoReset = autoReset, referenceTracking = referenceTracking)
+    }
   }
 }
 
