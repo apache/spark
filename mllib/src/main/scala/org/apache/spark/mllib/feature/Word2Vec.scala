@@ -556,7 +556,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
     def load(sc: SparkContext, path: String): Word2VecModel = {
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
-      val dataFrame = sqlContext.parquetFile(dataPath)
+      val dataFrame = sqlContext.read.parquet(dataPath)
 
       val dataArray = dataFrame.select("word", "vector").collect()
 
