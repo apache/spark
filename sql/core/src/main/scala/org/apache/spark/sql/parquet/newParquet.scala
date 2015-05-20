@@ -255,9 +255,9 @@ private[sql] class ParquetRelation2(
 
     Utils.withDummyCallSite(sqlContext.sparkContext) {
       // TODO Stop using `FilteringParquetRowInputFormat` and overriding `getPartition`.
-      // After upgrading to Parquet 1.6.0, we should be able to stop caching `FileStatus` objects and
-      // footers.  Especially when a global arbitrative schema (either from metastore or data source
-      // DDL) is available.
+      // After upgrading to Parquet 1.6.0, we should be able to stop caching `FileStatus` objects
+      // and footers. Especially when a global arbitrative schema (either from metastore or data
+      // source DDL) is available.
       new SqlNewHadoopRDD(
         sc = sqlContext.sparkContext,
         broadcastedConf = broadcastedConf,
