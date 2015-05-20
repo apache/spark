@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.feature
 
+import java.lang.{Double => JDouble, Integer => JInt}
 import java.util.{Map => JMap}
 
 import scala.collection.JavaConverters._
@@ -253,13 +254,8 @@ class VectorIndexerModel private[ml] (
   extends Model[VectorIndexerModel] with VectorIndexerParams {
 
   /** Java-friendly version of [[categoryMaps]] */
-  def javaCategoryMaps: JMap[java.lang.Integer, JMap[java.lang.Double, java.lang.Integer]] = {
-    categoryMaps.map { case (feature, catMap) =>
-      val jCatMap: JMap[java.lang.Double, java.lang.Integer] = catMap.map { case (cat, idx) =>
-        (cat.asInstanceOf[java.lang.Double], idx.asInstanceOf[java.lang.Integer])
-      }.asJava
-      (feature.asInstanceOf[java.lang.Integer], jCatMap)
-    }.asJava
+  def javaCategoryMaps: JMap[JInt, JMap[JDouble, JInt]] = {
+    categoryMaps.mapValues(_.asJava).asJava.asInstanceOf[JMap[JInt, JMap[JDouble, JInt]]]
   }
 
   /**
