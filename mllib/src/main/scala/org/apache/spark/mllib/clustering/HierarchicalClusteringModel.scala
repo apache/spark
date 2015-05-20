@@ -17,8 +17,11 @@
 
 package org.apache.spark.mllib.clustering
 
+import java.io.File
+
 import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
-import org.apache.spark.api.java.JavaRDD
+import org.apache.commons.io.FilenameUtils
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -35,8 +38,20 @@ class HierarchicalClusteringModel(val tree: ClusterTree)
   /** Current version of model save/load format. */
   override protected def formatVersion: String = "1.0"
 
-  override def save(sc: SparkContext, path: String) {
-    val oos = new java.io.ObjectOutputStream(new java.io.FileOutputStream(path))
+  override def save(sc: SparkContext, path: String): Unit = this.save(path)
+
+  def save(sc: JavaSparkContext, path: String): Unit = this.save(path)
+
+  private def save(path: String): Unit = {
+    val pathObj = new File(HierarchicalClusteringModel.getModelFilePath(path)).getParentFile
+    if (pathObj.exists()) {
+      throw new IllegalArgumentException("You should save your model in another directory. " +
+          "the directory already exists: " + path)
+    }
+
+    pathObj.mkdir();
+    val modelFilePath = HierarchicalClusteringModel.getModelFilePath(path)
+    val oos = new java.io.ObjectOutputStream(new java.io.FileOutputStream(modelFilePath))
     try {
       oos.writeObject(this)
     } finally {
@@ -137,11 +152,23 @@ class HierarchicalClusteringModel(val tree: ClusterTree)
 object HierarchicalClusteringModel extends Loader[HierarchicalClusteringModel] {
 
   override def load(sc: SparkContext, path: String): HierarchicalClusteringModel = {
-    val stream = new java.io.ObjectInputStream(new java.io.FileInputStream(path))
+    this.load(path)
+  }
+
+  def load(sc: JavaSparkContext, path: String): HierarchicalClusteringModel = {
+    this.load(path)
+  }
+
+  def load(path: String): HierarchicalClusteringModel = {
+    val modelFilePath = getModelFilePath(path)
+    val stream = new java.io.ObjectInputStream(new java.io.FileInputStream(modelFilePath))
     try {
       stream.readObject().asInstanceOf[HierarchicalClusteringModel]
     } finally {
       stream.close()
     }
   }
+
+  private[clustering]
+  def getModelFilePath(path: String): String = FilenameUtils.concat(path, "model")
 }
