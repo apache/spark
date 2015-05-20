@@ -548,7 +548,7 @@ class StreamingContext private[streaming] (
   /**
    * Start the execution of the streams.
    *
-   * @throws SparkException if the StreamingContext is already stopped.
+   * @throws IllegalStateException if the StreamingContext is already stopped.
    */
   def start(): Unit = synchronized {
     state match {
@@ -567,7 +567,7 @@ class StreamingContext private[streaming] (
       case ACTIVE =>
         logWarning("StreamingContext has already been started")
       case STOPPED =>
-        throw new SparkException("StreamingContext has already been stopped")
+        throw new IllegalStateException("StreamingContext has already been stopped")
     }
   }
 

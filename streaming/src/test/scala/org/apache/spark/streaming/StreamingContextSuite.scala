@@ -163,7 +163,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
     ssc.stop()
-    intercept[SparkException] {
+    intercept[IllegalStateException] {
       ssc.start() // start after stop should throw exception
     }
     assert(ssc.getState() === StreamingContextState.STOPPED)
@@ -581,7 +581,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     val anotherInput = addInputStream(anotherSsc)
     anotherInput.foreachRDD { rdd => rdd.count }
 
-    val exception = intercept[SparkException] {
+    val exception = intercept[IllegalStateException] {
       anotherSsc.start()
     }
     assert(exception.getMessage.contains("StreamingContext"), "Did not get the right exception")
@@ -604,7 +604,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
 
     def testForException(clue: String, expectedErrorMsg: String)(body: => Unit): Unit = {
       withClue(clue) {
-        val ex = intercept[SparkException] {
+        val ex = intercept[IllegalStateException] {
           body
         }
         assert(ex.getMessage.toLowerCase().contains(expectedErrorMsg))
