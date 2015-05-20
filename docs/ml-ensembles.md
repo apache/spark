@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Ensembles - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Ensembles
+title: Ensembles
+displayTitle: <a href="ml-guide.html">ML</a> - Ensembles
 ---
 
 * Table of contents
