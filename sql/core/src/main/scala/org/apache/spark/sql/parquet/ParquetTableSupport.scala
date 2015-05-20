@@ -197,7 +197,9 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   private[parquet] def writePrimitive(schema: DataType, value: Any): Unit = {
     if (value != null) {
       schema match {
-        case StringType => writer.addBinary(
+        case StringType if value.isInstanceOf[String] => writer.addBinary(
+          Binary.fromByteArray(UTF8String(value.asInstanceOf[String]).getBytes))
+        case StringType if value.isInstanceOf[UTF8String] => writer.addBinary(
           Binary.fromByteArray(value.asInstanceOf[UTF8String].getBytes))
         case BinaryType => writer.addBinary(
           Binary.fromByteArray(value.asInstanceOf[Array[Byte]]))
