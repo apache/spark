@@ -127,6 +127,11 @@ private[yarn] class YarnAllocator(
     }
   }
 
+  // Maintain a map of preferredNodeLocation to counts.
+  private var preferredNodeLocationToCounts: Map[String, Int] = Map.empty
+  // Maintain a map of rack to counts
+  private var preferredRackLocationToCounts: Map[String, Int] = Map.empty
+
   def getNumExecutorsRunning: Int = numExecutorsRunning
 
   def getNumExecutorsFailed: Int = numExecutorsFailed
@@ -170,6 +175,21 @@ private[yarn] class YarnAllocator(
     } else {
       logWarning(s"Attempted to kill unknown executor $executorId!")
     }
+  }
+
+  /**
+   * Update the preferred node locations
+   */
+  def updatePreferredNodeLocations(hostToCounts: Map[String, Int]): Unit = synchronized {
+    this.preferredNodeLocationToCounts = hostToCounts
+
+    val rackToCounts = new HashMap[String, Int]()
+    hostToCounts.foreach { case (host, count) =>
+      val rackName = RackResolver.resolve(conf, host).getNetworkLocation
+      val count = rackToCounts.getOrElseUpdate(rackName, 0) + count
+      rackToCounts(rackName) = count
+    }
+    preferredRackLocationToCounts = rackToCounts.toMap
   }
 
   /**
@@ -249,11 +269,13 @@ private[yarn] class YarnAllocator(
    * Creates a container request, handling the reflection required to use YARN features that were
    * added in recent versions.
    */
-  private def createContainerRequest(resource: Resource): ContainerRequest = {
+  private def createContainerRequest(resource: Resource): ContainerRequest = synchronized {
+    val nodes = preferredNodeLocationToCounts.keys.toArray
+    val racks = preferredRackLocationToCounts.keys.toArray
     nodeLabelConstructor.map { constructor =>
-      constructor.newInstance(resource, null, null, RM_REQUEST_PRIORITY, true: java.lang.Boolean,
+      constructor.newInstance(resource, nodes, racks, RM_REQUEST_PRIORITY, true: java.lang.Boolean,
         labelExpression.orNull)
-    }.getOrElse(new ContainerRequest(resource, null, null, RM_REQUEST_PRIORITY))
+    }.getOrElse(new ContainerRequest(resource, nodes, racks, RM_REQUEST_PRIORITY))
   }
 
   /**

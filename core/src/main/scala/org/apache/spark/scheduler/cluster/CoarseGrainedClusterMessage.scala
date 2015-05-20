@@ -86,10 +86,7 @@ private[spark] object CoarseGrainedClusterMessages {
 
   // Request executors by specifying the new total number of executors desired
   // This includes executors already pending or running
-  case class RequestExecutors(
-      requestedTotal: Int,
-      preferredNodeLocations: Seq[String],
-      blacklist: Seq[String])
+  case class RequestExecutors(requestedTotal: Int, preferredNodeLocationToCounts: Map[String, Int])
     extends CoarseGrainedClusterMessage
 
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage

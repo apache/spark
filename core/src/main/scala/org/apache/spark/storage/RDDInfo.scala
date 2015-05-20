@@ -29,7 +29,7 @@ class RDDInfo(
     var storageLevel: StorageLevel,
     val parentIds: Seq[Int],
     val scope: Option[RDDOperationScope] = None,
-    val preferredNodeLocations: Set[String] = Set.empty)
+    val preferredNodeLocations: Seq[String] = Nil)
   extends Ordered[RDDInfo] {
 
   var numCachedPartitions = 0
@@ -57,9 +57,8 @@ private[spark] object RDDInfo {
   def fromRdd(rdd: RDD[_]): RDDInfo = {
     val rddName = Option(rdd.name).getOrElse(Utils.getFormattedClassName(rdd))
     val parentIds = rdd.dependencies.map(_.rdd.id)
-    val preferredNodeLocations = rdd.partitions.flatMap(p => rdd.preferredLocations(p))
-    val consolidatedLocations = preferredNodeLocations.toSet
+    val preferredNodeLocations = rdd.partitions.flatMap(p => rdd.preferredLocations(p)).toSeq
     new RDDInfo(rdd.id, rddName, rdd.partitions.length, rdd.getStorageLevel, parentIds,
-      rdd.scope, consolidatedLocations)
+      rdd.scope, preferredNodeLocations)
   }
 }

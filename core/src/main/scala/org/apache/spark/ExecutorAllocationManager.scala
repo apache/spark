@@ -350,7 +350,7 @@ private[spark] class ExecutorAllocationManager(
     }
 
     val addRequestAcknowledged = testing ||
-      client.requestTotalExecutors(numExecutorsTarget, listener.preferredNodeLocations, Nil)
+      client.requestTotalExecutors(numExecutorsTarget, listener.preferredNodeLocations)
     if (addRequestAcknowledged) {
       val executorsString = "executor" + { if (delta > 1) "s" else "" }
       logInfo(s"Requesting $delta new $executorsString because tasks are backlogged" +
@@ -521,7 +521,7 @@ private[spark] class ExecutorAllocationManager(
     private var numRunningTasks: Int = _
 
     // stageId to preferredLocation map, maintain the preferred node location of each stage
-    private val stageIdToPreferredLocations = new mutable.HashMap[Int, mutable.HashSet[String]]
+    private val stageIdToPreferredLocations = new mutable.HashMap[Int, mutable.ArrayBuffer[String]]
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
       initializing = false
@@ -531,10 +531,10 @@ private[spark] class ExecutorAllocationManager(
         stageIdToNumTasks(stageId) = numTasks
         allocationManager.onSchedulerBacklogged()
 
-        val preferredLocations = stageIdToPreferredLocations.getOrElseUpdate(stageId,
-          new mutable.HashSet[String]())
+        val locations = stageIdToPreferredLocations.getOrElseUpdate(stageId,
+          mutable.ArrayBuffer[String]())
         stageSubmitted.stageInfo.rddInfos.foreach { rddInfo =>
-          rddInfo.preferredNodeLocations.foreach { l => preferredLocations += l }
+          rddInfo.preferredNodeLocations.foreach { l =>  locations += l }
         }
       }
     }
@@ -650,7 +650,7 @@ private[spark] class ExecutorAllocationManager(
     }
 
     def preferredNodeLocations: Seq[String] = allocationManager.synchronized {
-      stageIdToPreferredLocations.values.flatMap(x => x).toSet.toSeq
+      stageIdToPreferredLocations.values.flatMap(x => x).toSeq
     }
   }
 
