@@ -372,7 +372,7 @@ class DataFrameSuite extends QueryTest {
     val describeResult = Seq(
       Row("count",   "4",               "4"),
       Row("mean",    "33.0",            "178.0"),
-      Row("stddev",  "16.583123951777", "10.0"),
+      Row("stddev",  "19.148542155126762", "11.547005383792516"),
       Row("min",     "16",              "164"),
       Row("max",     "60",              "192"))
 
