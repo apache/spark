@@ -28,7 +28,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SerializableWritable
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Row, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -425,6 +425,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
             None
         }
         .orElse {
+          // We only know the partition columns and their data types. We need to discover
+          // partition values.
           userDefinedPartitionColumns.map { partitionSchema =>
             val spec = discoverPartitions()
             val castedPartitions = spec.partitions.map { case p @ Partition(values, path) =>

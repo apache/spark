@@ -89,19 +89,10 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         val userSpecifiedSchema =
           schemaString.map(s => DataType.fromJson(s).asInstanceOf[StructType])
 
-        val partitionColumns = {
-          // Versions earlier than 1.4.0 don't have this property.
-          val count = table.properties.getOrElse(
-            "spark.sql.sources.schema.partitionColumns.count", "0").toInt
-          (0 until count).map { index =>
-            table.properties.getOrElse(
-              s"spark.sql.sources.schema.partitionColumns.$index",
-              throw new AnalysisException(
-                s"Expecting $count partition columns, " +
-                  "but could not find partition column #$index from the metastore")
-            )
-          }
-        }
+        // We only need names at here since userSpecifiedSchema we loaded from the metastore
+        // contains partition columns. We can always get datatypes of partitioning columns
+        // from userSpecifiedSchema.
+        val partitionColumns = table.partitionColumns.map(_.name)
 
         // It does not appear that the ql client for the metastore has a way to enumerate all the
         // SerDe properties directly...
@@ -169,19 +160,25 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       }
     }
 
-    // Saves partition columns into table properties.  Two things to note:
-    //
-    //  1. We save each column as a single property since column names may contain arbitrary
-    //     characters (i.e., in back-quoted column names).
-    //
-    //  2. We are not saving partition columns as standard Hive partition columns here, because
-    //     partition columns of a Spark SQL data source relation are not quite the same as standard
-    //     Hive partition columns.  For example, the former only supports dynamic partitions.
-    tableProperties.put(
-      "spark.sql.sources.schema.partitionColumns.count",
-      partitionColumns.length.toString)
-    partitionColumns.zipWithIndex.foreach { case (column, index) =>
-      tableProperties.put(s"spark.sql.sources.schema.partitionColumns.$index", column)
+    val metastorePartitionColumns = userSpecifiedSchema.map { schema =>
+      val fields = partitionColumns.map(col => schema(col))
+      fields.map { field =>
+        HiveColumn(
+          name = field.name,
+          hiveType = HiveMetastoreTypes.toMetastoreType(field.dataType),
+          comment = "")
+      }.toSeq
+    }.getOrElse {
+      if (partitionColumns.length > 0) {
+        // The table does not have a specified schema, which means that the schema will be inferred
+        // when we load the table. So, we are not expecting partition columns and we will discover
+        // partitions when we load the table. However, if there are specified partition columns,
+        // we simplily ignore them and provide a warning message..
+        logWarning(
+          s"The schema and partitions of table $tableName will be inferred when it is loaded. " +
+            s"Specified partition columns (${partitionColumns.mkString(",")}) will be ignored.")
+      }
+      Seq.empty[HiveColumn]
     }
 
     val tableType = if (isExternal) {
@@ -197,7 +194,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         specifiedDatabase = Option(dbName),
         name = tblName,
         schema = Seq.empty,
-        partitionColumns = Seq.empty,
+        partitionColumns = metastorePartitionColumns,
         tableType = tableType,
         properties = tableProperties.toMap,
         serdeProperties = options))
