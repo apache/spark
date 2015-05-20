@@ -44,14 +44,24 @@ import org.apache.spark.sql.{SQLContext, Row}
 /**
  *  Entry in vocabulary 
  */
-private case class VocabWord(
+private abstract class VocabWord {
+  def word: String
+  def cn: Int
+}
+ 
+private case class VocabWordHS(
   var word: String,
   var cn: Int,
   var point: Array[Int],
   var code: Array[Int],
   var codeLen:Int
-)
-
+) extends VocabWord
+ 
+private case class VocabWordNS(
+  var word: String,
+  var cn: Int
+) extends VocabWord
+ 
 /**
  * :: Experimental ::
  * Word2Vec creates vector representation of words in a text corpus.
@@ -79,7 +89,47 @@ class Word2Vec extends Serializable with Logging {
   private var numIterations = 1
   private var seed = Utils.random.nextLong()
   private var minCount = 5
-  
+  // Hierarchical softmax
+  private var hs = true
+  // Negative sampling
+  private var negative: Int = 0
+  private var nsTableSize = 10000
+  private var nsPower = 0.75
+ 
+  /**
+   * Sets hierarchical softmax.
+   */
+  def setHSMode(): this.type = {
+    this.hs = true
+    this.negative = 0
+    this
+  }
+ 
+  /**
+   * Sets negative sampling.
+   */
+  def setNSMode(samplingNum: Int): this.type = {
+    this.negative = samplingNum
+    this.hs = false
+    this
+  }
+ 
+  /**
+   * Sets negative sampling table size (default: 10000).
+   */
+  def setNSTableSize(tableSize: Int): this.type = {
+    this.nsTableSize = tableSize
+    this
+  }
+ 
+  /**
+   * Sets negative sampling power (default: 0.75).
+   */
+  def setNSPower(nsPower: Double): this.type = {
+    this.nsPower = nsPower
+    this
+  }
+
   /**
    * Sets vector size (default: 100).
    */
@@ -147,13 +197,18 @@ class Word2Vec extends Serializable with Logging {
   private def learnVocab(words: RDD[String]): Unit = {
     vocab = words.map(w => (w, 1))
       .reduceByKey(_ + _)
-      .map(x => VocabWord(
-        x._1,
-        x._2,
-        new Array[Int](MAX_CODE_LENGTH), 
-        new Array[Int](MAX_CODE_LENGTH), 
-        0))
-      .filter(_.cn >= minCount)
+      .map{ x => 
+        if (this.hs) {
+          VocabWordHS(
+            x._1,
+            x._2,
+            new Array[Int](MAX_CODE_LENGTH), 
+            new Array[Int](MAX_CODE_LENGTH), 
+            0).asInstanceOf[VocabWord]
+        } else {
+          VocabWordNS(x._1, x._2).asInstanceOf[VocabWord]
+        }
+      }.filter(_.cn >= minCount)
       .collect()
       .sortWith((a, b) => a.cn > b.cn)
     
@@ -176,6 +231,28 @@ class Word2Vec extends Serializable with Logging {
       i += 1
     }
     expTable
+  }
+
+  private def createSamplingTable(): Array[Int] = {
+    val table = new Array[Int](nsTableSize)
+    // Normalization constant
+    val z = vocab.foldLeft(0.0) { (p, currVocab) =>
+      p + math.pow(currVocab.cn, nsPower)
+    }
+    var wordIndex = 0
+    var accuProbability = math.pow(vocab(wordIndex).cn, nsPower) / z
+    var tableIndex = 0
+    for (tableIndex <- 0 until nsTableSize) {
+      table(tableIndex) = wordIndex
+      if (tableIndex.toDouble / nsTableSize > accuProbability) {
+        wordIndex += 1
+        accuProbability += math.pow(vocab(wordIndex).cn, nsPower) / z
+      }
+      if (wordIndex >= trainWordsCount) {
+        wordIndex = trainWordsCount - 1
+      }
+    }
+    table
   }
 
   private def createBinaryTree(): Unit = {
@@ -243,12 +320,13 @@ class Word2Vec extends Serializable with Logging {
         i += 1
         b = parentNode(b)
       }
-      vocab(a).codeLen = i
-      vocab(a).point(0) = vocabSize - 2
+      val vocabA = vocab(a).asInstanceOf[VocabWordHS]
+      vocabA.codeLen = i
+      vocabA.point(0) = vocabSize - 2
       b = 0
       while (b < i) {
-        vocab(a).code(i - b - 1) = code(b)
-        vocab(a).point(i - b) = point(b) - vocabSize
+        vocabA.code(i - b - 1) = code(b)
+        vocabA.point(i - b) = point(b) - vocabSize
         b += 1
       }
       a += 1
@@ -265,9 +343,17 @@ class Word2Vec extends Serializable with Logging {
     val words = dataset.flatMap(x => x)
 
     learnVocab(words)
-    
-    createBinaryTree()
-    
+
+    if (this.hs) {
+      createBinaryTree()
+    }
+
+    val sampleTable: Array[Int] = if (this.negative > 0) {
+      createSamplingTable()
+    } else {
+      null
+    }
+        
     val sc = dataset.context
 
     val expTable = sc.broadcast(createExpTable())
@@ -339,25 +425,59 @@ class Word2Vec extends Serializable with Logging {
                     val lastWord = sentence(c)
                     val l1 = lastWord * vectorSize
                     val neu1e = new Array[Float](vectorSize)
+
                     // Hierarchical softmax
-                    var d = 0
-                    while (d < bcVocab.value(word).codeLen) {
-                      val inner = bcVocab.value(word).point(d)
-                      val l2 = inner * vectorSize
-                      // Propagate hidden -> output
-                      var f = blas.sdot(vectorSize, syn0, l1, 1, syn1, l2, 1)
-                      if (f > -MAX_EXP && f < MAX_EXP) {
-                        val ind = ((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2.0)).toInt
-                        f = expTable.value(ind)
-                        val g = ((1 - bcVocab.value(word).code(d) - f) * alpha).toFloat
-                        blas.saxpy(vectorSize, g, syn1, l2, 1, neu1e, 0, 1)
-                        blas.saxpy(vectorSize, g, syn0, l1, 1, syn1, l2, 1)
-                        syn1Modify(inner) += 1
+                    if (this.hs) {
+                      val vocab = bcVocab.value(word).asInstanceOf[VocabWordHS]
+                      var d = 0
+                      while (d < vocab.codeLen) {
+                        val inner = vocab.point(d)
+                        val l2 = inner * vectorSize
+                        // Propagate hidden -> output
+                        var f = blas.sdot(vectorSize, syn0, l1, 1, syn1, l2, 1)
+                        if (f > -MAX_EXP && f < MAX_EXP) {
+                          val ind = ((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2.0)).toInt
+                          f = expTable.value(ind)
+                          val g = ((1 - vocab.code(d) - f) * alpha).toFloat
+                          blas.saxpy(vectorSize, g, syn1, l2, 1, neu1e, 0, 1)
+                          blas.saxpy(vectorSize, g, syn0, l1, 1, syn1, l2, 1)
+                          syn1Modify(inner) += 1
+                        }
+                        d += 1
                       }
-                      d += 1
+                      blas.saxpy(vectorSize, 1.0f, neu1e, 0, 1, syn0, l1, 1)
+                      syn0Modify(lastWord) += 1
+                    } else {
+                      // Negative sampling
+                      var i = 0
+                      while (i < this.negative + 1) {
+                        val sampled = if (i == 0) {
+                          lastWord
+                        } else {
+                          var w = sampleTable(Utils.random.nextInt(sampleTable.length))
+                          while (w == lastWord) {
+                            w = sampleTable(Utils.random.nextInt(sampleTable.length))
+                          }
+                          w
+                        }
+                        val label = if (i == 0) { 1.0 } else { 0.0 }
+ 
+                        val l2 = sampled * vectorSize
+                        // Propagate hidden -> output
+                        var f = blas.sdot(vectorSize, syn0, l1, 1, syn1, l2, 1)
+                        if (f > -MAX_EXP && f < MAX_EXP) {
+                          val ind = ((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2.0)).toInt
+                          f = expTable.value(ind)
+                          val g = ((label - f) * alpha).toFloat
+                          blas.saxpy(vectorSize, g, syn1, l2, 1, neu1e, 0, 1)
+                          blas.saxpy(vectorSize, g, syn0, l1, 1, syn1, l2, 1)
+                          syn1Modify(sampled) += 1
+                        }
+                        i += 1
+                      }
+                      blas.saxpy(vectorSize, 1.0f, neu1e, 0, 1, syn0, l1, 1)
+                      syn0Modify(lastWord) += 1
                     }
-                    blas.saxpy(vectorSize, 1.0f, neu1e, 0, 1, syn0, l1, 1)
-                    syn0Modify(lastWord) += 1
                   }
                 }
                 a += 1
@@ -497,7 +617,7 @@ class Word2VecModel private[mllib] (
    */
   def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
     val vector = transform(word)
-    findSynonyms(vector,num)
+    findSynonyms(vector, num)
   }
 
   /**
@@ -521,7 +641,7 @@ class Word2VecModel private[mllib] (
     val updatedCosines = new Array[Double](numWords)
     var ind = 0
     while (ind < numWords) {
-      updatedCosines(ind) = cosineVec(ind) / wordVecNorms(ind)
+      updatedCosines(ind) = cosineVec(ind) / wordVecNorms(ind) / blas.snrm2(vectorSize, fVector, 1)
       ind += 1
     }
     wordList.zip(updatedCosines)
