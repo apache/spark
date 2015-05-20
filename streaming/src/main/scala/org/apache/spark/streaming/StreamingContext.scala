@@ -523,11 +523,52 @@ class StreamingContext private[streaming] (
     assert(graph != null, "Graph is null")
     graph.validate()
 
+    assert(isCoresEnoughInLocalMode(), "No enough cores, Spark jobs will not get resources to " +
+      "process the received data.")
     assert(
       checkpointDir == null || checkpointDuration != null,
       "Checkpoint directory has been set, but the graph checkpointing interval has " +
         "not been set. Please use StreamingContext.checkpoint() to set the interval."
     )
+  }
+
+  private def isCoresEnoughInLocalMode(): Boolean = {
+    val risNum = graph.getReceiverInputStreams().size
+    if (risNum == 0){
+      true
+    }
+
+    // Regular expression used for local[N] and local[*] master formats
+    val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
+    // Regular expression for local[N, maxRetries], used in tests with failing tasks
+    val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+|\*)\s*,\s*([0-9]+)\]""".r
+    // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
+    val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
+
+    val master = sc.conf.get("spark.master")
+    val coresPerTask = sc.conf.getInt("spark.task.cpus", 1)
+    val maxTaskNum = master match {
+      case "local" => 1 / coresPerTask
+
+      case LOCAL_N_REGEX(threads) =>
+        def localCpuCount = Runtime.getRuntime.availableProcessors()
+        // local[*] estimates the number of cores on the machine; local[N] uses exactly N threads.
+        val threadCount = if (threads == "*") localCpuCount else threads.toInt
+        threadCount / coresPerTask
+
+      case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
+        def localCpuCount = Runtime.getRuntime.availableProcessors()
+        // local[*] estimates the number of cores on the machine; local[N] uses exactly N threads.
+        val threadCount = if (threads == "*") localCpuCount else threads.toInt
+        threadCount / coresPerTask
+
+      case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
+        coresPerSlave.toInt / coresPerTask * numSlaves.toInt
+
+      case _ => Int.MaxValue
+    }
+
+    maxTaskNum > risNum
   }
 
   /**
