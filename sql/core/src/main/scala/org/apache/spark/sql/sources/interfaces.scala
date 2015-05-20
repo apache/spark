@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.SerializableWritable
-import org.apache.spark.broadcast.Broadcast
-
 import scala.collection.mutable
 import scala.util.Try
 
@@ -28,7 +25,9 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SerializableWritable
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection

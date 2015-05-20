@@ -50,7 +50,6 @@ private[spark] class SqlNewHadoopPartition(
 }
 
 /**
- * :: DeveloperApi ::
  * An RDD that provides core functionality for reading data stored in Hadoop (e.g., files in HDFS,
  * sources in HBase, or S3), using the new MapReduce API (`org.apache.hadoop.mapreduce`).
  * It is based on [[org.apache.spark.rdd.NewHadoopRDD]]. It has three additions.
@@ -60,13 +59,10 @@ private[spark] class SqlNewHadoopPartition(
  * 3. An optional closure `initLocalJobFuncOpt` that set configurations at both the driver side
  *    and the executor side to the shared Hadoop Configuration.
  *
- * @param sc The SparkContext to associate the RDD with.
- * @param inputFormatClass Storage format of the data to be read.
- * @param keyClass Class of the key associated with the inputFormatClass.
- * @param valueClass Class of the value associated with the inputFormatClass.
- * @param conf The Hadoop configuration.
+ * Note: This is RDD is basically a cloned version of [[org.apache.spark.rdd.NewHadoopRDD]] with
+ * changes based on [[org.apache.spark.rdd.HadoopRDD]]. In future, this functionality will be
+ * folded into core.
  */
-@DeveloperApi
 private[sql] class SqlNewHadoopRDD[K, V](
     @transient sc : SparkContext,
     broadcastedConf: Broadcast[SerializableWritable[Configuration]],
@@ -85,9 +81,20 @@ private[sql] class SqlNewHadoopRDD[K, V](
 
   protected def getJob(): Job = {
     val conf: Configuration = broadcastedConf.value.value
+    // "new Job" will make a copy of the conf. Then, it is
+    // safe to mutate conf properties with initLocalJobFuncOpt
+    // and initDriverSideJobFuncOpt.
     val newJob = new Job(conf)
     initLocalJobFuncOpt.map(f => f(newJob))
     newJob
+  }
+
+  def getConf(isDriverSide: Boolean): Configuration = {
+    val job = getJob()
+    if (isDriverSide) {
+      initDriverSideJobFuncOpt.map(f => f(job))
+    }
+    job.getConfiguration
   }
 
   private val jobTrackerId: String = {
@@ -234,14 +241,6 @@ private[sql] class SqlNewHadoopRDD[K, V](
         " Use a map transformation to make copies of the records.")
     }
     super.persist(storageLevel)
-  }
-
-  def getConf(isDriverSide: Boolean): Configuration = {
-    val job = getJob()
-    if (isDriverSide) {
-      initDriverSideJobFuncOpt.map(f => f(job))
-    }
-    job.getConfiguration
   }
 }
 
