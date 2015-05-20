@@ -17,12 +17,13 @@
 
 package org.apache.spark.streaming
 
-import java.io.InputStream
+import java.io.{NotSerializableException, InputStream}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.Map
 import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 import akka.actor.{Props, SupervisorStrategy}
 import org.apache.hadoop.conf.Configuration
@@ -35,13 +36,14 @@ import org.apache.spark._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.input.FixedLengthBinaryInputFormat
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
+import org.apache.spark.serializer.SerializationDebugger
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
-import org.apache.spark.util.CallSite
+import org.apache.spark.util.{Utils, CallSite}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -233,6 +235,10 @@ class StreamingContext private[streaming] (
     } else {
       checkpointDir = null
     }
+  }
+
+  private[streaming] def isCheckpointingEnabled: Boolean = {
+    checkpointDir != null
   }
 
   private[streaming] def initialCheckpoint: Checkpoint = {
@@ -523,11 +529,26 @@ class StreamingContext private[streaming] (
     assert(graph != null, "Graph is null")
     graph.validate()
 
-    assert(
-      checkpointDir == null || checkpointDuration != null,
+    require(
+      !isCheckpointingEnabled || checkpointDuration != null,
       "Checkpoint directory has been set, but the graph checkpointing interval has " +
         "not been set. Please use StreamingContext.checkpoint() to set the interval."
     )
+
+    // Verify whether the DStream checkpoint is serializable
+    if (isCheckpointingEnabled) {
+      val checkpoint = new Checkpoint(this, Time.apply(0))
+      try {
+        Checkpoint.serialize(checkpoint, conf)
+      } catch {
+        case e: NotSerializableException =>
+          throw new IllegalArgumentException(
+            "DStream checkpointing has been enabled but the DStreams with their functions " +
+              "are not serializable\nSerialization stack:\n" +
+              SerializationDebugger.find(checkpoint).map("\t- " + _).mkString("\n")
+          )
+      }
+    }
   }
 
   /**

@@ -132,6 +132,24 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     }
   }
 
+  test("start with non-seriazable DStream checkpoints") {
+    val checkpointDir = Utils.createTempDir()
+    ssc = new StreamingContext(conf, batchDuration)
+    ssc.checkpoint(checkpointDir.getAbsolutePath)
+    addInputStream(ssc).foreachRDD { rdd =>
+      // Refer to this.appName from inside closure so that this closure refers to
+      // the instance of StreamingContextSuite, and is therefore not serializable
+      rdd.count() + appName
+    }
+
+    // Test whether start() fails early when checkpointing is enabled
+    intercept[IllegalArgumentException] {
+      ssc.start()
+    }
+    assert(ssc.getState() !== StreamingContextState.ACTIVE)
+    assert(StreamingContext.getActive().isEmpty)
+  }
+
   test("start multiple times") {
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
