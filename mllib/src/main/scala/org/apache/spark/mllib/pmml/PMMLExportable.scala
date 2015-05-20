@@ -18,18 +18,21 @@
 package org.apache.spark.mllib.pmml
 
 import java.io.{File, OutputStream, StringWriter}
-import javax.xml.transform.stream.StreamResult
 
+import javax.xml.transform.stream.StreamResult
 import org.jpmml.model.JAXBUtil
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.pmml.export.PMMLModelExportFactory
 
 /**
+ * :: DeveloperApi ::
  * Export model to the PMML format
  * Predictive Model Markup Language (PMML) is an XML-based file format
  * developed by the Data Mining Group (www.dmg.org).
  */
+@DeveloperApi
 trait PMMLExportable {
 
   /**
