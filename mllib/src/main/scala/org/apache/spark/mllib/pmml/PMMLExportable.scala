@@ -18,12 +18,12 @@
 package org.apache.spark.mllib.pmml
 
 import java.io.{File, OutputStream, StringWriter}
-
 import javax.xml.transform.stream.StreamResult
+
 import org.jpmml.model.JAXBUtil
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, DeveloperApi}
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.mllib.pmml.export.PMMLModelExportFactory
 
 /**
