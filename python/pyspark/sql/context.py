@@ -31,6 +31,7 @@ from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
 from pyspark.sql.types import Row, StringType, StructType, _verify_type, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter, _python_to_sql_converter
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.readwriter import DataFrameReader
 
 try:
     import pandas
@@ -457,19 +458,7 @@ class SQLContext(object):
 
         Optionally, a schema can be provided as the schema of the returned DataFrame.
         """
-        if path is not None:
-            options["path"] = path
-        if source is None:
-            source = self.getConf("spark.sql.sources.default",
-                                  "org.apache.spark.sql.parquet")
-        if schema is None:
-            df = self._ssql_ctx.load(source, options)
-        else:
-            if not isinstance(schema, StructType):
-                raise TypeError("schema should be StructType")
-            scala_datatype = self._ssql_ctx.parseDataType(schema.json())
-            df = self._ssql_ctx.load(source, scala_datatype, options)
-        return DataFrame(df, self)
+        return self.read.load(path, source, schema, **options)
 
     def createExternalTable(self, tableName, path=None, source=None,
                             schema=None, **options):
@@ -566,6 +555,19 @@ class SQLContext(object):
     def clearCache(self):
         """Removes all cached tables from the in-memory cache. """
         self._ssql_ctx.clearCache()
+
+    @property
+    def read(self):
+        """
+        Returns a :class:`DataFrameReader` that can be used to read data
+        in as a :class:`DataFrame`.
+
+        ::note: Experimental
+
+        >>> sqlContext.read
+        <pyspark.sql.readwriter.DataFrameReader object at ...>
+        """
+        return DataFrameReader(self)
 
 
 class HiveContext(SQLContext):
