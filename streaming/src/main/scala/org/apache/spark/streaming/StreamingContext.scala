@@ -17,13 +17,12 @@
 
 package org.apache.spark.streaming
 
-import java.io.{NotSerializableException, InputStream}
+import java.io.{InputStream, NotSerializableException}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.Map
 import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
-import scala.util.control.NonFatal
 
 import akka.actor.{Props, SupervisorStrategy}
 import org.apache.hadoop.conf.Configuration
@@ -43,7 +42,7 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
-import org.apache.spark.util.{Utils, CallSite}
+import org.apache.spark.util.CallSite
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -542,7 +541,7 @@ class StreamingContext private[streaming] (
         Checkpoint.serialize(checkpoint, conf)
       } catch {
         case e: NotSerializableException =>
-          throw new IllegalArgumentException(
+          throw new NotSerializableException(
             "DStream checkpointing has been enabled but the DStreams with their functions " +
               "are not serializable\nSerialization stack:\n" +
               SerializationDebugger.find(checkpoint).map("\t- " + _).mkString("\n")
