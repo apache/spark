@@ -26,6 +26,25 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Rollup, Cube, Aggregate}
 import org.apache.spark.sql.types.NumericType
 
+/**
+ * The Grouping Type
+ */
+sealed private[sql] trait GroupType
+
+/**
+ * To indicate it's the GroupBy
+ */
+private[sql] object GroupByType extends GroupType
+
+/**
+ * To indicate it's the CUBE
+ */
+private[sql] object CubeType extends GroupType
+
+/**
+ * To indicate it's the ROLLUP
+ */
+private[sql] object RollupType extends GroupType
 
 /**
  * :: Experimental ::
@@ -34,10 +53,13 @@ import org.apache.spark.sql.types.NumericType
  * @since 1.3.0
  */
 @Experimental
-class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) {
+class GroupedData protected[sql](
+    df: DataFrame,
+    groupingExprs: Seq[Expression],
+    groupType: GroupType) {
 
   protected def aggregateExpressions(aggrExprs: Seq[NamedExpression])
-  : Seq[NamedExpression] = {
+    : Seq[NamedExpression] = {
     if (df.sqlContext.conf.dataFrameRetainGroupColumns) {
       val retainedExprs = groupingExprs.map {
         case expr: NamedExpression => expr
@@ -50,8 +72,17 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
   }
 
   protected[sql] implicit def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
-    DataFrame(
-      df.sqlContext, Aggregate(groupingExprs, aggregateExpressions(aggExprs), df.logicalPlan))
+    groupType match {
+      case GroupByType =>
+        DataFrame(
+          df.sqlContext, Aggregate(groupingExprs, aggregateExpressions(aggExprs), df.logicalPlan))
+      case RollupType =>
+        DataFrame(
+          df.sqlContext, Rollup(groupingExprs, df.logicalPlan, aggregateExpressions(aggExprs)))
+      case CubeType =>
+        DataFrame(
+          df.sqlContext, Cube(groupingExprs, df.logicalPlan, aggregateExpressions(aggExprs)))
+    }
   }
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => Expression)
@@ -258,28 +289,4 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
     aggregateNumericColumns(colNames:_*)(Sum)
   }
 
-}
-
-/**
- * A set of methods for aggregations on a [[DataFrame]] cube, created by [[DataFrame.cube]].
- */
-private[sql] class CubedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression])
-  extends GroupedData(df, groupingExprs) {
-
-  protected[sql] implicit override def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
-    DataFrame(
-      df.sqlContext, Cube(groupingExprs, df.logicalPlan, aggregateExpressions(aggExprs)))
-  }
-}
-
-/**
- * A set of methods for aggregations on a [[DataFrame]] rollup, created by [[DataFrame.rollup]].
- */
-private[sql] class RollupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression])
-  extends GroupedData(df, groupingExprs) {
-
-  protected[sql] implicit override def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
-    DataFrame(
-      df.sqlContext, Rollup(groupingExprs, df.logicalPlan, aggregateExpressions(aggExprs)))
-  }
 }

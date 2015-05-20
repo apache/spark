@@ -685,7 +685,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def groupBy(cols: Column*): GroupedData = new GroupedData(this, cols.map(_.expr))
+  def groupBy(cols: Column*): GroupedData = new GroupedData(this, cols.map(_.expr), GroupByType)
 
   /**
    * Rollup the [[DataFrame]] using the specified columns, so we can run aggregation on them.
@@ -705,7 +705,7 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   @scala.annotation.varargs
-  def rollup(cols: Column*): GroupedData = new RollupedData(this, cols.map(_.expr))
+  def rollup(cols: Column*): GroupedData = new GroupedData(this, cols.map(_.expr), RollupType)
 
   /**
    * Cube the [[DataFrame]] using the specified columns, so we can run aggregation on them.
@@ -725,7 +725,7 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   @scala.annotation.varargs
-  def cube(cols: Column*): GroupedData = new CubedData(this, cols.map(_.expr))
+  def cube(cols: Column*): GroupedData = new GroupedData(this, cols.map(_.expr), CubeType)
 
   /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
@@ -750,7 +750,7 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def groupBy(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    new GroupedData(this, colNames.map(colName => resolve(colName)))
+    new GroupedData(this, colNames.map(colName => resolve(colName)), GroupByType)
   }
 
   /**
@@ -776,7 +776,7 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def rollup(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    new RollupedData(this, colNames.map(colName => resolve(colName)))
+    new GroupedData(this, colNames.map(colName => resolve(colName)), RollupType)
   }
 
   /**
@@ -802,7 +802,7 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def cube(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    new CubedData(this, colNames.map(colName => resolve(colName)))
+    new GroupedData(this, colNames.map(colName => resolve(colName)), CubeType)
   }
 
   /**
