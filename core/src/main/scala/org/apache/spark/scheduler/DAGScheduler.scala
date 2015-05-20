@@ -946,7 +946,9 @@ class DAGScheduler(
       stage.resetInternalAccumulators()
     }
 
-    val properties = jobIdToActiveJob.get(stage.firstJobId).map(_.properties).orNull
+    // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
+    // with this Stage
+    val properties = jobIdToActiveJob(jobId).properties
 
     runningStages += stage
     // SparkListenerStageSubmitted should be posted before testing whether tasks are
