@@ -167,7 +167,7 @@ class MasterSuite extends FunSuite with Matchers with Eventually {
     val localCluster = new LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
     try {
-      eventually(timeout(2 seconds), interval(100 milliseconds)) {
+      eventually(timeout(5 seconds), interval(100 milliseconds)) {
         val json = Source.fromURL(s"http://localhost:${localCluster.masterWebUIPort}/json")
           .getLines().mkString("\n")
         val JArray(workers) = (parse(json) \ "workers")

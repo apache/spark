@@ -43,7 +43,7 @@ class LocalSparkCluster(
   private val localHostname = Utils.localHostName()
   private val masterActorSystems = ArrayBuffer[ActorSystem]()
   private val workerActorSystems = ArrayBuffer[ActorSystem]()
-  //exposed for testing
+  // exposed for testing
   var masterWebUIPort = -1
 
   def start(): Array[String] = {
@@ -55,8 +55,9 @@ class LocalSparkCluster(
       .set("spark.shuffle.service.enabled", "false")
 
     /* Start the Master */
-    val (masterSystem, masterPort, webUi, _) = Master.startSystemAndActor(localHostname, 0, 0, _conf)
-    masterWebUIPort = webUi
+    val (masterSystem, masterPort, webUiPort, _) =
+      Master.startSystemAndActor(localHostname, 0, 0, _conf)
+    masterWebUIPort = webUiPort
     masterActorSystems += masterSystem
     val masterUrl = "spark://" + Utils.localHostNameForURI() + ":" + masterPort
     val masters = Array(masterUrl)
