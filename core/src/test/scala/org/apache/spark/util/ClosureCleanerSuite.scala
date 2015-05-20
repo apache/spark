@@ -112,6 +112,7 @@ class ClosureCleanerSuite extends FunSuite {
       expectCorrectException { TestUserClosuresActuallyCleaned.testAggregateByKey(pairRdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testFoldByKey(pairRdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testReduceByKey(pairRdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testReduceByKeyLocally(pairRdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapValues(pairRdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testFlatMapValues(pairRdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testForeachAsync(rdd) }
@@ -315,6 +316,9 @@ private object TestUserClosuresActuallyCleaned {
   }
   def testFoldByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.foldByKey(0) { case (_, _) => return; 1 } }
   def testReduceByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.reduceByKey { case (_, _) => return; 1 } }
+  def testReduceByKeyLocally(rdd: RDD[(Int, Int)]): Unit = {
+    rdd.reduceByKeyLocally { case (_, _) => return; 1 }
+  }
   def testMapValues(rdd: RDD[(Int, Int)]): Unit = { rdd.mapValues { _ => return; 1 } }
   def testFlatMapValues(rdd: RDD[(Int, Int)]): Unit = { rdd.flatMapValues { _ => return; Seq() } }
 
