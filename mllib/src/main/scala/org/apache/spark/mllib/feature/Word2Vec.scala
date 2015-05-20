@@ -517,11 +517,10 @@ class Word2VecModel private[mllib] (
     blas.sgemv(
       "T", vectorSize, numWords, alpha, wordVectors, vectorSize, fVector, 1, beta, cosineVec, 1)
 
-    // Need not divide with the norm of the given vector since it is constant.
     val updatedCosines = new Array[Double](numWords)
     var ind = 0
     while (ind < numWords) {
-      updatedCosines(ind) = cosineVec(ind) / wordVecNorms(ind)
+      updatedCosines(ind) = cosineVec(ind) / wordVecNorms(ind) / blas.snrm2(vectorSize, fVector, 1)
       ind += 1
     }
     wordList.zip(updatedCosines)
