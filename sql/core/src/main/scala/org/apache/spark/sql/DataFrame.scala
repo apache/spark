@@ -685,10 +685,13 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def groupBy(cols: Column*): GroupedData = new GroupedData(this, cols.map(_.expr), GroupByType)
+  def groupBy(cols: Column*): GroupedData = {
+    GroupedData(this, cols.map(_.expr), GroupedData.GroupByType)
+  }
 
   /**
-   * Rollup the [[DataFrame]] using the specified columns, so we can run aggregation on them.
+   * Create a multi-dimensional rollup for the current [[DataFrame]] using the specified columns,
+   * so we can run aggregation on them.
    * See [[GroupedData]] for all the available aggregate functions.
    *
    * {{{
@@ -705,10 +708,13 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   @scala.annotation.varargs
-  def rollup(cols: Column*): GroupedData = new GroupedData(this, cols.map(_.expr), RollupType)
+  def rollup(cols: Column*): GroupedData = {
+    GroupedData(this, cols.map(_.expr), GroupedData.RollupType)
+  }
 
   /**
-   * Cube the [[DataFrame]] using the specified columns, so we can run aggregation on them.
+   * Create a multi-dimensional cube for the current [[DataFrame]] using the specified columns,
+   * so we can run aggregation on them.
    * See [[GroupedData]] for all the available aggregate functions.
    *
    * {{{
@@ -725,7 +731,7 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   @scala.annotation.varargs
-  def cube(cols: Column*): GroupedData = new GroupedData(this, cols.map(_.expr), CubeType)
+  def cube(cols: Column*): GroupedData = GroupedData(this, cols.map(_.expr), GroupedData.CubeType)
 
   /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
@@ -750,14 +756,15 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def groupBy(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    new GroupedData(this, colNames.map(colName => resolve(colName)), GroupByType)
+    GroupedData(this, colNames.map(colName => resolve(colName)), GroupedData.GroupByType)
   }
 
   /**
-   * Rollup the [[DataFrame]] using the specified columns, so we can run aggregation on them.
+   * Create a multi-dimensional rollup for the current [[DataFrame]] using the specified columns,
+   * so we can run aggregation on them.
    * See [[GroupedData]] for all the available aggregate functions.
    *
-   * This is a variant of groupBy that can only group by existing columns using column names
+   * This is a variant of rollup that can only group by existing columns using column names
    * (i.e. cannot construct expressions).
    *
    * {{{
@@ -776,14 +783,15 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def rollup(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    new GroupedData(this, colNames.map(colName => resolve(colName)), RollupType)
+    GroupedData(this, colNames.map(colName => resolve(colName)), GroupedData.RollupType)
   }
 
   /**
-   * Cube the [[DataFrame]] using the specified columns, so we can run aggregation on them.
+   * Create a multi-dimensional cube for the current [[DataFrame]] using the specified columns,
+   * so we can run aggregation on them.
    * See [[GroupedData]] for all the available aggregate functions.
    *
-   * This is a variant of groupBy that can only group by existing columns using column names
+   * This is a variant of cube that can only group by existing columns using column names
    * (i.e. cannot construct expressions).
    *
    * {{{
@@ -802,7 +810,7 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def cube(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    new GroupedData(this, colNames.map(colName => resolve(colName)), CubeType)
+    GroupedData(this, colNames.map(colName => resolve(colName)), GroupedData.CubeType)
   }
 
   /**

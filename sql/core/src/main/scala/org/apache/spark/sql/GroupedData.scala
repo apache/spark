@@ -32,19 +32,31 @@ import org.apache.spark.sql.types.NumericType
 sealed private[sql] trait GroupType
 
 /**
- * To indicate it's the GroupBy
+ * Companion object for GroupedData
  */
-private[sql] object GroupByType extends GroupType
+private[sql] object GroupedData {
+  def apply(
+      df: DataFrame,
+      groupingExprs: Seq[Expression],
+      groupType: GroupType): GroupedData = {
+    new GroupedData(df, groupingExprs).withNewGroupType(groupType)
+  }
 
-/**
- * To indicate it's the CUBE
- */
-private[sql] object CubeType extends GroupType
+  /**
+   * To indicate it's the GroupBy
+   */
+  private[sql] object GroupByType extends GroupType
 
-/**
- * To indicate it's the ROLLUP
- */
-private[sql] object RollupType extends GroupType
+  /**
+   * To indicate it's the CUBE
+   */
+  private[sql] object CubeType extends GroupType
+
+  /**
+   * To indicate it's the ROLLUP
+   */
+  private[sql] object RollupType extends GroupType
+}
 
 /**
  * :: Experimental ::
@@ -53,35 +65,36 @@ private[sql] object RollupType extends GroupType
  * @since 1.3.0
  */
 @Experimental
-class GroupedData protected[sql](
-    df: DataFrame,
-    groupingExprs: Seq[Expression],
-    groupType: GroupType) {
+class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) {
 
-  protected def aggregateExpressions(aggrExprs: Seq[NamedExpression])
-    : Seq[NamedExpression] = {
-    if (df.sqlContext.conf.dataFrameRetainGroupColumns) {
-      val retainedExprs = groupingExprs.map {
-        case expr: NamedExpression => expr
-        case expr: Expression => Alias(expr, expr.prettyString)()
-      }
-      retainedExprs ++ aggrExprs
-    } else {
-      aggrExprs
-    }
+  private var groupType: GroupType = _
+
+  private[sql] def withNewGroupType(groupType: GroupType): GroupedData = {
+    this.groupType = groupType
+    this
   }
 
-  protected[sql] implicit def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
+  private[sql] implicit def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
+    val aggregates = if (df.sqlContext.conf.dataFrameRetainGroupColumns) {
+        val retainedExprs = groupingExprs.map {
+          case expr: NamedExpression => expr
+          case expr: Expression => Alias(expr, expr.prettyString)()
+        }
+        retainedExprs ++ aggExprs
+      } else {
+        aggExprs
+      }
+
     groupType match {
-      case GroupByType =>
+      case GroupedData.GroupByType =>
         DataFrame(
-          df.sqlContext, Aggregate(groupingExprs, aggregateExpressions(aggExprs), df.logicalPlan))
-      case RollupType =>
+          df.sqlContext, Aggregate(groupingExprs, aggregates, df.logicalPlan))
+      case GroupedData.RollupType =>
         DataFrame(
-          df.sqlContext, Rollup(groupingExprs, df.logicalPlan, aggregateExpressions(aggExprs)))
-      case CubeType =>
+          df.sqlContext, Rollup(groupingExprs, df.logicalPlan, aggregates))
+      case GroupedData.CubeType =>
         DataFrame(
-          df.sqlContext, Cube(groupingExprs, df.logicalPlan, aggregateExpressions(aggExprs)))
+          df.sqlContext, Cube(groupingExprs, df.logicalPlan, aggregates))
     }
   }
 
@@ -288,5 +301,4 @@ class GroupedData protected[sql](
   def sum(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames:_*)(Sum)
   }
-
 }
