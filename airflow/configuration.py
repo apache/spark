@@ -7,6 +7,7 @@ defaults = {
     'core': {
         'unit_test_mode': False,
         'parallelism': 32,
+        'load_examples': True,
     },
     'webserver': {
         'base_url': 'http://localhost:8080',
@@ -32,6 +33,7 @@ base_log_folder = {AIRFLOW_HOME}/logs
 executor = SequentialExecutor
 sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/airflow.db
 parallelism = 32
+load_examples = True
 
 [webserver]
 base_url = http://localhost:8080
@@ -66,6 +68,7 @@ base_log_folder = {AIRFLOW_HOME}/logs
 executor = SequentialExecutor
 sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/unittests.db
 unit_test_mode = True
+load_examples = True
 
 [webserver]
 base_url = http://localhost:8080
