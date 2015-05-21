@@ -217,53 +217,52 @@ abstract class DStream[T: ClassTag] (
       case StreamingContextState.INITIALIZED =>
         // good to go
       case StreamingContextState.ACTIVE =>
-        throw new SparkException(
+        throw new IllegalStateException(
           "Adding new inputs, transformations, and output operations after " +
             "starting a context is not supported")
       case StreamingContextState.STOPPED =>
-        throw new SparkException(
+        throw new IllegalStateException(
           "Adding new inputs, transformations, and output operations after " +
             "stopping a context is not supported")
     }
   }
 
   private[streaming] def validateAtStart() {
-    assert(rememberDuration != null, "Remember duration is set to null")
+    require(rememberDuration != null, "Remember duration is set to null")
 
-    assert(
+    require(
       !mustCheckpoint || checkpointDuration != null,
       "The checkpoint interval for " + this.getClass.getSimpleName + " has not been set." +
         " Please use DStream.checkpoint() to set the interval."
     )
 
-    assert(
+    require(
      checkpointDuration == null || context.sparkContext.checkpointDir.isDefined,
-      "The checkpoint directory has not been set. Please use StreamingContext.checkpoint()" +
-      " or SparkContext.checkpoint() to set the checkpoint directory."
+      "The checkpoint directory has not been set. Please set it by StreamingContext.checkpoint()."
     )
 
-    assert(
+    require(
       checkpointDuration == null || checkpointDuration >= slideDuration,
       "The checkpoint interval for " + this.getClass.getSimpleName + " has been set to " +
         checkpointDuration + " which is lower than its slide time (" + slideDuration + "). " +
         "Please set it to at least " + slideDuration + "."
     )
 
-    assert(
+    require(
       checkpointDuration == null || checkpointDuration.isMultipleOf(slideDuration),
       "The checkpoint interval for " + this.getClass.getSimpleName + " has been set to " +
         checkpointDuration + " which not a multiple of its slide time (" + slideDuration + "). " +
-        "Please set it to a multiple " + slideDuration + "."
+        "Please set it to a multiple of " + slideDuration + "."
     )
 
-    assert(
+    require(
       checkpointDuration == null || storageLevel != StorageLevel.NONE,
       "" + this.getClass.getSimpleName + " has been marked for checkpointing but the storage " +
         "level has not been set to enable persisting. Please use DStream.persist() to set the " +
         "storage level to use memory for better checkpointing performance."
     )
 
-    assert(
+    require(
       checkpointDuration == null || rememberDuration > checkpointDuration,
       "The remember duration for " + this.getClass.getSimpleName + " has been set to " +
         rememberDuration + " which is not more than the checkpoint interval (" +
@@ -272,7 +271,7 @@ abstract class DStream[T: ClassTag] (
 
     val metadataCleanerDelay = MetadataCleaner.getDelaySeconds(ssc.conf)
     logInfo("metadataCleanupDelay = " + metadataCleanerDelay)
-    assert(
+    require(
       metadataCleanerDelay < 0 || rememberDuration.milliseconds < metadataCleanerDelay * 1000,
       "It seems you are doing some DStream window operation or setting a checkpoint interval " +
         "which requires " + this.getClass.getSimpleName + " to remember generated RDDs for more " +
@@ -539,7 +538,7 @@ abstract class DStream[T: ClassTag] (
 
   /** Return a new DStream containing only the elements that satisfy a predicate. */
   def filter(filterFunc: T => Boolean): DStream[T] = ssc.withScope {
-    new FilteredDStream(this, filterFunc)
+    new FilteredDStream(this, context.sparkContext.clean(filterFunc))
   }
 
   /**
@@ -624,7 +623,8 @@ abstract class DStream[T: ClassTag] (
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
   def foreachRDD(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
-    this.foreachRDD((r: RDD[T], t: Time) => foreachFunc(r))
+    val cleanedF = context.sparkContext.clean(foreachFunc, false)
+    this.foreachRDD((r: RDD[T], t: Time) => cleanedF(r))
   }
 
   /**
@@ -632,8 +632,8 @@ abstract class DStream[T: ClassTag] (
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
   def foreachRDD(foreachFunc: (RDD[T], Time) => Unit): Unit = ssc.withScope {
-    // because the DStream is reachable from the outer object here, and because 
-    // DStreams can't be serialized with closures, we can't proactively check 
+    // because the DStream is reachable from the outer object here, and because
+    // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
     new ForEachDStream(this, context.sparkContext.clean(foreachFunc, false)).register()
   }
@@ -643,8 +643,8 @@ abstract class DStream[T: ClassTag] (
    * on each RDD of 'this' DStream.
    */
   def transform[U: ClassTag](transformFunc: RDD[T] => RDD[U]): DStream[U] = ssc.withScope {
-    // because the DStream is reachable from the outer object here, and because 
-    // DStreams can't be serialized with closures, we can't proactively check 
+    // because the DStream is reachable from the outer object here, and because
+    // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
     val cleanedF = context.sparkContext.clean(transformFunc, false)
     transform((r: RDD[T], t: Time) => cleanedF(r))
@@ -655,8 +655,8 @@ abstract class DStream[T: ClassTag] (
    * on each RDD of 'this' DStream.
    */
   def transform[U: ClassTag](transformFunc: (RDD[T], Time) => RDD[U]): DStream[U] = ssc.withScope {
-    // because the DStream is reachable from the outer object here, and because 
-    // DStreams can't be serialized with closures, we can't proactively check 
+    // because the DStream is reachable from the outer object here, and because
+    // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
     val cleanedF = context.sparkContext.clean(transformFunc, false)
     val realTransformFunc =  (rdds: Seq[RDD[_]], time: Time) => {
@@ -673,8 +673,8 @@ abstract class DStream[T: ClassTag] (
   def transformWith[U: ClassTag, V: ClassTag](
       other: DStream[U], transformFunc: (RDD[T], RDD[U]) => RDD[V]
     ): DStream[V] = ssc.withScope {
-    // because the DStream is reachable from the outer object here, and because 
-    // DStreams can't be serialized with closures, we can't proactively check 
+    // because the DStream is reachable from the outer object here, and because
+    // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
     val cleanedF = ssc.sparkContext.clean(transformFunc, false)
     transformWith(other, (rdd1: RDD[T], rdd2: RDD[U], time: Time) => cleanedF(rdd1, rdd2))
@@ -687,8 +687,8 @@ abstract class DStream[T: ClassTag] (
   def transformWith[U: ClassTag, V: ClassTag](
       other: DStream[U], transformFunc: (RDD[T], RDD[U], Time) => RDD[V]
     ): DStream[V] = ssc.withScope {
-    // because the DStream is reachable from the outer object here, and because 
-    // DStreams can't be serialized with closures, we can't proactively check 
+    // because the DStream is reachable from the outer object here, and because
+    // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
     val cleanedF = ssc.sparkContext.clean(transformFunc, false)
     val realTransformFunc = (rdds: Seq[RDD[_]], time: Time) => {
