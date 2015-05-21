@@ -99,7 +99,7 @@ class SimpleTextRelation(
   }
 
   override def hashCode(): Int =
-    Objects.hashCode(paths, maybeDataSchema, dataSchema)
+    Objects.hashCode(paths, maybeDataSchema, dataSchema, partitionColumns)
 
   override def buildScan(inputStatuses: Array[FileStatus]): RDD[Row] = {
     val fields = dataSchema.map(_.dataType)

@@ -89,7 +89,7 @@ class SVMModel (
   override protected def formatVersion: String = "1.0"
 
   override def toString: String = {
-    s"${super.toString}, numClasses = 2, threshold = ${threshold.get}"
+    s"${super.toString}, numClasses = 2, threshold = ${threshold.getOrElse("None")}"
   }
 }
 

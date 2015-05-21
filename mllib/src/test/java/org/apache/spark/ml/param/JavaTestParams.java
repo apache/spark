@@ -81,5 +81,6 @@ public class JavaTestParams extends JavaParams {
       ParamValidators.inArray(validStrings));
     setDefault(myIntParam_, 1);
     setDefault(myDoubleParam_, 0.5);
+    setDefault(myIntParam().w(1), myDoubleParam().w(0.5));
   }
 }

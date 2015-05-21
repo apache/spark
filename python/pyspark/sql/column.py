@@ -302,6 +302,8 @@ class Column(object):
             raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
 
+    astype = cast
+
     @ignore_unicode_prefix
     @since(1.3)
     def between(self, lowerBound, upperBound):
