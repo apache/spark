@@ -33,7 +33,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
   override def beforeAll(): Unit = {
     path = Utils.createTempDir()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    jsonRDD(rdd).registerTempTable("jt")
+    read.json(rdd).registerTempTable("jt")
   }
 
   override def afterAll(): Unit = {

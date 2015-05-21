@@ -42,7 +42,7 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
     path.delete()
 
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    df = jsonRDD(rdd)
+    df = read.json(rdd)
     df.registerTempTable("jsonTable")
   }
 
@@ -57,41 +57,48 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
 
   def checkLoad(): Unit = {
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
-    checkAnswer(load(path.toString), df.collect())
+    checkAnswer(read.load(path.toString), df.collect())
 
     // Test if we can pick up the data source name passed in load.
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
-    checkAnswer(load(path.toString, "org.apache.spark.sql.json"), df.collect())
-    checkAnswer(load("org.apache.spark.sql.json", Map("path" -> path.toString)), df.collect())
+    checkAnswer(read.format("json").load(path.toString), df.collect())
+    checkAnswer(read.format("json").load(path.toString), df.collect())
     val schema = StructType(StructField("b", StringType, true) :: Nil)
     checkAnswer(
-      load("org.apache.spark.sql.json", schema, Map("path" -> path.toString)),
+      read.format("json").schema(schema).load(path.toString),
       sql("SELECT b FROM jsonTable").collect())
   }
 
   test("save with path and load") {
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
-    df.save(path.toString)
+    df.write.save(path.toString)
+    checkLoad()
+  }
+
+  test("save with string mode and path, and load") {
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
+    path.createNewFile()
+    df.write.mode("overwrite").save(path.toString)
     checkLoad()
   }
 
   test("save with path and datasource, and load") {
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
-    df.save(path.toString, "org.apache.spark.sql.json")
+    df.write.json(path.toString)
     checkLoad()
   }
 
   test("save with data source and options, and load") {
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
-    df.save("org.apache.spark.sql.json", SaveMode.ErrorIfExists, Map("path" -> path.toString))
+    df.write.mode(SaveMode.ErrorIfExists).json(path.toString)
     checkLoad()
   }
 
   test("save and save again") {
-    df.save(path.toString, "org.apache.spark.sql.json")
+    df.write.json(path.toString)
 
     var message = intercept[RuntimeException] {
-      df.save(path.toString, "org.apache.spark.sql.json")
+      df.write.json(path.toString)
     }.getMessage
 
     assert(
@@ -100,14 +107,14 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
 
     if (path.exists()) Utils.deleteRecursively(path)
 
-    df.save(path.toString, "org.apache.spark.sql.json")
+    df.write.json(path.toString)
     checkLoad()
 
-    df.save("org.apache.spark.sql.json", SaveMode.Overwrite, Map("path" -> path.toString))
+    df.write.mode(SaveMode.Overwrite).json(path.toString)
     checkLoad()
 
     message = intercept[RuntimeException] {
-      df.save("org.apache.spark.sql.json", SaveMode.Append, Map("path" -> path.toString))
+      df.write.mode(SaveMode.Append).json(path.toString)
     }.getMessage
 
     assert(

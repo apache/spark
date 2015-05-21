@@ -189,7 +189,7 @@ object KafkaUtils {
       sc: SparkContext,
       kafkaParams: Map[String, String],
       offsetRanges: Array[OffsetRange]
-    ): RDD[(K, V)] = {
+    ): RDD[(K, V)] = sc.withScope {
     val messageHandler = (mmd: MessageAndMetadata[K, V]) => (mmd.key, mmd.message)
     val leaders = leadersForRanges(kafkaParams, offsetRanges)
     new KafkaRDD[K, V, KD, VD, (K, V)](sc, kafkaParams, offsetRanges, leaders, messageHandler)
@@ -224,7 +224,7 @@ object KafkaUtils {
       offsetRanges: Array[OffsetRange],
       leaders: Map[TopicAndPartition, Broker],
       messageHandler: MessageAndMetadata[K, V] => R
-    ): RDD[R] = {
+    ): RDD[R] = sc.withScope {
     val leaderMap = if (leaders.isEmpty) {
       leadersForRanges(kafkaParams, offsetRanges)
     } else {
@@ -233,7 +233,8 @@ object KafkaUtils {
         case (tp: TopicAndPartition, Broker(host, port)) => (tp, (host, port))
       }.toMap
     }
-    new KafkaRDD[K, V, KD, VD, R](sc, kafkaParams, offsetRanges, leaderMap, messageHandler)
+    val cleanedHandler = sc.clean(messageHandler)
+    new KafkaRDD[K, V, KD, VD, R](sc, kafkaParams, offsetRanges, leaderMap, cleanedHandler)
   }
 
   /**
@@ -256,7 +257,7 @@ object KafkaUtils {
       valueDecoderClass: Class[VD],
       kafkaParams: JMap[String, String],
       offsetRanges: Array[OffsetRange]
-    ): JavaPairRDD[K, V] = {
+    ): JavaPairRDD[K, V] = jsc.sc.withScope {
     implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
     implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
     implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
@@ -294,7 +295,7 @@ object KafkaUtils {
       offsetRanges: Array[OffsetRange],
       leaders: JMap[TopicAndPartition, Broker],
       messageHandler: JFunction[MessageAndMetadata[K, V], R]
-    ): JavaRDD[R] = {
+    ): JavaRDD[R] = jsc.sc.withScope {
     implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
     implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
     implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
@@ -348,8 +349,9 @@ object KafkaUtils {
       fromOffsets: Map[TopicAndPartition, Long],
       messageHandler: MessageAndMetadata[K, V] => R
   ): InputDStream[R] = {
+    val cleanedHandler = ssc.sc.clean(messageHandler)
     new DirectKafkaInputDStream[K, V, KD, VD, R](
-      ssc, kafkaParams, fromOffsets, messageHandler)
+      ssc, kafkaParams, fromOffsets, cleanedHandler)
   }
 
   /**
@@ -469,11 +471,12 @@ object KafkaUtils {
     implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
     implicit val valueDecoderCmt: ClassTag[VD] = ClassTag(valueDecoderClass)
     implicit val recordCmt: ClassTag[R] = ClassTag(recordClass)
+    val cleanedHandler = jssc.sparkContext.clean(messageHandler.call _)
     createDirectStream[K, V, KD, VD, R](
       jssc.ssc,
       Map(kafkaParams.toSeq: _*),
       Map(fromOffsets.mapValues { _.longValue() }.toSeq: _*),
-      messageHandler.call _
+      cleanedHandler
     )
   }
 

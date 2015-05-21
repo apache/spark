@@ -34,6 +34,16 @@ and in `project/SparkBuild.scala` add:
 
 to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/pull/2883/files) if you are unsure of where to add these lines.
 
+# Building a Runnable Distribution
+
+To create a Spark distribution like those distributed by the 
+[Spark Downloads](http://spark.apache.org/downloads.html) page, and that is laid out so as 
+to be runnable, use `make-distribution.sh` in the project root directory. It can be configured 
+with Maven profile settings and so on like the direct Maven build. Example:
+
+    ./make-distribution.sh --name custom-spark --tgz -Phadoop-2.4 -Pyarn
+    
+For more information on usage, run `./make-distribution.sh --help`
 
 # Setting up Maven's Memory Usage
 
