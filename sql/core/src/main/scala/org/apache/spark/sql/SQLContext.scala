@@ -1275,6 +1275,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
 
+
+  // Register a succesfully instantiatd context to the singleton. This should be at the end of
+  // the class definition so that the singleton is updated only if there is no exception in the
+  // construction of the instance.
   SQLContext.setLastInstantiatedContext(self)
 }
 
