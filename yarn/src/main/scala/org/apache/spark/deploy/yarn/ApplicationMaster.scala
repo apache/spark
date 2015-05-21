@@ -345,10 +345,7 @@ private[spark] class ApplicationMaster(
               if (numPendingAllocate > 0) {
                 val currentAllocationInterval =
                   math.min(heartbeatInterval, nextAllocationInterval)
-                nextAllocationInterval *= 2
-                // avoid overflow
-                nextAllocationInterval = math.min(
-                  nextAllocationInterval, ApplicationMaster.MAX_RM_HEARTBEAT_INTERVAL_MS)
+                nextAllocationInterval = currentAllocationInterval * 2 // avoid overflow
                 currentAllocationInterval
               } else {
                 nextAllocationInterval = initialAllocationInterval
@@ -579,9 +576,6 @@ object ApplicationMaster extends Logging {
   private val EXIT_SC_NOT_INITED = 13
   private val EXIT_SECURITY = 14
   private val EXIT_EXCEPTION_USER_CLASS = 15
-
-  // cap on heartbeat interval between us and the resource manager
-  private val MAX_RM_HEARTBEAT_INTERVAL_MS = 10000
 
   private var master: ApplicationMaster = _
 
