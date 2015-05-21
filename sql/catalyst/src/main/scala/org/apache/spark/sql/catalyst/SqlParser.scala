@@ -55,6 +55,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val AS = Keyword("AS")
   protected val ASC = Keyword("ASC")
   protected val AVG = Keyword("AVG")
+  protected val STDDEV = Keyword("STDDEV")
   protected val BETWEEN = Keyword("BETWEEN")
   protected val BY = Keyword("BY")
   protected val CASE = Keyword("CASE")
@@ -290,6 +291,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     | FIRST ~ "(" ~> expression <~ ")" ^^ { case exp => First(exp) }
     | LAST  ~ "(" ~> expression <~ ")" ^^ { case exp => Last(exp) }
     | AVG   ~ "(" ~> expression <~ ")" ^^ { case exp => Average(exp) }
+    | STDDEV~ "(" ~> expression <~ ")" ^^ { case exp => StandardDeviation(exp) }
     | MIN   ~ "(" ~> expression <~ ")" ^^ { case exp => Min(exp) }
     | MAX   ~ "(" ~> expression <~ ")" ^^ { case exp => Max(exp) }
     | UPPER ~ "(" ~> expression <~ ")" ^^ { case exp => Upper(exp) }
