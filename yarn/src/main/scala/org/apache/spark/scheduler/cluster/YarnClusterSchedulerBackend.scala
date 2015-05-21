@@ -98,7 +98,12 @@ private[spark] class YarnClusterSchedulerBackend(
             }
           }
 
-        // Build the HTTP address for the node and build the URL for the logs.
+        // Now that we have found the report for the Node Manager that the AM is running on, we
+        // can get the base HTTP address for the Node manager from the report.
+        // The format used for the logs for each container is well-known and can be constructed
+        // using the NM's HTTP address and the container ID.
+        // The NM may be running several containers, but we can build the URL for the AM using
+        // the AM's container ID, which we already know.
         nodeReport.foreach { report =>
           val httpAddress = report.getHttpAddress
           // lookup appropriate http scheme for container log urls
