@@ -22,7 +22,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.parquet.ParquetTest
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -235,10 +234,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       val fs = path.getFileSystem(SparkHadoopUtil.get.conf)
       assert(fs.listStatus(path).isEmpty)
     }
-  }
-
-  def withTable(tableName: String)(f: => Unit): Unit = {
-    try f finally sql(s"DROP TABLE $tableName")
   }
 
   test("saveAsTable()/load() - non-partitioned table - Overwrite") {
@@ -519,6 +514,20 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
+    }
+  }
+
+  test("SPARK-7616: adjust column name order accordingly when saving partitioned table") {
+    val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+
+    df.write
+      .format("parquet")
+      .mode(SaveMode.Overwrite)
+      .partitionBy("c", "a")
+      .saveAsTable("t")
+
+    withTable("t") {
+      checkAnswer(table("t"), df.select('b, 'c, 'a).collect())
     }
   }
 }
