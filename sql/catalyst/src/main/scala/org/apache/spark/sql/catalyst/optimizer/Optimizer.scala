@@ -119,6 +119,26 @@ object UnionPushdown extends Rule[LogicalPlan] {
  */
 object ColumnPruning extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Eliminate unneeded attributes from Expand that is used in GroupingSets
+    case a @ Aggregate(groupByExprs, aggregations, e @ Expand(projections, output, child))
+        if (e.outputSet -- a.references).nonEmpty =>
+      // It is safe to remove these attributes because they are not referred in the wrapping
+      // Aggregate node.
+      val prunedProjections = projections.map { groupExpr =>
+        val newExprs = groupExpr.collect {
+          case x: NamedExpression if a.references.contains(x) => x
+          case l: Literal => l
+        }
+        GroupExpression(newExprs)
+      }
+
+      val newOutput = output.collect {
+        case x: NamedExpression if a.references.contains(x) => x
+        case x: AttributeReference if x.name == VirtualColumn.groupingIdName => x
+      }
+
+      Aggregate(groupByExprs, aggregations, Expand(prunedProjections, newOutput, child))
+
     // Eliminate attributes that are not needed to calculate the specified aggregates.
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = Project(a.references.toSeq, child))
