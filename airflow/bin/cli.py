@@ -12,7 +12,6 @@ import dateutil.parser
 from datetime import datetime
 import logging
 import os
-import signal
 import subprocess
 import sys
 
@@ -74,12 +73,17 @@ def run(args):
     args.execution_date = dateutil.parser.parse(args.execution_date)
     iso = args.execution_date.isoformat()
     filename = "{directory}/{iso}".format(**locals())
+    subdir = None
+    if args.subdir:
+        subdir = args.subdir.replace(
+            "DAGS_FOLDER", conf.get("core", "DAGS_FOLDER"))
+        subdir = os.path.expanduser(subdir)
     logging.basicConfig(
         filename=filename,
         level=logging.INFO,
         format=settings.LOG_FORMAT)
     if not args.pickle:
-        dagbag = DagBag(args.subdir)
+        dagbag = DagBag(subdir)
         if args.dag_id not in dagbag.dags:
             msg = 'DAG [{0}] could not be found'.format(args.dag_id)
             logging.error(msg)
@@ -115,32 +119,35 @@ def run(args):
             job_id=args.job_id,
         )
     else:
-        try:
-            # Running remotely, so pickling the DAG
-            session = settings.Session()
-            pickle = DagPickle(dag)
-            session.add(pickle)
-            session.commit()
-            pickle_id = pickle.id
-            print(
-                'Pickled dag {dag} '
-                'as pickle_id:{pickle_id}').format(**locals())
-        except Exception as e:
-            print('Could not pickle the DAG')
-            print(e)
-            pickle_id = None
+        pickle_id = None
+        if args.ship_dag:
+            try:
+                # Running remotely, so pickling the DAG
+                session = settings.Session()
+                pickle = DagPickle(dag)
+                session.add(pickle)
+                session.commit()
+                pickle_id = pickle.id
+                print(
+                    'Pickled dag {dag} '
+                    'as pickle_id:{pickle_id}').format(**locals())
+            except Exception as e:
+                print('Could not pickle the DAG')
+                print(e)
+                raise e
 
         executor = DEFAULT_EXECUTOR
         executor.start()
-        cmd = ti.command(
-            force=args.force,
-            local=True,
+        print("Sending to executor.")
+        executor.queue_task_instance(
+            ti,
             mark_success=args.mark_success,
+            pickle_id=pickle_id,
             ignore_dependencies=args.ignore_dependencies,
-            pickle_id=pickle_id)
-        print("Sending run command to executor:\n" + cmd)
-        executor.queue_task_instance(ti)
+            force=args.force)
+        executor.heartbeat()
         executor.end()
+
 
 def task_state(args):
     """
@@ -150,7 +157,6 @@ def task_state(args):
     success
     """
     args.execution_date = dateutil.parser.parse(args.execution_date)
-    iso = args.execution_date.isoformat()
     dagbag = DagBag(args.subdir)
     if args.dag_id not in dagbag.dags:
         raise Exception('dag_id could not be found')
@@ -404,6 +410,10 @@ def get_parser():
     parser_run.add_argument(
         "-i", "--ignore_dependencies",
         help="Ignore upstream and depends_on_past dependencies",
+        action="store_true")
+    parser_run.add_argument(
+        "--ship_dag",
+        help="Pickles (serializes) the DAG and ships it to the worker",
         action="store_true")
     parser_run.add_argument(
         "-p", "--pickle",

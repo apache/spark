@@ -415,7 +415,7 @@ class TaskInstance(Base):
         raw = "--raw" if raw else ""
         subdir = ""
         if not pickle and self.task.dag and self.task.dag.full_filepath:
-            subdir = "-sd {0}".format(self.task.dag.full_filepath)
+            subdir = "-sd DAGS_FOLDER/{0}".format(self.task.dag.filepath)
         return (
             "airflow run "
             "{self.dag_id} {self.task_id} {iso} "
@@ -997,7 +997,7 @@ class BaseOperator(Base):
     def priority_weight_total(self):
         return sum([
             t.priority_weight
-            for t in  self.get_flat_relatives(upstream=False)
+            for t in self.get_flat_relatives(upstream=False)
         ]) + self.priority_weight
 
     def __cmp__(self, other):
