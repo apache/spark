@@ -565,11 +565,8 @@ class StreamingContext private[streaming] (
           state = StreamingContextState.ACTIVE
           StreamingContext.setActiveContext(this)
         }
-        shutdownHookRef = Utils.addShutdownHook(StreamingContext.SHUTDOWN_HOOK_PRIORITY) { () =>
-          logInfo("Invoking stop() from shutdown hook")
-          // Do not stop SparkContext, let its own shutdown hook stop it
-          stop(stopSparkContext = false)
-        }
+        shutdownHookRef = Utils.addShutdownHook(
+          StreamingContext.SHUTDOWN_HOOK_PRIORITY)(stopOnShutdown)
         logInfo("StreamingContext started")
       case ACTIVE =>
         logWarning("StreamingContext has already been started")
@@ -658,6 +655,13 @@ class StreamingContext private[streaming] (
       // The state should always be Stopped after calling `stop()`, even if we haven't started yet
       state = STOPPED
     }
+  }
+
+  private def stopOnShutdown(): Unit = {
+    val stopGracefully = conf.getBoolean("spark.streaming.stopGracefullyOnShutdown", false)
+    logInfo(s"Invoking stop(stopGracefully=$stopGracefully) from shutdown hook")
+    // Do not stop SparkContext, let its own shutdown hook stop it
+    stop(stopSparkContext = false, stopGracefully = stopGracefully)
   }
 }
 
