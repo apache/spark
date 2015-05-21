@@ -396,7 +396,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size
     }
 
-    // Killing executors means effectively that we want less executors than before, so also
+    // Killing executors means effectively that we want fewer executors than before, so also
     // update the target number of executors to avoid having the backend allocate new ones.
     // We should do this outside of the synchronized block to avoid holding on to a lock while
     // awaiting a reply.
