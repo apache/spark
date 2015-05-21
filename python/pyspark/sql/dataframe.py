@@ -805,6 +805,7 @@ class DataFrame(object):
         from pyspark.sql.group import GroupedData
         return GroupedData(jgd, self.sql_ctx)
 
+    @since(1.4)
     def rollup(self, *cols):
         """
         Create a multi-dimensional rollup for the current :class:`DataFrame` using
@@ -820,13 +821,12 @@ class DataFrame(object):
         | null|null|    2|
         |Alice|   2|    1|
         +-----+----+-----+
-
-        .. versionadded:: 1.4
         """
         jgd = self._jdf.rollup(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
         return GroupedData(jgd, self.sql_ctx)
 
+    @since(1.4)
     def cube(self, *cols):
         """
         Create a multi-dimensional cube for the current :class:`DataFrame` using
@@ -844,8 +844,6 @@ class DataFrame(object):
         | null|null|    2|
         |Alice|   2|    1|
         +-----+----+-----+
-
-        .. versionadded:: 1.4
         """
         jgd = self._jdf.cube(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
