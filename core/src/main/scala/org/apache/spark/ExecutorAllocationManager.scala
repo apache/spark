@@ -268,6 +268,8 @@ private[spark] class ExecutorAllocationManager(
       numExecutorsTarget = math.max(maxNeeded, minNumExecutors)
       client.requestTotalExecutors(numExecutorsTarget)
       numExecutorsToAdd = 1
+      logInfo(s"Lowering target number of executors to $numExecutorsTarget because " +
+        s"not all requests are actually needed (previously $oldNumExecutorsTarget)")
       numExecutorsTarget - oldNumExecutorsTarget
     } else if (addTime != NOT_SET && now >= addTime) {
       val delta = addExecutors(maxNeeded)
