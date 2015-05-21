@@ -318,7 +318,8 @@ private[sql] object JsonRDD extends Logging {
 
           parsed
         } catch {
-          case e: JsonProcessingException => Map(columnNameOfCorruptRecords -> record) :: Nil
+          case e: JsonProcessingException =>
+            Map(columnNameOfCorruptRecords -> UTF8String(record)) :: Nil
         }
       }
     })
