@@ -435,11 +435,11 @@ class GradientBoostedTrees(object):
 
     @classmethod
     def _train(cls, data, algo, categoricalFeaturesInfo,
-               loss, numIterations, learningRate, maxDepth):
+               loss, numIterations, learningRate, maxDepth, maxBins):
         first = data.first()
         assert isinstance(first, LabeledPoint), "the data should be RDD of LabeledPoint"
         model = callMLlibFunc("trainGradientBoostedTreesModel", data, algo, categoricalFeaturesInfo,
-                              loss, numIterations, learningRate, maxDepth)
+                              loss, numIterations, learningRate, maxDepth, maxBins)
         return GradientBoostedTreesModel(model)
 
     @classmethod
