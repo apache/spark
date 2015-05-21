@@ -751,9 +751,9 @@ class DataFrame(object):
         >>> df.groupBy(['name', df.age]).count().collect()
         [Row(name=u'Bob', age=5, count=1), Row(name=u'Alice', age=2, count=1)]
         """
-        jdf = self._jdf.groupBy(self._jcols(*cols))
+        jgd = self._jdf.groupBy(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jdf, self.sql_ctx)
+        return GroupedData(jgd, self.sql_ctx)
 
     def rollup(self, *cols):
         """
@@ -773,9 +773,9 @@ class DataFrame(object):
 
         .. versionadded:: 1.4
         """
-        jdf = self._jdf.rollup(self._jcols(*cols))
+        jgd = self._jdf.rollup(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jdf, self.sql_ctx)
+        return GroupedData(jgd, self.sql_ctx)
 
     def cube(self, *cols):
         """
@@ -797,9 +797,9 @@ class DataFrame(object):
 
         .. versionadded:: 1.4
         """
-        jdf = self._jdf.cube(self._jcols(*cols))
+        jgd = self._jdf.cube(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jdf, self.sql_ctx)
+        return GroupedData(jgd, self.sql_ctx)
 
     def agg(self, *exprs):
         """ Aggregate on the entire :class:`DataFrame` without groups
