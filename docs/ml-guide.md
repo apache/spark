@@ -150,7 +150,7 @@ This is useful if there are two algorithms with the `maxIter` parameter in a `Pi
 
 # Algorithm Guides
 
-There are now several algorithms in the Pipelines API which are not in the lower-level MLlib API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines and ensembles, which fit naturally into the `Estimator` abstraction in the Pipelines.
+There are now several algorithms in the Pipelines API which are not in the lower-level MLlib API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines, and ensembles, which fit naturally into the `Estimator` abstraction in the Pipelines.
 
 **Pipelines API Algorithm Guides**
 
