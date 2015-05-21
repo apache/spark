@@ -26,6 +26,7 @@ if sys.version < "3":
 from pyspark import SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
+from pyspark.sql import since
 from pyspark.sql.types import StringType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 
@@ -78,6 +79,18 @@ _functions = {
     'sqrt': 'Computes the square root of the specified float value.',
     'abs': 'Computes the absolute value.',
 
+    'max': 'Aggregate function: returns the maximum value of the expression in a group.',
+    'min': 'Aggregate function: returns the minimum value of the expression in a group.',
+    'first': 'Aggregate function: returns the first value in a group.',
+    'last': 'Aggregate function: returns the last value in a group.',
+    'count': 'Aggregate function: returns the number of items in a group.',
+    'sum': 'Aggregate function: returns the sum of all values in the expression.',
+    'avg': 'Aggregate function: returns the average of the values in a group.',
+    'mean': 'Aggregate function: returns the average of the values in a group.',
+    'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
+}
+
+_functions_1_4 = {
     # unary math functions
     'acos': 'Computes the cosine inverse of the given value; the returned angle is in the range' +
             '0.0 through pi.',
@@ -102,21 +115,11 @@ _functions = {
     'tan': 'Computes the tangent of the given value.',
     'tanh': 'Computes the hyperbolic tangent of the given value.',
     'toDegrees': 'Converts an angle measured in radians to an approximately equivalent angle ' +
-             'measured in degrees.',
+                 'measured in degrees.',
     'toRadians': 'Converts an angle measured in degrees to an approximately equivalent angle ' +
-             'measured in radians.',
+                 'measured in radians.',
 
     'bitwiseNOT': 'Computes bitwise not.',
-
-    'max': 'Aggregate function: returns the maximum value of the expression in a group.',
-    'min': 'Aggregate function: returns the minimum value of the expression in a group.',
-    'first': 'Aggregate function: returns the first value in a group.',
-    'last': 'Aggregate function: returns the last value in a group.',
-    'count': 'Aggregate function: returns the number of items in a group.',
-    'sum': 'Aggregate function: returns the sum of all values in the expression.',
-    'avg': 'Aggregate function: returns the average of the values in a group.',
-    'mean': 'Aggregate function: returns the average of the values in a group.',
-    'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
 }
 
 # math functions that take two arguments as input
@@ -128,15 +131,18 @@ _binary_mathfunctions = {
 }
 
 for _name, _doc in _functions.items():
-    globals()[_name] = _create_function(_name, _doc)
+    globals()[_name] = since(1.3)(_create_function(_name, _doc))
+for _name, _doc in _functions_1_4.items():
+    globals()[_name] = since(1.4)(_create_function(_name, _doc))
 for _name, _doc in _binary_mathfunctions.items():
-    globals()[_name] = _create_binary_mathfunction(_name, _doc)
+    globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
 del _name, _doc
 __all__ += _functions.keys()
 __all__ += _binary_mathfunctions.keys()
 __all__.sort()
 
 
+@since(1.4)
 def array(*cols):
     """Creates a new array column.
 
@@ -155,6 +161,7 @@ def array(*cols):
     return Column(jc)
 
 
+@since(1.3)
 def approxCountDistinct(col, rsd=None):
     """Returns a new :class:`Column` for approximate distinct count of ``col``.
 
@@ -169,6 +176,7 @@ def approxCountDistinct(col, rsd=None):
     return Column(jc)
 
 
+@since(1.4)
 def explode(col):
     """Returns a new row for each element in the given array or map.
 
@@ -189,6 +197,7 @@ def explode(col):
     return Column(jc)
 
 
+@since(1.4)
 def coalesce(*cols):
     """Returns the first column that is not null.
 
@@ -225,6 +234,7 @@ def coalesce(*cols):
     return Column(jc)
 
 
+@since(1.3)
 def countDistinct(col, *cols):
     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
 
@@ -239,6 +249,7 @@ def countDistinct(col, *cols):
     return Column(jc)
 
 
+@since(1.4)
 def monotonicallyIncreasingId():
     """A column that generates monotonically increasing 64-bit integers.
 
@@ -259,6 +270,7 @@ def monotonicallyIncreasingId():
     return Column(sc._jvm.functions.monotonicallyIncreasingId())
 
 
+@since(1.4)
 def rand(seed=None):
     """Generates a random column with i.i.d. samples from U[0.0, 1.0].
     """
@@ -270,6 +282,7 @@ def rand(seed=None):
     return Column(jc)
 
 
+@since(1.4)
 def randn(seed=None):
     """Generates a column with i.i.d. samples from the standard normal distribution.
     """
@@ -281,6 +294,7 @@ def randn(seed=None):
     return Column(jc)
 
 
+@since(1.4)
 def sparkPartitionId():
     """A column for partition ID of the Spark task.
 
@@ -294,6 +308,7 @@ def sparkPartitionId():
 
 
 @ignore_unicode_prefix
+@since(1.4)
 def struct(*cols):
     """Creates a new struct column.
 
@@ -312,6 +327,7 @@ def struct(*cols):
     return Column(jc)
 
 
+@since(1.4)
 def when(condition, value):
     """Evaluates a list of conditions and returns one of multiple possible result expressions.
     If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
@@ -336,6 +352,8 @@ def when(condition, value):
 class UserDefinedFunction(object):
     """
     User defined function in Python
+
+    .. versionadded:: 1.3
     """
     def __init__(self, func, returnType):
         self.func = func
@@ -353,8 +371,8 @@ class UserDefinedFunction(object):
         ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
         jdt = ssql_ctx.parseDataType(self.returnType.json())
         fname = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
-        judf = sc._jvm.UserDefinedPythonFunction(fname, bytearray(pickled_command), env,
-                                                 includes, sc.pythonExec, broadcast_vars,
+        judf = sc._jvm.UserDefinedPythonFunction(fname, bytearray(pickled_command), env, includes,
+                                                 sc.pythonExec, sc.pythonVer, broadcast_vars,
                                                  sc._javaAccumulator, jdt)
         return judf
 
@@ -369,6 +387,7 @@ class UserDefinedFunction(object):
         return Column(jc)
 
 
+@since(1.3)
 def udf(f, returnType=StringType()):
     """Creates a :class:`Column` expression representing a user defined function (UDF).
 

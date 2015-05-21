@@ -32,7 +32,7 @@ abstract class Model[M <: Model[M]] extends Transformer {
    * The parent estimator that produced this model.
    * Note: For ensembles' component Models, this value can be null.
    */
-  var parent: Estimator[M] = _
+  @transient var parent: Estimator[M] = _
 
   /**
    * Sets the parent of this model (Java API).
@@ -41,6 +41,9 @@ abstract class Model[M <: Model[M]] extends Transformer {
     this.parent = parent
     this.asInstanceOf[M]
   }
+
+  /** Indicates whether this [[Model]] has a corresponding parent. */
+  def hasParent: Boolean = parent != null
 
   override def copy(extra: ParamMap): M = {
     // The default implementation of Params.copy doesn't work for models.

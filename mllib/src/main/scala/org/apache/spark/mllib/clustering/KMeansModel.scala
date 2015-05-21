@@ -120,7 +120,7 @@ object KMeansModel extends Loader[KMeansModel] {
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
       val k = (metadata \ "k").extract[Int]
-      val centriods = sqlContext.parquetFile(Loader.dataPath(path))
+      val centriods = sqlContext.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Cluster](centriods.schema)
       val localCentriods = centriods.map(Cluster.apply).collect()
       assert(k == localCentriods.size)
