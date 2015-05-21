@@ -294,6 +294,13 @@ class Column(object):
         return Column(jc)
 
     @ignore_unicode_prefix
+    def astype(self, dataType):
+        """ Convert the column into type `dataType`
+        Only used in Column for Python
+        """
+        return self.cast(dataType)
+
+    @ignore_unicode_prefix
     def between(self, lowerBound, upperBound):
         """ A boolean expression that is evaluated to true if the value of this
         expression is between the given columns.
