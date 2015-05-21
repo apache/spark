@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -47,7 +48,10 @@ class HashingTFSuite extends FunSuite with MLlibTestSparkContext {
       .setInputCol("words")
       .setOutputCol("features")
       .setNumFeatures(1000)
-    val features = hashingTF.transform(df).select("features").first().getAs[Vector](0)
+    val output = hashingTF.transform(df)
+    val attrGroup = AttributeGroup.fromStructField(output.schema("features"))
+    require(attrGroup.numAttributes === Some(1000))
+    val features = output.select("features").first().getAs[Vector](0)
     // Assume perfect hash on "a", "b", "c", and "d".
     val expected = Vectors.sparse(1000,
       Seq(("a".##, 2.0), ("b".##, 2.0), ("c".##, 1.0), ("d".##, 1.0)))
