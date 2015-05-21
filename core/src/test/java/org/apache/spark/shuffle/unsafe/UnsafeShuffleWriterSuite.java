@@ -26,6 +26,7 @@ import scala.collection.Iterator;
 import scala.reflect.ClassTag;
 import scala.runtime.AbstractFunction1;
 
+import com.google.common.collect.Iterators;
 import com.google.common.collect.HashMultiset;
 import com.google.common.io.ByteStreams;
 import org.junit.After;
@@ -250,6 +251,20 @@ public class UnsafeShuffleWriterSuite {
   @Test
   public void doNotNeedToCallWriteBeforeUnsuccessfulStop() throws IOException {
     createWriter(false).stop(false);
+  }
+
+  @Test
+  public void writeEmptyIterator() throws Exception {
+    final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
+    writer.write(Iterators.<Product2<Object, Object>>emptyIterator());
+    final Option<MapStatus> mapStatus = writer.stop(true);
+    assertTrue(mapStatus.isDefined());
+    assertTrue(mergedOutputFile.exists());
+    assertArrayEquals(new long[NUM_PARTITITONS], partitionSizesInMergedFile);
+    assertEquals(0, taskMetrics.shuffleWriteMetrics().get().shuffleRecordsWritten());
+    assertEquals(0, taskMetrics.shuffleWriteMetrics().get().shuffleBytesWritten());
+    assertEquals(0, taskMetrics.diskBytesSpilled());
+    assertEquals(0, taskMetrics.memoryBytesSpilled());
   }
 
   @Test
