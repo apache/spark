@@ -38,14 +38,12 @@ import org.apache.spark.util.Utils
 
 class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
 
-  private var sqlContext: SQLContext = _
   private var tempDir: File = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     tempDir = Utils.createTempDir()
     sc.setCheckpointDir(tempDir.getAbsolutePath)
-    sqlContext = new SQLContext(sc)
   }
 
   override def afterAll(): Unit = {
