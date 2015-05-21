@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming
 
-import java.io.InputStream
+import java.io.{InputStream, NotSerializableException}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.Map
@@ -34,7 +34,8 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.spark._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.input.FixedLengthBinaryInputFormat
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{RDD, RDDOperationScope}
+import org.apache.spark.serializer.SerializationDebugger
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
@@ -235,6 +236,10 @@ class StreamingContext private[streaming] (
     }
   }
 
+  private[streaming] def isCheckpointingEnabled: Boolean = {
+    checkpointDir != null
+  }
+
   private[streaming] def initialCheckpoint: Checkpoint = {
     if (isCheckpointPresent) cp_ else null
   }
@@ -242,14 +247,21 @@ class StreamingContext private[streaming] (
   private[streaming] def getNewInputStreamId() = nextInputStreamId.getAndIncrement()
 
   /**
-   * Create an input stream with any arbitrary user implemented receiver.
-   * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
-   * @param receiver Custom implementation of Receiver
+   * Execute a block of code in a scope such that all new DStreams created in this body will
+   * be part of the same scope. For more detail, see the comments in `doCompute`.
+   *
+   * Note: Return statements are NOT allowed in the given body.
    */
-  @deprecated("Use receiverStream", "1.0.0")
-  def networkStream[T: ClassTag](
-    receiver: Receiver[T]): ReceiverInputDStream[T] = {
-    receiverStream(receiver)
+  private[streaming] def withScope[U](body: => U): U = sparkContext.withScope(body)
+
+  /**
+   * Execute a block of code in a scope such that all new DStreams created in this body will
+   * be part of the same scope. For more detail, see the comments in `doCompute`.
+   *
+   * Note: Return statements are NOT allowed in the given body.
+   */
+  private def withNamedScope[U](name: String)(body: => U): U = {
+    RDDOperationScope.withScope(sc, name, allowNesting = false, ignoreParent = false)(body)
   }
 
   /**
@@ -257,9 +269,22 @@ class StreamingContext private[streaming] (
    * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param receiver Custom implementation of Receiver
    */
-  def receiverStream[T: ClassTag](
-    receiver: Receiver[T]): ReceiverInputDStream[T] = {
-    new PluggableInputDStream[T](this, receiver)
+  @deprecated("Use receiverStream", "1.0.0")
+  def networkStream[T: ClassTag](receiver: Receiver[T]): ReceiverInputDStream[T] = {
+    withNamedScope("network stream") {
+      receiverStream(receiver)
+    }
+  }
+
+  /**
+   * Create an input stream with any arbitrary user implemented receiver.
+   * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
+   * @param receiver Custom implementation of Receiver
+   */
+  def receiverStream[T: ClassTag](receiver: Receiver[T]): ReceiverInputDStream[T] = {
+    withNamedScope("receiver stream") {
+      new PluggableInputDStream[T](this, receiver)
+    }
   }
 
   /**
@@ -279,7 +304,7 @@ class StreamingContext private[streaming] (
       name: String,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
       supervisorStrategy: SupervisorStrategy = ActorSupervisorStrategy.defaultStrategy
-    ): ReceiverInputDStream[T] = {
+    ): ReceiverInputDStream[T] = withNamedScope("actor stream") {
     receiverStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
   }
 
@@ -296,7 +321,7 @@ class StreamingContext private[streaming] (
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): ReceiverInputDStream[String] = {
+    ): ReceiverInputDStream[String] = withNamedScope("socket text stream") {
     socketStream[String](hostname, port, SocketReceiver.bytesToLines, storageLevel)
   }
 
@@ -334,7 +359,7 @@ class StreamingContext private[streaming] (
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): ReceiverInputDStream[T] = {
+    ): ReceiverInputDStream[T] = withNamedScope("raw socket stream") {
     new RawInputDStream[T](this, hostname, port, storageLevel)
   }
 
@@ -408,7 +433,7 @@ class StreamingContext private[streaming] (
    * file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    */
-  def textFileStream(directory: String): DStream[String] = {
+  def textFileStream(directory: String): DStream[String] = withNamedScope("text file stream") {
     fileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
   }
 
@@ -430,7 +455,7 @@ class StreamingContext private[streaming] (
   @Experimental
   def binaryRecordsStream(
       directory: String,
-      recordLength: Int): DStream[Array[Byte]] = {
+      recordLength: Int): DStream[Array[Byte]] = withNamedScope("binary records stream") {
     val conf = sc_.hadoopConfiguration
     conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
     val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](
@@ -477,7 +502,7 @@ class StreamingContext private[streaming] (
   /**
    * Create a unified DStream from multiple DStreams of the same type and same slide duration.
    */
-  def union[T: ClassTag](streams: Seq[DStream[T]]): DStream[T] = {
+  def union[T: ClassTag](streams: Seq[DStream[T]]): DStream[T] = withScope {
     new UnionDStream[T](streams.toArray)
   }
 
@@ -488,7 +513,7 @@ class StreamingContext private[streaming] (
   def transform[T: ClassTag](
       dstreams: Seq[DStream[_]],
       transformFunc: (Seq[RDD[_]], Time) => RDD[T]
-    ): DStream[T] = {
+    ): DStream[T] = withScope {
     new TransformedDStream[T](dstreams, sparkContext.clean(transformFunc))
   }
 
@@ -503,11 +528,26 @@ class StreamingContext private[streaming] (
     assert(graph != null, "Graph is null")
     graph.validate()
 
-    assert(
-      checkpointDir == null || checkpointDuration != null,
+    require(
+      !isCheckpointingEnabled || checkpointDuration != null,
       "Checkpoint directory has been set, but the graph checkpointing interval has " +
         "not been set. Please use StreamingContext.checkpoint() to set the interval."
     )
+
+    // Verify whether the DStream checkpoint is serializable
+    if (isCheckpointingEnabled) {
+      val checkpoint = new Checkpoint(this, Time.apply(0))
+      try {
+        Checkpoint.serialize(checkpoint, conf)
+      } catch {
+        case e: NotSerializableException =>
+          throw new NotSerializableException(
+            "DStream checkpointing has been enabled but the DStreams with their functions " +
+              "are not serializable\nSerialization stack:\n" +
+              SerializationDebugger.find(checkpoint).map("\t- " + _).mkString("\n")
+          )
+      }
+    }
   }
 
   /**

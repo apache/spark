@@ -58,7 +58,7 @@ object RDDRelation {
     df.where($"key" === 1).orderBy($"value".asc).select($"key").collect().foreach(println)
 
     // Write out an RDD as a parquet file.
-    df.saveAsParquetFile("pair.parquet")
+    df.write.parquet("pair.parquet")
 
     // Read in parquet file.  Parquet files are self-describing so the schmema is preserved.
     val parquetFile = sqlContext.read.parquet("pair.parquet")

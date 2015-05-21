@@ -237,7 +237,7 @@ model2.transform(test.toDF)
   .select("features", "label", "myProbability", "prediction")
   .collect()
   .foreach { case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
-    println("($features, $label) -> prob=$prob, prediction=$prediction")
+    println(s"($features, $label) -> prob=$prob, prediction=$prediction")
   }
 
 sc.stop()
@@ -391,7 +391,7 @@ model.transform(test.toDF)
   .select("id", "text", "probability", "prediction")
   .collect()
   .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
-    println("($id, $text) --> prob=$prob, prediction=$prediction")
+    println(s"($id, $text) --> prob=$prob, prediction=$prediction")
   }
 
 sc.stop()

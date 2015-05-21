@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.io.CharArrayWriter
-import java.sql.DriverManager
 import java.util.Properties
 
 import scala.collection.JavaConversions._
@@ -40,9 +39,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
-import org.apache.spark.sql.jdbc.JDBCWriteDetails
 import org.apache.spark.sql.json.JacksonGenerator
-import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, ResolvedDataSource}
+import org.apache.spark.sql.sources.CreateTableUsingAsSelect
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -226,10 +224,6 @@ class DataFrame private[sql](
         s"Invalid tree; ${e.getMessage}:\n$queryExecution"
     }
   }
-
-  /** Left here for backward compatibility. */
-  @deprecated("1.3.0", "use toDF")
-  def toSchemaRDD: DataFrame = this
 
   /**
    * Returns the object itself.
@@ -1069,7 +1063,7 @@ class DataFrame private[sql](
 
     val ret: Seq[Row] = if (outputCols.nonEmpty) {
       val aggExprs = statistics.flatMap { case (_, colToAgg) =>
-        outputCols.map(c => Column(colToAgg(Column(c).expr)).as(c))
+        outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), StringType)).as(c))
       }
 
       val row = agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
@@ -1083,9 +1077,9 @@ class DataFrame private[sql](
       statistics.map { case (name, _) => Row(name) }
     }
 
-    // The first column is string type, and the rest are double type.
+    // All columns are string type
     val schema = StructType(
-      StructField("summary", StringType) :: outputCols.map(StructField(_, DoubleType))).toAttributes
+      StructField("summary", StringType) :: outputCols.map(StructField(_, StringType))).toAttributes
     LocalRelation(schema, ret)
   }
 
@@ -1300,230 +1294,6 @@ class DataFrame private[sql](
   def write: DataFrameWriter = new DataFrameWriter(this)
 
   /**
-   * Saves the contents of this [[DataFrame]] as a parquet file, preserving the schema.
-   * Files that are written out using this method can be read back in as a [[DataFrame]]
-   * using the `parquetFile` function in [[SQLContext]].
-   * @group output
-   * @since 1.3.0
-   */
-  @deprecated("Use write.parquet(path)", "1.4.0")
-  def saveAsParquetFile(path: String): Unit = {
-    if (sqlContext.conf.parquetUseDataSourceApi) {
-      write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
-    } else {
-      sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
-    }
-  }
-
-  /**
-   * Creates a table from the the contents of this DataFrame.
-   * It will use the default data source configured by spark.sql.sources.default.
-   * This will fail if the table already exists.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
-   * @group output
-   * @since 1.3.0
-   */
-  @deprecated("Use write.saveAsTable(tableName)", "1.4.0")
-  def saveAsTable(tableName: String): Unit = {
-    write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
-  }
-
-  /**
-   * Creates a table from the the contents of this DataFrame, using the default data source
-   * configured by spark.sql.sources.default and [[SaveMode.ErrorIfExists]] as the save mode.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
-   * @group output
-   * @since 1.3.0
-   */
-  @deprecated("Use write.mode(mode).saveAsTable(tableName)", "1.4.0")
-  def saveAsTable(tableName: String, mode: SaveMode): Unit = {
-    if (sqlContext.catalog.tableExists(Seq(tableName)) && mode == SaveMode.Append) {
-      // If table already exists and the save mode is Append,
-      // we will just call insertInto to append the contents of this DataFrame.
-      insertInto(tableName, overwrite = false)
-    } else {
-      write.mode(mode).saveAsTable(tableName)
-    }
-  }
-
-  /**
-   * Creates a table at the given path from the the contents of this DataFrame
-   * based on a given data source and a set of options,
-   * using [[SaveMode.ErrorIfExists]] as the save mode.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
-   * @group output
-   * @since 1.3.0
-   */
-  @deprecated("Use write.format(source).saveAsTable(tableName)", "1.4.0")
-  def saveAsTable(tableName: String, source: String): Unit = {
-    write.format(source).saveAsTable(tableName)
-  }
-
-  /**
-   * :: Experimental ::
-   * Creates a table at the given path from the the contents of this DataFrame
-   * based on a given data source, [[SaveMode]] specified by mode, and a set of options.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
-   * @group output
-   * @since 1.3.0
-   */
-  @deprecated("Use write.format(source).mode(mode).saveAsTable(tableName)", "1.4.0")
-  def saveAsTable(tableName: String, source: String, mode: SaveMode): Unit = {
-    write.format(source).mode(mode).saveAsTable(tableName)
-  }
-
-  /**
-   * Creates a table at the given path from the the contents of this DataFrame
-   * based on a given data source, [[SaveMode]] specified by mode, and a set of options.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
-   * @group output
-   * @since 1.3.0
-   */
-  @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
-    "1.4.0")
-  def saveAsTable(
-      tableName: String,
-      source: String,
-      mode: SaveMode,
-      options: java.util.Map[String, String]): Unit = {
-    write.format(source).mode(mode).options(options).saveAsTable(tableName)
-  }
-
-  /**
-   * (Scala-specific)
-   * Creates a table from the the contents of this DataFrame based on a given data source,
-   * [[SaveMode]] specified by mode, and a set of options.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
-   * @group output
-   * @since 1.3.0
-   */
-  @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
-    "1.4.0")
-  def saveAsTable(
-      tableName: String,
-      source: String,
-      mode: SaveMode,
-      options: Map[String, String]): Unit = {
-    write.format(source).mode(mode).options(options).saveAsTable(tableName)
-  }
-
-  /**
-   * Saves the contents of this DataFrame to the given path,
-   * using the default data source configured by spark.sql.sources.default and
-   * [[SaveMode.ErrorIfExists]] as the save mode.
-   * @group output
-   * @since 1.3.0
-   */
-  @deprecated("Use write.save(path)", "1.4.0")
-  def save(path: String): Unit = {
-    write.save(path)
-  }
-
-  /**
-   * Saves the contents of this DataFrame to the given path and [[SaveMode]] specified by mode,
-   * using the default data source configured by spark.sql.sources.default.
-   * @group output
-   * @since 1.3.0
-   */
-  @deprecated("Use write.mode(mode).save(path)", "1.4.0")
-  def save(path: String, mode: SaveMode): Unit = {
-    write.mode(mode).save(path)
-  }
-
-  /**
-   * Saves the contents of this DataFrame to the given path based on the given data source,
-   * using [[SaveMode.ErrorIfExists]] as the save mode.
-   * @group output
-   * @since 1.3.0
-   */
-  @deprecated("Use write.format(source).save(path)", "1.4.0")
-  def save(path: String, source: String): Unit = {
-    write.format(source).save(path)
-  }
-
-  /**
-   * Saves the contents of this DataFrame to the given path based on the given data source and
-   * [[SaveMode]] specified by mode.
-   * @group output
-   * @since 1.3.0
-   */
-  @deprecated("Use write.format(source).mode(mode).save(path)", "1.4.0")
-  def save(path: String, source: String, mode: SaveMode): Unit = {
-    write.format(source).mode(mode).save(path)
-  }
-
-  /**
-   * Saves the contents of this DataFrame based on the given data source,
-   * [[SaveMode]] specified by mode, and a set of options.
-   * @group output
-   * @since 1.3.0
-   */
-  @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
-  def save(
-      source: String,
-      mode: SaveMode,
-      options: java.util.Map[String, String]): Unit = {
-    write.format(source).mode(mode).options(options).save()
-  }
-
-  /**
-   * (Scala-specific)
-   * Saves the contents of this DataFrame based on the given data source,
-   * [[SaveMode]] specified by mode, and a set of options
-   * @group output
-   * @since 1.3.0
-   */
-  @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
-  def save(
-      source: String,
-      mode: SaveMode,
-      options: Map[String, String]): Unit = {
-    write.format(source).mode(mode).options(options).save()
-  }
-
-  /**
    * :: Experimental ::
    * Adds the rows from this RDD to the specified table, optionally overwriting the existing data.
    * @group output
@@ -1577,100 +1347,6 @@ class DataFrame private[sql](
   }
 
   ////////////////////////////////////////////////////////////////////////////
-  // JDBC Write Support
-  ////////////////////////////////////////////////////////////////////////////
-
-  /**
-   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`.
-   * This will run a `CREATE TABLE` and a bunch of `INSERT INTO` statements.
-   * If you pass `true` for `allowExisting`, it will drop any table with the
-   * given name; if you pass `false`, it will throw if the table already
-   * exists.
-   * @group output
-   * @since 1.3.0
-   */
-  def createJDBCTable(url: String, table: String, allowExisting: Boolean): Unit = {
-    createJDBCTable(url, table, allowExisting, new Properties())
-  }
-    
-  /**
-   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`
-   * using connection properties defined in `properties`.
-   * This will run a `CREATE TABLE` and a bunch of `INSERT INTO` statements.
-   * If you pass `true` for `allowExisting`, it will drop any table with the
-   * given name; if you pass `false`, it will throw if the table already
-   * exists.
-   * @group output
-   * @since 1.4.0
-   */
-  def createJDBCTable(
-      url: String,
-      table: String,
-      allowExisting: Boolean,
-      properties: Properties): Unit = {
-    val conn = DriverManager.getConnection(url, properties)
-    try {
-      if (allowExisting) {
-        val sql = s"DROP TABLE IF EXISTS $table"
-        conn.prepareStatement(sql).executeUpdate()
-      }
-      val schema = JDBCWriteDetails.schemaString(this, url)
-      val sql = s"CREATE TABLE $table ($schema)"
-      conn.prepareStatement(sql).executeUpdate()
-    } finally {
-      conn.close()
-    }
-    JDBCWriteDetails.saveTable(this, url, table, properties)
-  }
-
-  /**
-   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`.
-   * Assumes the table already exists and has a compatible schema.  If you
-   * pass `true` for `overwrite`, it will `TRUNCATE` the table before
-   * performing the `INSERT`s.
-   *
-   * The table must already exist on the database.  It must have a schema
-   * that is compatible with the schema of this RDD; inserting the rows of
-   * the RDD in order via the simple statement
-   * `INSERT INTO table VALUES (?, ?, ..., ?)` should not fail.
-   * @group output
-   * @since 1.3.0
-   */
-  def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
-    insertIntoJDBC(url, table, overwrite, new Properties())
-  }
-
-  /**
-   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`
-   * using connection properties defined in `properties`.
-   * Assumes the table already exists and has a compatible schema.  If you
-   * pass `true` for `overwrite`, it will `TRUNCATE` the table before
-   * performing the `INSERT`s.
-   *
-   * The table must already exist on the database.  It must have a schema
-   * that is compatible with the schema of this RDD; inserting the rows of
-   * the RDD in order via the simple statement
-   * `INSERT INTO table VALUES (?, ?, ..., ?)` should not fail.
-   * @group output
-   * @since 1.4.0
-   */
-  def insertIntoJDBC(
-      url: String,
-      table: String,
-      overwrite: Boolean,
-      properties: Properties): Unit = {
-    if (overwrite) {
-      val conn = DriverManager.getConnection(url, properties)
-      try {
-        val sql = s"TRUNCATE TABLE $table"
-        conn.prepareStatement(sql).executeUpdate()
-      } finally {
-        conn.close()
-      }
-    }
-    JDBCWriteDetails.saveTable(this, url, table, properties)
-  }
-  ////////////////////////////////////////////////////////////////////////////
   // for Python API
   ////////////////////////////////////////////////////////////////////////////
 
@@ -1682,4 +1358,264 @@ class DataFrame private[sql](
     val jrdd = rdd.map(EvaluatePython.rowToArray(_, fieldTypes)).toJavaRDD()
     SerDeUtil.javaToPython(jrdd)
   }
+
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+  // Deprecated methods
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+
+  /** Left here for backward compatibility. */
+  @deprecated("use toDF", "1.3.0")
+  def toSchemaRDD: DataFrame = this
+
+  /**
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`.
+   * This will run a `CREATE TABLE` and a bunch of `INSERT INTO` statements.
+   * If you pass `true` for `allowExisting`, it will drop any table with the
+   * given name; if you pass `false`, it will throw if the table already
+   * exists.
+   * @group output
+   */
+  @deprecated("Use write.jdbc()", "1.4.0")
+  def createJDBCTable(url: String, table: String, allowExisting: Boolean): Unit = {
+    val w = if (allowExisting) write.mode(SaveMode.Overwrite) else write
+    w.jdbc(url, table, new Properties)
+  }
+
+  /**
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`.
+   * Assumes the table already exists and has a compatible schema.  If you
+   * pass `true` for `overwrite`, it will `TRUNCATE` the table before
+   * performing the `INSERT`s.
+   *
+   * The table must already exist on the database.  It must have a schema
+   * that is compatible with the schema of this RDD; inserting the rows of
+   * the RDD in order via the simple statement
+   * `INSERT INTO table VALUES (?, ?, ..., ?)` should not fail.
+   * @group output
+   */
+  @deprecated("Use write.jdbc()", "1.4.0")
+  def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
+    val w = if (overwrite) write.mode(SaveMode.Overwrite) else write
+    w.jdbc(url, table, new Properties)
+  }
+
+  /**
+   * Saves the contents of this [[DataFrame]] as a parquet file, preserving the schema.
+   * Files that are written out using this method can be read back in as a [[DataFrame]]
+   * using the `parquetFile` function in [[SQLContext]].
+   * @group output
+   */
+  @deprecated("Use write.parquet(path)", "1.4.0")
+  def saveAsParquetFile(path: String): Unit = {
+    if (sqlContext.conf.parquetUseDataSourceApi) {
+      write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
+    } else {
+      sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+    }
+  }
+
+  /**
+   * Creates a table from the the contents of this DataFrame.
+   * It will use the default data source configured by spark.sql.sources.default.
+   * This will fail if the table already exists.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * @group output
+   */
+  @deprecated("Use write.saveAsTable(tableName)", "1.4.0")
+  def saveAsTable(tableName: String): Unit = {
+    write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
+  }
+
+  /**
+   * Creates a table from the the contents of this DataFrame, using the default data source
+   * configured by spark.sql.sources.default and [[SaveMode.ErrorIfExists]] as the save mode.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * @group output
+   */
+  @deprecated("Use write.mode(mode).saveAsTable(tableName)", "1.4.0")
+  def saveAsTable(tableName: String, mode: SaveMode): Unit = {
+    if (sqlContext.catalog.tableExists(Seq(tableName)) && mode == SaveMode.Append) {
+      // If table already exists and the save mode is Append,
+      // we will just call insertInto to append the contents of this DataFrame.
+      insertInto(tableName, overwrite = false)
+    } else {
+      write.mode(mode).saveAsTable(tableName)
+    }
+  }
+
+  /**
+   * Creates a table at the given path from the the contents of this DataFrame
+   * based on a given data source and a set of options,
+   * using [[SaveMode.ErrorIfExists]] as the save mode.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * @group output
+   */
+  @deprecated("Use write.format(source).saveAsTable(tableName)", "1.4.0")
+  def saveAsTable(tableName: String, source: String): Unit = {
+    write.format(source).saveAsTable(tableName)
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a table at the given path from the the contents of this DataFrame
+   * based on a given data source, [[SaveMode]] specified by mode, and a set of options.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * @group output
+   */
+  @deprecated("Use write.format(source).mode(mode).saveAsTable(tableName)", "1.4.0")
+  def saveAsTable(tableName: String, source: String, mode: SaveMode): Unit = {
+    write.format(source).mode(mode).saveAsTable(tableName)
+  }
+
+  /**
+   * Creates a table at the given path from the the contents of this DataFrame
+   * based on a given data source, [[SaveMode]] specified by mode, and a set of options.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * @group output
+   */
+  @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
+    "1.4.0")
+  def saveAsTable(
+      tableName: String,
+      source: String,
+      mode: SaveMode,
+      options: java.util.Map[String, String]): Unit = {
+    write.format(source).mode(mode).options(options).saveAsTable(tableName)
+  }
+
+  /**
+   * (Scala-specific)
+   * Creates a table from the the contents of this DataFrame based on a given data source,
+   * [[SaveMode]] specified by mode, and a set of options.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   *
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * @group output
+   */
+  @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
+    "1.4.0")
+  def saveAsTable(
+      tableName: String,
+      source: String,
+      mode: SaveMode,
+      options: Map[String, String]): Unit = {
+    write.format(source).mode(mode).options(options).saveAsTable(tableName)
+  }
+
+  /**
+   * Saves the contents of this DataFrame to the given path,
+   * using the default data source configured by spark.sql.sources.default and
+   * [[SaveMode.ErrorIfExists]] as the save mode.
+   * @group output
+   */
+  @deprecated("Use write.save(path)", "1.4.0")
+  def save(path: String): Unit = {
+    write.save(path)
+  }
+
+  /**
+   * Saves the contents of this DataFrame to the given path and [[SaveMode]] specified by mode,
+   * using the default data source configured by spark.sql.sources.default.
+   * @group output
+   */
+  @deprecated("Use write.mode(mode).save(path)", "1.4.0")
+  def save(path: String, mode: SaveMode): Unit = {
+    write.mode(mode).save(path)
+  }
+
+  /**
+   * Saves the contents of this DataFrame to the given path based on the given data source,
+   * using [[SaveMode.ErrorIfExists]] as the save mode.
+   * @group output
+   */
+  @deprecated("Use write.format(source).save(path)", "1.4.0")
+  def save(path: String, source: String): Unit = {
+    write.format(source).save(path)
+  }
+
+  /**
+   * Saves the contents of this DataFrame to the given path based on the given data source and
+   * [[SaveMode]] specified by mode.
+   * @group output
+   */
+  @deprecated("Use write.format(source).mode(mode).save(path)", "1.4.0")
+  def save(path: String, source: String, mode: SaveMode): Unit = {
+    write.format(source).mode(mode).save(path)
+  }
+
+  /**
+   * Saves the contents of this DataFrame based on the given data source,
+   * [[SaveMode]] specified by mode, and a set of options.
+   * @group output
+   */
+  @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
+  def save(
+      source: String,
+      mode: SaveMode,
+      options: java.util.Map[String, String]): Unit = {
+    write.format(source).mode(mode).options(options).save()
+  }
+
+  /**
+   * (Scala-specific)
+   * Saves the contents of this DataFrame based on the given data source,
+   * [[SaveMode]] specified by mode, and a set of options
+   * @group output
+   */
+  @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
+  def save(
+      source: String,
+      mode: SaveMode,
+      options: Map[String, String]): Unit = {
+    write.format(source).mode(mode).options(options).save()
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+  // End of eeprecated methods
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+
 }

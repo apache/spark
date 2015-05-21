@@ -94,7 +94,7 @@ public class JavaSparkSQL {
 
     System.out.println("=== Data source: Parquet File ===");
     // DataFrames can be saved as parquet files, maintaining the schema information.
-    schemaPeople.saveAsParquetFile("people.parquet");
+    schemaPeople.write().parquet("people.parquet");
 
     // Read in the parquet file created above.
     // Parquet files are self-describing so the schema is preserved.
@@ -151,7 +151,7 @@ public class JavaSparkSQL {
     List<String> jsonData = Arrays.asList(
           "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
     JavaRDD<String> anotherPeopleRDD = ctx.parallelize(jsonData);
-    DataFrame peopleFromJsonRDD = sqlContext.jsonRDD(anotherPeopleRDD.rdd());
+    DataFrame peopleFromJsonRDD = sqlContext.read().json(anotherPeopleRDD.rdd());
 
     // Take a look at the schema of this new DataFrame.
     peopleFromJsonRDD.printSchema();

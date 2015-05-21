@@ -75,6 +75,13 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
     checkLoad()
   }
 
+  test("save with string mode and path, and load") {
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
+    path.createNewFile()
+    df.write.mode("overwrite").save(path.toString)
+    checkLoad()
+  }
+
   test("save with path and datasource, and load") {
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
     df.write.json(path.toString)

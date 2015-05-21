@@ -162,5 +162,7 @@ private object RandomForestClassifierSuite {
     val oldModelAsNew = RandomForestClassificationModel.fromOld(
       oldModel, newModel.parent.asInstanceOf[RandomForestClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
+    assert(newModel.hasParent)
+    assert(!newModel.trees.head.asInstanceOf[DecisionTreeClassificationModel].hasParent)
   }
 }
