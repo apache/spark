@@ -102,6 +102,44 @@ object Checkpoint extends Logging {
       Seq.empty
     }
   }
+
+  /** Serialize the checkpoint, or throw any exception that occurs */
+  def serialize(checkpoint: Checkpoint, conf: SparkConf): Array[Byte] = {
+    val compressionCodec = CompressionCodec.createCodec(conf)
+    val bos = new ByteArrayOutputStream()
+    val zos = compressionCodec.compressedOutputStream(bos)
+    val oos = new ObjectOutputStream(zos)
+    Utils.tryWithSafeFinally {
+      oos.writeObject(checkpoint)
+    } {
+      oos.close()
+    }
+    bos.toByteArray
+  }
+
+  /** Deserialize a checkpoint from the input stream, or throw any exception that occurs */
+  def deserialize(inputStream: InputStream, conf: SparkConf): Checkpoint = {
+    val compressionCodec = CompressionCodec.createCodec(conf)
+    var ois: ObjectInputStreamWithLoader = null
+    Utils.tryWithSafeFinally {
+
+      // ObjectInputStream uses the last defined user-defined class loader in the stack
+      // to find classes, which maybe the wrong class loader. Hence, a inherited version
+      // of ObjectInputStream is used to explicitly use the current thread's default class
+      // loader to find and load classes. This is a well know Java issue and has popped up
+      // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)
+      val zis = compressionCodec.compressedInputStream(inputStream)
+      ois = new ObjectInputStreamWithLoader(zis,
+        Thread.currentThread().getContextClassLoader)
+      val cp = ois.readObject.asInstanceOf[Checkpoint]
+      cp.validate()
+      cp
+    } {
+      if (ois != null) {
+        ois.close()
+      }
+    }
+  }
 }
 
 
@@ -189,17 +227,10 @@ class CheckpointWriter(
   }
 
   def write(checkpoint: Checkpoint, clearCheckpointDataLater: Boolean) {
-    val bos = new ByteArrayOutputStream()
-    val zos = compressionCodec.compressedOutputStream(bos)
-    val oos = new ObjectOutputStream(zos)
-    Utils.tryWithSafeFinally {
-      oos.writeObject(checkpoint)
-    } {
-      oos.close()
-    }
     try {
+      val bytes = Checkpoint.serialize(checkpoint, conf)
       executor.execute(new CheckpointWriteHandler(
-        checkpoint.checkpointTime, bos.toByteArray, clearCheckpointDataLater))
+        checkpoint.checkpointTime, bytes, clearCheckpointDataLater))
       logDebug("Submitted checkpoint of time " + checkpoint.checkpointTime + " writer queue")
     } catch {
       case rej: RejectedExecutionException =>
@@ -264,25 +295,8 @@ object CheckpointReader extends Logging {
     checkpointFiles.foreach(file => {
       logInfo("Attempting to load checkpoint from file " + file)
       try {
-        var ois: ObjectInputStreamWithLoader = null
-        var cp: Checkpoint = null
-        Utils.tryWithSafeFinally {
-          val fis = fs.open(file)
-          // ObjectInputStream uses the last defined user-defined class loader in the stack
-          // to find classes, which maybe the wrong class loader. Hence, a inherited version
-          // of ObjectInputStream is used to explicitly use the current thread's default class
-          // loader to find and load classes. This is a well know Java issue and has popped up
-          // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)
-          val zis = compressionCodec.compressedInputStream(fis)
-          ois = new ObjectInputStreamWithLoader(zis,
-            Thread.currentThread().getContextClassLoader)
-          cp = ois.readObject.asInstanceOf[Checkpoint]
-        } {
-          if (ois != null) {
-            ois.close()
-          }
-        }
-        cp.validate()
+        val fis = fs.open(file)
+        val cp = Checkpoint.deserialize(fis, conf)
         logInfo("Checkpoint successfully loaded from file " + file)
         logInfo("Checkpoint was generated at time " + cp.checkpointTime)
         return Some(cp)

@@ -22,7 +22,7 @@ import scala.beans.BeanInfo
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row}
 
 @BeanInfo
 case class TokenizerTestData(rawText: String, wantedTokens: Array[String])
@@ -30,13 +30,6 @@ case class TokenizerTestData(rawText: String, wantedTokens: Array[String])
 class RegexTokenizerSuite extends FunSuite with MLlibTestSparkContext {
   import org.apache.spark.ml.feature.RegexTokenizerSuite._
   
-  @transient var sqlContext: SQLContext = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sqlContext = new SQLContext(sc)
-  }
-
   test("RegexTokenizer") {
     val tokenizer = new RegexTokenizer()
       .setInputCol("rawText")
