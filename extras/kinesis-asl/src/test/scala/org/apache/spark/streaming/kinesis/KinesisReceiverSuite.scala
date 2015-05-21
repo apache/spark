@@ -66,7 +66,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
   var checkpointStateMock: KinesisCheckpointState = _
   var currentClockMock: Clock = _
 
-  override def beforeFunction() = {
+  override def beforeFunction(): Unit = {
     receiverMock = mock[KinesisReceiver]
     checkpointerMock = mock[IRecordProcessorCheckpointer]
     checkpointClockMock = mock[ManualClock]
