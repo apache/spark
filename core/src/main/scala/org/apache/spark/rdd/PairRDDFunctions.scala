@@ -296,6 +296,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * before sending results to a reducer, similarly to a "combiner" in MapReduce.
    */
   def reduceByKeyLocally(func: (V, V) => V): Map[K, V] = self.withScope {
+    val cleanedF = self.sparkContext.clean(func)
 
     if (keyClass.isArray) {
       throw new SparkException("reduceByKeyLocally() does not support array keys")
@@ -305,7 +306,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val map = new JHashMap[K, V]
       iter.foreach { pair =>
         val old = map.get(pair._1)
-        map.put(pair._1, if (old == null) pair._2 else func(old, pair._2))
+        map.put(pair._1, if (old == null) pair._2 else cleanedF(old, pair._2))
       }
       Iterator(map)
     } : Iterator[JHashMap[K, V]]
@@ -313,7 +314,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val mergeMaps = (m1: JHashMap[K, V], m2: JHashMap[K, V]) => {
       m2.foreach { pair =>
         val old = m1.get(pair._1)
-        m1.put(pair._1, if (old == null) pair._2 else func(old, pair._2))
+        m1.put(pair._1, if (old == null) pair._2 else cleanedF(old, pair._2))
       }
       m1
     } : JHashMap[K, V]
