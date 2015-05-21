@@ -17,9 +17,12 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.apache.commons.io.FilenameUtils
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.scalatest.{BeforeAndAfterEach, FunSuite}
+
+import scala.reflect.io.Path
 
 class HierarchicalClusteringModelSuite
     extends FunSuite with MLlibTestSparkContext with BeforeAndAfterEach {
@@ -179,13 +182,20 @@ class HierarchicalClusteringModelSuite
     val data = sc.parallelize(localData.map(_._2))
     val model = app.run(data)
 
-    val tmpFile = java.io.File.createTempFile("hierarchical-clustering", "save-load")
-    model.save(sc, tmpFile.getAbsolutePath)
+    // create a temporary directory for the test
+    val tmpBaseDir = System.getProperty("java.io.tmpdir")
+    val tmpDir = this.getClass.getSimpleName + this.hashCode().toString
+    val tmpPath = FilenameUtils.concat(tmpBaseDir, tmpDir)
 
-    val sameModel = HierarchicalClusteringModel.load(sc, tmpFile.getAbsolutePath)
+    model.save(sc, tmpPath)
+    val sameModel = HierarchicalClusteringModel.load(sc, tmpPath)
     assert(sameModel.getClass.getSimpleName.toString === "HierarchicalClusteringModel")
     localData.foreach { case (label, vector) =>
         assert(model.predict(vector) === sameModel.predict(vector))
     }
+
+    // delete the temporary directory
+    val path = Path(tmpPath)
+    path.deleteRecursively()
   }
 }

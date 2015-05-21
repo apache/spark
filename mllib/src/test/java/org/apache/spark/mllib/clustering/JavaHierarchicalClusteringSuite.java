@@ -69,14 +69,17 @@ public class JavaHierarchicalClusteringSuite implements Serializable {
 
     // save & load
     try {
+      // create a temporary directory
       String tempDir = System.getProperty("java.io.tmpdir");
-      Path pathObj = Paths.get(tempDir, this.getClass().getSimpleName());
+      Path pathObj = Paths.get(tempDir, String.valueOf(this.hashCode()));
       String path = pathObj.toAbsolutePath().toString();
 
-      model.save(sc, pathObj.toAbsolutePath().toString());
+      model.save(sc, path);
       HierarchicalClusteringModel savedModel = HierarchicalClusteringModel.load(sc, path);
       assertEquals(1, savedModel.getCenters().length);
       assertEquals(expectedCenter, savedModel.getCenters()[0]);
+
+      // delete the temporary directory
       FileUtil.delete(new File(path));
     } catch (IOException e) {
       e.printStackTrace();

@@ -44,12 +44,9 @@ class HierarchicalClusteringModel(val tree: ClusterTree)
 
   private def save(path: String): Unit = {
     val pathObj = new File(HierarchicalClusteringModel.getModelFilePath(path)).getParentFile
-    if (pathObj.exists()) {
-      throw new IllegalArgumentException("You should save your model in another directory. " +
-          "the directory already exists: " + path)
+    if (! pathObj.exists()) {
+      pathObj.mkdirs();
     }
-
-    pathObj.mkdir();
     val modelFilePath = HierarchicalClusteringModel.getModelFilePath(path)
     val oos = new java.io.ObjectOutputStream(new java.io.FileOutputStream(modelFilePath))
     try {

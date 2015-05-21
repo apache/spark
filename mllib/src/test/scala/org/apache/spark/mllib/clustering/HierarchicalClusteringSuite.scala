@@ -24,7 +24,7 @@ import org.apache.spark.mllib.util.TestingUtils._
 import org.scalatest.FunSuite
 
 
-class HierarchicalClusteringAppSuite extends FunSuite with MLlibTestSparkContext {
+class HierarchicalClusteringSuite extends FunSuite with MLlibTestSparkContext {
 
   test("the root index is equal to 1") {
     assert(HierarchicalClustering.ROOT_INDEX_KEY === 1)
@@ -44,10 +44,6 @@ class HierarchicalClusteringAppSuite extends FunSuite with MLlibTestSparkContext
       assert(closestIndex === i)
     }
   }
-}
-
-
-class HierarchicalClusteringSuite extends FunSuite with MLlibTestSparkContext {
 
   test("run") {
     val algo = new HierarchicalClustering().setNumClusters(123)
