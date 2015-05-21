@@ -21,16 +21,10 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.DataFrame
 
 
 class OneHotEncoderSuite extends FunSuite with MLlibTestSparkContext {
-  private var sqlContext: SQLContext = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sqlContext = new SQLContext(sc)
-  }
 
   def stringIndexed(): DataFrame = {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)

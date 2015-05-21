@@ -22,7 +22,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.mllib.linalg.DenseVector
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{Row, SQLContext, DataFrame}
+import org.apache.spark.sql.{DataFrame, Row}
 
 class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
 

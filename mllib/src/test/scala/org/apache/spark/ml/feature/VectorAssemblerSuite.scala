@@ -22,7 +22,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.SparkException
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.Row
 
 class VectorAssemblerSuite extends FunSuite with MLlibTestSparkContext {
 

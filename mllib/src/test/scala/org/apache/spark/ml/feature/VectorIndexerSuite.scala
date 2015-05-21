@@ -26,8 +26,7 @@ import org.apache.spark.ml.attribute._
 import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
-
+import org.apache.spark.sql.DataFrame
 
 class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
 

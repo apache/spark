@@ -18,12 +18,12 @@
 package org.apache.spark.ml.feature
 
 import org.scalatest.FunSuite
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{Row, SQLContext}
-import org.scalatest.exceptions.TestFailedException
+import org.apache.spark.sql.Row
 
 class PolynomialExpansionSuite extends FunSuite with MLlibTestSparkContext {
 

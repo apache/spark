@@ -20,9 +20,7 @@ package org.apache.spark.ml.feature
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
-
+import org.apache.spark.sql.{DataFrame, Row}
 
 class BinarizerSuite extends FunSuite with MLlibTestSparkContext {
 
