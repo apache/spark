@@ -124,8 +124,14 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
   }
 
   /**
-   * If the heartbeat receiver is not stopped, notify it of
-   * executor removals so it doesn't log superfluous errors.
+   * If the heartbeat receiver is not stopped, notify it of executor removals so it doesn't
+   * log superfluous errors.
+   *
+   * Note that we must do this after the executor is actually removed to guard against the
+   * following race condition: if we remove an executor's metadata from our data structure
+   * prematurely, we may get an in-flight heartbeat from the executor before the executor is
+   * actually removed, in which case we will still mark the executor as a dead host later
+   * and expire it with loud error messages.
    */
   override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
     if (self != null) {
