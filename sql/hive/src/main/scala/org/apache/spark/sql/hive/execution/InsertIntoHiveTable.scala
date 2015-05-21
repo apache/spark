@@ -106,7 +106,7 @@ case class InsertIntoHiveTable(
         }
 
         writerContainer
-          .getLocalFileWriter(row)
+          .getLocalFileWriter(row, table.schema)
           .write(serializer.serialize(outputData, standardOI))
       }
 

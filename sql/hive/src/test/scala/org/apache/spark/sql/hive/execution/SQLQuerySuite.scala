@@ -837,4 +837,40 @@ class SQLQuerySuite extends QueryTest {
         java.lang.Math.exp(1.0).toString,
         java.lang.Math.floor(1.9).toString))
   }
+
+  test("dynamic partition value test") {
+    try {
+      sql("set hive.exec.dynamic.partition.mode=nonstrict")
+      // date
+      sql("drop table if exists dynparttest1")
+      sql("create table dynparttest1 (value int) partitioned by (pdate date)")
+      sql(
+        """
+        |insert into table dynparttest1 partition(pdate)
+        | select count(*), cast('2015-05-21' as date) as pdate from src
+      """.stripMargin)
+      checkAnswer(
+      sql(
+        "select * from dynparttest1"),
+        Seq(Row(500, java.sql.Date.valueOf("2015-05-21"))))
+
+      // decimal
+      sql("drop table if exists dynparttest3")
+      sql("create table dynparttest3 (value int) partitioned by (pdec decimal(5, 1))")
+      sql(
+        """
+          |insert into table dynparttest3 partition(pdec)
+          | select count(*), cast('100.12' as decimal(5, 1)) as pdec from src
+        """.stripMargin)
+      checkAnswer(
+        sql(
+          "select * from dynparttest3"),
+        Seq(Row(500, new java.math.BigDecimal("100.1"))))
+    } finally {
+      sql("drop table if exists dynparttest1")
+      sql("drop table if exists dynparttest2")
+      sql("drop table if exists dynparttest3")
+      sql("set hive.exec.dynamic.partition.mode=strict")
+    }
+  }
 }
