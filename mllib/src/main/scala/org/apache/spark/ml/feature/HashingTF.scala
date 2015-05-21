@@ -59,8 +59,6 @@ class HashingTF(override val uid: String) extends Transformer with HasInputCol w
   /** @group setParam */
   def setNumFeatures(value: Int): this.type = set(numFeatures, value)
 
-
-
   override def transform(dataset: DataFrame): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
     val hashingTF = new feature.HashingTF($(numFeatures))
@@ -72,9 +70,8 @@ class HashingTF(override val uid: String) extends Transformer with HasInputCol w
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[ArrayType],
-      s"The input column must be array type, but got $inputType.")
-    val attrGroup = new AttributeGroup(
-      name = $(outputCol), numAttributes = Some($(numFeatures)), attrs = None)
+      s"The input column must be ArrayType, but got $inputType.")
+    val attrGroup = new AttributeGroup($(outputCol), $(numFeatures))
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }
 }

@@ -24,6 +24,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.Utils
 
 class HashingTFSuite extends FunSuite with MLlibTestSparkContext {
 
@@ -36,17 +37,19 @@ class HashingTFSuite extends FunSuite with MLlibTestSparkContext {
     val df = sqlContext.createDataFrame(Seq(
       (0, "a a b b c d".split(" ").toSeq)
     )).toDF("id", "words")
+    val n = 100
     val hashingTF = new HashingTF()
       .setInputCol("words")
       .setOutputCol("features")
-      .setNumFeatures(1000)
+      .setNumFeatures(n)
     val output = hashingTF.transform(df)
     val attrGroup = AttributeGroup.fromStructField(output.schema("features"))
-    require(attrGroup.numAttributes === Some(1000))
+    require(attrGroup.numAttributes === Some(n))
     val features = output.select("features").first().getAs[Vector](0)
     // Assume perfect hash on "a", "b", "c", and "d".
-    val expected = Vectors.sparse(1000,
-      Seq(("a".##, 2.0), ("b".##, 2.0), ("c".##, 1.0), ("d".##, 1.0)))
+    def idx(any: Any): Int = Utils.nonNegativeMod(any.##, n)
+    val expected = Vectors.sparse(n,
+      Seq((idx("a"), 2.0), (idx("b"), 2.0), (idx("c"), 1.0), (idx("d"), 1.0)))
     assert(features ~== expected absTol 1e-14)
   }
 }
