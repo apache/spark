@@ -386,7 +386,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(95 < g.agg(functions.approxCountDistinct(df.key)).first()[0])
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
-        self.assertEqual([Row(**{"STDDEV(key)": 28.86607004772212})],
+        self.assertEqual([Row(**{"STDDEV(key)": 29.011491975882016})],
                          df.groupBy().stddev('key').collect())
 
     def test_save_and_load(self):

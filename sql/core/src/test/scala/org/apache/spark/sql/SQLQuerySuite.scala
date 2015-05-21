@@ -351,7 +351,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("stddev") {
     checkAnswer(
       sql("SELECT STDDEV(a) FROM testData2"),
-      Row(math.sqrt(4/6.0))
+      Row(math.sqrt(4/5.0))
     )
   }
 

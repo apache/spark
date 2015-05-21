@@ -631,11 +631,11 @@ case class StdDeviation(child: Expression)
   }
 
   override def asPartial: SplitEvaluation = {
-    val (seqPartialData, castStddev) = child.dataType match {
+    val (castStddev, seqPartialData) = child.dataType match {
       case DecimalType.Fixed(_, _) =>
         // Turn the child to unlimited decimals for calculation, before going back to fixed
-        val (seqPartialData, stddev) = calcPartialStddev(DecimalType.Unlimited)
-        (seqPartialData, Cast(stddev, dataType))
+        val (stddev, seqPartialData) = calcPartialStddev(DecimalType.Unlimited)
+        (Cast(stddev, dataType), seqPartialData)
       case _ =>
         calcPartialStddev(dataType)
     }
@@ -648,21 +648,23 @@ case class StdDeviation(child: Expression)
    * @param calcType data type during calcuation
    * @return seqPartialData is data for partialEvaluations
    */
-  protected def calcPartialStddev(calcType: DataType): (List[Alias], Expression) = {
+  protected def calcPartialStddev(calcType: DataType): (Expression, List[Alias]) = {
     val castedChild = Cast(child, calcType)
     val partialSquredSum = Alias(Sum(Multiply(castedChild, castedChild)), "PartialSquredSum")()
     val partialSum = Alias(Sum(castedChild), "PartialSum")()
     val partialCount = Alias(Count(child), "PartialCount")()
     val seqPartialData = partialCount :: partialSum :: partialSquredSum :: Nil
 
+    // collect all partial data and final calculate.
     val castedSquredSum = Cast(Sum(partialSquredSum.toAttribute), calcType)
     val castedSum = Cast(Sum(partialSum.toAttribute), calcType)
     val castedCount = Cast(Sum(partialCount.toAttribute), calcType)
     val castedAvg = Divide(castedSum, castedCount)
+    val castedSumAvg = Multiply(castedSum, castedAvg)
     val stddev = Sqrt(Divide(
-                        Subtract(castedSquredSum, Multiply(castedSum, castedAvg)),
-                        castedCount));
-    (seqPartialData, stddev)
+                        Subtract(castedSquredSum, castedSumAvg),
+                        Subtract(castedCount, Cast(Literal(1), calcType))))
+    (stddev, seqPartialData)
   }
 
   override def toString: String = s"STDDEV($child)"
@@ -671,8 +673,8 @@ case class StdDeviation(child: Expression)
 }
 
 /**
- * the standard deviation = sqrt(sum((xi-avg)^2)/N)
- *                        = sqrt(sum(xi^2)/N - avg*avg)
+ * the standard deviation = sqrt(sum((xi-avg)^2)/(N-1))
+ *                        = sqrt((sum(xi^2) - 2*avg*sum(xi) + avg*avg) / (N-1))
  * squaredSum is used to calculate the sum of squared every values = sum(xi^2)
  */
 case class StdDeviationFunction(expr: Expression, base: AggregateExpression)
@@ -691,7 +693,7 @@ case class StdDeviationFunction(expr: Expression, base: AggregateExpression)
 
   private val zero = Cast(Literal(0), calcType)
 
-  private var count: Long = _
+  private var count: Long = 0L
 
   private val squaredSum = MutableLiteral(zero.eval(null), calcType)
 
@@ -715,15 +717,15 @@ case class StdDeviationFunction(expr: Expression, base: AggregateExpression)
   }
 
   override def eval(input: Row): Any = {
-    if (count == 0L) {
+    if ((count - 1) <= 0L) {
       null
     } else {
       val avg = Divide(Cast(sum, calcType), Cast(Literal(count), calcType))
-      // avg*avg*n
-      val squareAvgN = Multiply(Cast(sum, calcType),avg)
+      // sum*avg
+      val sumAvg = Multiply(Cast(sum, calcType), avg)
       val stddev = Sqrt(Divide(
-                          Subtract(Cast(squaredSum, calcType), squareAvgN),
-                          Cast(Literal(count), calcType)))
+                          Subtract(Cast(squaredSum, calcType), sumAvg),
+                          Cast(Literal(count - 1), calcType)))
       stddev.eval(null)
     }
   }

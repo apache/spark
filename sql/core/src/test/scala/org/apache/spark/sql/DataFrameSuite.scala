@@ -335,7 +335,7 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("stddev") {
-    val testData2ADev = math.sqrt(4/6.0)
+    val testData2ADev = math.sqrt(4/5.0)
     checkAnswer(
       testData2.agg(stddev('a)),
       Row(testData2ADev))
