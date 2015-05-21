@@ -74,30 +74,31 @@ private[sql] object PartitioningUtils {
       defaultPartitionName: String): PartitionSpec = {
     // First, we need to parse every partition's path and see if we can find partition values.
     val pathsWithPartitionValues = paths.flatMap { path =>
-      parsePartition(path, defaultPartitionName) match {
-        case Some(partitionValues) => Some(path -> partitionValues)
-        case None => None
-      }
+      parsePartition(path, defaultPartitionName).map(path -> _)
     }
 
     if (pathsWithPartitionValues.isEmpty) {
       // This dataset is not partitioned.
       PartitionSpec.emptySpec
     } else {
-      // This dataset is partitioned. We need to first resolve type conflicts of
-      // those partition values belonging to the same partition column.
+      // This dataset is partitioned. We need to check whether all partitions have the same
+      // partition columns and resolve potential type conflicts.
       val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues.map(_._2))
-      // Create the StructType represents the partition columns.
+
+      // Creates the StructType which represents the partition columns.
       val fields = {
-        val (PartitionValues(columnNames, literals)) = resolvedPartitionValues.head
+        val PartitionValues(columnNames, literals) = resolvedPartitionValues.head
         columnNames.zip(literals).map { case (name, Literal(_, dataType)) =>
+          // We always assume partition columns are nullable since we've no idea whether null values
+          // will be appended in the future.
           StructField(name, dataType, nullable = true)
         }
       }
-      // Finally, we create `Partition`'s based on path and resolved partition values.
-      val partitions = resolvedPartitionValues.zip(pathsWithPartitionValues.map(_._1)).map {
-        case (PartitionValues(_, literals), path) =>
-          Partition(Row(literals.map(_.value): _*), path.toString)
+
+      // Finally, we create `Partition`s based on paths and resolved partition values.
+      val partitions = resolvedPartitionValues.zip(pathsWithPartitionValues).map {
+        case (PartitionValues(_, literals), (path, _)) =>
+          Partition(Row.fromSeq(literals.map(_.value)), path.toString)
       }
 
       PartitionSpec(StructType(fields), partitions)
@@ -131,7 +132,7 @@ private[sql] object PartitioningUtils {
     while (!finished) {
       // Sometimes (e.g., when speculative task is enabled), temporary directories may be left
       // uncleaned.  Here we simply ignore them.
-      if (chopped.getName == "_temporary") {
+      if (chopped.getName.toLowerCase == "_temporary") {
         return None
       }
 
