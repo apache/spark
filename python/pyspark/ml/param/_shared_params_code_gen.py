@@ -116,7 +116,7 @@ if __name__ == "__main__":
         ("rawPredictionCol", "raw prediction (a.k.a. confidence) column name", "'rawPrediction'"),
         ("inputCol", "input column name", None),
         ("inputCols", "input column names", None),
-        ("outputCol", "output column name", None),
+        ("outputCol", "output column name", "self.uid + '__output'"),
         ("numFeatures", "number of features", None),
         ("checkpointInterval", "checkpoint interval (>= 1)", None),
         ("seed", "random seed", "hash(type(self).__name__)"),
