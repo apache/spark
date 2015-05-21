@@ -211,8 +211,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
       table: String,
       parts: Array[Partition],
       connectionProperties: Properties): DataFrame = {
-    val fetchSize = connectionProperties.getProperty("fetchSize", "0").toInt
-    val relation = JDBCRelation(url, table, parts, fetchSize, connectionProperties)(sqlContext)
+    val relation = JDBCRelation(url, table, parts, connectionProperties)(sqlContext)
     sqlContext.baseRelationToDataFrame(relation)
   }
 
