@@ -35,6 +35,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -147,7 +148,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
 
   setDefault(rank -> 10, maxIter -> 10, regParam -> 0.1, numUserBlocks -> 10, numItemBlocks -> 10,
     implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
-    ratingCol -> "rating", nonnegative -> false, checkpointInterval -> 10, seed -> 0L)
+    ratingCol -> "rating", nonnegative -> false, checkpointInterval -> 10)
 
   /**
    * Validates and transforms the input schema.
@@ -171,7 +172,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
  * Model fitted by ALS.
  */
 class ALSModel private[ml] (
-    override val parent: ALS,
+    override val uid: String,
     k: Int,
     userFactors: RDD[(Int, Array[Float])],
     itemFactors: RDD[(Int, Array[Float])])
@@ -235,9 +236,11 @@ class ALSModel private[ml] (
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
-class ALS extends Estimator[ALSModel] with ALSParams {
+class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
 
   import org.apache.spark.ml.recommendation.ALS.Rating
+
+  def this() = this(Identifiable.randomUID("als"))
 
   /** @group setParam */
   def setRank(value: Int): this.type = set(rank, value)
@@ -303,7 +306,8 @@ class ALS extends Estimator[ALSModel] with ALSParams {
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
       alpha = $(alpha), nonnegative = $(nonnegative),
       checkpointInterval = $(checkpointInterval), seed = $(seed))
-    copyValues(new ALSModel(this, $(rank), userFactors, itemFactors))
+    val model = new ALSModel(uid, $(rank), userFactors, itemFactors).setParent(this)
+    copyValues(model)
   }
 
   override def transformSchema(schema: StructType): StructType = {

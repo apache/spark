@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.sources
 
+import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, _}
+import org.apache.spark.SerializableWritable
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -43,6 +45,8 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * data source 'org.apache.spark.sql.json.DefaultSource'
  *
  * A new instance of this class with be instantiated each time a DDL call is made.
+ *
+ * @since 1.3.0
  */
 @DeveloperApi
 trait RelationProvider {
@@ -72,6 +76,8 @@ trait RelationProvider {
  * users need to provide a schema when using a SchemaRelationProvider.
  * A relation provider can inherits both [[RelationProvider]] and [[SchemaRelationProvider]]
  * if it can support both schema inference and user-specified schemas.
+ *
+ * @since 1.3.0
  */
 @DeveloperApi
 trait SchemaRelationProvider {
@@ -90,7 +96,7 @@ trait SchemaRelationProvider {
  * ::DeveloperApi::
  * Implemented by objects that produce relations for a specific kind of data source
  * with a given schema and partitioned columns.  When Spark SQL is given a DDL operation with a
- * USING clause specified (to specify the implemented [[FSBasedRelationProvider]]), a user defined
+ * USING clause specified (to specify the implemented [[HadoopFsRelationProvider]]), a user defined
  * schema, and an optional list of partition columns, this interface is used to pass in the
  * parameters specified by a user.
  *
@@ -101,13 +107,15 @@ trait SchemaRelationProvider {
  *
  * A new instance of this class with be instantiated each time a DDL call is made.
  *
- * The difference between a [[RelationProvider]] and a [[FSBasedRelationProvider]] is
+ * The difference between a [[RelationProvider]] and a [[HadoopFsRelationProvider]] is
  * that users need to provide a schema and a (possibly empty) list of partition columns when
  * using a SchemaRelationProvider. A relation provider can inherits both [[RelationProvider]],
- * and [[FSBasedRelationProvider]] if it can support schema inference, user-specified
+ * and [[HadoopFsRelationProvider]] if it can support schema inference, user-specified
  * schemas, and accessing partitioned relations.
+ *
+ * @since 1.4.0
  */
-trait FSBasedRelationProvider {
+trait HadoopFsRelationProvider {
   /**
    * Returns a new base relation with the given parameters, a user defined schema, and a list of
    * partition columns. Note: the parameters' keywords are case insensitive and this insensitivity
@@ -118,9 +126,12 @@ trait FSBasedRelationProvider {
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
-      parameters: Map[String, String]): FSBasedRelation
+      parameters: Map[String, String]): HadoopFsRelation
 }
 
+/**
+ * @since 1.3.0
+ */
 @DeveloperApi
 trait CreatableRelationProvider {
   /**
@@ -134,6 +145,8 @@ trait CreatableRelationProvider {
     * existing data is expected to be overwritten by the contents of the DataFrame.
     * ErrorIfExists mode means that when saving a DataFrame to a data source,
     * if data already exists, an exception is expected to be thrown.
+     *
+     * @since 1.3.0
     */
   def createRelation(
       sqlContext: SQLContext,
@@ -152,6 +165,8 @@ trait CreatableRelationProvider {
  * BaseRelations must also define a equality function that only returns true when the two
  * instances will return the same data. This equality function is used when determining when
  * it is safe to substitute cached results for a given relation.
+ *
+ * @since 1.3.0
  */
 @DeveloperApi
 abstract class BaseRelation {
@@ -167,6 +182,8 @@ abstract class BaseRelation {
    *
    * Note that it is always better to overestimate size than underestimate, because underestimation
    * could lead to execution plans that are suboptimal (i.e. broadcasting a very large table).
+   *
+   * @since 1.3.0
    */
   def sizeInBytes: Long = sqlContext.conf.defaultSizeInBytes
 
@@ -177,6 +194,8 @@ abstract class BaseRelation {
    *
    * Note: The internal representation is not stable across releases and thus data sources outside
    * of Spark SQL should leave this as true.
+   *
+   * @since 1.4.0
    */
   def needConversion: Boolean = true
 }
@@ -184,6 +203,8 @@ abstract class BaseRelation {
 /**
  * ::DeveloperApi::
  * A BaseRelation that can produce all of its tuples as an RDD of Row objects.
+ *
+ * @since 1.3.0
  */
 @DeveloperApi
 trait TableScan {
@@ -194,6 +215,8 @@ trait TableScan {
  * ::DeveloperApi::
  * A BaseRelation that can eliminate unneeded columns before producing an RDD
  * containing all of its tuples as Row objects.
+ *
+ * @since 1.3.0
  */
 @DeveloperApi
 trait PrunedScan {
@@ -211,6 +234,8 @@ trait PrunedScan {
  * The pushed down filters are currently purely an optimization as they will all be evaluated
  * again.  This means it is safe to use them with methods that produce false positives such
  * as filtering partitions based on a bloom filter.
+ *
+ * @since 1.3.0
  */
 @DeveloperApi
 trait PrunedFilteredScan {
@@ -232,6 +257,8 @@ trait PrunedFilteredScan {
  * 3. It assumes that fields of the data provided in the insert method are nullable.
  * If a data source needs to check the actual nullability of a field, it needs to do it in the
  * insert method.
+ *
+ * @since 1.3.0
  */
 @DeveloperApi
 trait InsertableRelation {
@@ -245,6 +272,8 @@ trait InsertableRelation {
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].  Unlike the other APIs this
  * interface is NOT designed to be binary compatible across releases and thus should only be used
  * for experimentation.
+ *
+ * @since 1.3.0
  */
 @Experimental
 trait CatalystScan {
@@ -253,38 +282,55 @@ trait CatalystScan {
 
 /**
  * ::Experimental::
- * [[OutputWriter]] is used together with [[FSBasedRelation]] for persisting rows to the
- * underlying file system.  Subclasses of [[OutputWriter]] must provide a zero-argument constructor.
- * An [[OutputWriter]] instance is created and initialized when a new output file is opened on
- * executor side.  This instance is used to persist rows to this single output file.
+ * A factory that produces [[OutputWriter]]s.  A new [[OutputWriterFactory]] is created on driver
+ * side for each write job issued when writing to a [[HadoopFsRelation]], and then gets serialized
+ * to executor side to create actual [[OutputWriter]]s on the fly.
+ *
+ * @since 1.4.0
  */
 @Experimental
-abstract class OutputWriter {
+abstract class OutputWriterFactory extends Serializable {
   /**
-   * Initializes this [[OutputWriter]] before any rows are persisted.
+   * When writing to a [[HadoopFsRelation]], this method gets called by each task on executor side
+   * to instantiate new [[OutputWriter]]s.
    *
    * @param path Path of the file to which this [[OutputWriter]] is supposed to write.  Note that
    *        this may not point to the final output file.  For example, `FileOutputFormat` writes to
    *        temporary directories and then merge written files back to the final destination.  In
    *        this case, `path` points to a temporary output file under the temporary directory.
    * @param dataSchema Schema of the rows to be written. Partition columns are not included in the
-   *        schema if the corresponding relation is partitioned.
+   *        schema if the relation being written is partitioned.
    * @param context The Hadoop MapReduce task context.
+   *
+   * @since 1.4.0
    */
-  def init(
-      path: String,
-      dataSchema: StructType,
-      context: TaskAttemptContext): Unit = ()
+  def newInstance(path: String, dataSchema: StructType, context: TaskAttemptContext): OutputWriter
+}
 
+/**
+ * ::Experimental::
+ * [[OutputWriter]] is used together with [[HadoopFsRelation]] for persisting rows to the
+ * underlying file system.  Subclasses of [[OutputWriter]] must provide a zero-argument constructor.
+ * An [[OutputWriter]] instance is created and initialized when a new output file is opened on
+ * executor side.  This instance is used to persist rows to this single output file.
+ *
+ * @since 1.4.0
+ */
+@Experimental
+abstract class OutputWriter {
   /**
    * Persists a single row.  Invoked on the executor side.  When writing to dynamically partitioned
    * tables, dynamic partition columns are not included in rows to be written.
+   *
+   * @since 1.4.0
    */
   def write(row: Row): Unit
 
   /**
    * Closes the [[OutputWriter]]. Invoked on the executor side after all rows are persisted, before
    * the task output is committed.
+   *
+   * @since 1.4.0
    */
   def close(): Unit
 }
@@ -298,93 +344,132 @@ abstract class OutputWriter {
  * filter using selected predicates before producing an RDD containing all matching tuples as
  * [[Row]] objects. In addition, when reading from Hive style partitioned tables stored in file
  * systems, it's able to discover partitioning information from the paths of input directories, and
- * perform partition pruning before start reading the data. Subclasses of [[FSBasedRelation()]] must
- * override one of the three `buildScan` methods to implement the read path.
+ * perform partition pruning before start reading the data. Subclasses of [[HadoopFsRelation()]]
+ * must override one of the three `buildScan` methods to implement the read path.
  *
  * For the write path, it provides the ability to write to both non-partitioned and partitioned
  * tables.  Directory layout of the partitioned tables is compatible with Hive.
  *
  * @constructor This constructor is for internal uses only. The [[PartitionSpec]] argument is for
  *              implementing metastore table conversion.
- * @param paths Base paths of this relation.  For partitioned relations, it should be the root
- *        directories of all partition directories.
- * @param maybePartitionSpec An [[FSBasedRelation]] can be created with an optional
+ *
+ * @param maybePartitionSpec An [[HadoopFsRelation]] can be created with an optional
  *        [[PartitionSpec]], so that partition discovery can be skipped.
+ *
+ * @since 1.4.0
  */
 @Experimental
-abstract class FSBasedRelation private[sql](
-    val paths: Array[String],
-    maybePartitionSpec: Option[PartitionSpec])
+abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
   extends BaseRelation {
 
-  /**
-   * Constructs an [[FSBasedRelation]].
-   *
-   * @param paths Base paths of this relation.  For partitioned relations, it should be either root
-   *        directories of all partition directories.
-   * @param partitionColumns Partition columns of this relation.
-   */
-  def this(paths: Array[String], partitionColumns: StructType) =
-    this(paths, {
-      if (partitionColumns.isEmpty) None
-      else Some(PartitionSpec(partitionColumns, Array.empty[Partition]))
-    })
-
-  /**
-   * Constructs an [[FSBasedRelation]].
-   *
-   * @param paths Base paths of this relation.  For partitioned relations, it should be root
-   *        directories of all partition directories.
-   */
-  def this(paths: Array[String]) = this(paths, None)
+  def this() = this(None)
 
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
   private val codegenEnabled = sqlContext.conf.codegenEnabled
 
-  private var _partitionSpec: PartitionSpec = maybePartitionSpec.map { spec =>
-    spec.copy(partitionColumns = spec.partitionColumns.asNullable)
-  }.getOrElse {
-    if (sqlContext.conf.partitionDiscoveryEnabled()) {
-      discoverPartitions()
-    } else {
-      PartitionSpec(StructType(Nil), Array.empty[Partition])
+  private var _partitionSpec: PartitionSpec = _
+
+  private class FileStatusCache {
+    var leafFiles = mutable.Map.empty[Path, FileStatus]
+
+    var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
+
+    var leafDirs = mutable.Map.empty[Path, FileStatus]
+
+    def refresh(): Unit = {
+      def listLeafFilesAndDirs(fs: FileSystem, status: FileStatus): Set[FileStatus] = {
+        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
+        val leafDirs = if (dirs.isEmpty) Set(status) else Set.empty[FileStatus]
+        files.toSet ++ leafDirs ++ dirs.flatMap(dir => listLeafFilesAndDirs(fs, dir))
+      }
+
+      leafDirs.clear()
+      leafFiles.clear()
+
+      // We don't filter files/directories like _temporary/_SUCCESS here, as specific data sources
+      // may take advantages over them (e.g. Parquet _metadata and _common_metadata files).
+      val statuses = paths.flatMap { path =>
+        val hdfsPath = new Path(path)
+        val fs = hdfsPath.getFileSystem(hadoopConf)
+        val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+        Try(fs.getFileStatus(qualified)).toOption.toArray.flatMap(listLeafFilesAndDirs(fs, _))
+      }
+
+      val (dirs, files) = statuses.partition(_.isDir)
+      leafDirs ++= dirs.map(d => d.getPath -> d).toMap
+      leafFiles ++= files.map(f => f.getPath -> f).toMap
+      leafDirToChildrenFiles ++= files.groupBy(_.getPath.getParent)
     }
   }
 
-  private[sql] def partitionSpec: PartitionSpec = _partitionSpec
+  private lazy val fileStatusCache = {
+    val cache = new FileStatusCache
+    cache.refresh()
+    cache
+  }
+
+  protected def cachedLeafStatuses(): Set[FileStatus] = {
+    fileStatusCache.leafFiles.values.toSet
+  }
+
+  final private[sql] def partitionSpec: PartitionSpec = {
+    if (_partitionSpec == null) {
+      _partitionSpec = maybePartitionSpec
+        .map(spec => spec.copy(partitionColumns = spec.partitionColumns.asNullable))
+        .orElse(userDefinedPartitionColumns.map(PartitionSpec(_, Array.empty[Partition])))
+        .getOrElse {
+          if (sqlContext.conf.partitionDiscoveryEnabled()) {
+            discoverPartitions()
+          } else {
+            PartitionSpec(StructType(Nil), Array.empty[Partition])
+          }
+        }
+    }
+    _partitionSpec
+  }
 
   /**
-   * Partition columns. Note that they are always nullable.
+   * Base paths of this relation.  For partitioned relations, it should be either root directories
+   * of all partition directories.
+   *
+   * @since 1.4.0
    */
-  def partitionColumns: StructType = partitionSpec.partitionColumns
+  def paths: Array[String]
+
+  /**
+   * Partition columns.  Can be either defined by [[userDefinedPartitionColumns]] or automatically
+   * discovered.  Note that they should always be nullable.
+   *
+   * @since 1.4.0
+   */
+  final def partitionColumns: StructType =
+    userDefinedPartitionColumns.getOrElse(partitionSpec.partitionColumns)
+
+  /**
+   * Optional user defined partition columns.
+   *
+   * @since 1.4.0
+   */
+  def userDefinedPartitionColumns: Option[StructType] = None
 
   private[sql] def refresh(): Unit = {
+    fileStatusCache.refresh()
     if (sqlContext.conf.partitionDiscoveryEnabled()) {
       _partitionSpec = discoverPartitions()
     }
   }
 
   private def discoverPartitions(): PartitionSpec = {
-    val basePaths = paths.map(new Path(_))
-    val leafDirs = basePaths.flatMap { path =>
-      val fs = path.getFileSystem(hadoopConf)
-      Try(fs.getFileStatus(path.makeQualified(fs.getUri, fs.getWorkingDirectory)))
-        .filter(_.isDir)
-        .map(SparkHadoopUtil.get.listLeafDirStatuses(fs, _))
-        .getOrElse(Seq.empty[FileStatus])
-    }.map(_.getPath)
-
-    if (leafDirs.nonEmpty) {
-      PartitioningUtils.parsePartitions(leafDirs, "__HIVE_DEFAULT_PARTITION__")
-    } else {
-      PartitionSpec(StructType(Array.empty[StructField]), Array.empty[Partition])
-    }
+    val leafDirs = fileStatusCache.leafDirs.keys.toSeq
+    PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME)
   }
 
   /**
    * Schema of this relation.  It consists of columns appearing in [[dataSchema]] and all partition
    * columns not appearing in [[dataSchema]].
+   *
+   * @since 1.4.0
    */
   override lazy val schema: StructType = {
     val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
@@ -393,9 +478,33 @@ abstract class FSBasedRelation private[sql](
     })
   }
 
+  private[sources] final def buildScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputPaths: Array[String],
+      broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
+    val inputStatuses = inputPaths.flatMap { input =>
+      val path = new Path(input)
+
+      // First assumes `input` is a directory path, and tries to get all files contained in it.
+      fileStatusCache.leafDirToChildrenFiles.getOrElse(
+        path,
+        // Otherwise, `input` might be a file path
+        fileStatusCache.leafFiles.get(path).toArray
+      ).filter { status =>
+        val name = status.getPath.getName
+        !name.startsWith("_") && !name.startsWith(".")
+      }
+    }
+
+    buildScan(requiredColumns, filters, inputStatuses, broadcastedConf)
+  }
+
   /**
    * Specifies schema of actual data files.  For partitioned relations, if one or more partitioned
    * columns are contained in the data files, they should also appear in `dataSchema`.
+   *
+   * @since 1.4.0
    */
   def dataSchema: StructType
 
@@ -404,12 +513,14 @@ abstract class FSBasedRelation private[sql](
    * this relation. For partitioned relations, this method is called for each selected partition,
    * and builds an `RDD[Row]` containing all rows within that single partition.
    *
-   * @param inputPaths For a non-partitioned relation, it contains paths of all data files in the
+   * @param inputFiles For a non-partitioned relation, it contains paths of all data files in the
    *        relation. For a partitioned relation, it contains paths of all data files in a single
    *        selected partition.
+   *
+   * @since 1.4.0
    */
-  def buildScan(inputPaths: Array[String]): RDD[Row] = {
-    throw new RuntimeException(
+  def buildScan(inputFiles: Array[FileStatus]): RDD[Row] = {
+    throw new UnsupportedOperationException(
       "At least one buildScan() method should be overridden to read the relation.")
   }
 
@@ -419,11 +530,13 @@ abstract class FSBasedRelation private[sql](
    * and builds an `RDD[Row]` containing all rows within that single partition.
    *
    * @param requiredColumns Required columns.
-   * @param inputPaths For a non-partitioned relation, it contains paths of all data files in the
+   * @param inputFiles For a non-partitioned relation, it contains paths of all data files in the
    *        relation. For a partitioned relation, it contains paths of all data files in a single
    *        selected partition.
+   *
+   * @since 1.4.0
    */
-  def buildScan(requiredColumns: Array[String], inputPaths: Array[String]): RDD[Row] = {
+  def buildScan(requiredColumns: Array[String], inputFiles: Array[FileStatus]): RDD[Row] = {
     // Yeah, to workaround serialization...
     val dataSchema = this.dataSchema
     val codegenEnabled = this.codegenEnabled
@@ -433,7 +546,7 @@ abstract class FSBasedRelation private[sql](
       BoundReference(dataSchema.fieldIndex(col), field.dataType, field.nullable)
     }.toSeq
 
-    buildScan(inputPaths).mapPartitions { rows =>
+    buildScan(inputFiles).mapPartitions { rows =>
       val buildProjection = if (codegenEnabled) {
         GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
       } else {
@@ -455,30 +568,57 @@ abstract class FSBasedRelation private[sql](
    *        of all `filters`.  The pushed down filters are currently purely an optimization as they
    *        will all be evaluated again. This means it is safe to use them with methods that produce
    *        false positives such as filtering partitions based on a bloom filter.
-   * @param inputPaths For a non-partitioned relation, it contains paths of all data files in the
+   * @param inputFiles For a non-partitioned relation, it contains paths of all data files in the
    *        relation. For a partitioned relation, it contains paths of all data files in a single
    *        selected partition.
+   *
+   * @since 1.4.0
    */
   def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
-      inputPaths: Array[String]): RDD[Row] = {
-    buildScan(requiredColumns, inputPaths)
+      inputFiles: Array[FileStatus]): RDD[Row] = {
+    buildScan(requiredColumns, inputFiles)
   }
 
   /**
-   * Client side preparation for data writing can be put here.  For example, user defined output
-   * committer can be configured here.
+   * For a non-partitioned relation, this method builds an `RDD[Row]` containing all rows within
+   * this relation. For partitioned relations, this method is called for each selected partition,
+   * and builds an `RDD[Row]` containing all rows within that single partition.
+   *
+   * Note: This interface is subject to change in future.
+   *
+   * @param requiredColumns Required columns.
+   * @param filters Candidate filters to be pushed down. The actual filter should be the conjunction
+   *        of all `filters`.  The pushed down filters are currently purely an optimization as they
+   *        will all be evaluated again. This means it is safe to use them with methods that produce
+   *        false positives such as filtering partitions based on a bloom filter.
+   * @param inputFiles For a non-partitioned relation, it contains paths of all data files in the
+   *        relation. For a partitioned relation, it contains paths of all data files in a single
+   *        selected partition.
+   * @param broadcastedConf A shared broadcast Hadoop Configuration, which can be used to reduce the
+   *                        overhead of broadcasting the Configuration for every Hadoop RDD.
+   *
+   * @since 1.4.0
+   */
+  private[sql] def buildScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputFiles: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
+    buildScan(requiredColumns, filters, inputFiles)
+  }
+
+  /**
+   * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
+   * be put here.  For example, user defined output committer can be configured here
+   * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
    *
    * Note that the only side effect expected here is mutating `job` via its setters.  Especially,
    * Spark SQL caches [[BaseRelation]] instances for performance, mutating relation internal states
    * may cause unexpected behaviors.
+   *
+   * @since 1.4.0
    */
-  def prepareForWrite(job: Job): Unit = ()
-
-  /**
-   * This method is responsible for producing a new [[OutputWriter]] for each newly opened output
-   * file on the executor side.
-   */
-  def outputWriterClass: Class[_ <: OutputWriter]
+  def prepareJobForWrite(job: Job): OutputWriterFactory
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.api.r
 
 import java.io._
-import java.net.ServerSocket
+import java.net.{InetAddress, ServerSocket}
 import java.util.{Map => JMap}
 
 import scala.collection.JavaConversions._
@@ -55,7 +55,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     val parentIterator = firstParent[T].iterator(partition, context)
 
     // we expect two connections
-    val serverSocket = new ServerSocket(0, 2)
+    val serverSocket = new ServerSocket(0, 2, InetAddress.getByName("localhost"))
     val listenPort = serverSocket.getLocalPort()
 
     // The stdout/stderr is shared by multiple tasks, because we use one daemon
@@ -414,7 +414,7 @@ private[r] object RRDD {
       synchronized {
         if (daemonChannel == null) {
           // we expect one connections
-          val serverSocket = new ServerSocket(0, 1)
+          val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
           val daemonPort = serverSocket.getLocalPort
           errThread = createRProcess(rLibDir, daemonPort, "daemon.R")
           // the socket used to send out the input of task

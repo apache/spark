@@ -18,12 +18,13 @@
 package org.apache.spark.sql
 
 import scala.language.implicitConversions
+import scala.collection.JavaConversions._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedStar, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.{MultiAlias, UnresolvedAttribute, UnresolvedStar, UnresolvedExtractValue}
 import org.apache.spark.sql.types._
 
 
@@ -45,6 +46,8 @@ private[sql] object Column {
  * @groupname expr_ops Expression operators.
  * @groupname df_ops DataFrame functions.
  * @groupname Ungrouped Support functions for DataFrames.
+ *
+ * @since 1.3.0
  */
 @Experimental
 class Column(protected[sql] val expr: Expression) extends Logging {
@@ -77,6 +80,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *   of every struct in that array, and return an Array of fields
    *
    * @group expr_ops
+   * @since 1.4.0
    */
   def apply(extraction: Any): Column = UnresolvedExtractValue(expr, lit(extraction).expr)
 
@@ -92,6 +96,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def unary_- : Column = UnaryMinus(expr)
 
@@ -107,6 +112,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def unary_! : Column = Not(expr)
 
@@ -122,6 +128,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def === (other: Any): Column = {
     val right = lit(other).expr
@@ -145,6 +152,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def equalTo(other: Any): Column = this === other
 
@@ -161,6 +169,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def !== (other: Any): Column = Not(EqualTo(expr, lit(other).expr))
 
@@ -177,6 +186,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group java_expr_ops
+   * @since 1.3.0
    */
   def notEqual(other: Any): Column = Not(EqualTo(expr, lit(other).expr))
 
@@ -192,6 +202,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def > (other: Any): Column = GreaterThan(expr, lit(other).expr)
 
@@ -207,6 +218,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group java_expr_ops
+   * @since 1.3.0
    */
   def gt(other: Any): Column = this > other
 
@@ -221,6 +233,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def < (other: Any): Column = LessThan(expr, lit(other).expr)
 
@@ -235,6 +248,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group java_expr_ops
+   * @since 1.3.0
    */
   def lt(other: Any): Column = this < other
 
@@ -249,6 +263,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def <= (other: Any): Column = LessThanOrEqual(expr, lit(other).expr)
 
@@ -263,6 +278,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group java_expr_ops
+   * @since 1.3.0
    */
   def leq(other: Any): Column = this <= other
 
@@ -277,6 +293,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def >= (other: Any): Column = GreaterThanOrEqual(expr, lit(other).expr)
 
@@ -291,6 +308,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group java_expr_ops
+   * @since 1.3.0
    */
   def geq(other: Any): Column = this >= other
 
@@ -298,6 +316,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * Equality test that is safe for null values.
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def <=> (other: Any): Column = EqualNullSafe(expr, lit(other).expr)
 
@@ -305,13 +324,78 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * Equality test that is safe for null values.
    *
    * @group java_expr_ops
+   * @since 1.3.0
    */
   def eqNullSafe(other: Any): Column = this <=> other
+
+  /**
+   * Evaluates a list of conditions and returns one of multiple possible result expressions.
+   * If otherwise is not defined at the end, null is returned for unmatched conditions.
+   *
+   * {{{
+   *   // Example: encoding gender string column into integer.
+   *
+   *   // Scala:
+   *   people.select(when(people("gender") === "male", 0)
+   *     .when(people("gender") === "female", 1)
+   *     .otherwise(2))
+   *
+   *   // Java:
+   *   people.select(when(col("gender").equalTo("male"), 0)
+   *     .when(col("gender").equalTo("female"), 1)
+   *     .otherwise(2))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.4.0
+   */
+  def when(condition: Column, value: Any):Column = this.expr match {
+    case CaseWhen(branches: Seq[Expression]) =>
+      CaseWhen(branches ++ Seq(lit(condition).expr, lit(value).expr))
+    case _ =>
+      throw new IllegalArgumentException(
+        "when() can only be applied on a Column previously generated by when() function")
+  }
+
+  /**
+   * Evaluates a list of conditions and returns one of multiple possible result expressions.
+   * If otherwise is not defined at the end, null is returned for unmatched conditions.
+   *
+   * {{{
+   *   // Example: encoding gender string column into integer.
+   *
+   *   // Scala:
+   *   people.select(when(people("gender") === "male", 0)
+   *     .when(people("gender") === "female", 1)
+   *     .otherwise(2))
+   *
+   *   // Java:
+   *   people.select(when(col("gender").equalTo("male"), 0)
+   *     .when(col("gender").equalTo("female"), 1)
+   *     .otherwise(2))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.4.0
+   */
+  def otherwise(value: Any):Column = this.expr match {
+    case CaseWhen(branches: Seq[Expression]) =>
+      if (branches.size % 2 == 0) {
+        CaseWhen(branches :+ lit(value).expr)
+      } else {
+        throw new IllegalArgumentException(
+          "otherwise() can only be applied once on a Column previously generated by when()")
+      }
+    case _ =>
+      throw new IllegalArgumentException(
+        "otherwise() can only be applied on a Column previously generated by when()")
+  }
 
   /**
    * True if the current column is between the lower bound and upper bound, inclusive.
    *
    * @group java_expr_ops
+   * @since 1.4.0
    */
   def between(lowerBound: Any, upperBound: Any): Column = {
     (this >= lowerBound) && (this <= upperBound)
@@ -321,6 +405,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * True if the current expression is null.
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def isNull: Column = IsNull(expr)
 
@@ -328,6 +413,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * True if the current expression is NOT null.
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def isNotNull: Column = IsNotNull(expr)
 
@@ -342,6 +428,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def || (other: Any): Column = Or(expr, lit(other).expr)
 
@@ -356,6 +443,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group java_expr_ops
+   * @since 1.3.0
    */
   def or(other: Column): Column = this || other
 
@@ -370,6 +458,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def && (other: Any): Column = And(expr, lit(other).expr)
 
@@ -384,6 +473,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group java_expr_ops
+   * @since 1.3.0
    */
   def and(other: Column): Column = this && other
 
@@ -398,6 +488,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def + (other: Any): Column = Add(expr, lit(other).expr)
 
@@ -412,6 +503,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group java_expr_ops
+   * @since 1.3.0
    */
   def plus(other: Any): Column = this + other
 
@@ -426,6 +518,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def - (other: Any): Column = Subtract(expr, lit(other).expr)
 
@@ -440,6 +533,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group java_expr_ops
+   * @since 1.3.0
    */
   def minus(other: Any): Column = this - other
 
@@ -454,6 +548,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def * (other: Any): Column = Multiply(expr, lit(other).expr)
 
@@ -468,6 +563,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group java_expr_ops
+   * @since 1.3.0
    */
   def multiply(other: Any): Column = this * other
 
@@ -482,6 +578,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def / (other: Any): Column = Divide(expr, lit(other).expr)
 
@@ -496,6 +593,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group java_expr_ops
+   * @since 1.3.0
    */
   def divide(other: Any): Column = this / other
 
@@ -503,6 +601,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * Modulo (a.k.a. remainder) expression.
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def % (other: Any): Column = Remainder(expr, lit(other).expr)
 
@@ -510,6 +609,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * Modulo (a.k.a. remainder) expression.
    *
    * @group java_expr_ops
+   * @since 1.3.0
    */
   def mod(other: Any): Column = this % other
 
@@ -518,6 +618,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * by the evaluated values of the arguments.
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   @scala.annotation.varargs
   def in(list: Column*): Column = In(expr, list.map(_.expr))
@@ -526,6 +627,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * SQL like expression.
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def like(literal: String): Column = Like(expr, lit(literal).expr)
 
@@ -533,6 +635,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * SQL RLIKE expression (LIKE with Regex).
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def rlike(literal: String): Column = RLike(expr, lit(literal).expr)
 
@@ -541,6 +644,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * or gets a value by key `key` in a [[MapType]].
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def getItem(key: Any): Column = UnresolvedExtractValue(expr, Literal(key))
 
@@ -548,6 +652,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * An expression that gets a field by name in a [[StructType]].
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def getField(fieldName: String): Column = UnresolvedExtractValue(expr, Literal(fieldName))
 
@@ -557,6 +662,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @param len expression for the length of the substring.
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def substr(startPos: Column, len: Column): Column = Substring(expr, startPos.expr, len.expr)
 
@@ -566,6 +672,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @param len length of the substring.
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def substr(startPos: Int, len: Int): Column = Substring(expr, lit(startPos).expr, lit(len).expr)
 
@@ -573,6 +680,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * Contains the other element.
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def contains(other: Any): Column = Contains(expr, lit(other).expr)
 
@@ -580,6 +688,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * String starts with.
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def startsWith(other: Column): Column = StartsWith(expr, lit(other).expr)
 
@@ -587,6 +696,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * String starts with another string literal.
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def startsWith(literal: String): Column = this.startsWith(lit(literal))
 
@@ -594,6 +704,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * String ends with.
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def endsWith(other: Column): Column = EndsWith(expr, lit(other).expr)
 
@@ -601,6 +712,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * String ends with another string literal.
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def endsWith(literal: String): Column = this.endsWith(lit(literal))
 
@@ -612,8 +724,33 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def as(alias: String): Column = Alias(expr, alias)()
+
+  /**
+   * (Scala-specific) Assigns the given aliases to the results of a table generating function.
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select(explode($"myMap").as("key" :: "value" :: Nil))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.4.0
+   */
+  def as(aliases: Seq[String]): Column = MultiAlias(expr, aliases)
+
+  /**
+   * Assigns the given aliases to the results of a table generating function.
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select(explode($"myMap").as("key" :: "value" :: Nil))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.4.0
+   */
+  def as(aliases: Array[String]): Column = MultiAlias(expr, aliases)
 
   /**
    * Gives the column an alias.
@@ -623,6 +760,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def as(alias: Symbol): Column = Alias(expr, alias.name)()
 
@@ -634,6 +772,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def as(alias: String, metadata: Metadata): Column = {
     Alias(expr, alias)(explicitMetadata = Some(metadata))
@@ -651,6 +790,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def cast(to: DataType): Column = expr match {
     // Lift alias out of cast so we can support col.as("name").cast(IntegerType)
@@ -668,6 +808,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def cast(to: String): Column = cast(DataTypeParser.parse(to))
 
@@ -682,6 +823,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def desc: Column = SortOrder(expr, Descending)
 
@@ -696,6 +838,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.3.0
    */
   def asc: Column = SortOrder(expr, Ascending)
 
@@ -703,6 +846,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * Prints the expression to the console for debugging purpose.
    *
    * @group df_ops
+   * @since 1.3.0
    */
   def explain(extended: Boolean): Unit = {
     if (extended) {
@@ -719,6 +863,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.4.0
    */
   def bitwiseOR(other: Any): Column = BitwiseOr(expr, lit(other).expr)
 
@@ -729,6 +874,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.4.0
    */
   def bitwiseAND(other: Any): Column = BitwiseAnd(expr, lit(other).expr)
 
@@ -739,6 +885,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * }}}
    *
    * @group expr_ops
+   * @since 1.4.0
    */
   def bitwiseXOR(other: Any): Column = BitwiseXor(expr, lit(other).expr)
 
@@ -748,61 +895,115 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 /**
  * :: Experimental ::
  * A convenient class used for constructing schema.
+ *
+ * @since 1.3.0
  */
 @Experimental
 class ColumnName(name: String) extends Column(name) {
 
-  /** Creates a new AttributeReference of type boolean */
+  /**
+   * Creates a new [[StructField]] of type boolean.
+   * @since 1.3.0
+   */
   def boolean: StructField = StructField(name, BooleanType)
 
-  /** Creates a new AttributeReference of type byte */
+  /**
+   * Creates a new [[StructField]] of type byte.
+   * @since 1.3.0
+   */
   def byte: StructField = StructField(name, ByteType)
 
-  /** Creates a new AttributeReference of type short */
+  /**
+   * Creates a new [[StructField]] of type short.
+   * @since 1.3.0
+   */
   def short: StructField = StructField(name, ShortType)
 
-  /** Creates a new AttributeReference of type int */
+  /**
+   * Creates a new [[StructField]] of type int.
+   * @since 1.3.0
+   */
   def int: StructField = StructField(name, IntegerType)
 
-  /** Creates a new AttributeReference of type long */
+  /**
+   * Creates a new [[StructField]] of type long.
+   * @since 1.3.0
+   */
   def long: StructField = StructField(name, LongType)
 
-  /** Creates a new AttributeReference of type float */
+  /**
+   * Creates a new [[StructField]] of type float.
+   * @since 1.3.0
+   */
   def float: StructField = StructField(name, FloatType)
 
-  /** Creates a new AttributeReference of type double */
+  /**
+   * Creates a new [[StructField]] of type double.
+   * @since 1.3.0
+   */
   def double: StructField = StructField(name, DoubleType)
 
-  /** Creates a new AttributeReference of type string */
+  /**
+   * Creates a new [[StructField]] of type string.
+   * @since 1.3.0
+   */
   def string: StructField = StructField(name, StringType)
 
-  /** Creates a new AttributeReference of type date */
+  /**
+   * Creates a new [[StructField]] of type date.
+   * @since 1.3.0
+   */
   def date: StructField = StructField(name, DateType)
 
-  /** Creates a new AttributeReference of type decimal */
+  /**
+   * Creates a new [[StructField]] of type decimal.
+   * @since 1.3.0
+   */
   def decimal: StructField = StructField(name, DecimalType.Unlimited)
 
-  /** Creates a new AttributeReference of type decimal */
+  /**
+   * Creates a new [[StructField]] of type decimal.
+   * @since 1.3.0
+   */
   def decimal(precision: Int, scale: Int): StructField =
     StructField(name, DecimalType(precision, scale))
 
-  /** Creates a new AttributeReference of type timestamp */
+  /**
+   * Creates a new [[StructField]] of type timestamp.
+   * @since 1.3.0
+   */
   def timestamp: StructField = StructField(name, TimestampType)
 
-  /** Creates a new AttributeReference of type binary */
+  /**
+   * Creates a new [[StructField]] of type binary.
+   * @since 1.3.0
+   */
   def binary: StructField = StructField(name, BinaryType)
 
-  /** Creates a new AttributeReference of type array */
+  /**
+   * Creates a new [[StructField]] of type array.
+   * @since 1.3.0
+   */
   def array(dataType: DataType): StructField = StructField(name, ArrayType(dataType))
 
-  /** Creates a new AttributeReference of type map */
+  /**
+   * Creates a new [[StructField]] of type map.
+   * @since 1.3.0
+   */
   def map(keyType: DataType, valueType: DataType): StructField =
     map(MapType(keyType, valueType))
 
   def map(mapType: MapType): StructField = StructField(name, mapType)
 
-  /** Creates a new AttributeReference of type struct */
+  /**
+   * Creates a new [[StructField]] of type struct.
+   * @since 1.3.0
+   */
   def struct(fields: StructField*): StructField = struct(StructType(fields))
 
+  /**
+   * Creates a new [[StructField]] of type struct.
+   * @since 1.3.0
+   */
   def struct(structType: StructType): StructField = StructField(name, structType)
 }
