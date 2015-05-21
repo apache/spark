@@ -451,7 +451,6 @@ class ListTests(MLlibTestCase):
                 rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4, maxBins=1)
 
 
-
 class StatTests(MLlibTestCase):
     # SPARK-4023
     def test_col_with_different_rdds(self):
