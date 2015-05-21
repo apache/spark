@@ -182,7 +182,7 @@ class BlockManagerMasterEndpoint(
       }
     }
     listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
-    logInfo(s"Successfully removed BlockManager $blockManagerId")
+    logDebug(s"Successfully removed BlockManager $blockManagerId")
   }
 
   private def removeExecutor(execId: String) {
