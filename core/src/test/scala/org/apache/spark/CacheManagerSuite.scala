@@ -96,7 +96,7 @@ class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAf
 
     assert(!blockInfo.contains(RDDBlockId(0, 0)))
 
-    val context = new TaskContextImpl(0, 0, 0, 0)
+    val context = new TaskContextImpl(0, 0, 0, 0, null)
     try {
       val computeValue =
         cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY, cacheRemote = true)
