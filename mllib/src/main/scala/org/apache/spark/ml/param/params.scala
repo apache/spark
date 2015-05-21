@@ -24,7 +24,7 @@ import scala.annotation.varargs
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.{DeveloperApi, AlphaComponent}
 import org.apache.spark.ml.util.Identifiable
 
 /**
@@ -92,9 +92,11 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
 }
 
 /**
+ * :: DeveloperApi ::
  * Factory methods for common validation functions for [[Param.isValid]].
  * The numerical methods only support Int, Long, Float, and Double.
  */
+@DeveloperApi
 object ParamValidators {
 
   /** (private[param]) Default validation always return true */
@@ -530,11 +532,13 @@ trait Params extends Identifiable with Serializable {
 }
 
 /**
+ * :: DeveloperApi ::
  * Java-friendly wrapper for [[Params]].
  * Java developers who need to extend [[Params]] should use this class instead.
  * If you need to extend a abstract class which already extends [[Params]], then that abstract
  * class should be Java-friendly as well.
  */
+@DeveloperApi
 abstract class JavaParams extends Params
 
 /**
