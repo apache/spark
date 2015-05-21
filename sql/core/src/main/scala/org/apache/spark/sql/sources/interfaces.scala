@@ -462,12 +462,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
   private def discoverPartitions(): PartitionSpec = {
     val leafDirs = fileStatusCache.leafDirs.keys.toSeq
-
-    if (leafDirs.nonEmpty) {
-      PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME)
-    } else {
-      PartitionSpec(StructType(Array.empty[StructField]), Array.empty[Partition])
-    }
+    PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME)
   }
 
   /**
