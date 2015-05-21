@@ -755,6 +755,52 @@ class DataFrame(object):
         from pyspark.sql.group import GroupedData
         return GroupedData(jdf, self.sql_ctx)
 
+    def rollup(self, *cols):
+        """
+        Create a multi-dimensional rollup for the current :class:`DataFrame` using
+        the specified columns, so we can run aggregation on them.
+
+        >>> df.rollup('name', df.age).count().show()
+        +-----+----+-----+
+        | name| age|count|
+        +-----+----+-----+
+        |Alice|null|    1|
+        |  Bob|   5|    1|
+        |  Bob|null|    1|
+        | null|null|    2|
+        |Alice|   2|    1|
+        +-----+----+-----+
+
+        .. versionadded:: 1.4
+        """
+        jdf = self._jdf.rollup(self._jcols(*cols))
+        from pyspark.sql.group import GroupedData
+        return GroupedData(jdf, self.sql_ctx)
+
+    def cube(self, *cols):
+        """
+        Create a multi-dimensional cube for the current :class:`DataFrame` using
+        the specified columns, so we can run aggregation on them.
+
+        >>> df.cube('name', df.age).count().show()
+        +-----+----+-----+
+        | name| age|count|
+        +-----+----+-----+
+        | null|   2|    1|
+        |Alice|null|    1|
+        |  Bob|   5|    1|
+        |  Bob|null|    1|
+        | null|   5|    1|
+        | null|null|    2|
+        |Alice|   2|    1|
+        +-----+----+-----+
+
+        .. versionadded:: 1.4
+        """
+        jdf = self._jdf.cube(self._jcols(*cols))
+        from pyspark.sql.group import GroupedData
+        return GroupedData(jdf, self.sql_ctx)
+
     def agg(self, *exprs):
         """ Aggregate on the entire :class:`DataFrame` without groups
         (shorthand for ``df.groupBy.agg()``).
