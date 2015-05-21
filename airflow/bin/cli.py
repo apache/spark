@@ -149,7 +149,6 @@ def task_state(args):
     >>> airflow task_state tutorial sleep 2015-01-01
     success
     """
-    log_to_stdout()
     args.execution_date = dateutil.parser.parse(args.execution_date)
     iso = args.execution_date.isoformat()
     dagbag = DagBag(args.subdir)
