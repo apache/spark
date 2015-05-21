@@ -110,6 +110,18 @@ class StringIndexerModel private[ml] (
     map
   }
 
+  private lazy val indexToLabel: OpenHashMap[String, Double] = {
+    val n = labels.length
+    val map = new OpenHashMap[String, Double](n)
+    var i = 0
+    while (i < n) {
+      map.update(i, labels(i))
+      i += 1
+    }
+    map
+  }
+
+
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 
@@ -151,4 +163,21 @@ class StringIndexerModel private[ml] (
     val copied = new StringIndexerModel(uid, labels)
     copyValues(copied, extra)
   }
+
+  def invertTransform(dataset: DataFrame): DataFrame = {
+    val indexer = udf { index: Double =>
+      if (indexToLabel.contains(index)) {
+        labelToIndex(label)
+      } else {
+        // TODO: handle unseen labels
+        throw new SparkException(s"Unseen label: $label.")
+      }
+    }
+    val outputColName = $(outputCol)
+    val metadata = NominalAttribute.defaultAttr
+      .withName(inputColName).withValues(labels).toMetadata()
+    dataset.select(col("*"),
+      indexer(dataset($(inputCol))).as(inputColName, metadata))
+  }
+
 }
