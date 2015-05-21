@@ -292,6 +292,11 @@ class SparkContext(object):
         return self._jsc.version()
 
     @property
+    def startTime(self):
+        """Return the epoch time when the Spark Context was started."""
+        return self._jsc.startTime()
+
+    @property
     def defaultParallelism(self):
         """
         Default level of parallelism to use when not given by user (e.g. for
