@@ -16,7 +16,6 @@
  */
 package org.apache.spark.status.api.v1
 
-import java.io.File
 import javax.servlet.ServletContext
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, Response}
@@ -165,17 +164,11 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
     }
   }
 
-  @Path("applications/{appId}/{attemptId}/download")
-  def getEventLogs(
-      @PathParam("appId") appId: String,
-      @PathParam("attemptId") attemptId: String): EventLogDownloadResource = {
-    new EventLogDownloadResource(uiRoot, appId)
-  }
 }
 
 private[spark] object ApiRootResource {
 
-  def getApiServlet(uiRoot: UIRoot): ServletContextHandler = {
+  def getServletHandler(uiRoot: UIRoot): ServletContextHandler = {
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
     jerseyContext.setContextPath("/api")
     val holder:ServletHolder = new ServletHolder(classOf[ServletContainer])
