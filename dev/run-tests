@@ -20,8 +20,4 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
-python -u ./dev/run-tests.py
-
-# exit from this script with the return code from the python script to ensure
-# dev/run-tests-jenkins reports the correct error
-exit $?
+exec python -u ./dev/run-tests.py
