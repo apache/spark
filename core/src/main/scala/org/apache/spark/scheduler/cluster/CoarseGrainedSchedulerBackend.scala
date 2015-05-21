@@ -55,6 +55,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   val maxRegisteredWaitingTimeMs =
     conf.getTimeAsMs("spark.scheduler.maxRegisteredResourcesWaitingTime", "30s")
   val createTime = System.currentTimeMillis()
+  // If this CoarseGrainedSchedulerBackend is changed to support multiple threads, then this may need
+  // to be changed so that we don't share the serializer instance across threads
+  private val ser = SparkEnv.get.closureSerializer.newInstance()
 
   private val executorDataMap = new HashMap[String, ExecutorData]
 
