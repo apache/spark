@@ -176,8 +176,7 @@ private[sql] class ParquetRelation2(
         Boolean.box(shouldMergeSchemas),
         paths.toSet,
         maybeDataSchema,
-        maybePartitionSpec,
-        userDefinedPartitionColumns)
+        partitionColumns)
     } else {
       Objects.hashCode(
         Boolean.box(shouldMergeSchemas),
@@ -185,8 +184,7 @@ private[sql] class ParquetRelation2(
         dataSchema,
         schema,
         maybeDataSchema,
-        maybePartitionSpec,
-        userDefinedPartitionColumns)
+        partitionColumns)
     }
   }
 

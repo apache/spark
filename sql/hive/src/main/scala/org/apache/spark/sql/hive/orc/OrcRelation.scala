@@ -180,7 +180,7 @@ private[sql] class OrcRelation(
       paths.toSet,
       dataSchema,
       schema,
-      maybePartitionSpec)
+      partitionColumns)
   }
 
   override def buildScan(
