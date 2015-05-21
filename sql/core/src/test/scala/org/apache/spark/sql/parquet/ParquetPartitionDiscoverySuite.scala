@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.parquet
 
+import java.io.File
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
@@ -175,11 +177,17 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         pi <- Seq(1, 2)
         ps <- Seq("foo", "bar")
       } {
+        val dir = makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
         makeParquetFile(
           (1 to 10).map(i => ParquetData(i, i.toString)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
+          dir)
+        // Introduce _temporary dir to test the robustness of the schema discovery process.
+        new File(dir.toString, "_temporary").mkdir()
       }
+      // Introduce _temporary dir to the base dir the robustness of the schema discovery process.
+      new File(base.getCanonicalPath, "_temporary").mkdir()
 
+      println("load the partitioned table")
       read.parquet(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {

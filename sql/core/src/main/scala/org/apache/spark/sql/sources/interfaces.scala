@@ -377,8 +377,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
 
-    var leafDirs = mutable.Map.empty[Path, FileStatus]
-
     def refresh(): Unit = {
       def listLeafFilesAndDirs(fs: FileSystem, status: FileStatus): Set[FileStatus] = {
         val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
@@ -386,7 +384,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         files.toSet ++ leafDirs ++ dirs.flatMap(dir => listLeafFilesAndDirs(fs, dir))
       }
 
-      leafDirs.clear()
       leafFiles.clear()
 
       // We don't filter files/directories like _temporary/_SUCCESS here, as specific data sources
@@ -399,7 +396,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       }
 
       val (dirs, files) = statuses.partition(_.isDir)
-      leafDirs ++= dirs.map(d => d.getPath -> d).toMap
       leafFiles ++= files.map(f => f.getPath -> f).toMap
       leafDirToChildrenFiles ++= files.groupBy(_.getPath.getParent)
     }
@@ -484,7 +480,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   }
 
   private def discoverPartitions(): PartitionSpec = {
-    val leafDirs = fileStatusCache.leafDirs.keys.toSeq
+    // We use leaf dirs containing data files to discover the schema.
+    val leafDirs = fileStatusCache.leafDirToChildrenFiles.keys.toSeq
     PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME)
   }
 
