@@ -129,6 +129,7 @@ class HivePrestoTest(unittest.TestCase):
             GROUP BY name
             """,
             mysql_table='test_static_babynames',
+            mysql_preoperator='TRUNCATE TABLE test_static_babynames;',
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
