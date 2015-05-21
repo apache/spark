@@ -43,7 +43,14 @@ object MimaExcludes {
             MimaBuild.excludeSparkPackage("unused"),
             // SPARK-7805 - Some SQL test code accidentally included in src/main 
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.sql.test.SQLTestUtils.withTable")
+              "org.apache.spark.sql.test.SQLTestUtils.withTable"),
+            // TODO: REMOVE THESE AFTER 1.4 IS RELEASED - Transient changes in 1.4
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.status.api.v1.JsonRootResource"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.status.api.v1.JsonRootResource$"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.StreamingContext.withNamedScope") 
           )
         case v if v.startsWith("1.4") =>
           Seq(
