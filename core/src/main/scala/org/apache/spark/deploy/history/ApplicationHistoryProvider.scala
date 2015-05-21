@@ -68,6 +68,6 @@ private[history] abstract class ApplicationHistoryProvider {
    * Get the event logs for the given application. The event logs are compressed into a zip file
    * and copied into the directory passed in.
    */
-  def copyApplicationEventLogs(appId: String, directory: File) = { }
+  def copyApplicationEventLogs(appId: String, directory: File): Unit = { }
 
 }
