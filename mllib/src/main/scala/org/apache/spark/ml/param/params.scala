@@ -438,19 +438,18 @@ trait Params extends Identifiable with Serializable {
    * @param value  the default value
    */
   protected final def setDefault[T](param: Param[T], value: T): this.type = {
-    defaultParamMap.put(param, value)
+    defaultParamMap.put(param -> value)
     this
   }
 
   /**
    * Sets default values for a list of params.
    *
-   * Note: Java developers should use the single-parameter [[setDefault()]].
-   *       Annotating this with varargs causes compilation failures. See SPARK-7498.
    * @param paramPairs  a list of param pairs that specify params and their default values to set
    *                    respectively. Make sure that the params are initialized before this method
    *                    gets called.
    */
+  @varargs
   protected final def setDefault(paramPairs: ParamPair[_]*): this.type = {
     paramPairs.foreach { p =>
       setDefault(p.param.asInstanceOf[Param[Any]], p.value)
@@ -559,7 +558,7 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
   /**
    * Puts a (param, value) pair (overwrites if the input param exists).
    */
-  def put[T](param: Param[T], value: T): this.type = put(ParamPair(param, value))
+  def put[T](param: Param[T], value: T): this.type = put(param -> value)
 
   /**
    * Puts a list of param pairs (overwrites if the input params exists).
