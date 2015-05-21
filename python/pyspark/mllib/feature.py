@@ -254,6 +254,49 @@ class ChiSqSelector(object):
         return ChiSqSelectorModel(jmodel)
 
 
+class PCAModel(JavaVectorTransformer):
+    """
+    Model fitted by [[PCA]] that can project vectors to a low-dimensional space using PCA.
+    """
+    def transform(self, vector):
+        """
+        Applies transformation on a vector.
+
+        :param vector: Vector or RDD of Vector to be transformed.
+        :return: transformed vector.
+        """
+        return JavaVectorTransformer.transform(self, vector)
+
+
+class PCA(object):
+    """
+    A feature transformer that projects vectors to a low-dimensional space using PCA.
+
+    >>> data = [Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),
+    ...     Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),
+    ...     Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0])]
+    >>> model = PCA(2).fit(sc.parallelize(data))
+    >>> pcArray = model.transform(Vectors.sparse(5, [(1, 1.0), (3, 7.0)])).toArray()
+    >>> pcArray[0]
+    1.648...
+    >>> pcArray[1]
+    -4.013...
+    """
+    def __init__(self, k):
+        """
+        :param k: number of principal components.
+        """
+        self.k = int(k)
+
+    def fit(self, data):
+        """
+        Computes a [[PCAModel]] that contains the principal components of the input vectors.
+        :param data: source vectors
+        """
+        jmodel = callMLlibFunc("fitPCA", self.k, data)
+        return PCAModel(jmodel)
+
+
 class HashingTF(object):
     """
     .. note:: Experimental

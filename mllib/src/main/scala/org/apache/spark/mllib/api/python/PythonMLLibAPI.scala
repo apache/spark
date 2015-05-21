@@ -519,6 +519,16 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for PCA.fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitPCA(k: Int, data: JavaRDD[Vector]): PCAModel = {
+    new PCA(k).fit(data.rdd)
+  }
+
+  /**
    * Java stub for IDF.fit(). This stub returns a
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on
