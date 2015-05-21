@@ -539,7 +539,7 @@ abstract class DStream[T: ClassTag] (
 
   /** Return a new DStream containing only the elements that satisfy a predicate. */
   def filter(filterFunc: T => Boolean): DStream[T] = ssc.withScope {
-    new FilteredDStream(this, filterFunc)
+    new FilteredDStream(this, context.sparkContext.clean(filterFunc))
   }
 
   /**
@@ -624,7 +624,8 @@ abstract class DStream[T: ClassTag] (
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
   def foreachRDD(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
-    this.foreachRDD((r: RDD[T], t: Time) => foreachFunc(r))
+    val cleanedF = context.sparkContext.clean(foreachFunc, false)
+    this.foreachRDD((r: RDD[T], t: Time) => cleanedF(r))
   }
 
   /**

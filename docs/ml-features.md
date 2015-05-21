@@ -440,5 +440,100 @@ for expanded in polyDF.select("polyFeatures").take(3):
 </div>
 </div>
 
+## OneHotEncoder
+
+[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features 
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+import org.apache.spark.ml.feature.{OneHotEncoder, StringIndexer}
+
+val df = sqlContext.createDataFrame(Seq(
+  (0, "a"),
+  (1, "b"),
+  (2, "c"),
+  (3, "a"),
+  (4, "a"),
+  (5, "c")
+)).toDF("id", "category")
+
+val indexer = new StringIndexer()
+  .setInputCol("category")
+  .setOutputCol("categoryIndex")
+  .fit(df)
+val indexed = indexer.transform(df)
+
+val encoder = new OneHotEncoder().setInputCol("categoryIndex").
+  setOutputCol("categoryVec")
+val encoded = encoder.transform(indexed)
+encoded.select("id", "categoryVec").foreach(println)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+import com.google.common.collect.Lists;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.OneHotEncoder;
+import org.apache.spark.ml.feature.StringIndexer;
+import org.apache.spark.ml.feature.StringIndexerModel;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+    RowFactory.create(0, "a"),
+    RowFactory.create(1, "b"),
+    RowFactory.create(2, "c"),
+    RowFactory.create(3, "a"),
+    RowFactory.create(4, "a"),
+    RowFactory.create(5, "c")
+));
+StructType schema = new StructType(new StructField[]{
+    new StructField("id", DataTypes.DoubleType, false, Metadata.empty()),
+    new StructField("category", DataTypes.StringType, false, Metadata.empty())
+});
+DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+StringIndexerModel indexer = new StringIndexer()
+  .setInputCol("category")
+  .setOutputCol("categoryIndex")
+  .fit(df);
+DataFrame indexed = indexer.transform(df);
+
+OneHotEncoder encoder = new OneHotEncoder()
+  .setInputCol("categoryIndex")
+  .setOutputCol("categoryVec");
+DataFrame encoded = encoder.transform(indexed);
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+from pyspark.ml.feature import OneHotEncoder, StringIndexer
+
+df = sqlContext.createDataFrame([
+  (0, "a"),
+  (1, "b"),
+  (2, "c"),
+  (3, "a"),
+  (4, "a"),
+  (5, "c")
+], ["id", "category"])
+
+stringIndexer = StringIndexer(inputCol="category", outputCol="categoryIndex")
+model = stringIndexer.fit(df)
+indexed = model.transform(df)
+encoder = OneHotEncoder(includeFirst=False, inputCol="categoryIndex", outputCol="categoryVec")
+encoded = encoder.transform(indexed)
+{% endhighlight %}
+</div>
+</div>
+
 # Feature Selectors
 

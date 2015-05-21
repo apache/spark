@@ -25,16 +25,9 @@ import org.apache.spark.SparkException
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row}
 
 class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
-
-  @transient private var sqlContext: SQLContext = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sqlContext = new SQLContext(sc)
-  }
 
   test("Bucket continuous features, without -inf,inf") {
     // Check a set of valid feature values.

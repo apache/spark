@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming
 
-import java.io.InputStream
+import java.io.{InputStream, NotSerializableException}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.Map
@@ -35,6 +35,7 @@ import org.apache.spark._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.input.FixedLengthBinaryInputFormat
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
+import org.apache.spark.serializer.SerializationDebugger
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
@@ -235,6 +236,10 @@ class StreamingContext private[streaming] (
     }
   }
 
+  private[streaming] def isCheckpointingEnabled: Boolean = {
+    checkpointDir != null
+  }
+
   private[streaming] def initialCheckpoint: Checkpoint = {
     if (isCheckpointPresent) cp_ else null
   }
@@ -255,7 +260,7 @@ class StreamingContext private[streaming] (
    *
    * Note: Return statements are NOT allowed in the given body.
    */
-  private[streaming] def withNamedScope[U](name: String)(body: => U): U = {
+  private def withNamedScope[U](name: String)(body: => U): U = {
     RDDOperationScope.withScope(sc, name, allowNesting = false, ignoreParent = false)(body)
   }
 
@@ -523,11 +528,26 @@ class StreamingContext private[streaming] (
     assert(graph != null, "Graph is null")
     graph.validate()
 
-    assert(
-      checkpointDir == null || checkpointDuration != null,
+    require(
+      !isCheckpointingEnabled || checkpointDuration != null,
       "Checkpoint directory has been set, but the graph checkpointing interval has " +
         "not been set. Please use StreamingContext.checkpoint() to set the interval."
     )
+
+    // Verify whether the DStream checkpoint is serializable
+    if (isCheckpointingEnabled) {
+      val checkpoint = new Checkpoint(this, Time.apply(0))
+      try {
+        Checkpoint.serialize(checkpoint, conf)
+      } catch {
+        case e: NotSerializableException =>
+          throw new NotSerializableException(
+            "DStream checkpointing has been enabled but the DStreams with their functions " +
+              "are not serializable\nSerialization stack:\n" +
+              SerializationDebugger.find(checkpoint).map("\t- " + _).mkString("\n")
+          )
+      }
+    }
   }
 
   /**
