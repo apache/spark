@@ -68,20 +68,31 @@ sealed abstract class Attribute extends Serializable {
    * Converts this attribute to [[Metadata]].
    * @param withType whether to include the type info
    */
-  private[attribute] def toMetadata(withType: Boolean): Metadata
+  private[attribute] def toMetadataImpl(withType: Boolean): Metadata
 
   /**
    * Converts this attribute to [[Metadata]]. For numeric attributes, the type info is excluded to
    * save space, because numeric type is the default attribute type. For nominal and binary
    * attributes, the type info is included.
    */
-  private[attribute] def toMetadata(): Metadata = {
+  private[attribute] def toMetadataImpl(): Metadata = {
     if (attrType == AttributeType.Numeric) {
-      toMetadata(withType = false)
+      toMetadataImpl(withType = false)
     } else {
-      toMetadata(withType = true)
+      toMetadataImpl(withType = true)
     }
   }
+
+  /** Converts to ML metadata with some existing metadata. */
+  def toMetadata(existingMetadata: Metadata): Metadata = {
+    new MetadataBuilder()
+      .withMetadata(existingMetadata)
+      .putMetadata(AttributeKeys.ML_ATTR, toMetadataImpl())
+      .build()
+  }
+
+  /** Converts to ML metadata */
+  def toMetadata(): Metadata = toMetadata(Metadata.empty)
 
   /**
    * Converts to a [[StructField]] with some existing metadata.
@@ -90,7 +101,7 @@ sealed abstract class Attribute extends Serializable {
   def toStructField(existingMetadata: Metadata): StructField = {
     val newMetadata = new MetadataBuilder()
       .withMetadata(existingMetadata)
-      .putMetadata(AttributeKeys.ML_ATTR, withoutName.withoutIndex.toMetadata())
+      .putMetadata(AttributeKeys.ML_ATTR, withoutName.withoutIndex.toMetadataImpl())
       .build()
     StructField(name.get, DoubleType, nullable = false, newMetadata)
   }
@@ -98,7 +109,7 @@ sealed abstract class Attribute extends Serializable {
   /** Converts to a [[StructField]]. */
   def toStructField(): StructField = toStructField(Metadata.empty)
 
-  override def toString: String = toMetadata(withType = true).toString
+  override def toString: String = toMetadataImpl(withType = true).toString
 }
 
 /** Trait for ML attribute factories. */
@@ -114,7 +125,13 @@ private[attribute] trait AttributeFactory {
    */
   def fromStructField(field: StructField): Attribute = {
     require(field.dataType == DoubleType)
-    fromMetadata(field.metadata.getMetadata(AttributeKeys.ML_ATTR)).withName(field.name)
+    val metadata = field.metadata
+    val mlAttr = AttributeKeys.ML_ATTR
+    if (metadata.contains(mlAttr)) {
+      fromMetadata(metadata.getMetadata(mlAttr)).withName(field.name)
+    } else {
+      UnresolvedAttribute
+    }
   }
 }
 
@@ -210,7 +227,7 @@ class NumericAttribute private[ml] (
   override def isNominal: Boolean = false
 
   /** Convert this attribute to metadata. */
-  private[attribute] override def toMetadata(withType: Boolean): Metadata = {
+  override private[attribute] def toMetadataImpl(withType: Boolean): Metadata = {
     import org.apache.spark.ml.attribute.AttributeKeys._
     val bldr = new MetadataBuilder()
     if (withType) bldr.putString(TYPE, attrType.name)
@@ -353,6 +370,20 @@ class NominalAttribute private[ml] (
   /** Copy without the `numValues`. */
   def withoutNumValues: NominalAttribute = copy(numValues = None)
 
+  /**
+   * Get the number of values, either from `numValues` or from `values`.
+   * Return None if unknown.
+   */
+  def getNumValues: Option[Int] = {
+    if (numValues.nonEmpty) {
+      numValues
+    } else if (values.nonEmpty) {
+      Some(values.get.length)
+    } else {
+      None
+    }
+  }
+
   /** Creates a copy of this attribute with optional changes. */
   private def copy(
       name: Option[String] = name,
@@ -363,7 +394,7 @@ class NominalAttribute private[ml] (
     new NominalAttribute(name, index, isOrdinal, numValues, values)
   }
 
-  private[attribute] override def toMetadata(withType: Boolean): Metadata = {
+  override private[attribute] def toMetadataImpl(withType: Boolean): Metadata = {
     import org.apache.spark.ml.attribute.AttributeKeys._
     val bldr = new MetadataBuilder()
     if (withType) bldr.putString(TYPE, attrType.name)
@@ -465,7 +496,7 @@ class BinaryAttribute private[ml] (
     new BinaryAttribute(name, index, values)
   }
 
-  private[attribute] override def toMetadata(withType: Boolean): Metadata = {
+  override private[attribute] def toMetadataImpl(withType: Boolean): Metadata = {
     import org.apache.spark.ml.attribute.AttributeKeys._
     val bldr = new MetadataBuilder
     if (withType) bldr.putString(TYPE, attrType.name)
@@ -509,4 +540,33 @@ object BinaryAttribute extends AttributeFactory {
       if (metadata.contains(VALUES)) Some(metadata.getStringArray(VALUES)) else None
     new BinaryAttribute(name, index, values)
   }
+}
+
+/**
+ * An unresolved attribute.
+ */
+object UnresolvedAttribute extends Attribute {
+
+  override def attrType: AttributeType = AttributeType.Unresolved
+
+  override def withIndex(index: Int): Attribute = this
+
+  override def isNumeric: Boolean = false
+
+  override def withoutIndex: Attribute = this
+
+  override def isNominal: Boolean = false
+
+  override def name: Option[String] = None
+
+  override private[attribute] def toMetadataImpl(withType: Boolean): Metadata = {
+    Metadata.empty
+  }
+
+  override def withoutName: Attribute = this
+
+  override def index: Option[Int] = None
+
+  override def withName(name: String): Attribute = this
+
 }

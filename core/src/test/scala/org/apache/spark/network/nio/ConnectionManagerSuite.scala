@@ -260,8 +260,8 @@ class ConnectionManagerSuite extends FunSuite {
   test("sendMessageReliably timeout") {
     val clientConf = new SparkConf
     clientConf.set("spark.authenticate", "false")
-    val ackTimeout = 30
-    clientConf.set("spark.core.connection.ack.wait.timeout", s"${ackTimeout}")
+    val ackTimeoutS = 30
+    clientConf.set("spark.core.connection.ack.wait.timeout", s"${ackTimeoutS}s")
 
     val clientSecurityManager = new SecurityManager(clientConf)
     val manager = new ConnectionManager(0, clientConf, clientSecurityManager)
@@ -272,7 +272,7 @@ class ConnectionManagerSuite extends FunSuite {
     val managerServer = new ConnectionManager(0, serverConf, serverSecurityManager)
     managerServer.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       // sleep 60 sec > ack timeout for simulating server slow down or hang up
-      Thread.sleep(ackTimeout * 3 * 1000)
+      Thread.sleep(ackTimeoutS * 3 * 1000)
       None
     })
 
@@ -287,7 +287,7 @@ class ConnectionManagerSuite extends FunSuite {
     // Otherwise TimeoutExcepton is thrown from Await.result.
     // We expect TimeoutException is not thrown.
     intercept[IOException] {
-      Await.result(future, (ackTimeout * 2) second)
+      Await.result(future, (ackTimeoutS * 2) second)
     }
 
     manager.stop()

@@ -90,7 +90,7 @@ private[sql] object CatalystConverter {
         createConverter(field.copy(dataType = udt.sqlType), fieldIndex, parent)
       }
       // For native JVM types we use a converter with native arrays
-      case ArrayType(elementType: NativeType, false) => {
+      case ArrayType(elementType: AtomicType, false) => {
         new CatalystNativeArrayConverter(elementType, fieldIndex, parent)
       }
       // This is for other types of arrays, including those with nested fields
@@ -118,19 +118,19 @@ private[sql] object CatalystConverter {
       case ShortType => {
         new CatalystPrimitiveConverter(parent, fieldIndex) {
           override def addInt(value: Int): Unit =
-            parent.updateShort(fieldIndex, value.asInstanceOf[ShortType.JvmType])
+            parent.updateShort(fieldIndex, value.asInstanceOf[ShortType.InternalType])
         }
       }
       case ByteType => {
         new CatalystPrimitiveConverter(parent, fieldIndex) {
           override def addInt(value: Int): Unit =
-            parent.updateByte(fieldIndex, value.asInstanceOf[ByteType.JvmType])
+            parent.updateByte(fieldIndex, value.asInstanceOf[ByteType.InternalType])
         }
       }
       case DateType => {
         new CatalystPrimitiveConverter(parent, fieldIndex) {
           override def addInt(value: Int): Unit =
-            parent.updateDate(fieldIndex, value.asInstanceOf[DateType.JvmType])
+            parent.updateDate(fieldIndex, value.asInstanceOf[DateType.InternalType])
         }
       }
       case d: DecimalType => {
@@ -146,7 +146,8 @@ private[sql] object CatalystConverter {
         }
       }
       // All other primitive types use the default converter
-      case ctype: PrimitiveType => { // note: need the type tag here!
+      case ctype: DataType if ParquetTypesConverter.isPrimitiveType(ctype) => {
+        // note: need the type tag here!
         new CatalystPrimitiveConverter(parent, fieldIndex)
       }
       case _ => throw new RuntimeException(
@@ -219,8 +220,8 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
   protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit =
     updateField(fieldIndex, value.getBytes)
 
-  protected[parquet] def updateString(fieldIndex: Int, value: String): Unit =
-    updateField(fieldIndex, value)
+  protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit =
+    updateField(fieldIndex, UTF8String(value))
 
   protected[parquet] def updateTimestamp(fieldIndex: Int, value: Binary): Unit =
     updateField(fieldIndex, readTimestamp(value))
@@ -324,9 +325,9 @@ private[parquet] class CatalystGroupConverter(
 
   override def start(): Unit = {
     current = ArrayBuffer.fill(size)(null)
-    converters.foreach {
-      converter => if (!converter.isPrimitive) {
-        converter.asInstanceOf[CatalystConverter].clearBuffer
+    converters.foreach { converter =>
+      if (!converter.isPrimitive) {
+        converter.asInstanceOf[CatalystConverter].clearBuffer()
       }
     }
   }
@@ -418,8 +419,8 @@ private[parquet] class CatalystPrimitiveRowConverter(
   override protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit =
     current.update(fieldIndex, value.getBytes)
 
-  override protected[parquet] def updateString(fieldIndex: Int, value: String): Unit =
-    current.setString(fieldIndex, value)
+  override protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit =
+    current.update(fieldIndex, UTF8String(value))
 
   override protected[parquet] def updateTimestamp(fieldIndex: Int, value: Binary): Unit =
     current.update(fieldIndex, readTimestamp(value))
@@ -475,19 +476,18 @@ private[parquet] class CatalystPrimitiveConverter(
 private[parquet] class CatalystPrimitiveStringConverter(parent: CatalystConverter, fieldIndex: Int)
   extends CatalystPrimitiveConverter(parent, fieldIndex) {
 
-  private[this] var dict: Array[String] = null
+  private[this] var dict: Array[Array[Byte]] = null
 
   override def hasDictionarySupport: Boolean = true
 
   override def setDictionary(dictionary: Dictionary):Unit =
-    dict = Array.tabulate(dictionary.getMaxId + 1) {dictionary.decodeToBinary(_).toStringUsingUTF8}
-
+    dict = Array.tabulate(dictionary.getMaxId + 1) { dictionary.decodeToBinary(_).getBytes }
 
   override def addValueFromDictionary(dictionaryId: Int): Unit =
     parent.updateString(fieldIndex, dict(dictionaryId))
 
   override def addBinary(value: Binary): Unit =
-    parent.updateString(fieldIndex, value.toStringUsingUTF8)
+    parent.updateString(fieldIndex, value.getBytes)
 }
 
 private[parquet] object CatalystArrayConverter {
@@ -613,7 +613,7 @@ private[parquet] class CatalystArrayConverter(
 
   override def start(): Unit = {
     if (!converter.isPrimitive) {
-      converter.asInstanceOf[CatalystConverter].clearBuffer
+      converter.asInstanceOf[CatalystConverter].clearBuffer()
     }
   }
 
@@ -637,13 +637,13 @@ private[parquet] class CatalystArrayConverter(
  * @param capacity The (initial) capacity of the buffer
  */
 private[parquet] class CatalystNativeArrayConverter(
-    val elementType: NativeType,
+    val elementType: AtomicType,
     val index: Int,
     protected[parquet] val parent: CatalystConverter,
     protected[parquet] var capacity: Int = CatalystArrayConverter.INITIAL_ARRAY_SIZE)
   extends CatalystConverter {
 
-  type NativeType = elementType.JvmType
+  type NativeType = elementType.InternalType
 
   private var buffer: Array[NativeType] = elementType.classTag.newArray(capacity)
 
@@ -714,9 +714,9 @@ private[parquet] class CatalystNativeArrayConverter(
     elements += 1
   }
 
-  override protected[parquet] def updateString(fieldIndex: Int, value: String): Unit = {
+  override protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[NativeType]
+    buffer(elements) = UTF8String(value).asInstanceOf[NativeType]
     elements += 1
   }
 

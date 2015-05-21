@@ -32,16 +32,42 @@ Important classes of Spark SQL and DataFrames:
       Aggregation methods, returned by :func:`DataFrame.groupBy`.
     - L{DataFrameNaFunctions}
       Methods for handling missing data (null values).
+    - L{DataFrameStatFunctions}
+      Methods for statistics functionality.
     - L{functions}
       List of built-in functions available for :class:`DataFrame`.
     - L{types}
       List of data types available.
 """
+from __future__ import absolute_import
 
-from pyspark.sql.context import SQLContext, HiveContext
+
+def since(version):
+    def deco(f):
+        f.__doc__ = f.__doc__.rstrip() + "\n\n.. versionadded:: %s" % version
+        return f
+    return deco
+
+# fix the module name conflict for Python 3+
+import sys
+from . import _types as types
+modname = __name__ + '.types'
+types.__name__ = modname
+# update the __module__ for all objects, make them picklable
+for v in types.__dict__.values():
+    if hasattr(v, "__module__") and v.__module__.endswith('._types'):
+        v.__module__ = modname
+sys.modules[modname] = types
+del modname, sys
+
 from pyspark.sql.types import Row
-from pyspark.sql.dataframe import DataFrame, GroupedData, Column, SchemaRDD, DataFrameNaFunctions
+from pyspark.sql.context import SQLContext, HiveContext
+from pyspark.sql.column import Column
+from pyspark.sql.dataframe import DataFrame, SchemaRDD, DataFrameNaFunctions, DataFrameStatFunctions
+from pyspark.sql.group import GroupedData
+from pyspark.sql.readwriter import DataFrameReader, DataFrameWriter
 
 __all__ = [
-    'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row', 'DataFrameNaFunctions'
+    'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row',
+    'DataFrameNaFunctions', 'DataFrameStatFunctions'
 ]

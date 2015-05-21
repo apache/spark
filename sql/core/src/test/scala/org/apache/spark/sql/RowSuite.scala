@@ -30,7 +30,7 @@ class RowSuite extends FunSuite {
   test("create row") {
     val expected = new GenericMutableRow(4)
     expected.update(0, 2147483647)
-    expected.update(1, "this is a string")
+    expected.setString(1, "this is a string")
     expected.update(2, false)
     expected.update(3, null)
     val actual1 = Row(2147483647, "this is a string", false, null)
@@ -61,5 +61,15 @@ class RowSuite extends FunSuite {
     val ser = instance.serialize(row)
     val de = instance.deserialize(ser).asInstanceOf[Row]
     assert(de === row)
+  }
+
+  test("get values by field name on Row created via .toDF") {
+    val row = Seq((1, Seq(1))).toDF("a", "b").first()
+    assert(row.getAs[Int]("a") === 1)
+    assert(row.getAs[Seq[Int]]("b") === Seq(1))
+
+    intercept[IllegalArgumentException]{
+      row.getAs[Int]("c")
+    }
   }
 }

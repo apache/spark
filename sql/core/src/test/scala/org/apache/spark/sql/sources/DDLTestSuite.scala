@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
@@ -24,17 +25,17 @@ class DDLScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    SimpleDDLScan(parameters("from").toInt, parameters("TO").toInt)(sqlContext)
+    SimpleDDLScan(parameters("from").toInt, parameters("TO").toInt, parameters("Table"))(sqlContext)
   }
 }
 
-case class SimpleDDLScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
+case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlContext: SQLContext)
   extends BaseRelation with TableScan {
 
-  override def schema =
+  override def schema: StructType =
     StructType(Seq(
       StructField("intType", IntegerType, nullable = false,
-        new MetadataBuilder().putString("comment", "test comment").build()),
+        new MetadataBuilder().putString("comment", s"test comment $table").build()),
       StructField("stringType", StringType, nullable = false),
       StructField("dateType", DateType, nullable = false),
       StructField("timestampType", TimestampType, nullable = false),
@@ -57,12 +58,13 @@ case class SimpleDDLScan(from: Int, to: Int)(@transient val sqlContext: SQLConte
     ))
 
 
-  override def buildScan() = sqlContext.sparkContext.parallelize(from to to).
-    map(e => Row(s"people$e", e * 2))
+  override def buildScan(): RDD[Row] = {
+    sqlContext.sparkContext.parallelize(from to to).map(e => Row(s"people$e", e * 2))
+  }
 }
 
 class DDLTestSuite extends DataSourceTest {
-  import caseInsensisitiveContext._
+  import caseInsensitiveContext._
 
   before {
       sql(
@@ -71,7 +73,8 @@ class DDLTestSuite extends DataSourceTest {
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
           |  From '1',
-          |  To '10'
+          |  To '10',
+          |  Table 'test1'
           |)
           """.stripMargin)
   }
@@ -79,7 +82,7 @@ class DDLTestSuite extends DataSourceTest {
   sqlTest(
       "describe ddlPeople",
       Seq(
-        Row("intType", "int", "test comment"),
+        Row("intType", "int", "test comment test1"),
         Row("stringType", "string", ""),
         Row("dateType", "date", ""),
         Row("timestampType", "timestamp", ""),
@@ -96,4 +99,10 @@ class DDLTestSuite extends DataSourceTest {
         Row("arrayType", "array<string>", ""),
         Row("structType", "struct<f1:string,f2:int>", "")
       ))
+
+  test("SPARK-7686 DescribeCommand should have correct physical plan output attributes") {
+    val attributes = sql("describe ddlPeople").queryExecution.executedPlan.output
+    assert(attributes.map(_.name) === Seq("col_name", "data_type", "comment"))
+    assert(attributes.map(_.dataType).toSet === Set(StringType))
+  }
 }

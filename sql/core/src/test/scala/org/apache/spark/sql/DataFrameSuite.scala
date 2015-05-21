@@ -22,9 +22,7 @@ import scala.language.postfixOps
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, TestSQLContext}
-import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
 import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.sql.test.TestSQLContext.sql
 
 
 class DataFrameSuite extends QueryTest {
@@ -64,7 +62,7 @@ class DataFrameSuite extends QueryTest {
     val df = Seq((1,(1,1))).toDF()
 
     checkAnswer(
-      df.groupBy("_1").agg(col("_1"), sum("_2._1")).toDF("key", "total"),
+      df.groupBy("_1").agg(sum("_2._1")).toDF("key", "total"),
       Row(1, 1) :: Nil)
   }
 
@@ -86,6 +84,12 @@ class DataFrameSuite extends QueryTest {
     TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
   }
 
+  test("access complex data") {
+    assert(complexData.filter(complexData("a").getItem(0) === 2).count() == 1)
+    assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
+    assert(complexData.filter(complexData("s").getField("key") === 1).count() == 1)
+  }
+
   test("table scan") {
     checkAnswer(
       testData,
@@ -103,15 +107,6 @@ class DataFrameSuite extends QueryTest {
     assert(testData.head(2).head.schema === testData.schema)
   }
 
-  test("self join") {
-    val df1 = testData.select(testData("key")).as('df1)
-    val df2 = testData.select(testData("key")).as('df2)
-
-    checkAnswer(
-      df1.join(df2, $"df1.key" === $"df2.key"),
-      sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key").collect().toSeq)
-  }
-
   test("simple explode") {
     val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
 
@@ -119,17 +114,6 @@ class DataFrameSuite extends QueryTest {
       df.explode("words", "word") { word: String => word.split(" ").toSeq }.select('word),
       Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
     )
-  }
-
-  test("self join with aliases") {
-    val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
-    checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
-
-    checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").count(),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
   test("explode") {
@@ -143,7 +127,7 @@ class DataFrameSuite extends QueryTest {
       df2
         .select('_1 as 'letter, 'number)
         .groupBy('letter)
-        .agg('letter, countDistinct('number)),
+        .agg(countDistinct('number)),
       Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
     )
   }
@@ -172,46 +156,12 @@ class DataFrameSuite extends QueryTest {
       testData.select('key).collect().toSeq)
   }
 
-  test("groupBy") {
-    checkAnswer(
-      testData2.groupBy("a").agg($"a", sum($"b")),
-      Seq(Row(1, 3), Row(2, 3), Row(3, 3))
-    )
-    checkAnswer(
-      testData2.groupBy("a").agg($"a", sum($"b").as("totB")).agg(sum('totB)),
-      Row(9)
-    )
-    checkAnswer(
-      testData2.groupBy("a").agg(col("a"), count("*")),
-      Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil
-    )
-    checkAnswer(
-      testData2.groupBy("a").agg(Map("*" -> "count")),
-      Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil
-    )
-    checkAnswer(
-      testData2.groupBy("a").agg(Map("b" -> "sum")),
-      Row(1, 3) :: Row(2, 3) :: Row(3, 3) :: Nil
-    )
-
-    val df1 = Seq(("a", 1, 0, "b"), ("b", 2, 4, "c"), ("a", 2, 3, "d"))
-      .toDF("key", "value1", "value2", "rest")
+  test("coalesce") {
+    assert(testData.select('key).coalesce(1).rdd.partitions.size === 1)
 
     checkAnswer(
-      df1.groupBy("key").min(),
-      df1.groupBy("key").min("value1", "value2").collect()
-    )
-    checkAnswer(
-      df1.groupBy("key").min("value2"),
-      Seq(Row("a", 0), Row("b", 4))
-    )
-  }
-
-  test("agg without groups") {
-    checkAnswer(
-      testData2.agg(sum('b)),
-      Row(9)
-    )
+      testData.select('key).coalesce(1).select('key),
+      testData.select('key).collect().toSeq)
   }
 
   test("convert $\"attribute name\" into unresolved attribute") {
@@ -334,21 +284,6 @@ class DataFrameSuite extends QueryTest {
       Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
   }
 
-  test("stddev") {
-    val testData2ADev = math.sqrt(4/5.0)
-    checkAnswer(
-      testData2.agg(stddev('a)),
-      Row(testData2ADev))
-
-    checkAnswer(
-      testData2.agg(stddev(testData2("a"))),
-      Row(testData2ADev))
-
-    checkAnswer(
-      decimalData.agg(stddev('a), sumDistinct('a)), // non-partial
-      Row(testData2ADev, new java.math.BigDecimal(6)) :: Nil)
-  }
-
   test("null average") {
     checkAnswer(
       testData3.agg(avg('b)),
@@ -423,7 +358,22 @@ class DataFrameSuite extends QueryTest {
       Row(null))
   }
 
-  test("except") {
+ test("stddev") {
+    val testData2ADev = math.sqrt(4/5.0)
+    checkAnswer(
+      testData2.agg(stddev('a)),
+      Row(testData2ADev))
+
+    checkAnswer(
+      testData2.agg(stddev(testData2("a"))),
+      Row(testData2ADev))
+
+    checkAnswer(
+      decimalData.agg(stddev('a), sumDistinct('a)), // non-partial
+      Row(testData2ADev, new java.math.BigDecimal(6)) :: Nil)
+  }
+ 
+ test("except") {
     checkAnswer(
       lowerCaseData.except(upperCaseData),
       Row(1, "a") ::
@@ -454,6 +404,15 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("call udf in SQLContext") {
+    val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+    val sqlctx = df.sqlContext
+    sqlctx.udf.register("simpleUdf", (v: Int) => v * v)
+    checkAnswer(
+      df.select($"id", callUdf("simpleUdf", $"value")),
+      Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
+  }
+
   test("withColumn") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
     checkAnswer(
@@ -461,7 +420,31 @@ class DataFrameSuite extends QueryTest {
       testData.collect().map { case Row(key: Int, value: String) =>
         Row(key, value, key + 1)
       }.toSeq)
-    assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
+    assert(df.schema.map(_.name) === Seq("key", "value", "newCol"))
+  }
+
+  test("replace column using withColumn") {
+    val df2 = TestSQLContext.sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df3 = df2.withColumn("x", df2("x") + 1)
+    checkAnswer(
+      df3.select("x"),
+      Row(2) :: Row(3) :: Row(4) :: Nil)
+  }
+
+  test("drop column using drop") {
+    val df = testData.drop("key")
+    checkAnswer(
+      df,
+      testData.collect().map(x => Row(x.getString(1))).toSeq)
+    assert(df.schema.map(_.name) === Seq("value"))
+  }
+
+  test("drop unknown column (no-op)") {
+    val df = testData.drop("random")
+    checkAnswer(
+      df,
+      testData.collect().toSeq)
+    assert(df.schema.map(_.name) === Seq("key","value"))
   }
 
   test("withColumnRenamed") {
@@ -472,7 +455,24 @@ class DataFrameSuite extends QueryTest {
       testData.collect().map { case Row(key: Int, value: String) =>
         Row(key, value, key + 1)
       }.toSeq)
-    assert(df.schema.map(_.name).toSeq === Seq("key", "valueRenamed", "newCol"))
+    assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
+  }
+
+  test("randomSplit") {
+    val n = 600
+    val data = TestSQLContext.sparkContext.parallelize(1 to n, 2).toDF("id")
+    for (seed <- 1 to 5) {
+      val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
+      assert(splits.length == 3, "wrong number of splits")
+
+      assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList ==
+        data.collect().toList, "incomplete or wrong split")
+
+      val s = splits.map(_.count())
+      assert(math.abs(s(0) - 100) < 50) // std =  9.13
+      assert(math.abs(s(1) - 200) < 50) // std = 11.55
+      assert(math.abs(s(2) - 300) < 50) // std = 12.25
+    }
   }
 
   test("describe") {
@@ -483,14 +483,14 @@ class DataFrameSuite extends QueryTest {
       ("Amy",   24, 180)).toDF("name", "age", "height")
 
     val describeResult = Seq(
-      Row("count",   4,               4),
-      Row("mean",    33.0,            178.0),
-      Row("stddev",  16.583123951777, 10.0),
-      Row("min",     16,              164),
-      Row("max",     60,              192))
+      Row("count",   "4",               "4"),
+      Row("mean",    "33.0",            "178.0"),
+      Row("stddev",  "16.583123951777", "10.0"),
+      Row("min",     "16",              "164"),
+      Row("max",     "60",              "192"))
 
     val emptyDescribeResult = Seq(
-      Row("count",   0,    0),
+      Row("count",   "0",  "0"),
       Row("mean",    null, null),
       Row("stddev",  null, null),
       Row("min",     null, null),
@@ -501,6 +501,11 @@ class DataFrameSuite extends QueryTest {
     val describeTwoCols = describeTestData.describe("age", "height")
     assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
     checkAnswer(describeTwoCols, describeResult)
+    // All aggregate value should have been cast to string
+    describeTwoCols.collect().foreach { row =>
+      assert(row.get(1).isInstanceOf[String], "expected string but found " + row.get(1).getClass)
+      assert(row.get(2).isInstanceOf[String], "expected string but found " + row.get(2).getClass)
+    }
 
     val describeAllCols = describeTestData.describe()
     assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
@@ -530,10 +535,159 @@ class DataFrameSuite extends QueryTest {
     testData.select($"*").show(1000)
   }
 
+  test("SPARK-7319 showString") {
+    val expectedAnswer = """+---+-----+
+                           ||key|value|
+                           |+---+-----+
+                           ||  1|    1|
+                           |+---+-----+
+                           |""".stripMargin
+    assert(testData.select($"*").showString(1) === expectedAnswer)
+  }
+
+  test("SPARK-7327 show with empty dataFrame") {
+    val expectedAnswer = """+---+-----+
+                           ||key|value|
+                           |+---+-----+
+                           |+---+-----+
+                           |""".stripMargin
+    assert(testData.select($"*").filter($"key" < 0).showString(1) === expectedAnswer)
+  }
+
   test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
     val rowRDD = TestSQLContext.sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
     val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
     val df = TestSQLContext.createDataFrame(rowRDD, schema)
     df.rdd.collect()
+  }
+
+  test("SPARK-6899") {
+    val originalValue = TestSQLContext.conf.codegenEnabled
+    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
+    checkAnswer(
+      decimalData.agg(avg('a)),
+      Row(new java.math.BigDecimal(2.0)))
+    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+  }
+
+  test("SPARK-7133: Implement struct, array, and map field accessor") {
+    assert(complexData.filter(complexData("a")(0) === 2).count() == 1)
+    assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
+    assert(complexData.filter(complexData("s")("key") === 1).count() == 1)
+    assert(complexData.filter(complexData("m")(complexData("s")("value")) === 1).count() == 1)
+  }
+
+  test("SPARK-7551: support backticks for DataFrame attribute resolution") {
+    val df = TestSQLContext.read.json(TestSQLContext.sparkContext.makeRDD(
+      """{"a.b": {"c": {"d..e": {"f": 1}}}}""" :: Nil))
+    checkAnswer(
+      df.select(df("`a.b`.c.`d..e`.`f`")),
+      Row(1)
+    )
+
+    val df2 = TestSQLContext.read.json(TestSQLContext.sparkContext.makeRDD(
+      """{"a  b": {"c": {"d  e": {"f": 1}}}}""" :: Nil))
+    checkAnswer(
+      df2.select(df2("`a  b`.c.d  e.f")),
+      Row(1)
+    )
+
+    def checkError(testFun: => Unit): Unit = {
+      val e = intercept[org.apache.spark.sql.AnalysisException] {
+        testFun
+      }
+      assert(e.getMessage.contains("syntax error in attribute name:"))
+    }
+    checkError(df("`abc.`c`"))
+    checkError(df("`abc`..d"))
+    checkError(df("`a`.b."))
+    checkError(df("`a.b`.c.`d"))
+  }
+
+  test("SPARK-7324 dropDuplicates") {
+    val testData = TestSQLContext.sparkContext.parallelize(
+      (2, 1, 2) :: (1, 1, 1) ::
+      (1, 2, 1) :: (2, 1, 2) ::
+      (2, 2, 2) :: (2, 2, 1) ::
+      (2, 1, 1) :: (1, 1, 2) ::
+      (1, 2, 2) :: (1, 2, 1) :: Nil).toDF("key", "value1", "value2")
+
+    checkAnswer(
+      testData.dropDuplicates(),
+      Seq(Row(2, 1, 2), Row(1, 1, 1), Row(1, 2, 1),
+        Row(2, 2, 2), Row(2, 1, 1), Row(2, 2, 1),
+        Row(1, 1, 2), Row(1, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("key", "value1")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value1", "value2")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("key")),
+      Seq(Row(2, 1, 2), Row(1, 1, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value1")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates(Seq("value2")),
+      Seq(Row(2, 1, 2), Row(1, 1, 1)))
+  }
+
+  test("SPARK-7276: Project collapse for continuous select") {
+    var df = testData
+    for (i <- 1 to 5) {
+      df = df.select($"*")
+    }
+
+    import org.apache.spark.sql.catalyst.plans.logical.Project
+    // make sure df have at most two Projects
+    val p = df.logicalPlan.asInstanceOf[Project].child.asInstanceOf[Project]
+    assert(!p.child.isInstanceOf[Project])
+  }
+
+  test("SPARK-7150 range api") {
+    // numSlice is greater than length
+    val res1 = TestSQLContext.range(0, 10, 1, 15).select("id")
+    assert(res1.count == 10)
+    assert(res1.agg(sum("id")).as("sumid").collect() === Seq(Row(45)))
+
+    val res2 = TestSQLContext.range(3, 15, 3, 2).select("id")
+    assert(res2.count == 4)
+    assert(res2.agg(sum("id")).as("sumid").collect() === Seq(Row(30)))
+
+    val res3 = TestSQLContext.range(1, -2).select("id")
+    assert(res3.count == 0)
+
+    // start is positive, end is negative, step is negative
+    val res4 = TestSQLContext.range(1, -2, -2, 6).select("id")
+    assert(res4.count == 2)
+    assert(res4.agg(sum("id")).as("sumid").collect() === Seq(Row(0)))
+
+    // start, end, step are negative
+    val res5 = TestSQLContext.range(-3, -8, -2, 1).select("id")
+    assert(res5.count == 3)
+    assert(res5.agg(sum("id")).as("sumid").collect() === Seq(Row(-15)))
+
+    // start, end are negative, step is positive
+    val res6 = TestSQLContext.range(-8, -4, 2, 1).select("id")
+    assert(res6.count == 2)
+    assert(res6.agg(sum("id")).as("sumid").collect() === Seq(Row(-14)))
+
+    val res7 = TestSQLContext.range(-10, -9, -20, 1).select("id")
+    assert(res7.count == 0)
+
+    val res8 = TestSQLContext.range(Long.MinValue, Long.MaxValue, Long.MaxValue, 100).select("id")
+    assert(res8.count == 3)
+    assert(res8.agg(sum("id")).as("sumid").collect() === Seq(Row(-3)))
+
+    val res9 = TestSQLContext.range(Long.MaxValue, Long.MinValue, Long.MinValue, 100).select("id")
+    assert(res9.count == 2)
+    assert(res9.agg(sum("id")).as("sumid").collect() === Seq(Row(Long.MaxValue - 1)))
   }
 }

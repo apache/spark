@@ -109,7 +109,8 @@ class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
 
     // verify whether the earliest file has been deleted
     val rolledOverFiles = allGeneratedFiles.filter { _ != testFile.toString }.toArray.sorted
-    logInfo(s"All rolled over files generated:${rolledOverFiles.size}\n" + rolledOverFiles.mkString("\n"))
+    logInfo(s"All rolled over files generated:${rolledOverFiles.size}\n" +
+      rolledOverFiles.mkString("\n"))
     assert(rolledOverFiles.size > 2)
     val earliestRolledOverFile = rolledOverFiles.head
     val existingRolledOverFiles = RollingFileAppender.getSortedRolledOverFiles(
@@ -135,7 +136,7 @@ class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
       val testOutputStream = new PipedOutputStream()
       val testInputStream = new PipedInputStream(testOutputStream)
       val appender = FileAppender(testInputStream, testFile, conf)
-      //assert(appender.getClass === classTag[ExpectedAppender].getClass)
+      // assert(appender.getClass === classTag[ExpectedAppender].getClass)
       assert(appender.getClass.getSimpleName ===
         classTag[ExpectedAppender].runtimeClass.getSimpleName)
       if (appender.isInstanceOf[RollingFileAppender]) {
@@ -153,9 +154,11 @@ class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
 
     import RollingFileAppender._
 
-    def rollingStrategy(strategy: String) = Seq(STRATEGY_PROPERTY -> strategy)
-    def rollingSize(size: String) = Seq(SIZE_PROPERTY -> size)
-    def rollingInterval(interval: String) = Seq(INTERVAL_PROPERTY -> interval)
+    def rollingStrategy(strategy: String): Seq[(String, String)] =
+      Seq(STRATEGY_PROPERTY -> strategy)
+    def rollingSize(size: String): Seq[(String, String)] = Seq(SIZE_PROPERTY -> size)
+    def rollingInterval(interval: String): Seq[(String, String)] =
+      Seq(INTERVAL_PROPERTY -> interval)
 
     val msInDay = 24 * 60 * 60 * 1000L
     val msInHour = 60 * 60 * 1000L

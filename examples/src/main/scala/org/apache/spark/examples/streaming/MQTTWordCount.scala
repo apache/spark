@@ -56,7 +56,7 @@ object MQTTPublisher {
       while (true) {
         try {
           msgtopic.publish(message)
-          println(s"Published data. topic: {msgtopic.getName()}; Message: {message}")
+          println(s"Published data. topic: ${msgtopic.getName()}; Message: $message")
         } catch {
           case e: MqttException if e.getReasonCode == MqttException.REASON_CODE_MAX_INFLIGHT =>
             Thread.sleep(10) 

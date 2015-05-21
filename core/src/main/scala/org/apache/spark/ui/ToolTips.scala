@@ -24,7 +24,9 @@ private[spark] object ToolTips {
        scheduler delay is large, consider decreasing the size of tasks or decreasing the size
        of task results."""
 
-  val TASK_DESERIALIZATION_TIME = "Time spent deserializing the task closure on the executor."
+  val TASK_DESERIALIZATION_TIME =
+    """Time spent deserializing the task closure on the executor, including the time to read the
+       broadcasted task."""
 
   val SHUFFLE_READ_BLOCKED_TIME =
     "Time that the task spent blocked waiting for shuffle data to be read from remote machines."
@@ -55,4 +57,23 @@ private[spark] object ToolTips {
   val GC_TIME =
     """Time that the executor spent paused for Java garbage collection while the task was
        running."""
+
+  val JOB_TIMELINE =
+    """Shows when jobs started and ended and when executors joined or left. Drag to scroll.
+       Click Enable Zooming and use mouse wheel to zoom in/out."""
+
+  val STAGE_TIMELINE =
+    """Shows when stages started and ended and when executors joined or left. Drag to scroll.
+       Click Enable Zooming and use mouse wheel to zoom in/out."""
+
+  val JOB_DAG =
+    """Shows a graph of stages executed for this job, each of which can contain
+       multiple RDD operations (e.g. map() and filter()), and of RDDs inside each operation
+       (shown as dots)."""
+
+  val STAGE_DAG =
+    """Shows a graph of RDD operations in this stage, and RDDs inside each one. A stage can run
+       multiple operations (e.g. two map() functions) if they can be pipelined. Some operations
+       also create multiple RDDs internally. Cached RDDs are shown in green.
+    """
 }

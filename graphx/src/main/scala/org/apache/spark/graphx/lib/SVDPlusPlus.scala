@@ -93,7 +93,7 @@ object SVDPlusPlus {
     val gJoinT0 = g.outerJoinVertices(t0) {
       (vid: VertexId, vd: (Array[Double], Array[Double], Double, Double),
        msg: Option[(Long, Double)]) =>
-        (vd._1, vd._2, msg.get._2 / msg.get._1, 1.0 / scala.math.sqrt(msg.get._1))
+        (vd._1, vd._2, msg.get._2 / msg.get._1 - u, 1.0 / scala.math.sqrt(msg.get._1))
     }.cache()
     materialize(gJoinT0)
     g.unpersist()

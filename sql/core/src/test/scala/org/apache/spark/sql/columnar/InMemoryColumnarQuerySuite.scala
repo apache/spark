@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.columnar
 
+import java.sql.{Date, Timestamp}
+
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.sql.types.{DecimalType, Decimal}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, TestData}
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 
@@ -42,7 +44,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       .toDF().registerTempTable("sizeTst")
     cacheTable("sizeTst")
     assert(
-      table("sizeTst").queryExecution.logical.statistics.sizeInBytes >
+      table("sizeTst").queryExecution.analyzed.statistics.sizeInBytes >
         conf.autoBroadcastJoinThreshold)
   }
 
@@ -131,5 +133,60 @@ class InMemoryColumnarQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT * FROM test_fixed_decimal"),
       (1 to 10).map(i => Row(Decimal(i, 15, 10).toJavaBigDecimal)))
+  }
+
+  test("test different data types") {
+    // Create the schema.
+    val struct =
+      StructType(
+        StructField("f1", FloatType, true) ::
+        StructField("f2", ArrayType(BooleanType), true) :: Nil)
+    val dataTypes =
+      Seq(StringType, BinaryType, NullType, BooleanType,
+        ByteType, ShortType, IntegerType, LongType,
+        FloatType, DoubleType, DecimalType.Unlimited, DecimalType(6, 5),
+        DateType, TimestampType,
+        ArrayType(IntegerType), MapType(StringType, LongType), struct)
+    val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
+      StructField(s"col$index", dataType, true)
+    }
+    val allColumns = fields.map(_.name).mkString(",")
+    val schema = StructType(fields)
+
+    // Create a RDD for the schema
+    val rdd =
+      sparkContext.parallelize((1 to 100), 10).map { i =>
+        Row(
+          s"str${i}: test cache.",
+          s"binary${i}: test cache.".getBytes("UTF-8"),
+          null,
+          i % 2 == 0,
+          i.toByte,
+          i.toShort,
+          i,
+          Long.MaxValue - i.toLong,
+          (i + 0.25).toFloat,
+          (i + 0.75),
+          BigDecimal(Long.MaxValue.toString + ".12345"),
+          new java.math.BigDecimal(s"${i % 9 + 1}" + ".23456"),
+          new Date(i),
+          new Timestamp(i),
+          (1 to i).toSeq,
+          (0 to i).map(j => s"map_key_$j" -> (Long.MaxValue - j)).toMap,
+          Row((i - 0.25).toFloat, (1 to i).toSeq))
+      }
+    createDataFrame(rdd, schema).registerTempTable("InMemoryCache_different_data_types")
+    // Cache the table.
+    sql("cache table InMemoryCache_different_data_types")
+    // Make sure the table is indeed cached.
+    val tableScan = table("InMemoryCache_different_data_types").queryExecution.executedPlan
+    assert(
+      isCached("InMemoryCache_different_data_types"),
+      "InMemoryCache_different_data_types should be cached.")
+    // Issue a query and check the results.
+    checkAnswer(
+      sql(s"SELECT DISTINCT ${allColumns} FROM InMemoryCache_different_data_types"),
+      table("InMemoryCache_different_data_types").collect())
+    dropTempTable("InMemoryCache_different_data_types")
   }
 }

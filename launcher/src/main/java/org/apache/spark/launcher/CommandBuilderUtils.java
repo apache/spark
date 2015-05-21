@@ -30,6 +30,12 @@ class CommandBuilderUtils {
   static final String DEFAULT_MEM = "512m";
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
   static final String ENV_SPARK_HOME = "SPARK_HOME";
+  static final String ENV_SPARK_ASSEMBLY = "_SPARK_ASSEMBLY";
+
+  /** The set of known JVM vendors. */
+  static enum JavaVendor {
+    Oracle, IBM, OpenJDK, Unknown
+  };
 
   /** Returns whether the given string is null or empty. */
   static boolean isEmpty(String s) {
@@ -105,6 +111,21 @@ class CommandBuilderUtils {
   static boolean isWindows() {
     String os = System.getProperty("os.name");
     return os.startsWith("Windows");
+  }
+
+  /** Returns an enum value indicating whose JVM is being used. */
+  static JavaVendor getJavaVendor() {
+    String vendorString = System.getProperty("java.vendor");
+    if (vendorString.contains("Oracle")) {
+      return JavaVendor.Oracle;
+    }
+    if (vendorString.contains("IBM")) {
+      return JavaVendor.IBM;
+    }
+    if (vendorString.contains("OpenJDK")) {
+      return JavaVendor.OpenJDK;
+    }
+    return JavaVendor.Unknown;
   }
 
   /**
@@ -243,7 +264,7 @@ class CommandBuilderUtils {
     boolean needsQuotes = false;
     for (int i = 0; i < arg.length(); i++) {
       int c = arg.codePointAt(i);
-      if (Character.isWhitespace(c) || c == '"' || c == '=') {
+      if (Character.isWhitespace(c) || c == '"' || c == '=' || c == ',' || c == ';') {
         needsQuotes = true;
         break;
       }
@@ -260,28 +281,27 @@ class CommandBuilderUtils {
         quoted.append('"');
         break;
 
-      case '=':
-        quoted.append('^');
-        break;
-
       default:
         break;
       }
       quoted.appendCodePoint(cp);
+    }
+    if (arg.codePointAt(arg.length() - 1) == '\\') {
+      quoted.append("\\");
     }
     quoted.append("\"");
     return quoted.toString();
   }
 
   /**
-   * Quotes a string so that it can be used in a command string and be parsed back into a single
-   * argument by python's "shlex.split()" function.
-   *
+   * Quotes a string so that it can be used in a command string.
    * Basically, just add simple escapes. E.g.:
    *    original single argument : ab "cd" ef
    *    after: "ab \"cd\" ef"
+   *
+   * This can be parsed back into a single argument by python's "shlex.split()" function.
    */
-  static String quoteForPython(String s) {
+  static String quoteForCommandString(String s) {
     StringBuilder quoted = new StringBuilder().append('"');
     for (int i = 0; i < s.length(); i++) {
       int cp = s.codePointAt(i);

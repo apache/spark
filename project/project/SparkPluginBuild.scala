@@ -24,20 +24,6 @@ import sbt.Keys._
  * becomes available for scalastyle sbt plugin.
  */
 object SparkPluginDef extends Build {
-  lazy val root = Project("plugins", file(".")) dependsOn(sparkStyle, sbtPomReader)
-  lazy val sparkStyle = Project("spark-style", file("spark-style"), settings = styleSettings)
+  lazy val root = Project("plugins", file(".")) dependsOn(sbtPomReader)
   lazy val sbtPomReader = uri("https://github.com/ScrapCodes/sbt-pom-reader.git#ignore_artifact_id")
-
-  // There is actually no need to publish this artifact.
-  def styleSettings = Defaults.defaultSettings ++ Seq (
-    name                 :=  "spark-style",
-    organization         :=  "org.apache.spark",
-    scalaVersion         :=  "2.10.4",
-    scalacOptions        :=  Seq("-unchecked", "-deprecation"),
-    libraryDependencies  ++= Dependencies.scalaStyle
-  )
-
-  object Dependencies {
-    val scalaStyle = Seq("org.scalastyle" %% "scalastyle" % "0.4.0")
-  }
 }

@@ -180,10 +180,12 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
     val caseClassString =
       "StructType(List(StructField(c1,IntegerType,false), StructField(c2,BinaryType,true)))"
 
+    // scalastyle:off
     val jsonString =
       """
         |{"type":"struct","fields":[{"name":"c1","type":"integer","nullable":false,"metadata":{}},{"name":"c2","type":"binary","nullable":true,"metadata":{}}]}
       """.stripMargin
+    // scalastyle:on
 
     val fromCaseClassString = ParquetTypesConverter.convertFromString(caseClassString)
     val fromJson = ParquetTypesConverter.convertFromString(jsonString)

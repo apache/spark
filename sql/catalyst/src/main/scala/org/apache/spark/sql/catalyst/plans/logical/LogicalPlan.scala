@@ -19,12 +19,11 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedGetField, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, EliminateSubQueries, Resolver}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.trees
-import org.apache.spark.sql.types.{ArrayType, StructType, StructField}
 
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
@@ -106,26 +105,77 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   }
 
   /**
-   * Optionally resolves the given string to a [[NamedExpression]] using the input from all child
+   * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
    * nodes of this LogicalPlan. The attribute is expressed as
    * as string in the following form: `[scope].AttributeName.[nested].[fields]...`.
    */
   def resolveChildren(
-      name: String,
+      nameParts: Seq[String],
       resolver: Resolver,
       throwErrors: Boolean = false): Option[NamedExpression] =
-    resolve(name, children.flatMap(_.output), resolver, throwErrors)
+    resolve(nameParts, children.flatMap(_.output), resolver, throwErrors)
 
   /**
-   * Optionally resolves the given string to a [[NamedExpression]] based on the output of this
+   * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
    * LogicalPlan. The attribute is expressed as string in the following form:
    * `[scope].AttributeName.[nested].[fields]...`.
    */
   def resolve(
-      name: String,
+      nameParts: Seq[String],
       resolver: Resolver,
       throwErrors: Boolean = false): Option[NamedExpression] =
-    resolve(name, output, resolver, throwErrors)
+    resolve(nameParts, output, resolver, throwErrors)
+
+  /**
+   * Given an attribute name, split it to name parts by dot, but
+   * don't split the name parts quoted by backticks, for example,
+   * `ab.cd`.`efg` should be split into two parts "ab.cd" and "efg".
+   */
+  def resolveQuoted(
+      name: String,
+      resolver: Resolver): Option[NamedExpression] = {
+    resolve(parseAttributeName(name), resolver, true)
+  }
+
+  /**
+   * Internal method, used to split attribute name by dot with backticks rule.
+   * Backticks must appear in pairs, and the quoted string must be a complete name part,
+   * which means `ab..c`e.f is not allowed.
+   * Escape character is not supported now, so we can't use backtick inside name part.
+   */
+  private def parseAttributeName(name: String): Seq[String] = {
+    val e = new AnalysisException(s"syntax error in attribute name: $name")
+    val nameParts = scala.collection.mutable.ArrayBuffer.empty[String]
+    val tmp = scala.collection.mutable.ArrayBuffer.empty[Char]
+    var inBacktick = false
+    var i = 0
+    while (i < name.length) {
+      val char = name(i)
+      if (inBacktick) {
+        if (char == '`') {
+          inBacktick = false
+          if (i + 1 < name.length && name(i + 1) != '.') throw e
+        } else {
+          tmp += char
+        }
+      } else {
+        if (char == '`') {
+          if (tmp.nonEmpty) throw e
+          inBacktick = true
+        } else if (char == '.') {
+          if (tmp.isEmpty) throw e
+          nameParts += tmp.mkString
+          tmp.clear()
+        } else {
+          tmp += char
+        }
+      }
+      i += 1
+    }
+    if (tmp.isEmpty || inBacktick) throw e
+    nameParts += tmp.mkString
+    nameParts.toSeq
+  }
 
   /**
    * Resolve the given `name` string against the given attribute, returning either 0 or 1 match.
@@ -135,7 +185,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * See the comment above `candidates` variable in resolve() for semantics the returned data.
    */
   private def resolveAsTableColumn(
-      nameParts: Array[String],
+      nameParts: Seq[String],
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
     assert(nameParts.length > 1)
@@ -155,7 +205,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * See the comment above `candidates` variable in resolve() for semantics the returned data.
    */
   private def resolveAsColumn(
-      nameParts: Array[String],
+      nameParts: Seq[String],
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
     if (resolver(attribute.name, nameParts.head)) {
@@ -167,12 +217,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
   /** Performs attribute resolution given a name and a sequence of possible attributes. */
   protected def resolve(
-      name: String,
+      nameParts: Seq[String],
       input: Seq[Attribute],
       resolver: Resolver,
       throwErrors: Boolean): Option[NamedExpression] = {
-
-    val parts = name.split("\\.")
 
     // A sequence of possible candidate matches.
     // Each candidate is a tuple. The first element is a resolved attribute, followed by a list
@@ -182,9 +230,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     // and the second element will be List("c").
     var candidates: Seq[(Attribute, List[String])] = {
       // If the name has 2 or more parts, try to resolve it as `table.column` first.
-      if (parts.length > 1) {
+      if (nameParts.length > 1) {
         input.flatMap { option =>
-          resolveAsTableColumn(parts, resolver, option)
+          resolveAsTableColumn(nameParts, resolver, option)
         }
       } else {
         Seq.empty
@@ -194,9 +242,11 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     // If none of attributes match `table.column` pattern, we try to resolve it as a column.
     if (candidates.isEmpty) {
       candidates = input.flatMap { candidate =>
-        resolveAsColumn(parts, resolver, candidate)
+        resolveAsColumn(nameParts, resolver, candidate)
       }
     }
+
+    def name = UnresolvedAttribute(nameParts).name
 
     candidates.distinct match {
       // One match, no nested fields, use it.
@@ -205,13 +255,13 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       // One match, but we also need to extract the requested nested field.
       case Seq((a, nestedFields)) =>
         try {
-
-          // The foldLeft adds UnresolvedGetField for every remaining parts of the name,
-          // and aliased it with the last part of the name.
-          // For example, consider name "a.b.c", where "a" is resolved to an existing attribute.
-          // Then this will add UnresolvedGetField("b") and UnresolvedGetField("c"), and alias
+          // The foldLeft adds GetFields for every remaining parts of the identifier,
+          // and aliases it with the last part of the identifier.
+          // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
+          // Then this will add GetField("c", GetField("b", a)), and alias
           // the final expression as "c".
-          val fieldExprs = nestedFields.foldLeft(a: Expression)(resolveGetField(_, _, resolver))
+          val fieldExprs = nestedFields.foldLeft(a: Expression)((expr, fieldName) =>
+            ExtractValue(expr, Literal(fieldName), resolver))
           val aliasName = nestedFields.last
           Some(Alias(fieldExprs, aliasName)())
         } catch {
@@ -228,41 +278,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
         val referenceNames = ambiguousReferences.map(_._1).mkString(", ")
         throw new AnalysisException(
           s"Reference '$name' is ambiguous, could be: $referenceNames.")
-    }
-  }
-
-  /**
-   * Returns the resolved `GetField`, and report error if no desired field or over one
-   * desired fields are found.
-   *
-   * TODO: this code is duplicated from Analyzer and should be refactored to avoid this.
-   */
-  protected def resolveGetField(
-      expr: Expression,
-      fieldName: String,
-      resolver: Resolver): Expression = {
-    def findField(fields: Array[StructField]): Int = {
-      val checkField = (f: StructField) => resolver(f.name, fieldName)
-      val ordinal = fields.indexWhere(checkField)
-      if (ordinal == -1) {
-        throw new AnalysisException(
-          s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
-      } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
-        throw new AnalysisException(
-          s"Ambiguous reference to fields ${fields.filter(checkField).mkString(", ")}")
-      } else {
-        ordinal
-      }
-    }
-    expr.dataType match {
-      case StructType(fields) =>
-        val ordinal = findField(fields)
-        StructGetField(expr, fields(ordinal), ordinal)
-      case ArrayType(StructType(fields), containsNull) =>
-        val ordinal = findField(fields)
-        ArrayGetField(expr, fields(ordinal), ordinal, containsNull)
-      case otherType =>
-        throw new AnalysisException(s"GetField is not valid on fields of type $otherType")
     }
   }
 }

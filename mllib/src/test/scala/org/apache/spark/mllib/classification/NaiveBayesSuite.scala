@@ -102,7 +102,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
   def validateModelFit(
       piData: Array[Double],
       thetaData: Array[Array[Double]],
-      model: NaiveBayesModel) = {
+      model: NaiveBayesModel): Unit = {
     def closeFit(d1: Double, d2: Double, precision: Double): Boolean = {
       (d1 - d2).abs <= precision
     }
@@ -205,6 +205,39 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
       LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty)))
     intercept[SparkException] {
       NaiveBayes.train(sc.makeRDD(nan, 2))
+    }
+  }
+
+  test("detect non zero or one values in Bernoulli") {
+    val badTrain = Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0)))
+
+    intercept[SparkException] {
+      NaiveBayes.train(sc.makeRDD(badTrain, 2), 1.0, "Bernoulli")
+    }
+
+    val okTrain = Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0))
+    )
+
+    val badPredict = Seq(
+      Vectors.dense(1.0),
+      Vectors.dense(2.0),
+      Vectors.dense(1.0),
+      Vectors.dense(0.0))
+
+    val model = NaiveBayes.train(sc.makeRDD(okTrain, 2), 1.0, "Bernoulli")
+    intercept[SparkException] {
+      model.predict(sc.makeRDD(badPredict, 2)).collect()
     }
   }
 

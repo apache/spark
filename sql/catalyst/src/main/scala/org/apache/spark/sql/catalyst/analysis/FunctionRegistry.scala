@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.Expression
 import scala.collection.mutable
 
@@ -28,12 +29,12 @@ trait FunctionRegistry {
 
   def lookupFunction(name: String, children: Seq[Expression]): Expression
 
-  def caseSensitive: Boolean
+  def conf: CatalystConf
 }
 
 trait OverrideFunctionRegistry extends FunctionRegistry {
 
-  val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive)
+  val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
 
   override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     functionBuilders.put(name, builder)
@@ -44,8 +45,9 @@ trait OverrideFunctionRegistry extends FunctionRegistry {
   }
 }
 
-class SimpleFunctionRegistry(val caseSensitive: Boolean) extends FunctionRegistry {
-  val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive)
+class SimpleFunctionRegistry(val conf: CatalystConf) extends FunctionRegistry {
+
+  val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
 
   override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     functionBuilders.put(name, builder)
@@ -57,8 +59,8 @@ class SimpleFunctionRegistry(val caseSensitive: Boolean) extends FunctionRegistr
 }
 
 /**
- * A trivial catalog that returns an error when a function is requested.  Used for testing when all
- * functions are already filled in and the analyser needs only to resolve attribute references.
+ * A trivial catalog that returns an error when a function is requested. Used for testing when all
+ * functions are already filled in and the analyzer needs only to resolve attribute references.
  */
 object EmptyFunctionRegistry extends FunctionRegistry {
   override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
@@ -69,7 +71,7 @@ object EmptyFunctionRegistry extends FunctionRegistry {
     throw new UnsupportedOperationException
   }
 
-  override def caseSensitive: Boolean = throw new UnsupportedOperationException
+  override def conf: CatalystConf = throw new UnsupportedOperationException
 }
 
 /**

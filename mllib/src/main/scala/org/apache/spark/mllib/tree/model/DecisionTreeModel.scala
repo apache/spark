@@ -113,10 +113,12 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
     DecisionTreeModel.SaveLoadV1_0.save(sc, path, this)
   }
 
-  override protected def formatVersion: String = "1.0"
+  override protected def formatVersion: String = DecisionTreeModel.formatVersion
 }
 
 object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
+
+  private[spark] def formatVersion: String = "1.0"
 
   private[tree] object SaveLoadV1_0 {
 
@@ -221,14 +223,14 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       val dataRDD: DataFrame = sc.parallelize(nodes)
         .map(NodeData.apply(0, _))
         .toDF()
-      dataRDD.saveAsParquetFile(Loader.dataPath(path))
+      dataRDD.write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String, algo: String, numNodes: Int): DecisionTreeModel = {
       val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
       // Load Parquet data.
-      val dataRDD = sqlContext.parquetFile(datapath)
+      val dataRDD = sqlContext.read.parquet(datapath)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[NodeData](dataRDD.schema)
       val nodes = dataRDD.map(NodeData.apply)

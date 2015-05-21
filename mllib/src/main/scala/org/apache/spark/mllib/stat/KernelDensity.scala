@@ -32,7 +32,7 @@ private[stat] object KernelDensity {
 
     // This gets used in each Gaussian PDF computation, so compute it up front
     val logStandardDeviationPlusHalfLog2Pi =
-      Math.log(standardDeviation) + 0.5 * Math.log(2 * Math.PI)
+      math.log(standardDeviation) + 0.5 * math.log(2 * math.Pi)
 
     val (points, count) = samples.aggregate((new Array[Double](evaluationPoints.length), 0))(
       (x, y) => {
@@ -66,6 +66,6 @@ private[stat] object KernelDensity {
     val x0 = x - mean
     val x1 = x0 / standardDeviation
     val logDensity = -0.5 * x1 * x1 - logStandardDeviationPlusHalfLog2Pi
-    Math.exp(logDensity)
+    math.exp(logDensity)
   }
 }

@@ -25,7 +25,7 @@ import org.apache.spark.storage.StorageLevel
 
 class VertexRDDSuite extends FunSuite with LocalSparkContext {
 
-  def vertices(sc: SparkContext, n: Int) = {
+  private def vertices(sc: SparkContext, n: Int) = {
     VertexRDD(sc.parallelize((0 to n).map(x => (x.toLong, x)), 5))
   }
 
@@ -52,7 +52,7 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val vertexA = VertexRDD(sc.parallelize(0 until 75, 2).map(i => (i.toLong, 0))).cache()
       val vertexB = VertexRDD(sc.parallelize(25 until 100, 2).map(i => (i.toLong, 1))).cache()
       val vertexC = vertexA.minus(vertexB)
-      assert(vertexC.map(_._1).collect.toSet === (0 until 25).toSet)
+      assert(vertexC.map(_._1).collect().toSet === (0 until 25).toSet)
     }
   }
 
@@ -62,7 +62,7 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val vertexB: RDD[(VertexId, Int)] =
         sc.parallelize(25 until 100, 2).map(i => (i.toLong, 1)).cache()
       val vertexC = vertexA.minus(vertexB)
-      assert(vertexC.map(_._1).collect.toSet === (0 until 25).toSet)
+      assert(vertexC.map(_._1).collect().toSet === (0 until 25).toSet)
     }
   }
 
@@ -72,7 +72,7 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val vertexB = VertexRDD(sc.parallelize(50 until 100, 2).map(i => (i.toLong, 1)))
       assert(vertexA.partitions.size != vertexB.partitions.size)
       val vertexC = vertexA.minus(vertexB)
-      assert(vertexC.map(_._1).collect.toSet === (0 until 50).toSet)
+      assert(vertexC.map(_._1).collect().toSet === (0 until 50).toSet)
     }
   }
 
@@ -106,7 +106,7 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val vertexB = VertexRDD(sc.parallelize(8 until 16, 2).map(i => (i.toLong, 1)))
       assert(vertexA.partitions.size != vertexB.partitions.size)
       val vertexC = vertexA.diff(vertexB)
-      assert(vertexC.map(_._1).collect.toSet === (8 until 16).toSet)
+      assert(vertexC.map(_._1).collect().toSet === (8 until 16).toSet)
     }
   }
 
@@ -116,11 +116,11 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val verts = vertices(sc, n).cache()
       val evens = verts.filter(q => ((q._2 % 2) == 0)).cache()
       // leftJoin with another VertexRDD
-      assert(verts.leftJoin(evens) { (id, a, bOpt) => a - bOpt.getOrElse(0) }.collect.toSet ===
+      assert(verts.leftJoin(evens) { (id, a, bOpt) => a - bOpt.getOrElse(0) }.collect().toSet ===
         (0 to n by 2).map(x => (x.toLong, 0)).toSet ++ (1 to n by 2).map(x => (x.toLong, x)).toSet)
       // leftJoin with an RDD
       val evensRDD = evens.map(identity)
-      assert(verts.leftJoin(evensRDD) { (id, a, bOpt) => a - bOpt.getOrElse(0) }.collect.toSet ===
+      assert(verts.leftJoin(evensRDD) { (id, a, bOpt) => a - bOpt.getOrElse(0) }.collect().toSet ===
         (0 to n by 2).map(x => (x.toLong, 0)).toSet ++ (1 to n by 2).map(x => (x.toLong, x)).toSet)
     }
   }
@@ -134,7 +134,7 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val vertexC = vertexA.leftJoin(vertexB) { (vid, old, newOpt) =>
         old - newOpt.getOrElse(0)
       }
-      assert(vertexC.filter(v => v._2 != 0).map(_._1).collect.toSet == (1 to 99 by 2).toSet)
+      assert(vertexC.filter(v => v._2 != 0).map(_._1).collect().toSet == (1 to 99 by 2).toSet)
     }
   }
 
@@ -144,11 +144,11 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val verts = vertices(sc, n).cache()
       val evens = verts.filter(q => ((q._2 % 2) == 0)).cache()
       // innerJoin with another VertexRDD
-      assert(verts.innerJoin(evens) { (id, a, b) => a - b }.collect.toSet ===
+      assert(verts.innerJoin(evens) { (id, a, b) => a - b }.collect().toSet ===
         (0 to n by 2).map(x => (x.toLong, 0)).toSet)
       // innerJoin with an RDD
       val evensRDD = evens.map(identity)
-      assert(verts.innerJoin(evensRDD) { (id, a, b) => a - b }.collect.toSet ===
+      assert(verts.innerJoin(evensRDD) { (id, a, b) => a - b }.collect().toSet ===
         (0 to n by 2).map(x => (x.toLong, 0)).toSet)    }
   }
 
@@ -161,7 +161,7 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val vertexC = vertexA.innerJoin(vertexB) { (vid, old, newVal) =>
         old - newVal
       }
-      assert(vertexC.filter(v => v._2 == 0).map(_._1).collect.toSet == (0 to 98 by 2).toSet)
+      assert(vertexC.filter(v => v._2 == 0).map(_._1).collect().toSet == (0 to 98 by 2).toSet)
     }
   }
 
@@ -171,7 +171,7 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val verts = vertices(sc, n)
       val messageTargets = (0 to n) ++ (0 to n by 2)
       val messages = sc.parallelize(messageTargets.map(x => (x.toLong, 1)))
-      assert(verts.aggregateUsingIndex[Int](messages, _ + _).collect.toSet ===
+      assert(verts.aggregateUsingIndex[Int](messages, _ + _).collect().toSet ===
         (0 to n).map(x => (x.toLong, if (x % 2 == 0) 2 else 1)).toSet)
     }
   }
@@ -183,7 +183,7 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val edges = EdgeRDD.fromEdges(sc.parallelize(List.empty[Edge[Int]]))
       val rdd = VertexRDD(verts, edges, 0, (a: Int, b: Int) => a + b)
       // test merge function
-      assert(rdd.collect.toSet == Set((0L, 0), (1L, 3), (2L, 9)))
+      assert(rdd.collect().toSet == Set((0L, 0), (1L, 3), (2L, 9)))
     }
   }
 

@@ -35,7 +35,7 @@ class MockSampler extends RandomSampler[Long, Long] {
     Iterator(s)
   }
 
-  override def clone = new MockSampler
+  override def clone: MockSampler = new MockSampler
 }
 
 class PartitionwiseSampledRDDSuite extends FunSuite with SharedSparkContext {

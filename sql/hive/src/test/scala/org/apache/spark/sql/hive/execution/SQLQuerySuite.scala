@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
-import org.apache.spark.sql.hive.{MetastoreRelation, HiveShim}
+import org.apache.spark.sql.catalyst.errors.DialectException
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.{HiveQLDialect, HiveShim, MetastoreRelation}
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -34,12 +36,102 @@ case class Nested3(f3: Int)
 case class NestedArray2(b: Seq[Int])
 case class NestedArray1(a: NestedArray2)
 
+case class Order(
+    id: Int,
+    make: String,
+    `type`: String,
+    price: Int,
+    pdate: String,
+    customer: String,
+    city: String,
+    state: String,
+    month: Int)
+
+case class WindowData(
+    month: Int,
+    area: String,
+    product: Int)
+/** A SQL Dialect for testing purpose, and it can not be nested type */
+class MyDialect extends DefaultParserDialect
+
 /**
  * A collection of hive query tests where we generate the answers ourselves instead of depending on
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest {
+  test("SPARK-6835: udtf in lateral view") {
+    val df = Seq((1, 1)).toDF("c1", "c2")
+    df.registerTempTable("table1")
+    val query = sql("SELECT c1, v FROM table1 LATERAL VIEW stack(3, 1, c1 + 1, c1 + 2) d AS v")
+    checkAnswer(query, Row(1, 1) :: Row(1, 2) :: Row(1, 3) :: Nil)
+  }
+
+  test("SPARK-6851: Self-joined converted parquet tables") {
+    val orders = Seq(
+      Order(1, "Atlas", "MTB", 234, "2015-01-07", "John D", "Pacifica", "CA", 20151),
+      Order(3, "Swift", "MTB", 285, "2015-01-17", "John S", "Redwood City", "CA", 20151),
+      Order(4, "Atlas", "Hybrid", 303, "2015-01-23", "Jones S", "San Mateo", "CA", 20151),
+      Order(7, "Next", "MTB", 356, "2015-01-04", "Jane D", "Daly City", "CA", 20151),
+      Order(10, "Next", "YFlikr", 187, "2015-01-09", "John D", "Fremont", "CA", 20151),
+      Order(11, "Swift", "YFlikr", 187, "2015-01-23", "John D", "Hayward", "CA", 20151),
+      Order(2, "Next", "Hybrid", 324, "2015-02-03", "Jane D", "Daly City", "CA", 20152),
+      Order(5, "Next", "Street", 187, "2015-02-08", "John D", "Fremont", "CA", 20152),
+      Order(6, "Atlas", "Street", 154, "2015-02-09", "John D", "Pacifica", "CA", 20152),
+      Order(8, "Swift", "Hybrid", 485, "2015-02-19", "John S", "Redwood City", "CA", 20152),
+      Order(9, "Atlas", "Split", 303, "2015-02-28", "Jones S", "San Mateo", "CA", 20152))
+
+    val orderUpdates = Seq(
+      Order(1, "Atlas", "MTB", 434, "2015-01-07", "John D", "Pacifica", "CA", 20151),
+      Order(11, "Swift", "YFlikr", 137, "2015-01-23", "John D", "Hayward", "CA", 20151))
+
+    orders.toDF.registerTempTable("orders1")
+    orderUpdates.toDF.registerTempTable("orderupdates1")
+
+    sql(
+      """CREATE TABLE orders(
+        |  id INT,
+        |  make String,
+        |  type String,
+        |  price INT,
+        |  pdate String,
+        |  customer String,
+        |  city String)
+        |PARTITIONED BY (state STRING, month INT)
+        |STORED AS PARQUET
+      """.stripMargin)
+
+    sql(
+      """CREATE TABLE orderupdates(
+        |  id INT,
+        |  make String,
+        |  type String,
+        |  price INT,
+        |  pdate String,
+        |  customer String,
+        |  city String)
+        |PARTITIONED BY (state STRING, month INT)
+        |STORED AS PARQUET
+      """.stripMargin)
+
+    sql("set hive.exec.dynamic.partition.mode=nonstrict")
+    sql("INSERT INTO TABLE orders PARTITION(state, month) SELECT * FROM orders1")
+    sql("INSERT INTO TABLE orderupdates PARTITION(state, month) SELECT * FROM orderupdates1")
+
+    checkAnswer(
+      sql(
+        """
+          |select orders.state, orders.month
+          |from orders
+          |join (
+          |  select distinct orders.state,orders.month
+          |  from orders
+          |  join orderupdates
+          |    on orderupdates.id = orders.id) ao
+          |  on ao.state = orders.state and ao.month = orders.month
+        """.stripMargin),
+      (1 to 6).map(_ => Row("CA", 20151)))
+  }
 
   test("SPARK-5371: union with null and sum") {
     val df = Seq((1, 1)).toDF("c1", "c2")
@@ -108,7 +200,7 @@ class SQLQuerySuite extends QueryTest {
     var message = intercept[AnalysisException] {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
     }.getMessage
-    assert(message.contains("Table ctas1 already exists"))
+    assert(message.contains("ctas1 already exists"))
     checkRelation("ctas1", true)
     sql("DROP TABLE ctas1")
 
@@ -144,6 +236,35 @@ class SQLQuerySuite extends QueryTest {
     sql("DROP TABLE ctas1")
 
     setConf("spark.sql.hive.convertCTAS", originalConf)
+  }
+
+  test("SQL Dialect Switching") {
+    assert(getSQLDialect().getClass === classOf[HiveQLDialect])
+    setConf("spark.sql.dialect", classOf[MyDialect].getCanonicalName())
+    assert(getSQLDialect().getClass === classOf[MyDialect])
+    assert(sql("SELECT 1").collect() === Array(Row(1)))
+
+    // set the dialect back to the DefaultSQLDialect
+    sql("SET spark.sql.dialect=sql")
+    assert(getSQLDialect().getClass === classOf[DefaultParserDialect])
+    sql("SET spark.sql.dialect=hiveql")
+    assert(getSQLDialect().getClass === classOf[HiveQLDialect])
+
+    // set invalid dialect
+    sql("SET spark.sql.dialect.abc=MyTestClass")
+    sql("SET spark.sql.dialect=abc")
+    intercept[Exception] {
+      sql("SELECT 1")
+    }
+    // test if the dialect set back to HiveQLDialect
+    getSQLDialect().getClass === classOf[HiveQLDialect]
+
+    sql("SET spark.sql.dialect=MyTestClass")
+    intercept[DialectException] {
+      sql("SELECT 1")
+    }
+    // test if the dialect set back to HiveQLDialect
+    assert(getSQLDialect().getClass === classOf[HiveQLDialect])
   }
 
   test("CTAS with serde") {
@@ -192,7 +313,7 @@ class SQLQuerySuite extends QueryTest {
           SELECT key, value
           FROM src
           ORDER BY key, value""").collect().toSeq)
-    intercept[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] {
+    intercept[AnalysisException] {
       sql(
         """CREATE TABLE ctas4 AS
           | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
@@ -371,6 +492,12 @@ class SQLQuerySuite extends QueryTest {
     }
   }
 
+  test("SPARK-4699 HiveContext should be case insensitive by default") {
+    checkAnswer(
+      sql("SELECT KEY FROM Src ORDER BY value"),
+      sql("SELECT key FROM src ORDER BY value").collect().toSeq)
+  }
+
   test("SPARK-5284 Insert into Hive throws NPE when a inner complex type field has a null value") {
     val schema = StructType(
       StructField("s",
@@ -408,24 +535,47 @@ class SQLQuerySuite extends QueryTest {
 
   test("SPARK-4296 Grouping field with Hive UDF as sub expression") {
     val rdd = sparkContext.makeRDD( """{"a": "str", "b":"1", "c":"1970-01-01 00:00:00"}""" :: Nil)
-    jsonRDD(rdd).registerTempTable("data")
+    read.json(rdd).registerTempTable("data")
     checkAnswer(
       sql("SELECT concat(a, '-', b), year(c) FROM data GROUP BY concat(a, '-', b), year(c)"),
       Row("str-1", 1970))
 
     dropTempTable("data")
 
-    jsonRDD(rdd).registerTempTable("data")
+    read.json(rdd).registerTempTable("data")
     checkAnswer(sql("SELECT year(c) + 1 FROM data GROUP BY year(c) + 1"), Row(1971))
 
     dropTempTable("data")
   }
 
-  test("resolve udtf with single alias") {
-    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i+1}]}"""))
-    jsonRDD(rdd).registerTempTable("data")
+  test("resolve udtf in projection #1") {
+    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
+    read.json(rdd).registerTempTable("data")
     val df = sql("SELECT explode(a) AS val FROM data")
     val col = df("val")
+  }
+
+  test("resolve udtf in projection #2") {
+    val rdd = sparkContext.makeRDD((1 to 2).map(i => s"""{"a":[$i, ${i + 1}]}"""))
+    jsonRDD(rdd).registerTempTable("data")
+    checkAnswer(sql("SELECT explode(map(1, 1)) FROM data LIMIT 1"), Row(1, 1) :: Nil)
+    checkAnswer(sql("SELECT explode(map(1, 1)) as (k1, k2) FROM data LIMIT 1"), Row(1, 1) :: Nil)
+    intercept[AnalysisException] {
+      sql("SELECT explode(map(1, 1)) as k1 FROM data LIMIT 1")
+    }
+
+    intercept[AnalysisException] {
+      sql("SELECT explode(map(1, 1)) as (k1, k2, k3) FROM data LIMIT 1")
+    }
+  }
+
+  // TGF with non-TGF in project is allowed in Spark SQL, but not in Hive
+  test("TGF with non-TGF in projection") {
+    val rdd = sparkContext.makeRDD( """{"a": "1", "b":"1"}""" :: Nil)
+    jsonRDD(rdd).registerTempTable("data")
+    checkAnswer(
+      sql("SELECT explode(map(a, b)) as (k1, k2), a, b FROM data"),
+      Row("1", "1", "1", "1") :: Nil)
   }
 
   test("logical.Project should not be resolved if it contains aggregates or generators") {
@@ -435,8 +585,8 @@ class SQLQuerySuite extends QueryTest {
     // is not in a valid state (cannot be executed). Because of this bug, the analysis rule of
     // PreInsertionCasts will actually start to work before ImplicitGenerate and then
     // generates an invalid query plan.
-    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i+1}]}"""))
-    jsonRDD(rdd).registerTempTable("data")
+    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
+    read.json(rdd).registerTempTable("data")
     val originalConf = getConf("spark.sql.hive.convertCTAS", "false")
     setConf("spark.sql.hive.convertCTAS", "false")
 
@@ -468,7 +618,7 @@ class SQLQuerySuite extends QueryTest {
       sql(s"DROP TABLE $tableName")
     }
   }
-  
+
   test("SPARK-5203 union with different decimal precision") {
     Seq.empty[(Decimal, Decimal)]
       .toDF("d1", "d2")
@@ -479,4 +629,189 @@ class SQLQuerySuite extends QueryTest {
       .queryExecution.analyzed
   }
 
+  test("test script transform") {
+    val data = (1 to 100000).map { i => (i, i, i) }
+    data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
+    assert(100000 ===
+      sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat' AS (a,b,c) FROM script_trans")
+      .queryExecution.toRdd.count())
+  }
+
+  test("window function: udaf with aggregate expressin") {
+    val data = Seq(
+      WindowData(1, "a", 5),
+      WindowData(2, "a", 6),
+      WindowData(3, "b", 7),
+      WindowData(4, "b", 8),
+      WindowData(5, "c", 9),
+      WindowData(6, "c", 10)
+    )
+    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+
+    checkAnswer(
+      sql(
+        """
+          |select area, sum(product), sum(sum(product)) over (partition by area)
+          |from windowData group by month, area
+        """.stripMargin),
+      Seq(
+        ("a", 5, 11),
+        ("a", 6, 11),
+        ("b", 7, 15),
+        ("b", 8, 15),
+        ("c", 9, 19),
+        ("c", 10, 19)
+      ).map(i => Row(i._1, i._2, i._3)))
+
+    checkAnswer(
+      sql(
+        """
+          |select area, sum(product) - 1, sum(sum(product)) over (partition by area)
+          |from windowData group by month, area
+        """.stripMargin),
+      Seq(
+        ("a", 4, 11),
+        ("a", 5, 11),
+        ("b", 6, 15),
+        ("b", 7, 15),
+        ("c", 8, 19),
+        ("c", 9, 19)
+      ).map(i => Row(i._1, i._2, i._3)))
+
+    checkAnswer(
+      sql(
+        """
+          |select area, sum(product), sum(product) / sum(sum(product)) over (partition by area)
+          |from windowData group by month, area
+        """.stripMargin),
+      Seq(
+        ("a", 5, 5d/11),
+        ("a", 6, 6d/11),
+        ("b", 7, 7d/15),
+        ("b", 8, 8d/15),
+        ("c", 10, 10d/19),
+        ("c", 9, 9d/19)
+      ).map(i => Row(i._1, i._2, i._3)))
+
+    checkAnswer(
+      sql(
+        """
+          |select area, sum(product), sum(product) / sum(sum(product) - 1) over (partition by area)
+          |from windowData group by month, area
+        """.stripMargin),
+      Seq(
+        ("a", 5, 5d/9),
+        ("a", 6, 6d/9),
+        ("b", 7, 7d/13),
+        ("b", 8, 8d/13),
+        ("c", 10, 10d/17),
+        ("c", 9, 9d/17)
+      ).map(i => Row(i._1, i._2, i._3)))
+  }
+
+  test("window function: partition and order expressions") {
+    val data = Seq(
+      WindowData(1, "a", 5),
+      WindowData(2, "a", 6),
+      WindowData(3, "b", 7),
+      WindowData(4, "b", 8),
+      WindowData(5, "c", 9),
+      WindowData(6, "c", 10)
+    )
+    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+
+    checkAnswer(
+      sql(
+        """
+          |select month, area, product, sum(product + 1) over (partition by 1 order by 2)
+          |from windowData
+        """.stripMargin),
+      Seq(
+        (1, "a", 5, 51),
+        (2, "a", 6, 51),
+        (3, "b", 7, 51),
+        (4, "b", 8, 51),
+        (5, "c", 9, 51),
+        (6, "c", 10, 51)
+      ).map(i => Row(i._1, i._2, i._3, i._4)))
+
+    checkAnswer(
+      sql(
+        """
+          |select month, area, product, sum(product)
+          |over (partition by month % 2 order by 10 - product)
+          |from windowData
+        """.stripMargin),
+      Seq(
+        (1, "a", 5, 21),
+        (2, "a", 6, 24),
+        (3, "b", 7, 16),
+        (4, "b", 8, 18),
+        (5, "c", 9, 9),
+        (6, "c", 10, 10)
+      ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("window function: expressions in arguments of a window functions") {
+    val data = Seq(
+      WindowData(1, "a", 5),
+      WindowData(2, "a", 6),
+      WindowData(3, "b", 7),
+      WindowData(4, "b", 8),
+      WindowData(5, "c", 9),
+      WindowData(6, "c", 10)
+    )
+    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+
+    checkAnswer(
+      sql(
+        """
+          |select month, area, month % 2,
+          |lag(product, 1 + 1, product) over (partition by month % 2 order by area)
+          |from windowData
+        """.stripMargin),
+      Seq(
+        (1, "a", 1, 5),
+        (2, "a", 0, 6),
+        (3, "b", 1, 7),
+        (4, "b", 0, 8),
+        (5, "c", 1, 5),
+        (6, "c", 0, 6)
+      ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("test case key when") {
+    (1 to 5).map(i => (i, i.toString)).toDF("k", "v").registerTempTable("t")
+    checkAnswer(
+      sql("SELECT CASE k WHEN 2 THEN 22 WHEN 4 THEN 44 ELSE 0 END, v FROM t"),
+      Row(0, "1") :: Row(22, "2") :: Row(0, "3") :: Row(44, "4") :: Row(0, "5") :: Nil)
+  }
+
+  test("SPARK-7595: Window will cause resolve failed with self join") {
+    checkAnswer(sql(
+      """
+        |with
+        | v1 as (select key, count(value) over (partition by key) cnt_val from src),
+        | v2 as (select v1.key, v1_lag.cnt_val from v1, v1 v1_lag where v1.key = v1_lag.key)
+        | select * from v2 order by key limit 1
+      """.stripMargin), Row(0, 3))
+  }
+
+  test("SPARK-7269 Check analysis failed in case in-sensitive") {
+    Seq(1, 2, 3).map { i =>
+      (i.toString, i.toString)
+    }.toDF("key", "value").registerTempTable("df_analysis")
+    sql("SELECT kEy from df_analysis group by key").collect()
+    sql("SELECT kEy+3 from df_analysis group by key+3").collect()
+    sql("SELECT kEy+3, a.kEy, A.kEy from df_analysis A group by key").collect()
+    sql("SELECT cast(kEy+1 as Int) from df_analysis A group by cast(key+1 as int)").collect()
+    sql("SELECT cast(kEy+1 as Int) from df_analysis A group by key+1").collect()
+    sql("SELECT 2 from df_analysis A group by key+1").collect()
+    intercept[AnalysisException] {
+      sql("SELECT kEy+1 from df_analysis group by key+3")
+    }
+    intercept[AnalysisException] {
+      sql("SELECT cast(key+2 as Int) from df_analysis A group by cast(key+1 as int)")
+    }
+  }
 }
