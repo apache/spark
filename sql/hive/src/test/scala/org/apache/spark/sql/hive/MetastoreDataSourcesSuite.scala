@@ -708,8 +708,8 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
   test("Saving partition columns information") {
     val df =
-      sparkContext.parallelize((1 to 10), 4).map { i =>
-        Tuple4(i, i + 1, s"str$i", s"str${i+1}")
+      sparkContext.parallelize(1 to 10, 4).map { i =>
+        Tuple4(i, i + 1, s"str$i", s"str${i + 1}")
       }.toDF("a", "b", "c", "d")
 
     val tableName = s"partitionInfo_${System.currentTimeMillis()}"
