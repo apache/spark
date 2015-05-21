@@ -970,6 +970,7 @@ class BaseOperator(Base):
         self.wait_for_downstream = wait_for_downstream
         self._schedule_interval = schedule_interval
         self.retries = retries
+        self.queue = queue
         if isinstance(retry_delay, timedelta):
             self.retry_delay = retry_delay
         else:

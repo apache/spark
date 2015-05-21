@@ -56,7 +56,8 @@ class CeleryExecutor(BaseExecutor):
         self.last_state = {}
 
     def execute_async(self, key, command, queue=CELERY_DEFAULT_QUEUE):
-        self.tasks[key] = execute_command.delay(command, queue=queue)
+        self.tasks[key] = execute_command.apply_async(
+            args=[command], queue=queue)
         self.last_state[key] = celery_states.PENDING
 
     def sync(self):

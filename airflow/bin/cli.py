@@ -286,7 +286,7 @@ def worker(args):
     options = {
         'optimization': 'fair',
         'O': 'fair',
-        'Q': args.queues,
+        'queues': args.queues,
     }
     worker.run(**options)
     sp.kill()

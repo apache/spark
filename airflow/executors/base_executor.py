@@ -47,7 +47,7 @@ class BaseExecutor(object):
             task_instance.key,
             command,
             priority=task_instance.task.priority_weight_total,
-            queue=task_instance.queue)
+            queue=task_instance.task.queue)
 
     def sync(self):
         """
