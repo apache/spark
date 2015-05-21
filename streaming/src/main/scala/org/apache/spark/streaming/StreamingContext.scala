@@ -41,7 +41,7 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
-import org.apache.spark.util.CallSite
+import org.apache.spark.util.{CallSite, Utils}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -199,6 +199,8 @@ class StreamingContext private[streaming] (
   private var state: StreamingContextState = INITIALIZED
 
   private val startSite = new AtomicReference[CallSite](null)
+
+  private var shutdownHookRef: AnyRef = _
 
   /**
    * Return the associated Spark context
@@ -563,6 +565,11 @@ class StreamingContext private[streaming] (
           state = StreamingContextState.ACTIVE
           StreamingContext.setActiveContext(this)
         }
+        shutdownHookRef = Utils.addShutdownHook(StreamingContext.SHUTDOWN_HOOK_PRIORITY) { () =>
+          logInfo("Invoking stop() from shutdown hook")
+          // Do not stop SparkContext, let its own shutdown hook stop it
+          stop(stopSparkContext = false)
+        }
         logInfo("StreamingContext started")
       case ACTIVE =>
         logWarning("StreamingContext has already been started")
@@ -639,6 +646,9 @@ class StreamingContext private[streaming] (
           uiTab.foreach(_.detach())
           StreamingContext.setActiveContext(null)
           waiter.notifyStop()
+          if (shutdownHookRef != null) {
+            Utils.removeShutdownHook(shutdownHookRef)
+          }
           logInfo("StreamingContext stopped successfully")
       }
       // Even if we have already stopped, we still need to attempt to stop the SparkContext because
@@ -663,6 +673,8 @@ object StreamingContext extends Logging {
    * StreamingContext in getActiveOrCreate().
    */
   private val ACTIVATION_LOCK = new Object()
+
+  private val SHUTDOWN_HOOK_PRIORITY = Utils.SPARK_CONTEXT_SHUTDOWN_PRIORITY + 1
 
   private val activeContext = new AtomicReference[StreamingContext](null)
 
