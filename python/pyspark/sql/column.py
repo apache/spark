@@ -297,6 +297,10 @@ class Column(object):
     def astype(self, dataType):
         """ Convert the column into type `dataType`
         Only used in Column for Python
+        >>> df.select(df.age.astype("string").alias('ages')).collect()
+        [Row(ages=u'2'), Row(ages=u'5')]
+        >>> df.select(df.age.astype(StringType()).alias('ages')).collect()
+        [Row(ages=u'2'), Row(ages=u'5')]
         """
         return self.cast(dataType)
 
