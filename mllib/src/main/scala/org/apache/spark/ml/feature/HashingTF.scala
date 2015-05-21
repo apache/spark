@@ -37,6 +37,12 @@ class HashingTF(override val uid: String) extends Transformer with HasInputCol w
 
   def this() = this(Identifiable.randomUID("hashingTF"))
 
+  /** @group setParam */
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  def setOutputCol(value: String): this.type = set(outputCol, value)
+
   /**
    * Number of features.  Should be > 0.
    * (default = 2^18^)
@@ -52,6 +58,8 @@ class HashingTF(override val uid: String) extends Transformer with HasInputCol w
 
   /** @group setParam */
   def setNumFeatures(value: Int): this.type = set(numFeatures, value)
+
+
 
   override def transform(dataset: DataFrame): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)

@@ -204,11 +204,17 @@ class ParamsSuite extends FunSuite {
 
 object ParamsSuite extends FunSuite {
 
-  /** Checks obj.params. */
+  /**
+   * Checks common requirements for [[Params.params]]: 1) number of params; 2) params are ordered
+   * by names; 3) param parent has the same UID as the object's UID; 4) param name is the same as
+   * the param method name.
+   */
   def checkParams(obj: Params, expectedNumParams: Int): Unit = {
     val params = obj.params
     require(params.length === expectedNumParams,
       s"Expect $expectedNumParams params but got ${params.length}: ${params.map(_.name).toSeq}.")
+    val paramNames = params.map(_.name)
+    require(paramNames === paramNames.sorted)
     params.foreach { p =>
       assert(p.parent === obj.uid)
       assert(obj.getParam(p.name) === p)
