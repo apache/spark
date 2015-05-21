@@ -54,7 +54,7 @@ private[spark] abstract class YarnSchedulerBackend(
    */
   override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
     yarnSchedulerEndpoint.askWithRetry[Boolean](
-      RequestExecutors(requestedTotal, preferredNodeLocationToCounts))
+      RequestExecutors(requestedTotal, preferredNodeLocations))
   }
 
   /**

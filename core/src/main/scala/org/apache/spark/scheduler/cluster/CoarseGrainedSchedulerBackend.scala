@@ -67,8 +67,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
 
-  // Maintain a map to record the preferred node location and its count
-  protected var preferredNodeLocationToCounts: Map[String, Int] = Map.empty
+  // Maintain a map to record the preferred node location
+  protected var preferredNodeLocations: Seq[String] = Nil
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
@@ -345,12 +345,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     logInfo(s"Requesting $numAdditionalExecutors additional executor(s) from the cluster manager")
     logDebug(s"Number of pending executors is now $numPendingExecutors")
 
-    val hostToCounts = new mutable.HashMap[String, Int]()
-    preferredNodeLocations.foreach { host =>
-      val count = hostToCounts.getOrElseUpdate(host, 0) + 1
-      hostToCounts(host) = count
-    }
-    this.preferredNodeLocationToCounts = hostToCounts.toMap
+    this.preferredNodeLocations = preferredNodeLocations
 
     numPendingExecutors += numAdditionalExecutors
     // Account for executors pending to be added or removed
@@ -371,12 +366,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           s"$numExecutors from the cluster manager. Please specify a positive number!")
     }
 
-    val hostToCounts = new mutable.HashMap[String, Int]()
-    preferredNodeLocations.foreach { host =>
-      val count = hostToCounts.getOrElseUpdate(host, 0) + 1
-      hostToCounts(host) = count
-    }
-    this.preferredNodeLocationToCounts = hostToCounts.toMap
+    this.preferredNodeLocations = preferredNodeLocations
 
     numPendingExecutors =
       math.max(numExecutors - numExistingExecutors + executorsPendingToRemove.size, 0)

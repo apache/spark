@@ -57,8 +57,9 @@ private[spark] object RDDInfo {
   def fromRdd(rdd: RDD[_]): RDDInfo = {
     val rddName = Option(rdd.name).getOrElse(Utils.getFormattedClassName(rdd))
     val parentIds = rdd.dependencies.map(_.rdd.id)
-    val preferredNodeLocations = rdd.partitions.flatMap(p => rdd.preferredLocations(p)).toSeq
+    val aggregatedPreferredLocations =
+      rdd.partitions.flatMap(p => rdd.preferredLocations(p)).toSet.toSeq
     new RDDInfo(rdd.id, rddName, rdd.partitions.length, rdd.getStorageLevel, parentIds,
-      rdd.scope, preferredNodeLocations)
+      rdd.scope, aggregatedPreferredLocations)
   }
 }

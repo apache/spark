@@ -127,10 +127,10 @@ private[yarn] class YarnAllocator(
     }
   }
 
-  // Maintain a map of preferredNodeLocation to counts.
-  private var preferredNodeLocationToCounts: Map[String, Int] = Map.empty
-  // Maintain a map of rack to counts
-  private var preferredRackLocationToCounts: Map[String, Int] = Map.empty
+  // Maintain a map of preferredNodeLocation to use.
+  private val preferredNodeLocationToUses = new HashMap[String, Boolean]
+  // Maintain a preferred map of rack
+  private val preferredRackLocations = new HashSet[String]
 
   def getNumExecutorsRunning: Int = numExecutorsRunning
 
@@ -180,16 +180,13 @@ private[yarn] class YarnAllocator(
   /**
    * Update the preferred node locations
    */
-  def updatePreferredNodeLocations(hostToCounts: Map[String, Int]): Unit = synchronized {
-    this.preferredNodeLocationToCounts = hostToCounts
+  def updatePreferredNodeLocations(preferredNodeLocations: Seq[String]): Unit = synchronized {
+    preferredNodeLocations.foreach { node =>
+      preferredNodeLocationToUses.getOrElseUpdate(node, false)
 
-    val rackToCounts = new HashMap[String, Int]()
-    hostToCounts.foreach { case (host, count) =>
-      val rackName = RackResolver.resolve(conf, host).getNetworkLocation
-      val count = rackToCounts.getOrElseUpdate(rackName, 0) + count
-      rackToCounts(rackName) = count
+      val rack = RackResolver.resolve(conf, node).getNetworkLocation
+      preferredRackLocations.add(rack)
     }
-    preferredRackLocationToCounts = rackToCounts.toMap
   }
 
   /**
@@ -269,13 +266,15 @@ private[yarn] class YarnAllocator(
    * Creates a container request, handling the reflection required to use YARN features that were
    * added in recent versions.
    */
-  private def createContainerRequest(resource: Resource): ContainerRequest = synchronized {
-    val nodes = preferredNodeLocationToCounts.keys.toArray
-    val racks = preferredRackLocationToCounts.keys.toArray
+  private def createContainerRequest(resource: Resource): ContainerRequest = {
+    // filter nodes which don't have containers, but node or rack preference is required.
+    val nodes = preferredNodeLocationToUses.filterKeys(_ == false).keys.toArray
+    val racks = preferredRackLocations.toArray(new Array[String](preferredRackLocations.size()))
+
     nodeLabelConstructor.map { constructor =>
-      constructor.newInstance(resource, nodes, racks, RM_REQUEST_PRIORITY, true: java.lang.Boolean,
-        labelExpression.orNull)
-    }.getOrElse(new ContainerRequest(resource, nodes, racks, RM_REQUEST_PRIORITY))
+      constructor.newInstance(resource, nodes, racks, RM_REQUEST_PRIORITY,
+        true: java.lang.Boolean, labelExpression.orNull)
+    }.getOrElse(new ContainerRequest(resource, nodes, racks.toArray, RM_REQUEST_PRIORITY))
   }
 
   /**
@@ -292,7 +291,7 @@ private[yarn] class YarnAllocator(
     // Match incoming requests by host
     val remainingAfterHostMatches = new ArrayBuffer[Container]
     for (allocatedContainer <- allocatedContainers) {
-      matchContainerToRequest(allocatedContainer, allocatedContainer.getNodeId.getHost,
+      matchNodeLocalityContainerToRequest(allocatedContainer, allocatedContainer.getNodeId.getHost,
         containersToUse, remainingAfterHostMatches)
     }
 
@@ -300,7 +299,7 @@ private[yarn] class YarnAllocator(
     val remainingAfterRackMatches = new ArrayBuffer[Container]
     for (allocatedContainer <- remainingAfterHostMatches) {
       val rack = RackResolver.resolve(conf, allocatedContainer.getNodeId.getHost).getNetworkLocation
-      matchContainerToRequest(allocatedContainer, rack, containersToUse,
+      matchRackLocalityContainerToRequest(allocatedContainer, rack, containersToUse,
         remainingAfterRackMatches)
     }
 
@@ -354,6 +353,46 @@ private[yarn] class YarnAllocator(
       val containerRequest = matchingRequests.get(0).iterator.next
       amClient.removeContainerRequest(containerRequest)
       containersToUse += allocatedContainer
+    } else {
+      remaining += allocatedContainer
+    }
+  }
+
+  /**
+   * Looks for requests for the given node that matches the preferred node location,
+   * also matches the give container allocation. If it finds one, removes the request so that it
+   * won't be submitted again. Places the container into containersToUse or remaining.
+   */
+  private def matchNodeLocalityContainerToRequest(
+      allocatedContainer: Container,
+      location: String,
+      containersToUse: ArrayBuffer[Container],
+      remaining: ArrayBuffer[Container]): Unit = {
+    if (preferredNodeLocationToUses.contains(location)) {
+      val isHostUsed = preferredNodeLocationToUses(location)
+      if (isHostUsed) {
+        logInfo(s"Create a container on host $location where already has a container")
+      } else {
+        preferredNodeLocationToUses(location) = true
+      }
+      matchContainerToRequest(allocatedContainer, location, containersToUse, remaining)
+    } else {
+      remaining += allocatedContainer
+    }
+  }
+
+  /**
+   * Looks for requests for the given rack that matches the preferred rack location,
+   * also matches the give container allocation. If it finds one, removes the request so that it
+   * won't be submitted again. Places the container into containersToUse or remaining.
+   */
+  private def matchRackLocalityContainerToRequest(
+      allocatedContainer: Container,
+      location: String,
+      containerToUse: ArrayBuffer[Container],
+      remaining: ArrayBuffer[Container]): Unit = {
+    if (preferredRackLocations.contains(location)) {
+      matchContainerToRequest(allocatedContainer, location, containerToUse, remaining)
     } else {
       remaining += allocatedContainer
     }
@@ -446,11 +485,21 @@ private[yarn] class YarnAllocator(
         containerSet.remove(containerId)
         if (containerSet.isEmpty) {
           allocatedHostToContainersMap.remove(host)
+          preferredNodeLocationToUses.remove(host)
         } else {
           allocatedHostToContainersMap.update(host, containerSet)
         }
 
         allocatedContainerToHostMap.remove(containerId)
+
+        val remainingRacks = allocatedHostToContainersMap.keys.map { h =>
+          RackResolver.resolve(conf, h).getNetworkLocation
+        }.toSet
+        remainingRacks.foreach { rack =>
+          if (!preferredRackLocations.contains(rack)) {
+            preferredRackLocations.remove(rack)
+          }
+        }
       }
     }
   }

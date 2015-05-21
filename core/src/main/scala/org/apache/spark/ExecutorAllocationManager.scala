@@ -650,7 +650,7 @@ private[spark] class ExecutorAllocationManager(
     }
 
     def preferredNodeLocations: Seq[String] = allocationManager.synchronized {
-      stageIdToPreferredLocations.values.flatMap(x => x).toSeq
+      stageIdToPreferredLocations.values.flatMap(x => x).toSet.toSeq
     }
   }
 
