@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive
 
 import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.sql.Timestamp
-import java.util.concurrent.atomic.AtomicReference
 import java.util.{ArrayList => JArrayList}
 
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
@@ -123,6 +122,29 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[hive] def hiveMetastoreJars: String =
     getConf(HIVE_METASTORE_JARS, "builtin")
 
+  /**
+   * A comma separated list of class prefixes that should be loaded using the classloader that
+   * is shared between Spark SQL and a specific version of Hive. An example of classes that should
+   * be shared is JDBC drivers that are needed to talk to the metastore. Other classes that need
+   * to be shared are those that interact with classes that are already shared.  For example,
+   * custom appenders that are used by log4j.
+   */
+  protected[hive] def hiveMetastoreSharedPrefixes: Seq[String] =
+    getConf("spark.sql.hive.metastore.sharedPrefixes", jdbcPrefixes)
+      .split(",").filterNot(_ == "")
+
+  private def jdbcPrefixes = Seq(
+    "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc").mkString(",")
+
+  /**
+   * A comma separated list of class prefixes that should explicitly be reloaded for each version
+   * of Hive that Spark SQL is communicating with.  For example, Hive UDFs that are declared in a
+   * prefix that typically would be shared (i.e. org.apache.spark.*)
+   */
+  protected[hive] def hiveMetastoreBarrierPrefixes: Seq[String] =
+    getConf("spark.sql.hive.metastore.barrierPrefixes", "")
+      .split(",").filterNot(_ == "")
+
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
 
@@ -180,12 +202,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         version = metaVersion,
         execJars = jars.toSeq,
         config = allConfig,
-        isolationOn = true)
+        isolationOn = true,
+        barrierPrefixes = hiveMetastoreBarrierPrefixes,
+        sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else if (hiveMetastoreJars == "maven") {
       // TODO: Support for loading the jars from an already downloaded location.
       logInfo(
         s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using maven.")
-      IsolatedClientLoader.forVersion(hiveMetastoreVersion, allConfig )
+      IsolatedClientLoader.forVersion(hiveMetastoreVersion, allConfig)
     } else {
       // Convert to files and expand any directories.
       val jars =
@@ -211,7 +235,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         version = metaVersion,
         execJars = jars.toSeq,
         config = allConfig,
-        isolationOn = true)
+        isolationOn = true,
+        barrierPrefixes = hiveMetastoreBarrierPrefixes,
+        sharedPrefixes = hiveMetastoreSharedPrefixes)
     }
     isolatedLoader.client
   }
@@ -467,8 +493,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         case _ => super.simpleString
       }
   }
-
-  HiveContext.setLastInstantiatedContext(self)
 }
 
 
@@ -530,45 +554,5 @@ private[hive] object HiveContext {
     case (s: String, StringType) => "\"" + s + "\""
     case (decimal, DecimalType()) => decimal.toString
     case (other, tpe) if primitiveTypes contains tpe => other.toString
-  }
-
-
-  private val INSTANTIATION_LOCK = new Object()
-
-  /**
-   * Reference to the last created SQLContext.
-   */
-  @transient private val lastInstantiatedContext = new AtomicReference[HiveContext]()
-
-  /**
-   * Get the singleton SQLContext if it exists or create a new one using the given configuration.
-   * This function can be used to create a singleton SQLContext object that can be shared across
-   * the JVM.
-   */
-  def getOrCreate(sparkContext: SparkContext): HiveContext = {
-    INSTANTIATION_LOCK.synchronized {
-      if (lastInstantiatedContext.get() == null) {
-        new HiveContext(sparkContext)
-      }
-    }
-    lastInstantiatedContext.get()
-  }
-
-  private[hive] def getLastInstantiatedContext(): Option[HiveContext] = {
-    INSTANTIATION_LOCK.synchronized {
-      Option(lastInstantiatedContext.get())
-    }
-  }
-
-  private[hive] def clearLastInstantiatedContext(): Unit = {
-    INSTANTIATION_LOCK.synchronized {
-      lastInstantiatedContext.set(null)
-    }
-  }
-
-  private[hive] def setLastInstantiatedContext(hiveContext: HiveContext): Unit = {
-    INSTANTIATION_LOCK.synchronized {
-      lastInstantiatedContext.set(hiveContext)
-    }
   }
 }
