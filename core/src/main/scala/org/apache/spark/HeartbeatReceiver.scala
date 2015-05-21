@@ -55,6 +55,8 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 private[spark] class HeartbeatReceiver(sc: SparkContext)
   extends ThreadSafeRpcEndpoint with SparkListener with Logging {
 
+  sc.addSparkListener(this)
+
   override val rpcEnv: RpcEnv = sc.env.rpcEnv
 
   private[spark] var scheduler: TaskScheduler = null
