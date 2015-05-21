@@ -156,7 +156,7 @@ class StreamingContext private[streaming] (
       cp_.graph.restoreCheckpointData()
       cp_.graph
     } else {
-      assert(batchDur_ != null, "Batch duration for streaming context cannot be null")
+      require(batchDur_ != null, "Batch duration for StreamingContext cannot be null")
       val newGraph = new DStreamGraph()
       newGraph.setBatchDuration(batchDur_)
       newGraph
@@ -462,7 +462,8 @@ class StreamingContext private[streaming] (
       directory, FileInputDStream.defaultFilter : Path => Boolean, newFilesOnly=true, conf)
     val data = br.map { case (k, v) =>
       val bytes = v.getBytes
-      assert(bytes.length == recordLength, "Byte array does not have correct length")
+      require(bytes.length == recordLength, "Byte array does not have correct length. " +
+        s"${bytes.length} did not equal recordLength: $recordLength")
       bytes
     }
     data
@@ -568,7 +569,7 @@ class StreamingContext private[streaming] (
   /**
    * Start the execution of the streams.
    *
-   * @throws SparkException if the StreamingContext is already stopped.
+   * @throws IllegalStateException if the StreamingContext is already stopped.
    */
   def start(): Unit = synchronized {
     state match {
@@ -587,7 +588,7 @@ class StreamingContext private[streaming] (
       case ACTIVE =>
         logWarning("StreamingContext has already been started")
       case STOPPED =>
-        throw new SparkException("StreamingContext has already been stopped")
+        throw new IllegalStateException("StreamingContext has already been stopped")
     }
   }
 
@@ -689,7 +690,7 @@ object StreamingContext extends Logging {
   private def assertNoOtherContextIsActive(): Unit = {
     ACTIVATION_LOCK.synchronized {
       if (activeContext.get() != null) {
-        throw new SparkException(
+        throw new IllegalStateException(
           "Only one StreamingContext may be started in this JVM. " +
             "Currently running StreamingContext was started at" +
             activeContext.get.startSite.get.longForm)
