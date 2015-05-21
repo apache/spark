@@ -22,6 +22,7 @@ import java.io.File
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
 import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive._
@@ -29,7 +30,7 @@ import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.parquet.{ParquetRelation2, ParquetTableScan}
 import org.apache.spark.sql.sources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{QueryTest, SQLConf, SaveMode}
+import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf, SaveMode}
 import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
@@ -383,6 +384,54 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
     }
 
     sql("DROP TABLE ms_convert")
+  }
+
+  def collectParquetRelation(df: DataFrame): ParquetRelation2 = {
+    val plan = df.queryExecution.analyzed
+    plan.collectFirst {
+      case LogicalRelation(r: ParquetRelation2) => r
+    }.getOrElse {
+      fail(s"Expecting a ParquetRelation2, but got:\n$plan")
+    }
+  }
+
+  test("SPARK-7749: non-partitioned metastore Parquet table lookup should use cached relation") {
+    sql(
+      s"""CREATE TABLE nonPartitioned (
+         |  key INT,
+         |  value STRING
+         |)
+         |STORED AS PARQUET
+       """.stripMargin)
+
+    // First lookup fills the cache
+    val r1 = collectParquetRelation(table("nonPartitioned"))
+    // Second lookup should reuse the cache
+    val r2 = collectParquetRelation(table("nonPartitioned"))
+    // They should be the same instance
+    assert(r1 eq r2)
+
+    sql("DROP TABLE nonPartitioned")
+  }
+
+  test("SPARK-7749: partitioned metastore Parquet table lookup should use cached relation") {
+    sql(
+      s"""CREATE TABLE partitioned (
+         |  key INT,
+         |  value STRING
+         |)
+         |PARTITIONED BY (part INT)
+         |STORED AS PARQUET
+       """.stripMargin)
+
+    // First lookup fills the cache
+    val r1 = collectParquetRelation(table("partitioned"))
+    // Second lookup should reuse the cache
+    val r2 = collectParquetRelation(table("partitioned"))
+    // They should be the same instance
+    assert(r1 eq r2)
+
+    sql("DROP TABLE partitioned")
   }
 
   test("Caching converted data source Parquet Relations") {
