@@ -121,7 +121,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   // TODO how to handle the temp function per user session?
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry(true)
+  protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry(conf)
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =

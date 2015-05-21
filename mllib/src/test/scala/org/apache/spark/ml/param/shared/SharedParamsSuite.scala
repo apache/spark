@@ -15,27 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.map;
+package org.apache.spark.ml.param.shared
 
-/**
- * Interface that defines how we can grow the size of a hash map when it is over a threshold.
- */
-public interface HashMapGrowthStrategy {
+import org.scalatest.FunSuite
 
-  int nextCapacity(int currentCapacity);
+import org.apache.spark.ml.param.Params
 
-  /**
-   * Double the size of the hash map every time.
-   */
-  HashMapGrowthStrategy DOUBLING = new Doubling();
+class SharedParamsSuite extends FunSuite {
 
-  class Doubling implements HashMapGrowthStrategy {
-    @Override
-    public int nextCapacity(int currentCapacity) {
-      assert (currentCapacity > 0);
-      // Guard against overflow
-      return (currentCapacity * 2 > 0) ? (currentCapacity * 2) : Integer.MAX_VALUE;
-    }
+  test("outputCol") {
+
+    class Obj(override val uid: String) extends Params with HasOutputCol
+
+    val obj = new Obj("obj")
+
+    assert(obj.hasDefault(obj.outputCol))
+    assert(obj.getOrDefault(obj.outputCol) === "obj__output")
   }
-
 }
