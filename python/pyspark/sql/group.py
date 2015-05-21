@@ -122,6 +122,20 @@ class GroupedData(object):
         """
 
     @df_varargs_api
+    def stddev(self, *cols):
+        """Computes standard deviation for each numeric columns for each group.
+
+        :func:`stddev` is an alias for :func:`avg`.
+
+        :param cols: list of column names (string). Non-numeric columns are ignored.
+
+        >>> df.groupBy().stddev('age').collect()
+        [Row(STD(age)=3.5)]
+        >>> df3.groupBy().stddev('age', 'height').collect()
+        [Row(STD(age)=3.5, STD(height)=82.5)]
+        """
+
+    @df_varargs_api
     def max(self, *cols):
         """Computes the max value for each numeric columns for each group.
 
