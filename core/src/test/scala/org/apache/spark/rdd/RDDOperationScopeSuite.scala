@@ -22,13 +22,13 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.apache.spark.{TaskContext, Partition, SparkContext}
 
 /**
- *
+ * Tests whether scopes are passed from the RDD operation to the RDDs correctly.
  */
 class RDDOperationScopeSuite extends FunSuite with BeforeAndAfter {
   private var sc: SparkContext = null
   private val scope1 = new RDDOperationScope("scope1")
-  private val scope2 = new RDDOperationScope("scope2", parent = Some(scope1))
-  private val scope3 = new RDDOperationScope("scope3", parent = Some(scope2))
+  private val scope2 = new RDDOperationScope("scope2", Some(scope1))
+  private val scope3 = new RDDOperationScope("scope3", Some(scope2))
 
   before {
     sc = new SparkContext("local", "test")
@@ -48,9 +48,9 @@ class RDDOperationScopeSuite extends FunSuite with BeforeAndAfter {
     val scope1Json = scope1.toJson
     val scope2Json = scope2.toJson
     val scope3Json = scope3.toJson
-    assert(scope1Json === s"""{"id":${scope1.id},"name":"scope1"}""")
-    assert(scope2Json === s"""{"id":${scope2.id},"name":"scope2","parent":$scope1Json}""")
-    assert(scope3Json === s"""{"id":${scope3.id},"name":"scope3","parent":$scope2Json}""")
+    assert(scope1Json === s"""{"id":"${scope1.id}","name":"scope1"}""")
+    assert(scope2Json === s"""{"id":"${scope2.id}","name":"scope2","parent":$scope1Json}""")
+    assert(scope3Json === s"""{"id":"${scope3.id}","name":"scope3","parent":$scope2Json}""")
     assert(RDDOperationScope.fromJson(scope1Json) === scope1)
     assert(RDDOperationScope.fromJson(scope2Json) === scope2)
     assert(RDDOperationScope.fromJson(scope3Json) === scope3)

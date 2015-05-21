@@ -483,16 +483,15 @@ trait Params extends Identifiable with Serializable {
   def copy(extra: ParamMap): Params = {
     val that = this.getClass.getConstructor(classOf[String]).newInstance(uid)
     copyValues(that, extra)
-    that
   }
 
   /**
    * Extracts the embedded default param values and user-supplied values, and then merges them with
    * extra values from input into a flat param map, where the latter value is used if there exist
-   * conflicts, i.e., with ordering: default param values < user-supplied values < extraParamMap.
+   * conflicts, i.e., with ordering: default param values < user-supplied values < extra.
    */
-  final def extractParamMap(extraParamMap: ParamMap): ParamMap = {
-    defaultParamMap ++ paramMap ++ extraParamMap
+  final def extractParamMap(extra: ParamMap): ParamMap = {
+    defaultParamMap ++ paramMap ++ extra
   }
 
   /**

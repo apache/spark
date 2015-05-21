@@ -39,7 +39,7 @@ import org.apache.spark.ui.SparkUI
  * HistoryServerSuite.
  */
 @Path("/v1")
-private[v1] class JsonRootResource extends UIRootFromServletContext {
+private[v1] class ApiRootResource extends UIRootFromServletContext {
 
   @Path("applications")
   def getApplicationList(): ApplicationListResource = {
@@ -166,11 +166,11 @@ private[v1] class JsonRootResource extends UIRootFromServletContext {
 
 }
 
-private[spark] object JsonRootResource {
+private[spark] object ApiRootResource {
 
-  def getJsonServlet(uiRoot: UIRoot): ServletContextHandler = {
+  def getServletHandler(uiRoot: UIRoot): ServletContextHandler = {
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
-    jerseyContext.setContextPath("/json")
+    jerseyContext.setContextPath("/api")
     val holder:ServletHolder = new ServletHolder(classOf[ServletContainer])
     holder.setInitParameter("com.sun.jersey.config.property.resourceConfigClass",
       "com.sun.jersey.api.core.PackagesResourceConfig")

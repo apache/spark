@@ -23,15 +23,17 @@ import java.util.UUID
 /**
  * Trait for an object with an immutable unique ID that identifies itself and its derivatives.
  */
-trait Identifiable {
+private[spark] trait Identifiable {
 
   /**
    * An immutable unique ID for the object and its derivatives.
    */
   val uid: String
+
+  override def toString: String = uid
 }
 
-object Identifiable {
+private[spark] object Identifiable {
 
   /**
    * Returns a random UID that concatenates the given prefix, "_", and 12 random hex chars.

@@ -345,28 +345,40 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Returns a list containing weights, mean and covariance of each mixture component.
    */
   def trainGaussianMixture(
-      data: JavaRDD[Vector], 
-      k: Int, 
-      convergenceTol: Double, 
+      data: JavaRDD[Vector],
+      k: Int,
+      convergenceTol: Double,
       maxIterations: Int,
-      seed: java.lang.Long): JList[Object] = {
+      seed: java.lang.Long,
+      initialModelWeights: java.util.ArrayList[Double],
+      initialModelMu: java.util.ArrayList[Vector],
+      initialModelSigma: java.util.ArrayList[Matrix]): JList[Object] = {
     val gmmAlg = new GaussianMixture()
       .setK(k)
       .setConvergenceTol(convergenceTol)
       .setMaxIterations(maxIterations)
+
+    if (initialModelWeights != null && initialModelMu != null && initialModelSigma != null) {
+      val gaussians = initialModelMu.asScala.toSeq.zip(initialModelSigma.asScala.toSeq).map {
+        case (x, y) => new MultivariateGaussian(x.asInstanceOf[Vector], y.asInstanceOf[Matrix])
+      }
+      val initialModel = new GaussianMixtureModel(
+        initialModelWeights.asScala.toArray, gaussians.toArray)
+      gmmAlg.setInitialModel(initialModel)
+    }
 
     if (seed != null) gmmAlg.setSeed(seed)
 
     try {
       val model = gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
       var wt = ArrayBuffer.empty[Double]
-      var mu = ArrayBuffer.empty[Vector]      
+      var mu = ArrayBuffer.empty[Vector]
       var sigma = ArrayBuffer.empty[Matrix]
       for (i <- 0 until model.k) {
           wt += model.weights(i)
           mu += model.gaussians(i).mu
           sigma += model.gaussians(i).sigma
-      }    
+      }
       List(Vectors.dense(wt.toArray), mu.toArray, sigma.toArray).map(_.asInstanceOf[Object]).asJava
     } finally {
       data.rdd.unpersist(blocking = false)

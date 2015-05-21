@@ -17,21 +17,21 @@
 
 package org.apache.spark.streaming
 
-import java.io.File
+import java.io.{File, NotSerializableException}
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.{Assertions, BeforeAndAfter, FunSuite}
-import org.scalatest.concurrent.Timeouts
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
+import org.scalatest.{Assertions, BeforeAndAfter, FunSuite}
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
 
 
 class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts with Logging {
@@ -132,6 +132,25 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     }
   }
 
+  test("start with non-seriazable DStream checkpoints") {
+    val checkpointDir = Utils.createTempDir()
+    ssc = new StreamingContext(conf, batchDuration)
+    ssc.checkpoint(checkpointDir.getAbsolutePath)
+    addInputStream(ssc).foreachRDD { rdd =>
+      // Refer to this.appName from inside closure so that this closure refers to
+      // the instance of StreamingContextSuite, and is therefore not serializable
+      rdd.count() + appName
+    }
+
+    // Test whether start() fails early when checkpointing is enabled
+    val exception = intercept[NotSerializableException] {
+      ssc.start()
+    }
+    assert(exception.getMessage().contains("DStreams with their functions are not serializable"))
+    assert(ssc.getState() !== StreamingContextState.ACTIVE)
+    assert(StreamingContext.getActive().isEmpty)
+  }
+
   test("start multiple times") {
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
@@ -163,7 +182,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
     ssc.stop()
-    intercept[SparkException] {
+    intercept[IllegalStateException] {
       ssc.start() // start after stop should throw exception
     }
     assert(ssc.getState() === StreamingContextState.STOPPED)
@@ -581,7 +600,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     val anotherInput = addInputStream(anotherSsc)
     anotherInput.foreachRDD { rdd => rdd.count }
 
-    val exception = intercept[SparkException] {
+    val exception = intercept[IllegalStateException] {
       anotherSsc.start()
     }
     assert(exception.getMessage.contains("StreamingContext"), "Did not get the right exception")
@@ -604,7 +623,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
 
     def testForException(clue: String, expectedErrorMsg: String)(body: => Unit): Unit = {
       withClue(clue) {
-        val ex = intercept[SparkException] {
+        val ex = intercept[IllegalStateException] {
           body
         }
         assert(ex.getMessage.toLowerCase().contains(expectedErrorMsg))
