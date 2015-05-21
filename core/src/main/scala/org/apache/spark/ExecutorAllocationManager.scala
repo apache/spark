@@ -294,7 +294,7 @@ private[spark] class ExecutorAllocationManager(
   private def addExecutors(maxNumExecutorsNeeded: Int): Int = {
     // Do not request more executors if it would put our target over the upper bound
     if (numExecutorsTarget >= maxNumExecutors) {
-      logInfo(s"Not adding executors because our current target total " +
+      logDebug(s"Not adding executors because our current target total " +
         s"is already $numExecutorsTarget (limit $maxNumExecutors)")
       numExecutorsToAdd = 1
       return 0
