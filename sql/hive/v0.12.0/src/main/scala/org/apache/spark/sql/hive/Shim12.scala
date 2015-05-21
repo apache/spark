@@ -205,7 +205,7 @@ private[hive] object HiveShim {
   }
 
   def getExternalTmpPath(context: Context, uri: URI) = {
-    context.getExternalTmpFileURI(uri)
+    new Path(context.getExternalTmpFileURI(uri))
   }
 
   def getDataLocationPath(p: Partition) = p.getPartitionPath

@@ -189,6 +189,8 @@ private[hive] trait HiveStrategies {
           table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
         execution.InsertIntoHiveTable(
           table, partition, planLater(child), overwrite, ifNotExists) :: Nil
+      case hive.WriteToDirectory(path, child, isLocal, desc) =>
+        execution.WriteToDirectory(path, planLater(child), isLocal, desc) :: Nil
       case _ => Nil
     }
   }

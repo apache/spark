@@ -422,6 +422,81 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
   }
 
+  test("test insert overwrite to dir from hive metastore table") {
+    import org.apache.spark.util.Utils
+
+    val path = Utils.createTempDir()
+    path.delete()
+    checkAnswer(
+      sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.toString}' SELECT * FROM src where key < 10"),
+      Seq.empty[Row])
+
+    checkAnswer(
+      sql(s"""INSERT OVERWRITE LOCAL DIRECTORY '${path.toString}'
+           |ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS orc
+           |SELECT * FROM src where key < 10""".stripMargin),
+      Seq.empty[Row])
+
+    // use orc data source to check the data of path is right.
+    sql(
+      s"""CREATE TEMPORARY TABLE orc_source
+         |USING org.apache.spark.sql.hive.orc
+         |OPTIONS (
+         |  PATH '${path.getCanonicalPath}'
+         |)
+       """.stripMargin)
+    checkAnswer(
+      sql("select * from orc_source"),
+      sql("select * from src where key < 10").collect()
+    )
+
+    Utils.deleteRecursively(path)
+    dropTempTable("orc_source")
+  }
+
+  test("test insert overwrite to dir from temp table") {
+    import org.apache.spark.util.Utils
+
+    sparkContext
+      .parallelize(1 to 10)
+      .map(i => TestData(i, i.toString))
+      .toDF()
+      .registerTempTable("test_insert_table")
+
+    val path = Utils.createTempDir()
+    path.delete()
+    checkAnswer(
+      sql(
+        s"""
+           |INSERT OVERWRITE LOCAL DIRECTORY '${path.toString}'
+           |SELECT * FROM test_insert_table
+         """.stripMargin),
+      Seq.empty[Row])
+
+    checkAnswer(
+      sql(s"""
+        INSERT OVERWRITE LOCAL DIRECTORY '${path.toString}'
+        |ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS orc
+        |SELECT * FROM test_insert_table""".stripMargin),
+      Seq.empty[Row])
+
+    // use orc data source to check the data of path is right.
+    sql(
+      s"""CREATE TEMPORARY TABLE orc_source
+         |USING org.apache.spark.sql.hive.orc
+         |OPTIONS (
+         |  PATH '${path.getCanonicalPath}'
+         |)
+       """.stripMargin)
+    checkAnswer(
+      sql("select * from orc_source"),
+      sql("select * from test_insert_table").collect()
+    )
+    Utils.deleteRecursively(path)
+    dropTempTable("test_insert_table")
+    dropTempTable("orc_source")
+  }
+
   test("SPARK-4825 save join to table") {
     val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
     sql("CREATE TABLE test1 (key INT, value STRING)")

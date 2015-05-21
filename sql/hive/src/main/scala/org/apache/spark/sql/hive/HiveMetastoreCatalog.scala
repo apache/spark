@@ -469,6 +469,27 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     }
   }
 
+  object WriteToDirs extends Rule[LogicalPlan] with HiveInspectors {
+    import org.apache.hadoop.hive.ql.Context
+    import org.apache.hadoop.hive.ql.parse.{ASTNode, SemanticAnalyzer}
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      // Wait until children are resolved.
+      case p: LogicalPlan if !p.childrenResolved => p
+
+      case WriteToDirectory(path, child, isLocal, tableDesc)
+          if !tableDesc.getProperties.containsKey("columns.types") =>
+        // generate column name and related type info as hive style
+        val Array(cols, types) = child.output.foldLeft(Array("", ""))((r, a) => {
+          r(0) = r(0) + a.name + ","
+          r(1) = r(1) + a.dataType.toTypeInfo.getTypeName + ":"
+          r
+        })
+        tableDesc.getProperties.setProperty("columns", cols.dropRight(1))
+        tableDesc.getProperties.setProperty("columns.types", types.dropRight(1))
+        WriteToDirectory(path, child, isLocal, tableDesc)
+    }
+  }
   /**
    * Casts input data to correct data types according to table definition before inserting into
    * that table.

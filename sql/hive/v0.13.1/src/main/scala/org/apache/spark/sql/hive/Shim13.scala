@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.rmi.server.UID
 import java.util.{Properties, ArrayList => JArrayList}
+import java.net.URI
 import java.io.{OutputStream, InputStream}
 
 import scala.collection.JavaConversions._
@@ -338,6 +339,10 @@ private[hive] object HiveShim {
     if (names != null && names.size > 0) {
       appendReadColumnNames(conf, names)
     }
+  }
+
+  def getExternalTmpPath(context: Context, uri: URI) = {
+    context.getExternalTmpPath(uri)
   }
 
   def getExternalTmpPath(context: Context, path: Path) = {
