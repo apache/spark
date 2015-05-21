@@ -45,6 +45,8 @@ private[spark] case object TaskSchedulerIsSet
 
 private[spark] case object ExpireDeadHosts
 
+private[spark] case class RegisterExecutor(executorId: String)
+
 private[spark] case class RemoveExecutor(executorId: String)
 
 private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
@@ -96,6 +98,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
   }
 
   override def receive: PartialFunction[Any, Unit] = {
+    case RegisterExecutor(executorId) =>
+      executorLastSeen(executorId) = System.currentTimeMillis()
     case RemoveExecutor(executorId) =>
       executorLastSeen.remove(executorId)
     case ExpireDeadHosts =>
@@ -107,15 +111,22 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case heartbeat @ Heartbeat(executorId, taskMetrics, blockManagerId) =>
       if (scheduler != null) {
-        executorLastSeen(executorId) = System.currentTimeMillis()
-        eventLoopThread.submit(new Runnable {
-          override def run(): Unit = Utils.tryLogNonFatalError {
-            val unknownExecutor = !scheduler.executorHeartbeatReceived(
-              executorId, taskMetrics, blockManagerId)
-            val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
-            context.reply(response)
-          }
-        })
+        if (executorLastSeen.contains(executorId)) {
+          executorLastSeen(executorId) = System.currentTimeMillis()
+          eventLoopThread.submit(new Runnable {
+            override def run(): Unit = Utils.tryLogNonFatalError {
+              val unknownExecutor = !scheduler.executorHeartbeatReceived(
+                executorId, taskMetrics, blockManagerId)
+              val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
+              context.reply(response)
+            }
+          })
+        } else {
+          // This may happen if we get an executor's in-flight heartbeat immediately
+          // after we just removed it. It's not really an error condition so we should
+          // not log warning here.
+          logDebug(s"Received heartbeat from unknown executor $executorId")
+        }
       } else {
         // Because Executor will sleep several seconds before sending the first "Heartbeat", this
         // case rarely happens. However, if it really happens, log it and ask the executor to
@@ -123,6 +134,15 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
         logWarning(s"Dropping $heartbeat because TaskScheduler is not ready yet")
         context.reply(HeartbeatResponse(reregisterBlockManager = true))
       }
+  }
+
+  /**
+   * If the heartbeat receiver is not stopped, notify it of executor registrations.
+   */
+  override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
+    if (self != null) {
+      self.send(RegisterExecutor(executorAdded.executorId))
+    }
   }
 
   /**
