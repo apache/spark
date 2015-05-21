@@ -446,12 +446,10 @@ class ListTests(MLlibTestCase):
         # Verify that maxBins is being passed through
         GradientBoostedTrees.trainRegressor(
             rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4, maxBins=32)
-        try:
+        with self.assertRaises(Exception) as cm:
             GradientBoostedTrees.trainRegressor(
                 rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4, maxBins=1)
-            self.fail("max bins was not passed through (or not verified!)")
-        except Exception:
-            self.pass()
+
 
 
 class StatTests(MLlibTestCase):
