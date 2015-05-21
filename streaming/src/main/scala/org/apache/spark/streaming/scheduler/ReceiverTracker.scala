@@ -37,6 +37,12 @@ private[streaming] case class RegisterReceiver(
     host: String,
     receiverEndpoint: RpcEndpointRef
   ) extends ReceiverTrackerMessage
+private[streaming] case class ReceiverStarted(
+    streamId: Int,
+    typ: String,
+    host: String,
+    receiverEndpoint: RpcEndpointRef
+ ) extends ReceiverTrackerMessage
 private[streaming] case class AddBlock(receivedBlockInfo: ReceivedBlockInfo)
   extends ReceiverTrackerMessage
 private[streaming] case class ReportError(streamId: Int, message: String, error: String)
@@ -67,13 +73,38 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   )
   private val listenerBus = ssc.scheduler.listenerBus
 
+  /** Enumeration to identify current state of the ReceiverTracker */
+  object TrackerState extends Enumeration {
+    type CheckpointState = Value
+    val Initialized, Started, Stopping, Stopped = Value
+  }
+  import TrackerState._
+
+  /** State of the tracker */
+  @volatile private var trackerState = Initialized
+
   // endpoint is created when generator starts.
   // This not being null means the tracker has been started and not stopped
   private var endpoint: RpcEndpointRef = null
 
+  /** Check if tracker has been marked for starting */
+  private def isTrackerStarted(): Boolean = {
+    trackerState == Started
+  }
+ 
+  /** Check if tracker has been marked for stopping */
+  private def isTrackerStopping(): Boolean = {
+    trackerState == Stopping
+  }
+ 
+  /** Check if tracker has been marked for stopped */
+  private def isTrackerStopped(): Boolean = {
+    trackerState == Stopped
+  }
+
   /** Start the endpoint and receiver execution thread. */
   def start(): Unit = synchronized {
-    if (endpoint != null) {
+    if (isTrackerStarted) {
       throw new SparkException("ReceiverTracker already started")
     }
 
@@ -82,12 +113,14 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         "ReceiverTracker", new ReceiverTrackerEndpoint(ssc.env.rpcEnv))
       if (!skipReceiverLaunch) receiverExecutor.start()
       logInfo("ReceiverTracker started")
+      trackerState = Started
     }
   }
 
   /** Stop the receiver execution thread. */
   def stop(graceful: Boolean): Unit = synchronized {
-    if (!receiverInputStreams.isEmpty && endpoint != null) {
+    if (isTrackerStarted) {
+      trackerState = Stopping
       // First, stop the receivers
       if (!skipReceiverLaunch) receiverExecutor.stop(graceful)
 
@@ -96,6 +129,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       endpoint = null
       receivedBlockTracker.stop()
       logInfo("ReceiverTracker stopped")
+      trackerState = Stopped
     }
   }
 
@@ -147,10 +181,27 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
     receiverInfo(streamId) = ReceiverInfo(
       streamId, s"${typ}-${streamId}", receiverEndpoint, true, host)
-    listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
+    listenerBus.post(StreamingListenerReceiverRegistered(receiverInfo(streamId)))
     logInfo("Registered receiver for stream " + streamId + " from " + senderAddress)
   }
-
+ 
+  /** Receiver started */
+  private def receiverStarted(
+      streamId: Int,
+      typ: String,
+      host: String,
+      receiverEndpoint: RpcEndpointRef,
+      senderAddress: RpcAddress
+    ) {
+    if (!receiverInputStreamIds.contains(streamId)) {
+      throw new SparkException("Start received for unexpected id " + streamId)
+    }
+    receiverInfo(streamId) = ReceiverInfo(
+      streamId, s"${typ}-${streamId}", receiverEndpoint, true, host)
+    listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
+    logInfo("Receiver started for stream " + streamId + " from " + senderAddress)
+  }
+ 
   /** Deregister a receiver */
   private def deregisterReceiver(streamId: Int, message: String, error: String) {
     val newReceiverInfo = receiverInfo.get(streamId) match {
@@ -216,8 +267,19 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case RegisterReceiver(streamId, typ, host, receiverEndpoint) =>
-        registerReceiver(streamId, typ, host, receiverEndpoint, context.sender.address)
-        context.reply(true)
+        if (!isTrackerStopping) {
+          registerReceiver(streamId, typ, host, receiverEndpoint, context.sender.address)
+          context.reply(true)
+        } else {
+          context.reply(false)
+        }
+      case ReceiverStarted(streamId, typ, host, receiverEndpoint) =>
+        if (!isTrackerStopping) {
+          receiverStarted(streamId, typ, host, receiverEndpoint, context.sender.address)
+          context.reply(true)
+        } else {
+          context.reply(false)
+        }
       case AddBlock(receivedBlockInfo) =>
         context.reply(addBlock(receivedBlockInfo))
       case DeregisterReceiver(streamId, message, error) =>

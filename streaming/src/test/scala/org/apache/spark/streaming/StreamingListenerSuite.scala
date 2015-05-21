@@ -117,6 +117,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     ssc.start()
     try {
       eventually(timeout(2000 millis), interval(20 millis)) {
+        collector.registeredReceiverStreamIds.size should equal (1)
         collector.startedReceiverStreamIds.size should equal (1)
         collector.startedReceiverStreamIds(0) should equal (0)
         collector.stoppedReceiverStreamIds should have size 1
@@ -161,10 +162,15 @@ class BatchInfoCollector extends StreamingListener {
 
 /** Listener that collects information on processed batches */
 class ReceiverInfoCollector extends StreamingListener {
+  val registeredReceiverStreamIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int]
   val startedReceiverStreamIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int]
   val stoppedReceiverStreamIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int]
   val receiverErrors =
     new ArrayBuffer[(Int, String, String)] with SynchronizedBuffer[(Int, String, String)]
+
+  override def onReceiverRegistered(receiverRegistered: StreamingListenerReceiverRegistered) {
+    registeredReceiverStreamIds += receiverRegistered.receiverInfo.streamId
+  }
 
   override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
     startedReceiverStreamIds += receiverStarted.receiverInfo.streamId
