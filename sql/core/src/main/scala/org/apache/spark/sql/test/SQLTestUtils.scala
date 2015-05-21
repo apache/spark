@@ -78,4 +78,11 @@ trait SQLTestUtils {
   protected def withTempTable(tableName: String)(f: => Unit): Unit = {
     try f finally sqlContext.dropTempTable(tableName)
   }
+
+  /**
+   * Drops table `tableName` after calling `f`.
+   */
+  protected def withTable(tableName: String)(f: => Unit): Unit = {
+    try f finally sqlContext.sql(s"DROP TABLE IF EXISTS $tableName")
+  }
 }
