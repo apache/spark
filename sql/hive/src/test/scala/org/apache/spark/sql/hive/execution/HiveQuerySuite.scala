@@ -20,12 +20,9 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.util.{Locale, TimeZone}
 
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDTF
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorFactory, StructObjectInspector, ObjectInspector}
-import org.scalatest.BeforeAndAfter
-
 import scala.util.Try
+
+import org.scalatest.BeforeAndAfter
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
@@ -289,29 +286,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     val res = sql("SELECT 2 / 1, 1 / 2, 1 / 3, 1 / COUNT(*) FROM src LIMIT 1").collect().head
     Seq(2.0, 0.5, 0.3333333333333333, 0.002).zip(res.toSeq).foreach( x =>
       assert(x._1 == x._2.asInstanceOf[Double]))
-  }
-
-  // `Math.exp(1.0)` has different result for different jdk version, so not use createQueryTest
-  test("udf_java_method") {
-    val res = sql(
-      """
-        |SELECT java_method("java.lang.String", "valueOf", 1),
-        |       java_method("java.lang.String", "isEmpty"),
-        |       java_method("java.lang.Math", "max", 2, 3),
-        |       java_method("java.lang.Math", "min", 2, 3),
-        |       java_method("java.lang.Math", "round", 2.5),
-        |       java_method("java.lang.Math", "exp", 1.0),
-        |       java_method("java.lang.Math", "floor", 1.9)
-        |FROM src tablesample (1 rows)
-      """.stripMargin).collect().head
-    Seq(
-      "1",
-      "true",
-      java.lang.Math.max(2, 3).toString,
-      java.lang.Math.min(2, 3).toString,
-      java.lang.Math.round(2.5).toString,
-      java.lang.Math.exp(1.0).toString,
-      java.lang.Math.floor(1.9).toString).zip(res.toSeq).foreach(x => assert(x._1 == x._2))
   }
 
   createQueryTest("modulus",
