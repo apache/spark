@@ -336,53 +336,55 @@ listToSeq <- function(l) {
 # if their values should be included in the new function environment.
 # param
 #   node The current AST node in the traversal.
+#   newEnv A new function environment to store necessary function dependencies, an output argument.
 #   oldEnv The original function environment.
 #   defVars An Accumulator of variables names defined in the function's calling environment,
 #           including function argument and local variable names.
 #   checkedFunc An environment of function objects examined during cleanClosure. It can 
 #               be considered as a "name"-to-"list of functions" mapping.
-#   newEnv A new function environment to store necessary function dependencies, an output argument.
-processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
+processClosure <- function(node, newEnv, oldEnv = environment(), defVars = initAccumulator(), 
+                           checkedFuncs = new.env()) {
   nodeLen <- length(node)
   
   if (nodeLen > 1 && typeof(node) == "language") {
     # Recursive case: current AST node is an internal node, check for its children. 
     if (length(node[[1]]) > 1) {
       for (i in 1:nodeLen) {
-        processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
+        processClosure(node[[i]], newEnv, oldEnv, defVars, checkedFuncs)
       }
     } else {  # if node[[1]] is length of 1, check for some R special functions.
       nodeChar <- as.character(node[[1]])
       if (nodeChar == "{" || nodeChar == "(") {  # Skip start symbol.
         for (i in 2:nodeLen) {
-          processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
+          processClosure(node[[i]], newEnv, oldEnv, defVars, checkedFuncs)
         }
       } else if (nodeChar == "<-" || nodeChar == "=" || 
                    nodeChar == "<<-") { # Assignment Ops.
+        for (i in 3:nodeLen) {
+          processClosure(node[[i]], newEnv, oldEnv, defVars, checkedFuncs)
+        }
         defVar <- node[[2]]
         if (length(defVar) == 1 && typeof(defVar) == "symbol") {
           # Add the defined variable name into defVars.
           addItemToAccumulator(defVars, as.character(defVar))
         } else {
-          processClosure(node[[2]], oldEnv, defVars, checkedFuncs, newEnv)
-        }
-        for (i in 3:nodeLen) {
-          processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
+          processClosure(node[[2]], newEnv, oldEnv, defVars, checkedFuncs)
         }
       } else if (nodeChar == "function") {  # Function definition.
         # Add parameter names.
         newArgs <- names(node[[2]])
         lapply(newArgs, function(arg) { addItemToAccumulator(defVars, arg) })
         for (i in 3:nodeLen) {
-          processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
+          processClosure(node[[i]], newEnv, oldEnv, defVars, checkedFuncs)
         }
+        defVars$counter <- defVars$counter - length(newArgs)
       } else if (nodeChar == "$") {  # Skip the field.
-        processClosure(node[[2]], oldEnv, defVars, checkedFuncs, newEnv)
+        processClosure(node[[2]], newEnv, oldEnv, defVars, checkedFuncs)
       } else if (nodeChar == "::" || nodeChar == ":::") {
-        processClosure(node[[3]], oldEnv, defVars, checkedFuncs, newEnv)
+        # No need to process. Ignore.
       } else {
         for (i in 1:nodeLen) {
-          processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
+          processClosure(node[[i]], newEnv, oldEnv, defVars, checkedFuncs)
         }
       }
     }
@@ -390,23 +392,28 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
                (typeof(node) == "symbol" || typeof(node) == "language")) {
     # Base case: current AST node is a leaf node and a symbol or a function call.
     nodeChar <- as.character(node)
-    if (!nodeChar %in% defVars$data) {  # Not a function parameter or local variable.
+    if (!nodeChar %in% defVars$data[1:defVars$counter]) {  # Not a function parameter or local variable.
       func.env <- oldEnv
       topEnv <- parent.env(.GlobalEnv)
       # Search in function environment, and function's enclosing environments 
       # up to global environment. There is no need to look into package environments
-      # above the global or namespace environment that is not SparkR below the global, 
-      # as they are assumed to be loaded on workers.
+      # above the global, as they are assumed to be loaded on workers.
       while (!identical(func.env, topEnv)) {
-        # Namespaces other than "SparkR" will not be searched.
+        # Only examine functions in non-namespace environments or private functions in 
+        # package namespaces.
         if (!isNamespace(func.env) || 
-              (getNamespaceName(func.env) == "SparkR" && 
-              !(nodeChar %in% getNamespaceExports("SparkR")))) {  # Only include SparkR internals.
+              !(nodeChar %in% getNamespaceExports(getNamespaceName(func.env)))
+        ) {
           # Set parameter 'inherits' to FALSE since we do not need to search in
           # attached package environments.
           if (tryCatch(exists(nodeChar, envir = func.env, inherits = FALSE),
                        error = function(e) { FALSE })) {
-            obj <- get(nodeChar, envir = func.env, inherits = FALSE)
+            obj <- tryCatch(get(nodeChar, envir = func.env, inherits = FALSE),
+                            error = function(e) { .Call("getMissingArg") })
+            if (missing(obj)) {
+              assign(nodeChar, .Call("getMissingArg"), envir = newEnv)
+              break
+            }
             if (is.function(obj)) {  # If the node is a function call.
               funcList <- mget(nodeChar, envir = checkedFuncs, inherits = F, 
                                ifnotfound = list(list(NULL)))[[1]]
@@ -417,14 +424,21 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
                 break
               }
               # Function has not been examined, record it and recursively clean its closure.
-              assign(nodeChar, 
-                     if (is.null(funcList[[1]])) {
-                       list(obj)
-                     } else {
-                       append(funcList, obj)
-                     },
-                     envir = checkedFuncs)
+              newFuncList <- if (is.null(funcList[[1]])) { 
+                list(obj) 
+              } else { 
+                append(funcList, obj)
+              }
+              assign(nodeChar, newFuncList, envir = checkedFuncs)
               obj <- cleanClosure(obj, checkedFuncs)
+              parent.env(environment(obj)) <- newEnv
+              # Remove examined functions.
+              newFuncList[[length(newFuncList)]] <- NULL
+              if (length(newFuncList) > 0) {
+                assign(nodeChar, newFuncList, envir = checkedFuncs)
+              } else {
+                remove(list = nodeChar, envir = checkedFuncs)
+              }
             }
             assign(nodeChar, obj, envir = newEnv)
             break
@@ -460,7 +474,7 @@ cleanClosure <- function(func, checkedFuncs = new.env()) {
       addItemToAccumulator(defVars, argNames[i])
     }
     # Recursively examine variables in the function body.
-    processClosure(func.body, oldEnv, defVars, checkedFuncs, newEnv)
+    processClosure(func.body, newEnv, oldEnv, defVars, checkedFuncs)
     environment(func) <- newEnv
   }
   func

@@ -15,12 +15,6 @@
  limitations under the License.
 */
 
-/*
- * A C function for R extension which implements the Java String hash algorithm.
- * Refer to http://en.wikipedia.org/wiki/Java_hashCode%28%29#The_java.lang.String_hash_function
- *
- */
-
 #include <R.h>
 #include <Rinternals.h>
 
@@ -29,6 +23,11 @@
 #define IS_SCALAR(x, type) (TYPEOF(x) == (type) && XLENGTH(x) == 1)
 #endif
 
+/*
+ * A C function for R extension which implements the Java String hash algorithm.
+ * Refer to http://en.wikipedia.org/wiki/Java_hashCode%28%29#The_java.lang.String_hash_function
+ *
+ */
 SEXP stringHashCode(SEXP string) {
   const char* str;
   R_xlen_t len, i;
@@ -47,3 +46,11 @@ SEXP stringHashCode(SEXP string) {
 
   return ScalarInteger(hashCode);
 }
+
+/*
+ * Get the value of missing argument symbol.
+ */
+SEXP getMissingArg() {
+  return R_MissingArg;
+}
+

@@ -83,38 +83,65 @@ test_that("cleanClosure on R functions", {
   field <- matrix(2)
   defUse <- 3
   g <- function(x) { x + y }
+  h <- function(x) { f(x) }
   f <- function(x) {
     defUse <- base::as.integer(x) + 1  # Test for access operators `::`.
     lapply(x, g) + 1  # Test for capturing function call "g"'s closure as a argument of lapply.
     l$field[1,1] <- 3  # Test for access operators `$`.
     res <- defUse + l$field[1,]  # Test for def-use chain of "defUse", and "" symbol.
     f(res)  # Test for recursive calls.
+    h(res)  # f should be examined again in h's env. More recursive call f -> h -> f ...
   }
   newF <- cleanClosure(f)
   env <- environment(newF)
-  # TODO(shivaram): length(ls(env)) is 4 here for some reason and `lapply` is included in `env`.
-  # Disabling this test till we debug this.
-  #
-  # expect_equal(length(ls(env)), 3)  # Only "g", "l" and "f". No "base", "field" or "defUse".
+  # "g", "l", "f", "h" and "lapply" (private in SparkR). No "base", "field" or "defUse".
+  expect_equal(length(ls(env)), 5)
   expect_true("g" %in% ls(env))
   expect_true("l" %in% ls(env))
   expect_true("f" %in% ls(env))
+  expect_true("h" %in% ls(env))
   expect_equal(get("l", envir = env, inherits = FALSE), l)
-  # "y" should be in the environemnt of g.
   newG <- get("g", envir = env, inherits = FALSE)
+  newH <- get("h", envir = env, inherits = FALSE)
+  # "y" should be in the environemnt of g.
   env <- environment(newG)
-  expect_equal(length(ls(env)), 1)
+  expect_equal(ls(env), "y")
   actual <- get("y", envir = env, inherits = FALSE)
   expect_equal(actual, y)
+  # "f" should be in h's env.
+  env <- environment(newH)
+  expect_equal(ls(env), "f")
+  actual <- get("f", envir = env, inherits = FALSE)
+  expect_equal(actual, f)
   
-  # Test for function (and variable) definitions.
-  f <- function(x) {
-    g <- function(y) { y * 2 }
-    g(x)
+  # Test for function (and variable) definitions and package private functions.
+  z <- c(1, 2)
+  miss <- .Call("getMissingArg")  # simulate a missing arg passing in by enclosing call.
+  f <- function(x, y) {
+    privateCallRes <- unlist(joinTaggedList(x, y))
+    g <- function(y) { 
+      miss  # access to missing arg.
+      y * 2 
+    }
+    z <- z * 2  # Write after read.
+    g(privateCallRes)  # Missing arg.
   }
   newF <- cleanClosure(f)
   env <- environment(newF)
-  expect_equal(length(ls(env)), 0)  # "y" and "g" should not be included.
+  expect_equal(length(ls(env)), 3)  # "miss", z" and "joinTaggedList". No y" or "g".
+  expect_true("joinTaggedList" %in% ls(env))
+  expect_true("z" %in% ls(env))
+  expect_true("miss" %in% ls(env))
+  actual <- get("joinTaggedList", envir = env, inherits = FALSE)
+  expect_equal(actual, joinTaggedList)
+  env <- environment(actual)
+  # Private "genCompactLists" and "mergeCompactLists" are called by "joinTaggedList".
+  expect_true("genCompactLists" %in% ls(env))
+  expect_true("mergeCompactLists" %in% ls(env))
+  actual <- get("genCompactLists", envir = env, inherits = FALSE)
+  expect_equal(actual, genCompactLists)
+  actual <- get("mergeCompactLists", envir = env, inherits = FALSE)
+  expect_equal(actual, mergeCompactLists)
   
   # Test for overriding variables in base namespace (Issue: SparkR-196).
   nums <- as.list(1:10)

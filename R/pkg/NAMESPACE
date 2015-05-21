@@ -1,6 +1,7 @@
 # Imports from base R
 importFrom(methods, setGeneric, setMethod, setOldClass)
 useDynLib(SparkR, stringHashCode)
+useDynLib(SparkR, getMissingArg)
 
 # S3 methods exported
 export("sparkR.init")

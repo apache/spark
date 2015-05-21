@@ -17,8 +17,8 @@
 
 all: sharelib
 
-sharelib: string_hash_code.c
-	R CMD SHLIB -o SparkR.dll string_hash_code.c
+sharelib: utils.c
+	R CMD SHLIB -o SparkR.dll utils.c
 
 clean:
 	rm -f *.o
