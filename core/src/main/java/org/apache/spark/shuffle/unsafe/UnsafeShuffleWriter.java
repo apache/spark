@@ -175,6 +175,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final SpillInfo[] spills = sorter.closeAndGetSpills();
     sorter = null;
     final long[] partitionLengths;
+    final File outputFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+    final long initialFileLength = outputFile.length();
     try {
       partitionLengths = mergeSpills(spills);
     } finally {
@@ -184,7 +186,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
     }
-    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
+    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths, initialFileLength);
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
   }
 
