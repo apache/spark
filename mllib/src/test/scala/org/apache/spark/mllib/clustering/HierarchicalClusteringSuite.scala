@@ -134,10 +134,10 @@ class HierarchicalClusteringSuite extends FunSuite with MLlibTestSparkContext {
   test("should assign each data to new clusters") {
     val algo = new HierarchicalClustering
     val seed = Seq(
-      (2L, Vectors.dense(0.0, 0.0)), (2L, Vectors.dense(1.0, 1.0)), (2L, Vectors.dense(2.0, 2.0)),
-      (2L, Vectors.dense(3.0, 3.0)), (2L, Vectors.dense(4.0, 4.0)), (2L, Vectors.dense(5.0, 5.0)),
-      (3L, Vectors.dense(6.0, 6.0)), (3L, Vectors.dense(7.0, 7.0)), (3L, Vectors.dense(8.0, 8.0)),
-      (3L, Vectors.dense(9.0, 9.0)), (3L, Vectors.dense(10.0, 10.0)), (3L, Vectors.dense(11.0, 11.0))
+      (2L, Vectors.dense(0.0, 0.0)),(2L, Vectors.dense(1.0, 1.0)),(2L, Vectors.dense(2.0, 2.0)),
+      (2L, Vectors.dense(3.0, 3.0)),(2L, Vectors.dense(4.0, 4.0)),(2L, Vectors.dense(5.0, 5.0)),
+      (3L, Vectors.dense(6.0, 6.0)),(3L, Vectors.dense(7.0, 7.0)),(3L, Vectors.dense(8.0, 8.0)),
+      (3L, Vectors.dense(9.0, 9.0)),(3L, Vectors.dense(10.0, 10.0)),(3L, Vectors.dense(11.0, 11.0))
     ).map { case (idx, vector) => (idx, vector.toBreeze)}
     val newClusters = Map(
       4L -> new ClusterTree(Vectors.dense(1.0, 1.0), 3, Vectors.dense(1.0, 1.0)),
