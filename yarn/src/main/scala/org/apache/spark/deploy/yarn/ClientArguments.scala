@@ -30,7 +30,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var archives: String = null
   var userJar: String = null
   var userClass: String = null
-  var pyFiles: String = null
+  var pyFiles: Seq[String] = Nil
   var primaryPyFile: String = null
   var primaryRFile: String = null
   var userArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
@@ -222,7 +222,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           args = tail
 
         case ("--py-files") :: value :: tail =>
-          pyFiles = value
+          pyFiles = value.split(",")
           args = tail
 
         case ("--files") :: value :: tail =>

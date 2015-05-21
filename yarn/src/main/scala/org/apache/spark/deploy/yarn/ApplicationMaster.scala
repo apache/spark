@@ -46,6 +46,14 @@ private[spark] class ApplicationMaster(
     client: YarnRMClient)
   extends Logging {
 
+  // Load the properties file with the Spark configuration and set entries as system properties,
+  // so that user code run inside the AM also has access to them.
+  if (args.propertiesFile != null) {
+    Utils.getPropertiesFromFile(args.propertiesFile).foreach { case (k, v) =>
+      sys.props(k) = v
+    }
+  }
+
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
 
@@ -465,9 +473,9 @@ private[spark] class ApplicationMaster(
         new MutableURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
       }
 
+    var userArgs = args.userArgs
     if (args.primaryPyFile != null && args.primaryPyFile.endsWith(".py")) {
-      System.setProperty("spark.submit.pyFiles",
-        PythonRunner.formatPaths(args.pyFiles).mkString(","))
+      userArgs = Seq(args.primaryPyFile, "") ++ userArgs
     }
     if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
       // TODO(davies): add R dependencies here
@@ -478,8 +486,8 @@ private[spark] class ApplicationMaster(
     val userThread = new Thread {
       override def run() {
         try {
-          val mainArgs = new Array[String](args.userArgs.size)
-          args.userArgs.copyToArray(mainArgs, 0, args.userArgs.size)
+          val mainArgs = new Array[String](userArgs.size)
+          userArgs.copyToArray(mainArgs, 0, userArgs.size)
           mainMethod.invoke(null, mainArgs)
           finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
           logDebug("Done running users class")
