@@ -16,6 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.io.File
 import javax.servlet.ServletContext
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, Response}
@@ -168,11 +169,8 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
   def getEventLogs(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): EventLogDownloadResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
-      new EventLogDownloadResource(ui, appId)
-    }
+    new EventLogDownloadResource(uiRoot, appId)
   }
-
 }
 
 private[spark] object ApiRootResource {

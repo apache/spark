@@ -173,8 +173,9 @@ class HistoryServer(
     getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
 
-  def copyEventLogsToDirectory(appId: String, destDir: File): Unit = {
+  def copyEventLogsToDirectory(appId: String, destDir: File): Boolean = {
     provider.copyApplicationEventLogs(appId, destDir)
+    true
   }
 
 
