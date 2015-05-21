@@ -26,13 +26,6 @@ import org.apache.spark.sql.{Row, SQLContext}
 
 class VectorAssemblerSuite extends FunSuite with MLlibTestSparkContext {
 
-  @transient var sqlContext: SQLContext = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sqlContext = new SQLContext(sc)
-  }
-
   test("assemble") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
     assert(assemble(0.0) === Vectors.sparse(1, Array.empty, Array.empty))

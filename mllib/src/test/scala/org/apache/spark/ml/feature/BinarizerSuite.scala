@@ -27,11 +27,9 @@ import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 class BinarizerSuite extends FunSuite with MLlibTestSparkContext {
 
   @transient var data: Array[Double] = _
-  @transient var sqlContext: SQLContext = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sqlContext = new SQLContext(sc)
     data = Array(0.1, -0.5, 0.2, -0.3, 0.8, 0.7, -0.1, -0.4)
   }
 

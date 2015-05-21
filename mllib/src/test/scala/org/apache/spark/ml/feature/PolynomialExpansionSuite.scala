@@ -27,13 +27,6 @@ import org.scalatest.exceptions.TestFailedException
 
 class PolynomialExpansionSuite extends FunSuite with MLlibTestSparkContext {
 
-  @transient var sqlContext: SQLContext = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sqlContext = new SQLContext(sc)
-  }
-
   test("Polynomial expansion with default parameter") {
     val data = Array(
       Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),

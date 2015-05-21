@@ -32,13 +32,12 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 
 class OneVsRestSuite extends FunSuite with MLlibTestSparkContext {
 
-  @transient var sqlContext: SQLContext = _
   @transient var dataset: DataFrame = _
   @transient var rdd: RDD[LabeledPoint] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sqlContext = new SQLContext(sc)
+
     val nPoints = 1000
 
     // The following weights and xMean/xVariance are computed from iris dataset with lambda=0.2.

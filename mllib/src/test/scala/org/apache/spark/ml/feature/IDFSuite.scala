@@ -26,13 +26,6 @@ import org.apache.spark.sql.{Row, SQLContext}
 
 class IDFSuite extends FunSuite with MLlibTestSparkContext {
 
-  @transient var sqlContext: SQLContext = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sqlContext = new SQLContext(sc)
-  }
-
   def scaleDataWithIDF(dataSet: Array[Vector], model: Vector): Array[Vector] = {
     dataSet.map {
       case data: DenseVector =>

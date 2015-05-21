@@ -27,14 +27,12 @@ import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
-  @transient var sqlContext: SQLContext = _
   @transient var dataset: DataFrame = _
   @transient var binaryDataset: DataFrame = _
   private val eps: Double = 1e-5
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sqlContext = new SQLContext(sc)
 
     dataset = sqlContext.createDataFrame(generateLogisticInput(1.0, 1.0, nPoints = 100, seed = 42))
 

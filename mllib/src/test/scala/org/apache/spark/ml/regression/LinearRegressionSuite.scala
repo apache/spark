@@ -26,7 +26,6 @@ import org.apache.spark.sql.{Row, SQLContext, DataFrame}
 
 class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
-  @transient var sqlContext: SQLContext = _
   @transient var dataset: DataFrame = _
 
   /**
@@ -41,7 +40,6 @@ class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
    */
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sqlContext = new SQLContext(sc)
     dataset = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, 42, 0.1), 2))
