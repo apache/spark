@@ -21,7 +21,7 @@ Within that context, each observation is a document and each
 feature represents a term whose value is the frequency of the term (in multinomial naive Bayes) or
 a zero or one indicating whether the term was found in the document (in Bernoulli naive Bayes).
 Feature values must be nonnegative. The model type is selected with an optional parameter
-"Multinomial" or "Bernoulli" with "Multinomial" as the default.
+"multinomial" or "bernoulli" with "multinomial" as the default.
 [Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
 setting the parameter $\lambda$ (default to $1.0$). For document classification, the input feature
 vectors are usually sparse, and sparse vectors should be supplied as input to take advantage of
@@ -35,7 +35,7 @@ sparsity. Since the training data is only used once, it is not necessary to cach
 [NaiveBayes](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayes$) implements
 multinomial naive Bayes. It takes an RDD of
 [LabeledPoint](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint) and an optional
-smoothing parameter `lambda` as input, an optional model type parameter (default is Multinomial), and outputs a
+smoothing parameter `lambda` as input, an optional model type parameter (default is "multinomial"), and outputs a
 [NaiveBayesModel](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayesModel), which
 can be used for evaluation and prediction.
 
@@ -54,7 +54,7 @@ val splits = parsedData.randomSplit(Array(0.6, 0.4), seed = 11L)
 val training = splits(0)
 val test = splits(1)
 
-val model = NaiveBayes.train(training, lambda = 1.0, model = "Multinomial")
+val model = NaiveBayes.train(training, lambda = 1.0, model = "multinomial")
 
 val predictionAndLabel = test.map(p => (model.predict(p.features), p.label))
 val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test.count()
@@ -75,6 +75,8 @@ optionally smoothing parameter `lambda` as input, and output a
 can be used for evaluation and prediction.
 
 {% highlight java %}
+import scala.Tuple2;
+
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
@@ -82,7 +84,6 @@ import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.mllib.classification.NaiveBayes;
 import org.apache.spark.mllib.classification.NaiveBayesModel;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import scala.Tuple2;
 
 JavaRDD<LabeledPoint> training = ... // training set
 JavaRDD<LabeledPoint> test = ... // test set
