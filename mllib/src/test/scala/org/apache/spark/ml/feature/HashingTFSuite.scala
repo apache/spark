@@ -24,16 +24,8 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.SQLContext
 
 class HashingTFSuite extends FunSuite with MLlibTestSparkContext {
-
-  var sqlContext: SQLContext = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sqlContext = new SQLContext(sc)
-  }
 
   test("params") {
     val hashingTF = new HashingTF
