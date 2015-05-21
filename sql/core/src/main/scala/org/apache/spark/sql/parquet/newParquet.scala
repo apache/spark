@@ -49,8 +49,7 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider {
       schema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
-    val partitionSpec = partitionColumns.map(PartitionSpec(_, Seq.empty))
-    new ParquetRelation2(paths, schema, partitionSpec, parameters)(sqlContext)
+    new ParquetRelation2(paths, schema, None, partitionColumns, parameters)(sqlContext)
   }
 }
 
@@ -118,11 +117,27 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
 private[sql] class ParquetRelation2(
     override val paths: Array[String],
     private val maybeDataSchema: Option[StructType],
+    // This is for metastore conversion.
     private val maybePartitionSpec: Option[PartitionSpec],
+    override val userDefinedPartitionColumns: Option[StructType],
     parameters: Map[String, String])(
     val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec)
   with Logging {
+
+  private[sql] def this(
+      paths: Array[String],
+      maybeDataSchema: Option[StructType],
+      maybePartitionSpec: Option[PartitionSpec],
+      parameters: Map[String, String])(
+      sqlContext: SQLContext) = {
+    this(
+      paths,
+      maybeDataSchema,
+      maybePartitionSpec,
+      maybePartitionSpec.map(_.partitionColumns),
+      parameters)(sqlContext)
+  }
 
   // Should we merge schemas from all Parquet part-files?
   private val shouldMergeSchemas =
@@ -161,7 +176,7 @@ private[sql] class ParquetRelation2(
         Boolean.box(shouldMergeSchemas),
         paths.toSet,
         maybeDataSchema,
-        maybePartitionSpec)
+        partitionColumns)
     } else {
       Objects.hashCode(
         Boolean.box(shouldMergeSchemas),
@@ -169,7 +184,7 @@ private[sql] class ParquetRelation2(
         dataSchema,
         schema,
         maybeDataSchema,
-        maybePartitionSpec)
+        partitionColumns)
     }
   }
 
@@ -184,9 +199,6 @@ private[sql] class ParquetRelation2(
   override val needConversion: Boolean = false
 
   override def sizeInBytes: Long = metadataCache.dataStatuses.map(_.getLen).sum
-
-  override def userDefinedPartitionColumns: Option[StructType] =
-    maybePartitionSpec.map(_.partitionColumns)
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     val conf = ContextUtil.getConfiguration(job)

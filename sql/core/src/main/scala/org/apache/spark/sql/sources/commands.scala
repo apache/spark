@@ -93,6 +93,8 @@ private[sql] case class InsertIntoHadoopFsRelation(
       job.setOutputValueClass(classOf[Row])
       FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
 
+      // We create a DataFrame by applying the schema of relation to the data to make sure.
+      // We are writing data based on the expected schema,
       val df = sqlContext.createDataFrame(
         DataFrame(sqlContext, query).queryExecution.toRdd,
         relation.schema,

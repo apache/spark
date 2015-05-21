@@ -670,6 +670,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     catalog.createDataSourceTable(
       tableName = "wide_schema",
       userSpecifiedSchema = Some(schema),
+      partitionColumns = Array.empty[String],
       provider = "json",
       options = Map("path" -> "just a dummy path"),
       isExternal = false)
@@ -705,6 +706,35 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     sql(s"drop table $tableName")
   }
 
+  test("Saving partition columns information") {
+    val df =
+      sparkContext.parallelize(1 to 10, 4).map { i =>
+        Tuple4(i, i + 1, s"str$i", s"str${i + 1}")
+      }.toDF("a", "b", "c", "d")
+
+    val tableName = s"partitionInfo_${System.currentTimeMillis()}"
+    df.write.format("parquet").partitionBy("d", "b").saveAsTable(tableName)
+    invalidateTable(tableName)
+    val metastoreTable = catalog.client.getTable("default", tableName)
+    val expectedPartitionColumns =
+      StructType(df.schema("d") :: df.schema("b") :: Nil)
+    val actualPartitionColumns =
+      StructType(
+        metastoreTable.partitionColumns.map(c =>
+          StructField(c.name, HiveMetastoreTypes.toDataType(c.hiveType))))
+    // Make sure partition columns are correctly stored in metastore.
+    assert(
+      expectedPartitionColumns.sameType(actualPartitionColumns),
+      s"Partitions columns stored in metastore $actualPartitionColumns is not the " +
+        s"partition columns defined by the saveAsTable operation $expectedPartitionColumns.")
+
+    // Check the content of the saved table.
+    checkAnswer(
+      table(tableName).selectExpr("c", "b", "d", "a"),
+      df.selectExpr("c", "b", "d", "a").collect())
+
+    sql(s"drop table $tableName")
+  }
 
   test("insert into a table") {
     def createDF(from: Int, to: Int): DataFrame =
