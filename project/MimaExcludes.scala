@@ -34,6 +34,17 @@ import com.typesafe.tools.mima.core.ProblemFilters._
 object MimaExcludes {
     def excludes(version: String) =
       version match {
+        case v if v.startsWith("1.5") =>
+          Seq(
+            MimaBuild.excludeSparkPackage("deploy"),
+            // These are needed if checking against the sbt build, since they are part of
+            // the maven-generated artifacts in 1.3.
+            excludePackage("org.spark-project.jetty"),
+            MimaBuild.excludeSparkPackage("unused"),
+            // SPARK-7805 - Some SQL test code accidentally included in src/main 
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.sql.test.SQLTestUtils.withTable")
+          )
         case v if v.startsWith("1.4") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
