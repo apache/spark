@@ -315,8 +315,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _dagScheduler = ds
   }
 
-  private[spark] def heartbeatReceiverEndpoint: RpcEndpointRef = _heartbeatReceiver
-
   def applicationId: String = _applicationId
   def applicationAttemptId: Option[String] = _applicationAttemptId
 

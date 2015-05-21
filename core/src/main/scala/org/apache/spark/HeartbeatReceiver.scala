@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcEnv, RpcCallContext}
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.scheduler.{SlaveLost, TaskScheduler}
+import org.apache.spark.scheduler._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -53,7 +53,7 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
  * Lives in the driver to receive heartbeats from executors..
  */
 private[spark] class HeartbeatReceiver(sc: SparkContext)
-  extends ThreadSafeRpcEndpoint with Logging {
+  extends ThreadSafeRpcEndpoint with SparkListener with Logging {
 
   override val rpcEnv: RpcEnv = sc.env.rpcEnv
 
@@ -121,6 +121,16 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
         logWarning(s"Dropping $heartbeat because TaskScheduler is not ready yet")
         context.reply(HeartbeatResponse(reregisterBlockManager = true))
       }
+  }
+
+  /**
+   * If the heartbeat receiver is not stopped, notify it of
+   * executor removals so it doesn't log superfluous errors.
+   */
+  override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
+    if (self != null) {
+      self.send(RemoveExecutor(executorRemoved.executorId))
+    }
   }
 
   private def expireDeadHosts(): Unit = {

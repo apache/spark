@@ -440,11 +440,10 @@ private[spark] class TaskSchedulerImpl(
     synchronized {
       if (activeExecutorIds.contains(executorId)) {
         val hostPort = executorIdToHost(executorId)
-        val msg = "Lost executor %s on %s: %s".format(executorId, hostPort, reason)
         if (reason.isError) {
-          logError(msg)
+          logError("Lost executor %s on %s: %s".format(executorId, hostPort, reason))
         } else {
-          logInfo(msg)
+          logInfo("Removed executor %s on %s: %s".format(executorId, hostPort, reason))
         }
         removeExecutor(executorId)
         failedExecutor = Some(executorId)
@@ -458,7 +457,7 @@ private[spark] class TaskSchedulerImpl(
     }
     // Call dagScheduler.executorLost without holding the lock on this to prevent deadlock
     if (failedExecutor.isDefined) {
-      dagScheduler.executorLost(failedExecutor.get)
+      dagScheduler.executorLost(failedExecutor.get, reason.isError)
       backend.reviveOffers()
     }
   }
