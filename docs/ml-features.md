@@ -535,5 +535,88 @@ encoded = encoder.transform(indexed)
 </div>
 </div>
 
+## VectorIndexer
+
+`VectorIndexer` helps index categorical features in datasets of `Vector`s.
+It can both automatically decide which features are categorical and convert original values to category indices.  Specifically, it does the following:
+
+1. Take an input column of type [Vector](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) and a parameter `maxCategories`.
+2. Decide which features should be categorical based on the number of distinct values, where features with at most `maxCategories` are declared categorical.
+3. Compute 0-based category indices for each categorical feature.
+4. Index categorical features and transform original feature values to indices.
+
+Indexing categorical features allows algorithms such as Decision Trees and Tree Ensembles to treat categorical features appropriately, improving performance.
+
+Please refer to the [VectorIndexer API docs](api/scala/index.html#org.apache.spark.ml.feature.VectorIndexer) for more details.
+
+In the example below, we read in a dataset of labeled points and then use `VectorIndexer` to decide which features should be treated as categorical.  We transform the categorical feature values to their indices.  This transformed data could then be passed to algorithms such as `DecisionTreeRegressor` that handle categorical features.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+import org.apache.spark.ml.feature.VectorIndexer
+import org.apache.spark.mllib.util.MLUtils
+
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+val indexer = new VectorIndexer()
+  .setInputCol("features")
+  .setOutputCol("indexed")
+  .setMaxCategories(10)
+val indexerModel = indexer.fit(data)
+val categoricalFeatures: Set[Int] = indexerModel.categoryMaps.keys.toSet
+println(s"Chose ${categoricalFeatures.size} categorical features: " +
+  categoricalFeatures.mkString(", "))
+
+// Create new column "indexed" with categorical values transformed to indices
+val indexedData = indexerModel.transform(data)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+import java.util.Map;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.VectorIndexer;
+import org.apache.spark.ml.feature.VectorIndexerModel;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.sql.DataFrame;
+
+JavaRDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(sc.sc(),
+  "data/mllib/sample_libsvm_data.txt").toJavaRDD();
+DataFrame data = sqlContext.createDataFrame(rdd, LabeledPoint.class);
+VectorIndexer indexer = new VectorIndexer()
+  .setInputCol("features")
+  .setOutputCol("indexed")
+  .setMaxCategories(10);
+VectorIndexerModel indexerModel = indexer.fit(data);
+Map<Integer, Map<Double, Integer>> categoryMaps = indexerModel.javaCategoryMaps();
+System.out.print("Chose " + categoryMaps.size() + "categorical features:");
+for (Integer feature : categoryMaps.keySet()) {
+  System.out.print(" " + feature);
+}
+System.out.println();
+
+// Create new column "indexed" with categorical values transformed to indices
+DataFrame indexedData = indexerModel.transform(data);
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+from pyspark.ml.feature import VectorIndexer
+from pyspark.mllib.util import MLUtils
+
+data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+indexer = VectorIndexer(inputCol="features", outputCol="indexed", maxCategories=10)
+indexerModel = indexer.fit(data)
+
+# Create new column "indexed" with categorical values transformed to indices
+indexedData = indexerModel.transform(data)
+{% endhighlight %}
+</div>
+</div>
+
 # Feature Selectors
 
