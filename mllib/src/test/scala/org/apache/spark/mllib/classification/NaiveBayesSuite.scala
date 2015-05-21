@@ -68,6 +68,9 @@ object NaiveBayesSuite {
             case (index, reps) => (index, reps.size.toDouble)
           }
           counts.toArray.sortBy(_._1).map(_._2)
+        case _ =>
+          // This should never happen.
+          throw new UnknownError(s"Invalid modelType: $modelType.")
       }
 
       LabeledPoint(y, Vectors.dense(xi))
