@@ -185,7 +185,7 @@ private[ml] trait HasInputCols extends Params {
 }
 
 /**
- * (private[ml]) Trait for shared param outputCol.
+ * (private[ml]) Trait for shared param outputCol (default: uid + "__output").
  */
 private[ml] trait HasOutputCol extends Params {
 
@@ -194,6 +194,8 @@ private[ml] trait HasOutputCol extends Params {
    * @group param
    */
   final val outputCol: Param[String] = new Param[String](this, "outputCol", "output column name")
+
+  setDefault(outputCol, uid + "__output")
 
   /** @group getParam */
   final def getOutputCol: String = $(outputCol)
