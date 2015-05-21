@@ -1296,7 +1296,7 @@ object SQLContext {
   @transient private val lastInstantiatedContext = new AtomicReference[SQLContext]()
 
   /**
-   * Get the singleton SQLContext if it exists or create a new one using the given configuration.
+   * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
    * This function can be used to create a singleton SQLContext object that can be shared across
    * the JVM.
    */
@@ -1307,12 +1307,6 @@ object SQLContext {
       }
     }
     lastInstantiatedContext.get()
-  }
-
-  private[sql] def getLastInstantiatedContext(): Option[SQLContext] = {
-    INSTANTIATION_LOCK.synchronized {
-      Option(lastInstantiatedContext.get())
-    }
   }
 
   private[sql] def clearLastInstantiatedContext(): Unit = {
