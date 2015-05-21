@@ -94,8 +94,8 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Called when supervisor is stopped */
   protected def onStop(message: String, error: Option[Throwable]) { }
 
-  /** Called when receiver is started */
-  protected def onReceiverStart() { }
+  /** Called when receiver is started. Return if the driver accepts us */
+  protected def onReceiverStart(): Boolean = true
 
   /** Called when receiver is stopped */
   protected def onReceiverStop(message: String, error: Option[Throwable]) { }
@@ -117,11 +117,15 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Start receiver */
   def startReceiver(): Unit = synchronized {
     try {
-      logInfo("Starting receiver")
-      receiver.onStart()
-      logInfo("Called receiver onStart")
-      onReceiverStart()
-      receiverState = Started
+      if (onReceiverStart()) {
+        logInfo("Starting receiver")
+        receiverState = Started
+        receiver.onStart()
+        logInfo("Called receiver onStart")
+      } else {
+        // The driver refused us
+        stop("Registered unsuccessfully because the driver refused" + streamId, None)
+      }
     } catch {
       case t: Throwable =>
         stop("Error starting receiver " + streamId, Some(t))
@@ -132,7 +136,13 @@ private[streaming] abstract class ReceiverSupervisor(
   def stopReceiver(message: String, error: Option[Throwable]): Unit = synchronized {
     try {
       logInfo("Stopping receiver with message: " + message + ": " + error.getOrElse(""))
-      receiverState = Stopped
+      if (receiverState == Started) {
+        receiverState = Stopped
+        receiver.onStop()
+      } else {
+        // "receiver.onStart()" is not called. So we should not call "receiver.onStop()"
+        receiverState = Stopped
+      }
       receiver.onStop()
       logInfo("Called receiver onStop")
       onReceiverStop(message, error)

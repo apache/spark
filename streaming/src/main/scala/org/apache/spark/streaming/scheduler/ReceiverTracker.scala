@@ -366,9 +366,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // Distribute the receivers and start them
       logInfo("Starting " + receivers.length + " receivers")
       running = true
-      ssc.sparkContext.runJob(tempRDD, ssc.sparkContext.clean(startReceiver))
-      running = false
-      logInfo("All of the receivers have been terminated")
+      try {
+        ssc.sparkContext.runJob(tempRDD, ssc.sparkContext.clean(startReceiver))
+        logInfo("All of the receivers have been terminated")
+      } finally {
+        running = false
+      }
     }
 
     /** Stops the receivers. */
