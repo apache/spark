@@ -164,6 +164,20 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double])
   def sum(): JDouble = srdd.sum()
 
   /**
+   * Returns the minimum element from this RDD as defined by
+   * the default comparator natural order.
+   * @return the minimum of the RDD
+   */
+  def min(): JDouble = min(com.google.common.collect.Ordering.natural())
+
+  /**
+   * Returns the maximum element from this RDD as defined by
+   * the default comparator natural order.
+   * @return the maximum of the RDD
+   */
+  def max(): JDouble = max(com.google.common.collect.Ordering.natural())
+
+  /**
    * Return a [[org.apache.spark.util.StatCounter]] object that captures the mean, variance and
    * count of the RDD's elements in one operation.
    */

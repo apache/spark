@@ -30,7 +30,7 @@ import org.apache.spark.util.StatCounter
  */
 class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   /** Add up the elements in this RDD. */
-  def sum(): Double = {
+  def sum(): Double = self.withScope {
     self.fold(0.0)(_ + _)
   }
 
@@ -38,37 +38,49 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * Return a [[org.apache.spark.util.StatCounter]] object that captures the mean, variance and
    * count of the RDD's elements in one operation.
    */
-  def stats(): StatCounter = {
+  def stats(): StatCounter = self.withScope {
     self.mapPartitions(nums => Iterator(StatCounter(nums))).reduce((a, b) => a.merge(b))
   }
 
   /** Compute the mean of this RDD's elements. */
-  def mean(): Double = stats().mean
+  def mean(): Double = self.withScope {
+    stats().mean
+  }
 
   /** Compute the variance of this RDD's elements. */
-  def variance(): Double = stats().variance
+  def variance(): Double = self.withScope {
+    stats().variance
+  }
 
   /** Compute the standard deviation of this RDD's elements. */
-  def stdev(): Double = stats().stdev
+  def stdev(): Double = self.withScope {
+    stats().stdev
+  }
 
   /**
    * Compute the sample standard deviation of this RDD's elements (which corrects for bias in
    * estimating the standard deviation by dividing by N-1 instead of N).
    */
-  def sampleStdev(): Double = stats().sampleStdev
+  def sampleStdev(): Double = self.withScope {
+    stats().sampleStdev
+  }
 
   /**
    * Compute the sample variance of this RDD's elements (which corrects for bias in
    * estimating the variance by dividing by N-1 instead of N).
    */
-  def sampleVariance(): Double = stats().sampleVariance
+  def sampleVariance(): Double = self.withScope {
+    stats().sampleVariance
+  }
 
   /**
    * :: Experimental ::
    * Approximate operation to return the mean within a timeout.
    */
   @Experimental
-  def meanApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
+  def meanApprox(
+      timeout: Long,
+      confidence: Double = 0.95): PartialResult[BoundedDouble] = self.withScope {
     val processPartition = (ctx: TaskContext, ns: Iterator[Double]) => StatCounter(ns)
     val evaluator = new MeanEvaluator(self.partitions.length, confidence)
     self.context.runApproximateJob(self, processPartition, evaluator, timeout)
@@ -79,7 +91,9 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * Approximate operation to return the sum within a timeout.
    */
   @Experimental
-  def sumApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
+  def sumApprox(
+      timeout: Long,
+      confidence: Double = 0.95): PartialResult[BoundedDouble] = self.withScope {
     val processPartition = (ctx: TaskContext, ns: Iterator[Double]) => StatCounter(ns)
     val evaluator = new SumEvaluator(self.partitions.length, confidence)
     self.context.runApproximateJob(self, processPartition, evaluator, timeout)
@@ -93,7 +107,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * If the RDD contains infinity, NaN throws an exception
    * If the elements in RDD do not vary (max == min) always returns a single bucket.
    */
-  def histogram(bucketCount: Int): Pair[Array[Double], Array[Long]] = {
+  def histogram(bucketCount: Int): Pair[Array[Double], Array[Long]] = self.withScope {
     // Scala's built-in range has issues. See #SI-8782
     def customRange(min: Double, max: Double, steps: Int): IndexedSeq[Double] = {
       val span = max - min
@@ -140,7 +154,9 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * the maximum value of the last position and all NaN entries will be counted
    * in that bucket.
    */
-  def histogram(buckets: Array[Double], evenBuckets: Boolean = false): Array[Long] = {
+  def histogram(
+      buckets: Array[Double],
+      evenBuckets: Boolean = false): Array[Long] = self.withScope {
     if (buckets.length < 2) {
       throw new IllegalArgumentException("buckets array must have at least two elements")
     }

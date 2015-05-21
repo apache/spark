@@ -34,7 +34,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Vector, Vectors, DenseMatrix, BLAS, DenseVector}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
 import org.apache.spark.util.Utils
@@ -158,6 +158,9 @@ class Word2Vec extends Serializable with Logging {
       .sortWith((a, b) => a.cn > b.cn)
     
     vocabSize = vocab.length
+    require(vocabSize > 0, "The vocabulary size should be > 0. You may need to check " +
+      "the setting of minCount, which could be large enough to remove all your words in sentences.")
+
     var a = 0
     while (a < vocabSize) {
       vocabHash += vocab(a).word -> a
@@ -429,7 +432,36 @@ class Word2Vec extends Serializable with Logging {
  */
 @Experimental
 class Word2VecModel private[mllib] (
-    private val model: Map[String, Array[Float]]) extends Serializable with Saveable {
+    model: Map[String, Array[Float]]) extends Serializable with Saveable {
+
+  // wordList: Ordered list of words obtained from model.
+  private val wordList: Array[String] = model.keys.toArray
+
+  // wordIndex: Maps each word to an index, which can retrieve the corresponding
+  //            vector from wordVectors (see below).
+  private val wordIndex: Map[String, Int] = wordList.zip(0 until model.size).toMap
+
+  // vectorSize: Dimension of each word's vector.
+  private val vectorSize = model.head._2.size
+  private val numWords = wordIndex.size
+
+  // wordVectors: Array of length numWords * vectorSize, vector corresponding to the word
+  //              mapped with index i can be retrieved by the slice
+  //              (ind * vectorSize, ind * vectorSize + vectorSize)
+  // wordVecNorms: Array of length numWords, each value being the Euclidean norm
+  //               of the wordVector.
+  private val (wordVectors: Array[Float], wordVecNorms: Array[Double]) = {
+    val wordVectors = new Array[Float](vectorSize * numWords)
+    val wordVecNorms = new Array[Double](numWords)
+    var i = 0
+    while (i < numWords) {
+      val vec = model.get(wordList(i)).get
+      Array.copy(vec, 0, wordVectors, i * vectorSize, vectorSize)
+      wordVecNorms(i) = blas.snrm2(vectorSize, vec, 1)
+      i += 1
+    }
+    (wordVectors, wordVecNorms)
+  }
 
   private def cosineSimilarity(v1: Array[Float], v2: Array[Float]): Double = {
     require(v1.length == v2.length, "Vectors should have the same length")
@@ -443,7 +475,7 @@ class Word2VecModel private[mllib] (
   override protected def formatVersion = "1.0"
 
   def save(sc: SparkContext, path: String): Unit = {
-    Word2VecModel.SaveLoadV1_0.save(sc, path, model)
+    Word2VecModel.SaveLoadV1_0.save(sc, path, getVectors)
   }
 
   /**
@@ -479,9 +511,23 @@ class Word2VecModel private[mllib] (
    */
   def findSynonyms(vector: Vector, num: Int): Array[(String, Double)] = {
     require(num > 0, "Number of similar words should > 0")
-    // TODO: optimize top-k
+
     val fVector = vector.toArray.map(_.toFloat)
-    model.mapValues(vec => cosineSimilarity(fVector, vec))
+    val cosineVec = Array.fill[Float](numWords)(0)
+    val alpha: Float = 1
+    val beta: Float = 0
+
+    blas.sgemv(
+      "T", vectorSize, numWords, alpha, wordVectors, vectorSize, fVector, 1, beta, cosineVec, 1)
+
+    // Need not divide with the norm of the given vector since it is constant.
+    val updatedCosines = new Array[Double](numWords)
+    var ind = 0
+    while (ind < numWords) {
+      updatedCosines(ind) = cosineVec(ind) / wordVecNorms(ind)
+      ind += 1
+    }
+    wordList.zip(updatedCosines)
       .toSeq
       .sortBy(- _._2)
       .take(num + 1)
@@ -493,7 +539,9 @@ class Word2VecModel private[mllib] (
    * Returns a map of words to their vector representations.
    */
   def getVectors: Map[String, Array[Float]] = {
-    model
+    wordIndex.map { case (word, ind) =>
+      (word, wordVectors.slice(vectorSize * ind, vectorSize * ind + vectorSize))
+    }
   }
 }
 
@@ -511,7 +559,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
     def load(sc: SparkContext, path: String): Word2VecModel = {
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
-      val dataFrame = sqlContext.parquetFile(dataPath)
+      val dataFrame = sqlContext.read.parquet(dataPath)
 
       val dataArray = dataFrame.select("word", "vector").collect()
 
@@ -535,7 +583,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val dataArray = model.toSeq.map { case (w, v) => Data(w, v) }
-      sc.parallelize(dataArray.toSeq, 1).toDF().saveAsParquetFile(Loader.dataPath(path))
+      sc.parallelize(dataArray.toSeq, 1).toDF().write.parquet(Loader.dataPath(path))
     }
   }
 

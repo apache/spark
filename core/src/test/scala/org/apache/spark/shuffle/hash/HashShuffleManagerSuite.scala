@@ -27,7 +27,7 @@ import org.apache.spark.{SparkEnv, SparkContext, LocalSparkContext, SparkConf}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.shuffle.FileShuffleBlockManager
+import org.apache.spark.shuffle.FileShuffleBlockResolver
 import org.apache.spark.storage.{ShuffleBlockId, FileSegment}
 
 class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
@@ -53,14 +53,14 @@ class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
 
     sc = new SparkContext("local", "test", conf)
 
-    val shuffleBlockManager =
-      SparkEnv.get.shuffleManager.shuffleBlockResolver.asInstanceOf[FileShuffleBlockManager]
+    val shuffleBlockResolver =
+      SparkEnv.get.shuffleManager.shuffleBlockResolver.asInstanceOf[FileShuffleBlockResolver]
 
-    val shuffle1 = shuffleBlockManager.forMapTask(1, 1, 1, new JavaSerializer(conf),
+    val shuffle1 = shuffleBlockResolver.forMapTask(1, 1, 1, new JavaSerializer(conf),
       new ShuffleWriteMetrics)
     for (writer <- shuffle1.writers) {
-      writer.write("test1")
-      writer.write("test2")
+      writer.write("test1", "value")
+      writer.write("test2", "value")
     }
     for (writer <- shuffle1.writers) {
       writer.commitAndClose()
@@ -69,12 +69,12 @@ class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
     val shuffle1Segment = shuffle1.writers(0).fileSegment()
     shuffle1.releaseWriters(success = true)
 
-    val shuffle2 = shuffleBlockManager.forMapTask(1, 2, 1, new JavaSerializer(conf),
+    val shuffle2 = shuffleBlockResolver.forMapTask(1, 2, 1, new JavaSerializer(conf),
       new ShuffleWriteMetrics)
 
     for (writer <- shuffle2.writers) {
-      writer.write("test3")
-      writer.write("test4")
+      writer.write("test3", "value")
+      writer.write("test4", "vlue")
     }
     for (writer <- shuffle2.writers) {
       writer.commitAndClose()
@@ -88,20 +88,20 @@ class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
     // of block based on remaining data in file : which could mess things up when there is
     // concurrent read and writes happening to the same shuffle group.
 
-    val shuffle3 = shuffleBlockManager.forMapTask(1, 3, 1, new JavaSerializer(testConf),
+    val shuffle3 = shuffleBlockResolver.forMapTask(1, 3, 1, new JavaSerializer(testConf),
       new ShuffleWriteMetrics)
     for (writer <- shuffle3.writers) {
-      writer.write("test3")
-      writer.write("test4")
+      writer.write("test3", "value")
+      writer.write("test4", "value")
     }
     for (writer <- shuffle3.writers) {
       writer.commitAndClose()
     }
     // check before we register.
-    checkSegments(shuffle2Segment, shuffleBlockManager.getBlockData(ShuffleBlockId(1, 2, 0)))
+    checkSegments(shuffle2Segment, shuffleBlockResolver.getBlockData(ShuffleBlockId(1, 2, 0)))
     shuffle3.releaseWriters(success = true)
-    checkSegments(shuffle2Segment, shuffleBlockManager.getBlockData(ShuffleBlockId(1, 2, 0)))
-    shuffleBlockManager.removeShuffle(1)
+    checkSegments(shuffle2Segment, shuffleBlockResolver.getBlockData(ShuffleBlockId(1, 2, 0)))
+    shuffleBlockResolver.removeShuffle(1)
   }
 
   def writeToFile(file: File, numBytes: Int) {

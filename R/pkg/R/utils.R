@@ -501,7 +501,7 @@ appendPartitionLengths <- function(x, other) {
 #   A result RDD.
 mergePartitions <- function(rdd, zip) {
   serializerMode <- getSerializedMode(rdd)
-  partitionFunc <- function(split, part) {
+  partitionFunc <- function(partIndex, part) {
     len <- length(part)
     if (len > 0) {
       if (serializerMode == "byte") {

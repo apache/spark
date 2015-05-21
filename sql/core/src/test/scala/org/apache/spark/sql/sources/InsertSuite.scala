@@ -21,19 +21,19 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{SaveMode, AnalysisException, Row}
 import org.apache.spark.util.Utils
 
 class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
 
-  import caseInsensisitiveContext._
+  import caseInsensitiveContext._
 
   var path: File = null
 
   override def beforeAll: Unit = {
     path = Utils.createTempDir()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    jsonRDD(rdd).registerTempTable("jt")
+    read.json(rdd).registerTempTable("jt")
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable (a int, b string)
@@ -100,23 +100,48 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
   test("INSERT OVERWRITE a JSONRelation multiple times") {
     sql(
       s"""
-        |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
-      """.stripMargin)
-
-    sql(
-      s"""
-        |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
-      """.stripMargin)
-
-    sql(
-      s"""
-        |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
-      """.stripMargin)
-
+         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
+    """.stripMargin)
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i, s"str$i"))
     )
+
+    // Writing the table to less part files.
+    val rdd1 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""), 5)
+    read.json(rdd1).registerTempTable("jt1")
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt1
+    """.stripMargin)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      (1 to 10).map(i => Row(i, s"str$i"))
+    )
+
+    // Writing the table to more part files.
+    val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""), 10)
+    read.json(rdd2).registerTempTable("jt2")
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt2
+    """.stripMargin)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      (1 to 10).map(i => Row(i, s"str$i"))
+    )
+
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable SELECT a * 10, b FROM jt1
+    """.stripMargin)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      (1 to 10).map(i => Row(i * 10, s"str$i"))
+    )
+
+    dropTempTable("jt1")
+    dropTempTable("jt2")
   }
 
   test("INSERT INTO not supported for JSONRelation for now") {
@@ -126,6 +151,20 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
         |INSERT INTO TABLE jsonTable SELECT a, b FROM jt
       """.stripMargin)
     }
+  }
+
+  test("save directly to the path of a JSON table") {
+    table("jt").selectExpr("a * 5 as a", "b").write.mode(SaveMode.Overwrite).json(path.toString)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      (1 to 10).map(i => Row(i * 5, s"str$i"))
+    )
+
+    table("jt").write.mode(SaveMode.Overwrite).json(path.toString)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      (1 to 10).map(i => Row(i, s"str$i"))
+    )
   }
 
   test("it is not allowed to write to a table while querying it.") {

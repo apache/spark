@@ -40,11 +40,11 @@ function handle_error () {
 {
   if [ -n "$AMPLAB_JENKINS_BUILD_PROFILE" ]; then
     if [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop1.0" ]; then
-      export SBT_MAVEN_PROFILES_ARGS="-Dhadoop.version=1.0.4"
+      export SBT_MAVEN_PROFILES_ARGS="-Phadoop-1 -Dhadoop.version=1.0.4"
     elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.0" ]; then
-      export SBT_MAVEN_PROFILES_ARGS="-Dhadoop.version=2.0.0-mr1-cdh4.1.1"
+      export SBT_MAVEN_PROFILES_ARGS="-Phadoop-1 -Dhadoop.version=2.0.0-mr1-cdh4.1.1"
     elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.2" ]; then
-      export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0"
+      export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Phadoop-2.2"
     elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.3" ]; then
       export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
     fi
@@ -142,29 +142,6 @@ CURRENT_BLOCK=$BLOCK_BUILD
 
 {
   HIVE_BUILD_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
-  HIVE_12_BUILD_ARGS="$HIVE_BUILD_ARGS -Phive-0.12.0"
-
-  # First build with Hive 0.12.0 to ensure patches do not break the Hive 0.12.0 build
-  echo "[info] Compile with Hive 0.12.0"
-  [ -d "lib_managed" ] && rm -rf lib_managed
-  echo "[info] Building Spark with these arguments: $HIVE_12_BUILD_ARGS"
-
-  if [ "${AMPLAB_JENKINS_BUILD_TOOL}" == "maven" ]; then
-    build/mvn $HIVE_12_BUILD_ARGS clean package -DskipTests
-  else
-    # NOTE: echo "q" is needed because sbt on encountering a build file with failure
-    # (either resolution or compilation) prompts the user for input either q, r, etc
-    # to quit or retry. This echo is there to make it not block.
-    # NOTE: Do not quote $BUILD_MVN_PROFILE_ARGS or else it will be interpreted as a
-    # single argument!
-    # QUESTION: Why doesn't 'yes "q"' work?
-    # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
-    echo -e "q\n" \
-      | build/sbt $HIVE_12_BUILD_ARGS clean hive/compile hive-thriftserver/compile \
-      | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
-  fi
-
-  # Then build with default Hive version (0.13.1) because tests are based on this version
   echo "[info] Compile with Hive 0.13.1"
   [ -d "lib_managed" ] && rm -rf lib_managed
   echo "[info] Building Spark with these arguments: $HIVE_BUILD_ARGS"
@@ -236,7 +213,7 @@ echo "========================================================================="
 CURRENT_BLOCK=$BLOCK_PYSPARK_UNIT_TESTS
 
 # add path for python 3 in jenkins
-export PATH="${PATH}:/home/anaonda/envs/py3k/bin"
+export PATH="${PATH}:/home/anaconda/envs/py3k/bin"
 ./python/run-tests
 
 echo ""

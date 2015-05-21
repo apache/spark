@@ -23,8 +23,6 @@ import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
 
-from py4j.java_collections import ListConverter
-
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast
@@ -175,6 +173,7 @@ class SparkContext(object):
             self._jvm.PythonAccumulatorParam(host, port))
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
+        self.pythonVer = "%d.%d" % sys.version_info[:2]
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
@@ -269,6 +268,13 @@ class SparkContext(object):
         """
         self.stop()
 
+    def setLogLevel(self, logLevel):
+        """
+        Control our logLevel. This overrides any user-defined log settings.
+        Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
+        """
+        self._jsc.setLogLevel(logLevel)
+
     @classmethod
     def setSystemProperty(cls, key, value):
         """
@@ -312,6 +318,22 @@ class SparkContext(object):
             self._accumulatorServer = None
         with SparkContext._lock:
             SparkContext._active_spark_context = None
+
+    def range(self, start, end, step=1, numSlices=None):
+        """
+        Create a new RDD of int containing elements from `start` to `end`
+        (exclusive), increased by `step` every element.
+
+        :param start: the start value
+        :param end: the end value (exclusive)
+        :param step: the incremental step (default: 1)
+        :param numSlices: the number of partitions of the new RDD
+        :return: An RDD of int
+
+        >>> sc.range(1, 7, 2).collect()
+        [1, 3, 5]
+        """
+        return self.parallelize(xrange(start, end, step), numSlices)
 
     def parallelize(self, c, numSlices=None):
         """
@@ -643,7 +665,6 @@ class SparkContext(object):
             rdds = [x._reserialize() for x in rdds]
         first = rdds[0]._jrdd
         rest = [x._jrdd for x in rdds[1:]]
-        rest = ListConverter().convert(rest, self._gateway._gateway_client)
         return RDD(self._jsc.union(first, rest), self, rdds[0]._jrdd_deserializer)
 
     def broadcast(self, value):
@@ -671,7 +692,7 @@ class SparkContext(object):
             elif isinstance(value, complex):
                 accum_param = accumulators.COMPLEX_ACCUMULATOR_PARAM
             else:
-                raise Exception("No default accumulator param for type %s" % type(value))
+                raise TypeError("No default accumulator param for type %s" % type(value))
         SparkContext._next_accum_id += 1
         return Accumulator(SparkContext._next_accum_id - 1, value, accum_param)
 
@@ -846,13 +867,12 @@ class SparkContext(object):
         """
         if partitions is None:
             partitions = range(rdd._jrdd.partitions().size())
-        javaPartitions = ListConverter().convert(partitions, self._gateway._gateway_client)
 
         # Implementation note: This is implemented as a mapPartitions followed
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
-        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions,
+        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions,
                                           allowLocal)
         return list(_load_from_socket(port, mappedRDD._jrdd_deserializer))
 

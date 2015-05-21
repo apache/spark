@@ -17,6 +17,7 @@
 
 import sys
 import decimal
+import time
 import datetime
 import keyword
 import warnings
@@ -29,6 +30,9 @@ from operator import itemgetter
 if sys.version >= "3":
     long = int
     unicode = str
+
+from py4j.protocol import register_input_converter
+from py4j.java_gateway import JavaClass
 
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
@@ -69,56 +73,74 @@ class DataType(object):
 
 # This singleton pattern does not work with pickle, you will get
 # another object after pickle and unpickle
-class PrimitiveTypeSingleton(type):
-    """Metaclass for PrimitiveType"""
+class DataTypeSingleton(type):
+    """Metaclass for DataType"""
 
     _instances = {}
 
     def __call__(cls):
         if cls not in cls._instances:
-            cls._instances[cls] = super(PrimitiveTypeSingleton, cls).__call__()
+            cls._instances[cls] = super(DataTypeSingleton, cls).__call__()
         return cls._instances[cls]
 
 
-class PrimitiveType(DataType):
-    """Spark SQL PrimitiveType"""
-
-    __metaclass__ = PrimitiveTypeSingleton
-
-
-class NullType(PrimitiveType):
+class NullType(DataType):
     """Null type.
 
     The data type representing None, used for the types that cannot be inferred.
     """
 
+    __metaclass__ = DataTypeSingleton
 
-class StringType(PrimitiveType):
+
+class AtomicType(DataType):
+    """An internal type used to represent everything that is not
+    null, UDTs, arrays, structs, and maps."""
+
+    __metaclass__ = DataTypeSingleton
+
+
+class NumericType(AtomicType):
+    """Numeric data types.
+    """
+
+
+class IntegralType(NumericType):
+    """Integral data types.
+    """
+
+
+class FractionalType(NumericType):
+    """Fractional data types.
+    """
+
+
+class StringType(AtomicType):
     """String data type.
     """
 
 
-class BinaryType(PrimitiveType):
+class BinaryType(AtomicType):
     """Binary (byte array) data type.
     """
 
 
-class BooleanType(PrimitiveType):
+class BooleanType(AtomicType):
     """Boolean data type.
     """
 
 
-class DateType(PrimitiveType):
+class DateType(AtomicType):
     """Date (datetime.date) data type.
     """
 
 
-class TimestampType(PrimitiveType):
+class TimestampType(AtomicType):
     """Timestamp (datetime.datetime) data type.
     """
 
 
-class DecimalType(DataType):
+class DecimalType(FractionalType):
     """Decimal (decimal.Decimal) data type.
     """
 
@@ -146,31 +168,31 @@ class DecimalType(DataType):
             return "DecimalType()"
 
 
-class DoubleType(PrimitiveType):
+class DoubleType(FractionalType):
     """Double data type, representing double precision floats.
     """
 
 
-class FloatType(PrimitiveType):
+class FloatType(FractionalType):
     """Float data type, representing single precision floats.
     """
 
 
-class ByteType(PrimitiveType):
+class ByteType(IntegralType):
     """Byte data type, i.e. a signed integer in a single byte.
     """
     def simpleString(self):
         return 'tinyint'
 
 
-class IntegerType(PrimitiveType):
+class IntegerType(IntegralType):
     """Int data type, i.e. a signed 32-bit integer.
     """
     def simpleString(self):
         return 'int'
 
 
-class LongType(PrimitiveType):
+class LongType(IntegralType):
     """Long data type, i.e. a signed 64-bit integer.
 
     If the values are beyond the range of [-9223372036854775808, 9223372036854775807],
@@ -180,7 +202,7 @@ class LongType(PrimitiveType):
         return 'bigint'
 
 
-class ShortType(PrimitiveType):
+class ShortType(IntegralType):
     """Short data type, i.e. a signed 16-bit integer.
     """
     def simpleString(self):
@@ -422,11 +444,9 @@ class UserDefinedType(DataType):
         return type(self) == type(other)
 
 
-_all_primitive_types = dict((v.typeName(), v)
-                            for v in list(globals().values())
-                            if (type(v) is type or type(v) is PrimitiveTypeSingleton)
-                            and v.__base__ == PrimitiveType)
-
+_atomic_types = [StringType, BinaryType, BooleanType, DecimalType, FloatType, DoubleType,
+                 ByteType, ShortType, IntegerType, LongType, DateType, TimestampType]
+_all_atomic_types = dict((t.typeName(), t) for t in _atomic_types)
 _all_complex_types = dict((v.typeName(), v)
                           for v in [ArrayType, MapType, StructType])
 
@@ -440,7 +460,7 @@ def _parse_datatype_json_string(json_string):
     ...     scala_datatype = sqlContext._ssql_ctx.parseDataType(datatype.json())
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     assert datatype == python_datatype
-    >>> for cls in _all_primitive_types.values():
+    >>> for cls in _all_atomic_types.values():
     ...     check_datatype(cls())
 
     >>> # Simple ArrayType.
@@ -490,8 +510,8 @@ _FIXED_DECIMAL = re.compile("decimal\\((\\d+),(\\d+)\\)")
 
 def _parse_datatype_json_value(json_value):
     if not isinstance(json_value, dict):
-        if json_value in _all_primitive_types.keys():
-            return _all_primitive_types[json_value]()
+        if json_value in _all_atomic_types.keys():
+            return _all_atomic_types[json_value]()
         elif json_value == 'decimal':
             return DecimalType()
         elif _FIXED_DECIMAL.match(json_value):
@@ -562,8 +582,8 @@ def _infer_type(obj):
     else:
         try:
             return _infer_schema(obj)
-        except ValueError:
-            raise ValueError("not supported type: %s" % type(obj))
+        except TypeError:
+            raise TypeError("not supported type: %s" % type(obj))
 
 
 def _infer_schema(row):
@@ -584,7 +604,7 @@ def _infer_schema(row):
         items = sorted(row.__dict__.items())
 
     else:
-        raise ValueError("Can not infer schema for type: %s" % type(row))
+        raise TypeError("Can not infer schema for type: %s" % type(row))
 
     fields = [StructField(k, _infer_type(v), True) for k, v in items]
     return StructType(fields)
@@ -648,7 +668,7 @@ def _python_to_sql_converter(dataType):
 
     if isinstance(dataType, StructType):
         names, types = zip(*[(f.name, f.dataType) for f in dataType.fields])
-        converters = map(_python_to_sql_converter, types)
+        converters = [_python_to_sql_converter(t) for t in types]
 
         def converter(obj):
             if isinstance(obj, dict):
@@ -696,7 +716,7 @@ def _merge_type(a, b):
         return a
     elif type(a) is not type(b):
         # TODO: type cast (such as int -> long)
-        raise TypeError("Can not merge type %s and %s" % (a, b))
+        raise TypeError("Can not merge type %s and %s" % (type(a), type(b)))
 
     # same type
     if isinstance(a, StructType):
@@ -773,7 +793,7 @@ def _create_converter(dataType):
         elif hasattr(obj, "__dict__"):  # object
             d = obj.__dict__
         else:
-            raise ValueError("Unexpected obj: %s" % obj)
+            raise TypeError("Unexpected obj type: %s" % type(obj))
 
         if convert_fields:
             return tuple([conv(d.get(name)) for name, conv in zip(names, converters)])
@@ -912,7 +932,7 @@ def _infer_schema_type(obj, dataType):
         return StructType(fields)
 
     else:
-        raise ValueError("Unexpected dataType: %s" % dataType)
+        raise TypeError("Unexpected dataType: %s" % type(dataType))
 
 
 _acceptable_types = {
@@ -926,7 +946,7 @@ _acceptable_types = {
     DecimalType: (decimal.Decimal,),
     StringType: (str, unicode),
     BinaryType: (bytearray,),
-    DateType: (datetime.date,),
+    DateType: (datetime.date, datetime.datetime),
     TimestampType: (datetime.datetime,),
     ArrayType: (list, tuple, array),
     MapType: (dict,),
@@ -1121,7 +1141,7 @@ def _create_cls(dataType):
         return lambda datum: dataType.deserialize(datum)
 
     elif not isinstance(dataType, StructType):
-        # no wrapper for primitive types
+        # no wrapper for atomic types
         return lambda x: x
 
     class Row(tuple):
@@ -1224,17 +1244,42 @@ class Row(tuple):
             raise AttributeError(item)
 
     def __reduce__(self):
+        """Returns a tuple so Python knows how to pickle Row."""
         if hasattr(self, "__fields__"):
             return (_create_row, (self.__fields__, tuple(self)))
         else:
             return tuple.__reduce__(self)
 
     def __repr__(self):
+        """Printable representation of Row used in Python REPL."""
         if hasattr(self, "__fields__"):
             return "Row(%s)" % ", ".join("%s=%r" % (k, v)
                                          for k, v in zip(self.__fields__, tuple(self)))
         else:
             return "<Row(%s)>" % ", ".join(self)
+
+
+class DateConverter(object):
+    def can_convert(self, obj):
+        return isinstance(obj, datetime.date)
+
+    def convert(self, obj, gateway_client):
+        Date = JavaClass("java.sql.Date", gateway_client)
+        return Date.valueOf(obj.strftime("%Y-%m-%d"))
+
+
+class DatetimeConverter(object):
+    def can_convert(self, obj):
+        return isinstance(obj, datetime.datetime)
+
+    def convert(self, obj, gateway_client):
+        Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
+        return Timestamp(int(time.mktime(obj.timetuple())) * 1000 + obj.microsecond // 1000)
+
+
+# datetime is a subclass of date, we should register DatetimeConverter first
+register_input_converter(DatetimeConverter())
+register_input_converter(DateConverter())
 
 
 def _test():

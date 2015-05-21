@@ -45,10 +45,9 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
     blockManager.get(key) match {
       case Some(blockResult) =>
         // Partition is already materialized, so just return its values
-        val inputMetrics = blockResult.inputMetrics
         val existingMetrics = context.taskMetrics
-          .getInputMetricsForReadMethod(inputMetrics.readMethod)
-        existingMetrics.incBytesRead(inputMetrics.bytesRead)
+          .getInputMetricsForReadMethod(blockResult.readMethod)
+        existingMetrics.incBytesRead(blockResult.bytes)
 
         val buf = blockResult.data.toArray
           // If the block is retrieved remotely, try to cache it locally

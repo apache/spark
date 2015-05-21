@@ -26,6 +26,7 @@ import shutil
 import tempfile
 import pickle
 import functools
+import datetime
 
 import py4j
 
@@ -108,13 +109,33 @@ class SQLTests(ReusedPySparkTestCase):
         os.unlink(cls.tempdir.name)
         cls.sqlCtx = SQLContext(cls.sc)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
-        rdd = cls.sc.parallelize(cls.testData)
+        rdd = cls.sc.parallelize(cls.testData, 2)
         cls.df = rdd.toDF()
 
     @classmethod
     def tearDownClass(cls):
         ReusedPySparkTestCase.tearDownClass()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+
+    def test_range(self):
+        self.assertEqual(self.sqlCtx.range(1, 1).count(), 0)
+        self.assertEqual(self.sqlCtx.range(1, 0, -1).count(), 1)
+        self.assertEqual(self.sqlCtx.range(0, 1 << 40, 1 << 39).count(), 2)
+
+    def test_explode(self):
+        from pyspark.sql.functions import explode
+        d = [Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"})]
+        rdd = self.sc.parallelize(d)
+        data = self.sqlCtx.createDataFrame(rdd)
+
+        result = data.select(explode(data.intlist).alias("a")).select("a").collect()
+        self.assertEqual(result[0][0], 1)
+        self.assertEqual(result[1][0], 2)
+        self.assertEqual(result[2][0], 3)
+
+        result = data.select(explode(data.mapfield).alias("a", "b")).select("a", "b").collect()
+        self.assertEqual(result[0][0], "a")
+        self.assertEqual(result[0][1], "b")
 
     def test_udf_with_callable(self):
         d = [Row(number=i, squared=i**2) for i in range(10)]
@@ -302,7 +323,7 @@ class SQLTests(ReusedPySparkTestCase):
         abstract = "byte1 short1 float1 time1 map1{} struct1(b) list1[]"
         schema = _parse_schema_abstract(abstract)
         typedSchema = _infer_schema_type(rdd.first(), schema)
-        df = self.sqlCtx.applySchema(rdd, typedSchema)
+        df = self.sqlCtx.createDataFrame(rdd, typedSchema)
         r = (127, -32768, 1.0, datetime(2010, 1, 1, 1, 1, 1), {"a": 1}, Row(b=2), [1, 2, 3])
         self.assertEqual(r, tuple(df.first()))
 
@@ -374,6 +395,13 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(self.testData, df.select(df.key, df.value).collect())
         self.assertEqual([Row(value='1')], df.where(df.key == 1).select(df.value).collect())
 
+    def test_freqItems(self):
+        vals = [Row(a=1, b=-2.0) if i % 2 == 0 else Row(a=i, b=i * 1.0) for i in range(100)]
+        df = self.sc.parallelize(vals).toDF()
+        items = df.stat.freqItems(("a", "b"), 0.4).collect()[0]
+        self.assertTrue(1 in items[0])
+        self.assertTrue(-2.0 in items[1])
+
     def test_aggregator(self):
         df = self.df
         g = df.groupBy()
@@ -386,33 +414,100 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(95 < g.agg(functions.approxCountDistinct(df.key)).first()[0])
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
+    def test_corr(self):
+        import math
+        df = self.sc.parallelize([Row(a=i, b=math.sqrt(i)) for i in range(10)]).toDF()
+        corr = df.stat.corr("a", "b")
+        self.assertTrue(abs(corr - 0.95734012) < 1e-6)
+
+    def test_cov(self):
+        df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
+        cov = df.stat.cov("a", "b")
+        self.assertTrue(abs(cov - 55.0 / 3) < 1e-6)
+
+    def test_crosstab(self):
+        df = self.sc.parallelize([Row(a=i % 3, b=i % 2) for i in range(1, 7)]).toDF()
+        ct = df.stat.crosstab("a", "b").collect()
+        ct = sorted(ct, key=lambda x: x[0])
+        for i, row in enumerate(ct):
+            self.assertEqual(row[0], str(i))
+            self.assertTrue(row[1], 1)
+            self.assertTrue(row[2], 1)
+
+    def test_math_functions(self):
+        df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
+        from pyspark.sql import functions
+        import math
+
+        def get_values(l):
+            return [j[0] for j in l]
+
+        def assert_close(a, b):
+            c = get_values(b)
+            diff = [abs(v - c[k]) < 1e-6 for k, v in enumerate(a)]
+            return sum(diff) == len(a)
+        assert_close([math.cos(i) for i in range(10)],
+                     df.select(functions.cos(df.a)).collect())
+        assert_close([math.cos(i) for i in range(10)],
+                     df.select(functions.cos("a")).collect())
+        assert_close([math.sin(i) for i in range(10)],
+                     df.select(functions.sin(df.a)).collect())
+        assert_close([math.sin(i) for i in range(10)],
+                     df.select(functions.sin(df['a'])).collect())
+        assert_close([math.pow(i, 2 * i) for i in range(10)],
+                     df.select(functions.pow(df.a, df.b)).collect())
+        assert_close([math.pow(i, 2) for i in range(10)],
+                     df.select(functions.pow(df.a, 2)).collect())
+        assert_close([math.pow(i, 2) for i in range(10)],
+                     df.select(functions.pow(df.a, 2.0)).collect())
+        assert_close([math.hypot(i, 2 * i) for i in range(10)],
+                     df.select(functions.hypot(df.a, df.b)).collect())
+
+    def test_rand_functions(self):
+        df = self.df
+        from pyspark.sql import functions
+        rnd = df.select('key', functions.rand()).collect()
+        for row in rnd:
+            assert row[1] >= 0.0 and row[1] <= 1.0, "got: %s" % row[1]
+        rndn = df.select('key', functions.randn(5)).collect()
+        for row in rndn:
+            assert row[1] >= -4.0 and row[1] <= 4.0, "got: %s" % row[1]
+
+    def test_between_function(self):
+        df = self.sc.parallelize([
+            Row(a=1, b=2, c=3),
+            Row(a=2, b=1, c=3),
+            Row(a=4, b=1, c=4)]).toDF()
+        self.assertEqual([Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)],
+                         df.filter(df.a.between(df.b, df.c)).collect())
+
     def test_save_and_load(self):
         df = self.df
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
-        df.save(tmpPath, "org.apache.spark.sql.json", "error")
-        actual = self.sqlCtx.load(tmpPath, "org.apache.spark.sql.json")
-        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        df.write.json(tmpPath)
+        actual = self.sqlCtx.read.json(tmpPath)
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
         schema = StructType([StructField("value", StringType(), True)])
-        actual = self.sqlCtx.load(tmpPath, "org.apache.spark.sql.json", schema)
-        self.assertTrue(sorted(df.select("value").collect()) == sorted(actual.collect()))
+        actual = self.sqlCtx.read.json(tmpPath, schema)
+        self.assertEqual(sorted(df.select("value").collect()), sorted(actual.collect()))
 
-        df.save(tmpPath, "org.apache.spark.sql.json", "overwrite")
-        actual = self.sqlCtx.load(tmpPath, "org.apache.spark.sql.json")
-        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        df.write.json(tmpPath, "overwrite")
+        actual = self.sqlCtx.read.json(tmpPath)
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
-        df.save(source="org.apache.spark.sql.json", mode="overwrite", path=tmpPath,
-                noUse="this options will not be used in save.")
-        actual = self.sqlCtx.load(source="org.apache.spark.sql.json", path=tmpPath,
-                                  noUse="this options will not be used in load.")
-        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        df.write.save(format="json", mode="overwrite", path=tmpPath,
+                      noUse="this options will not be used in save.")
+        actual = self.sqlCtx.read.load(format="json", path=tmpPath,
+                                       noUse="this options will not be used in load.")
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
         defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
                                                     "org.apache.spark.sql.parquet")
         self.sqlCtx.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
         actual = self.sqlCtx.load(path=tmpPath)
-        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
         self.sqlCtx.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
 
         shutil.rmtree(tmpPath)
@@ -444,6 +539,13 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual("v", df.select(df.d["k"]).first()[0])
         self.assertEqual("v", df.select(df.d.getItem("k")).first()[0])
 
+    def test_field_accessor(self):
+        df = self.sc.parallelize([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})]).toDF()
+        self.assertEqual(1, df.select(df.l[0]).first()[0])
+        self.assertEqual(1, df.select(df.r["a"]).first()[0])
+        self.assertEqual("b", df.select(df.r["b"]).first()[0])
+        self.assertEqual("v", df.select(df.d["k"]).first()[0])
+
     def test_infer_long_type(self):
         longrow = [Row(f1='a', f2=100000000000000)]
         df = self.sc.parallelize(longrow).toDF()
@@ -463,6 +565,16 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(_infer_type(2**31), LongType())
         self.assertEqual(_infer_type(2**61), LongType())
         self.assertEqual(_infer_type(2**71), LongType())
+
+    def test_filter_with_datetime(self):
+        time = datetime.datetime(2015, 4, 17, 23, 1, 2, 3000)
+        date = time.date()
+        row = Row(date=date, time=time)
+        df = self.sqlCtx.createDataFrame([row])
+        self.assertEqual(1, df.filter(df.date == date).count())
+        self.assertEqual(1, df.filter(df.time == time).count())
+        self.assertEqual(0, df.filter(df.date > date).count())
+        self.assertEqual(0, df.filter(df.time > time).count())
 
     def test_dropna(self):
         schema = StructType([
@@ -560,6 +672,67 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(row.age, None)
         self.assertEqual(row.height, None)
 
+    def test_bitwise_operations(self):
+        from pyspark.sql import functions
+        row = Row(a=170, b=75)
+        df = self.sqlCtx.createDataFrame([row])
+        result = df.select(df.a.bitwiseAND(df.b)).collect()[0].asDict()
+        self.assertEqual(170 & 75, result['(a & b)'])
+        result = df.select(df.a.bitwiseOR(df.b)).collect()[0].asDict()
+        self.assertEqual(170 | 75, result['(a | b)'])
+        result = df.select(df.a.bitwiseXOR(df.b)).collect()[0].asDict()
+        self.assertEqual(170 ^ 75, result['(a ^ b)'])
+        result = df.select(functions.bitwiseNOT(df.b)).collect()[0].asDict()
+        self.assertEqual(~75, result['~b'])
+
+    def test_replace(self):
+        schema = StructType([
+            StructField("name", StringType(), True),
+            StructField("age", IntegerType(), True),
+            StructField("height", DoubleType(), True)])
+
+        # replace with int
+        row = self.sqlCtx.createDataFrame([(u'Alice', 10, 10.0)], schema).replace(10, 20).first()
+        self.assertEqual(row.age, 20)
+        self.assertEqual(row.height, 20.0)
+
+        # replace with double
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 80, 80.0)], schema).replace(80.0, 82.1).first()
+        self.assertEqual(row.age, 82)
+        self.assertEqual(row.height, 82.1)
+
+        # replace with string
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace(u'Alice', u'Ann').first()
+        self.assertEqual(row.name, u"Ann")
+        self.assertEqual(row.age, 10)
+
+        # replace with subset specified by a string of a column name w/ actual change
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace(10, 20, subset='age').first()
+        self.assertEqual(row.age, 20)
+
+        # replace with subset specified by a string of a column name w/o actual change
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace(10, 20, subset='height').first()
+        self.assertEqual(row.age, 10)
+
+        # replace with subset specified with one column replaced, another column not in subset
+        # stays unchanged.
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, 10.0)], schema).replace(10, 20, subset=['name', 'age']).first()
+        self.assertEqual(row.name, u'Alice')
+        self.assertEqual(row.age, 20)
+        self.assertEqual(row.height, 10.0)
+
+        # replace with subset specified but no column will be replaced
+        row = self.sqlCtx.createDataFrame(
+            [(u'Alice', 10, None)], schema).replace(10, 20, subset=['name', 'height']).first()
+        self.assertEqual(row.name, u'Alice')
+        self.assertEqual(row.age, 10)
+        self.assertEqual(row.height, None)
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
@@ -594,51 +767,44 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         df = self.df
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
-        df.saveAsTable("savedJsonTable", "org.apache.spark.sql.json", "append", path=tmpPath)
-        actual = self.sqlCtx.createExternalTable("externalJsonTable", tmpPath,
-                                                 "org.apache.spark.sql.json")
-        self.assertTrue(
-            sorted(df.collect()) ==
-            sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
-        self.assertTrue(
-            sorted(df.collect()) ==
-            sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
-        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        df.write.saveAsTable("savedJsonTable", "json", "append", path=tmpPath)
+        actual = self.sqlCtx.createExternalTable("externalJsonTable", tmpPath, "json")
+        self.assertEqual(sorted(df.collect()),
+                         sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
+        self.assertEqual(sorted(df.collect()),
+                         sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
         self.sqlCtx.sql("DROP TABLE externalJsonTable")
 
-        df.saveAsTable("savedJsonTable", "org.apache.spark.sql.json", "overwrite", path=tmpPath)
+        df.write.saveAsTable("savedJsonTable", "json", "overwrite", path=tmpPath)
         schema = StructType([StructField("value", StringType(), True)])
-        actual = self.sqlCtx.createExternalTable("externalJsonTable",
-                                                 source="org.apache.spark.sql.json",
+        actual = self.sqlCtx.createExternalTable("externalJsonTable", source="json",
                                                  schema=schema, path=tmpPath,
                                                  noUse="this options will not be used")
-        self.assertTrue(
-            sorted(df.collect()) ==
-            sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
-        self.assertTrue(
-            sorted(df.select("value").collect()) ==
-            sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
-        self.assertTrue(sorted(df.select("value").collect()) == sorted(actual.collect()))
+        self.assertEqual(sorted(df.collect()),
+                         sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
+        self.assertEqual(sorted(df.select("value").collect()),
+                         sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
+        self.assertEqual(sorted(df.select("value").collect()), sorted(actual.collect()))
         self.sqlCtx.sql("DROP TABLE savedJsonTable")
         self.sqlCtx.sql("DROP TABLE externalJsonTable")
 
         defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
                                                     "org.apache.spark.sql.parquet")
         self.sqlCtx.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
-        df.saveAsTable("savedJsonTable", path=tmpPath, mode="overwrite")
+        df.write.saveAsTable("savedJsonTable", path=tmpPath, mode="overwrite")
         actual = self.sqlCtx.createExternalTable("externalJsonTable", path=tmpPath)
-        self.assertTrue(
-            sorted(df.collect()) ==
-            sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
-        self.assertTrue(
-            sorted(df.collect()) ==
-            sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
-        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        self.assertEqual(sorted(df.collect()),
+                         sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
+        self.assertEqual(sorted(df.collect()),
+                         sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
         self.sqlCtx.sql("DROP TABLE savedJsonTable")
         self.sqlCtx.sql("DROP TABLE externalJsonTable")
         self.sqlCtx.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
 
         shutil.rmtree(tmpPath)
+
 
 if __name__ == "__main__":
     unittest.main()

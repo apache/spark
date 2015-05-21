@@ -20,33 +20,46 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, DriverManager, ResultSet, ResultSetMetaData, SQLException}
 import java.util.Properties
 
-import org.apache.commons.lang.StringEscapeUtils.escapeSql
+import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Row, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources._
 
+/**
+ * Data corresponding to one partition of a JDBCRDD.
+ */
+private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
+  override def index: Int = idx
+}
+
+
 private[sql] object JDBCRDD extends Logging {
+
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
-   * the DriverQuirks class corresponding to your database driver returns null.
+   * the JdbcDialect class corresponding to your database driver returns null.
    *
    * @param sqlType - A field of java.sql.Types
    * @return The Catalyst type corresponding to sqlType.
    */
-  private def getCatalystType(sqlType: Int): DataType = {
+  private def getCatalystType(sqlType: Int, precision: Int, scale: Int): DataType = {
     val answer = sqlType match {
       case java.sql.Types.ARRAY         => null
       case java.sql.Types.BIGINT        => LongType
       case java.sql.Types.BINARY        => BinaryType
-      case java.sql.Types.BIT           => BooleanType // Per JDBC; Quirks handles quirky drivers.
+      case java.sql.Types.BIT           => BooleanType // @see JdbcDialect for quirks
       case java.sql.Types.BLOB          => BinaryType
       case java.sql.Types.BOOLEAN       => BooleanType
       case java.sql.Types.CHAR          => StringType
       case java.sql.Types.CLOB          => StringType
       case java.sql.Types.DATALINK      => null
       case java.sql.Types.DATE          => DateType
+      case java.sql.Types.DECIMAL
+        if precision != 0 || scale != 0 => DecimalType(precision, scale)
       case java.sql.Types.DECIMAL       => DecimalType.Unlimited
       case java.sql.Types.DISTINCT      => null
       case java.sql.Types.DOUBLE        => DoubleType
@@ -59,7 +72,10 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.NCHAR         => StringType
       case java.sql.Types.NCLOB         => StringType
       case java.sql.Types.NULL          => null
+      case java.sql.Types.NUMERIC
+        if precision != 0 || scale != 0 => DecimalType(precision, scale)
       case java.sql.Types.NUMERIC       => DecimalType.Unlimited
+      case java.sql.Types.NVARCHAR      => StringType
       case java.sql.Types.OTHER         => null
       case java.sql.Types.REAL          => DoubleType
       case java.sql.Types.REF           => StringType
@@ -92,7 +108,7 @@ private[sql] object JDBCRDD extends Logging {
    * @throws SQLException if the table contains an unsupported type.
    */
   def resolveTable(url: String, table: String, properties: Properties): StructType = {
-    val quirks = DriverQuirks.get(url)
+    val dialect = JdbcDialects.get(url)
     val conn: Connection = DriverManager.getConnection(url, properties)
     try {
       val rs = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0").executeQuery()
@@ -102,14 +118,16 @@ private[sql] object JDBCRDD extends Logging {
         val fields = new Array[StructField](ncols)
         var i = 0
         while (i < ncols) {
-          val columnName = rsmd.getColumnName(i + 1)
+          val columnName = rsmd.getColumnLabel(i + 1)
           val dataType = rsmd.getColumnType(i + 1)
           val typeName = rsmd.getColumnTypeName(i + 1)
           val fieldSize = rsmd.getPrecision(i + 1)
+          val fieldScale = rsmd.getScale(i + 1)
           val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
           val metadata = new MetadataBuilder().putString("name", columnName)
-          var columnType = quirks.getCatalystType(dataType, typeName, fieldSize, metadata)
-          if (columnType == null) columnType = getCatalystType(dataType)
+          val columnType =
+            dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
+              getCatalystType(dataType, fieldSize, fieldScale))
           fields(i) = StructField(columnName, columnType, nullable, metadata.build())
           i = i + 1
         }
@@ -151,7 +169,7 @@ private[sql] object JDBCRDD extends Logging {
   def getConnector(driver: String, url: String, properties: Properties): () => Connection = {
     () => {
       try {
-        if (driver != null) Class.forName(driver)
+        if (driver != null) DriverRegistry.register(driver)
       } catch {
         case e: ClassNotFoundException => {
           logWarning(s"Couldn't find class $driver", e);
@@ -160,6 +178,7 @@ private[sql] object JDBCRDD extends Logging {
       DriverManager.getConnection(url, properties)
     }
   }
+
   /**
    * Build and return JDBCRDD from the given information.
    *
@@ -185,18 +204,15 @@ private[sql] object JDBCRDD extends Logging {
       requiredColumns: Array[String],
       filters: Array[Filter],
       parts: Array[Partition]): RDD[Row] = {
-
-    val prunedSchema = pruneSchema(schema, requiredColumns)
-
-    return new
-        JDBCRDD(
-          sc,
-          getConnector(driver, url, properties),
-          prunedSchema,
-          fqTable,
-          requiredColumns,
-          filters,
-          parts)
+    new JDBCRDD(
+      sc,
+      getConnector(driver, url, properties),
+      pruneSchema(schema, requiredColumns),
+      fqTable,
+      requiredColumns,
+      filters,
+      parts,
+      properties)
   }
 }
 
@@ -212,7 +228,8 @@ private[sql] class JDBCRDD(
     fqTable: String,
     columns: Array[String],
     filters: Array[Filter],
-    partitions: Array[Partition])
+    partitions: Array[Partition],
+    properties: Properties)
   extends RDD[Row](sc, Nil) {
 
   /**
@@ -236,6 +253,9 @@ private[sql] class JDBCRDD(
     case stringValue: UTF8String => s"'${escapeSql(stringValue.toString)}'"
     case _ => value
   }
+
+  private def escapeSql(value: String): String =
+    if (value == null) null else  StringUtils.replace(value, "'", "''")
 
   /**
    * Turns a single Filter into a String representing a SQL expression.
@@ -283,7 +303,7 @@ private[sql] class JDBCRDD(
   abstract class JDBCConversion
   case object BooleanConversion extends JDBCConversion
   case object DateConversion extends JDBCConversion
-  case object DecimalConversion extends JDBCConversion
+  case class  DecimalConversion(precisionInfo: Option[(Int, Int)]) extends JDBCConversion
   case object DoubleConversion extends JDBCConversion
   case object FloatConversion extends JDBCConversion
   case object IntegerConversion extends JDBCConversion
@@ -300,7 +320,8 @@ private[sql] class JDBCRDD(
     schema.fields.map(sf => sf.dataType match {
       case BooleanType           => BooleanConversion
       case DateType              => DateConversion
-      case DecimalType.Unlimited => DecimalConversion
+      case DecimalType.Unlimited => DecimalConversion(None)
+      case DecimalType.Fixed(d)  => DecimalConversion(Some(d))
       case DoubleType            => DoubleConversion
       case FloatType             => FloatConversion
       case IntegerType           => IntegerConversion
@@ -337,6 +358,8 @@ private[sql] class JDBCRDD(
     val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause"
     val stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
+    val fetchSize = properties.getProperty("fetchSize", "0").toInt
+    stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()
 
     val conversions = getConversions(schema)
@@ -349,9 +372,36 @@ private[sql] class JDBCRDD(
           val pos = i + 1
           conversions(i) match {
             case BooleanConversion    => mutableRow.setBoolean(i, rs.getBoolean(pos))
-            // TODO(davies): convert Date into Int
-            case DateConversion       => mutableRow.update(i, rs.getDate(pos))
-            case DecimalConversion    => mutableRow.update(i, rs.getBigDecimal(pos))
+            case DateConversion       =>
+              // DateUtils.fromJavaDate does not handle null value, so we need to check it.
+              val dateVal = rs.getDate(pos)
+              if (dateVal != null) {
+                mutableRow.update(i, DateUtils.fromJavaDate(dateVal))
+              } else {
+                mutableRow.update(i, null)
+              }
+            // When connecting with Oracle DB through JDBC, the precision and scale of BigDecimal
+            // object returned by ResultSet.getBigDecimal is not correctly matched to the table
+            // schema reported by ResultSetMetaData.getPrecision and ResultSetMetaData.getScale.
+            // If inserting values like 19999 into a column with NUMBER(12, 2) type, you get through
+            // a BigDecimal object with scale as 0. But the dataframe schema has correct type as
+            // DecimalType(12, 2). Thus, after saving the dataframe into parquet file and then
+            // retrieve it, you will get wrong result 199.99.
+            // So it is needed to set precision and scale for Decimal based on JDBC metadata.
+            case DecimalConversion(Some((p, s))) =>
+              val decimalVal = rs.getBigDecimal(pos)
+              if (decimalVal == null) {
+                mutableRow.update(i, null)
+              } else {
+                mutableRow.update(i, Decimal(decimalVal, p, s))
+              }
+            case DecimalConversion(None) =>
+              val decimalVal = rs.getBigDecimal(pos)
+              if (decimalVal == null) {
+                mutableRow.update(i, null)
+              } else {
+                mutableRow.update(i, Decimal(decimalVal))
+              }
             case DoubleConversion     => mutableRow.setDouble(i, rs.getDouble(pos))
             case FloatConversion      => mutableRow.setFloat(i, rs.getFloat(pos))
             case IntegerConversion    => mutableRow.setInt(i, rs.getInt(pos))

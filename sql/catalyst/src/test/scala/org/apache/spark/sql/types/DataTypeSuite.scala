@@ -56,6 +56,19 @@ class DataTypeSuite extends FunSuite {
     }
   }
 
+  test("extract field index from a StructType") {
+    val struct = StructType(
+      StructField("a", LongType) ::
+      StructField("b", FloatType) :: Nil)
+
+    assert(struct.fieldIndex("a") === 0)
+    assert(struct.fieldIndex("b") === 1)
+
+    intercept[IllegalArgumentException] {
+      struct.fieldIndex("non_existent")
+    }
+  }
+
   def checkDataTypeJsonRepr(dataType: DataType): Unit = {
     test(s"JSON - $dataType") {
       assert(DataType.fromJson(dataType.json) === dataType)

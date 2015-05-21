@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.util.{List => JList, Map => JMap}
 
 import org.apache.spark.Accumulator
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.expressions.ScalaUdf
@@ -36,7 +37,10 @@ import org.apache.spark.sql.types.DataType
  *   // Projects a column that adds a prediction column based on the score column.
  *   df.select( predict(df("score")) )
  * }}}
+ *
+ * @since 1.3.0
  */
+@Experimental
 case class UserDefinedFunction protected[sql] (f: AnyRef, dataType: DataType) {
 
   def apply(exprs: Column*): Column = {
@@ -54,14 +58,15 @@ private[sql] case class UserDefinedPythonFunction(
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
     pythonExec: String,
+    pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]],
     dataType: DataType) {
 
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
   def apply(exprs: Column*): Column = {
-    val udf = PythonUDF(name, command, envVars, pythonIncludes, pythonExec, broadcastVars,
-      accumulator, dataType, exprs.map(_.expr))
+    val udf = PythonUDF(name, command, envVars, pythonIncludes, pythonExec, pythonVer,
+      broadcastVars, accumulator, dataType, exprs.map(_.expr))
     Column(udf)
   }
 }

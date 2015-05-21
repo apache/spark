@@ -55,9 +55,9 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
     }.foreach(println)
 
   */
-  
-  val f = children.size match {
-    case 0 => 
+
+  private[this] val f = children.size match {
+    case 0 =>
       val func = function.asInstanceOf[() => Any]
       (input: Row) => {
         func()
@@ -956,7 +956,7 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
   }
 
   // scalastyle:on
-
-  override def eval(input: Row): Any = CatalystTypeConverters.convertToCatalyst(f(input), dataType)
+  private[this] val converter = CatalystTypeConverters.createToCatalystConverter(dataType)
+  override def eval(input: Row): Any = converter(f(input))
 
 }

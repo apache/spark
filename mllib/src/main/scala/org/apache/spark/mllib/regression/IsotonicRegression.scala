@@ -21,11 +21,20 @@ import java.io.Serializable
 import java.lang.{Double => JDouble}
 import java.util.Arrays.binarySearch
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
+import org.json4s._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
 
 /**
  * :: Experimental ::
@@ -42,7 +51,7 @@ import org.apache.spark.rdd.RDD
 class IsotonicRegressionModel (
     val boundaries: Array[Double],
     val predictions: Array[Double],
-    val isotonic: Boolean) extends Serializable {
+    val isotonic: Boolean) extends Serializable with Saveable {
 
   private val predictionOrd = if (isotonic) Ordering[Double] else Ordering[Double].reverse
 
@@ -50,10 +59,18 @@ class IsotonicRegressionModel (
   assertOrdered(boundaries)
   assertOrdered(predictions)(predictionOrd)
 
+  /** A Java-friendly constructor that takes two Iterable parameters and one Boolean parameter. */
+  def this(boundaries: java.lang.Iterable[Double],
+      predictions: java.lang.Iterable[Double],
+      isotonic: java.lang.Boolean) = {
+    this(boundaries.asScala.toArray, predictions.asScala.toArray, isotonic)
+  }
+
   /** Asserts the input array is monotone with the given ordering. */
   private def assertOrdered(xs: Array[Double])(implicit ord: Ordering[Double]): Unit = {
     var i = 1
-    while (i < xs.length) {
+    val len = xs.length
+    while (i < len) {
       require(ord.compare(xs(i - 1), xs(i)) <= 0,
         s"Elements (${xs(i - 1)}, ${xs(i)}) are not ordered.")
       i += 1
@@ -122,6 +139,81 @@ class IsotonicRegressionModel (
         testData)
     } else {
       predictions(foundIndex)
+    }
+  }
+
+  /** A convenient method for boundaries called by the Python API. */
+  private[mllib] def boundaryVector: Vector = Vectors.dense(boundaries)
+
+  /** A convenient method for boundaries called by the Python API. */
+  private[mllib] def predictionVector: Vector = Vectors.dense(predictions)
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    IsotonicRegressionModel.SaveLoadV1_0.save(sc, path, boundaries, predictions, isotonic)
+  }
+
+  override protected def formatVersion: String = "1.0"
+}
+
+object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
+
+  import org.apache.spark.mllib.util.Loader._
+
+  private object SaveLoadV1_0 {
+
+    def thisFormatVersion: String = "1.0"
+
+    /** Hard-code class name string in case it changes in the future */
+    def thisClassName: String = "org.apache.spark.mllib.regression.IsotonicRegressionModel"
+
+    /** Model data for model import/export */
+    case class Data(boundary: Double, prediction: Double)
+
+    def save(
+        sc: SparkContext, 
+        path: String, 
+        boundaries: Array[Double], 
+        predictions: Array[Double], 
+        isotonic: Boolean): Unit = {
+      val sqlContext = new SQLContext(sc)
+
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ 
+          ("isotonic" -> isotonic)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
+
+      sqlContext.createDataFrame(
+        boundaries.toSeq.zip(predictions).map { case (b, p) => Data(b, p) }
+      ).write.parquet(dataPath(path))
+    }
+
+    def load(sc: SparkContext, path: String): (Array[Double], Array[Double]) = {
+      val sqlContext = new SQLContext(sc)
+      val dataRDD = sqlContext.read.parquet(dataPath(path))
+
+      checkSchema[Data](dataRDD.schema)
+      val dataArray = dataRDD.select("boundary", "prediction").collect()
+      val (boundaries, predictions) = dataArray.map { x =>
+        (x.getDouble(0), x.getDouble(1))
+      }.toList.sortBy(_._1).unzip
+      (boundaries.toArray, predictions.toArray)
+    }
+  }
+
+  override def load(sc: SparkContext, path: String): IsotonicRegressionModel = {
+    implicit val formats = DefaultFormats
+    val (loadedClassName, version, metadata) = loadMetadata(sc, path)
+    val isotonic =  (metadata \ "isotonic").extract[Boolean]
+    val classNameV1_0 = SaveLoadV1_0.thisClassName
+    (loadedClassName, version) match {
+      case (className, "1.0") if className == classNameV1_0 =>
+        val (boundaries, predictions) = SaveLoadV1_0.load(sc, path)
+        new IsotonicRegressionModel(boundaries, predictions, isotonic)
+      case _ => throw new Exception(
+        s"IsotonicRegressionModel.load did not recognize model with (className, format version):" +
+        s"($loadedClassName, $version).  Supported:\n" +
+        s"  ($classNameV1_0, 1.0)"
+      )
     }
   }
 }
@@ -238,11 +330,12 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     }
 
     var i = 0
-    while (i < input.length) {
+    val len = input.length
+    while (i < len) {
       var j = i
 
       // Find monotonicity violating sequence, if any.
-      while (j < input.length - 1 && input(j)._1 > input(j + 1)._1) {
+      while (j < len - 1 && input(j)._1 > input(j + 1)._1) {
         j = j + 1
       }
 
