@@ -369,36 +369,42 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Request that the cluster manager kill the specified executors.
    * Return whether the kill request is acknowledged.
    */
-  final override def killExecutors(executorIds: Seq[String]): Boolean = synchronized {
-    if (executorIds.size == 1) {
-      logInfo(s"Requesting cluster manager to kill executor ${executorIds.head}.")
-    } else if (executorIds.size > 1) {
-      logInfo(s"Requesting cluster manager to kill executors ${executorIds.mkString(", ")}")
-    } else {
-      // No executors to kill
-      return false
-    }
+  final override def killExecutors(executorIds: Seq[String]): Boolean = {
+    val executorIdsToKill = new ArrayBuffer[String]
 
-    val filteredExecutorIds = new ArrayBuffer[String]
-    executorIds.foreach { id =>
-      if (executorDataMap.contains(id)) {
-        filteredExecutorIds += id
+    // New target total after all pending requests have been granted
+    val newTargetTotal = synchronized {
+      if (executorIds.size == 1) {
+        logInfo(s"Requesting cluster manager to kill executor ${executorIds.head}.")
+      } else if (executorIds.size > 1) {
+        logInfo(s"Requesting cluster manager to kill executors ${executorIds.mkString(", ")}")
       } else {
-        logWarning(s"Executor to kill $id does not exist!")
+        // No executors to kill
+        return false
       }
-    }
-    // Killing executors means effectively that we want less executors than before, so also update
-    // the target number of executors to avoid having the backend allocate new ones.
-    val newTotal = (numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size
-      - filteredExecutorIds.size)
-    doRequestTotalExecutors(newTotal)
 
-    executorsPendingToRemove ++= filteredExecutorIds
-    val acked = doKillExecutors(filteredExecutorIds)
+      executorIds.foreach { id =>
+        if (executorDataMap.contains(id)) {
+          executorIdsToKill += id
+        } else {
+          logWarning(s"Executor to kill $id does not exist!")
+        }
+      }
+
+      executorsPendingToRemove ++= executorIdsToKill
+
+      numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size
+    }
+
+    // Killing executors means effectively that we want less executors than before, so also
+    // update the target number of executors to avoid having the backend allocate new ones.
+    // We should do this outside of the synchronized block to avoid holding on to a lock while
+    // awaiting a reply.
+    val acked = doRequestTotalExecutors(newTargetTotal) && doKillExecutors(executorIdsToKill)
     if (acked) {
-      // Remove executors from various data structures in advance so
-      // we do not generate a bunch of unexpected error messages
-      filteredExecutorIds.foreach { id =>
+      // Remove executors from various data structures in advance
+      // so we do not generate a bunch of unexpected error messages
+      executorIdsToKill.foreach { id =>
         removeExecutor(id, "manually killed", isError = false)
       }
     }
