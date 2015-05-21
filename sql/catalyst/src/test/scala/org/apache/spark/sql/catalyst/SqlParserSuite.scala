@@ -18,7 +18,10 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedStar, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.Command
 
@@ -50,6 +53,15 @@ private[sql] class CaseInsensitiveTestParser extends AbstractSparkSQLParser {
 }
 
 class SqlParserSuite extends SparkFunSuite {
+
+  test("precedence of NOT operator") {
+    val parser = new SqlParser
+    val actual = parser.parse("SELECT * FROM t WHERE NOT c IS NULL")
+    val expected = UnresolvedRelation("t" :: Nil)
+      .where('c.isNull.unary_!)
+      .select(UnresolvedStar(None))
+    assertResult(expected)(actual)
+  }
 
   test("test long keyword") {
     val parser = new SuperLongKeywordTestParser
