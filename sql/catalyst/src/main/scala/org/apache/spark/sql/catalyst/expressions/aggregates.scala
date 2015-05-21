@@ -352,6 +352,68 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
   override def newInstance(): AverageFunction = new AverageFunction(child, this)
 }
 
+case class StandardDeviation(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
+
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = child.dataType match {
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType(precision + 4, scale + 4)  // Add 4 digits after decimal point, like Hive
+    case DecimalType.Unlimited =>
+      DecimalType.Unlimited
+    case _ =>
+      DoubleType
+  }
+
+  override def toString: String = s"STD($child)"
+
+  override def asPartial: SplitEvaluation = {
+    child.dataType match {
+      case DecimalType.Fixed(_, _) | DecimalType.Unlimited =>
+        // Turn the child to unlimited decimals for calculation, before going back to fixed
+        val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), "PartialSum")()
+        val partialSquaredSum = Alias(
+          Sum(Multiply(Cast(child, DecimalType.Unlimited), Cast(child, DecimalType.Unlimited))),
+          "PartialSquaredSum")()
+        val partialCount = Alias(Count(child), "PartialCount")()
+
+        val castedSum = Cast(Sum(partialSum.toAttribute), DecimalType.Unlimited)
+        val castedSquaredSum = Cast(Sum(partialSquaredSum.toAttribute), DecimalType.Unlimited)
+        val castedCount = Cast(Sum(partialCount.toAttribute), DecimalType.Unlimited)
+
+
+        val sumSquared = Cast(Multiply(castedSum, castedSum), DecimalType.Unlimited)
+        val fullcalc = Sqrt(Cast(Divide(
+          Subtract(castedSquaredSum,
+            Cast(Divide(sumSquared, castedCount), DecimalType.Unlimited)),
+          castedCount), DecimalType.Unlimited))
+        SplitEvaluation(
+          Cast(fullcalc, dataType),
+          partialSquaredSum :: partialCount :: partialSum :: Nil)
+
+      case _ =>
+        val partialSum = Alias(Sum(child), "PartialSum")()
+        val partialSquaredSum = Alias(Sum(Multiply(child, child)), "PartialSquaredSum")()
+        val partialCount = Alias(Count(child), "PartialCount")()
+
+        val castedSum = Cast(Sum(partialSum.toAttribute), dataType)
+        val castedSquaredSum = Cast(Sum(partialSquaredSum.toAttribute), dataType)
+        val castedCount = Cast(Sum(partialCount.toAttribute), dataType)
+
+        val sumSquared = Cast(Multiply(castedSum, castedSum), dataType)
+        val fullcalc = Sqrt(Divide(
+          Subtract(castedSquaredSum,
+            Cast(Divide(sumSquared, castedCount), dataType)),
+          castedCount))
+        SplitEvaluation(
+          fullcalc,
+          partialSquaredSum :: partialCount :: partialSum :: Nil)
+    }
+  }
+
+  override def newInstance(): StandardDeviationFunction = new StandardDeviationFunction(child, this)
+}
+
 case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
   override def nullable: Boolean = true
@@ -548,6 +610,67 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
     if (evaluatedExpr != null) {
       count += 1
       sum.update(addFunction(evaluatedExpr), input)
+    }
+  }
+}
+
+case class StandardDeviationFunction(expr: Expression, base: AggregateExpression)
+  extends AggregateFunction {
+
+  def this() = this(null, null) // Required for serialization.
+
+  private val calcType =
+    expr.dataType match {
+      case DecimalType.Fixed(_, _) =>
+        DecimalType.Unlimited
+      case _ =>
+        expr.dataType
+    }
+
+  private val zero = Cast(Literal(0), calcType)
+
+  private var count: Long = _
+  private val mean = MutableLiteral(zero.eval(null), calcType)
+  private val delta = MutableLiteral(zero.eval(null), calcType)
+  private val M2 = MutableLiteral(zero.eval(null), calcType) // Sum of Square of difference.
+
+  private def updateDelta(value: Any) = Subtract(
+    Cast(Literal.create(value, expr.dataType), calcType), mean)
+
+  private def updateMean() = Add(mean,
+    Divide(delta, Cast(Literal(count), dataType)))
+
+  private def updateM2(value: Any) = Add(M2,
+    Multiply(delta,
+      Subtract(Cast(Literal.create(value, expr.dataType), calcType), mean)))
+
+  override def eval(input: Row): Any = {
+    if (count < 2L) {
+      null
+    } else {
+      expr.dataType match {
+        case DecimalType.Fixed(_, _) =>
+          Cast(Sqrt(
+            Cast(Divide(
+              Cast(M2, DecimalType.Unlimited),
+              Cast(Literal(count), DecimalType.Unlimited)),
+              DecimalType.Unlimited)), dataType).eval(null)
+        case _ =>
+          Sqrt(Cast(Divide(
+            Cast(M2, dataType),
+            Cast(Literal(count), dataType)),
+            dataType )).eval(null)
+      }
+    }
+  }
+
+  override def update(input: Row): Unit = {
+    val evaluatedExpr = expr.eval(input)
+    if (evaluatedExpr != null) {
+      count += 1
+      delta.update(updateDelta(evaluatedExpr), input)
+      mean.update(updateMean, null)
+      M2.update(updateM2(evaluatedExpr), input)
     }
   }
 }

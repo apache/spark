@@ -413,6 +413,7 @@ class SQLTests(ReusedPySparkTestCase):
                          tuple(g.agg(functions.first(df.key), functions.last(df.value)).first()))
         self.assertTrue(95 < g.agg(functions.approxCountDistinct(df.key)).first()[0])
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
+        self.assertEqual([Row(**{"STD(key#0)": 28.866070047722118})], g.stddev().collect())
 
     def test_corr(self):
         import math

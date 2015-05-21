@@ -116,6 +116,7 @@ _functions = {
     'sum': 'Aggregate function: returns the sum of all values in the expression.',
     'avg': 'Aggregate function: returns the average of the values in a group.',
     'mean': 'Aggregate function: returns the average of the values in a group.',
+    'stddev': 'Aggregate function: returns the standard deviation of the values in a group.',
     'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
 }
 

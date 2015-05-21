@@ -239,6 +239,22 @@ object functions {
   def avg(columnName: String): Column = avg(Column(columnName))
 
   /**
+   * Aggregate function: returns the standard deviation of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.5.0
+   */
+  def stddev(e: Column): Column = StandardDeviation(e.expr)
+
+  /**
+   * Aggregate function: returns the average of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.5.0
+   */
+  def stddev(columnName: String): Column = stddev(Column(columnName))
+
+  /**
    * Aggregate function: returns the first value in a group.
    *
    * @group agg_funcs

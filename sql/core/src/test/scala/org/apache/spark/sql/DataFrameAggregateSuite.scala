@@ -47,6 +47,10 @@ class DataFrameAggregateSuite extends QueryTest {
       testData2.groupBy("a").agg(Map("b" -> "sum")),
       Row(1, 3) :: Row(2, 3) :: Row(3, 3) :: Nil
     )
+    checkAnswer(
+      testData2.groupBy("a").agg(Map("b" -> "stddev")),
+      Row(1, 0.5) :: Row(2, 0.5) :: Row(3, 0.5) :: Nil
+    )
 
     val df1 = Seq(("a", 1, 0, "b"), ("b", 2, 4, "c"), ("a", 2, 3, "d"))
       .toDF("key", "value1", "value2", "rest")
@@ -58,6 +62,10 @@ class DataFrameAggregateSuite extends QueryTest {
     checkAnswer(
       df1.groupBy("key").min("value2"),
       Seq(Row("a", 0), Row("b", 4))
+    )
+    checkAnswer(
+      df1.groupBy("key").stddev("value2"),
+      Seq(Row("a", 1.5), Row("b", 0.0))
     )
   }
 
@@ -134,6 +142,34 @@ class DataFrameAggregateSuite extends QueryTest {
 
     checkAnswer(
       emptyTableData.agg(avg('a), sumDistinct('b)), // non-partial
+      Row(null, null))
+  }
+
+  test("standard deviation") {
+    checkAnswer(
+      testData2.agg(stddev('a)),
+      Row(0.816496580927726))
+
+    checkAnswer(
+      testData2.agg(stddev('a), sumDistinct('a)), // non-partial
+      Row(0.816496580927726, 6.0) :: Nil)
+  }
+
+  test("null standard deviation") {
+    checkAnswer(
+      testData3.agg(stddev('b), sumDistinct('b)), // non-partial
+      Row(0.0, 2.0)
+    )
+  }
+
+  test("zero stddev") {
+    val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
+    checkAnswer(
+      emptyTableData.agg(stddev('a)),
+      Row(null))
+
+    checkAnswer(
+      emptyTableData.agg(stddev('a), sumDistinct('b)), // non-partial
       Row(null, null))
   }
 

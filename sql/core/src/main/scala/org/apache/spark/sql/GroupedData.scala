@@ -121,6 +121,7 @@ class GroupedData protected[sql](
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
     expr.toLowerCase match {
       case "avg" | "average" | "mean" => Average
+      case "std" | "stddev" => StandardDeviation
       case "max" => Max
       case "min" => Min
       case "sum" => Sum
@@ -137,7 +138,7 @@ class GroupedData protected[sql](
    * (Scala-specific) Compute aggregates by specifying a map from column name to
    * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
    *
-   * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
+   * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`, `stddev`.
    * {{{
    *   // Selects the age of the oldest employee and the aggregate expense for each department
    *   df.groupBy("department").agg(
@@ -156,7 +157,7 @@ class GroupedData protected[sql](
    * (Scala-specific) Compute aggregates by specifying a map from column name to
    * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
    *
-   * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
+   * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`, `stddev`.
    * {{{
    *   // Selects the age of the oldest employee and the aggregate expense for each department
    *   df.groupBy("department").agg(Map(
@@ -272,6 +273,18 @@ class GroupedData protected[sql](
   @scala.annotation.varargs
   def avg(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames:_*)(Average)
+  }
+
+  /**
+   * Compute the standard deviation for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the standard deviations for them.
+   *
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def stddev(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames:_*)(StandardDeviation)
   }
 
   /**

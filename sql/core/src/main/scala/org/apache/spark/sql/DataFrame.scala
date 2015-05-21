@@ -1155,7 +1155,7 @@ class DataFrame private[sql](
     val statistics = List[(String, Expression => Expression)](
       "count" -> Count,
       "mean" -> Average,
-      "stddev" -> stddevExpr,
+      "stddev" -> StandardDeviation,
       "min" -> Min,
       "max" -> Max)
 
