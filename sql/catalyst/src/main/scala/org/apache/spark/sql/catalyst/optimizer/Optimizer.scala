@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.RightOuter
 import org.apache.spark.sql.catalyst.plans.LeftSemi
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.rules.RuleExecutor._
 import org.apache.spark.sql.types._
 
 abstract class Optimizer extends RuleExecutor[LogicalPlan]

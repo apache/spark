@@ -21,6 +21,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, IntegerLiteral, Literal}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.catalyst.rules.RuleExecutor._
 
 class RuleExecutorSuite extends FunSuite {
   object DecrementLiterals extends Rule[Expression] {
