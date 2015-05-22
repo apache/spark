@@ -18,13 +18,13 @@
 package org.apache.spark.sql
 
 import scala.language.implicitConversions
-import scala.collection.JavaConversions._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.analysis.{MultiAlias, UnresolvedAttribute, UnresolvedStar, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.types._
 
 
@@ -888,6 +888,22 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.4.0
    */
   def bitwiseXOR(other: Any): Column = BitwiseXor(expr, lit(other).expr)
+
+  /**
+   * Define a windowing column.
+   *
+   * {{{
+   *   val w = Window.partitionBy("name").orderBy("id")
+   *   df.select(
+   *     sum("price").over(w.rangeBetween(Long.MinValue, 2)),
+   *     avg("price").over(w.rowsBetween(0, 4))
+   *   )
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.4.0
+   */
+  def over(window: expressions.WindowSpec): Column = window.withAggregate(this)
 
 }
 
