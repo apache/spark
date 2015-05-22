@@ -352,7 +352,8 @@ object SparkSubmit {
         if (args.primaryResource == PYSPARK_SHELL) {
           args.mainClass = "org.apache.spark.api.python.PythonGatewayServer"
         } else {
-          // If a python file is provided, add it to the child arguments and list of files to deploy.
+          // If a python file is provided, add it to the child arguments and list of files to
+          // deploy.
           // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]
           args.mainClass = "org.apache.spark.deploy.PythonRunner"
           args.childArgs = ArrayBuffer(args.primaryResource, args.pyFiles) ++ args.childArgs
