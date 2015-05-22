@@ -183,7 +183,6 @@ private[yarn] class YarnAllocator(
   def updatePreferredNodeLocations(preferredNodeLocations: Seq[String]): Unit = synchronized {
     preferredNodeLocations.foreach { node =>
       preferredNodeLocationToUses.getOrElseUpdate(node, false)
-
       val rack = RackResolver.resolve(conf, node).getNetworkLocation
       preferredRackLocations.add(rack)
     }
@@ -267,14 +266,14 @@ private[yarn] class YarnAllocator(
    * added in recent versions.
    */
   private def createContainerRequest(resource: Resource): ContainerRequest = {
-    // filter nodes which don't have containers, but node or rack preference is required.
+    // filter nodes which don't have containers but node preference is required.
     val nodes = preferredNodeLocationToUses.filterKeys(_ == false).keys.toArray
-    val racks = preferredRackLocations.toArray(new Array[String](preferredRackLocations.size()))
 
     nodeLabelConstructor.map { constructor =>
-      constructor.newInstance(resource, nodes, racks, RM_REQUEST_PRIORITY,
+      constructor.newInstance(resource, nodes, preferredRackLocations.toArray, RM_REQUEST_PRIORITY,
         true: java.lang.Boolean, labelExpression.orNull)
-    }.getOrElse(new ContainerRequest(resource, nodes, racks.toArray, RM_REQUEST_PRIORITY))
+    }.getOrElse(new ContainerRequest(resource, nodes, preferredRackLocations.toArray,
+      RM_REQUEST_PRIORITY))
   }
 
   /**
@@ -485,6 +484,8 @@ private[yarn] class YarnAllocator(
         containerSet.remove(containerId)
         if (containerSet.isEmpty) {
           allocatedHostToContainersMap.remove(host)
+          // If all the containers of this node are removed, remove this preferred location,
+          // since it means currently we don't need to this node locality.
           preferredNodeLocationToUses.remove(host)
         } else {
           allocatedHostToContainersMap.update(host, containerSet)
@@ -492,6 +493,8 @@ private[yarn] class YarnAllocator(
 
         allocatedContainerToHostMap.remove(containerId)
 
+        // If current there's no container allocated on this rack, remove it,
+        // since we don't need this rack currently.
         val remainingRacks = allocatedHostToContainersMap.keys.map { h =>
           RackResolver.resolve(conf, h).getNetworkLocation
         }.toSet
@@ -508,7 +511,6 @@ private[yarn] class YarnAllocator(
     releasedContainers.add(container.getId())
     amClient.releaseAssignedContainer(container.getId())
   }
-
 }
 
 private object YarnAllocator {
