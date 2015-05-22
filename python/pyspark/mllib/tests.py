@@ -46,6 +46,7 @@ from pyspark.mllib.stat import Statistics
 from pyspark.mllib.feature import Word2Vec
 from pyspark.mllib.feature import IDF
 from pyspark.mllib.feature import StandardScaler
+from pyspark.mllib.feature import ElementwiseProduct
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import SQLContext
 
@@ -816,6 +817,18 @@ class StandardScalerTests(MLlibTestCase):
         ]
         model = StandardScaler().fit(self.sc.parallelize(data))
         self.assertEqual(model.transform([1.0, 2.0, 3.0]), DenseVector([1.0, 2.0, 3.0]))
+
+
+class ElementwiseProductTests(MLlibTestCase):
+    def test_model_transform(self):
+        weight = Vectors.dense([3, 2, 1])
+
+        densevec = Vectors.dense([4, 5, 6])
+        sparsevec = Vectors.sparse(3, [0], [1])
+        eprod = ElementwiseProduct(weight)
+        self.assertEqual(eprod.transform(densevec), DenseVector([12, 10, 6]))
+        self.assertEqual(
+            eprod.transform(sparsevec), SparseVector(3, [0], [3]))
 
 
 if __name__ == "__main__":

@@ -527,6 +527,28 @@ val transformedData2 = parsedData.map(x => transformer.transform(x))
 
 {% endhighlight %}
 </div>
+
+<div data-lang="python">
+{% highlight python %}
+from pyspark import SparkContext
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.feature import ElementwiseProduct
+
+# Load and parse the data
+sc = SparkContext()
+data = sc.textFile("data/mllib/kmeans_data.txt")
+parsedData = data.map(lambda x: [float(t) for t in x.split(" ")])
+
+# Create weight vector.
+transformingVector = Vectors.dense([0.0, 1.0, 2.0])
+transformer = ElementwiseProduct(transformingVector)
+
+# Batch transform.
+transformedData = transformer.transform(parsedData)
+transformedData2 = transformer.transform(parsedData.first())
+
+{% endhighlight %}
+</div>
 </div>
 
 

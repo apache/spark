@@ -701,6 +701,14 @@ private[python] class PythonMLLibAPI extends Serializable {
     }
   }
 
+  def elementwiseProductVector(weight: Vector, vector: Vector): Vector = {
+    new ElementwiseProduct(weight).transform(vector)
+  }
+
+  def elementwiseProductVector(weight: Vector, vector: JavaRDD[Vector]): JavaRDD[Vector] = {
+    new ElementwiseProduct(weight).transform(vector)
+  }
+
   /**
    * Java stub for mllib Statistics.colStats(X: RDD[Vector]).
    * TODO figure out return type.
