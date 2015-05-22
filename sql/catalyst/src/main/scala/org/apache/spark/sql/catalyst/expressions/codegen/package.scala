@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.rules
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.util.Utils
 
@@ -35,11 +34,11 @@ package object codegen {
   protected[codegen] val globalLock = org.apache.spark.sql.catalyst.ScalaReflectionLock
 
   /** Canonicalizes an expression so those that differ only by names can reuse the same code. */
-  object ExpressionCanonicalizer extends rules.RuleExecutor[Expression] {
+  object ExpressionCanonicalizer extends RuleExecutor[Expression] {
     val batches =
       Batch("CleanExpressions", FixedPoint(20), CleanExpressions) :: Nil
 
-    object CleanExpressions extends rules.Rule[Expression] {
+    object CleanExpressions extends Rule[Expression] {
       def apply(e: Expression): Expression = e transform {
         case Alias(c, _) => c
       }
