@@ -25,7 +25,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcEnv, RpcCallContext}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.scheduler._
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
@@ -45,17 +45,21 @@ private[spark] case object TaskSchedulerIsSet
 
 private[spark] case object ExpireDeadHosts
 
-private[spark] case class RegisterExecutor(executorId: String)
+private case class ExecutorRegistered(executorId: String)
 
-private[spark] case class RemoveExecutor(executorId: String)
+private case class ExecutorRemoved(executorId: String)
 
 private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 
 /**
  * Lives in the driver to receive heartbeats from executors..
  */
-private[spark] class HeartbeatReceiver(sc: SparkContext)
+private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   extends ThreadSafeRpcEndpoint with SparkListener with Logging {
+
+  def this(sc: SparkContext) {
+    this(sc, new SystemClock)
+  }
 
   sc.addSparkListener(this)
 
@@ -98,21 +102,22 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
   }
 
   override def receive: PartialFunction[Any, Unit] = {
-    case RegisterExecutor(executorId) =>
-      executorLastSeen(executorId) = System.currentTimeMillis()
-    case RemoveExecutor(executorId) =>
+    case ExecutorRegistered(executorId) =>
+      executorLastSeen(executorId) = clock.getTimeMillis()
+    case ExecutorRemoved(executorId) =>
       executorLastSeen.remove(executorId)
-    case ExpireDeadHosts =>
-      expireDeadHosts()
     case TaskSchedulerIsSet =>
       scheduler = sc.taskScheduler
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case ExpireDeadHosts =>
+      expireDeadHosts()
+      context.reply(true)
     case heartbeat @ Heartbeat(executorId, taskMetrics, blockManagerId) =>
       if (scheduler != null) {
         if (executorLastSeen.contains(executorId)) {
-          executorLastSeen(executorId) = System.currentTimeMillis()
+          executorLastSeen(executorId) = clock.getTimeMillis()
           eventLoopThread.submit(new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
               val unknownExecutor = !scheduler.executorHeartbeatReceived(
@@ -124,8 +129,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
         } else {
           // This may happen if we get an executor's in-flight heartbeat immediately
           // after we just removed it. It's not really an error condition so we should
-          // not log warning here.
+          // not log warning here. Otherwise there may be a lot of noise especially if
+          // we explicitly remove executors (SPARK-4134).
           logDebug(s"Received heartbeat from unknown executor $executorId")
+          context.reply(HeartbeatResponse(reregisterBlockManager = true))
         }
       } else {
         // Because Executor will sleep several seconds before sending the first "Heartbeat", this
@@ -141,7 +148,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
    */
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
     if (self != null) {
-      self.send(RegisterExecutor(executorAdded.executorId))
+      self.send(ExecutorRegistered(executorAdded.executorId))
     }
   }
 
@@ -157,13 +164,13 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
    */
   override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
     if (self != null) {
-      self.send(RemoveExecutor(executorRemoved.executorId))
+      self.send(ExecutorRemoved(executorRemoved.executorId))
     }
   }
 
   private def expireDeadHosts(): Unit = {
     logTrace("Checking for hosts with no recent heartbeats in HeartbeatReceiver.")
-    val now = System.currentTimeMillis()
+    val now = clock.getTimeMillis()
     for ((executorId, lastSeenMs) <- executorLastSeen) {
       if (now - lastSeenMs > executorTimeoutMs) {
         logWarning(s"Removing executor $executorId with no recent heartbeats: " +

@@ -20,62 +20,146 @@ package org.apache.spark
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.storage.BlockManagerId
-import org.scalatest.FunSuite
+import org.scalatest.{BeforeAndAfterEach, FunSuite, PrivateMethodTester}
+import org.scalatest.concurrent.Eventually._
 import org.mockito.Mockito.{mock, spy, verify, when}
 import org.mockito.Matchers
 import org.mockito.Matchers._
 
-import org.apache.spark.scheduler.TaskScheduler
-import org.apache.spark.util.RpcUtils
-import org.scalatest.concurrent.Eventually._
+import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.scheduler._
+import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.ManualClock
 
-class HeartbeatReceiverSuite extends FunSuite with LocalSparkContext {
+class HeartbeatReceiverSuite
+  extends FunSuite
+  with BeforeAndAfterEach
+  with PrivateMethodTester
+  with LocalSparkContext {
 
-  test("HeartbeatReceiver") {
+  private val executorId1 = "executor-1"
+  private val executorId2 = "executor-2"
+
+  // Shared state that must be reset before and after each test
+  private var scheduler: TaskScheduler = null
+  private var heartbeatReceiver: HeartbeatReceiver = null
+  private var heartbeatReceiverRef: RpcEndpointRef = null
+  private var heartbeatReceiverClock: ManualClock = null
+
+  override def beforeEach(): Unit = {
     sc = spy(new SparkContext("local[2]", "test"))
-    val scheduler = mock(classOf[TaskScheduler])
+    scheduler = mock(classOf[TaskScheduler])
+    when(sc.taskScheduler).thenReturn(scheduler)
+    heartbeatReceiverClock = new ManualClock
+    heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
+    heartbeatReceiverRef = sc.env.rpcEnv.setupEndpoint("heartbeat", heartbeatReceiver)
     when(scheduler.executorHeartbeatReceived(any(), any(), any())).thenReturn(true)
-    when(sc.taskScheduler).thenReturn(scheduler)
-
-    val heartbeatReceiver = new HeartbeatReceiver(sc)
-    sc.env.rpcEnv.setupEndpoint("heartbeat", heartbeatReceiver).send(TaskSchedulerIsSet)
-    eventually(timeout(5 seconds), interval(5 millis)) {
-      assert(heartbeatReceiver.scheduler != null)
-    }
-    val receiverRef = RpcUtils.makeDriverRef("heartbeat", sc.conf, sc.env.rpcEnv)
-
-    val metrics = new TaskMetrics
-    val blockManagerId = BlockManagerId("executor-1", "localhost", 12345)
-    val response = receiverRef.askWithRetry[HeartbeatResponse](
-      Heartbeat("executor-1", Array(1L -> metrics), blockManagerId))
-
-    verify(scheduler).executorHeartbeatReceived(
-      Matchers.eq("executor-1"), Matchers.eq(Array(1L -> metrics)), Matchers.eq(blockManagerId))
-    assert(false === response.reregisterBlockManager)
   }
 
-  test("HeartbeatReceiver re-register") {
-    sc = spy(new SparkContext("local[2]", "test"))
-    val scheduler = mock(classOf[TaskScheduler])
-    when(scheduler.executorHeartbeatReceived(any(), any(), any())).thenReturn(false)
-    when(sc.taskScheduler).thenReturn(scheduler)
-
-    val heartbeatReceiver = new HeartbeatReceiver(sc)
-    sc.env.rpcEnv.setupEndpoint("heartbeat", heartbeatReceiver).send(TaskSchedulerIsSet)
-    eventually(timeout(5 seconds), interval(5 millis)) {
-      assert(heartbeatReceiver.scheduler != null)
-    }
-    val receiverRef = RpcUtils.makeDriverRef("heartbeat", sc.conf, sc.env.rpcEnv)
-
-    val metrics = new TaskMetrics
-    val blockManagerId = BlockManagerId("executor-1", "localhost", 12345)
-    val response = receiverRef.askWithRetry[HeartbeatResponse](
-      Heartbeat("executor-1", Array(1L -> metrics), blockManagerId))
-
-    verify(scheduler).executorHeartbeatReceived(
-      Matchers.eq("executor-1"), Matchers.eq(Array(1L -> metrics)), Matchers.eq(blockManagerId))
-    assert(true === response.reregisterBlockManager)
+  override def afterEach(): Unit = {
+    resetSparkContext()
+    scheduler = null
+    heartbeatReceiver = null
+    heartbeatReceiverRef = null
+    heartbeatReceiverClock = null
   }
+
+  test("task scheduler is set correctly") {
+    assert(heartbeatReceiver.scheduler === null)
+    heartbeatReceiverRef.send(TaskSchedulerIsSet)
+    eventually(timeout(5 seconds), interval(5 millis)) {
+      assert(heartbeatReceiver.scheduler !== null)
+    }
+  }
+
+  test("normal heartbeat") {
+    heartbeatReceiverRef.send(TaskSchedulerIsSet)
+    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId1, null))
+    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId2, null))
+    triggerHeartbeat(executorId1, executorShouldReregister = false)
+    triggerHeartbeat(executorId2, executorShouldReregister = false)
+    val trackedExecutors = executorLastSeen(heartbeatReceiver)
+    assert(trackedExecutors.size === 2)
+    assert(trackedExecutors.contains(executorId1))
+    assert(trackedExecutors.contains(executorId2))
+  }
+
+  test("reregister if scheduler is not ready yet") {
+    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId1, null))
+    // Task scheduler not set in HeartbeatReceiver
+    triggerHeartbeat(executorId1, executorShouldReregister = true)
+  }
+
+  test("reregister if heartbeat from unregistered executor") {
+    heartbeatReceiverRef.send(TaskSchedulerIsSet)
+    // Received heartbeat from unknown receiver, so we ask it to re-register
+    triggerHeartbeat(executorId1, executorShouldReregister = true)
+    assert(executorLastSeen(heartbeatReceiver).isEmpty)
+  }
+
+  test("reregister if heartbeat from removed executor") {
+    heartbeatReceiverRef.send(TaskSchedulerIsSet)
+    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId1, null))
+    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId2, null))
+    // Remove the second executor but not the first
+    heartbeatReceiver.onExecutorRemoved(SparkListenerExecutorRemoved(0, executorId2, "bad boy"))
+    // Now trigger the heartbeats
+    // A heartbeat from the second executor should require reregistering
+    triggerHeartbeat(executorId1, executorShouldReregister = false)
+    triggerHeartbeat(executorId2, executorShouldReregister = true)
+    val trackedExecutors = executorLastSeen(heartbeatReceiver)
+    assert(trackedExecutors.size === 1)
+    assert(trackedExecutors.contains(executorId1))
+    assert(!trackedExecutors.contains(executorId2))
+  }
+
+  test("expire dead hosts") {
+    val executorTimeout = executorTimeoutMs(heartbeatReceiver)
+    heartbeatReceiverRef.send(TaskSchedulerIsSet)
+    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId1, null))
+    heartbeatReceiver.onExecutorAdded(SparkListenerExecutorAdded(0, executorId2, null))
+    triggerHeartbeat(executorId1, executorShouldReregister = false)
+    triggerHeartbeat(executorId2, executorShouldReregister = false)
+    // Advance the clock and only trigger a heartbeat for the first executor
+    heartbeatReceiverClock.advance(executorTimeout / 2)
+    triggerHeartbeat(executorId1, executorShouldReregister = false)
+    heartbeatReceiverClock.advance(executorTimeout)
+    heartbeatReceiverRef.askWithRetry[Boolean](ExpireDeadHosts)
+    // Only the second executor should be expired as a dead host
+    verify(scheduler).executorLost(Matchers.eq(executorId2), any())
+    val trackedExecutors = executorLastSeen(heartbeatReceiver)
+    assert(trackedExecutors.size === 1)
+    assert(trackedExecutors.contains(executorId1))
+    assert(!trackedExecutors.contains(executorId2))
+  }
+
+  /** Manually send a heartbeat and return the response. */
+  private def triggerHeartbeat(
+      executorId: String,
+      executorShouldReregister: Boolean): Unit = {
+    val metrics = new TaskMetrics
+    val blockManagerId = BlockManagerId(executorId, "localhost", 12345)
+    val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](
+      Heartbeat(executorId, Array(1L -> metrics), blockManagerId))
+    if (executorShouldReregister) {
+      assert(response.reregisterBlockManager)
+    } else {
+      assert(!response.reregisterBlockManager)
+      // Additionally verify that the scheduler callback is called with the correct parameters
+      verify(scheduler).executorHeartbeatReceived(
+        Matchers.eq(executorId), Matchers.eq(Array(1L -> metrics)), Matchers.eq(blockManagerId))
+    }
+  }
+
+  // Helper methods to access private fields in HeartbeatReceiver
+  private val _executorLastSeen = PrivateMethod[collection.Map[String, Long]]('executorLastSeen)
+  private val _executorTimeoutMs = PrivateMethod[Long]('executorTimeoutMs)
+  private def executorLastSeen(receiver: HeartbeatReceiver): collection.Map[String, Long] = {
+    receiver invokePrivate _executorLastSeen()
+  }
+  private def executorTimeoutMs(receiver: HeartbeatReceiver): Long = {
+    receiver invokePrivate _executorTimeoutMs()
+  }
+
 }
