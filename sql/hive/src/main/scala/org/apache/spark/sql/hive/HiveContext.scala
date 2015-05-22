@@ -509,6 +509,8 @@ private[hive] object HiveContext {
     val tempDir = Utils.createTempDir()
     val localMetastore = new File(tempDir, "metastore").getAbsolutePath
     val propMap: HashMap[String, String] = HashMap()
+    // We have to mask all properties in hive-site.xml that relates to metastore data source
+    // as we used a local metastore here.
     HiveConf.ConfVars.values().foreach { confvar  =>
       if (confvar.varname.contains("datanucleus") || confvar.varname.contains("jdo")) {
         propMap.put(confvar.varname, confvar.defaultVal)
