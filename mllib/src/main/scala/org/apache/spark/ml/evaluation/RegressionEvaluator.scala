@@ -40,8 +40,10 @@ class RegressionEvaluator(override val uid: String)
    * param for metric name in evaluation
    * @group param
    */
-  val metricName: Param[String] = new Param(this, "metricName",
-    "metric name in evaluation (rmse|r2|mae)", ParamValidators.inArray(Array("rmse", "r2", "mae")))
+  val metricName: Param[String] = {
+    val allowedParams = ParamValidators.inArray(Array("mse", "rmse", "r2", "mae"))
+    new Param(this, "metricName", "metric name in evaluation (mse|rmse|r2|mae)", allowedParams)
+  }
 
   /** @group getParam */
   def getMetricName: String = $(metricName)
