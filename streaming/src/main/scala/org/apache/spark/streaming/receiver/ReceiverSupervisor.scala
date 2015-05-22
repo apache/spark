@@ -20,6 +20,7 @@ package org.apache.spark.streaming.receiver
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
@@ -127,7 +128,7 @@ private[streaming] abstract class ReceiverSupervisor(
         stop("Registered unsuccessfully because the driver refused" + streamId, None)
       }
     } catch {
-      case t: Throwable =>
+      case NonFatal(t) =>
         stop("Error starting receiver " + streamId, Some(t))
     }
   }
@@ -147,7 +148,7 @@ private[streaming] abstract class ReceiverSupervisor(
       logInfo("Called receiver onStop")
       onReceiverStop(message, error)
     } catch {
-      case t: Throwable =>
+      case NonFatal(t) =>
         logError("Error stopping receiver " + streamId + t.getStackTraceString)
     }
   }
