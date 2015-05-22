@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.sql.Timestamp
-import java.util.{ArrayList => JArrayList, Properties}
+import java.util.{ArrayList => JArrayList}
 
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.spark.sql.catalyst.ParserDialect
