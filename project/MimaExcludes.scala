@@ -50,7 +50,8 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.status.api.v1.JsonRootResource$"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.streaming.StreamingContext.withNamedScope") 
+              "org.apache.spark.streaming.StreamingContext.withNamedScope"),
+            excludePackage("org.apache.spark.sql.sources.HadoopFsRelation") 
           )
         case v if v.startsWith("1.4") =>
           Seq(
