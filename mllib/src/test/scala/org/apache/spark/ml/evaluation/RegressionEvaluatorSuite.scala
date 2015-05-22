@@ -47,22 +47,17 @@ class RegressionEvaluatorSuite extends FunSuite with MLlibTestSparkContext {
 
   test("Regression Evaluator: default params") {
     /**
-     * Using the following python code to load the data and train the model using scikit learn.
+     * Using the following R code to load the data, train the model and evaluate metrics.
      *
-     * > from sklearn.linear_model import LinearRegression
-     * > from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-     * > import pandas as pd
-     * > from patsy import dmatrices
-     * > df = pd.read_csv("path")
-     * > y, X = dmatrices('label ~ x + y',df, return_type="dataframe")
-     * > regr = LinearRegression()
-     * > regr.fit(X, y)
-     * > print('Mean Squared Error: %.2f' % mean_squared_error(y, regr.predict(X)))
-     * > print('Mean Absolute Error: %.2f' % mean_absolute_error(y, regr.predict(X)))
-     * > print('R2 score: %.2f' % r2_score(y, regr.predict(X)))
-     * > Mean Squared Error: 0.01
-     * > Mean Absolute Error: 0.08
-     * > R2 score: 1.00
+     * > library("glmnet")
+     * > library("rminer")
+     * > data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
+     * > features <- as.matrix(data.frame(as.numeric(data$V2), as.numeric(data$V3)))
+     * > label <- as.numeric(data$V1)
+     * > model <- glmnet(features, label, family="gaussian", alpha = 0, lambda = 0)
+     * > rmse <- mmetric(label, predict(model, features), metric='RMSE')
+     * > mae <- mmetric(label, predict(model, features), metric='MAE')
+     * > r2 <- mmetric(label, predict(model, features), metric='R2')
      */
     val trainer = new LinearRegression
     val model = trainer.fit(dataset)
