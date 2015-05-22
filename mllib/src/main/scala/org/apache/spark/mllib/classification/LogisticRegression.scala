@@ -322,6 +322,13 @@ object LogisticRegressionWithSGD {
  * Limited-memory BFGS. Standard feature scaling and L2 regularization are used by default.
  * NOTE: Labels used in Logistic Regression should be {0, 1, ..., k - 1}
  * for k classes multi-label classification problem.
+ *
+ * Earlier implementations of LogisticRegressionWithLBFGS applies a regularization
+ * penalty to all elements including the intercept. If this is called with one of
+ * standard updaters (SimpleUpdater, L1Updater, or SquaredL2Updater) this is translated
+ * into a call to ml.LogisticRegression, otherwise this will use the existing mllib
+ * GeneralizedLinearAlgorithm trainer, resulting in a regularization penalty to the
+ * intercept.
  */
 class LogisticRegressionWithLBFGS
   extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
@@ -362,5 +369,15 @@ class LogisticRegressionWithLBFGS
     } else {
       new LogisticRegressionModel(weights, intercept, numFeatures, numOfLinearPredictor + 1)
     }
+  }
+
+  /**
+   * Run the algorithm with the configured parameters on an input RDD
+   * of LabeledPoint entries starting from the initial weights provided.
+   * If a known updater is used calls the ml implementation, to avoid
+   * applying a regularization penalty to the intercept, otherwise
+   * defaults to the mllib implementation.
+   */
+  override def run(input: RDD[LabeledPoint], initialWeights: Vector): LogisticRegressionModel = {
   }
 }
