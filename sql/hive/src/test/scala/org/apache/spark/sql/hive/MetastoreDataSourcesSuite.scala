@@ -51,12 +51,12 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test ("persistent JSON table") {
     sql(
       s"""
-        |CREATE TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${filePath}'
-        |)
-      """.stripMargin)
+         |CREATE TABLE jsonTable
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '$filePath'
+         |)
+       """.stripMargin)
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
@@ -66,16 +66,16 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test ("persistent JSON table with a user specified schema") {
     sql(
       s"""
-        |CREATE TABLE jsonTable (
-        |a string,
-        |b String,
-        |`c_!@(3)` int,
-        |`<d>` Struct<`d!`:array<int>, `=`:array<struct<Dd2: boolean>>>)
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${filePath}'
-        |)
-      """.stripMargin)
+         |CREATE TABLE jsonTable (
+         |a string,
+         |b String,
+         |`c_!@(3)` int,
+         |`<d>` Struct<`d!`:array<int>, `=`:array<struct<Dd2: boolean>>>)
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '$filePath'
+         |)
+       """.stripMargin)
 
     read.json(filePath).registerTempTable("expectedJsonTable")
 
@@ -89,12 +89,12 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     // field values based on field names.
     sql(
       s"""
-        |CREATE TABLE jsonTable (`<d>` Struct<`=`:array<struct<Dd2: boolean>>>, b String)
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${filePath}'
-        |)
-      """.stripMargin)
+         |CREATE TABLE jsonTable (`<d>` Struct<`=`:array<struct<Dd2: boolean>>>, b String)
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '$filePath'
+         |)
+       """.stripMargin)
 
     val innerStruct = StructType(
       StructField("=", ArrayType(StructType(StructField("Dd2", BooleanType, true) :: Nil))) :: Nil)
@@ -114,12 +114,12 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("resolve shortened provider names") {
     sql(
       s"""
-        |CREATE TABLE jsonTable
-        |USING org.apache.spark.sql.json
-        |OPTIONS (
-        |  path '${filePath}'
-        |)
-      """.stripMargin)
+         |CREATE TABLE jsonTable
+         |USING org.apache.spark.sql.json
+         |OPTIONS (
+         |  path '$filePath'
+         |)
+       """.stripMargin)
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
@@ -129,12 +129,12 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("drop table") {
     sql(
       s"""
-        |CREATE TABLE jsonTable
-        |USING org.apache.spark.sql.json
-        |OPTIONS (
-        |  path '${filePath}'
-        |)
-      """.stripMargin)
+         |CREATE TABLE jsonTable
+         |USING org.apache.spark.sql.json
+         |OPTIONS (
+         |  path '$filePath'
+         |)
+       """.stripMargin)
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
@@ -147,7 +147,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     }
 
     assert(
-      (new File(filePath)).exists(),
+      new File(filePath).exists(),
       "The table with specified path is considered as an external table, " +
         "its data should not deleted after DROP TABLE.")
   }
@@ -160,12 +160,12 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     sql(
       s"""
-        |CREATE TABLE jsonTable
-        |USING org.apache.spark.sql.json
-        |OPTIONS (
-        |  path '${tempDir.getCanonicalPath}'
-        |)
-      """.stripMargin)
+         |CREATE TABLE jsonTable
+         |USING org.apache.spark.sql.json
+         |OPTIONS (
+         |  path '${tempDir.getCanonicalPath}'
+         |)
+       """.stripMargin)
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
@@ -198,12 +198,12 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     sql(
       s"""
-        |CREATE TABLE jsonTable
-        |USING org.apache.spark.sql.json
-        |OPTIONS (
-        |  path '${tempDir.getCanonicalPath}'
-        |)
-      """.stripMargin)
+         |CREATE TABLE jsonTable
+         |USING org.apache.spark.sql.json
+         |OPTIONS (
+         |  path '${tempDir.getCanonicalPath}'
+         |)
+       """.stripMargin)
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
@@ -217,12 +217,12 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     sql(
       s"""
-        |CREATE TABLE jsonTable
-        |USING org.apache.spark.sql.json
-        |OPTIONS (
-        |  path '${tempDir.getCanonicalPath}'
-        |)
-      """.stripMargin)
+         |CREATE TABLE jsonTable
+         |USING org.apache.spark.sql.json
+         |OPTIONS (
+         |  path '${tempDir.getCanonicalPath}'
+         |)
+       """.stripMargin)
 
     // New table should reflect new schema.
     checkAnswer(
@@ -234,12 +234,12 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("invalidate cache and reload") {
     sql(
       s"""
-        |CREATE TABLE jsonTable (`c_!@(3)` int)
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${filePath}'
-        |)
-      """.stripMargin)
+         |CREATE TABLE jsonTable (`c_!@(3)` int)
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '$filePath'
+         |)
+       """.stripMargin)
 
     read.json(filePath).registerTempTable("expectedJsonTable")
 
@@ -263,22 +263,22 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("CTAS") {
     sql(
       s"""
-        |CREATE TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${filePath}'
-        |)
-      """.stripMargin)
+         |CREATE TABLE jsonTable
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '$filePath'
+         |)
+       """.stripMargin)
 
     sql(
       s"""
-        |CREATE TABLE ctasJsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${tempPath}'
-        |) AS
-        |SELECT * FROM jsonTable
-      """.stripMargin)
+         |CREATE TABLE ctasJsonTable
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '$tempPath'
+         |) AS
+         |SELECT * FROM jsonTable
+       """.stripMargin)
 
     assert(table("ctasJsonTable").schema === table("jsonTable").schema)
 
@@ -290,34 +290,34 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("CTAS with IF NOT EXISTS") {
     sql(
       s"""
-        |CREATE TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${filePath}'
-        |)
-      """.stripMargin)
+         |CREATE TABLE jsonTable
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '$filePath'
+         |)
+       """.stripMargin)
 
     sql(
       s"""
-        |CREATE TABLE ctasJsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${tempPath}'
-        |) AS
-        |SELECT * FROM jsonTable
-      """.stripMargin)
+         |CREATE TABLE ctasJsonTable
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '$tempPath'
+         |) AS
+         |SELECT * FROM jsonTable
+       """.stripMargin)
 
     // Create the table again should trigger a AnalysisException.
     val message = intercept[AnalysisException] {
       sql(
         s"""
-        |CREATE TABLE ctasJsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${tempPath}'
-        |) AS
-        |SELECT * FROM jsonTable
-      """.stripMargin)
+           |CREATE TABLE ctasJsonTable
+           |USING org.apache.spark.sql.json.DefaultSource
+           |OPTIONS (
+           |  path '$tempPath'
+           |) AS
+           |SELECT * FROM jsonTable
+         """.stripMargin)
     }.getMessage
     assert(message.contains("Table ctasJsonTable already exists."),
       "We should complain that ctasJsonTable already exists")
@@ -327,13 +327,13 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     // The actual table's schema and data should not be changed.
     sql(
       s"""
-        |CREATE TABLE IF NOT EXISTS ctasJsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${tempPath}'
-        |) AS
-        |SELECT a FROM jsonTable
-      """.stripMargin)
+         |CREATE TABLE IF NOT EXISTS ctasJsonTable
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '$tempPath'
+         |) AS
+         |SELECT a FROM jsonTable
+       """.stripMargin)
 
     // Discard the cached relation.
     invalidateTable("ctasJsonTable")
@@ -349,12 +349,12 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("CTAS a managed table") {
     sql(
       s"""
-        |CREATE TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${filePath}'
-        |)
-      """.stripMargin)
+         |CREATE TABLE jsonTable
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '$filePath'
+         |)
+       """.stripMargin)
 
     val expectedPath = catalog.hiveDefaultTableFilePath("ctasJsonTable")
     val filesystemPath = new Path(expectedPath)
@@ -364,22 +364,22 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     // It is a managed table when we do not specify the location.
     sql(
       s"""
-        |CREATE TABLE ctasJsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
-        |AS
-        |SELECT * FROM jsonTable
-      """.stripMargin)
+         |CREATE TABLE ctasJsonTable
+         |USING org.apache.spark.sql.json.DefaultSource
+         |AS
+         |SELECT * FROM jsonTable
+       """.stripMargin)
 
     assert(fs.exists(filesystemPath), s"$expectedPath should exist after we create the table.")
 
     sql(
       s"""
-        |CREATE TABLE loadedTable
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${expectedPath}'
-        |)
-      """.stripMargin)
+         |CREATE TABLE loadedTable
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '$expectedPath'
+         |)
+       """.stripMargin)
 
     assert(table("ctasJsonTable").schema === table("loadedTable").schema)
 
@@ -395,12 +395,12 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("SPARK-5286 Fail to drop an invalid table when using the data source API") {
     sql(
       s"""
-        |CREATE TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path 'it is not a path at all!'
-        |)
-      """.stripMargin)
+         |CREATE TABLE jsonTable
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path 'it is not a path at all!'
+         |)
+       """.stripMargin)
 
     sql("DROP TABLE jsonTable").collect().foreach(println)
   }
@@ -408,7 +408,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("SPARK-5839 HiveMetastoreCatalog does not recognize table aliases of data source tables.") {
     val originalDefaultSource = conf.defaultDataSourceName
 
-    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
     val df = read.json(rdd)
 
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
@@ -417,21 +417,21 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     checkAnswer(
       sql("SELECT * FROM savedJsonTable where savedJsonTable.a < 5"),
-      (1 to 4).map(i => Row(i, s"str${i}")))
+      (1 to 4).map(i => Row(i, s"str$i")))
 
     checkAnswer(
       sql("SELECT * FROM savedJsonTable tmp where tmp.a > 5"),
-      (6 to 10).map(i => Row(i, s"str${i}")))
+      (6 to 10).map(i => Row(i, s"str$i")))
 
     invalidateTable("savedJsonTable")
 
     checkAnswer(
       sql("SELECT * FROM savedJsonTable where savedJsonTable.a < 5"),
-      (1 to 4).map(i => Row(i, s"str${i}")))
+      (1 to 4).map(i => Row(i, s"str$i")))
 
     checkAnswer(
       sql("SELECT * FROM savedJsonTable tmp where tmp.a > 5"),
-      (6 to 10).map(i => Row(i, s"str${i}")))
+      (6 to 10).map(i => Row(i, s"str$i")))
 
     // Drop table will also delete the data.
     sql("DROP TABLE savedJsonTable")
@@ -442,7 +442,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("save table") {
     val originalDefaultSource = conf.defaultDataSourceName
 
-    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
     val df = read.json(rdd)
 
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
@@ -500,7 +500,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("create external table") {
     val originalDefaultSource = conf.defaultDataSourceName
 
-    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
     val df = read.json(rdd)
 
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
@@ -564,7 +564,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       setConf("spark.sql.hive.convertMetastoreParquet", "true")
       setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
 
-      val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+      val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
       read.json(rdd).registerTempTable("jt")
       sql(
         """
@@ -661,11 +661,11 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
   test("SPARK-6024 wide schema support") {
     // We will need 80 splits for this schema if the threshold is 4000.
-    val schema = StructType((1 to 5000).map(i => StructField(s"c_${i}", StringType, true)))
+    val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType, true)))
     assert(
-      schema.json.size > conf.schemaStringLengthThreshold,
+      schema.json.length > conf.schemaStringLengthThreshold,
       "To correctly test the fix of SPARK-6024, the value of " +
-      s"spark.sql.sources.schemaStringLengthThreshold needs to be less than ${schema.json.size}")
+      s"spark.sql.sources.schemaStringLengthThreshold needs to be less than ${schema.json.length}")
     // Manually create a metastore data source table.
     catalog.createDataSourceTable(
       tableName = "wide_schema",
