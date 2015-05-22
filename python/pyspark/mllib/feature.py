@@ -258,14 +258,6 @@ class PCAModel(JavaVectorTransformer):
     """
     Model fitted by [[PCA]] that can project vectors to a low-dimensional space using PCA.
     """
-    def transform(self, vector):
-        """
-        Applies transformation on a vector.
-
-        :param vector: Vector or RDD of Vector to be transformed.
-        :return: transformed vector.
-        """
-        return JavaVectorTransformer.transform(self, vector)
 
 
 class PCA(object):
