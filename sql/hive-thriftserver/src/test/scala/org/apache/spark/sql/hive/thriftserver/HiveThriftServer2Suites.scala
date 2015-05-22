@@ -351,7 +351,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 
       queries.foreach(statement.execute)
 
-      val largeJoin = "SELECT COUNT(*) FROM test_map " + List.fill(10)("join test_map").mkString(" ")
+      val largeJoin = "SELECT COUNT(*) FROM test_map " +
+        List.fill(10)("join test_map").mkString(" ")
       val f = future { Thread.sleep(100); statement.cancel(); }
       val e = intercept[SQLException] {
         statement.executeQuery(largeJoin)
@@ -362,7 +363,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       // cancel is a noop
       statement.executeQuery("SET spark.sql.hive.thriftServer.async=false")
       val sf = future { Thread.sleep(100); statement.cancel(); }
-      val smallJoin = "SELECT COUNT(*) FROM test_map " + List.fill(4)("join test_map").mkString(" ")
+      val smallJoin = "SELECT COUNT(*) FROM test_map " +
+        List.fill(4)("join test_map").mkString(" ")
       val rs1 = statement.executeQuery(smallJoin)
       Await.result(sf, Duration.Inf)
       rs1.next()
@@ -614,7 +616,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   }
 
   override protected def afterAll(): Unit = {
-    //stopThriftServer()
-    //logInfo("HiveThriftServer2 stopped")
+    stopThriftServer()
+    logInfo("HiveThriftServer2 stopped")
   }
 }
