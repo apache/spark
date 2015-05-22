@@ -55,10 +55,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   val maxRegisteredWaitingTimeMs =
     conf.getTimeAsMs("spark.scheduler.maxRegisteredResourcesWaitingTime", "30s")
   val createTime = System.currentTimeMillis()
-  // If this CoarseGrainedSchedulerBackend is changed to support multiple threads,
-  // then this may need to be changed so that we don't share the serializer
-  // instance across threads
-  private val ser = SparkEnv.get.closureSerializer.newInstance()
 
   private val executorDataMap = new HashMap[String, ExecutorData]
 
@@ -72,6 +68,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
+
+    // If this DriverEndpoint is changed to support multiple threads,
+    // then this may need to be changed so that we don't share the serializer
+    // instance across threads
+    private val ser = SparkEnv.get.closureSerializer.newInstance()
 
     override protected def log = CoarseGrainedSchedulerBackend.this.log
 
