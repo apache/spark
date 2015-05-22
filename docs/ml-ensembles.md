@@ -61,4 +61,68 @@ val fprs = (0 until numClasses).map(label => (label, metrics.falsePositiveRate(l
 println("label\tfpr\n%s".format(fprs.map {case (label, fpr) => label + "\t" + fpr}.mkString("\n")))
 {% endhighlight %}
 </div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.ml.classification.LogisticRegression;
+import org.apache.spark.ml.classification.OneVsRest;
+import org.apache.spark.mllib.evaluation.MulticlassMetrics;
+import org.apache.spark.mllib.linalg.Matrix;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.rdd.RDD;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
+
+SparkConf conf = new SparkConf().setAppName("JavaOneVsRestExample");
+JavaSparkContext jsc = new JavaSparkContext(conf);
+SQLContext jsql = new SQLContext(jsc);
+    
+RDD<LabeledPoint> data = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_multiclass_classification_data.txt");
+
+RDD<LabeledPoint>[] split = data.randomSplit(new double[]{0.7, 0.3}, 12345);
+RDD<LabeledPoint> train = split[0];
+RDD<LabeledPoint> test = split[1];
+
+// instantiate the One Vs Rest Classifier
+OneVsRest ovr = new OneVsRest().setClassifier(new LogisticRegression());
+    
+// train the multiclass model
+DataFrame trainingDataFrame = jsql.createDataFrame(train, LabeledPoint.class);    
+OneVsRestModel ovrModel = ovr.fit(trainingDataFrame.cache());
+
+// score the model on test data
+DataFrame testDataFrame = jsql.createDataFrame(test, LabeledPoint.class);
+DataFrame predictions = ovrModel
+    .transform(testDataFrame.cache())
+    .select("prediction", "label");
+
+// obtain metrics
+MulticlassMetrics metrics = new MulticlassMetrics(predictions);
+Matrix confusionMatrix = metrics.confusionMatrix();
+
+// output the Confusion Matrix
+System.out.println("Confusion Matrix");
+System.out.println(confusionMatrix);
+
+// compute the false positive rate per label
+StringBuilder results = new StringBuilder();
+results.append("label\tfpr\n");
+
+// the Iris DataSet has three classes
+int numClasses = 3;
+
+for (int label = 0; label < numClasses; label++) {
+  results.append(label);
+  results.append("\t");
+  results.append(metrics.falsePositiveRate((double) label));
+  results.append("\n");
+}
+System.out.println();
+System.out.println(results);
+{% endhighlight %}
+</div>
 </div>
