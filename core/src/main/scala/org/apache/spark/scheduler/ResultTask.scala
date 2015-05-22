@@ -24,6 +24,7 @@ import java.io._
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.serializer.KryoSerializer
 
 /**
  * A task that sends back the output to the driver application.
@@ -55,8 +56,17 @@ private[spark] class ResultTask[T, U](
     // Deserialize the RDD and the func using the broadcast variables.
     val deserializeStartTime = System.currentTimeMillis()
     val ser = SparkEnv.get.closureSerializer.newInstance()
+    // Kryo deserialization is not thread-safe w.r.t. underlying buffer
+    // create a copy of the buffer if Kryo is being used
+    val copy = if (SparkEnv.get.closureSerializer.isInstanceOf[KryoSerializer]) {
+        val arr = new Array[Byte](taskBinary.value.length)
+        System.arraycopy(taskBinary.value, 0, arr, 0, arr.length)
+        arr
+    } else {
+      taskBinary.value
+    }
     val (rdd, func) = ser.deserialize[(RDD[T], (TaskContext, Iterator[T]) => U)](
-      ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
+      ByteBuffer.wrap(copy), Thread.currentThread.getContextClassLoader)
     _executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime
 
     metrics = Some(context.taskMetrics)
