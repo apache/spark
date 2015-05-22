@@ -17,11 +17,9 @@
 
 package org.apache.spark
 
-import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.scalatest.{BeforeAndAfterEach, FunSuite, PrivateMethodTester}
-import org.scalatest.concurrent.Eventually._
 import org.mockito.Mockito.{mock, spy, verify, when}
 import org.mockito.Matchers
 import org.mockito.Matchers._
@@ -67,10 +65,8 @@ class HeartbeatReceiverSuite
 
   test("task scheduler is set correctly") {
     assert(heartbeatReceiver.scheduler === null)
-    heartbeatReceiverRef.send(TaskSchedulerIsSet)
-    eventually(timeout(5 seconds), interval(5 millis)) {
-      assert(heartbeatReceiver.scheduler !== null)
-    }
+    heartbeatReceiverRef.askWithReply[Boolean](TaskSchedulerIsSet)
+    assert(heartbeatReceiver.scheduler !== null)
   }
 
   test("normal heartbeat") {

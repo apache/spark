@@ -106,11 +106,12 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       executorLastSeen(executorId) = clock.getTimeMillis()
     case ExecutorRemoved(executorId) =>
       executorLastSeen.remove(executorId)
-    case TaskSchedulerIsSet =>
-      scheduler = sc.taskScheduler
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case TaskSchedulerIsSet =>
+      scheduler = sc.taskScheduler
+      context.reply(true)
     case ExpireDeadHosts =>
       expireDeadHosts()
       context.reply(true)
