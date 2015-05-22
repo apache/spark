@@ -46,7 +46,7 @@ public class JavaStandardScalerSuite {
   }
 
   @Test
-  public void regexTokenizer() {
+  public void standardScaler() {
     // The tests are to check Java compatibility.
     List<VectorIndexerSuite.FeatureData> points = Lists.newArrayList(
       new VectorIndexerSuite.FeatureData(Vectors.dense(0.0, -2.0)),
@@ -57,7 +57,7 @@ public class JavaStandardScalerSuite {
       VectorIndexerSuite.FeatureData.class);
     StandardScaler scaler = new StandardScaler()
       .setInputCol("features")
-      .setOutputCol("normFeatures")
+      .setOutputCol("scaledFeatures")
       .setWithStd(true)
       .setWithMean(false);
 
@@ -66,5 +66,6 @@ public class JavaStandardScalerSuite {
 
     // Normalize each feature to have unit standard deviation.
     DataFrame scaledData = scalerModel.transform(dataFrame);
+    scaledData.count();
   }
 }

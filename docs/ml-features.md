@@ -649,10 +649,13 @@ import org.apache.spark.mllib.util.MLUtils
 
 val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 val dataFrame = sqlContext.createDataFrame(data)
-val normalizer = new Normalizer().setInputCol("features").setOutputCol("normFeatures")
 
-// Normalize each Vector using $L^2$ norm.
-val l2NormData = normalizer.transform(dataFrame, normalizer.p -> 2)
+// Normalize each Vector using $L^1$ norm.
+val normalizer = new Normalizer()
+  .setInputCol("features")
+  .setOutputCol("normFeatures")
+  .setP(1.0)
+val l1NormData = normalizer.transform(dataFrame)
 
 // Normalize each Vector using $L^\infty$ norm.
 val lInfNormData = normalizer.transform(dataFrame, normalizer.p -> Double.PositiveInfinity)
@@ -670,12 +673,13 @@ import org.apache.spark.sql.DataFrame;
 JavaRDD<LabeledPoint> data =
   MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
 DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
+
+// Normalize each Vector using $L^1$ norm.
 Normalizer normalizer = new Normalizer()
   .setInputCol("features")
-  .setOutputCol("normFeatures");
-
-// Normalize each Vector using $L^2$ norm.
-DataFrame l2NormData = normalizer.transform(dataFrame, normalizer.p().w(2));
+  .setOutputCol("normFeatures")
+  .setP(1.0);
+DataFrame l1NormData = normalizer.transform(dataFrame);
 
 // Normalize each Vector using $L^\infty$ norm.
 DataFrame lInfNormData =
@@ -690,13 +694,13 @@ from pyspark.ml.feature import Normalizer
 
 data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 dataFrame = sqlContext.createDataFrame(data)
-normalizer = Normalizer(inputCol="features", outputCol="normFeatures")
 
-# Normalize each Vector using $L^2$ norm.
-l2NormData = normalizer.transform(dataFrame, {normalizer.p:2.0})
+# Normalize each Vector using $L^1$ norm.
+normalizer = Normalizer(inputCol="features", outputCol="normFeatures", p=1.0)
+l1NormData = normalizer.transform(dataFrame)
 
 # Normalize each Vector using $L^\infty$ norm.
-lInfNormData = normalizer.transform(dataFrame, {normalizer.p:float("inf")})
+lInfNormData = normalizer.transform(dataFrame, {normalizer.p: float("inf")})
 {% endhighlight %}
 </div>
 </div>
@@ -729,7 +733,7 @@ val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 val dataFrame = sqlContext.createDataFrame(data)
 val scaler = new StandardScaler()
   .setInputCol("features")
-  .setOutputCol("normFeatures")
+  .setOutputCol("scaledFeatures")
   .setWithStd(true)
   .setWithMean(false)
 
@@ -754,7 +758,7 @@ JavaRDD<LabeledPoint> data =
 DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
 StandardScaler scaler = new StandardScaler()
   .setInputCol("features")
-  .setOutputCol("normFeatures")
+  .setOutputCol("scaledFeatures")
   .setWithStd(true)
   .setWithMean(false);
 
@@ -773,7 +777,7 @@ from pyspark.ml.feature import StandardScaler
 
 data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 dataFrame = sqlContext.createDataFrame(data)
-scaler = StandardScaler(inputCol="features", outputCol="normFeatures",
+scaler = StandardScaler(inputCol="features", outputCol="scaledFeatures",
                         withStd=True, withMean=False)
 
 # Compute summary statistics by fitting the StandardScaler

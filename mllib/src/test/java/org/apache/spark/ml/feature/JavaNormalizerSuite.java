@@ -46,7 +46,7 @@ public class JavaNormalizerSuite {
   }
 
   @Test
-  public void regexTokenizer() {
+  public void normalizer() {
     // The tests are to check Java compatibility.
     List<VectorIndexerSuite.FeatureData> points = Lists.newArrayList(
       new VectorIndexerSuite.FeatureData(Vectors.dense(0.0, -2.0)),
@@ -61,9 +61,11 @@ public class JavaNormalizerSuite {
 
     // Normalize each Vector using $L^2$ norm.
     DataFrame l2NormData = normalizer.transform(dataFrame, normalizer.p().w(2));
+    l2NormData.count();
 
     // Normalize each Vector using $L^\infty$ norm.
     DataFrame lInfNormData =
       normalizer.transform(dataFrame, normalizer.p().w(Double.POSITIVE_INFINITY));
+    lInfNormData.count();
   }
 }
