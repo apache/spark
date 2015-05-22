@@ -39,7 +39,7 @@ else:
 from pyspark import SparkContext
 from pyspark.mllib.common import _to_java_object_rdd
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
-    DenseMatrix, SparseMatrix, Vectors, Matrices
+    DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
@@ -505,6 +505,23 @@ class VectorUDTTests(MLlibTestCase):
                 self.assertEqual(v, self.dv1)
             else:
                 raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
+
+
+class MatrixUDTTests(MLlibTestCase):
+
+    dm1 = DenseMatrix(3, 2, [0, 1, 4, 5, 9, 10])
+    dm2 = DenseMatrix(3, 2, [0, 1, 4, 5, 9, 10], isTransposed=True)
+    sm1 = SparseMatrix(1, 1, [0, 1], [0], [2.0])
+    sm2 = SparseMatrix(2, 1, [0, 0, 1], [0], [5.0], isTransposed=True)
+
+    udt = MatrixUDT()
+
+    def test_json_schema(self):
+        self.assertEqual(VectorUDT.fromJson(self.udt.jsonValue()), self.udt)
+
+    def test_serialization(self):
+        for m in [self.dm1, self.dm2, self.sm1, self.sm2]:
+            self.assertEqual(m, self.udt.deserialize(self.udt.serialize(m)))
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
