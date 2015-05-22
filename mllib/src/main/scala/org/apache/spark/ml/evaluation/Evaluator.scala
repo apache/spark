@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml
+package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param.{ParamMap, Params}
@@ -29,7 +29,7 @@ import org.apache.spark.sql.DataFrame
 abstract class Evaluator extends Params {
 
   /**
-   * Evaluates the output.
+   * Evaluates model output and returns a scalar metric (larger is better).
    *
    * @param dataset a dataset that contains labels/observations and predictions.
    * @param paramMap parameter map that specifies the input columns and output metrics

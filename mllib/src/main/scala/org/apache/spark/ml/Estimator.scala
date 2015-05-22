@@ -28,7 +28,7 @@ import org.apache.spark.sql.DataFrame
  * Abstract class for estimators that fit models to data.
  */
 @AlphaComponent
-abstract class Estimator[M <: Model[M]] extends PipelineStage with Params {
+abstract class Estimator[M <: Model[M]] extends PipelineStage {
 
   /**
    * Fits a single model to the input data with optional parameters.
