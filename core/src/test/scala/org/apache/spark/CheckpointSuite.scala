@@ -23,7 +23,6 @@ import scala.reflect.ClassTag
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd._
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.util.Utils
@@ -34,8 +33,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
 
   override def beforeEach() {
     super.beforeEach()
-    checkpointDir = File.createTempFile("temp", "")
-    checkpointDir.deleteOnExit()
+    checkpointDir = File.createTempFile("temp", "", Utils.createTempDir())
     checkpointDir.delete()
     sc = new SparkContext("local", "test")
     sc.setCheckpointDir(checkpointDir.toString)
@@ -77,7 +75,8 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     assert(sc.checkpointFile[Int](parCollection.getCheckpointFile.get).collect() === result)
     assert(parCollection.dependencies != Nil)
     assert(parCollection.partitions.length === numPartitions)
-    assert(parCollection.partitions.toList === parCollection.checkpointData.get.getPartitions.toList)
+    assert(parCollection.partitions.toList ===
+      parCollection.checkpointData.get.getPartitions.toList)
     assert(parCollection.collect() === result)
   }
 
@@ -104,13 +103,13 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
   }
 
   test("UnionRDD") {
-    def otherRDD = sc.makeRDD(1 to 10, 1)
+    def otherRDD: RDD[Int] = sc.makeRDD(1 to 10, 1)
     testRDD(_.union(otherRDD))
     testRDDPartitions(_.union(otherRDD))
   }
 
   test("CartesianRDD") {
-    def otherRDD = sc.makeRDD(1 to 10, 1)
+    def otherRDD: RDD[Int] = sc.makeRDD(1 to 10, 1)
     testRDD(new CartesianRDD(sc, _, otherRDD))
     testRDDPartitions(new CartesianRDD(sc, _, otherRDD))
 
@@ -225,7 +224,8 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     val partitionAfterCheckpoint =  serializeDeserialize(
       unionRDD.partitions.head.asInstanceOf[PartitionerAwareUnionRDDPartition])
     assert(
-      partitionBeforeCheckpoint.parents.head.getClass != partitionAfterCheckpoint.parents.head.getClass,
+      partitionBeforeCheckpoint.parents.head.getClass !=
+        partitionAfterCheckpoint.parents.head.getClass,
       "PartitionerAwareUnionRDDPartition.parents not updated after parent RDD is checkpointed"
     )
   }
@@ -360,7 +360,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
    * Generate an pair RDD (with partitioner) such that both the RDD and its partitions
    * have large size.
    */
-  def generateFatPairRDD() = {
+  def generateFatPairRDD(): RDD[(Int, Int)] = {
     new FatPairRDD(sc.makeRDD(1 to 100, 4), partitioner).mapValues(x => x)
   }
 
@@ -447,7 +447,8 @@ class FatPairRDD(parent: RDD[Int], _partitioner: Partitioner) extends RDD[(Int, 
 object CheckpointSuite {
   // This is a custom cogroup function that does not use mapValues like
   // the PairRDDFunctions.cogroup()
-  def cogroup[K, V](first: RDD[(K, V)], second: RDD[(K, V)], part: Partitioner) = {
+  def cogroup[K, V](first: RDD[(K, V)], second: RDD[(K, V)], part: Partitioner)
+    : RDD[(K, Array[Iterable[V]])] = {
     new CoGroupedRDD[K](
       Seq(first.asInstanceOf[RDD[(K, _)]], second.asInstanceOf[RDD[(K, _)]]),
       part

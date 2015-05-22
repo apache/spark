@@ -19,9 +19,9 @@ my_stringset        	struct<>            	from deserializer
 my_enumset          	struct<>            	from deserializer   
 my_structset        	struct<>            	from deserializer   
 optionals           	struct<>            	from deserializer   
-b                   	string              	None                
+b                   	string              	                    
 	 	 
 # Partition Information	 	 
 # col_name            	data_type           	comment             
 	 	 
-b                   	string              	None                
+b                   	string              	                    

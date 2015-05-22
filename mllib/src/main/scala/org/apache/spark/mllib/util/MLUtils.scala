@@ -19,16 +19,16 @@ package org.apache.spark.mllib.util
 
 import scala.reflect.ClassTag
 
-import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
-  squaredDistance => breezeSquaredDistance}
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
-import org.apache.spark.util.random.BernoulliSampler
+import org.apache.spark.util.random.BernoulliCellSampler
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.DStream
@@ -38,7 +38,7 @@ import org.apache.spark.streaming.dstream.DStream
  */
 object MLUtils {
 
-  private[util] lazy val EPSILON = {
+  private[mllib] lazy val EPSILON = {
     var eps = 1.0
     while ((1.0 + (eps / 2.0)) != 1.0) {
       eps /= 2.0
@@ -76,7 +76,7 @@ object MLUtils {
       .map { line =>
         val items = line.split(' ')
         val label = items.head.toDouble
-        val (indices, values) = items.tail.map { item =>
+        val (indices, values) = items.tail.filter(_.nonEmpty).map { item =>
           val indexAndValue = item.split(':')
           val index = indexAndValue(0).toInt - 1 // Convert 1-based indices to 0-based.
           val value = indexAndValue(1).toDouble
@@ -153,10 +153,12 @@ object MLUtils {
   def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {
     // TODO: allow to specify label precision and feature precision.
     val dataStr = data.map { case LabeledPoint(label, features) =>
-      val featureStrings = features.toBreeze.activeIterator.map { case (i, v) =>
-        s"${i + 1}:$v"
+      val sb = new StringBuilder(label.toString)
+      features.foreachActive { case (i, v) =>
+        sb += ' '
+        sb ++= s"${i + 1}:$v"
       }
-      (Iterator(label) ++ featureStrings).mkString(" ")
+      sb.mkString
     }
     dataStr.saveAsTextFile(dir)
   }
@@ -196,8 +198,8 @@ object MLUtils {
 
   /**
    * Load labeled data from a file. The data format used here is
-   * <L>, <f1> <f2> ...
-   * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
+   * L, f1 f2 ...
+   * where f1, f2 are feature values in Double and L is the corresponding label as Double.
    *
    * @param sc SparkContext
    * @param dir Directory to the input data files.
@@ -219,8 +221,8 @@ object MLUtils {
 
   /**
    * Save labeled data to a file. The data format used here is
-   * <L>, <f1> <f2> ...
-   * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
+   * L, f1 f2 ...
+   * where f1, f2 are feature values in Double and L is the corresponding label as Double.
    *
    * @param data An RDD of LabeledPoints containing data to be saved.
    * @param dir Directory to save the data.
@@ -244,7 +246,7 @@ object MLUtils {
   def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
     val numFoldsF = numFolds.toFloat
     (1 to numFolds).map { fold =>
-      val sampler = new BernoulliSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF,
+      val sampler = new BernoulliCellSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF,
         complement = false)
       val validation = new PartitionwiseSampledRDD(rdd, sampler, true, seed)
       val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), true, seed)
@@ -263,7 +265,7 @@ object MLUtils {
     }
     Vectors.fromBreeze(vector1)
   }
-
+ 
   /**
    * Returns the squared Euclidean distance between two vectors. The following formula will be used
    * if it does not introduce too much numerical error:
@@ -281,9 +283,9 @@ object MLUtils {
    * @return squared distance between v1 and v2 within the specified precision
    */
   private[mllib] def fastSquaredDistance(
-      v1: BV[Double],
+      v1: Vector,
       norm1: Double,
-      v2: BV[Double],
+      v2: Vector,
       norm2: Double,
       precision: Double = 1e-6): Double = {
     val n = v1.size
@@ -306,17 +308,34 @@ object MLUtils {
      */
     val precisionBound1 = 2.0 * EPSILON * sumSquaredNorm / (normDiff * normDiff + EPSILON)
     if (precisionBound1 < precision) {
-      sqDist = sumSquaredNorm - 2.0 * v1.dot(v2)
-    } else if (v1.isInstanceOf[BSV[Double]] || v2.isInstanceOf[BSV[Double]]) {
-      val dot = v1.dot(v2)
-      sqDist = math.max(sumSquaredNorm - 2.0 * dot, 0.0)
-      val precisionBound2 = EPSILON * (sumSquaredNorm + 2.0 * math.abs(dot)) / (sqDist + EPSILON)
+      sqDist = sumSquaredNorm - 2.0 * dot(v1, v2)
+    } else if (v1.isInstanceOf[SparseVector] || v2.isInstanceOf[SparseVector]) {
+      val dotValue = dot(v1, v2)
+      sqDist = math.max(sumSquaredNorm - 2.0 * dotValue, 0.0)
+      val precisionBound2 = EPSILON * (sumSquaredNorm + 2.0 * math.abs(dotValue)) /
+        (sqDist + EPSILON)
       if (precisionBound2 > precision) {
-        sqDist = breezeSquaredDistance(v1, v2)
+        sqDist = Vectors.sqdist(v1, v2)
       }
     } else {
-      sqDist = breezeSquaredDistance(v1, v2)
+      sqDist = Vectors.sqdist(v1, v2)
     }
     sqDist
+  }
+
+  /**
+   * When `x` is positive and large, computing `math.log(1 + math.exp(x))` will lead to arithmetic
+   * overflow. This will happen when `x > 709.78` which is not a very large number.
+   * It can be addressed by rewriting the formula into `x + math.log1p(math.exp(-x))` when `x > 0`.
+   *
+   * @param x a floating-point value as input.
+   * @return the result of `math.log(1 + math.exp(x))`.
+   */
+  private[spark] def log1pExp(x: Double): Double = {
+    if (x > 0) {
+      x + math.log1p(math.exp(-x))
+    } else {
+      math.log1p(math.exp(x))
+    }
   }
 }

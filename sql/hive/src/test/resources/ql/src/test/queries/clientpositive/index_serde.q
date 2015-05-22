@@ -1,3 +1,4 @@
+set hive.stats.dbclass=fs;
 -- Want to ensure we can build and use indices on tables stored with SerDes
 -- Build the (Avro backed) table
 CREATE TABLE doctors 
@@ -31,7 +32,7 @@ TBLPROPERTIES ('avro.schema.literal'='{
 
 DESCRIBE doctors;
 
-LOAD DATA LOCAL INPATH '../data/files/doctors.avro' INTO TABLE doctors;
+LOAD DATA LOCAL INPATH '../../data/files/doctors.avro' INTO TABLE doctors;
 
 -- Create and build an index
 CREATE INDEX doctors_index ON TABLE doctors(number) AS 'COMPACT' WITH DEFERRED REBUILD;

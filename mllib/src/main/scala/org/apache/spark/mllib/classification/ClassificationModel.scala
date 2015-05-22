@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.classification
 
+import org.json4s.{DefaultFormats, JValue}
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
@@ -52,4 +54,16 @@ trait ClassificationModel extends Serializable {
    */
   def predict(testData: JavaRDD[Vector]): JavaRDD[java.lang.Double] =
     predict(testData.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
+}
+
+private[mllib] object ClassificationModel {
+
+  /**
+   * Helper method for loading GLM classification model metadata.
+   * @return (numFeatures, numClasses)
+   */
+  def getNumFeaturesClasses(metadata: JValue): (Int, Int) = {
+    implicit val formats = DefaultFormats
+    ((metadata \ "numFeatures").extract[Int], (metadata \ "numClasses").extract[Int])
+  }
 }

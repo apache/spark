@@ -18,7 +18,7 @@
 __all__ = ["StorageLevel"]
 
 
-class StorageLevel:
+class StorageLevel(object):
 
     """
     Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,

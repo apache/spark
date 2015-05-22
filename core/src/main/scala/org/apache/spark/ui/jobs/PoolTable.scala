@@ -24,8 +24,8 @@ import org.apache.spark.scheduler.{Schedulable, StageInfo}
 import org.apache.spark.ui.UIUtils
 
 /** Table showing list of pools */
-private[ui] class PoolTable(pools: Seq[Schedulable], parent: JobProgressTab) {
-  private val listener = parent.listener
+private[ui] class PoolTable(pools: Seq[Schedulable], parent: StagesTab) {
+  private val listener = parent.progressListener
 
   def toNodeSeq: Seq[Node] = {
     listener.synchronized {

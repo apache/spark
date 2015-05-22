@@ -17,10 +17,9 @@
 
 package org.apache.spark.streaming
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.language.postfixOps
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
@@ -39,18 +38,56 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
   // To make sure that the processing start and end times in collected
   // information are different for successive batches
-  override def batchDuration = Milliseconds(100)
-  override def actuallyWait = true
+  override def batchDuration: Duration = Milliseconds(100)
+  override def actuallyWait: Boolean = true
 
   test("batch info reporting") {
     val ssc = setupStreams(input, operation)
     val collector = new BatchInfoCollector
     ssc.addStreamingListener(collector)
     runStreams(ssc, input.size, input.size)
-    val batchInfos = collector.batchInfos
-    batchInfos should have size 4
 
-    batchInfos.foreach(info => {
+    // SPARK-6766: batch info should be submitted
+    val batchInfosSubmitted = collector.batchInfosSubmitted
+    batchInfosSubmitted should have size 4
+
+    batchInfosSubmitted.foreach(info => {
+      info.schedulingDelay should be (None)
+      info.processingDelay should be (None)
+      info.totalDelay should be (None)
+    })
+
+    batchInfosSubmitted.foreach { info =>
+      info.numRecords should be (1L)
+      info.streamIdToNumRecords should be (Map(0 -> 1L))
+    }
+
+    isInIncreasingOrder(batchInfosSubmitted.map(_.submissionTime)) should be (true)
+
+    // SPARK-6766: processingStartTime of batch info should not be None when starting
+    val batchInfosStarted = collector.batchInfosStarted
+    batchInfosStarted should have size 4
+
+    batchInfosStarted.foreach(info => {
+      info.schedulingDelay should not be None
+      info.schedulingDelay.get should be >= 0L
+      info.processingDelay should be (None)
+      info.totalDelay should be (None)
+    })
+
+    batchInfosStarted.foreach { info =>
+      info.numRecords should be (1L)
+      info.streamIdToNumRecords should be (Map(0 -> 1L))
+    }
+
+    isInIncreasingOrder(batchInfosStarted.map(_.submissionTime)) should be (true)
+    isInIncreasingOrder(batchInfosStarted.map(_.processingStartTime.get)) should be (true)
+
+    // test onBatchCompleted
+    val batchInfosCompleted = collector.batchInfosCompleted
+    batchInfosCompleted should have size 4
+
+    batchInfosCompleted.foreach(info => {
       info.schedulingDelay should not be None
       info.processingDelay should not be None
       info.totalDelay should not be None
@@ -59,9 +96,14 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
       info.totalDelay.get should be >= 0L
     })
 
-    isInIncreasingOrder(batchInfos.map(_.submissionTime)) should be (true)
-    isInIncreasingOrder(batchInfos.map(_.processingStartTime.get)) should be (true)
-    isInIncreasingOrder(batchInfos.map(_.processingEndTime.get)) should be (true)
+    batchInfosCompleted.foreach { info =>
+      info.numRecords should be (1L)
+      info.streamIdToNumRecords should be (Map(0 -> 1L))
+    }
+
+    isInIncreasingOrder(batchInfosCompleted.map(_.submissionTime)) should be (true)
+    isInIncreasingOrder(batchInfosCompleted.map(_.processingStartTime.get)) should be (true)
+    isInIncreasingOrder(batchInfosCompleted.map(_.processingEndTime.get)) should be (true)
   }
 
   test("receiver info reporting") {
@@ -74,8 +116,8 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
     ssc.start()
     try {
-      eventually(timeout(1000 millis), interval(20 millis)) {
-        collector.startedReceiverStreamIds.size should be >= 1
+      eventually(timeout(2000 millis), interval(20 millis)) {
+        collector.startedReceiverStreamIds.size should equal (1)
         collector.startedReceiverStreamIds(0) should equal (0)
         collector.stoppedReceiverStreamIds should have size 1
         collector.stoppedReceiverStreamIds(0) should equal (0)
@@ -100,17 +142,29 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
 /** Listener that collects information on processed batches */
 class BatchInfoCollector extends StreamingListener {
-  val batchInfos = new ArrayBuffer[BatchInfo]
+  val batchInfosCompleted = new ArrayBuffer[BatchInfo] with SynchronizedBuffer[BatchInfo]
+  val batchInfosStarted = new ArrayBuffer[BatchInfo] with SynchronizedBuffer[BatchInfo]
+  val batchInfosSubmitted = new ArrayBuffer[BatchInfo] with SynchronizedBuffer[BatchInfo]
+
+  override def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted) {
+    batchInfosSubmitted += batchSubmitted.batchInfo
+  }
+
+  override def onBatchStarted(batchStarted: StreamingListenerBatchStarted) {
+    batchInfosStarted += batchStarted.batchInfo
+  }
+
   override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
-    batchInfos += batchCompleted.batchInfo
+    batchInfosCompleted += batchCompleted.batchInfo
   }
 }
 
 /** Listener that collects information on processed batches */
 class ReceiverInfoCollector extends StreamingListener {
-  val startedReceiverStreamIds = new ArrayBuffer[Int]
-  val stoppedReceiverStreamIds = new ArrayBuffer[Int]()
-  val receiverErrors = new ArrayBuffer[(Int, String, String)]()
+  val startedReceiverStreamIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int]
+  val stoppedReceiverStreamIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int]
+  val receiverErrors =
+    new ArrayBuffer[(Int, String, String)] with SynchronizedBuffer[(Int, String, String)]
 
   override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
     startedReceiverStreamIds += receiverStarted.receiverInfo.streamId

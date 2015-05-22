@@ -18,11 +18,12 @@
 package org.apache.spark.sql.catalyst
 
 import java.math.BigInteger
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.types._
 
 case class PrimitiveData(
     intField: Int,
@@ -42,7 +43,8 @@ case class NullableData(
     byteField: java.lang.Byte,
     booleanField: java.lang.Boolean,
     stringField: String,
-    decimalField: BigDecimal,
+    decimalField: java.math.BigDecimal,
+    dateField: Date,
     timestampField: Timestamp,
     binaryField: Array[Byte])
 
@@ -53,17 +55,25 @@ case class OptionalData(
     floatField: Option[Float],
     shortField: Option[Short],
     byteField: Option[Byte],
-    booleanField: Option[Boolean])
+    booleanField: Option[Boolean],
+    structField: Option[PrimitiveData])
 
 case class ComplexData(
     arrayField: Seq[Int],
+    arrayField1: Array[Int],
+    arrayField2: List[Int],
     arrayFieldContainsNull: Seq[java.lang.Integer],
     mapField: Map[Int, Long],
     mapFieldValueContainsNull: Map[Int, java.lang.Long],
-    structField: PrimitiveData)
+    structField: PrimitiveData,
+    nestedArrayField: Array[Array[Int]])
 
 case class GenericData[A](
     genericField: A)
+
+case class MultipleConstructorsData(a: Int, b: String, c: Double) {
+  def this(b: String, a: Int) = this(a, b, c = 1.0)
+}
 
 class ScalaReflectionSuite extends FunSuite {
   import ScalaReflection._
@@ -94,13 +104,14 @@ class ScalaReflectionSuite extends FunSuite {
         StructField("byteField", ByteType, nullable = true),
         StructField("booleanField", BooleanType, nullable = true),
         StructField("stringField", StringType, nullable = true),
-        StructField("decimalField", DecimalType, nullable = true),
+        StructField("decimalField", DecimalType.Unlimited, nullable = true),
+        StructField("dateField", DateType, nullable = true),
         StructField("timestampField", TimestampType, nullable = true),
         StructField("binaryField", BinaryType, nullable = true))),
       nullable = true))
   }
 
-  test("optinal data") {
+  test("optional data") {
     val schema = schemaFor[OptionalData]
     assert(schema === Schema(
       StructType(Seq(
@@ -110,7 +121,8 @@ class ScalaReflectionSuite extends FunSuite {
         StructField("floatField", FloatType, nullable = true),
         StructField("shortField", ShortType, nullable = true),
         StructField("byteField", ByteType, nullable = true),
-        StructField("booleanField", BooleanType, nullable = true))),
+        StructField("booleanField", BooleanType, nullable = true),
+        StructField("structField", schemaFor[PrimitiveData].dataType, nullable = true))),
       nullable = true))
   }
 
@@ -120,6 +132,14 @@ class ScalaReflectionSuite extends FunSuite {
       StructType(Seq(
         StructField(
           "arrayField",
+          ArrayType(IntegerType, containsNull = false),
+          nullable = true),
+        StructField(
+          "arrayField1",
+          ArrayType(IntegerType, containsNull = false),
+          nullable = true),
+        StructField(
+          "arrayField2",
           ArrayType(IntegerType, containsNull = false),
           nullable = true),
         StructField(
@@ -144,7 +164,10 @@ class ScalaReflectionSuite extends FunSuite {
             StructField("shortField", ShortType, nullable = false),
             StructField("byteField", ByteType, nullable = false),
             StructField("booleanField", BooleanType, nullable = false))),
-          nullable = true))),
+          nullable = true),
+        StructField(
+          "nestedArrayField",
+          ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true)))),
       nullable = true))
   }
 
@@ -195,28 +218,32 @@ class ScalaReflectionSuite extends FunSuite {
     assert(DoubleType === typeOfObject(1.7976931348623157E308))
 
     // DecimalType
-    assert(DecimalType === typeOfObject(BigDecimal("1.7976931348623157E318")))
+    assert(DecimalType.Unlimited ===
+      typeOfObject(new java.math.BigDecimal("1.7976931348623157E318")))
+
+    // DateType
+    assert(DateType === typeOfObject(Date.valueOf("2014-07-25")))
 
     // TimestampType
-    assert(TimestampType === typeOfObject(java.sql.Timestamp.valueOf("2014-07-25 10:26:00")))
+    assert(TimestampType === typeOfObject(Timestamp.valueOf("2014-07-25 10:26:00")))
 
     // NullType
     assert(NullType === typeOfObject(null))
 
     def typeOfObject1: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case value: java.math.BigInteger => DecimalType
-      case value: java.math.BigDecimal => DecimalType
+      case value: java.math.BigInteger => DecimalType.Unlimited
+      case value: java.math.BigDecimal => DecimalType.Unlimited
       case _ => StringType
     }
 
-    assert(DecimalType === typeOfObject1(
+    assert(DecimalType.Unlimited === typeOfObject1(
       new BigInteger("92233720368547758070")))
-    assert(DecimalType === typeOfObject1(
+    assert(DecimalType.Unlimited === typeOfObject1(
       new java.math.BigDecimal("1.7976931348623157E318")))
     assert(StringType === typeOfObject1(BigInt("92233720368547758070")))
 
     def typeOfObject2: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case value: java.math.BigInteger => DecimalType
+      case value: java.math.BigInteger => DecimalType.Unlimited
     }
 
     intercept[MatchError](typeOfObject2(BigInt("92233720368547758070")))
@@ -227,5 +254,32 @@ class ScalaReflectionSuite extends FunSuite {
 
     assert(ArrayType(IntegerType) === typeOfObject3(Seq(1, 2, 3)))
     assert(ArrayType(ArrayType(IntegerType)) === typeOfObject3(Seq(Seq(1,2,3))))
+  }
+
+  test("convert PrimitiveData to catalyst") {
+    val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
+    val convertedData = Row(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
+    val dataType = schemaFor[PrimitiveData].dataType
+    assert(CatalystTypeConverters.convertToCatalyst(data, dataType) === convertedData)
+  }
+
+  test("convert Option[Product] to catalyst") {
+    val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
+    val data = OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
+      Some(primitiveData))
+    val dataType = schemaFor[OptionalData].dataType
+    val convertedData = Row(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
+      Row(1, 1, 1, 1, 1, 1, true))
+    assert(CatalystTypeConverters.convertToCatalyst(data, dataType) === convertedData)
+  }
+
+  test("infer schema from case class with multiple constructors") {
+    val dataType = schemaFor[MultipleConstructorsData].dataType
+    dataType match {
+      case s: StructType =>
+        // Schema should have order: a: Int, b: String, c: Double
+        assert(s.fieldNames === Seq("a", "b", "c"))
+        assert(s.fields.map(_.dataType) === Seq(IntegerType, StringType, DoubleType))
+    }
   }
 }

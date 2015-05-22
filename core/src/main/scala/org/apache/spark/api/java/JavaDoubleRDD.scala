@@ -32,7 +32,8 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.StatCounter
 import org.apache.spark.util.Utils
 
-class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, JavaDoubleRDD] {
+class JavaDoubleRDD(val srdd: RDD[scala.Double])
+  extends AbstractJavaRDDLike[JDouble, JavaDoubleRDD] {
 
   override val classTag: ClassTag[JDouble] = implicitly[ClassTag[JDouble]]
 
@@ -114,7 +115,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
    * Return an RDD with the elements from `this` that are not in `other`.
    *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
-   * RDD will be <= us.
+   * RDD will be &lt;= us.
    */
   def subtract(other: JavaDoubleRDD): JavaDoubleRDD =
     fromRDD(srdd.subtract(other))
@@ -161,6 +162,20 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
 
   /** Add up the elements in this RDD. */
   def sum(): JDouble = srdd.sum()
+
+  /**
+   * Returns the minimum element from this RDD as defined by
+   * the default comparator natural order.
+   * @return the minimum of the RDD
+   */
+  def min(): JDouble = min(com.google.common.collect.Ordering.natural())
+
+  /**
+   * Returns the maximum element from this RDD as defined by
+   * the default comparator natural order.
+   * @return the maximum of the RDD
+   */
+  def max(): JDouble = max(com.google.common.collect.Ordering.natural())
 
   /**
    * Return a [[org.apache.spark.util.StatCounter]] object that captures the mean, variance and
@@ -233,11 +248,11 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
    * to the left except for the last which is closed
    *  e.g. for the array
    *  [1,10,20,50] the buckets are [1,10) [10,20) [20,50]
-   *  e.g 1<=x<10 , 10<=x<20, 20<=x<50
+   *  e.g 1&lt;=x&lt;10 , 10&lt;=x&lt;20, 20&lt;=x&lt;50
    *  And on the input of 1 and 50 we would have a histogram of 1,0,0
    *
    * Note: if your histogram is evenly spaced (e.g. [0, 10, 20, 30]) this can be switched
-   * from an O(log n) inseration to O(1) per element. (where n = # buckets) if you set evenBuckets
+   * from an O(log n) insertion to O(1) per element. (where n = # buckets) if you set evenBuckets
    * to true.
    * buckets must be sorted and not contain any duplicates.
    * buckets array must be at least two elements

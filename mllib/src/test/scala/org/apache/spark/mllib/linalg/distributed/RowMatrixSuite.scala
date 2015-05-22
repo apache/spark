@@ -23,9 +23,9 @@ import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, norm => brzNorm, s
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.{Matrices, Vectors, Vector}
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 
-class RowMatrixSuite extends FunSuite with LocalSparkContext {
+class RowMatrixSuite extends FunSuite with MLlibTestSparkContext {
 
   val m = 4
   val n = 3
@@ -95,6 +95,40 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("similar columns") {
+    val colMags = Vectors.dense(math.sqrt(126), math.sqrt(66), math.sqrt(94))
+    val expected = BDM(
+      (0.0, 54.0, 72.0),
+      (0.0, 0.0, 78.0),
+      (0.0, 0.0, 0.0))
+
+    for (i <- 0 until n; j <- 0 until n) {
+      expected(i, j) /= (colMags(i) * colMags(j))
+    }
+
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val G = mat.columnSimilarities(0.11).toBreeze()
+      for (i <- 0 until n; j <- 0 until n) {
+        if (expected(i, j) > 0) {
+          val actual = expected(i, j)
+          val estimate = G(i, j)
+          assert(math.abs(actual - estimate) / actual < 0.2,
+            s"Similarities not close enough: $actual vs $estimate")
+        }
+      }
+    }
+
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val G = mat.columnSimilarities()
+      assert(closeToZero(G.toBreeze() - expected))
+    }
+
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val G = mat.columnSimilaritiesDIMSUM(colMags.toArray, 150.0)
+      assert(closeToZero(G.toBreeze() - expected))
+    }
+  }
+
   test("svd of a full-rank matrix") {
     for (mat <- Seq(denseMat, sparseMat)) {
       for (mode <- Seq("auto", "local-svd", "local-eigs", "dist-eigs")) {
@@ -134,6 +168,14 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
       assert(svd.U.numCols() === 1)
       assert(svd.V.numRows === 3)
       assert(svd.V.numCols === 1)
+    }
+  }
+
+  test("validate k in svd") {
+    for (mat <- Seq(denseMat, sparseMat)) {
+      intercept[IllegalArgumentException] {
+        mat.computeSVD(-1)
+      }
     }
   }
 
@@ -190,6 +232,9 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
         assert(summary.numNonzeros === Vectors.dense(3.0, 3.0, 4.0), "nnz mismatch")
         assert(summary.max === Vectors.dense(9.0, 7.0, 8.0), "max mismatch")
         assert(summary.min === Vectors.dense(0.0, 0.0, 1.0), "column mismatch.")
+        assert(summary.normL2 === Vectors.dense(math.sqrt(126), math.sqrt(66), math.sqrt(94)),
+          "magnitude mismatch.")
+        assert(summary.normL1 === Vectors.dense(18.0, 12.0, 16.0), "L1 norm mismatch")
       }
     }
   }

@@ -27,7 +27,7 @@ import org.apache.spark.util.CallSite
  */
 private[spark] class ActiveJob(
     val jobId: Int,
-    val finalStage: Stage,
+    val finalStage: ResultStage,
     val func: (TaskContext, Iterator[_]) => _,
     val partitions: Array[Int],
     val callSite: CallSite,

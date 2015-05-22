@@ -118,4 +118,11 @@ class PrimitiveKeyOpenHashMapSuite extends FunSuite with Matchers {
       assert(map(i.toLong) === i.toString)
     }
   }
+
+  test("contains") {
+    val map = new PrimitiveKeyOpenHashMap[Int, Int](1)
+    map(0) = 0
+    assert(map.contains(0))
+    assert(!map.contains(1))
+  }
 }

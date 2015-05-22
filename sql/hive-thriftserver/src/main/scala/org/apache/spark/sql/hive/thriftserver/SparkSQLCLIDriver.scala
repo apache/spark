@@ -23,21 +23,22 @@ import java.io._
 import java.util.{ArrayList => JArrayList}
 
 import jline.{ConsoleReader, History}
-import org.apache.commons.lang.StringUtils
+
+import org.apache.commons.lang3.StringUtils
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
-import org.apache.hadoop.hive.common.LogUtils.LogInitializationException
-import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils, LogUtils}
+import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.processors.{SetProcessor, CommandProcessor, CommandProcessorFactory}
+import org.apache.hadoop.hive.ql.processors.{AddResourceProcessor, SetProcessor, CommandProcessor}
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.hive.{HiveContext, HiveShim}
+import org.apache.spark.util.Utils
 
 private[hive] object SparkSQLCLIDriver {
   private var prompt = "spark-sql"
@@ -73,19 +74,12 @@ private[hive] object SparkSQLCLIDriver {
       System.exit(1)
     }
 
-    // NOTE: It is critical to do this here so that log4j is reinitialized
-    // before any of the other core hive classes are loaded
-    var logInitFailed = false
-    var logInitDetailMessage: String = null
-    try {
-      logInitDetailMessage = LogUtils.initHiveLog4j()
-    } catch {
-      case e: LogInitializationException =>
-        logInitFailed = true
-        logInitDetailMessage = e.getMessage
+    val cliConf = new HiveConf(classOf[SessionState])
+    // Override the location of the metastore since this is only used for local execution.
+    HiveContext.newTemporaryConfiguration().foreach {
+      case (key, value) => cliConf.set(key, value)
     }
-
-    val sessionState = new CliSessionState(new HiveConf(classOf[SessionState]))
+    val sessionState = new CliSessionState(cliConf)
 
     sessionState.in = System.in
     try {
@@ -100,29 +94,22 @@ private[hive] object SparkSQLCLIDriver {
       System.exit(2)
     }
 
-    if (!sessionState.getIsSilent) {
-      if (logInitFailed) System.err.println(logInitDetailMessage)
-      else SessionState.getConsole.printInfo(logInitDetailMessage)
-    }
-
     // Set all properties specified via command line.
     val conf: HiveConf = sessionState.getConf
-    sessionState.cmdProperties.entrySet().foreach { item: java.util.Map.Entry[Object, Object] =>
-      conf.set(item.getKey.asInstanceOf[String], item.getValue.asInstanceOf[String])
-      sessionState.getOverriddenConfigurations.put(
-        item.getKey.asInstanceOf[String], item.getValue.asInstanceOf[String])
+    sessionState.cmdProperties.entrySet().foreach { item =>
+      val key = item.getKey.asInstanceOf[String]
+      val value = item.getValue.asInstanceOf[String]
+      // We do not propagate metastore options to the execution copy of hive.
+      if (key != "javax.jdo.option.ConnectionURL") {
+        conf.set(key, value)
+        sessionState.getOverriddenConfigurations.put(key, value)
+      }
     }
 
     SessionState.start(sessionState)
 
     // Clean up after we exit
-    Runtime.getRuntime.addShutdownHook(
-      new Thread() {
-        override def run() {
-          SparkSQLEnv.stop()
-        }
-      }
-    )
+    Utils.addShutdownHook { () => SparkSQLEnv.stop() }
 
     // "-h" option has been passed, so connect to Hive thrift server.
     if (sessionState.getHost != null) {
@@ -133,7 +120,7 @@ private[hive] object SparkSQLCLIDriver {
       }
     }
 
-    if (!sessionState.isRemoteMode && !ShimLoader.getHadoopShims.usesJobShell()) {
+    if (!sessionState.isRemoteMode) {
       // Hadoop-20 and above - we need to augment classpath using hiveconf
       // components.
       // See also: code in ExecDriver.java
@@ -158,6 +145,10 @@ private[hive] object SparkSQLCLIDriver {
       sessionState.err = new PrintStream(System.err, true, "UTF-8")
     } catch {
       case e: UnsupportedEncodingException => System.exit(3)
+    }
+
+    if (sessionState.database != null) {
+      SparkSQLEnv.hiveContext.runSqlHive(s"USE ${sessionState.database}")
     }
 
     // Execute -i init files (always in silent mode)
@@ -209,28 +200,29 @@ private[hive] object SparkSQLCLIDriver {
     val currentDB = ReflectionUtils.invokeStatic(classOf[CliDriver], "getFormattedDb",
       classOf[HiveConf] -> conf, classOf[CliSessionState] -> sessionState)
 
-    def promptWithCurrentDB = s"$prompt$currentDB"
-    def continuedPromptWithDBSpaces = continuedPrompt + ReflectionUtils.invokeStatic(
+    def promptWithCurrentDB: String = s"$prompt$currentDB"
+    def continuedPromptWithDBSpaces: String = continuedPrompt + ReflectionUtils.invokeStatic(
       classOf[CliDriver], "spacesForString", classOf[String] -> currentDB)
 
     var currentPrompt = promptWithCurrentDB
     var line = reader.readLine(currentPrompt + "> ")
 
     while (line != null) {
-      if (prefix.nonEmpty) {
-        prefix += '\n'
-      }
+      if (!line.startsWith("--")) {
+        if (prefix.nonEmpty) {
+          prefix += '\n'
+        }
 
-      if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
-        line = prefix + line
-        ret = cli.processLine(line, true)
-        prefix = ""
-        currentPrompt = promptWithCurrentDB
-      } else {
-        prefix = prefix + line
-        currentPrompt = continuedPromptWithDBSpaces
+        if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
+          line = prefix + line
+          ret = cli.processLine(line, true)
+          prefix = ""
+          currentPrompt = promptWithCurrentDB
+        } else {
+          prefix = prefix + line
+          currentPrompt = continuedPromptWithDBSpaces
+        }
       }
-
       line = reader.readLine(currentPrompt + "> ")
     }
 
@@ -275,10 +267,11 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     } else {
       var ret = 0
       val hconf = conf.asInstanceOf[HiveConf]
-      val proc: CommandProcessor = CommandProcessorFactory.get(tokens(0), hconf)
+      val proc: CommandProcessor = HiveShim.getCommandProcessor(Array(tokens(0)), hconf)
 
       if (proc != null) {
-        if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor]) {
+        if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor] ||
+          proc.isInstanceOf[AddResourceProcessor]) {
           val driver = new SparkSQLDriver
 
           driver.init()
@@ -287,8 +280,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           if (sessionState.getIsVerbose) {
             out.println(cmd)
           }
-
           val rc = driver.run(cmd)
+          val end = System.currentTimeMillis()
+          val timeTaken:Double = (end - start) / 1000.0
+
           ret = rc.getResponseCode
           if (ret != 0) {
             console.printError(rc.getErrorMessage())
@@ -305,9 +300,13 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             }
           }
 
+          var counter = 0
           try {
             while (!out.checkError() && driver.getResults(res)) {
-              res.foreach(out.println)
+              res.foreach{ l =>
+                counter += 1
+                out.println(l)
+              }
               res.clear()
             }
           } catch {
@@ -324,12 +323,11 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             ret = cret
           }
 
-          val end = System.currentTimeMillis()
-          if (end > start) {
-            val timeTaken:Double = (end - start) / 1000.0
-            console.printInfo(s"Time taken: $timeTaken seconds", null)
+          var responseMsg = s"Time taken: $timeTaken seconds"
+          if (counter != 0) {
+            responseMsg += s", Fetched $counter row(s)"
           }
-
+          console.printInfo(responseMsg , null)
           // Destroy the driver to release all the locks.
           driver.destroy()
         } else {

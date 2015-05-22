@@ -25,12 +25,12 @@ import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.deploy.worker.ui.WorkerWebUI._
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.util.RpcUtils
 
 /**
  * Web UI server for the standalone worker.
  */
-private[spark]
+private[worker]
 class WorkerWebUI(
     val worker: Worker,
     val workDir: File,
@@ -38,7 +38,7 @@ class WorkerWebUI(
   extends WebUI(worker.securityMgr, requestedPort, worker.conf, name = "WorkerUI")
   with Logging {
 
-  val timeout = AkkaUtils.askTimeout(worker.conf)
+  private[ui] val timeout = RpcUtils.askTimeout(worker.conf)
 
   initialize()
 
@@ -50,10 +50,9 @@ class WorkerWebUI(
     attachHandler(createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static"))
     attachHandler(createServletHandler("/log",
       (request: HttpServletRequest) => logPage.renderLog(request), worker.securityMgr))
-    worker.metricsSystem.getServletHandlers.foreach(attachHandler)
   }
 }
 
-private[spark] object WorkerWebUI {
+private[ui] object WorkerWebUI {
   val STATIC_RESOURCE_BASE = SparkUI.STATIC_RESOURCE_DIR
 }

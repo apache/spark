@@ -1,4 +1,0 @@
-idx_1               	show_idx_full       	key                 	default__show_idx_full_idx_1__	compact             	
-idx_2               	show_idx_full       	value1              	default__show_idx_full_idx_2__	compact             	
-idx_comment         	show_idx_full       	value2              	default__show_idx_full_idx_comment__	compact             	index comment       
-idx_compound        	show_idx_full       	key, value1         	default__show_idx_full_idx_compound__	compact             	

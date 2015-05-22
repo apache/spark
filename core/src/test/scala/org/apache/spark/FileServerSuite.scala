@@ -18,13 +18,17 @@
 package org.apache.spark
 
 import java.io._
+import java.net.URI
 import java.util.jar.{JarEntry, JarOutputStream}
+import javax.net.ssl.SSLException
 
-import com.google.common.io.Files
+import com.google.common.io.{ByteStreams, Files}
+import org.apache.commons.lang3.RandomUtils
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.util.Utils
+
+import SSLSampleConfigs._
 
 class FileServerSuite extends FunSuite with LocalSparkContext {
 
@@ -32,17 +36,17 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   @transient var tmpFile: File = _
   @transient var tmpJarUrl: String = _
 
+  def newConf: SparkConf = new SparkConf(loadDefaults = false).set("spark.authenticate", "false")
+
   override def beforeEach() {
     super.beforeEach()
     resetSparkContext()
-    System.setProperty("spark.authenticate", "false")
   }
 
   override def beforeAll() {
     super.beforeAll()
 
-    tmpDir = Files.createTempDir()
-    tmpDir.deleteOnExit()
+    tmpDir = Utils.createTempDir()
     val testTempDir = new File(tmpDir, "test")
     testTempDir.mkdir()
 
@@ -54,18 +58,12 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     val jarFile = new File(testTempDir, "test.jar")
     val jarStream = new FileOutputStream(jarFile)
     val jar = new JarOutputStream(jarStream, new java.util.jar.Manifest())
-    System.setProperty("spark.authenticate", "false")
 
     val jarEntry = new JarEntry(textFile.getName)
     jar.putNextEntry(jarEntry)
 
     val in = new FileInputStream(textFile)
-    val buffer = new Array[Byte](10240)
-    var nRead = 0
-    while (nRead <= 0) {
-      nRead = in.read(buffer, 0, buffer.length)
-      jar.write(buffer, 0, nRead)
-    }
+    ByteStreams.copy(in, jar)
 
     in.close()
     jar.close()
@@ -81,7 +79,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Distributing files locally") {
-    sc = new SparkContext("local[4]", "test")
+    sc = new SparkContext("local[4]", "test", newConf)
     sc.addFile(tmpFile.toString)
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
     val result = sc.parallelize(testData).reduceByKey {
@@ -115,7 +113,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
 
   test("Distributing files locally using URL as input") {
     // addFile("file:///....")
-    sc = new SparkContext("local[4]", "test")
+    sc = new SparkContext("local[4]", "test", newConf)
     sc.addFile(new File(tmpFile.toString).toURI.toString)
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
     val result = sc.parallelize(testData).reduceByKey {
@@ -129,7 +127,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   }
 
   test ("Dynamically adding JARS locally") {
-    sc = new SparkContext("local[4]", "test")
+    sc = new SparkContext("local[4]", "test", newConf)
     sc.addJar(tmpJarUrl)
     val testData = Array((1, 1))
     sc.parallelize(testData).foreach { x =>
@@ -140,7 +138,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Distributing files on a standalone cluster") {
-    sc = new SparkContext("local-cluster[1,1,512]", "test")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", newConf)
     sc.addFile(tmpFile.toString)
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
     val result = sc.parallelize(testData).reduceByKey {
@@ -154,7 +152,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   }
 
   test ("Dynamically adding JARS on a standalone cluster") {
-    sc = new SparkContext("local-cluster[1,1,512]", "test")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", newConf)
     sc.addJar(tmpJarUrl)
     val testData = Array((1,1))
     sc.parallelize(testData).foreach { x =>
@@ -165,7 +163,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   }
 
   test ("Dynamically adding JARS on a standalone cluster using local: URL") {
-    sc = new SparkContext("local-cluster[1,1,512]", "test")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", newConf)
     sc.addJar(tmpJarUrl.replace("file", "local"))
     val testData = Array((1,1))
     sc.parallelize(testData).foreach { x =>
@@ -173,6 +171,90 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
         throw new SparkException("jar not added")
       }
     }
+  }
+
+  test ("HttpFileServer should work with SSL") {
+    val sparkConf = sparkSSLConfig()
+    val sm = new SecurityManager(sparkConf)
+    val server = new HttpFileServer(sparkConf, sm, 0)
+    try {
+      server.initialize()
+
+      fileTransferTest(server, sm)
+    } finally {
+      server.stop()
+    }
+  }
+
+  test ("HttpFileServer should work with SSL and good credentials") {
+    val sparkConf = sparkSSLConfig()
+    sparkConf.set("spark.authenticate", "true")
+    sparkConf.set("spark.authenticate.secret", "good")
+
+    val sm = new SecurityManager(sparkConf)
+    val server = new HttpFileServer(sparkConf, sm, 0)
+    try {
+      server.initialize()
+
+      fileTransferTest(server, sm)
+    } finally {
+      server.stop()
+    }
+  }
+
+  test ("HttpFileServer should not work with valid SSL and bad credentials") {
+    val sparkConf = sparkSSLConfig()
+    sparkConf.set("spark.authenticate", "true")
+    sparkConf.set("spark.authenticate.secret", "bad")
+
+    val sm = new SecurityManager(sparkConf)
+    val server = new HttpFileServer(sparkConf, sm, 0)
+    try {
+      server.initialize()
+
+      intercept[IOException] {
+        fileTransferTest(server)
+      }
+    } finally {
+      server.stop()
+    }
+  }
+
+  test ("HttpFileServer should not work with SSL when the server is untrusted") {
+    val sparkConf = sparkSSLConfigUntrusted()
+    val sm = new SecurityManager(sparkConf)
+    val server = new HttpFileServer(sparkConf, sm, 0)
+    try {
+      server.initialize()
+
+      intercept[SSLException] {
+        fileTransferTest(server)
+      }
+    } finally {
+      server.stop()
+    }
+  }
+
+  def fileTransferTest(server: HttpFileServer, sm: SecurityManager = null): Unit = {
+    val randomContent = RandomUtils.nextBytes(100)
+    val file = File.createTempFile("FileServerSuite", "sslTests", tmpDir)
+    Files.write(randomContent, file)
+    server.addFile(file)
+
+    val uri = new URI(server.serverUri + "/files/" + file.getName)
+
+    val connection = if (sm != null && sm.isAuthenticationEnabled()) {
+      Utils.constructURIForAuthentication(uri, sm).toURL.openConnection()
+    } else {
+      uri.toURL.openConnection()
+    }
+
+    if (sm != null) {
+      Utils.setupSecureURLConnection(connection, sm)
+    }
+
+    val buf = ByteStreams.toByteArray(connection.getInputStream)
+    assert(buf === randomContent)
   }
 
 }

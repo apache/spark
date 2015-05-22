@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 import sys
 
 from pyspark import SparkContext
@@ -47,13 +49,15 @@ ROW                           COLUMN+CELL
 """
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print >> sys.stderr, """
+        print("""
         Usage: hbase_inputformat <host> <table>
 
         Run with example jar:
-        ./bin/spark-submit --driver-class-path /path/to/example/jar /path/to/examples/hbase_inputformat.py <host> <table>
+        ./bin/spark-submit --driver-class-path /path/to/example/jar \
+        /path/to/examples/hbase_inputformat.py <host> <table> [<znode>]
         Assumes you have some data in HBase already, running on <host>, in <table>
-        """
+          optionally, you can specify parent znode for your hbase cluster - <znode>
+        """, file=sys.stderr)
         exit(-1)
 
     host = sys.argv[1]
@@ -61,15 +65,21 @@ if __name__ == "__main__":
     sc = SparkContext(appName="HBaseInputFormat")
 
     conf = {"hbase.zookeeper.quorum": host, "hbase.mapreduce.inputtable": table}
+    if len(sys.argv) > 3:
+        conf = {"hbase.zookeeper.quorum": host, "zookeeper.znode.parent": sys.argv[3],
+                "hbase.mapreduce.inputtable": table}
+    keyConv = "org.apache.spark.examples.pythonconverters.ImmutableBytesWritableToStringConverter"
+    valueConv = "org.apache.spark.examples.pythonconverters.HBaseResultToStringConverter"
+
     hbase_rdd = sc.newAPIHadoopRDD(
         "org.apache.hadoop.hbase.mapreduce.TableInputFormat",
         "org.apache.hadoop.hbase.io.ImmutableBytesWritable",
         "org.apache.hadoop.hbase.client.Result",
-        keyConverter="org.apache.spark.examples.pythonconverters.ImmutableBytesWritableToStringConverter",
-        valueConverter="org.apache.spark.examples.pythonconverters.HBaseResultToStringConverter",
+        keyConverter=keyConv,
+        valueConverter=valueConv,
         conf=conf)
     output = hbase_rdd.collect()
     for (k, v) in output:
-        print (k, v)
+        print((k, v))
 
     sc.stop()

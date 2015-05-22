@@ -24,7 +24,7 @@ set b=a;
 set c=${hiveconf:${hiveconf:b}};
 set c;
 
-set jar=${system:build.ivy.lib.dir}/default/derby-${system:derby.version}.jar;
+set jar=${system:maven.local.repository}/org/apache/derby/derby/${system:derby.version}/derby-${system:derby.version}.jar;
 
 add file ${hiveconf:jar};
 delete file ${hiveconf:jar};

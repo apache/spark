@@ -20,34 +20,34 @@ package org.apache.spark
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
 import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.storage.{ShuffleDataBlockId, ShuffleBlockId}
 import org.apache.spark.util.MutablePair
 
-class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
+abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
   val conf = new SparkConf(loadDefaults = false)
 
+  // Ensure that the DAGScheduler doesn't retry stages whose fetches fail, so that we accurately
+  // test that the shuffle works (rather than retrying until all blocks are local to one Executor).
+  conf.set("spark.test.noStageRetry", "true")
+
   test("groupByKey without compression") {
-    try {
-      System.setProperty("spark.shuffle.compress", "false")
-      sc = new SparkContext("local", "test")
-      val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 4)
-      val groups = pairs.groupByKey(4).collect()
-      assert(groups.size === 2)
-      val valuesFor1 = groups.find(_._1 == 1).get._2
-      assert(valuesFor1.toList.sorted === List(1, 2, 3))
-      val valuesFor2 = groups.find(_._1 == 2).get._2
-      assert(valuesFor2.toList.sorted === List(1))
-    } finally {
-      System.setProperty("spark.shuffle.compress", "true")
-    }
+    val myConf = conf.clone().set("spark.shuffle.compress", "false")
+    sc = new SparkContext("local", "test", myConf)
+    val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 4)
+    val groups = pairs.groupByKey(4).collect()
+    assert(groups.size === 2)
+    val valuesFor1 = groups.find(_._1 == 1).get._2
+    assert(valuesFor1.toList.sorted === List(1, 2, 3))
+    val valuesFor2 = groups.find(_._1 == 2).get._2
+    assert(valuesFor2.toList.sorted === List(1))
   }
 
   test("shuffle non-zero block size") {
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     val NUM_BLOCKS = 3
 
     val a = sc.parallelize(1 to 10, 2)
@@ -73,7 +73,7 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
   test("shuffle serializer") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     val a = sc.parallelize(1 to 10, 2)
     val b = a.map { x =>
       (x, new NonJavaSerializableClass(x * 2))
@@ -89,16 +89,16 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
   test("zero sized blocks") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
 
-    // 10 partitions from 4 keys
-    val NUM_BLOCKS = 10
+    // 201 partitions (greater than "spark.shuffle.sort.bypassMergeThreshold") from 4 keys
+    val NUM_BLOCKS = 201
     val a = sc.parallelize(1 to 4, NUM_BLOCKS)
     val b = a.map(x => (x, x*2))
 
     // NOTE: The default Java serializer doesn't create zero-sized blocks.
     //       So, use Kryo
-    val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(10))
+    val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(NUM_BLOCKS))
       .setSerializer(new KryoSerializer(conf))
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
@@ -116,15 +116,15 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
   test("zero sized blocks without kryo") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
 
-    // 10 partitions from 4 keys
-    val NUM_BLOCKS = 10
+    // 201 partitions (greater than "spark.shuffle.sort.bypassMergeThreshold") from 4 keys
+    val NUM_BLOCKS = 201
     val a = sc.parallelize(1 to 4, NUM_BLOCKS)
     val b = a.map(x => (x, x*2))
 
     // NOTE: The default Java serializer should create zero-sized blocks
-    val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(10))
+    val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(NUM_BLOCKS))
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
     assert(c.count === 4)
@@ -141,8 +141,8 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
   test("shuffle on mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
-    def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+    def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
     val data = Array(p(1, 1), p(1, 2), p(1, 3), p(2, 1))
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
     val results = new ShuffledRDD[Int, Int, Int](pairs,
@@ -154,8 +154,8 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
   test("sorting on mutable pairs") {
     // This is not in SortingSuite because of the local cluster setup.
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
-    def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+    def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
     val data = Array(p(1, 11), p(3, 33), p(100, 100), p(2, 22))
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
     val results = new OrderedRDDFunctions[Int, Int, MutablePair[Int, Int]](pairs)
@@ -168,8 +168,8 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
   test("cogroup using mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
-    def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+    def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
     val data1 = Seq(p(1, 1), p(1, 2), p(1, 3), p(2, 1))
     val data2 = Seq(p(1, "11"), p(1, "12"), p(2, "22"), p(3, "3"))
     val pairs1: RDD[MutablePair[Int, Int]] = sc.parallelize(data1, 2)
@@ -195,8 +195,8 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
   test("subtract mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
-    def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+    def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
     val data1 = Seq(p(1, 1), p(1, 2), p(1, 3), p(2, 1), p(3, 33))
     val data2 = Seq(p(1, "11"), p(1, "12"), p(2, "22"))
     val pairs1: RDD[MutablePair[Int, Int]] = sc.parallelize(data1, 2)
@@ -209,11 +209,8 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
   test("sort with Java non serializable class - Kryo") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    val conf = new SparkConf()
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .setAppName("test")
-      .setMaster("local-cluster[2,1,512]")
-    sc = new SparkContext(conf)
+    val myConf = conf.clone().set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", myConf)
     val a = sc.parallelize(1 to 10, 2)
     val b = a.map { x =>
       (new NonJavaSerializableClass(x), x)
@@ -226,10 +223,7 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
   test("sort with Java non serializable class - Java") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    val conf = new SparkConf()
-      .setAppName("test")
-      .setMaster("local-cluster[2,1,512]")
-    sc = new SparkContext(conf)
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     val a = sc.parallelize(1 to 10, 2)
     val b = a.map { x =>
       (new NonJavaSerializableClass(x), x)
@@ -242,13 +236,58 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getMessage.toLowerCase.contains("serializable"))
   }
+
+  test("shuffle with different compression settings (SPARK-3426)") {
+    for (
+      shuffleSpillCompress <- Set(true, false);
+      shuffleCompress <- Set(true, false)
+    ) {
+      val myConf = conf.clone()
+        .setAppName("test")
+        .setMaster("local")
+        .set("spark.shuffle.spill.compress", shuffleSpillCompress.toString)
+        .set("spark.shuffle.compress", shuffleCompress.toString)
+        .set("spark.shuffle.memoryFraction", "0.001")
+      resetSparkContext()
+      sc = new SparkContext(myConf)
+      try {
+        sc.parallelize(0 until 100000).map(i => (i / 4, i)).groupByKey().collect()
+      } catch {
+        case e: Exception =>
+          val errMsg = s"Failed with spark.shuffle.spill.compress=$shuffleSpillCompress," +
+            s" spark.shuffle.compress=$shuffleCompress"
+          throw new Exception(errMsg, e)
+      }
+    }
+  }
+
+  test("[SPARK-4085] rerun map stage if reduce stage cannot find its local shuffle file") {
+    val myConf = conf.clone().set("spark.test.noStageRetry", "false")
+    sc = new SparkContext("local", "test", myConf)
+    val rdd = sc.parallelize(1 to 10, 2).map((_, 1)).reduceByKey(_ + _)
+    rdd.count()
+
+    // Delete one of the local shuffle blocks.
+    val hashFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleBlockId(0, 0, 0))
+    val sortFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleDataBlockId(0, 0, 0))
+    assert(hashFile.exists() || sortFile.exists())
+
+    if (hashFile.exists()) {
+      hashFile.delete()
+    }
+    if (sortFile.exists()) {
+      sortFile.delete()
+    }
+
+    // This count should retry the execution of the previous stage and rerun shuffle.
+    rdd.count()
+  }
 }
 
 object ShuffleSuite {
 
   def mergeCombineException(x: Int, y: Int): Int = {
     throw new SparkException("Exception for map-side combine.")
-    x + y
   }
 
   class NonJavaSerializableClass(val value: Int) extends Comparable[NonJavaSerializableClass] {

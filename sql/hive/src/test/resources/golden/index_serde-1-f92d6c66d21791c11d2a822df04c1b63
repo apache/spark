@@ -1,3 +1,0 @@
-number              	int                 	from deserializer   
-first_name          	string              	from deserializer   
-last_name           	string              	from deserializer   

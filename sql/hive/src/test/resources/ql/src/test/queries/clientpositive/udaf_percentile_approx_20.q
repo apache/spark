@@ -1,10 +1,10 @@
 -- INCLUDE_HADOOP_MAJOR_VERSIONS(0.20, 0.20S)
 
 CREATE TABLE bucket (key double, value string) CLUSTERED BY (key) SORTED BY (key DESC)  INTO 4 BUCKETS STORED AS TEXTFILE;
-load data local inpath '../data/files/srcsortbucket1outof4.txt' INTO TABLE bucket;
-load data local inpath '../data/files/srcsortbucket2outof4.txt' INTO TABLE bucket;
-load data local inpath '../data/files/srcsortbucket3outof4.txt' INTO TABLE bucket;
-load data local inpath '../data/files/srcsortbucket4outof4.txt' INTO TABLE bucket;
+load data local inpath '../../data/files/srcsortbucket1outof4.txt' INTO TABLE bucket;
+load data local inpath '../../data/files/srcsortbucket2outof4.txt' INTO TABLE bucket;
+load data local inpath '../../data/files/srcsortbucket3outof4.txt' INTO TABLE bucket;
+load data local inpath '../../data/files/srcsortbucket4outof4.txt' INTO TABLE bucket;
 
 create table t1 (result double);
 create table t2 (result double);

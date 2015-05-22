@@ -17,18 +17,18 @@
 
 package org.apache.spark.streaming
 
-import org.apache.spark.streaming.StreamingContext._
-
-import org.apache.spark.rdd.{BlockRDD, RDD}
-import org.apache.spark.SparkContext._
-
-import util.ManualClock
-import org.apache.spark.{SparkException, SparkConf}
-import org.apache.spark.streaming.dstream.{WindowedDStream, DStream}
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
-import scala.reflect.ClassTag
-import org.apache.spark.storage.StorageLevel
 import scala.collection.mutable
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import scala.language.existentials
+import scala.reflect.ClassTag
+
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.{BlockRDD, RDD}
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.dstream.{DStream, WindowedDStream}
+import org.apache.spark.util.{Clock, ManualClock}
+import org.apache.spark.HashPartitioner
 
 class BasicOperationsSuite extends TestSuiteBase {
   test("map") {
@@ -171,7 +171,9 @@ class BasicOperationsSuite extends TestSuiteBase {
   test("flatMapValues") {
     testOperation(
       Seq( Seq("a", "a", "b"), Seq("", ""), Seq() ),
-      (s: DStream[String]) => s.map(x => (x, 1)).reduceByKey(_ + _).flatMapValues(x => Seq(x, x + 10)),
+      (s: DStream[String]) => {
+        s.map(x => (x, 1)).reduceByKey(_ + _).flatMapValues(x => Seq(x, x + 10))
+      },
       Seq( Seq(("a", 2), ("a", 12), ("b", 1), ("b", 11)), Seq(("", 2), ("", 12)), Seq() ),
       true
     )
@@ -303,6 +305,21 @@ class BasicOperationsSuite extends TestSuiteBase {
     testOperation(inputData1, inputData2, operation, outputData, true)
   }
 
+  test("fullOuterJoin") {
+    val inputData1 = Seq( Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
+    val inputData2 = Seq( Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
+    val outputData = Seq(
+      Seq( ("a", (Some(1), Some("x"))), ("b", (Some(1), Some("x"))) ),
+      Seq( ("", (Some(1), Some("x"))), ("a", (Some(1), None)), ("b", (None, Some("x"))) ),
+      Seq( ("", (Some(1), None)) ),
+      Seq( ("", (None, Some("x"))) )
+    )
+    val operation = (s1: DStream[String], s2: DStream[String]) => {
+      s1.map(x => (x, 1)).fullOuterJoin(s2.map(x => (x, "x")))
+    }
+    testOperation(inputData1, inputData2, operation, outputData, true)
+  }
+
   test("updateStateByKey") {
     val inputData =
       Seq(
@@ -329,6 +346,79 @@ class BasicOperationsSuite extends TestSuiteBase {
         Some(values.sum + state.getOrElse(0))
       }
       s.map(x => (x, 1)).updateStateByKey[Int](updateFunc)
+    }
+
+    testOperation(inputData, updateStateOperation, outputData, true)
+  }
+
+  test("updateStateByKey - simple with initial value RDD") {
+    val initial = Seq(("a", 1), ("c", 2))
+
+    val inputData =
+      Seq(
+        Seq("a"),
+        Seq("a", "b"),
+        Seq("a", "b", "c"),
+        Seq("a", "b"),
+        Seq("a"),
+        Seq()
+      )
+
+    val outputData =
+      Seq(
+        Seq(("a", 2), ("c", 2)),
+        Seq(("a", 3), ("b", 1), ("c", 2)),
+        Seq(("a", 4), ("b", 2), ("c", 3)),
+        Seq(("a", 5), ("b", 3), ("c", 3)),
+        Seq(("a", 6), ("b", 3), ("c", 3)),
+        Seq(("a", 6), ("b", 3), ("c", 3))
+      )
+
+    val updateStateOperation = (s: DStream[String]) => {
+      val initialRDD = s.context.sparkContext.makeRDD(initial)
+      val updateFunc = (values: Seq[Int], state: Option[Int]) => {
+        Some(values.sum + state.getOrElse(0))
+      }
+      s.map(x => (x, 1)).updateStateByKey[Int](updateFunc,
+        new HashPartitioner (numInputPartitions), initialRDD)
+    }
+
+    testOperation(inputData, updateStateOperation, outputData, true)
+  }
+
+  test("updateStateByKey - with initial value RDD") {
+    val initial = Seq(("a", 1), ("c", 2))
+
+    val inputData =
+      Seq(
+        Seq("a"),
+        Seq("a", "b"),
+        Seq("a", "b", "c"),
+        Seq("a", "b"),
+        Seq("a"),
+        Seq()
+      )
+
+    val outputData =
+      Seq(
+        Seq(("a", 2), ("c", 2)),
+        Seq(("a", 3), ("b", 1), ("c", 2)),
+        Seq(("a", 4), ("b", 2), ("c", 3)),
+        Seq(("a", 5), ("b", 3), ("c", 3)),
+        Seq(("a", 6), ("b", 3), ("c", 3)),
+        Seq(("a", 6), ("b", 3), ("c", 3))
+      )
+
+    val updateStateOperation = (s: DStream[String]) => {
+      val initialRDD = s.context.sparkContext.makeRDD(initial)
+      val updateFunc = (values: Seq[Int], state: Option[Int]) => {
+        Some(values.sum + state.getOrElse(0))
+      }
+      val newUpdateFunc = (iterator: Iterator[(String, Seq[Int], Option[Int])]) => {
+        iterator.flatMap(t => updateFunc(t._2, t._3).map(s => (t._1, s)))
+      }
+      s.map(x => (x, 1)).updateStateByKey[Int](newUpdateFunc,
+        new HashPartitioner (numInputPartitions), true, initialRDD)
     }
 
     testOperation(inputData, updateStateOperation, outputData, true)
@@ -380,32 +470,31 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
 
   test("slice") {
-    val ssc = new StreamingContext(conf, Seconds(1))
-    val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
-    val stream = new TestInputStream[Int](ssc, input, 2)
-    stream.foreachRDD(_ => {})  // Dummy output stream
-    ssc.start()
-    Thread.sleep(2000)
-    def getInputFromSlice(fromMillis: Long, toMillis: Long) = {
-      stream.slice(new Time(fromMillis), new Time(toMillis)).flatMap(_.collect()).toSet
-    }
+    withStreamingContext(new StreamingContext(conf, Seconds(1))) { ssc =>
+      val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
+      val stream = new TestInputStream[Int](ssc, input, 2)
+      stream.foreachRDD(_ => {})  // Dummy output stream
+      ssc.start()
+      Thread.sleep(2000)
+      def getInputFromSlice(fromMillis: Long, toMillis: Long): Set[Int] = {
+        stream.slice(new Time(fromMillis), new Time(toMillis)).flatMap(_.collect()).toSet
+      }
 
-    assert(getInputFromSlice(0, 1000) == Set(1))
-    assert(getInputFromSlice(0, 2000) == Set(1, 2))
-    assert(getInputFromSlice(1000, 2000) == Set(1, 2))
-    assert(getInputFromSlice(2000, 4000) == Set(2, 3, 4))
-    ssc.stop()
-    Thread.sleep(1000)
+      assert(getInputFromSlice(0, 1000) == Set(1))
+      assert(getInputFromSlice(0, 2000) == Set(1, 2))
+      assert(getInputFromSlice(1000, 2000) == Set(1, 2))
+      assert(getInputFromSlice(2000, 4000) == Set(2, 3, 4))
+    }
   }
-
   test("slice - has not been initialized") {
-    val ssc = new StreamingContext(conf, Seconds(1))
-    val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
-    val stream = new TestInputStream[Int](ssc, input, 2)
-    val thrown = intercept[SparkException] {
-      stream.slice(new Time(0), new Time(1000))
+    withStreamingContext(new StreamingContext(conf, Seconds(1))) { ssc =>
+      val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
+      val stream = new TestInputStream[Int](ssc, input, 2)
+      val thrown = intercept[SparkException] {
+        stream.slice(new Time(0), new Time(1000))
+      }
+      assert(thrown.getMessage.contains("has not been initialized"))
     }
-    assert(thrown.getMessage.contains("has not been initialized"))
   }
 
   val cleanupTestInput = (0 until 10).map(x => Seq(x, x + 1)).toSeq
@@ -465,73 +554,79 @@ class BasicOperationsSuite extends TestSuiteBase {
   test("rdd cleanup - input blocks and persisted RDDs") {
     // Actually receive data over through receiver to create BlockRDDs
 
-    // Start the server
-    val testServer = new TestServer()
-    testServer.start()
+    withTestServer(new TestServer()) { testServer =>
+      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+        testServer.start()
 
-    // Set up the streaming context and input streams
-    val ssc = new StreamingContext(conf, batchDuration)
-    val networkStream = ssc.socketTextStream("localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
-    val mappedStream = networkStream.map(_ + ".").persist()
-    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
-    val outputStream = new TestOutputStream(mappedStream, outputBuffer)
+        val batchCounter = new BatchCounter(ssc)
 
-    outputStream.register()
-    ssc.start()
+        // Set up the streaming context and input streams
+        val networkStream =
+          ssc.socketTextStream("localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
+        val mappedStream = networkStream.map(_ + ".").persist()
+        val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
+        val outputStream = new TestOutputStream(mappedStream, outputBuffer)
 
-    // Feed data to the server to send to the network receiver
-    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    val input = Seq(1, 2, 3, 4, 5, 6)
+        outputStream.register()
+        ssc.start()
 
-    val blockRdds = new mutable.HashMap[Time, BlockRDD[_]]
-    val persistentRddIds = new mutable.HashMap[Time, Int]
+        // Feed data to the server to send to the network receiver
+        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+        val input = Seq(1, 2, 3, 4, 5, 6)
 
-    def collectRddInfo() { // get all RDD info required for verification
-      networkStream.generatedRDDs.foreach { case (time, rdd) =>
-        blockRdds(time) = rdd.asInstanceOf[BlockRDD[_]]
+        val blockRdds = new mutable.HashMap[Time, BlockRDD[_]]
+        val persistentRddIds = new mutable.HashMap[Time, Int]
+
+        def collectRddInfo() { // get all RDD info required for verification
+          networkStream.generatedRDDs.foreach { case (time, rdd) =>
+            blockRdds(time) = rdd.asInstanceOf[BlockRDD[_]]
+          }
+          mappedStream.generatedRDDs.foreach { case (time, rdd) =>
+            persistentRddIds(time) = rdd.id
+          }
+        }
+
+        Thread.sleep(200)
+        for (i <- 0 until input.size) {
+          testServer.send(input(i).toString + "\n")
+          Thread.sleep(200)
+          val numCompletedBatches = batchCounter.getNumCompletedBatches
+          clock.advance(batchDuration.milliseconds)
+          if (!batchCounter.waitUntilBatchesCompleted(numCompletedBatches + 1, 5000)) {
+            fail("Batch took more than 5 seconds to complete")
+          }
+          collectRddInfo()
+        }
+
+        Thread.sleep(200)
+        collectRddInfo()
+        logInfo("Stopping server")
+        testServer.stop()
+
+        // verify data has been received
+        assert(outputBuffer.size > 0)
+        assert(blockRdds.size > 0)
+        assert(persistentRddIds.size > 0)
+
+        import Time._
+
+        val latestPersistedRddId = persistentRddIds(persistentRddIds.keySet.max)
+        val earliestPersistedRddId = persistentRddIds(persistentRddIds.keySet.min)
+        val latestBlockRdd = blockRdds(blockRdds.keySet.max)
+        val earliestBlockRdd = blockRdds(blockRdds.keySet.min)
+        // verify that the latest mapped RDD is persisted but the earliest one has been unpersisted
+        assert(ssc.sparkContext.persistentRdds.contains(latestPersistedRddId))
+        assert(!ssc.sparkContext.persistentRdds.contains(earliestPersistedRddId))
+
+        // verify that the latest input blocks are present but the earliest blocks have been removed
+        assert(latestBlockRdd.isValid)
+        assert(latestBlockRdd.collect != null)
+        assert(!earliestBlockRdd.isValid)
+        earliestBlockRdd.blockIds.foreach { blockId =>
+          assert(!ssc.sparkContext.env.blockManager.master.contains(blockId))
+        }
       }
-      mappedStream.generatedRDDs.foreach { case (time, rdd) =>
-        persistentRddIds(time) = rdd.id
-      }
     }
-
-    Thread.sleep(200)
-    for (i <- 0 until input.size) {
-      testServer.send(input(i).toString + "\n")
-      Thread.sleep(200)
-      clock.addToTime(batchDuration.milliseconds)
-      collectRddInfo()
-    }
-
-    Thread.sleep(200)
-    collectRddInfo()
-    logInfo("Stopping server")
-    testServer.stop()
-    logInfo("Stopping context")
-
-    // verify data has been received
-    assert(outputBuffer.size > 0)
-    assert(blockRdds.size > 0)
-    assert(persistentRddIds.size > 0)
-
-    import Time._
-
-    val latestPersistedRddId = persistentRddIds(persistentRddIds.keySet.max)
-    val earliestPersistedRddId = persistentRddIds(persistentRddIds.keySet.min)
-    val latestBlockRdd = blockRdds(blockRdds.keySet.max)
-    val earliestBlockRdd = blockRdds(blockRdds.keySet.min)
-    // verify that the latest mapped RDD is persisted but the earliest one has been unpersisted
-    assert(ssc.sparkContext.persistentRdds.contains(latestPersistedRddId))
-    assert(!ssc.sparkContext.persistentRdds.contains(earliestPersistedRddId))
-
-    // verify that the latest input blocks are present but the earliest blocks have been removed
-    assert(latestBlockRdd.isValid)
-    assert(latestBlockRdd.collect != null)
-    assert(!earliestBlockRdd.isValid)
-    earliestBlockRdd.blockIds.foreach { blockId =>
-      assert(!ssc.sparkContext.env.blockManager.master.contains(blockId))
-    }
-    ssc.stop()
   }
 
   /** Test cleanup of RDDs in DStream metadata */
@@ -545,13 +640,15 @@ class BasicOperationsSuite extends TestSuiteBase {
     // Setup the stream computation
     assert(batchDuration === Seconds(1),
       "Batch duration has changed from 1 second, check cleanup tests")
-    val ssc = setupStreams(cleanupTestInput, operation)
-    val operatedStream = ssc.graph.getOutputStreams().head.dependencies.head.asInstanceOf[DStream[T]]
-    if (rememberDuration != null) ssc.remember(rememberDuration)
-    val output = runStreams[(Int, Int)](ssc, cleanupTestInput.size, numExpectedOutput)
-    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    assert(clock.time === Seconds(10).milliseconds)
-    assert(output.size === numExpectedOutput)
-    operatedStream
+    withStreamingContext(setupStreams(cleanupTestInput, operation)) { ssc =>
+      val operatedStream =
+        ssc.graph.getOutputStreams().head.dependencies.head.asInstanceOf[DStream[T]]
+      if (rememberDuration != null) ssc.remember(rememberDuration)
+      val output = runStreams[(Int, Int)](ssc, cleanupTestInput.size, numExpectedOutput)
+      val clock = ssc.scheduler.clock.asInstanceOf[Clock]
+      assert(clock.getTimeMillis() === Seconds(10).milliseconds)
+      assert(output.size === numExpectedOutput)
+      operatedStream
+    }
   }
 }

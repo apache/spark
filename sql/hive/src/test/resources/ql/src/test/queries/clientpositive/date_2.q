@@ -8,7 +8,7 @@ create table date_2 (
   FL_NUM int
 );
 
-LOAD DATA LOCAL INPATH '../data/files/flights_tiny.txt.1' OVERWRITE INTO TABLE date_2;
+LOAD DATA LOCAL INPATH '../../data/files/flights_tiny.txt.1' OVERWRITE INTO TABLE date_2;
 
 select fl_date, fl_num from date_2 order by fl_date asc, fl_num desc;
 select fl_date, fl_num from date_2 order by fl_date desc, fl_num asc;

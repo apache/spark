@@ -32,11 +32,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 from pyspark.resultiterable import ResultIterable
+from functools import reduce
 
 
 def _do_python_join(rdd, other, numPartitions, dispatch):
-    vs = rdd.map(lambda (k, v): (k, (1, v)))
-    ws = other.map(lambda (k, v): (k, (2, v)))
+    vs = rdd.mapValues(lambda v: (1, v))
+    ws = other.mapValues(lambda v: (2, v))
     return vs.union(ws).groupByKey(numPartitions).flatMapValues(lambda x: dispatch(x.__iter__()))
 
 
@@ -48,7 +49,7 @@ def python_join(rdd, other, numPartitions):
                 vbuf.append(v)
             elif n == 2:
                 wbuf.append(v)
-        return [(v, w) for v in vbuf for w in wbuf]
+        return ((v, w) for v in vbuf for w in wbuf)
     return _do_python_join(rdd, other, numPartitions, dispatch)
 
 
@@ -62,7 +63,7 @@ def python_right_outer_join(rdd, other, numPartitions):
                 wbuf.append(v)
         if not vbuf:
             vbuf.append(None)
-        return [(v, w) for v in vbuf for w in wbuf]
+        return ((v, w) for v in vbuf for w in wbuf)
     return _do_python_join(rdd, other, numPartitions, dispatch)
 
 
@@ -76,20 +77,37 @@ def python_left_outer_join(rdd, other, numPartitions):
                 wbuf.append(v)
         if not wbuf:
             wbuf.append(None)
+        return ((v, w) for v in vbuf for w in wbuf)
+    return _do_python_join(rdd, other, numPartitions, dispatch)
+
+
+def python_full_outer_join(rdd, other, numPartitions):
+    def dispatch(seq):
+        vbuf, wbuf = [], []
+        for (n, v) in seq:
+            if n == 1:
+                vbuf.append(v)
+            elif n == 2:
+                wbuf.append(v)
+        if not vbuf:
+            vbuf.append(None)
+        if not wbuf:
+            wbuf.append(None)
         return [(v, w) for v in vbuf for w in wbuf]
     return _do_python_join(rdd, other, numPartitions, dispatch)
 
 
 def python_cogroup(rdds, numPartitions):
     def make_mapper(i):
-        return lambda (k, v): (k, (i, v))
-    vrdds = [rdd.map(make_mapper(i)) for i, rdd in enumerate(rdds)]
+        return lambda v: (i, v)
+    vrdds = [rdd.mapValues(make_mapper(i)) for i, rdd in enumerate(rdds)]
     union_vrdds = reduce(lambda acc, other: acc.union(other), vrdds)
     rdd_len = len(vrdds)
 
     def dispatch(seq):
-        bufs = [[] for i in range(rdd_len)]
-        for (n, v) in seq:
+        bufs = [[] for _ in range(rdd_len)]
+        for n, v in seq:
             bufs[n].append(v)
-        return tuple(map(ResultIterable, bufs))
+        return tuple(ResultIterable(vs) for vs in bufs)
+
     return union_vrdds.groupByKey(numPartitions).mapValues(dispatch)

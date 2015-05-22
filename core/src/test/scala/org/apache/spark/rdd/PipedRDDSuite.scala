@@ -22,13 +22,15 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.{FileSplit, JobConf, TextInputFormat}
-import org.apache.spark._
 import org.scalatest.FunSuite
 
 import scala.collection.Map
 import scala.language.postfixOps
 import scala.sys.process._
 import scala.util.Try
+
+import org.apache.spark._
+import org.apache.spark.util.Utils
 
 class PipedRDDSuite extends FunSuite with SharedSparkContext {
 
@@ -141,7 +143,7 @@ class PipedRDDSuite extends FunSuite with SharedSparkContext {
       // make sure symlinks were created
       assert(pipedLs.length > 0)
       // clean up top level tasks directory
-      new File("tasks").delete()
+      Utils.deleteRecursively(new File("tasks"))
     } else {
       assert(true)
     }
@@ -174,7 +176,7 @@ class PipedRDDSuite extends FunSuite with SharedSparkContext {
       }
       val hadoopPart1 = generateFakeHadoopPartition()
       val pipedRdd = new PipedRDD(nums, "printenv " + varName)
-      val tContext = new TaskContext(0, 0, 0)
+      val tContext = new TaskContextImpl(0, 0, 0, 0, null)
       val rddIter = pipedRdd.compute(hadoopPart1, tContext)
       val arr = rddIter.toArray
       assert(arr(0) == "/some/path")

@@ -61,8 +61,8 @@ object ShortestPaths {
     }
 
     def sendMessage(edge: EdgeTriplet[SPMap, _]): Iterator[(VertexId, SPMap)] = {
-      val newAttr = incrementMap(edge.srcAttr)
-      if (edge.dstAttr != addMaps(newAttr, edge.dstAttr)) Iterator((edge.dstId, newAttr))
+      val newAttr = incrementMap(edge.dstAttr)
+      if (edge.srcAttr != addMaps(newAttr, edge.srcAttr)) Iterator((edge.srcId, newAttr))
       else Iterator.empty
     }
 

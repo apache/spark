@@ -11,6 +11,6 @@ INSERT OVERWRITE TABLE dest1 SELECT DISTINCT substr(src.value,5,1);
 FROM src
 INSERT OVERWRITE TABLE dest1 SELECT DISTINCT substr(src.value,5,1);
 
-SELECT dest1.* FROM dest1;
+SELECT dest1.* FROM dest1 ORDER BY c1;
 
 

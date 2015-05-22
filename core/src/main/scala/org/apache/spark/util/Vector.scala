@@ -24,9 +24,9 @@ import org.apache.spark.util.random.XORShiftRandom
 
 @deprecated("Use Vectors.dense from Spark's mllib.linalg package instead.", "1.0.0")
 class Vector(val elements: Array[Double]) extends Serializable {
-  def length = elements.length
+  def length: Int = elements.length
 
-  def apply(index: Int) = elements(index)
+  def apply(index: Int): Double = elements(index)
 
   def + (other: Vector): Vector = {
     if (length != other.length) {
@@ -35,7 +35,7 @@ class Vector(val elements: Array[Double]) extends Serializable {
     Vector(length, i => this(i) + other(i))
   }
 
-  def add(other: Vector) = this + other
+  def add(other: Vector): Vector = this + other
 
   def - (other: Vector): Vector = {
     if (length != other.length) {
@@ -44,7 +44,7 @@ class Vector(val elements: Array[Double]) extends Serializable {
     Vector(length, i => this(i) - other(i))
   }
 
-  def subtract(other: Vector) = this - other
+  def subtract(other: Vector): Vector = this - other
 
   def dot(other: Vector): Double = {
     if (length != other.length) {
@@ -93,19 +93,19 @@ class Vector(val elements: Array[Double]) extends Serializable {
     this
   }
 
-  def addInPlace(other: Vector) = this +=other
+  def addInPlace(other: Vector): Vector = this +=other
 
   def * (scale: Double): Vector = Vector(length, i => this(i) * scale)
 
-  def multiply (d: Double) = this * d
+  def multiply (d: Double): Vector = this * d
 
   def / (d: Double): Vector = this * (1 / d)
 
-  def divide (d: Double) = this / d
+  def divide (d: Double): Vector = this / d
 
-  def unary_- = this * -1
+  def unary_- : Vector = this * -1
 
-  def sum = elements.reduceLeft(_ + _)
+  def sum: Double = elements.reduceLeft(_ + _)
 
   def squaredDist(other: Vector): Double = {
     var ans = 0.0
@@ -119,40 +119,40 @@ class Vector(val elements: Array[Double]) extends Serializable {
 
   def dist(other: Vector): Double = math.sqrt(squaredDist(other))
 
-  override def toString = elements.mkString("(", ", ", ")")
+  override def toString: String = elements.mkString("(", ", ", ")")
 }
 
 object Vector {
-  def apply(elements: Array[Double]) = new Vector(elements)
+  def apply(elements: Array[Double]): Vector = new Vector(elements)
 
-  def apply(elements: Double*) = new Vector(elements.toArray)
+  def apply(elements: Double*): Vector = new Vector(elements.toArray)
 
   def apply(length: Int, initializer: Int => Double): Vector = {
     val elements: Array[Double] = Array.tabulate(length)(initializer)
     new Vector(elements)
   }
 
-  def zeros(length: Int) = new Vector(new Array[Double](length))
+  def zeros(length: Int): Vector = new Vector(new Array[Double](length))
 
-  def ones(length: Int) = Vector(length, _ => 1)
+  def ones(length: Int): Vector = Vector(length, _ => 1)
 
   /**
    * Creates this [[org.apache.spark.util.Vector]] of given length containing random numbers
    * between 0.0 and 1.0. Optional scala.util.Random number generator can be provided.
    */
-  def random(length: Int, random: Random = new XORShiftRandom()) =
+  def random(length: Int, random: Random = new XORShiftRandom()): Vector =
     Vector(length, _ => random.nextDouble())
 
   class Multiplier(num: Double) {
-    def * (vec: Vector) = vec * num
+    def * (vec: Vector): Vector = vec * num
   }
 
-  implicit def doubleToMultiplier(num: Double) = new Multiplier(num)
+  implicit def doubleToMultiplier(num: Double): Multiplier = new Multiplier(num)
 
   implicit object VectorAccumParam extends org.apache.spark.AccumulatorParam[Vector] {
-    def addInPlace(t1: Vector, t2: Vector) = t1 + t2
+    def addInPlace(t1: Vector, t2: Vector): Vector = t1 + t2
 
-    def zero(initialValue: Vector) = Vector.zeros(initialValue.length)
+    def zero(initialValue: Vector): Vector = Vector.zeros(initialValue.length)
   }
 
 }

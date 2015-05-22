@@ -22,6 +22,7 @@ import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
 import org.apache.spark.Logging
 import org.apache.spark.streaming.scheduler.Job
 import org.apache.spark.streaming.dstream.{DStream, ReceiverInputDStream, InputDStream}
+import org.apache.spark.util.Utils
 
 final private[streaming] class DStreamGraph extends Serializable with Logging {
 
@@ -44,7 +45,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       startTime = time
       outputStreams.foreach(_.initialize(zeroTime))
       outputStreams.foreach(_.remember(rememberDuration))
-      outputStreams.foreach(_.validate)
+      outputStreams.foreach(_.validateAtStart)
       inputStreams.par.foreach(_.start())
     }
   }
@@ -99,14 +100,18 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     }
   }
 
-  def getInputStreams() = this.synchronized { inputStreams.toArray }
+  def getInputStreams(): Array[InputDStream[_]] = this.synchronized { inputStreams.toArray }
 
-  def getOutputStreams() = this.synchronized { outputStreams.toArray }
+  def getOutputStreams(): Array[DStream[_]] = this.synchronized { outputStreams.toArray }
 
-  def getReceiverInputStreams() = this.synchronized {
+  def getReceiverInputStreams(): Array[ReceiverInputDStream[_]] = this.synchronized {
     inputStreams.filter(_.isInstanceOf[ReceiverInputDStream[_]])
       .map(_.asInstanceOf[ReceiverInputDStream[_]])
       .toArray
+  }
+
+  def getInputStreamName(streamId: Int): Option[String] = synchronized {
+    inputStreams.find(_.id == streamId).map(_.name)
   }
 
   def generateJobs(time: Time): Seq[Job] = {
@@ -152,15 +157,23 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   def validate() {
     this.synchronized {
-      assert(batchDuration != null, "Batch duration has not been set")
+      require(batchDuration != null, "Batch duration has not been set")
       // assert(batchDuration >= Milliseconds(100), "Batch duration of " + batchDuration +
       // " is very low")
-      assert(getOutputStreams().size > 0, "No output streams registered, so nothing to execute")
+      require(getOutputStreams().size > 0, "No output operations registered, so nothing to execute")
     }
   }
 
+  /**
+   * Get the maximum remember duration across all the input streams. This is a conservative but
+   * safe remember duration which can be used to perform cleanup operations.
+   */
+  def getMaxInputStreamRememberDuration(): Duration = {
+    inputStreams.map { _.rememberDuration }.maxBy { _.milliseconds }
+  }
+
   @throws(classOf[IOException])
-  private def writeObject(oos: ObjectOutputStream) {
+  private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     logDebug("DStreamGraph.writeObject used")
     this.synchronized {
       checkpointInProgress = true
@@ -172,7 +185,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   }
 
   @throws(classOf[IOException])
-  private def readObject(ois: ObjectInputStream) {
+  private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     logDebug("DStreamGraph.readObject used")
     this.synchronized {
       checkpointInProgress = true

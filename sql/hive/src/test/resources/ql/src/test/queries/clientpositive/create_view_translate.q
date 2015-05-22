@@ -11,3 +11,14 @@ describe formatted w;
 
 drop view v;
 drop view w;
+
+
+-- HIVE-4116 Can't use views using map datatype.
+
+CREATE TABLE items (id INT, name STRING, info MAP<STRING,STRING>);
+
+explain
+CREATE VIEW priceview AS SELECT items.id, items.info['price'] FROM items;
+CREATE VIEW priceview AS SELECT items.id, items.info['price'] FROM items;
+
+select * from priceview;

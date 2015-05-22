@@ -1,4 +1,4 @@
-a                   	string              	None                
-b                   	array<string>       	None                
-c                   	array<map<string,string>>	None                
-d                   	map<string,array<string>>	None                
+a                   	string              	                    
+b                   	array<string>       	                    
+c                   	array<map<string,string>>	                    
+d                   	map<string,array<string>>	                    

@@ -20,8 +20,11 @@ Decision tree classification and regression using MLlib.
 
 This example requires NumPy (http://www.numpy.org/).
 """
+from __future__ import print_function
 
-import numpy, os, sys
+import numpy
+import os
+import sys
 
 from operator import add
 
@@ -81,18 +84,17 @@ def reindexClassLabels(data):
     numClasses = len(classCounts)
     # origToNewLabels: class --> index in 0,...,numClasses-1
     if (numClasses < 2):
-        print >> sys.stderr, \
-            "Dataset for classification should have at least 2 classes." + \
-            " The given dataset had only %d classes." % numClasses
+        print("Dataset for classification should have at least 2 classes."
+              " The given dataset had only %d classes." % numClasses, file=sys.stderr)
         exit(1)
     origToNewLabels = dict([(sortedClasses[i], i) for i in range(0, numClasses)])
 
-    print "numClasses = %d" % numClasses
-    print "Per-class example fractions, counts:"
-    print "Class\tFrac\tCount"
+    print("numClasses = %d" % numClasses)
+    print("Per-class example fractions, counts:")
+    print("Class\tFrac\tCount")
     for c in sortedClasses:
         frac = classCounts[c] / (numExamples + 0.0)
-        print "%g\t%g\t%d" % (c, frac, classCounts[c])
+        print("%g\t%g\t%d" % (c, frac, classCounts[c]))
 
     if (sortedClasses[0] == 0 and sortedClasses[-1] == numClasses - 1):
         return (data, origToNewLabels)
@@ -103,9 +105,7 @@ def reindexClassLabels(data):
 
 
 def usage():
-    print >> sys.stderr, \
-        "Usage: decision_tree_runner [libsvm format data filepath]\n" + \
-        " Note: This only supports binary classification."
+    print("Usage: decision_tree_runner [libsvm format data filepath]", file=sys.stderr)
     exit(1)
 
 
@@ -125,16 +125,20 @@ if __name__ == "__main__":
 
     # Re-index class labels if needed.
     (reindexedData, origToNewLabels) = reindexClassLabels(points)
+    numClasses = len(origToNewLabels)
 
     # Train a classifier.
-    categoricalFeaturesInfo={} # no categorical features
-    model = DecisionTree.trainClassifier(reindexedData, numClasses=2,
+    categoricalFeaturesInfo = {}  # no categorical features
+    model = DecisionTree.trainClassifier(reindexedData, numClasses=numClasses,
                                          categoricalFeaturesInfo=categoricalFeaturesInfo)
     # Print learned tree and stats.
-    print "Trained DecisionTree for classification:"
-    print "  Model numNodes: %d\n" % model.numNodes()
-    print "  Model depth: %d\n" % model.depth()
-    print "  Training accuracy: %g\n" % getAccuracy(model, reindexedData)
-    print model
+    print("Trained DecisionTree for classification:")
+    print("  Model numNodes: %d" % model.numNodes())
+    print("  Model depth: %d" % model.depth())
+    print("  Training accuracy: %g" % getAccuracy(model, reindexedData))
+    if model.numNodes() < 20:
+        print(model.toDebugString())
+    else:
+        print(model)
 
     sc.stop()

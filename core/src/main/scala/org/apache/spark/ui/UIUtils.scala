@@ -20,12 +20,15 @@ package org.apache.spark.ui
 import java.text.SimpleDateFormat
 import java.util.{Locale, Date}
 
-import scala.xml.Node
+import scala.xml.{Node, Text, Unparsed}
+
 import org.apache.spark.Logging
+import org.apache.spark.ui.scope.RDDOperationGraph
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
-  val TABLE_CLASS = "table table-bordered table-striped table-condensed sortable"
+  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed sortable"
+  val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -147,18 +150,32 @@ private[spark] object UIUtils extends Logging {
     }
   }
 
-  def prependBaseUri(basePath: String = "", resource: String = "") = uiRoot + basePath + resource
+  def prependBaseUri(basePath: String = "", resource: String = ""): String = {
+    uiRoot + basePath + resource
+  }
 
-  def commonHeaderNodes = {
+  def commonHeaderNodes: Seq[Node] = {
     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-    <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
-          type="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
-          type="text/css" />
+    <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/webui.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri("/static/sorttable.js")} ></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
+    <script src={prependBaseUri("/static/vis.min.js")}></script>
     <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
+    <script src={prependBaseUri("/static/table.js")}></script>
+    <script src={prependBaseUri("/static/additional-metrics.js")}></script>
+    <script src={prependBaseUri("/static/timeline-view.js")}></script>
+  }
+
+  def vizHeaderNodes: Seq[Node] = {
+    <link rel="stylesheet" href={prependBaseUri("/static/spark-dag-viz.css")} type="text/css" />
+    <script src={prependBaseUri("/static/d3.min.js")}></script>
+    <script src={prependBaseUri("/static/dagre-d3.min.js")}></script>
+    <script src={prependBaseUri("/static/graphlib-dot.min.js")}></script>
+    <script src={prependBaseUri("/static/spark-dag-viz.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
@@ -166,28 +183,38 @@ private[spark] object UIUtils extends Logging {
       title: String,
       content: => Seq[Node],
       activeTab: SparkUITab,
-      refreshInterval: Option[Int] = None): Seq[Node] = {
+      refreshInterval: Option[Int] = None,
+      helpText: Option[String] = None,
+      showVisualization: Boolean = false): Seq[Node] = {
 
     val appName = activeTab.appName
+    val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
     val header = activeTab.headerTabs.map { tab =>
       <li class={if (tab == activeTab) "active" else ""}>
-        <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix)}>{tab.name}</a>
+        <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
       </li>
     }
+    val helpButton: Seq[Node] = helpText.map(tooltip(_, "bottom")).getOrElse(Seq.empty)
 
     <html>
       <head>
         {commonHeaderNodes}
+        {if (showVisualization) vizHeaderNodes else Seq.empty}
         <title>{appName} - {title}</title>
       </head>
       <body>
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
-            <a href={prependBaseUri("/")} class="brand">
-              <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
-            </a>
+            <div class="brand">
+              <a href={prependBaseUri("/")} class="brand">
+                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
+                <span class="version">{org.apache.spark.SPARK_VERSION}</span>
+              </a>
+            </div>
             <ul class="nav">{header}</ul>
-            <p class="navbar-text pull-right"><strong>{appName}</strong> application UI</p>
+            <p class="navbar-text pull-right">
+              <strong title={appName}>{shortAppName}</strong> application UI
+            </p>
           </div>
         </div>
         <div class="container-fluid">
@@ -195,6 +222,7 @@ private[spark] object UIUtils extends Logging {
             <div class="span12">
               <h3 style="vertical-align: bottom; display: inline-block;">
                 {title}
+                {helpButton}
               </h3>
             </div>
           </div>
@@ -216,8 +244,11 @@ private[spark] object UIUtils extends Logging {
           <div class="row-fluid">
             <div class="span12">
               <h3 style="vertical-align: middle; display: inline-block;">
-                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")}
-                     style="margin-right: 15px;" />
+                <a style="text-decoration: none" href={prependBaseUri("/")}>
+                  <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
+                  <span class="version"
+                        style="margin-right: 15px;">{org.apache.spark.SPARK_VERSION}</span>
+                </a>
                 {title}
               </h3>
             </div>
@@ -232,36 +263,127 @@ private[spark] object UIUtils extends Logging {
   def listingTable[T](
       headers: Seq[String],
       generateDataRow: T => Seq[Node],
-      data: Seq[T],
-      fixedWidth: Boolean = false): Seq[Node] = {
+      data: Iterable[T],
+      fixedWidth: Boolean = false,
+      id: Option[String] = None,
+      headerClasses: Seq[String] = Seq.empty,
+      stripeRowsWithCss: Boolean = true): Seq[Node] = {
 
-    var listingTableClass = TABLE_CLASS
-    if (fixedWidth) {
-      listingTableClass += " table-fixed"
-    }
+    val listingTableClass = if (stripeRowsWithCss) TABLE_CLASS_STRIPED else TABLE_CLASS_NOT_STRIPED
     val colWidth = 100.toDouble / headers.size
     val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
-    val headerRow: Seq[Node] = {
-      // if none of the headers have "\n" in them
-      if (headers.forall(!_.contains("\n"))) {
-        // represent header as simple text
-        headers.map(h => <th width={colWidthAttr}>{h}</th>)
+
+    def getClass(index: Int): String = {
+      if (index < headerClasses.size) {
+        headerClasses(index)
       } else {
-        // represent header text as list while respecting "\n"
-        headers.map { case h =>
-          <th width={colWidthAttr}>
-            <ul class ="unstyled">
-              { h.split("\n").map { case t => <li> {t} </li> } }
-            </ul>
-          </th>
-        }
+        ""
       }
     }
-    <table class={listingTableClass}>
+
+    val newlinesInHeader = headers.exists(_.contains("\n"))
+    def getHeaderContent(header: String): Seq[Node] = {
+      if (newlinesInHeader) {
+        <ul class="unstyled">
+          { header.split("\n").map { case t => <li> {t} </li> } }
+        </ul>
+      } else {
+        Text(header)
+      }
+    }
+
+    val headerRow: Seq[Node] = {
+      headers.view.zipWithIndex.map { x =>
+        <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
+      }
+    }
+    <table class={listingTableClass} id={id.map(Text.apply)}>
       <thead>{headerRow}</thead>
       <tbody>
         {data.map(r => generateDataRow(r))}
       </tbody>
     </table>
   }
+
+  def makeProgressBar(
+      started: Int,
+      completed: Int,
+      failed: Int,
+      skipped:Int,
+      total: Int): Seq[Node] = {
+    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
+    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
+
+    <div class="progress">
+      <span style="text-align:center; position:absolute; width:100%; left:0;">
+        {completed}/{total}
+        { if (failed > 0) s"($failed failed)" }
+        { if (skipped > 0) s"($skipped skipped)" }
+      </span>
+      <div class="bar bar-completed" style={completeWidth}></div>
+      <div class="bar bar-running" style={startWidth}></div>
+    </div>
+  }
+
+  /** Return a "DAG visualization" DOM element that expands into a visualization for a stage. */
+  def showDagVizForStage(stageId: Int, graph: Option[RDDOperationGraph]): Seq[Node] = {
+    showDagViz(graph.toSeq, forJob = false)
+  }
+
+  /** Return a "DAG visualization" DOM element that expands into a visualization for a job. */
+  def showDagVizForJob(jobId: Int, graphs: Seq[RDDOperationGraph]): Seq[Node] = {
+    showDagViz(graphs, forJob = true)
+  }
+
+  /**
+   * Return a "DAG visualization" DOM element that expands into a visualization on the UI.
+   *
+   * This populates metadata necessary for generating the visualization on the front-end in
+   * a format that is expected by spark-dag-viz.js. Any changes in the format here must be
+   * reflected there.
+   */
+  private def showDagViz(graphs: Seq[RDDOperationGraph], forJob: Boolean): Seq[Node] = {
+    <div>
+      <span class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
+        <span class="expand-dag-viz-arrow arrow-closed"></span>
+        <a data-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
+           data-placement="right">
+          DAG Visualization
+        </a>
+      </span>
+      <div id="dag-viz-graph"></div>
+      <div id="dag-viz-metadata" style="display:none">
+        {
+          graphs.map { g =>
+            val stageId = g.rootCluster.id.replaceAll(RDDOperationGraph.STAGE_CLUSTER_PREFIX, "")
+            val skipped = g.rootCluster.name.contains("skipped").toString
+            <div class="stage-metadata" stage-id={stageId} skipped={skipped}>
+              <div class="dot-file">{RDDOperationGraph.makeDotFile(g)}</div>
+              { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
+              { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }
+              {
+                g.rootCluster.getAllNodes.filter(_.cached).map { n =>
+                  <div class="cached-rdd">{n.id}</div>
+                }
+              }
+            </div>
+          }
+        }
+      </div>
+    </div>
+  }
+
+  def tooltip(text: String, position: String): Seq[Node] = {
+    <sup>
+      (<a data-toggle="tooltip" data-placement={position} title={text}>?</a>)
+    </sup>
+  }
+
+  /** Return a script element that automatically expands the DAG visualization on page load. */
+  def expandDagVizOnLoad(forJob: Boolean): Seq[Node] = {
+    <script type="text/javascript">
+      {Unparsed("$(document).ready(function() { toggleDagViz(" + forJob + ") });")}
+    </script>
+  }
+
 }

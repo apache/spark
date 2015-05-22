@@ -23,10 +23,10 @@ import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.curator.framework.CuratorFramework
 import org.apache.curator.framework.recipes.leader.{LeaderLatchListener, LeaderLatch}
+import org.apache.spark.deploy.SparkCuratorUtil
 
-private[spark] class ZooKeeperLeaderElectionAgent(val masterActor: ActorRef,
-    masterUrl: String, conf: SparkConf)
-  extends LeaderElectionAgent with LeaderLatchListener with Logging  {
+private[master] class ZooKeeperLeaderElectionAgent(val masterActor: LeaderElectable,
+    conf: SparkConf) extends LeaderLatchListener with LeaderElectionAgent with Logging  {
 
   val WORKING_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark") + "/leader_election"
 
@@ -34,28 +34,19 @@ private[spark] class ZooKeeperLeaderElectionAgent(val masterActor: ActorRef,
   private var leaderLatch: LeaderLatch = _
   private var status = LeadershipStatus.NOT_LEADER
 
-  override def preStart() {
+  start()
 
+  private def start() {
     logInfo("Starting ZooKeeper LeaderElection agent")
     zk = SparkCuratorUtil.newClient(conf)
     leaderLatch = new LeaderLatch(zk, WORKING_DIR)
     leaderLatch.addListener(this)
-
     leaderLatch.start()
   }
 
-  override def preRestart(reason: scala.Throwable, message: scala.Option[scala.Any]) {
-    logError("LeaderElectionAgent failed...", reason)
-    super.preRestart(reason, message)
-  }
-
-  override def postStop() {
+  override def stop() {
     leaderLatch.close()
     zk.close()
-  }
-
-  override def receive = {
-    case _ =>
   }
 
   override def isLeader() {
@@ -82,13 +73,13 @@ private[spark] class ZooKeeperLeaderElectionAgent(val masterActor: ActorRef,
     }
   }
 
-  def updateLeadershipStatus(isLeader: Boolean) {
+  private def updateLeadershipStatus(isLeader: Boolean) {
     if (isLeader && status == LeadershipStatus.NOT_LEADER) {
       status = LeadershipStatus.LEADER
-      masterActor ! ElectedLeader
+      masterActor.electedLeader()
     } else if (!isLeader && status == LeadershipStatus.LEADER) {
       status = LeadershipStatus.NOT_LEADER
-      masterActor ! RevokedLeadership
+      masterActor.revokedLeadership()
     }
   }
 

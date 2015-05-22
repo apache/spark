@@ -1,8 +1,10 @@
+set hive.fetch.task.conversion=more;
+
 DESCRIBE FUNCTION unix_timestamp;
 DESCRIBE FUNCTION EXTENDED unix_timestamp;
 
 create table oneline(key int, value string);
-load data local inpath '../data/files/things.txt' into table oneline;
+load data local inpath '../../data/files/things.txt' into table oneline;
 
 SELECT
   '2009-03-20 11:30:01',

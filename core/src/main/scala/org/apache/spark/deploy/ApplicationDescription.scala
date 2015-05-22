@@ -17,16 +17,32 @@
 
 package org.apache.spark.deploy
 
+import java.net.URI
+
 private[spark] class ApplicationDescription(
     val name: String,
     val maxCores: Option[Int],
-    val memoryPerSlave: Int,
+    val memoryPerExecutorMB: Int,
     val command: Command,
     var appUiUrl: String,
-    val eventLogDir: Option[String] = None)
+    val eventLogDir: Option[URI] = None,
+    // short name of compression codec used when writing event logs, if any (e.g. lzf)
+    val eventLogCodec: Option[String] = None,
+    val coresPerExecutor: Option[Int] = None)
   extends Serializable {
 
   val user = System.getProperty("user.name", "<unknown>")
+
+  def copy(
+      name: String = name,
+      maxCores: Option[Int] = maxCores,
+      memoryPerExecutorMB: Int = memoryPerExecutorMB,
+      command: Command = command,
+      appUiUrl: String = appUiUrl,
+      eventLogDir: Option[URI] = eventLogDir,
+      eventLogCodec: Option[String] = eventLogCodec): ApplicationDescription =
+    new ApplicationDescription(
+      name, maxCores, memoryPerExecutorMB, command, appUiUrl, eventLogDir, eventLogCodec)
 
   override def toString: String = "ApplicationDescription(" + name + ")"
 }

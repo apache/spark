@@ -25,4 +25,5 @@ libraryDependencies += "org.apache.spark" %% "spark-hive" % System.getenv.get("S
 
 resolvers ++= Seq(
   "Spark Release Repository" at System.getenv.get("SPARK_RELEASE_REPOSITORY"),
+  "Maven Repository" at "http://repo1.maven.org/maven2/",
   "Spray Repository" at "http://repo.spray.cc/")

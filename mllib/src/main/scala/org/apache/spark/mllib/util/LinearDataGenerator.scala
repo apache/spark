@@ -20,7 +20,7 @@ package org.apache.spark.mllib.util
 import scala.collection.JavaConversions._
 import scala.util.Random
 
-import org.jblas.DoubleMatrix
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
@@ -56,13 +56,17 @@ object LinearDataGenerator {
   }
 
   /**
+   * For compatibility, the generated data without specifying the mean and variance
+   * will have zero mean and variance of (1.0/3.0) since the original output range is
+   * [-1, 1] with uniform distribution, and the variance of uniform distribution
+   * is (b - a)^2^ / 12 which will be (1.0/3.0)
    *
    * @param intercept Data intercept
    * @param weights  Weights to be applied.
    * @param nPoints Number of points in sample.
    * @param seed Random seed
    * @param eps Epsilon scaling factor.
-   * @return
+   * @return Seq of input.
    */
   def generateLinearInput(
       intercept: Double,
@@ -70,13 +74,48 @@ object LinearDataGenerator {
       nPoints: Int,
       seed: Int,
       eps: Double = 0.1): Seq[LabeledPoint] = {
+    generateLinearInput(intercept, weights,
+      Array.fill[Double](weights.length)(0.0),
+      Array.fill[Double](weights.length)(1.0 / 3.0),
+      nPoints, seed, eps)}
+
+  /**
+   *
+   * @param intercept Data intercept
+   * @param weights  Weights to be applied.
+   * @param xMean the mean of the generated features. Lots of time, if the features are not properly
+   *              standardized, the algorithm with poor implementation will have difficulty
+   *              to converge.
+   * @param xVariance the variance of the generated features.
+   * @param nPoints Number of points in sample.
+   * @param seed Random seed
+   * @param eps Epsilon scaling factor.
+   * @return Seq of input.
+   */
+  def generateLinearInput(
+      intercept: Double,
+      weights: Array[Double],
+      xMean: Array[Double],
+      xVariance: Array[Double],
+      nPoints: Int,
+      seed: Int,
+      eps: Double): Seq[LabeledPoint] = {
 
     val rnd = new Random(seed)
-    val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
     val x = Array.fill[Array[Double]](nPoints)(
-      Array.fill[Double](weights.length)(2 * rnd.nextDouble - 1.0))
+      Array.fill[Double](weights.length)(rnd.nextDouble()))
+
+    x.foreach { v =>
+      var i = 0
+      val len = v.length
+      while (i < len) {
+        v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
+        i += 1
+      }
+    }
+
     val y = x.map { xi =>
-      new DoubleMatrix(1, xi.length, xi: _*).dot(weightsMat) + intercept + eps * rnd.nextGaussian()
+      blas.ddot(weights.length, xi, 1, weights, 1) + intercept + eps * rnd.nextGaussian()
     }
     y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
   }
@@ -100,9 +139,9 @@ object LinearDataGenerator {
       eps: Double,
       nparts: Int = 2,
       intercept: Double = 0.0) : RDD[LabeledPoint] = {
-    org.jblas.util.Random.seed(42)
+    val random = new Random(42)
     // Random values distributed uniformly in [-0.5, 0.5]
-    val w = DoubleMatrix.rand(nfeatures, 1).subi(0.5)
+    val w = Array.fill(nfeatures)(random.nextDouble() - 0.5)
 
     val data: RDD[LabeledPoint] = sc.parallelize(0 until nparts, nparts).flatMap { p =>
       val seed = 42 + p

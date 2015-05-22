@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import org.apache.hadoop.hive.ql.session.SessionState
+import java.io.PrintStream
 
-import org.apache.spark.scheduler.{SplitInfo, StatsReportListener}
-import org.apache.spark.Logging
-import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.{SparkConf, SparkContext}
+import scala.collection.JavaConversions._
+
+import org.apache.spark.scheduler.StatsReportListener
+import org.apache.spark.sql.hive.{HiveShim, HiveContext}
+import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.util.Utils
 
 /** A singleton object for the master program. The slaves should not access this. */
 private[hive] object SparkSQLEnv extends Logging {
@@ -33,14 +35,33 @@ private[hive] object SparkSQLEnv extends Logging {
 
   def init() {
     if (hiveContext == null) {
-      sparkContext = new SparkContext(new SparkConf()
-        .setAppName(s"SparkSQL::${java.net.InetAddress.getLocalHost.getHostName}"))
+      val sparkConf = new SparkConf(loadDefaults = true)
+      val maybeSerializer = sparkConf.getOption("spark.serializer")
+      val maybeKryoReferenceTracking = sparkConf.getOption("spark.kryo.referenceTracking")
 
+      sparkConf
+        .setAppName(s"SparkSQL::${Utils.localHostName()}")
+        .set(
+          "spark.serializer",
+          maybeSerializer.getOrElse("org.apache.spark.serializer.KryoSerializer"))
+        .set(
+          "spark.kryo.referenceTracking",
+          maybeKryoReferenceTracking.getOrElse("false"))
+
+      sparkContext = new SparkContext(sparkConf)
       sparkContext.addSparkListener(new StatsReportListener())
+      hiveContext = new HiveContext(sparkContext)
 
-      hiveContext = new HiveContext(sparkContext) {
-        @transient override lazy val sessionState = SessionState.get()
-        @transient override lazy val hiveconf = sessionState.getConf
+      hiveContext.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
+      hiveContext.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
+      hiveContext.metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
+
+      hiveContext.setConf("spark.sql.hive.version", HiveShim.version)
+
+      if (log.isDebugEnabled) {
+        hiveContext.hiveconf.getAllProperties.toSeq.sorted.foreach { case (k, v) =>
+          logDebug(s"HiveConf var: $k=$v")
+        }
       }
     }
   }

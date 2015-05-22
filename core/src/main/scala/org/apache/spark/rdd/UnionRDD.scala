@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Dependency, Partition, RangeDependency, SparkContext, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.Utils
 
 /**
  * Partition for UnionRDD.
@@ -43,12 +44,12 @@ private[spark] class UnionPartition[T: ClassTag](
 
   var parentPartition: Partition = rdd.partitions(parentRddPartitionIndex)
 
-  def preferredLocations() = rdd.preferredLocations(parentPartition)
+  def preferredLocations(): Seq[String] = rdd.preferredLocations(parentPartition)
 
   override val index: Int = idx
 
   @throws(classOf[IOException])
-  private def writeObject(oos: ObjectOutputStream) {
+  private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     // Update the reference to parent split at the time of task serialization
     parentPartition = rdd.partitions(parentRddPartitionIndex)
     oos.defaultWriteObject()
@@ -62,7 +63,7 @@ class UnionRDD[T: ClassTag](
   extends RDD[T](sc, Nil) {  // Nil since we implement getDependencies
 
   override def getPartitions: Array[Partition] = {
-    val array = new Array[Partition](rdds.map(_.partitions.size).sum)
+    val array = new Array[Partition](rdds.map(_.partitions.length).sum)
     var pos = 0
     for ((rdd, rddIndex) <- rdds.zipWithIndex; split <- rdd.partitions) {
       array(pos) = new UnionPartition(pos, rdd, rddIndex, split.index)
@@ -75,8 +76,8 @@ class UnionRDD[T: ClassTag](
     val deps = new ArrayBuffer[Dependency[_]]
     var pos = 0
     for (rdd <- rdds) {
-      deps += new RangeDependency(rdd, 0, pos, rdd.partitions.size)
-      pos += rdd.partitions.size
+      deps += new RangeDependency(rdd, 0, pos, rdd.partitions.length)
+      pos += rdd.partitions.length
     }
     deps
   }

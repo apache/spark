@@ -24,7 +24,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.rdd.{RandomRDDPartition, RandomRDD}
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.StatCounter
 
@@ -34,7 +34,7 @@ import org.apache.spark.util.StatCounter
  *
  * TODO update tests to use TestingUtils for floating point comparison after PR 1367 is merged
  */
-class RandomRDDsSuite extends FunSuite with LocalSparkContext with Serializable {
+class RandomRDDsSuite extends FunSuite with MLlibTestSparkContext with Serializable {
 
   def testGeneratedRDD(rdd: RDD[Double],
       expectedSize: Long,
@@ -110,7 +110,19 @@ class RandomRDDsSuite extends FunSuite with LocalSparkContext with Serializable 
   test("randomRDD for different distributions") {
     val size = 100000L
     val numPartitions = 10
+
+    //  mean of log normal = e^(mean + var / 2)
+    val logNormalMean = math.exp(0.5)
+    // variance of log normal = (e^var - 1) * e^(2 * mean + var)
+    val logNormalStd = math.sqrt((math.E - 1.0) * math.E)
+    val gammaScale = 1.0
+    val gammaShape = 2.0
+    // mean of gamma = shape * scale
+    val gammaMean = gammaShape * gammaScale
+    // var of gamma = shape * scale^2
+    val gammaStd = math.sqrt(gammaShape * gammaScale * gammaScale)
     val poissonMean = 100.0
+    val exponentialMean = 1.0
 
     for (seed <- 0 until 5) {
       val uniform = RandomRDDs.uniformRDD(sc, size, numPartitions, seed)
@@ -119,8 +131,18 @@ class RandomRDDsSuite extends FunSuite with LocalSparkContext with Serializable 
       val normal = RandomRDDs.normalRDD(sc, size, numPartitions, seed)
       testGeneratedRDD(normal, size, numPartitions, 0.0, 1.0)
 
+      val logNormal = RandomRDDs.logNormalRDD(sc, 0.0, 1.0, size, numPartitions, seed)
+      testGeneratedRDD(logNormal, size, numPartitions, logNormalMean, logNormalStd, 0.1)
+
       val poisson = RandomRDDs.poissonRDD(sc, poissonMean, size, numPartitions, seed)
       testGeneratedRDD(poisson, size, numPartitions, poissonMean, math.sqrt(poissonMean), 0.1)
+
+      val exponential = RandomRDDs.exponentialRDD(sc, exponentialMean, size, numPartitions, seed)
+      testGeneratedRDD(exponential, size, numPartitions, exponentialMean, exponentialMean, 0.1)
+
+      val gamma = RandomRDDs.gammaRDD(sc, gammaShape, gammaScale, size, numPartitions, seed)
+      testGeneratedRDD(gamma, size, numPartitions, gammaMean, gammaStd, 0.1)
+
     }
 
     // mock distribution to check that partitions have unique seeds
@@ -132,7 +154,19 @@ class RandomRDDsSuite extends FunSuite with LocalSparkContext with Serializable 
     val rows = 1000L
     val cols = 100
     val parts = 10
+
+    //  mean of log normal = e^(mean + var / 2)
+    val logNormalMean = math.exp(0.5)
+    // variance of log normal = (e^var - 1) * e^(2 * mean + var)
+    val logNormalStd = math.sqrt((math.E - 1.0) * math.E)
+    val gammaScale = 1.0
+    val gammaShape = 2.0
+    // mean of gamma = shape * scale
+    val gammaMean = gammaShape * gammaScale
+    // var of gamma = shape * scale^2
+    val gammaStd = math.sqrt(gammaShape * gammaScale * gammaScale)
     val poissonMean = 100.0
+    val exponentialMean = 1.0
 
     for (seed <- 0 until 5) {
       val uniform = RandomRDDs.uniformVectorRDD(sc, rows, cols, parts, seed)
@@ -141,8 +175,18 @@ class RandomRDDsSuite extends FunSuite with LocalSparkContext with Serializable 
       val normal = RandomRDDs.normalVectorRDD(sc, rows, cols, parts, seed)
       testGeneratedVectorRDD(normal, rows, cols, parts, 0.0, 1.0)
 
+      val logNormal = RandomRDDs.logNormalVectorRDD(sc, 0.0, 1.0, rows, cols, parts, seed)
+      testGeneratedVectorRDD(logNormal, rows, cols, parts, logNormalMean, logNormalStd, 0.1)
+
       val poisson = RandomRDDs.poissonVectorRDD(sc, poissonMean, rows, cols, parts, seed)
       testGeneratedVectorRDD(poisson, rows, cols, parts, poissonMean, math.sqrt(poissonMean), 0.1)
+
+      val exponential =
+        RandomRDDs.exponentialVectorRDD(sc, exponentialMean, rows, cols, parts, seed)
+      testGeneratedVectorRDD(exponential, rows, cols, parts, exponentialMean, exponentialMean, 0.1)
+
+      val gamma = RandomRDDs.gammaVectorRDD(sc, gammaShape, gammaScale, rows, cols, parts, seed)
+      testGeneratedVectorRDD(gamma, rows, cols, parts, gammaMean, gammaStd, 0.1)
     }
   }
 }
@@ -154,7 +198,7 @@ private[random] class MockDistro extends RandomDataGenerator[Double] {
   // This allows us to check that each partition has a different seed
   override def nextValue(): Double = seed.toDouble
 
-  override def setSeed(seed: Long) = this.seed = seed
+  override def setSeed(seed: Long): Unit = this.seed = seed
 
   override def copy(): MockDistro = new MockDistro
 }

@@ -36,10 +36,8 @@ private[spark] class HashShuffleReader[K, C](
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    val readMetrics = context.taskMetrics.createShuffleReadMetricsForDependency()
     val ser = Serializer.getSerializer(dep.serializer)
-    val iter = BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context, ser,
-      readMetrics)
+    val iter = BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context, ser)
 
     val aggregatedIter: Iterator[Product2[K, C]] = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
@@ -47,9 +45,9 @@ private[spark] class HashShuffleReader[K, C](
       } else {
         new InterruptibleIterator(context, dep.aggregator.get.combineValuesByKey(iter, context))
       }
-    } else if (dep.aggregator.isEmpty && dep.mapSideCombine) {
-      throw new IllegalStateException("Aggregator is empty for map-side combine")
     } else {
+      require(!dep.mapSideCombine, "Map-side combine without Aggregator specified!")
+
       // Convert the Product2s to pairs since this is what downstream RDDs currently expect
       iter.asInstanceOf[Iterator[Product2[K, C]]].map(pair => (pair._1, pair._2))
     }
@@ -61,14 +59,11 @@ private[spark] class HashShuffleReader[K, C](
         // the ExternalSorter won't spill to disk.
         val sorter = new ExternalSorter[K, C, C](ordering = Some(keyOrd), serializer = Some(ser))
         sorter.insertAll(aggregatedIter)
-        context.taskMetrics.memoryBytesSpilled += sorter.memoryBytesSpilled
-        context.taskMetrics.diskBytesSpilled += sorter.diskBytesSpilled
+        context.taskMetrics.incMemoryBytesSpilled(sorter.memoryBytesSpilled)
+        context.taskMetrics.incDiskBytesSpilled(sorter.diskBytesSpilled)
         sorter.iterator
       case None =>
         aggregatedIter
     }
   }
-
-  /** Close this reader */
-  override def stop(): Unit = ???
 }

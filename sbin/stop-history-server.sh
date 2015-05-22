@@ -19,7 +19,7 @@
 
 # Stops the history server on the machine this script is executed on.
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+sbin="`dirname "$0"`"
+sbin="`cd "$sbin"; pwd`"
 
 "$sbin"/spark-daemon.sh stop org.apache.spark.deploy.history.HistoryServer 1

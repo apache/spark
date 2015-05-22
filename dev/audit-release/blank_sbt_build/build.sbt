@@ -19,10 +19,12 @@ name := "Spark Release Auditor"
 
 version := "1.0"
 
-scalaVersion := "2.9.3"
+scalaVersion := System.getenv.get("SCALA_VERSION")
 
 libraryDependencies += "org.apache.spark" % System.getenv.get("SPARK_MODULE") % System.getenv.get("SPARK_VERSION")
 
 resolvers ++= Seq(
   "Spark Release Repository" at System.getenv.get("SPARK_RELEASE_REPOSITORY"),
+  "Eclipse Paho Repository" at "https://repo.eclipse.org/content/repositories/paho-releases/",
+  "Maven Repository" at "http://repo1.maven.org/maven2/",
   "Spray Repository" at "http://repo.spray.cc/")

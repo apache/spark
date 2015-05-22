@@ -19,7 +19,7 @@ package org.apache.spark.mllib.linalg
 
 import org.scalatest.FunSuite
 
-import breeze.linalg.{DenseMatrix => BDM}
+import breeze.linalg.{DenseMatrix => BDM, CSCMatrix => BSM}
 
 class BreezeMatrixConversionSuite extends FunSuite {
   test("dense matrix to breeze") {
@@ -36,5 +36,36 @@ class BreezeMatrixConversionSuite extends FunSuite {
     assert(mat.numRows === breeze.rows)
     assert(mat.numCols === breeze.cols)
     assert(mat.values.eq(breeze.data), "should not copy data")
+    // transposed matrix
+    val matTransposed = Matrices.fromBreeze(breeze.t).asInstanceOf[DenseMatrix]
+    assert(matTransposed.numRows === breeze.cols)
+    assert(matTransposed.numCols === breeze.rows)
+    assert(matTransposed.values.eq(breeze.data), "should not copy data")
+  }
+
+  test("sparse matrix to breeze") {
+    val values = Array(1.0, 2.0, 4.0, 5.0)
+    val colPtrs = Array(0, 2, 4)
+    val rowIndices = Array(1, 2, 1, 2)
+    val mat = Matrices.sparse(3, 2, colPtrs, rowIndices, values)
+    val breeze = mat.toBreeze.asInstanceOf[BSM[Double]]
+    assert(breeze.rows === mat.numRows)
+    assert(breeze.cols === mat.numCols)
+    assert(breeze.data.eq(mat.asInstanceOf[SparseMatrix].values), "should not copy data")
+  }
+
+  test("sparse breeze matrix to sparse matrix") {
+    val values = Array(1.0, 2.0, 4.0, 5.0)
+    val colPtrs = Array(0, 2, 4)
+    val rowIndices = Array(1, 2, 1, 2)
+    val breeze = new BSM[Double](values, 3, 2, colPtrs, rowIndices)
+    val mat = Matrices.fromBreeze(breeze).asInstanceOf[SparseMatrix]
+    assert(mat.numRows === breeze.rows)
+    assert(mat.numCols === breeze.cols)
+    assert(mat.values.eq(breeze.data), "should not copy data")
+    val matTransposed = Matrices.fromBreeze(breeze.t).asInstanceOf[SparseMatrix]
+    assert(matTransposed.numRows === breeze.cols)
+    assert(matTransposed.numCols === breeze.rows)
+    assert(!matTransposed.values.eq(breeze.data), "has to copy data")
   }
 }

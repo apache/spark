@@ -8,7 +8,7 @@ create table date_join1 (
   FL_NUM int
 );
 
-LOAD DATA LOCAL INPATH '../data/files/flights_join.txt' OVERWRITE INTO TABLE date_join1;
+LOAD DATA LOCAL INPATH '../../data/files/flights_join.txt' OVERWRITE INTO TABLE date_join1;
 
 -- Note that there are 2 rows with date 2000-11-28, so we should expect 4 rows with that date in the join results
 select t1.fl_num, t1.fl_date, t2.fl_num, t2.fl_date

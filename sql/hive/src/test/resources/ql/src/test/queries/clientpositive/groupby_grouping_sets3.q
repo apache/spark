@@ -4,8 +4,8 @@
 -- additional MR job is created for processing the grouping sets.
 CREATE TABLE T1(a STRING, b STRING, c STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY ' ' STORED AS TEXTFILE; 
 
-LOAD DATA LOCAL INPATH '../data/files/grouping_sets1.txt' INTO TABLE T1;
-LOAD DATA LOCAL INPATH '../data/files/grouping_sets2.txt' INTO TABLE T1;
+LOAD DATA LOCAL INPATH '../../data/files/grouping_sets1.txt' INTO TABLE T1;
+LOAD DATA LOCAL INPATH '../../data/files/grouping_sets2.txt' INTO TABLE T1;
 
 set hive.input.format = org.apache.hadoop.hive.ql.io.BucketizedHiveInputFormat;
 set hive.new.job.grouping.set.cardinality = 30;

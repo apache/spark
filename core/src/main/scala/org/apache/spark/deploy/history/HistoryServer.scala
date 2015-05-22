@@ -25,9 +25,11 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource,
+  UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.SignalLogger
+import org.apache.spark.util.{SignalLogger, Utils}
 
 /**
  * A web server that renders SparkUIs of completed applications.
@@ -45,17 +47,18 @@ class HistoryServer(
     provider: ApplicationHistoryProvider,
     securityManager: SecurityManager,
     port: Int)
-  extends WebUI(securityManager, port, conf) with Logging {
+  extends WebUI(securityManager, port, conf) with Logging with UIRoot {
 
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
 
   private val appLoader = new CacheLoader[String, SparkUI] {
     override def load(key: String): SparkUI = {
-      val ui = provider.getAppUI(key)
-      if (ui == null) {
-        throw new NoSuchElementException()
-      }
+      val parts = key.split("/")
+      require(parts.length == 1 || parts.length == 2, s"Invalid app key $key")
+      val ui = provider
+        .getAppUI(parts(0), if (parts.length > 1) Some(parts(1)) else None)
+        .getOrElse(throw new NoSuchElementException(s"no app with key $key"))
       attachSparkUI(ui)
       ui
     }
@@ -64,7 +67,7 @@ class HistoryServer(
   private val appCache = CacheBuilder.newBuilder()
     .maximumSize(retainedApplications)
     .removalListener(new RemovalListener[String, SparkUI] {
-      override def onRemoval(rm: RemovalNotification[String, SparkUI]) = {
+      override def onRemoval(rm: RemovalNotification[String, SparkUI]): Unit = {
         detachSparkUI(rm.getValue())
       }
     })
@@ -72,6 +75,8 @@ class HistoryServer(
 
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+      // Parse the URI created by getAttemptURI(). It contains an app ID and an optional
+      // attempt ID (separated by a slash).
       val parts = Option(req.getPathInfo()).getOrElse("").split("/")
       if (parts.length < 2) {
         res.sendError(HttpServletResponse.SC_BAD_REQUEST,
@@ -80,25 +85,34 @@ class HistoryServer(
       }
 
       val appId = parts(1)
+      val attemptId = if (parts.length >= 3) Some(parts(2)) else None
+
+      // Since we may have applications with multiple attempts mixed with applications with a
+      // single attempt, we need to try both. Try the single-attempt route first, and if an
+      // error is raised, then try the multiple attempt route.
+      if (!loadAppUi(appId, None) && (!attemptId.isDefined || !loadAppUi(appId, attemptId))) {
+        val msg = <div class="row-fluid">Application {appId} not found.</div>
+        res.setStatus(HttpServletResponse.SC_NOT_FOUND)
+        UIUtils.basicSparkPage(msg, "Not Found").foreach { n =>
+          res.getWriter().write(n.toString)
+        }
+        return
+      }
 
       // Note we don't use the UI retrieved from the cache; the cache loader above will register
       // the app's UI, and all we need to do is redirect the user to the same URI that was
       // requested, and the proper data should be served at that point.
-      try {
-        appCache.get(appId)
-        res.sendRedirect(res.encodeRedirectURL(req.getRequestURI()))
-      } catch {
-        case e: Exception => e.getCause() match {
-          case nsee: NoSuchElementException =>
-            val msg = <div class="row-fluid">Application {appId} not found.</div>
-            res.setStatus(HttpServletResponse.SC_NOT_FOUND)
-            UIUtils.basicSparkPage(msg, "Not Found").foreach(
-              n => res.getWriter().write(n.toString))
-
-          case cause: Exception => throw cause
-        }
-      }
+      res.sendRedirect(res.encodeRedirectURL(req.getRequestURI()))
     }
+
+    // SPARK-5983 ensure TRACE is not supported
+    protected override def doTrace(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+      res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
+    }
+  }
+
+  def getSparkUI(appKey: String): Option[SparkUI] = {
+    Option(appCache.get(appKey))
   }
 
   initialize()
@@ -111,6 +125,9 @@ class HistoryServer(
    */
   def initialize() {
     attachPage(new HistoryPage(this))
+
+    attachHandler(ApiRootResource.getServletHandler(this))
+
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
 
     val contextHandler = new ServletContextHandler
@@ -148,24 +165,45 @@ class HistoryServer(
    *
    * @return List of all known applications.
    */
-  def getApplicationList() = provider.getListing()
+  def getApplicationList(): Iterable[ApplicationHistoryInfo] = {
+    provider.getListing()
+  }
+
+  def getApplicationInfoList: Iterator[ApplicationInfo] = {
+    getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+  }
 
   /**
    * Returns the provider configuration to show in the listing page.
    *
    * @return A map with the provider's configuration.
    */
-  def getProviderConfig() = provider.getConfig()
+  def getProviderConfig(): Map[String, String] = provider.getConfig()
+
+  private def loadAppUi(appId: String, attemptId: Option[String]): Boolean = {
+    try {
+      appCache.get(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
+      true
+    } catch {
+      case e: Exception => e.getCause() match {
+        case nsee: NoSuchElementException =>
+          false
+
+        case cause: Exception => throw cause
+      }
+    }
+  }
 
 }
 
 /**
  * The recommended way of starting and stopping a HistoryServer is through the scripts
- * start-history-server.sh and stop-history-server.sh. The path to a base log directory
- * is must be specified, while the requested UI port is optional. For example:
+ * start-history-server.sh and stop-history-server.sh. The path to a base log directory,
+ * as well as any other relevant history server configuration, should be specified via
+ * the $SPARK_HISTORY_OPTS environment variable. For example:
  *
- *   ./sbin/spark-history-server.sh /tmp/spark-events
- *   ./sbin/spark-history-server.sh hdfs://1.2.3.4:9000/spark-events
+ *   export SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=/tmp/spark-events"
+ *   ./sbin/start-history-server.sh
  *
  * This launches the HistoryServer as a Spark daemon.
  */
@@ -176,8 +214,8 @@ object HistoryServer extends Logging {
 
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
-    initSecurity()
     new HistoryServerArguments(conf, argStrings)
+    initSecurity()
     val securityManager = new SecurityManager(conf)
 
     val providerName = conf.getOption("spark.history.provider")
@@ -192,11 +230,7 @@ object HistoryServer extends Logging {
     val server = new HistoryServer(conf, provider, securityManager, port)
     server.bind()
 
-    Runtime.getRuntime().addShutdownHook(new Thread("HistoryServerStopper") {
-      override def run() = {
-        server.stop()
-      }
-    })
+    Utils.addShutdownHook { () => server.stop() }
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }
@@ -213,6 +247,11 @@ object HistoryServer extends Logging {
       val keytabFilename = conf.get("spark.history.kerberos.keytab")
       SparkHadoopUtil.get.loginUserFromKeytab(principalName, keytabFilename)
     }
+  }
+
+  private[history] def getAttemptURI(appId: String, attemptId: Option[String]): String = {
+    val attemptSuffix = attemptId.map { id => s"/$id" }.getOrElse("")
+    s"${HistoryServer.UI_PATH_PREFIX}/${appId}${attemptSuffix}"
   }
 
 }

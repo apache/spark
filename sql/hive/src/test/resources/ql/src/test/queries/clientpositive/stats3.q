@@ -5,9 +5,9 @@ drop table hive_test_dst;
 
 create table hive_test_src ( col1 string ) stored as textfile ;
 explain extended
-load data local inpath '../data/files/test.dat' overwrite into table hive_test_src ;
+load data local inpath '../../data/files/test.dat' overwrite into table hive_test_src ;
 
-load data local inpath '../data/files/test.dat' overwrite into table hive_test_src ;
+load data local inpath '../../data/files/test.dat' overwrite into table hive_test_src ;
 
 desc formatted hive_test_src;
 

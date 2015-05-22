@@ -18,15 +18,17 @@
 package org.apache.spark.deploy
 
 import java.net.URI
+import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
+import scala.util.Try
 
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.util.{RedirectThread, Utils}
 
 /**
- * A main class used by spark-submit to launch Python applications. It executes python as a
+ * A main class used to launch Python applications. It executes python as a
  * subprocess and then has it connect back to the JVM to access system properties, etc.
  */
 object PythonRunner {
@@ -34,7 +36,8 @@ object PythonRunner {
     val pythonFile = args(0)
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)
-    val pythonExec = sys.env.get("PYSPARK_PYTHON").getOrElse("python") // TODO: get this from conf
+    val pythonExec =
+      sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python"))
 
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
@@ -54,9 +57,11 @@ object PythonRunner {
     val pythonPath = PythonUtils.mergePythonPaths(pathElements: _*)
 
     // Launch Python process
-    val builder = new ProcessBuilder(Seq(pythonExec, "-u", formattedPythonFile) ++ otherArgs)
+    val builder = new ProcessBuilder(Seq(pythonExec, formattedPythonFile) ++ otherArgs)
     val env = builder.environment()
     env.put("PYTHONPATH", pythonPath)
+    // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
+    env.put("PYTHONUNBUFFERED", "YES") // value is needed to be set to a non-empty string
     env.put("PYSPARK_GATEWAY_PORT", "" + gatewayServer.getListeningPort)
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     val process = builder.start()
@@ -78,16 +83,13 @@ object PythonRunner {
       throw new IllegalArgumentException("Launching Python applications through " +
         s"spark-submit is currently only supported for local files: $path")
     }
-    val windows = Utils.isWindows || testWindows
-    var formattedPath = if (windows) Utils.formatWindowsPath(path) else path
-
-    // Strip the URI scheme from the path
-    formattedPath =
-      new URI(formattedPath).getScheme match {
-        case Utils.windowsDrive(d) if windows => formattedPath
-        case null => formattedPath
-        case _ => new URI(formattedPath).getPath
-      }
+    // get path when scheme is file.
+    val uri = Try(new URI(path)).getOrElse(new File(path).toURI)
+    var formattedPath = uri.getScheme match {
+      case null => path
+      case "file" | "local" => uri.getPath
+      case _ => null
+    }
 
     // Guard against malformed paths potentially throwing NPE
     if (formattedPath == null) {
@@ -96,7 +98,9 @@ object PythonRunner {
 
     // In Windows, the drive should not be prefixed with "/"
     // For instance, python does not understand "/C:/path/to/sheep.py"
-    formattedPath = if (windows) formattedPath.stripPrefix("/") else formattedPath
+    if (Utils.isWindows && formattedPath.matches("/[a-zA-Z]:/.*")) {
+      formattedPath = formattedPath.stripPrefix("/")
+    }
     formattedPath
   }
 

@@ -17,9 +17,9 @@ create table  varchar_join1_str (
   c2 string
 );
 
-load data local inpath '../data/files/vc1.txt' into table varchar_join1_vc1;
-load data local inpath '../data/files/vc1.txt' into table varchar_join1_vc2;
-load data local inpath '../data/files/vc1.txt' into table varchar_join1_str;
+load data local inpath '../../data/files/vc1.txt' into table varchar_join1_vc1;
+load data local inpath '../../data/files/vc1.txt' into table varchar_join1_vc2;
+load data local inpath '../../data/files/vc1.txt' into table varchar_join1_str;
 
 -- Join varchar with same length varchar
 select * from varchar_join1_vc1 a join varchar_join1_vc1 b on (a.c2 = b.c2) order by a.c1;

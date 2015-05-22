@@ -17,16 +17,37 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.hive.test.TestHive.{read, sparkContext, jsonRDD, sql}
+import org.apache.spark.sql.hive.test.TestHive.implicits._
 
 case class Nested(a: Int, B: Int)
 case class Data(a: Int, B: Int, n: Nested, nestedArray: Seq[Nested])
 
 /**
- * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
+ * A set of test cases expressed in Hive QL that are not covered by the tests
+ * included in the hive distribution.
  */
 class HiveResolutionSuite extends HiveComparisonTest {
+
+  test("SPARK-3698: case insensitive test for nested data") {
+    read.json(sparkContext.makeRDD(
+      """{"a": [{"a": {"a": 1}}]}""" :: Nil)).registerTempTable("nested")
+    // This should be successfully analyzed
+    sql("SELECT a[0].A.A from nested").queryExecution.analyzed
+  }
+
+  test("SPARK-5278: check ambiguous reference to fields") {
+    read.json(sparkContext.makeRDD(
+      """{"a": [{"b": 1, "B": 2}]}""" :: Nil)).registerTempTable("nested")
+
+    // there are 2 filed matching field name "b", we should report Ambiguous reference error
+    val exception = intercept[AnalysisException] {
+      sql("SELECT a[0].b from nested").queryExecution.analyzed
+    }
+    assert(exception.getMessage.contains("Ambiguous reference to fields"))
+  }
+
   createQueryTest("table.attr",
     "SELECT src.key FROM src ORDER BY key LIMIT 1")
 
@@ -35,6 +56,9 @@ class HiveResolutionSuite extends HiveComparisonTest {
 
   createQueryTest("database.table table.attr",
     "SELECT src.key FROM default.src ORDER BY key LIMIT 1")
+
+  createQueryTest("database.table table.attr case insensitive",
+    "SELECT SRC.Key FROM Default.Src ORDER BY key LIMIT 1")
 
   createQueryTest("alias.attr",
     "SELECT a.key FROM src a ORDER BY key LIMIT 1")
@@ -53,24 +77,37 @@ class HiveResolutionSuite extends HiveComparisonTest {
 
   test("case insensitivity with scala reflection") {
     // Test resolution with Scala Reflection
-    TestHive.sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
-      .registerTempTable("caseSensitivityTest")
+    sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
+      .toDF().registerTempTable("caseSensitivityTest")
 
-    sql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
+    val query = sql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
+    assert(query.schema.fields.map(_.name) === Seq("a", "b", "A", "B", "a", "b", "A", "B"),
+      "The output schema did not preserve the case of the query.")
+    query.collect()
+  }
 
-    println(sql("SELECT * FROM casesensitivitytest one JOIN casesensitivitytest two ON one.a = two.a").queryExecution)
+  ignore("case insensitivity with scala reflection joins") {
+    // Test resolution with Scala Reflection
+    sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
+      .toDF().registerTempTable("caseSensitivityTest")
 
-    sql("SELECT * FROM casesensitivitytest one JOIN casesensitivitytest two ON one.a = two.a").collect()
-
-    // TODO: sql("SELECT * FROM casesensitivitytest a JOIN casesensitivitytest b ON a.a = b.a")
-
+    sql("SELECT * FROM casesensitivitytest a JOIN casesensitivitytest b ON a.a = b.a").collect()
   }
 
   test("nested repeated resolution") {
-    TestHive.sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
-      .registerTempTable("nestedRepeatedTest")
+    sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
+      .toDF().registerTempTable("nestedRepeatedTest")
     assert(sql("SELECT nestedArray[0].a FROM nestedRepeatedTest").collect().head(0) === 1)
   }
+
+  createQueryTest("test ambiguousReferences resolved as hive",
+    """
+      |CREATE TABLE t1(x INT);
+      |CREATE TABLE t2(a STRUCT<x: INT>, k INT);
+      |INSERT OVERWRITE TABLE t1 SELECT 1 FROM src LIMIT 1;
+      |INSERT OVERWRITE TABLE t2 SELECT named_struct("x",1),1 FROM src LIMIT 1;
+      |SELECT a.x FROM t1 a JOIN t2 b ON a.x = b.k;
+    """.stripMargin)
 
   /**
    * Negative examples.  Currently only left here for documentation purposes.

@@ -11,9 +11,9 @@ ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
 CREATE TABLE z (id INT, name STRING)
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
 
-load data local inpath '../data/files/x.txt' INTO TABLE x;
-load data local inpath '../data/files/y.txt' INTO TABLE y;
-load data local inpath '../data/files/z.txt' INTO TABLE z;
+load data local inpath '../../data/files/x.txt' INTO TABLE x;
+load data local inpath '../../data/files/y.txt' INTO TABLE y;
+load data local inpath '../../data/files/z.txt' INTO TABLE z;
 
 set hive.auto.convert.join=true;
 set hive.auto.convert.join.noconditionaltask=true;

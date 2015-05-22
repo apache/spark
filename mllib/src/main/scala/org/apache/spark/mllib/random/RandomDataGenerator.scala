@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.random
 
-import cern.jet.random.Poisson
-import cern.jet.random.engine.DRand
+import org.apache.commons.math3.distribution.{ExponentialDistribution,
+  GammaDistribution, LogNormalDistribution, PoissonDistribution}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.random.{XORShiftRandom, Pseudorandom}
@@ -56,7 +56,7 @@ class UniformGenerator extends RandomDataGenerator[Double] {
     random.nextDouble()
   }
 
-  override def setSeed(seed: Long) = random.setSeed(seed)
+  override def setSeed(seed: Long): Unit = random.setSeed(seed)
 
   override def copy(): UniformGenerator = new UniformGenerator()
 }
@@ -75,7 +75,7 @@ class StandardNormalGenerator extends RandomDataGenerator[Double] {
       random.nextGaussian()
   }
 
-  override def setSeed(seed: Long) = random.setSeed(seed)
+  override def setSeed(seed: Long): Unit = random.setSeed(seed)
 
   override def copy(): StandardNormalGenerator = new StandardNormalGenerator()
 }
@@ -89,13 +89,76 @@ class StandardNormalGenerator extends RandomDataGenerator[Double] {
 @DeveloperApi
 class PoissonGenerator(val mean: Double) extends RandomDataGenerator[Double] {
 
-  private var rng = new Poisson(mean, new DRand)
+  private val rng = new PoissonDistribution(mean)
 
-  override def nextValue(): Double = rng.nextDouble()
+  override def nextValue(): Double = rng.sample()
 
   override def setSeed(seed: Long) {
-    rng = new Poisson(mean, new DRand(seed.toInt))
+    rng.reseedRandomGenerator(seed)
   }
 
   override def copy(): PoissonGenerator = new PoissonGenerator(mean)
+}
+
+/**
+ * :: DeveloperApi ::
+ * Generates i.i.d. samples from the exponential distribution with the given mean.
+ *
+ * @param mean mean for the exponential distribution.
+ */
+@DeveloperApi
+class ExponentialGenerator(val mean: Double) extends RandomDataGenerator[Double] {
+
+  private val rng = new ExponentialDistribution(mean)
+
+  override def nextValue(): Double = rng.sample()
+
+  override def setSeed(seed: Long) {
+    rng.reseedRandomGenerator(seed)
+  }
+
+  override def copy(): ExponentialGenerator = new ExponentialGenerator(mean)
+}
+
+/**
+ * :: DeveloperApi ::
+ * Generates i.i.d. samples from the gamma distribution with the given shape and scale.
+ *
+ * @param shape shape for the gamma distribution.
+ * @param scale scale for the gamma distribution
+ */
+@DeveloperApi
+class GammaGenerator(val shape: Double, val scale: Double) extends RandomDataGenerator[Double] {
+
+  private val rng = new GammaDistribution(shape, scale)
+
+  override def nextValue(): Double = rng.sample()
+
+  override def setSeed(seed: Long) {
+    rng.reseedRandomGenerator(seed)
+  }
+
+  override def copy(): GammaGenerator = new GammaGenerator(shape, scale)
+}
+
+/**
+ * :: DeveloperApi ::
+ * Generates i.i.d. samples from the log normal distribution with the
+ * given mean and standard deviation.
+ *
+ * @param mean mean for the log normal distribution.
+ * @param std standard deviation for the log normal distribution
+ */
+@DeveloperApi
+class LogNormalGenerator(val mean: Double, val std: Double) extends RandomDataGenerator[Double] {
+
+  private val rng = new LogNormalDistribution(mean, std)
+
+  override def nextValue(): Double = rng.sample()
+
+  override def setSeed(seed: Long) {
+    rng.reseedRandomGenerator(seed)
+  }
+
+  override def copy(): LogNormalGenerator = new LogNormalGenerator(mean, std)
 }

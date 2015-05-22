@@ -19,18 +19,15 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Logging
-import org.apache.spark.rdd.RDD
-
-
+import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.trees
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, trees}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 
+import scala.collection.mutable.ArrayBuffer
 
 object SparkPlan {
   protected[sql] val currentContext = new ThreadLocal[SQLContext]()
@@ -49,14 +46,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * populated by the query planning infrastructure.
    */
   @transient
-  protected[spark] val sqlContext = SparkPlan.currentContext.get()
+  protected[spark] final val sqlContext = SparkPlan.currentContext.get()
 
   protected def sparkContext = sqlContext.sparkContext
 
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
   // the value of codegenEnabled will be set by the desserializer after the constructor has run.
   val codegenEnabled: Boolean = if (sqlContext != null) {
-    sqlContext.codegenEnabled
+    sqlContext.conf.codegenEnabled
   } else {
     false
   }
@@ -70,26 +67,95 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
   def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!
+
   /** Specifies any partition requirements on the input data for this operator. */
   def requiredChildDistribution: Seq[Distribution] =
     Seq.fill(children.size)(UnspecifiedDistribution)
 
+  /** Specifies how data is ordered in each partition. */
+  def outputOrdering: Seq[SortOrder] = Nil
+
+  /** Specifies sort order for each partition requirements on the input data for this operator. */
+  def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
+
   /**
-   * Runs this query returning the result as an RDD.
+   * Returns the result of this query as an RDD[Row] by delegating to doExecute
+   * after adding query plan information to created RDDs for visualization.
+   * Concrete implementations of SparkPlan should override doExecute instead.
    */
-  def execute(): RDD[Row]
+  final def execute(): RDD[Row] = {
+    RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+      doExecute()
+    }
+  }
+
+  /**
+   * Overridden by concrete implementations of SparkPlan.
+   * Produces the result of the query as an RDD[Row]
+   */
+  protected def doExecute(): RDD[Row]
 
   /**
    * Runs this query returning the result as an array.
    */
-  def executeCollect(): Array[Row] = execute().map(_.copy()).collect()
+  def executeCollect(): Array[Row] = {
+    execute().mapPartitions { iter =>
+      val converter = CatalystTypeConverters.createToScalaConverter(schema)
+      iter.map(converter(_).asInstanceOf[Row])
+    }.collect()
+  }
+
+  /**
+   * Runs this query returning the first `n` rows as an array.
+   *
+   * This is modeled after RDD.take but never runs any job locally on the driver.
+   */
+  def executeTake(n: Int): Array[Row] = {
+    if (n == 0) {
+      return new Array[Row](0)
+    }
+
+    val childRDD = execute().map(_.copy())
+
+    val buf = new ArrayBuffer[Row]
+    val totalParts = childRDD.partitions.length
+    var partsScanned = 0
+    while (buf.size < n && partsScanned < totalParts) {
+      // The number of partitions to try in this iteration. It is ok for this number to be
+      // greater than totalParts because we actually cap it at totalParts in runJob.
+      var numPartsToTry = 1
+      if (partsScanned > 0) {
+        // If we didn't find any rows after the first iteration, just try all partitions next.
+        // Otherwise, interpolate the number of partitions we need to try, but overestimate it
+        // by 50%.
+        if (buf.size == 0) {
+          numPartsToTry = totalParts - 1
+        } else {
+          numPartsToTry = (1.5 * n * partsScanned / buf.size).toInt
+        }
+      }
+      numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
+
+      val left = n - buf.size
+      val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+      val sc = sqlContext.sparkContext
+      val res =
+        sc.runJob(childRDD, (it: Iterator[Row]) => it.take(left).toArray, p, allowLocal = false)
+
+      res.foreach(buf ++= _.take(n - buf.size))
+      partsScanned += numPartsToTry
+    }
+
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
+    buf.toArray.map(converter(_).asInstanceOf[Row])
+  }
 
   protected def newProjection(
       expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if (codegenEnabled) {
-      GenerateProjection(expressions, inputSchema)
+      GenerateProjection.generate(expressions, inputSchema)
     } else {
       new InterpretedProjection(expressions, inputSchema)
     }
@@ -101,7 +167,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     log.debug(
       s"Creating MutableProj: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if(codegenEnabled) {
-      GenerateMutableProjection(expressions, inputSchema)
+      GenerateMutableProjection.generate(expressions, inputSchema)
     } else {
       () => new InterpretedMutableProjection(expressions, inputSchema)
     }
@@ -111,52 +177,19 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def newPredicate(
       expression: Expression, inputSchema: Seq[Attribute]): (Row) => Boolean = {
     if (codegenEnabled) {
-      GeneratePredicate(expression, inputSchema)
+      GeneratePredicate.generate(expression, inputSchema)
     } else {
-      InterpretedPredicate(expression, inputSchema)
+      InterpretedPredicate.create(expression, inputSchema)
     }
   }
 
   protected def newOrdering(order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[Row] = {
     if (codegenEnabled) {
-      GenerateOrdering(order, inputSchema)
+      GenerateOrdering.generate(order, inputSchema)
     } else {
       new RowOrdering(order, inputSchema)
     }
   }
-}
-
-/**
- * :: DeveloperApi ::
- * Allows already planned SparkQueries to be linked into logical query plans.
- *
- * Note that in general it is not valid to use this class to link multiple copies of the same
- * physical operator into the same query plan as this violates the uniqueness of expression ids.
- * Special handling exists for ExistingRdd as these are already leaf operators and thus we can just
- * replace the output attributes with new copies of themselves without breaking any attribute
- * linking.
- */
-@DeveloperApi
-case class SparkLogicalPlan(alreadyPlanned: SparkPlan)(@transient sqlContext: SQLContext)
-  extends LogicalPlan with MultiInstanceRelation {
-
-  def output = alreadyPlanned.output
-  override def children = Nil
-
-  override final def newInstance(): this.type = {
-    SparkLogicalPlan(
-      alreadyPlanned match {
-        case ExistingRdd(output, rdd) => ExistingRdd(output.map(_.newInstance), rdd)
-        case _ => sys.error("Multiple instance of the same relation detected.")
-      })(sqlContext).asInstanceOf[this.type]
-  }
-
-  @transient override lazy val statistics = Statistics(
-    // TODO: Instead of returning a default value here, find a way to return a meaningful size
-    // estimate for RDDs. See PR 1238 for more discussions.
-    sizeInBytes = BigInt(sqlContext.defaultSizeInBytes)
-  )
-
 }
 
 private[sql] trait LeafNode extends SparkPlan with trees.LeafNode[SparkPlan] {

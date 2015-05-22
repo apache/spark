@@ -22,9 +22,10 @@ import java.io._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.sources.DescribeCommand
+import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand => LogicalNativeCommand}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive.test.TestHive
 
@@ -128,28 +129,39 @@ abstract class HiveComparisonTest
   }
 
   protected def prepareAnswer(
-    hiveQuery: TestHive.type#HiveQLQueryExecution,
+    hiveQuery: TestHive.type#QueryExecution,
     answer: Seq[String]): Seq[String] = {
 
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-      case PhysicalOperation(_, _, Sort(_, _)) => true
+      case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }
 
-    val orderedAnswer = hiveQuery.logical match {
+    val orderedAnswer = hiveQuery.analyzed match {
       // Clean out non-deterministic time schema info.
       // Hack: Hive simply prints the result of a SET command to screen,
       // and does not return it as a query answer.
       case _: SetCommand => Seq("0")
-      case _: LogicalNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
+      case HiveNativeCommand(c) if c.toLowerCase.contains("desc") =>
+        answer
+          .filterNot(nonDeterministicLine)
+          .map(_.replaceAll("from deserializer", ""))
+          .map(_.replaceAll("None", ""))
+          .map(_.trim)
+          .filterNot(_ == "")
+      case _: HiveNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _: ExplainCommand => answer
       case _: DescribeCommand =>
         // Filter out non-deterministic lines and lines which do not have actual results but
         // can introduce problems because of the way Hive formats these lines.
         // Then, remove empty lines. Do not sort the results.
-        answer.filterNot(
-          r => nonDeterministicLine(r) || ignoredLine(r)).map(_.trim).filterNot(_ == "")
+        answer
+          .filterNot(r => nonDeterministicLine(r) || ignoredLine(r))
+          .map(_.replaceAll("from deserializer", ""))
+          .map(_.replaceAll("None", ""))
+          .map(_.trim)
+          .filterNot(_ == "")
       case plan => if (isSorted(plan)) answer else answer.sorted
     }
     orderedAnswer.map(cleanPaths)
@@ -164,6 +176,7 @@ abstract class HiveComparisonTest
     "last_modified_by",
     "last_modified_time",
     "Owner:",
+    "COLUMN_STATS_ACCURATE",
     // The following are hive specific schema parameters which we do not need to match exactly.
     "numFiles",
     "numRows",
@@ -195,6 +208,9 @@ abstract class HiveComparisonTest
 
   val installHooksCommand = "(?i)SET.*hooks".r
   def createQueryTest(testCaseName: String, sql: String, reset: Boolean = true) {
+    // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
+    assert(!testCaseName.contains(":"))
+
     // If test sharding is enable, skip tests that are not in the correct shard.
     shardInfo.foreach {
       case (shardId, numShards) if testCaseName.hashCode % numShards != shardId => return
@@ -225,7 +241,10 @@ abstract class HiveComparisonTest
       // Clear old output for this testcase.
       outputDirectories.map(new File(_, testCaseName)).filter(_.exists()).foreach(_.delete())
 
-      val allQueries = sql.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "").toSeq
+      val sqlWithoutComment =
+        sql.split("\n").filterNot(l => l.matches("--.*(?<=[^\\\\]);")).mkString("\n")
+      val allQueries =
+        sqlWithoutComment.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "").toSeq
 
       // TODO: DOCUMENT UNSUPPORTED
       val queryList =
@@ -234,9 +253,11 @@ abstract class HiveComparisonTest
           // the system to return the wrong answer.  Since we have no intention of mirroring their
           // previously broken behavior we simply filter out changes to this setting.
           .filterNot(_ contains "hive.outerjoin.supports.filters")
+          .filterNot(_ contains "hive.exec.post.hooks")
 
-      if (allQueries != queryList)
+      if (allQueries != queryList) {
         logWarning(s"Simplifications made on unsupported operations for test $testCaseName")
+      }
 
       lazy val consoleTestCase = {
         val quotes = "\"\"\""
@@ -247,9 +268,9 @@ abstract class HiveComparisonTest
       }
 
       try {
-        // MINOR HACK: You must run a query before calling reset the first time.
-        TestHive.sql("SHOW TABLES")
-        if (reset) { TestHive.reset() }
+        if (reset) {
+          TestHive.reset()
+        }
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
           case (queryString, i)  =>
@@ -277,21 +298,26 @@ abstract class HiveComparisonTest
             hiveCachedResults
           } else {
 
-            val hiveQueries = queryList.map(new TestHive.HiveQLQueryExecution(_))
+            val hiveQueries = queryList.map(new TestHive.QueryExecution(_))
             // Make sure we can at least parse everything before attempting hive execution.
+            // Note this must only look at the logical plan as we might not be able to analyze if
+            // other DDL has not been executed yet.
             hiveQueries.foreach(_.logical)
             val computedResults = (queryList.zipWithIndex, hiveQueries, hiveCacheFiles).zipped.map {
               case ((queryString, i), hiveQuery, cachedAnswerFile)=>
                 try {
                   // Hooks often break the harness and don't really affect our test anyway, don't
                   // even try running them.
-                  if (installHooksCommand.findAllMatchIn(queryString).nonEmpty)
+                  if (installHooksCommand.findAllMatchIn(queryString).nonEmpty) {
                     sys.error("hive exec hooks not supported for tests.")
+                  }
 
-                  logWarning(s"Running query ${i+1}/${queryList.size} with hive.")
+                  logWarning(s"Running query ${i + 1}/${queryList.size} with hive.")
                   // Analyze the query with catalyst to ensure test tables are loaded.
                   val answer = hiveQuery.analyzed match {
-                    case _: ExplainCommand => Nil // No need to execute EXPLAIN queries as we don't check the output.
+                    case _: ExplainCommand =>
+                      // No need to execute EXPLAIN queries as we don't check the output.
+                      Nil
                     case _ => TestHive.runSqlHive(queryString)
                   }
 
@@ -322,7 +348,7 @@ abstract class HiveComparisonTest
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          val query = new TestHive.HiveQLQueryExecution(queryString)
+          val query = new TestHive.QueryExecution(queryString)
           try { (query, prepareAnswer(query, query.stringResult())) } catch {
             case e: Throwable =>
               val errorMessage =
@@ -342,7 +368,7 @@ abstract class HiveComparisonTest
         (queryList, hiveResults, catalystResults).zipped.foreach {
           case (query, hive, (hiveQuery, catalyst)) =>
             // Check that the results match unless its an EXPLAIN query.
-            val preparedHive = prepareAnswer(hiveQuery,hive)
+            val preparedHive = prepareAnswer(hiveQuery, hive)
 
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) && preparedHive != catalyst) {
 
@@ -374,21 +400,24 @@ abstract class HiveComparisonTest
         case tf: org.scalatest.exceptions.TestFailedException => throw tf
         case originalException: Exception =>
           if (System.getProperty("spark.hive.canarytest") != null) {
-            // When we encounter an error we check to see if the environment is still okay by running a simple query.
-            // If this fails then we halt testing since something must have gone seriously wrong.
+            // When we encounter an error we check to see if the environment is still
+            // okay by running a simple query. If this fails then we halt testing since
+            // something must have gone seriously wrong.
             try {
-              new TestHive.HiveQLQueryExecution("SELECT key FROM src").stringResult()
+              new TestHive.QueryExecution("SELECT key FROM src").stringResult()
               TestHive.runSqlHive("SELECT key FROM src")
             } catch {
               case e: Exception =>
-                logError(s"FATAL ERROR: Canary query threw $e This implies that the testing environment has likely been corrupted.")
-                // The testing setup traps exits so wait here for a long time so the developer can see when things started
-                // to go wrong.
+                logError(s"FATAL ERROR: Canary query threw $e This implies that the " +
+                  "testing environment has likely been corrupted.")
+                // The testing setup traps exits so wait here for a long time so the developer
+                // can see when things started to go wrong.
                 Thread.sleep(1000000)
             }
           }
 
-          // If the canary query didn't fail then the environment is still okay, so just throw the original exception.
+          // If the canary query didn't fail then the environment is still okay,
+          // so just throw the original exception.
           throw originalException
       }
     }

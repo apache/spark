@@ -62,6 +62,10 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
 
   @volatile private var stopped = false
 
+  @volatile private var isTest = false
+
+  private var testLatch: CountDownLatch = null
+
   // The transaction that this processor would handle
   var txOpt: Option[Transaction] = None
 
@@ -182,6 +186,9 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
             rollbackAndClose(tx, close = false) // tx will be closed later anyway
         } finally {
           tx.close()
+          if (isTest) {
+            testLatch.countDown()
+          }
         }
       } else {
         logWarning("Spark could not commit transaction, NACK received. Rolling back transaction.")
@@ -236,5 +243,10 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
     populateEvents()
     processAckOrNack()
     null
+  }
+
+  private[sink] def countDownWhenBatchAcked(latch: CountDownLatch) {
+    testLatch = latch
+    isTest = true
   }
 }

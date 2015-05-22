@@ -1,3 +1,5 @@
+set hive.fetch.task.conversion=more;
+
 desc function str_to_map;
 desc function extended str_to_map;
 
@@ -19,7 +21,7 @@ limit 3;
 
 
 drop table tbl_s2m;
-create table tbl_s2m as select 'ABC=CC_333=444' as t from src limit 3;
+create table tbl_s2m as select 'ABC=CC_333=444' as t from src tablesample (3 rows);
 
 select str_to_map(t,'_','=')['333'] from tbl_s2m;
 

@@ -34,12 +34,12 @@ class EdgeDirection private (private val name: String) extends Serializable {
 
   override def toString: String = "EdgeDirection." + name
 
-  override def equals(o: Any) = o match {
+  override def equals(o: Any): Boolean = o match {
     case other: EdgeDirection => other.name == name
     case _ => false
   }
 
-  override def hashCode = name.hashCode
+  override def hashCode: Int = name.hashCode
 }
 
 
@@ -48,14 +48,14 @@ class EdgeDirection private (private val name: String) extends Serializable {
  */
 object EdgeDirection {
   /** Edges arriving at a vertex. */
-  final val In = new EdgeDirection("In")
+  final val In: EdgeDirection = new EdgeDirection("In")
 
   /** Edges originating from a vertex. */
-  final val Out = new EdgeDirection("Out")
+  final val Out: EdgeDirection = new EdgeDirection("Out")
 
   /** Edges originating from *or* arriving at a vertex of interest. */
-  final val Either = new EdgeDirection("Either")
+  final val Either: EdgeDirection = new EdgeDirection("Either")
 
   /** Edges originating from *and* arriving at a vertex of interest. */
-  final val Both = new EdgeDirection("Both")
+  final val Both: EdgeDirection = new EdgeDirection("Both")
 }

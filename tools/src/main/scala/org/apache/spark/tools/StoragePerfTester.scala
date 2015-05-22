@@ -20,10 +20,11 @@ package org.apache.spark.tools
 import java.util.concurrent.{CountDownLatch, Executors}
 import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.SparkContext
-import org.apache.spark.serializer.KryoSerializer
-import org.apache.spark.util.Utils
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.shuffle.hash.HashShuffleManager
+import org.apache.spark.util.Utils
 
 /**
  * Internal utility for micro-benchmarking shuffle write performance.
@@ -31,7 +32,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics
  * Writes simulated shuffle output from several threads and records the observed throughput.
  */
 object StoragePerfTester {
-  def main(args: Array[String]) = {
+  def main(args: Array[String]): Unit = {
     /** Total amount of data to generate. Distributed evenly amongst maps and reduce splits. */
     val dataSizeMb = Utils.memoryStringToMb(sys.env.getOrElse("OUTPUT_DATA", "1g"))
 
@@ -45,22 +46,25 @@ object StoragePerfTester {
     val totalRecords = dataSizeMb * 1000
     val recordsPerMap = totalRecords / numMaps
 
-    val writeData = "1" * recordLength
+    val writeKey = "1" * (recordLength / 2)
+    val writeValue = "1" * (recordLength / 2)
     val executor = Executors.newFixedThreadPool(numMaps)
 
-    System.setProperty("spark.shuffle.compress", "false")
-    System.setProperty("spark.shuffle.sync", "true")
+    val conf = new SparkConf()
+      .set("spark.shuffle.compress", "false")
+      .set("spark.shuffle.sync", "true")
+      .set("spark.shuffle.manager", "org.apache.spark.shuffle.hash.HashShuffleManager")
 
     // This is only used to instantiate a BlockManager. All thread scheduling is done manually.
-    val sc = new SparkContext("local[4]", "Write Tester")
-    val blockManager = sc.env.blockManager
+    val sc = new SparkContext("local[4]", "Write Tester", conf)
+    val hashShuffleManager = sc.env.shuffleManager.asInstanceOf[HashShuffleManager]
 
-    def writeOutputBytes(mapId: Int, total: AtomicLong) = {
-      val shuffle = blockManager.shuffleBlockManager.forMapTask(1, mapId, numOutputSplits,
+    def writeOutputBytes(mapId: Int, total: AtomicLong): Unit = {
+      val shuffle = hashShuffleManager.shuffleBlockResolver.forMapTask(1, mapId, numOutputSplits,
         new KryoSerializer(sc.conf), new ShuffleWriteMetrics())
       val writers = shuffle.writers
       for (i <- 1 to recordsPerMap) {
-        writers(i % numOutputSplits).write(writeData)
+        writers(i % numOutputSplits).write(writeKey, writeValue)
       }
       writers.map { w =>
         w.commitAndClose()
@@ -75,7 +79,7 @@ object StoragePerfTester {
     val totalBytes = new AtomicLong()
     for (task <- 1 to numMaps) {
       executor.submit(new Runnable() {
-        override def run() = {
+        override def run(): Unit = {
           try {
             writeOutputBytes(task, totalBytes)
             latch.countDown()

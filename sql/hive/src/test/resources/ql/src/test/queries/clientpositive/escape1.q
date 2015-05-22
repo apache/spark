@@ -8,7 +8,7 @@ DROP TABLE escape1;
 DROP TABLE escape_raw;
 
 CREATE TABLE escape_raw (s STRING) STORED AS TEXTFILE;
-LOAD DATA LOCAL INPATH '../data/files/escapetest.txt' INTO TABLE  escape_raw;
+LOAD DATA LOCAL INPATH '../../data/files/escapetest.txt' INTO TABLE  escape_raw;
 
 SELECT count(*) from escape_raw;
 SELECT * from escape_raw;

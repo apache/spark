@@ -22,45 +22,29 @@ import scala.collection.JavaConversions._
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRow, Row}
-import org.apache.spark.sql.execution.{Command, LeafNode}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
+import org.apache.spark.sql.execution.{SparkPlan, RunnableCommand}
 import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
+import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.SQLContext
 
 /**
  * Implementation for "describe [extended] table".
- *
- * :: DeveloperApi ::
  */
-@DeveloperApi
+private[hive]
 case class DescribeHiveTableCommand(
     table: MetastoreRelation,
-    output: Seq[Attribute],
-    isExtended: Boolean)(
-    @transient context: HiveContext)
-  extends LeafNode with Command {
+    override val output: Seq[Attribute],
+    isExtended: Boolean) extends RunnableCommand {
 
-  // Strings with the format like Hive. It is used for result comparison in our unit tests.
-  lazy val hiveString: Seq[String] = {
-    val alignment = 20
-    val delim = "\t"
-
-    sideEffectResult.map {
-      case (name, dataType, comment) =>
-        String.format("%-" + alignment + "s", name) + delim +
-          String.format("%-" + alignment + "s", dataType) + delim +
-          String.format("%-" + alignment + "s", Option(comment).getOrElse("None"))
-    }
-  }
-
-  override protected[sql] lazy val sideEffectResult: Seq[(String, String, String)] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     // Trying to mimic the format of Hive's output. But not exactly the same.
     var results: Seq[(String, String, String)] = Nil
 
     val columns: Seq[FieldSchema] = table.hiveQlTable.getCols
     val partitionColumns: Seq[FieldSchema] = table.hiveQlTable.getPartCols
     results ++= columns.map(field => (field.getName, field.getType, field.getComment))
-    if (!partitionColumns.isEmpty) {
+    if (partitionColumns.nonEmpty) {
       val partColumnInfo =
         partitionColumns.map(field => (field.getName, field.getType, field.getComment))
       results ++=
@@ -74,15 +58,8 @@ case class DescribeHiveTableCommand(
       results ++= Seq(("Detailed Table Information", table.hiveQlTable.getTTable.toString, ""))
     }
 
-    results
-  }
-
-  override def execute(): RDD[Row] = {
-    val rows = sideEffectResult.map {
-      case (name, dataType, comment) => new GenericRow(Array[Any](name, dataType, comment))
+    results.map { case (name, dataType, comment) =>
+      Row(name, dataType, comment)
     }
-    context.sparkContext.parallelize(rows, 1)
   }
-
-  override def otherCopyArgs = context :: Nil
 }

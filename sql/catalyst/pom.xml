@@ -21,8 +21,8 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent</artifactId>
-    <version>1.1.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.10</artifactId>
+    <version>1.4.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -44,20 +44,16 @@
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-reflect</artifactId>
     </dependency>
-    <dependency>
-      <groupId>org.scalamacros</groupId>
-      <artifactId>quasiquotes_${scala.binary.version}</artifactId>
-      <version>${scala.macros.version}</version>
-    </dependency>
+
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <scope>test</scope>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-unsafe_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
@@ -69,11 +65,6 @@
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
-      <plugin>
-        <groupId>org.scalatest</groupId>
-        <artifactId>scalatest-maven-plugin</artifactId>
-      </plugin>
-
       <!--
            This plugin forces the generation of jar containing catalyst test classes,
            so that the tests classes of external modules can use them. The two execution profiles
@@ -103,4 +94,20 @@
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <!-- Quasiquotes are merged into scala reflect from scala 2.11 onwards. -->
+    <profile>
+      <id>scala-2.10</id>
+      <activation>
+        <property><name>!scala-2.11</name></property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.scalamacros</groupId>
+          <artifactId>quasiquotes_${scala.binary.version}</artifactId>
+          <version>${scala.macros.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
 </project>

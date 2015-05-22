@@ -22,7 +22,7 @@ set mapred.input.dir.recursive=true;
 create table inputTbl1(key string, val string) stored as textfile;
 create table outputTbl1(key string, values bigint) stored as rcfile;
 
-load data local inpath '../data/files/T1.txt' into table inputTbl1;
+load data local inpath '../../data/files/T1.txt' into table inputTbl1;
 
 explain
 insert overwrite table outputTbl1

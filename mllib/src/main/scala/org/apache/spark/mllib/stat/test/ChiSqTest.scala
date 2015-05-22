@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.stat.test
 
 import breeze.linalg.{DenseMatrix => BDM}
-import cern.jet.stat.Probability.chiSquareComplemented
+import org.apache.commons.math3.distribution.ChiSquaredDistribution
 
 import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
@@ -33,7 +33,7 @@ import scala.collection.mutable
  * on an input of type `Matrix` in which independence between columns is assessed.
  * We also provide a method for computing the chi-squared statistic between each feature and the
  * label for an input `RDD[LabeledPoint]`, return an `Array[ChiSquaredTestResult]` of size =
- * number of features in the inpuy RDD.
+ * number of features in the input RDD.
  *
  * Supported methods for goodness of fit: `pearson` (default)
  * Supported methods for independence: `pearson` (default)
@@ -139,7 +139,7 @@ private[stat] object ChiSqTest extends Logging {
   }
 
   /*
-   * Pearon's goodness of fit test on the input observed and expected counts/relative frequencies.
+   * Pearson's goodness of fit test on the input observed and expected counts/relative frequencies.
    * Uniform distribution is assumed when `expected` is not passed in.
    */
   def chiSquared(observed: Vector,
@@ -188,12 +188,12 @@ private[stat] object ChiSqTest extends Logging {
       }
     }
     val df = size - 1
-    val pValue = chiSquareComplemented(df, statistic)
+    val pValue = 1.0 - new ChiSquaredDistribution(df).cumulativeProbability(statistic)
     new ChiSqTestResult(pValue, df, statistic, PEARSON.name, NullHypothesis.goodnessOfFit.toString)
   }
 
   /*
-   * Pearon's independence test on the input contingency matrix.
+   * Pearson's independence test on the input contingency matrix.
    * TODO: optimize for SparseMatrix when it becomes supported.
    */
   def chiSquaredMatrix(counts: Matrix, methodName:String = PEARSON.name): ChiSqTestResult = {
@@ -205,8 +205,10 @@ private[stat] object ChiSqTest extends Logging {
     val colSums = new Array[Double](numCols)
     val rowSums = new Array[Double](numRows)
     val colMajorArr = counts.toArray
+    val colMajorArrLen = colMajorArr.length
+
     var i = 0
-    while (i < colMajorArr.size) {
+    while (i < colMajorArrLen) {
       val elem = colMajorArr(i)
       if (elem < 0.0) {
         throw new IllegalArgumentException("Contingency table cannot contain negative entries.")
@@ -220,7 +222,7 @@ private[stat] object ChiSqTest extends Logging {
     // second pass to collect statistic
     var statistic = 0.0
     var j = 0
-    while (j < colMajorArr.size) {
+    while (j < colMajorArrLen) {
       val col = j / numRows
       val colSum = colSums(col)
       if (colSum == 0.0) {
@@ -238,7 +240,13 @@ private[stat] object ChiSqTest extends Logging {
       j += 1
     }
     val df = (numCols - 1) * (numRows - 1)
-    val pValue = chiSquareComplemented(df, statistic)
-    new ChiSqTestResult(pValue, df, statistic, methodName, NullHypothesis.independence.toString)
+    if (df == 0) {
+      // 1 column or 1 row. Constant distribution is independent of anything.
+      // pValue = 1.0 and statistic = 0.0 in this case.
+      new ChiSqTestResult(1.0, 0, 0.0, methodName, NullHypothesis.independence.toString)
+    } else {
+      val pValue = 1.0 - new ChiSquaredDistribution(df).cumulativeProbability(statistic)
+      new ChiSqTestResult(pValue, df, statistic, methodName, NullHypothesis.independence.toString)
+    }
   }
 }

@@ -4,10 +4,10 @@ DROP TABLE insert_into3b;
 CREATE TABLE insert_into3a (key int, value string);
 CREATE TABLE insert_into3b (key int, value string);
 
-EXPLAIN FROM src INSERT INTO TABLE insert_into3a SELECT * LIMIT 50
-                 INSERT INTO TABLE insert_into3b SELECT * LIMIT 100;
-FROM src INSERT INTO TABLE insert_into3a SELECT * LIMIT 50
-         INSERT INTO TABLE insert_into3b SELECT * LIMIT 100;
+EXPLAIN FROM src INSERT INTO TABLE insert_into3a SELECT * ORDER BY key, value LIMIT 50
+                 INSERT INTO TABLE insert_into3b SELECT * ORDER BY key, value LIMIT 100;
+FROM src INSERT INTO TABLE insert_into3a SELECT * ORDER BY key, value LIMIT 50
+         INSERT INTO TABLE insert_into3b SELECT * ORDER BY key, value LIMIT 100;
 SELECT SUM(HASH(c)) FROM (
     SELECT TRANSFORM(*) USING 'tr \t _' AS (c) FROM insert_into3a
 ) t;

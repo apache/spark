@@ -17,6 +17,6 @@ describe nestedcomplex;
 describe extended nestedcomplex;
 
 
-load data local inpath '../data/files/nested_complex.txt' overwrite into table nestedcomplex;
+load data local inpath '../../data/files/nested_complex.txt' overwrite into table nestedcomplex;
 
 select * from nestedcomplex sort by simple_int;

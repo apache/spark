@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.rules
-import org.apache.spark.sql.catalyst.util
+import org.apache.spark.util.Utils
 
 /**
  * A collection of generators that build custom bytecode at runtime for performing the evaluation
@@ -52,7 +52,7 @@ package object codegen {
   @DeveloperApi
   object DumpByteCode {
     import scala.sys.process._
-    val dumpDirectory = util.getTempFilePath("sparkSqlByteCode")
+    val dumpDirectory = Utils.createTempDir()
     dumpDirectory.mkdir()
 
     def apply(obj: Any): Unit = {

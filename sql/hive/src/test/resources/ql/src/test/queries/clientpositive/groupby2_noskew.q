@@ -11,4 +11,4 @@ INSERT OVERWRITE TABLE dest_g2 SELECT substr(src.key,1,1), count(DISTINCT substr
 FROM src
 INSERT OVERWRITE TABLE dest_g2 SELECT substr(src.key,1,1), count(DISTINCT substr(src.value,5)), concat(substr(src.key,1,1),sum(substr(src.value,5))) GROUP BY substr(src.key,1,1);
 
-SELECT dest_g2.* FROM dest_g2;
+SELECT dest_g2.* FROM dest_g2 ORDER BY key;

@@ -22,6 +22,8 @@ import scala.xml.Text
 
 import java.util.Date
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.ui.{ToolTips, UIUtils}
 import org.apache.spark.util.Utils
@@ -29,11 +31,10 @@ import org.apache.spark.util.Utils
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StageTableBase(
     stages: Seq[StageInfo],
-    parent: JobProgressTab,
-    killEnabled: Boolean = false) {
-
-  private val listener = parent.listener
-  protected def isFairScheduler = parent.isFairScheduler
+    basePath: String,
+    listener: JobProgressListener,
+    isFairScheduler: Boolean,
+    killEnabled: Boolean) {
 
   protected def columns: Seq[Node] = {
     <th>Stage Id</th> ++
@@ -43,6 +44,7 @@ private[ui] class StageTableBase(
     <th>Duration</th>
     <th>Tasks: Succeeded/Total</th>
     <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
+    <th><span data-toggle="tooltip" title={ToolTips.OUTPUT}>Output</span></th>
     <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
     <th>
       <!-- Place the shuffle write tooltip on the left (rather than the default position
@@ -70,35 +72,27 @@ private[ui] class StageTableBase(
     </table>
   }
 
-  private def makeProgressBar(started: Int, completed: Int, failed: Int, total: Int): Seq[Node] =
-  {
-    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
-    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
-
-    <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%; left:0;">
-        {completed}/{total} { if (failed > 0) s"($failed failed)" else "" }
-      </span>
-      <div class="bar bar-completed" style={completeWidth}></div>
-      <div class="bar bar-running" style={startWidth}></div>
-    </div>
-  }
-
   private def makeDescription(s: StageInfo): Seq[Node] = {
-    // scalastyle:off
-    val killLink = if (killEnabled) {
-      val killLinkUri = "%s/stages/stage/kill?id=%s&terminate=true"
-        .format(UIUtils.prependBaseUri(parent.basePath), s.stageId)
-      val confirm = "return window.confirm('Are you sure you want to kill stage %s ?');"
-        .format(s.stageId)
-      <span class="kill-link">
-        (<a href={killLinkUri} onclick={confirm}>kill</a>)
-      </span>
-    }
-    // scalastyle:on
+    val basePathUri = UIUtils.prependBaseUri(basePath)
 
-    val nameLinkUri ="%s/stages/stage?id=%s&attempt=%s"
-      .format(UIUtils.prependBaseUri(parent.basePath), s.stageId, s.attemptId)
+    val killLink = if (killEnabled) {
+      val confirm =
+        s"if (window.confirm('Are you sure you want to kill stage ${s.stageId} ?')) " +
+        "{ this.parentNode.submit(); return true; } else { return false; }"
+      // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
+      /*
+      val killLinkUri = s"$basePathUri/stages/stage/kill/"
+      <form action={killLinkUri} method="POST" style="display:inline">
+        <input type="hidden" name="id" value={s.stageId.toString}/>
+        <input type="hidden" name="terminate" value="true"/>
+        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
+      </form>
+       */
+      val killLinkUri = s"$basePathUri/stages/stage/kill/?id=${s.stageId}&terminate=true"
+      <a href={killLinkUri} onclick={confirm} class="kill-link">(kill)</a>
+    }
+
+    val nameLinkUri = s"$basePathUri/stages/stage?id=${s.stageId}&attempt=${s.attemptId}"
     val nameLink = <a href={nameLinkUri}>{s.name}</a>
 
     val cachedRddInfos = s.rddInfos.filter(_.numCachedPartitions > 0)
@@ -110,11 +104,9 @@ private[ui] class StageTableBase(
       <div class="stage-details collapsed">
         {if (cachedRddInfos.nonEmpty) {
           Text("RDD: ") ++
-          // scalastyle:off
           cachedRddInfos.map { i =>
-            <a href={"%s/storage/rdd?id=%d".format(UIUtils.prependBaseUri(parent.basePath), i.id)}>{i.name}</a>
+            <a href={s"$basePathUri/storage/rdd?id=${i.id}"}>{i.name}</a>
           }
-          // scalastyle:on
         }}
         <pre>{s.details}</pre>
       </div>
@@ -124,16 +116,28 @@ private[ui] class StageTableBase(
       stageData <- listener.stageIdToData.get((s.stageId, s.attemptId))
       desc <- stageData.description
     } yield {
-      <div><em>{desc}</em></div>
+      <span class="description-input" title={desc}>{desc}</span>
     }
-
     <div>{stageDesc.getOrElse("")} {killLink} {nameLink} {details}</div>
+  }
+
+  protected def missingStageRow(stageId: Int): Seq[Node] = {
+    <td>{stageId}</td> ++
+    {if (isFairScheduler) {<td>-</td>} else Seq.empty} ++
+    <td>No data available for this stage</td> ++ // Description
+    <td></td> ++ // Submitted
+    <td></td> ++ // Duration
+    <td></td> ++ // Tasks: Succeeded/Total
+    <td></td> ++ // Input
+    <td></td> ++ // Output
+    <td></td> ++ // Shuffle Read
+    <td></td> // Shuffle Write
   }
 
   protected def stageRow(s: StageInfo): Seq[Node] = {
     val stageDataOption = listener.stageIdToData.get((s.stageId, s.attemptId))
     if (stageDataOption.isEmpty) {
-      return <td>{s.stageId}</td><td>No data available for this stage</td>
+      return missingStageRow(s.stageId)
     }
 
     val stageData = stageDataOption.get
@@ -149,7 +153,9 @@ private[ui] class StageTableBase(
 
     val inputRead = stageData.inputBytes
     val inputReadWithUnit = if (inputRead > 0) Utils.bytesToString(inputRead) else ""
-    val shuffleRead = stageData.shuffleReadBytes
+    val outputWrite = stageData.outputBytes
+    val outputWriteWithUnit = if (outputWrite > 0) Utils.bytesToString(outputWrite) else ""
+    val shuffleRead = stageData.shuffleReadTotalBytes
     val shuffleReadWithUnit = if (shuffleRead > 0) Utils.bytesToString(shuffleRead) else ""
     val shuffleWrite = stageData.shuffleWriteBytes
     val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
@@ -162,7 +168,7 @@ private[ui] class StageTableBase(
     {if (isFairScheduler) {
       <td>
         <a href={"%s/stages/pool?poolname=%s"
-          .format(UIUtils.prependBaseUri(parent.basePath), stageData.schedulingPool)}>
+          .format(UIUtils.prependBaseUri(basePath), stageData.schedulingPool)}>
           {stageData.schedulingPool}
         </a>
       </td>
@@ -170,32 +176,60 @@ private[ui] class StageTableBase(
       Seq.empty
     }} ++
     <td>{makeDescription(s)}</td>
-    <td valign="middle">{submissionTime}</td>
+    <td sorttable_customkey={s.submissionTime.getOrElse(0).toString} valign="middle">
+      {submissionTime}
+    </td>
     <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
     <td class="progress-cell">
-      {makeProgressBar(stageData.numActiveTasks, stageData.completedIndices.size,
-        stageData.numFailedTasks, s.numTasks)}
+      {UIUtils.makeProgressBar(started = stageData.numActiveTasks,
+        completed = stageData.completedIndices.size, failed = stageData.numFailedTasks,
+        skipped = 0, total = s.numTasks)}
     </td>
-    <td sorttable_customekey={inputRead.toString}>{inputReadWithUnit}</td>
-    <td sorttable_customekey={shuffleRead.toString}>{shuffleReadWithUnit}</td>
-    <td sorttable_customekey={shuffleWrite.toString}>{shuffleWriteWithUnit}</td>
+    <td sorttable_customkey={inputRead.toString}>{inputReadWithUnit}</td>
+    <td sorttable_customkey={outputWrite.toString}>{outputWriteWithUnit}</td>
+    <td sorttable_customkey={shuffleRead.toString}>{shuffleReadWithUnit}</td>
+    <td sorttable_customkey={shuffleWrite.toString}>{shuffleWriteWithUnit}</td>
   }
 
   /** Render an HTML row that represents a stage */
-  private def renderStageRow(s: StageInfo): Seq[Node] = <tr>{stageRow(s)}</tr>
+  private def renderStageRow(s: StageInfo): Seq[Node] =
+    <tr id={"stage-" + s.stageId + "-" + s.attemptId}>{stageRow(s)}</tr>
 }
 
 private[ui] class FailedStageTable(
     stages: Seq[StageInfo],
-    parent: JobProgressTab,
-    killEnabled: Boolean = false)
-  extends StageTableBase(stages, parent, killEnabled) {
+    basePath: String,
+    listener: JobProgressListener,
+    isFairScheduler: Boolean)
+  extends StageTableBase(stages, basePath, listener, isFairScheduler, killEnabled = false) {
 
   override protected def columns: Seq[Node] = super.columns ++ <th>Failure Reason</th>
 
   override protected def stageRow(s: StageInfo): Seq[Node] = {
     val basicColumns = super.stageRow(s)
-    val failureReason = <td valign="middle"><pre>{s.failureReason.getOrElse("")}</pre></td>
-    basicColumns ++ failureReason
+    val failureReason = s.failureReason.getOrElse("")
+    val isMultiline = failureReason.indexOf('\n') >= 0
+    // Display the first line by default
+    val failureReasonSummary = StringEscapeUtils.escapeHtml4(
+      if (isMultiline) {
+        failureReason.substring(0, failureReason.indexOf('\n'))
+      } else {
+        failureReason
+      })
+    val details = if (isMultiline) {
+      // scalastyle:off
+      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
+            class="expand-details">
+        +details
+      </span> ++
+        <div class="stacktrace-details collapsed">
+          <pre>{failureReason}</pre>
+        </div>
+      // scalastyle:on
+    } else {
+      ""
+    }
+    val failureReasonHtml = <td valign="middle">{failureReasonSummary}{details}</td>
+    basicColumns ++ failureReasonHtml
   }
 }

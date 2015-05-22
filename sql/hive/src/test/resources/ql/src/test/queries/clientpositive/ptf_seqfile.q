@@ -12,7 +12,7 @@ CREATE TABLE part_seq(
     p_comment STRING
 ) STORED AS SEQUENCEFILE ;
 
-LOAD DATA LOCAL INPATH '../data/files/part.seq' overwrite into table part_seq;
+LOAD DATA LOCAL INPATH '../../data/files/part.seq' overwrite into table part_seq;
 
 -- testWindowingPTFWithPartSeqFile
 select p_mfgr, p_name, p_size, 

@@ -17,8 +17,8 @@ insert overwrite table nzhang_part4 partition (ds, hr) select key, value, ds, hr
 insert overwrite table nzhang_part4 partition (ds, hr) select key, value, ds, hr from srcpart where ds is not null and hr is not null;
 
 show partitions nzhang_part4;
-select * from nzhang_part4 where ds='2008-04-08' and hr is not null;
+select * from nzhang_part4 where ds='2008-04-08' and hr is not null order by ds, hr, key;
 
-select * from nzhang_part4 where ds is not null and hr is not null;
+select * from nzhang_part4 where ds is not null and hr is not null order by ds, hr, key;
 
 

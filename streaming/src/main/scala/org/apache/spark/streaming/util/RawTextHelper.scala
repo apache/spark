@@ -18,9 +18,7 @@
 package org.apache.spark.streaming.util
 
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.util.collection.OpenHashMap
-import scala.collection.JavaConversions.mapAsScalaMap
 
 private[streaming]
 object RawTextHelper {
@@ -71,7 +69,7 @@ object RawTextHelper {
     var count = 0
 
     while(data.hasNext) {
-      value = data.next
+      value = data.next()
       if (value != null) {
         count += 1
         if (len == 0) {
@@ -108,9 +106,13 @@ object RawTextHelper {
     }
   }
 
-  def add(v1: Long, v2: Long) = (v1 + v2)
+  def add(v1: Long, v2: Long): Long = {
+    v1 + v2
+  }
 
-  def subtract(v1: Long, v2: Long) = (v1 - v2)
+  def subtract(v1: Long, v2: Long): Long = {
+    v1 - v2
+  }
 
-  def max(v1: Long, v2: Long) = math.max(v1, v2)
+  def max(v1: Long, v2: Long): Long = math.max(v1, v2)
 }

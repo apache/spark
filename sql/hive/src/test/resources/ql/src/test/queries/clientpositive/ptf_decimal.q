@@ -9,11 +9,11 @@ CREATE TABLE part(
     p_type STRING,
     p_size INT,
     p_container STRING,
-    p_retailprice DECIMAL,
+    p_retailprice DECIMAL(6,2),
     p_comment STRING
 );
 
-LOAD DATA LOCAL INPATH '../data/files/part_tiny.txt' overwrite into table part;
+LOAD DATA LOCAL INPATH '../../data/files/part_tiny.txt' overwrite into table part;
 
 -- 1. aggregate functions with decimal type
 

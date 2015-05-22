@@ -17,17 +17,18 @@
 
 package org.apache.spark.scheduler.cluster
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem}
 
+import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.{Logging, SparkContext, SparkEnv}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 private[spark] class SimrSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     driverFilePath: String)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with Logging {
 
   val tmpPath = new Path(driverFilePath + "_tmp")
@@ -38,24 +39,23 @@ private[spark] class SimrSchedulerBackend(
   override def start() {
     super.start()
 
-    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
-      SparkEnv.driverActorSystemName,
-      sc.conf.get("spark.driver.host"),
-      sc.conf.get("spark.driver.port"),
-      CoarseGrainedSchedulerBackend.ACTOR_NAME)
+    val driverUrl = rpcEnv.uriOf(SparkEnv.driverActorSystemName,
+      RpcAddress(sc.conf.get("spark.driver.host"), sc.conf.get("spark.driver.port").toInt),
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
 
-    val conf = new Configuration()
+    val conf = SparkHadoopUtil.get.newConfiguration(sc.conf)
     val fs = FileSystem.get(conf)
+    val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
 
     logInfo("Writing to HDFS file: "  + driverFilePath)
     logInfo("Writing Akka address: "  + driverUrl)
-    logInfo("Writing Spark UI Address: " + sc.ui.appUIAddress)
+    logInfo("Writing Spark UI Address: " + appUIAddress)
 
     // Create temporary file to prevent race condition where executors get empty driverUrl file
     val temp = fs.create(tmpPath, true)
     temp.writeUTF(driverUrl)
     temp.writeInt(maxCores)
-    temp.writeUTF(sc.ui.appUIAddress)
+    temp.writeUTF(appUIAddress)
     temp.close()
 
     // "Atomic" rename
@@ -63,9 +63,10 @@ private[spark] class SimrSchedulerBackend(
   }
 
   override def stop() {
-    val conf = new Configuration()
+    val conf = SparkHadoopUtil.get.newConfiguration(sc.conf)
     val fs = FileSystem.get(conf)
     fs.delete(new Path(driverFilePath), false)
     super.stop()
   }
+
 }

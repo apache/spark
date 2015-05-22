@@ -19,6 +19,8 @@ package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
+import org.apache.spark.mllib.tree.configuration.FeatureType
+import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
 
 /**
  * :: DeveloperApi ::
@@ -36,9 +38,10 @@ case class Split(
     featureType: FeatureType,
     categories: List[Double]) {
 
-  override def toString =
-    "Feature = " + feature + ", threshold = " + threshold + ", featureType =  " + featureType +
-      ", categories = " + categories
+  override def toString: String = {
+    s"Feature = $feature, threshold = $threshold, featureType = $featureType, " +
+      s"categories = $categories"
+  }
 }
 
 /**
@@ -65,4 +68,3 @@ private[tree] class DummyHighSplit(feature: Int, featureType: FeatureType)
  */
 private[tree] class DummyCategoricalSplit(feature: Int, featureType: FeatureType)
   extends Split(feature, Double.MaxValue, featureType, List())
-

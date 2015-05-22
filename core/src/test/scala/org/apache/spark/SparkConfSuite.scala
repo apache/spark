@@ -17,27 +17,47 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
+import java.util.concurrent.{TimeUnit, Executors}
 
-class SparkConfSuite extends FunSuite with LocalSparkContext {
+import scala.concurrent.duration._
+import scala.language.postfixOps
+import scala.util.{Try, Random}
+
+import org.scalatest.FunSuite
+import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.serializer.{KryoRegistrator, KryoSerializer}
+import org.apache.spark.util.{RpcUtils, ResetSystemProperties}
+import com.esotericsoftware.kryo.Kryo
+
+class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemProperties {
+  test("Test byteString conversion") {
+    val conf = new SparkConf()
+    // Simply exercise the API, we don't need a complete conversion test since that's handled in
+    // UtilsSuite.scala
+    assert(conf.getSizeAsBytes("fake","1k") === ByteUnit.KiB.toBytes(1))
+    assert(conf.getSizeAsKb("fake","1k") === ByteUnit.KiB.toKiB(1))
+    assert(conf.getSizeAsMb("fake","1k") === ByteUnit.KiB.toMiB(1))
+    assert(conf.getSizeAsGb("fake","1k") === ByteUnit.KiB.toGiB(1))
+  }
+
+  test("Test timeString conversion") {
+    val conf = new SparkConf()
+    // Simply exercise the API, we don't need a complete conversion test since that's handled in
+    // UtilsSuite.scala
+    assert(conf.getTimeAsMs("fake","1ms") === TimeUnit.MILLISECONDS.toMillis(1))
+    assert(conf.getTimeAsSeconds("fake","1000ms") === TimeUnit.MILLISECONDS.toSeconds(1000))
+  }
+
   test("loading from system properties") {
-    try {
-      System.setProperty("spark.test.testProperty", "2")
-      val conf = new SparkConf()
-      assert(conf.get("spark.test.testProperty") === "2")
-    } finally {
-      System.clearProperty("spark.test.testProperty")
-    }
+    System.setProperty("spark.test.testProperty", "2")
+    val conf = new SparkConf()
+    assert(conf.get("spark.test.testProperty") === "2")
   }
 
   test("initializing without loading defaults") {
-    try {
-      System.setProperty("spark.test.testProperty", "2")
-      val conf = new SparkConf(false)
-      assert(!conf.contains("spark.test.testProperty"))
-    } finally {
-      System.clearProperty("spark.test.testProperty")
-    }
+    System.setProperty("spark.test.testProperty", "2")
+    val conf = new SparkConf(false)
+    assert(!conf.contains("spark.test.testProperty"))
   }
 
   test("named set methods") {
@@ -115,22 +135,145 @@ class SparkConfSuite extends FunSuite with LocalSparkContext {
 
   test("nested property names") {
     // This wasn't supported by some external conf parsing libraries
+    System.setProperty("spark.test.a", "a")
+    System.setProperty("spark.test.a.b", "a.b")
+    System.setProperty("spark.test.a.b.c", "a.b.c")
+    val conf = new SparkConf()
+    assert(conf.get("spark.test.a") === "a")
+    assert(conf.get("spark.test.a.b") === "a.b")
+    assert(conf.get("spark.test.a.b.c") === "a.b.c")
+    conf.set("spark.test.a.b", "A.B")
+    assert(conf.get("spark.test.a") === "a")
+    assert(conf.get("spark.test.a.b") === "A.B")
+    assert(conf.get("spark.test.a.b.c") === "a.b.c")
+  }
+
+  test("Thread safeness - SPARK-5425") {
+    import scala.collection.JavaConversions._
+    val executor = Executors.newSingleThreadScheduledExecutor()
+    val sf = executor.scheduleAtFixedRate(new Runnable {
+      override def run(): Unit =
+        System.setProperty("spark.5425." + Random.nextInt(), Random.nextInt().toString)
+    }, 0, 1, TimeUnit.MILLISECONDS)
+
     try {
-      System.setProperty("spark.test.a", "a")
-      System.setProperty("spark.test.a.b", "a.b")
-      System.setProperty("spark.test.a.b.c", "a.b.c")
-      val conf = new SparkConf()
-      assert(conf.get("spark.test.a") === "a")
-      assert(conf.get("spark.test.a.b") === "a.b")
-      assert(conf.get("spark.test.a.b.c") === "a.b.c")
-      conf.set("spark.test.a.b", "A.B")
-      assert(conf.get("spark.test.a") === "a")
-      assert(conf.get("spark.test.a.b") === "A.B")
-      assert(conf.get("spark.test.a.b.c") === "a.b.c")
+      val t0 = System.currentTimeMillis()
+      while ((System.currentTimeMillis() - t0) < 1000) {
+        val conf = Try(new SparkConf(loadDefaults = true))
+        assert(conf.isSuccess === true)
+      }
     } finally {
-      System.clearProperty("spark.test.a")
-      System.clearProperty("spark.test.a.b")
-      System.clearProperty("spark.test.a.b.c")
+      executor.shutdownNow()
+      for (key <- System.getProperties.stringPropertyNames() if key.startsWith("spark.5425."))
+        System.getProperties.remove(key)
     }
+  }
+
+  test("register kryo classes through registerKryoClasses") {
+    val conf = new SparkConf().set("spark.kryo.registrationRequired", "true")
+
+    conf.registerKryoClasses(Array(classOf[Class1], classOf[Class2]))
+    assert(conf.get("spark.kryo.classesToRegister") ===
+      classOf[Class1].getName + "," + classOf[Class2].getName)
+
+    conf.registerKryoClasses(Array(classOf[Class3]))
+    assert(conf.get("spark.kryo.classesToRegister") ===
+      classOf[Class1].getName + "," + classOf[Class2].getName + "," + classOf[Class3].getName)
+
+    conf.registerKryoClasses(Array(classOf[Class2]))
+    assert(conf.get("spark.kryo.classesToRegister") ===
+      classOf[Class1].getName + "," + classOf[Class2].getName + "," + classOf[Class3].getName)
+
+    // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
+    // blow up.
+    val serializer = new KryoSerializer(conf)
+    serializer.newInstance().serialize(new Class1())
+    serializer.newInstance().serialize(new Class2())
+    serializer.newInstance().serialize(new Class3())
+  }
+
+  test("register kryo classes through registerKryoClasses and custom registrator") {
+    val conf = new SparkConf().set("spark.kryo.registrationRequired", "true")
+
+    conf.registerKryoClasses(Array(classOf[Class1]))
+    assert(conf.get("spark.kryo.classesToRegister") === classOf[Class1].getName)
+
+    conf.set("spark.kryo.registrator", classOf[CustomRegistrator].getName)
+
+    // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
+    // blow up.
+    val serializer = new KryoSerializer(conf)
+    serializer.newInstance().serialize(new Class1())
+    serializer.newInstance().serialize(new Class2())
+  }
+
+  test("register kryo classes through conf") {
+    val conf = new SparkConf().set("spark.kryo.registrationRequired", "true")
+    conf.set("spark.kryo.classesToRegister", "java.lang.StringBuffer")
+    conf.set("spark.serializer", classOf[KryoSerializer].getName)
+
+    // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
+    // blow up.
+    val serializer = new KryoSerializer(conf)
+    serializer.newInstance().serialize(new StringBuffer())
+  }
+
+  test("deprecated configs") {
+    val conf = new SparkConf()
+    val newName = "spark.history.fs.update.interval"
+
+    assert(!conf.contains(newName))
+
+    conf.set("spark.history.updateInterval", "1")
+    assert(conf.get(newName) === "1")
+
+    conf.set("spark.history.fs.updateInterval", "2")
+    assert(conf.get(newName) === "2")
+
+    conf.set("spark.history.fs.update.interval.seconds", "3")
+    assert(conf.get(newName) === "3")
+
+    conf.set(newName, "4")
+    assert(conf.get(newName) === "4")
+
+    val count = conf.getAll.filter { case (k, v) => k.startsWith("spark.history.") }.size
+    assert(count === 4)
+
+    conf.set("spark.yarn.applicationMaster.waitTries", "42")
+    assert(conf.getTimeAsSeconds("spark.yarn.am.waitTime") === 420)
+
+    conf.set("spark.kryoserializer.buffer.mb", "1.1")
+    assert(conf.getSizeAsKb("spark.kryoserializer.buffer") === 1100)
+  }
+
+  test("akka deprecated configs") {
+    val conf = new SparkConf()
+
+    assert(!conf.contains("spark.rpc.numRetries"))
+    assert(!conf.contains("spark.rpc.retry.wait"))
+    assert(!conf.contains("spark.rpc.askTimeout"))
+    assert(!conf.contains("spark.rpc.lookupTimeout"))
+
+    conf.set("spark.akka.num.retries", "1")
+    assert(RpcUtils.numRetries(conf) === 1)
+
+    conf.set("spark.akka.retry.wait", "2")
+    assert(RpcUtils.retryWaitMs(conf) === 2L)
+
+    conf.set("spark.akka.askTimeout", "3")
+    assert(RpcUtils.askTimeout(conf) === (3 seconds))
+
+    conf.set("spark.akka.lookupTimeout", "4")
+    assert(RpcUtils.lookupTimeout(conf) === (4 seconds))
+  }
+}
+
+class Class1 {}
+class Class2 {}
+class Class3 {}
+
+class CustomRegistrator extends KryoRegistrator {
+  def registerClasses(kryo: Kryo) {
+    kryo.register(classOf[Class2])
   }
 }

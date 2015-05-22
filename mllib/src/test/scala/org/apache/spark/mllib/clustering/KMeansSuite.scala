@@ -21,11 +21,12 @@ import scala.util.Random
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.Utils
 
-class KMeansSuite extends FunSuite with LocalSparkContext {
+class KMeansSuite extends FunSuite with MLlibTestSparkContext {
 
   import org.apache.spark.mllib.clustering.KMeans.{K_MEANS_PARALLEL, RANDOM}
 
@@ -88,6 +89,27 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
     // Make sure code runs.
     var model = KMeans.train(data, k=3, maxIterations=1)
     assert(model.clusterCenters.size === 3)
+  }
+
+  test("deterministic initialization") {
+    // Create a large-ish set of points for clustering
+    val points = List.tabulate(1000)(n => Vectors.dense(n, n))
+    val rdd = sc.parallelize(points, 3)
+
+    for (initMode <- Seq(RANDOM, K_MEANS_PARALLEL)) {
+      // Create three deterministic models and compare cluster means
+      val model1 = KMeans.train(rdd, k = 10, maxIterations = 2, runs = 1,
+        initializationMode = initMode, seed = 42)
+      val centers1 = model1.clusterCenters
+
+      val model2 = KMeans.train(rdd, k = 10, maxIterations = 2, runs = 1,
+        initializationMode = initMode, seed = 42)
+      val centers2 = model2.clusterCenters
+
+      centers1.zip(centers2).foreach { case (c1, c2) =>
+        assert(c1 ~== c2 absTol 1E-14)
+      }
+    }
   }
 
   test("single cluster with big dataset") {
@@ -177,9 +199,13 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
   test("k-means|| initialization") {
 
     case class VectorWithCompare(x: Vector) extends Ordered[VectorWithCompare] {
-      @Override def compare(that: VectorWithCompare): Int = {
-        if(this.x.toArray.foldLeft[Double](0.0)((acc, x) => acc + x * x) >
-          that.x.toArray.foldLeft[Double](0.0)((acc, x) => acc + x * x)) -1 else 1
+      override def compare(that: VectorWithCompare): Int = {
+        if (this.x.toArray.foldLeft[Double](0.0)((acc, x) => acc + x * x) >
+          that.x.toArray.foldLeft[Double](0.0)((acc, x) => acc + x * x)) {
+          -1
+        } else {
+          1
+        }
       }
     }
 
@@ -234,6 +260,47 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
       assert(predicts(3) === predicts(4))
       assert(predicts(3) === predicts(5))
       assert(predicts(0) != predicts(3))
+    }
+  }
+
+  test("model save/load") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    Array(true, false).foreach { case selector =>
+      val model = KMeansSuite.createModel(10, 3, selector)
+      // Save model, load it back, and compare.
+      try {
+        model.save(sc, path)
+        val sameModel = KMeansModel.load(sc, path)
+        KMeansSuite.checkEqual(model, sameModel)
+      } finally {
+        Utils.deleteRecursively(tempDir)
+      }
+    }
+  }
+}
+
+object KMeansSuite extends FunSuite {
+  def createModel(dim: Int, k: Int, isSparse: Boolean): KMeansModel = {
+    val singlePoint = isSparse match {
+      case true =>
+        Vectors.sparse(dim, Array.empty[Int], Array.empty[Double])
+      case _ =>
+        Vectors.dense(Array.fill[Double](dim)(0.0))
+    }
+    new KMeansModel(Array.fill[Vector](k)(singlePoint))
+  }
+
+  def checkEqual(a: KMeansModel, b: KMeansModel): Unit = {
+    assert(a.k === b.k)
+    a.clusterCenters.zip(b.clusterCenters).foreach {
+      case (ca: SparseVector, cb: SparseVector) =>
+        assert(ca === cb)
+      case (ca: DenseVector, cb: DenseVector) =>
+        assert(ca === cb)
+      case _ =>
+        throw new AssertionError("checkEqual failed since the two clusters were not identical.\n")
     }
   }
 }

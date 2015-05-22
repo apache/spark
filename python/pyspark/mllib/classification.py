@@ -15,102 +15,313 @@
 # limitations under the License.
 #
 
+from math import exp
+
 import numpy
+from numpy import array
 
-from numpy import array, shape
-from pyspark import SparkContext
-from pyspark.mllib._common import \
-    _dot, _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
-    _serialize_double_matrix, _deserialize_double_matrix, \
-    _serialize_double_vector, _deserialize_double_vector, \
-    _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
-    _linear_predictor_typecheck, _get_unmangled_labeled_point_rdd
-from pyspark.mllib.linalg import SparseVector
-from pyspark.mllib.regression import LabeledPoint, LinearModel
-from math import exp, log
+from pyspark import RDD
+from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
+from pyspark.mllib.linalg import DenseVector, SparseVector, _convert_to_vector
+from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
+from pyspark.mllib.util import Saveable, Loader, inherit_doc
 
 
-class LogisticRegressionModel(LinearModel):
+__all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'LogisticRegressionWithLBFGS',
+           'SVMModel', 'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes']
+
+
+class LinearClassificationModel(LinearModel):
+    """
+    A private abstract class representing a multiclass classification model.
+    The categories are represented by int values: 0, 1, 2, etc.
+    """
+    def __init__(self, weights, intercept):
+        super(LinearClassificationModel, self).__init__(weights, intercept)
+        self._threshold = None
+
+    def setThreshold(self, value):
+        """
+        .. note:: Experimental
+
+        Sets the threshold that separates positive predictions from negative
+        predictions. An example with prediction score greater than or equal
+        to this threshold is identified as an positive, and negative otherwise.
+        It is used for binary classification only.
+        """
+        self._threshold = value
+
+    @property
+    def threshold(self):
+        """
+        .. note:: Experimental
+
+        Returns the threshold (if any) used for converting raw prediction scores
+        into 0/1 predictions. It is used for binary classification only.
+        """
+        return self._threshold
+
+    def clearThreshold(self):
+        """
+        .. note:: Experimental
+
+        Clears the threshold so that `predict` will output raw prediction scores.
+        It is used for binary classification only.
+        """
+        self._threshold = None
+
+    def predict(self, test):
+        """
+        Predict values for a single data point or an RDD of points using
+        the model trained.
+        """
+        raise NotImplementedError
+
+
+class LogisticRegressionModel(LinearClassificationModel):
 
     """A linear binary classification model derived from logistic regression.
 
     >>> data = [
-    ...     LabeledPoint(0.0, [0.0]),
-    ...     LabeledPoint(1.0, [1.0]),
-    ...     LabeledPoint(1.0, [2.0]),
-    ...     LabeledPoint(1.0, [3.0])
+    ...     LabeledPoint(0.0, [0.0, 1.0]),
+    ...     LabeledPoint(1.0, [1.0, 0.0]),
     ... ]
-    >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(data))
-    >>> lrm.predict(array([1.0])) > 0
-    True
-    >>> lrm.predict(array([0.0])) <= 0
-    True
+    >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(data), iterations=10)
+    >>> lrm.predict([1.0, 0.0])
+    1
+    >>> lrm.predict([0.0, 1.0])
+    0
+    >>> lrm.predict(sc.parallelize([[1.0, 0.0], [0.0, 1.0]])).collect()
+    [1, 0]
+    >>> lrm.clearThreshold()
+    >>> lrm.predict([0.0, 1.0])
+    0.279...
+
     >>> sparse_data = [
     ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
     ...     LabeledPoint(1.0, SparseVector(2, {1: 1.0})),
-    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
+    ...     LabeledPoint(0.0, SparseVector(2, {0: 1.0})),
     ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
     ... ]
-    >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(sparse_data))
-    >>> lrm.predict(array([0.0, 1.0])) > 0
-    True
-    >>> lrm.predict(array([0.0, 0.0])) <= 0
-    True
-    >>> lrm.predict(SparseVector(2, {1: 1.0})) > 0
-    True
-    >>> lrm.predict(SparseVector(2, {1: 0.0})) <= 0
-    True
+    >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(sparse_data), iterations=10)
+    >>> lrm.predict(array([0.0, 1.0]))
+    1
+    >>> lrm.predict(array([1.0, 0.0]))
+    0
+    >>> lrm.predict(SparseVector(2, {1: 1.0}))
+    1
+    >>> lrm.predict(SparseVector(2, {0: 1.0}))
+    0
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> lrm.save(sc, path)
+    >>> sameModel = LogisticRegressionModel.load(sc, path)
+    >>> sameModel.predict(array([0.0, 1.0]))
+    1
+    >>> sameModel.predict(SparseVector(2, {0: 1.0}))
+    0
+    >>> try:
+    ...    os.removedirs(path)
+    ... except:
+    ...    pass
+    >>> multi_class_data = [
+    ...     LabeledPoint(0.0, [0.0, 1.0, 0.0]),
+    ...     LabeledPoint(1.0, [1.0, 0.0, 0.0]),
+    ...     LabeledPoint(2.0, [0.0, 0.0, 1.0])
+    ... ]
+    >>> data = sc.parallelize(multi_class_data)
+    >>> mcm = LogisticRegressionWithLBFGS.train(data, iterations=10, numClasses=3)
+    >>> mcm.predict([0.0, 0.5, 0.0])
+    0
+    >>> mcm.predict([0.8, 0.0, 0.0])
+    1
+    >>> mcm.predict([0.0, 0.0, 0.3])
+    2
     """
+    def __init__(self, weights, intercept, numFeatures, numClasses):
+        super(LogisticRegressionModel, self).__init__(weights, intercept)
+        self._numFeatures = int(numFeatures)
+        self._numClasses = int(numClasses)
+        self._threshold = 0.5
+        if self._numClasses == 2:
+            self._dataWithBiasSize = None
+            self._weightsMatrix = None
+        else:
+            self._dataWithBiasSize = self._coeff.size / (self._numClasses - 1)
+            self._weightsMatrix = self._coeff.toArray().reshape(self._numClasses - 1,
+                                                                self._dataWithBiasSize)
+
+    @property
+    def numFeatures(self):
+        return self._numFeatures
+
+    @property
+    def numClasses(self):
+        return self._numClasses
 
     def predict(self, x):
-        _linear_predictor_typecheck(x, self._coeff)
-        margin = _dot(x, self._coeff) + self._intercept
-        if margin > 0:
-            prob = 1 / (1 + exp(-margin))
+        """
+        Predict values for a single data point or an RDD of points using
+        the model trained.
+        """
+        if isinstance(x, RDD):
+            return x.map(lambda v: self.predict(v))
+
+        x = _convert_to_vector(x)
+        if self.numClasses == 2:
+            margin = self.weights.dot(x) + self._intercept
+            if margin > 0:
+                prob = 1 / (1 + exp(-margin))
+            else:
+                exp_margin = exp(margin)
+                prob = exp_margin / (1 + exp_margin)
+            if self._threshold is None:
+                return prob
+            else:
+                return 1 if prob > self._threshold else 0
         else:
-            exp_margin = exp(margin)
-            prob = exp_margin / (1 + exp_margin)
-        return 1 if prob > 0.5 else 0
+            best_class = 0
+            max_margin = 0.0
+            if x.size + 1 == self._dataWithBiasSize:
+                for i in range(0, self._numClasses - 1):
+                    margin = x.dot(self._weightsMatrix[i][0:x.size]) + \
+                        self._weightsMatrix[i][x.size]
+                    if margin > max_margin:
+                        max_margin = margin
+                        best_class = i + 1
+            else:
+                for i in range(0, self._numClasses - 1):
+                    margin = x.dot(self._weightsMatrix[i])
+                    if margin > max_margin:
+                        max_margin = margin
+                        best_class = i + 1
+            return best_class
+
+    def save(self, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.classification.LogisticRegressionModel(
+            _py2java(sc, self._coeff), self.intercept, self.numFeatures, self.numClasses)
+        java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.classification.LogisticRegressionModel.load(
+            sc._jsc.sc(), path)
+        weights = _java2py(sc, java_model.weights())
+        intercept = java_model.intercept()
+        numFeatures = java_model.numFeatures()
+        numClasses = java_model.numClasses()
+        threshold = java_model.getThreshold().get()
+        model = LogisticRegressionModel(weights, intercept, numFeatures, numClasses)
+        model.setThreshold(threshold)
+        return model
 
 
 class LogisticRegressionWithSGD(object):
 
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
-              initialWeights=None, regParam=1.0, regType=None, intercept=False):
+              initialWeights=None, regParam=0.01, regType="l2", intercept=False,
+              validateData=True):
         """
         Train a logistic regression model on the given data.
 
-        @param data:              The training data.
-        @param iterations:        The number of iterations (default: 100).
-        @param step:              The step parameter used in SGD
+        :param data:              The training data, an RDD of LabeledPoint.
+        :param iterations:        The number of iterations (default: 100).
+        :param step:              The step parameter used in SGD
                                   (default: 1.0).
-        @param miniBatchFraction: Fraction of data to be used for each SGD
+        :param miniBatchFraction: Fraction of data to be used for each SGD
                                   iteration.
-        @param initialWeights:    The initial weights (default: None).
-        @param regParam:          The regularizer parameter (default: 1.0).
-        @param regType:           The type of regularizer used for training
+        :param initialWeights:    The initial weights (default: None).
+        :param regParam:          The regularizer parameter (default: 0.01).
+        :param regType:           The type of regularizer used for training
                                   our model.
-                                  Allowed values: "l1" for using L1Updater,
-                                                  "l2" for using
-                                                       SquaredL2Updater,
-                                                  "none" for no regularizer.
-                                  (default: "none")
-        @param intercept:         Boolean parameter which indicates the use
+
+                                  :Allowed values:
+                                     - "l1" for using L1 regularization
+                                     - "l2" for using L2 regularization
+                                     - None for no regularization
+
+                                     (default: "l2")
+
+        :param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).
+        :param validateData:      Boolean parameter which indicates if the
+                                  algorithm should validate data before training.
+                                  (default: True)
         """
-        sc = data.context
-        if regType is None:
-            regType = "none"
-        train_func = lambda d, i: sc._jvm.PythonMLLibAPI().trainLogisticRegressionModelWithSGD(
-            d._jrdd, iterations, step, miniBatchFraction, i, regParam, regType, intercept)
-        return _regression_train_wrapper(sc, train_func, LogisticRegressionModel, data,
-                                         initialWeights)
+        def train(rdd, i):
+            return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
+                                 float(step), float(miniBatchFraction), i, float(regParam), regType,
+                                 bool(intercept), bool(validateData))
+
+        return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
 
-class SVMModel(LinearModel):
+class LogisticRegressionWithLBFGS(object):
+
+    @classmethod
+    def train(cls, data, iterations=100, initialWeights=None, regParam=0.01, regType="l2",
+              intercept=False, corrections=10, tolerance=1e-4, validateData=True, numClasses=2):
+        """
+        Train a logistic regression model on the given data.
+
+        :param data:           The training data, an RDD of LabeledPoint.
+        :param iterations:     The number of iterations (default: 100).
+        :param initialWeights: The initial weights (default: None).
+        :param regParam:       The regularizer parameter (default: 0.01).
+        :param regType:        The type of regularizer used for training
+                               our model.
+
+                               :Allowed values:
+                                 - "l1" for using L1 regularization
+                                 - "l2" for using L2 regularization
+                                 - None for no regularization
+
+                                 (default: "l2")
+
+        :param intercept:      Boolean parameter which indicates the use
+                               or not of the augmented representation for
+                               training data (i.e. whether bias features
+                               are activated or not).
+        :param corrections:    The number of corrections used in the LBFGS
+                               update (default: 10).
+        :param tolerance:      The convergence tolerance of iterations for
+                               L-BFGS (default: 1e-4).
+        :param validateData:   Boolean parameter which indicates if the
+                               algorithm should validate data before training.
+                               (default: True)
+        :param numClasses:     The number of classes (i.e., outcomes) a label can take
+                               in Multinomial Logistic Regression (default: 2).
+
+        >>> data = [
+        ...     LabeledPoint(0.0, [0.0, 1.0]),
+        ...     LabeledPoint(1.0, [1.0, 0.0]),
+        ... ]
+        >>> lrm = LogisticRegressionWithLBFGS.train(sc.parallelize(data), iterations=10)
+        >>> lrm.predict([1.0, 0.0])
+        1
+        >>> lrm.predict([0.0, 1.0])
+        0
+        """
+        def train(rdd, i):
+            return callMLlibFunc("trainLogisticRegressionModelWithLBFGS", rdd, int(iterations), i,
+                                 float(regParam), regType, bool(intercept), int(corrections),
+                                 float(tolerance), bool(validateData), int(numClasses))
+
+        if initialWeights is None:
+            if numClasses == 2:
+                initialWeights = [0.0] * len(data.first().features)
+            else:
+                if intercept:
+                    initialWeights = [0.0] * (len(data.first().features) + 1) * (numClasses - 1)
+                else:
+                    initialWeights = [0.0] * len(data.first().features) * (numClasses - 1)
+        return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
+
+
+class SVMModel(LinearClassificationModel):
 
     """A support vector machine.
 
@@ -120,65 +331,120 @@ class SVMModel(LinearModel):
     ...     LabeledPoint(1.0, [2.0]),
     ...     LabeledPoint(1.0, [3.0])
     ... ]
-    >>> svm = SVMWithSGD.train(sc.parallelize(data))
-    >>> svm.predict(array([1.0])) > 0
-    True
+    >>> svm = SVMWithSGD.train(sc.parallelize(data), iterations=10)
+    >>> svm.predict([1.0])
+    1
+    >>> svm.predict(sc.parallelize([[1.0]])).collect()
+    [1]
+    >>> svm.clearThreshold()
+    >>> svm.predict(array([1.0]))
+    1.44...
+
     >>> sparse_data = [
     ...     LabeledPoint(0.0, SparseVector(2, {0: -1.0})),
     ...     LabeledPoint(1.0, SparseVector(2, {1: 1.0})),
     ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
     ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
     ... ]
-    >>> svm = SVMWithSGD.train(sc.parallelize(sparse_data))
-    >>> svm.predict(SparseVector(2, {1: 1.0})) > 0
-    True
-    >>> svm.predict(SparseVector(2, {0: -1.0})) <= 0
-    True
+    >>> svm = SVMWithSGD.train(sc.parallelize(sparse_data), iterations=10)
+    >>> svm.predict(SparseVector(2, {1: 1.0}))
+    1
+    >>> svm.predict(SparseVector(2, {0: -1.0}))
+    0
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> svm.save(sc, path)
+    >>> sameModel = SVMModel.load(sc, path)
+    >>> sameModel.predict(SparseVector(2, {1: 1.0}))
+    1
+    >>> sameModel.predict(SparseVector(2, {0: -1.0}))
+    0
+    >>> try:
+    ...    os.removedirs(path)
+    ... except:
+    ...    pass
     """
+    def __init__(self, weights, intercept):
+        super(SVMModel, self).__init__(weights, intercept)
+        self._threshold = 0.0
 
     def predict(self, x):
-        _linear_predictor_typecheck(x, self._coeff)
-        margin = _dot(x, self._coeff) + self._intercept
-        return 1 if margin >= 0 else 0
+        """
+        Predict values for a single data point or an RDD of points using
+        the model trained.
+        """
+        if isinstance(x, RDD):
+            return x.map(lambda v: self.predict(v))
+
+        x = _convert_to_vector(x)
+        margin = self.weights.dot(x) + self.intercept
+        if self._threshold is None:
+            return margin
+        else:
+            return 1 if margin > self._threshold else 0
+
+    def save(self, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.classification.SVMModel(
+            _py2java(sc, self._coeff), self.intercept)
+        java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.classification.SVMModel.load(
+            sc._jsc.sc(), path)
+        weights = _java2py(sc, java_model.weights())
+        intercept = java_model.intercept()
+        threshold = java_model.getThreshold().get()
+        model = SVMModel(weights, intercept)
+        model.setThreshold(threshold)
+        return model
 
 
 class SVMWithSGD(object):
 
     @classmethod
-    def train(cls, data, iterations=100, step=1.0, regParam=1.0,
-              miniBatchFraction=1.0, initialWeights=None, regType=None, intercept=False):
+    def train(cls, data, iterations=100, step=1.0, regParam=0.01,
+              miniBatchFraction=1.0, initialWeights=None, regType="l2",
+              intercept=False, validateData=True):
         """
         Train a support vector machine on the given data.
 
-        @param data:              The training data.
-        @param iterations:        The number of iterations (default: 100).
-        @param step:              The step parameter used in SGD
+        :param data:              The training data, an RDD of LabeledPoint.
+        :param iterations:        The number of iterations (default: 100).
+        :param step:              The step parameter used in SGD
                                   (default: 1.0).
-        @param regParam:          The regularizer parameter (default: 1.0).
-        @param miniBatchFraction: Fraction of data to be used for each SGD
+        :param regParam:          The regularizer parameter (default: 0.01).
+        :param miniBatchFraction: Fraction of data to be used for each SGD
                                   iteration.
-        @param initialWeights:    The initial weights (default: None).
-        @param regType:           The type of regularizer used for training
+        :param initialWeights:    The initial weights (default: None).
+        :param regType:           The type of regularizer used for training
                                   our model.
-                                  Allowed values: "l1" for using L1Updater,
-                                                  "l2" for using
-                                                       SquaredL2Updater,
-                                                  "none" for no regularizer.
-                                  (default: "none")
-        @param intercept:         Boolean parameter which indicates the use
+
+                                  :Allowed values:
+                                     - "l1" for using L1 regularization
+                                     - "l2" for using L2 regularization
+                                     - None for no regularization
+
+                                     (default: "l2")
+
+        :param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).
+        :param validateData:      Boolean parameter which indicates if the
+                                  algorithm should validate data before training.
+                                  (default: True)
         """
-        sc = data.context
-        if regType is None:
-            regType = "none"
-        train_func = lambda d, i: sc._jvm.PythonMLLibAPI().trainSVMModelWithSGD(
-            d._jrdd, iterations, step, regParam, miniBatchFraction, i, regType, intercept)
-        return _regression_train_wrapper(sc, train_func, SVMModel, data, initialWeights)
+        def train(rdd, i):
+            return callMLlibFunc("trainSVMModelWithSGD", rdd, int(iterations), float(step),
+                                 float(regParam), float(miniBatchFraction), i, regType,
+                                 bool(intercept), bool(validateData))
+
+        return _regression_train_wrapper(train, SVMModel, data, initialWeights)
 
 
-class NaiveBayesModel(object):
+@inherit_doc
+class NaiveBayesModel(Saveable, Loader):
 
     """
     Model for Naive Bayes classifiers.
@@ -197,6 +463,8 @@ class NaiveBayesModel(object):
     0.0
     >>> model.predict(array([1.0, 0.0]))
     1.0
+    >>> model.predict(sc.parallelize([[1.0, 0.0]])).collect()
+    [1.0]
     >>> sparse_data = [
     ...     LabeledPoint(0.0, SparseVector(2, {1: 0.0})),
     ...     LabeledPoint(0.0, SparseVector(2, {1: 1.0})),
@@ -207,6 +475,16 @@ class NaiveBayesModel(object):
     0.0
     >>> model.predict(SparseVector(2, {0: 1.0}))
     1.0
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> model.save(sc, path)
+    >>> sameModel = NaiveBayesModel.load(sc, path)
+    >>> sameModel.predict(SparseVector(2, {0: 1.0})) == model.predict(SparseVector(2, {0: 1.0}))
+    True
+    >>> try:
+    ...     os.removedirs(path)
+    ... except OSError:
+    ...     pass
     """
 
     def __init__(self, labels, pi, theta):
@@ -215,8 +493,29 @@ class NaiveBayesModel(object):
         self.theta = theta
 
     def predict(self, x):
-        """Return the most likely class for a data vector x"""
-        return self.labels[numpy.argmax(self.pi + _dot(x, self.theta.transpose()))]
+        """Return the most likely class for a data vector or an RDD of vectors"""
+        if isinstance(x, RDD):
+            return x.map(lambda v: self.predict(v))
+        x = _convert_to_vector(x)
+        return self.labels[numpy.argmax(self.pi + x.dot(self.theta.transpose()))]
+
+    def save(self, sc, path):
+        java_labels = _py2java(sc, self.labels.tolist())
+        java_pi = _py2java(sc, self.pi.tolist())
+        java_theta = _py2java(sc, self.theta.tolist())
+        java_model = sc._jvm.org.apache.spark.mllib.classification.NaiveBayesModel(
+            java_labels, java_pi, java_theta)
+        java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.classification.NaiveBayesModel.load(
+            sc._jsc.sc(), path)
+        # Can not unpickle array.array from Pyrolite in Python3 with "bytes"
+        py_labels = _java2py(sc, java_model.labels(), "latin1")
+        py_pi = _java2py(sc, java_model.pi(), "latin1")
+        py_theta = _java2py(sc, java_model.theta(), "latin1")
+        return NaiveBayesModel(py_labels, py_pi, numpy.array(py_theta))
 
 
 class NaiveBayes(object):
@@ -232,23 +531,21 @@ class NaiveBayes(object):
         classification.  By making every vector a 0-1 vector, it can also be
         used as Bernoulli NB (U{http://tinyurl.com/p7c96j6}).
 
-        @param data: RDD of NumPy vectors, one per element, where the first
-               coordinate is the label and the rest is the feature vector
-               (e.g. a count vector).
-        @param lambda_: The smoothing parameter
+        :param data: RDD of LabeledPoint.
+        :param lambda_: The smoothing parameter
         """
-        sc = data.context
-        dataBytes = _get_unmangled_labeled_point_rdd(data)
-        ans = sc._jvm.PythonMLLibAPI().trainNaiveBayes(dataBytes._jrdd, lambda_)
-        return NaiveBayesModel(
-            _deserialize_double_vector(ans[0]),
-            _deserialize_double_vector(ans[1]),
-            _deserialize_double_matrix(ans[2]))
+        first = data.first()
+        if not isinstance(first, LabeledPoint):
+            raise ValueError("`data` should be an RDD of LabeledPoint")
+        labels, pi, theta = callMLlibFunc("trainNaiveBayes", data, lambda_)
+        return NaiveBayesModel(labels.toArray(), pi.toArray(), numpy.array(theta))
 
 
 def _test():
     import doctest
-    globs = globals().copy()
+    from pyspark import SparkContext
+    import pyspark.mllib.classification
+    globs = pyspark.mllib.classification.__dict__.copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()

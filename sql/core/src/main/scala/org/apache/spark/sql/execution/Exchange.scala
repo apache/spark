@@ -17,83 +17,232 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.{SparkEnv, HashPartitioner, RangePartitioner, SparkConf}
-import org.apache.spark.rdd.ShuffledRDD
-import org.apache.spark.sql.{SQLContext, Row}
+import org.apache.spark.shuffle.unsafe.UnsafeShuffleManager
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.RowOrdering
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.util.MutablePair
+
+object Exchange {
+  /**
+   * Returns true when the ordering expressions are a subset of the key.
+   * if true, ShuffledRDD can use `setKeyOrdering(orderingKey)` to sort within [[Exchange]].
+   */
+  def canSortWithShuffle(partitioning: Partitioning, desiredOrdering: Seq[SortOrder]): Boolean = {
+    desiredOrdering.map(_.child).toSet.subsetOf(partitioning.keyExpressions.toSet)
+  }
+}
 
 /**
  * :: DeveloperApi ::
+ * Performs a shuffle that will result in the desired `newPartitioning`.  Optionally sorts each
+ * resulting partition based on expressions from the partition key.  It is invalid to construct an
+ * exchange operator with a `newOrdering` that cannot be calculated using the partitioning key.
  */
 @DeveloperApi
-case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
+case class Exchange(
+    newPartitioning: Partitioning,
+    newOrdering: Seq[SortOrder],
+    child: SparkPlan)
+  extends UnaryNode {
 
-  override def outputPartitioning = newPartitioning
+  override def outputPartitioning: Partitioning = newPartitioning
 
-  def output = child.output
+  override def outputOrdering: Seq[SortOrder] = newOrdering
 
-  /** We must copy rows when sort based shuffle is on */
-  protected def sortBasedShuffleOn = SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]
+  override def output: Seq[Attribute] = child.output
 
-  def execute() = attachTree(this , "execute") {
+  /**
+   * Determines whether records must be defensively copied before being sent to the shuffle.
+   * Several of Spark's shuffle components will buffer deserialized Java objects in memory. The
+   * shuffle code assumes that objects are immutable and hence does not perform its own defensive
+   * copying. In Spark SQL, however, operators' iterators return the same mutable `Row` object. In
+   * order to properly shuffle the output of these operators, we need to perform our own copying
+   * prior to sending records to the shuffle. This copying is expensive, so we try to avoid it
+   * whenever possible. This method encapsulates the logic for choosing when to copy.
+   *
+   * In the long run, we might want to push this logic into core's shuffle APIs so that we don't
+   * have to rely on knowledge of core internals here in SQL.
+   *
+   * See SPARK-2967, SPARK-4479, and SPARK-7375 for more discussion of this issue.
+   *
+   * @param partitioner the partitioner for the shuffle
+   * @param serializer the serializer that will be used to write rows
+   * @return true if rows should be copied before being shuffled, false otherwise
+   */
+  private def needToCopyObjectsBeforeShuffle(
+      partitioner: Partitioner,
+      serializer: Serializer): Boolean = {
+    // Note: even though we only use the partitioner's `numPartitions` field, we require it to be
+    // passed instead of directly passing the number of partitions in order to guard against
+    // corner-cases where a partitioner constructed with `numPartitions` partitions may output
+    // fewer partitions (like RangePartitioner, for example).
+    val conf = child.sqlContext.sparkContext.conf
+    val shuffleManager = SparkEnv.get.shuffleManager
+    val sortBasedShuffleOn = shuffleManager.isInstanceOf[SortShuffleManager] ||
+      shuffleManager.isInstanceOf[UnsafeShuffleManager]
+    val bypassMergeThreshold = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
+    val serializeMapOutputs = conf.getBoolean("spark.shuffle.sort.serializeMapOutputs", true)
+    if (newOrdering.nonEmpty) {
+      // If a new ordering is required, then records will be sorted with Spark's `ExternalSorter`,
+      // which requires a defensive copy.
+      true
+    } else if (sortBasedShuffleOn) {
+      val bypassIsSupported = SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]
+      if (bypassIsSupported && partitioner.numPartitions <= bypassMergeThreshold) {
+        // If we're using the original SortShuffleManager and the number of output partitions is
+        // sufficiently small, then Spark will fall back to the hash-based shuffle write path, which
+        // doesn't buffer deserialized records.
+        // Note that we'll have to remove this case if we fix SPARK-6026 and remove this bypass.
+        false
+      } else if (serializeMapOutputs && serializer.supportsRelocationOfSerializedObjects) {
+        // SPARK-4550 extended sort-based shuffle to serialize individual records prior to sorting
+        // them. This optimization is guarded by a feature-flag and is only applied in cases where
+        // shuffle dependency does not specify an ordering and the record serializer has certain
+        // properties. If this optimization is enabled, we can safely avoid the copy.
+        //
+        // This optimization also applies to UnsafeShuffleManager (added in SPARK-7081).
+        false
+      } else {
+        // Spark's SortShuffleManager uses `ExternalSorter` to buffer records in memory. This code
+        // path is used both when SortShuffleManager is used and when UnsafeShuffleManager falls
+        // back to SortShuffleManager to perform a shuffle that the new fast path can't handle. In
+        // both cases, we must copy.
+        true
+      }
+    } else {
+      // We're using hash-based shuffle, so we don't need to copy.
+      false
+    }
+  }
+
+  private val keyOrdering = {
+    if (newOrdering.nonEmpty) {
+      val key = newPartitioning.keyExpressions
+      val boundOrdering = newOrdering.map { o =>
+        val ordinal = key.indexOf(o.child)
+        if (ordinal == -1) sys.error(s"Invalid ordering on $o requested for $newPartitioning")
+        o.copy(child = BoundReference(ordinal, o.child.dataType, o.child.nullable))
+      }
+      new RowOrdering(boundOrdering)
+    } else {
+      null // Ordering will not be used
+    }
+  }
+
+  @transient private lazy val sparkConf = child.sqlContext.sparkContext.getConf
+
+  private def getSerializer(
+      keySchema: Array[DataType],
+      valueSchema: Array[DataType],
+      hasKeyOrdering: Boolean,
+      numPartitions: Int): Serializer = {
+    // It is true when there is no field that needs to be write out.
+    // For now, we will not use SparkSqlSerializer2 when noField is true.
+    val noField =
+      (keySchema == null || keySchema.length == 0) &&
+      (valueSchema == null || valueSchema.length == 0)
+
+    val useSqlSerializer2 =
+        child.sqlContext.conf.useSqlSerializer2 &&   // SparkSqlSerializer2 is enabled.
+        SparkSqlSerializer2.support(keySchema) &&    // The schema of key is supported.
+        SparkSqlSerializer2.support(valueSchema) &&  // The schema of value is supported.
+        !noField
+
+    val serializer = if (useSqlSerializer2) {
+      logInfo("Using SparkSqlSerializer2.")
+      new SparkSqlSerializer2(keySchema, valueSchema, hasKeyOrdering)
+    } else {
+      logInfo("Using SparkSqlSerializer.")
+      new SparkSqlSerializer(sparkConf)
+    }
+
+    serializer
+  }
+
+  protected override def doExecute(): RDD[Row] = attachTree(this , "execute") {
     newPartitioning match {
       case HashPartitioning(expressions, numPartitions) =>
-        // TODO: Eliminate redundant expressions in grouping key and value.
-        val rdd = child.execute().mapPartitions { iter =>
-          if (sortBasedShuffleOn) {
-            @transient val hashExpressions =
-              newProjection(expressions, child.output)
+        val keySchema = expressions.map(_.dataType).toArray
+        val valueSchema = child.output.map(_.dataType).toArray
+        val serializer = getSerializer(keySchema, valueSchema, newOrdering.nonEmpty, numPartitions)
+        val part = new HashPartitioner(numPartitions)
 
-            iter.map(r => (hashExpressions(r), r.copy()))
-          } else {
-            @transient val hashExpressions =
-              newMutableProjection(expressions, child.output)()
-
+        val rdd = if (needToCopyObjectsBeforeShuffle(part, serializer)) {
+          child.execute().mapPartitions { iter =>
+            val hashExpressions = newMutableProjection(expressions, child.output)()
+            iter.map(r => (hashExpressions(r).copy(), r.copy()))
+          }
+        } else {
+          child.execute().mapPartitions { iter =>
+            val hashExpressions = newMutableProjection(expressions, child.output)()
             val mutablePair = new MutablePair[Row, Row]()
             iter.map(r => mutablePair.update(hashExpressions(r), r))
           }
         }
-        val part = new HashPartitioner(numPartitions)
         val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part)
-        shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
+        if (newOrdering.nonEmpty) {
+          shuffled.setKeyOrdering(keyOrdering)
+        }
+        shuffled.setSerializer(serializer)
         shuffled.map(_._2)
 
       case RangePartitioning(sortingExpressions, numPartitions) =>
-        // TODO: RangePartitioner should take an Ordering.
-        implicit val ordering = new RowOrdering(sortingExpressions, child.output)
+        val keySchema = child.output.map(_.dataType).toArray
+        val serializer = getSerializer(keySchema, null, newOrdering.nonEmpty, numPartitions)
 
-        val rdd = child.execute().mapPartitions { iter =>
-          if (sortBasedShuffleOn) {
-            iter.map(row => (row.copy(), null))
-          } else {
-            val mutablePair = new MutablePair[Row, Null](null, null)
+        val childRdd = child.execute()
+        val part: Partitioner = {
+          // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
+          // partition bounds. To get accurate samples, we need to copy the mutable keys.
+          val rddForSampling = childRdd.mapPartitions { iter =>
+            val mutablePair = new MutablePair[Row, Null]()
+            iter.map(row => mutablePair.update(row.copy(), null))
+          }
+          // TODO: RangePartitioner should take an Ordering.
+          implicit val ordering = new RowOrdering(sortingExpressions, child.output)
+          new RangePartitioner(numPartitions, rddForSampling, ascending = true)
+        }
+
+        val rdd = if (needToCopyObjectsBeforeShuffle(part, serializer)) {
+          childRdd.mapPartitions { iter => iter.map(row => (row.copy(), null))}
+        } else {
+          childRdd.mapPartitions { iter =>
+            val mutablePair = new MutablePair[Row, Null]()
             iter.map(row => mutablePair.update(row, null))
           }
         }
-        val part = new RangePartitioner(numPartitions, rdd, ascending = true)
-        val shuffled = new ShuffledRDD[Row, Null, Null](rdd, part)
-        shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
 
+        val shuffled = new ShuffledRDD[Row, Null, Null](rdd, part)
+        if (newOrdering.nonEmpty) {
+          shuffled.setKeyOrdering(keyOrdering)
+        }
+        shuffled.setSerializer(serializer)
         shuffled.map(_._1)
 
       case SinglePartition =>
-        val rdd = child.execute().mapPartitions { iter =>
-          if (sortBasedShuffleOn) {
-            iter.map(r => (null, r.copy()))
-          } else {
+        val valueSchema = child.output.map(_.dataType).toArray
+        val serializer = getSerializer(null, valueSchema, hasKeyOrdering = false, 1)
+        val partitioner = new HashPartitioner(1)
+
+        val rdd = if (needToCopyObjectsBeforeShuffle(partitioner, serializer)) {
+          child.execute().mapPartitions { iter => iter.map(r => (null, r.copy())) }
+        } else {
+          child.execute().mapPartitions { iter =>
             val mutablePair = new MutablePair[Null, Row]()
             iter.map(r => mutablePair.update(null, r))
           }
         }
-        val partitioner = new HashPartitioner(1)
         val shuffled = new ShuffledRDD[Null, Row, Row](rdd, partitioner)
-        shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
+        shuffled.setSerializer(serializer)
         shuffled.map(_._2)
 
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
@@ -106,27 +255,34 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
  * of input data meets the
  * [[org.apache.spark.sql.catalyst.plans.physical.Distribution Distribution]] requirements for
- * each operator by inserting [[Exchange]] Operators where required.
+ * each operator by inserting [[Exchange]] Operators where required.  Also ensure that the
+ * required input partition ordering requirements are met.
  */
-private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPlan] {
+private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
-  def numPartitions = sqlContext.numShufflePartitions
+  def numPartitions: Int = sqlContext.conf.numShufflePartitions
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     case operator: SparkPlan =>
-      // Check if every child's outputPartitioning satisfies the corresponding
+      // True iff every child's outputPartitioning satisfies the corresponding
       // required data distribution.
-      def meetsRequirements =
-        !operator.requiredChildDistribution.zip(operator.children).map {
+      def meetsRequirements: Boolean =
+        operator.requiredChildDistribution.zip(operator.children).forall {
           case (required, child) =>
             val valid = child.outputPartitioning.satisfies(required)
             logDebug(
               s"${if (valid) "Valid" else "Invalid"} distribution," +
                 s"required: $required current: ${child.outputPartitioning}")
             valid
-        }.exists(!_)
+        }
 
-      // Check if outputPartitionings of children are compatible with each other.
+      // True iff any of the children are incorrectly sorted.
+      def needsAnySort: Boolean =
+        operator.requiredChildOrdering.zip(operator.children).exists {
+          case (required, child) => required.nonEmpty && required != child.outputOrdering
+        }
+
+      // True iff outputPartitionings of children are compatible with each other.
       // It is possible that every child satisfies its required data distribution
       // but two children have incompatible outputPartitionings. For example,
       // A dataset is range partitioned by "a.asc" (RangePartitioning) and another
@@ -134,7 +290,7 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
       // datasets are both clustered by "a", but these two outputPartitionings are not
       // compatible.
       // TODO: ASSUMES TRANSITIVITY?
-      def compatible =
+      def compatible: Boolean =
         !operator.children
           .map(_.outputPartitioning)
           .sliding(2)
@@ -143,28 +299,69 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
             case Seq(a,b) => a compatibleWith b
           }.exists(!_)
 
-      // Check if the partitioning we want to ensure is the same as the child's output
-      // partitioning. If so, we do not need to add the Exchange operator.
-      def addExchangeIfNecessary(partitioning: Partitioning, child: SparkPlan) =
-        if (child.outputPartitioning != partitioning) Exchange(partitioning, child) else child
+      // Adds Exchange or Sort operators as required
+      def addOperatorsIfNecessary(
+          partitioning: Partitioning,
+          rowOrdering: Seq[SortOrder],
+          child: SparkPlan): SparkPlan = {
+        val needSort = rowOrdering.nonEmpty && child.outputOrdering != rowOrdering
+        val needsShuffle = child.outputPartitioning != partitioning
+        val canSortWithShuffle = Exchange.canSortWithShuffle(partitioning, rowOrdering)
 
-      if (meetsRequirements && compatible) {
+        if (needSort && needsShuffle && canSortWithShuffle) {
+          Exchange(partitioning, rowOrdering, child)
+        } else {
+          val withShuffle = if (needsShuffle) {
+            Exchange(partitioning, Nil, child)
+          } else {
+            child
+          }
+
+          val withSort = if (needSort) {
+            if (sqlContext.conf.externalSortEnabled) {
+              ExternalSort(rowOrdering, global = false, withShuffle)
+            } else {
+              Sort(rowOrdering, global = false, withShuffle)
+            }
+          } else {
+            withShuffle
+          }
+
+          withSort
+        }
+      }
+
+      if (meetsRequirements && compatible && !needsAnySort) {
         operator
       } else {
         // At least one child does not satisfies its required data distribution or
         // at least one child's outputPartitioning is not compatible with another child's
         // outputPartitioning. In this case, we need to add Exchange operators.
-        val repartitionedChildren = operator.requiredChildDistribution.zip(operator.children).map {
-          case (AllTuples, child) =>
-            addExchangeIfNecessary(SinglePartition, child)
-          case (ClusteredDistribution(clustering), child) =>
-            addExchangeIfNecessary(HashPartitioning(clustering, numPartitions), child)
-          case (OrderedDistribution(ordering), child) =>
-            addExchangeIfNecessary(RangePartitioning(ordering, numPartitions), child)
-          case (UnspecifiedDistribution, child) => child
-          case (dist, _) => sys.error(s"Don't know how to ensure $dist")
+        val requirements =
+          (operator.requiredChildDistribution, operator.requiredChildOrdering, operator.children)
+
+        val fixedChildren = requirements.zipped.map {
+          case (AllTuples, rowOrdering, child) =>
+            addOperatorsIfNecessary(SinglePartition, rowOrdering, child)
+          case (ClusteredDistribution(clustering), rowOrdering, child) =>
+            addOperatorsIfNecessary(HashPartitioning(clustering, numPartitions), rowOrdering, child)
+          case (OrderedDistribution(ordering), rowOrdering, child) =>
+            addOperatorsIfNecessary(RangePartitioning(ordering, numPartitions), rowOrdering, child)
+
+          case (UnspecifiedDistribution, Seq(), child) =>
+            child
+          case (UnspecifiedDistribution, rowOrdering, child) =>
+            if (sqlContext.conf.externalSortEnabled) {
+              ExternalSort(rowOrdering, global = false, child)
+            } else {
+              Sort(rowOrdering, global = false, child)
+            }
+
+          case (dist, ordering, _) =>
+            sys.error(s"Don't know how to ensure $dist with ordering $ordering")
         }
-        operator.withNewChildren(repartitionedChildren)
+
+        operator.withNewChildren(fixedChildren)
       }
   }
 }

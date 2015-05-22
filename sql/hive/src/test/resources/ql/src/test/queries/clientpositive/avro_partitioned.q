@@ -28,7 +28,7 @@ TBLPROPERTIES ('avro.schema.literal'='{
   ]
 }');
 
-LOAD DATA LOCAL INPATH '../data/files/episodes.avro' INTO TABLE episodes;
+LOAD DATA LOCAL INPATH '../../data/files/episodes.avro' INTO TABLE episodes;
 
 CREATE TABLE episodes_partitioned
 PARTITIONED BY (doctor_pt INT)
@@ -66,7 +66,7 @@ INSERT OVERWRITE TABLE episodes_partitioned PARTITION (doctor_pt) SELECT title, 
 SELECT * FROM episodes_partitioned WHERE doctor_pt > 6 ORDER BY air_date;
 
 -- Verify that Fetch works in addition to Map
-SELECT * FROM episodes_partitioned LIMIT 5;
+SELECT * FROM episodes_partitioned ORDER BY air_date LIMIT 5;
 -- Fetch w/filter to specific partition
 SELECT * FROM episodes_partitioned WHERE doctor_pt = 6;
 -- Fetch w/non-existant partition

@@ -26,5 +26,5 @@ DESCRIBE FORMATTED tmptable;
 -- Load a file into a existing table
 -- Some stats (numFiles, totalSize) should be updated correctly
 -- Some other stats (numRows, rawDataSize) should be cleared
-load data local inpath '../data/files/srcbucket20.txt' INTO TABLE tmptable;
+load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE tmptable;
 DESCRIBE FORMATTED tmptable;

@@ -30,7 +30,7 @@ trait SharedSparkContext extends BeforeAndAfterAll { self: Suite =>
   var conf = new SparkConf(false)
 
   override def beforeAll() {
-    _sc = new SparkContext("local", "test", conf)
+    _sc = new SparkContext("local[4]", "test", conf)
     super.beforeAll()
   }
 

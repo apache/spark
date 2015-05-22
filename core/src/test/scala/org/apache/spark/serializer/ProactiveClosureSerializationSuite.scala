@@ -24,14 +24,16 @@ import org.apache.spark.rdd.RDD
 
 /* A trivial (but unserializable) container for trivial functions */
 class UnserializableClass {
-  def op[T](x: T) = x.toString
+  def op[T](x: T): String = x.toString
   
-  def pred[T](x: T) = x.toString.length % 2 == 0
+  def pred[T](x: T): Boolean = x.toString.length % 2 == 0
 }
 
 class ProactiveClosureSerializationSuite extends FunSuite with SharedSparkContext {
 
-  def fixture = (sc.parallelize(0 until 1000).map(_.toString), new UnserializableClass)
+  def fixture: (RDD[String], UnserializableClass) = {
+    (sc.parallelize(0 until 1000).map(_.toString), new UnserializableClass)
+  }
 
   test("throws expected serialization exceptions on actions") {
     val (data, uc) = fixture
@@ -50,8 +52,7 @@ class ProactiveClosureSerializationSuite extends FunSuite with SharedSparkContex
           "flatMap" -> xflatMap _,
           "filter" -> xfilter _,
           "mapPartitions" -> xmapPartitions _,
-          "mapPartitionsWithIndex" -> xmapPartitionsWithIndex _,
-          "mapPartitionsWithContext" -> xmapPartitionsWithContext _)) {
+          "mapPartitionsWithIndex" -> xmapPartitionsWithIndex _)) {
     val (name, xf) = transformation
 
     test(s"$name transformations throw proactive serialization exceptions") {
@@ -78,8 +79,5 @@ class ProactiveClosureSerializationSuite extends FunSuite with SharedSparkContex
 
   private def xmapPartitionsWithIndex(x: RDD[String], uc: UnserializableClass): RDD[String] = 
     x.mapPartitionsWithIndex((_, it) => it.map(y=>uc.op(y)))
-
-  private def xmapPartitionsWithContext(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.mapPartitionsWithContext((_, it) => it.map(y=>uc.op(y)))
   
 }

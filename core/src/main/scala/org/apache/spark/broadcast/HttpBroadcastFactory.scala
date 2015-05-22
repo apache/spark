@@ -31,7 +31,7 @@ class HttpBroadcastFactory extends BroadcastFactory {
     HttpBroadcast.initialize(isDriver, conf, securityMgr)
   }
 
-  override def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean, id: Long) =
+  override def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean, id: Long): Broadcast[T] =
     new HttpBroadcast[T](value_, isLocal, id)
 
   override def stop() { HttpBroadcast.stop() }

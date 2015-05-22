@@ -17,9 +17,9 @@ create table  varchar_union1_str (
   c2 string
 );
 
-load data local inpath '../data/files/vc1.txt' into table varchar_union1_vc1;
-load data local inpath '../data/files/vc1.txt' into table varchar_union1_vc2;
-load data local inpath '../data/files/vc1.txt' into table varchar_union1_str;
+load data local inpath '../../data/files/vc1.txt' into table varchar_union1_vc1;
+load data local inpath '../../data/files/vc1.txt' into table varchar_union1_vc2;
+load data local inpath '../../data/files/vc1.txt' into table varchar_union1_str;
 
 -- union varchar with same length varchar
 select * from (
