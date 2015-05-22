@@ -29,6 +29,7 @@ import org.junit.Test;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.expressions.Window;
+import org.apache.spark.sql.hive.HiveContext;
 import org.apache.spark.sql.hive.test.TestHive$;
 
 public class JavaDataFrameSuite {
