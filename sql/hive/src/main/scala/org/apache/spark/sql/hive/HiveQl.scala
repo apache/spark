@@ -1765,7 +1765,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
       case _ => // Unsupport features
     }
-    // note: we do not know the columns and column types when parsing, so here
+    // Note: we do not know the columns and column types when parsing, so here
     // just input `null` for column types. column types will be set in analyzer.
     PlanUtils.getDefaultTableDesc(createTableDesc, "", null)
   }
