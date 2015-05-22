@@ -14,74 +14,64 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.hive;
 
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.*;
-import org.apache.spark.sql.hive.test.TestHive$;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
-import org.apache.spark.util.Utils;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.*;
+import org.apache.spark.sql.expressions.Window;
+import org.apache.spark.sql.hive.test.TestHive$;
 
 public class JavaDataFrameSuite {
-    private transient JavaSparkContext sc;
-    private transient HiveContext hc;
+  private transient JavaSparkContext sc;
+  private transient HiveContext hc;
 
-    DataFrame df;
+  DataFrame df;
 
-    private void checkAnswer(DataFrame actual, List<Row> expected) {
-        String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
-        if (errorMessage != null) {
-            Assert.fail(errorMessage);
-        }
+  private void checkAnswer(DataFrame actual, List<Row> expected) {
+    String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
+    if (errorMessage != null) {
+      Assert.fail(errorMessage);
     }
+  }
 
-    @Before
-    public void setUp() throws IOException {
-        hc = TestHive$.MODULE$;
-        sc = new JavaSparkContext(hc.sparkContext());
+  @Before
+  public void setUp() throws IOException {
+    hc = TestHive$.MODULE$;
+    sc = new JavaSparkContext(hc.sparkContext());
 
-        List<String> jsonObjects = new ArrayList<String>(10);
-        for (int i = 0; i < 10; i++) {
-            jsonObjects.add("{\"key\":" + i + ", \"value\":\"str" + i + "\"}");
-        }
-        df = hc.jsonRDD(sc.parallelize(jsonObjects));
-        df.registerTempTable("window_table");
+    List<String> jsonObjects = new ArrayList<String>(10);
+    for (int i = 0; i < 10; i++) {
+      jsonObjects.add("{\"key\":" + i + ", \"value\":\"str" + i + "\"}");
     }
+    df = hc.jsonRDD(sc.parallelize(jsonObjects));
+    df.registerTempTable("window_table");
+  }
 
-    @After
-    public void tearDown() throws IOException {
-        // Clean up tables.
-        hc.sql("DROP TABLE IF EXISTS window_table");
-    }
+  @After
+  public void tearDown() throws IOException {
+    // Clean up tables.
+    hc.sql("DROP TABLE IF EXISTS window_table");
+  }
 
-    @Test
-    public void saveTableAndQueryIt() {
-        checkAnswer(
-            df.select(
-                functions.avg("key").over(
-                    Window$.MODULE$.partitionBy("value")
-                        .orderBy("key")
-                        .rowsBetween(Frame.preceding(1), Frame.following(1)))),
-            hc.sql("SELECT avg(key) " +
-                    "OVER (PARTITION BY value " +
-                    "      ORDER BY key " +
-                    "      ROWS BETWEEN 1 preceding and 1 following) " +
-                    "FROM window_table").collectAsList());
-    }
+  @Test
+  public void saveTableAndQueryIt() {
+    checkAnswer(
+      df.select(functions.avg("key").over(
+        Window.partitionBy("value").orderBy("key").rowsBetween(-1, 1))),
+      hc.sql("SELECT avg(key) " +
+        "OVER (PARTITION BY value " +
+        "      ORDER BY key " +
+        "      ROWS BETWEEN 1 preceding and 1 following) " +
+        "FROM window_table").collectAsList());
+  }
 }

@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{Frame, Window, Row, QueryTest}
+import org.apache.spark.sql.{Row, QueryTest}
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -52,9 +53,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
     checkAnswer(
       df.select(
-        lead("value").over(
-          Window.partitionBy($"key")
-          .orderBy($"value"))),
+        lead("value").over(Window.partitionBy($"key").orderBy($"value"))),
       sql(
         """SELECT
           | lead(value) OVER (PARTITION BY key ORDER BY value)
@@ -76,28 +75,13 @@ class HiveDataFrameWindowSuite extends QueryTest {
           | FROM window_table""".stripMargin).collect())
   }
 
-  test("last in window with default value") {
-    val df = Seq((1, "1"), (1, "1"), (2, "2"), (1, "1"),
-      (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.registerTempTable("window_table")
-    checkAnswer(
-      df.select(
-        last("value").over(Window)),
-      sql(
-        """SELECT
-          | last_value(value) OVER ()
-          | FROM window_table""".stripMargin).collect())
-  }
-
   test("lead in window with default value") {
     val df = Seq((1, "1"), (1, "1"), (2, "2"), (1, "1"),
                  (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     df.registerTempTable("window_table")
     checkAnswer(
       df.select(
-        lead("value", 2, "n/a").over(
-          Window.partitionBy("key")
-          .orderBy("value"))),
+        lead("value", 2, "n/a").over(Window.partitionBy("key").orderBy("value"))),
       sql(
         """SELECT
           | lead(value, 2, "n/a") OVER (PARTITION BY key ORDER BY value)
@@ -110,9 +94,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
     df.registerTempTable("window_table")
     checkAnswer(
       df.select(
-        lag("value", 2, "n/a").over(
-          Window.partitionBy($"key")
-          .orderBy($"value"))),
+        lag("value", 2, "n/a").over(Window.partitionBy($"key").orderBy($"value"))),
       sql(
         """SELECT
           | lag(value, 2, "n/a") OVER (PARTITION BY key ORDER BY value)
@@ -125,42 +107,18 @@ class HiveDataFrameWindowSuite extends QueryTest {
     checkAnswer(
       df.select(
         $"key",
-        max("key").over(
-          Window.partitionBy("value")
-            .orderBy("key")),
-        min("key").over(
-          Window.partitionBy("value")
-            .orderBy("key")),
-        mean("key").over(
-          Window.partitionBy("value")
-            .orderBy("key")),
-        count("key").over(
-          Window.partitionBy("value")
-            .orderBy("key")),
-        sum("key").over(
-          Window.partitionBy("value")
-            .orderBy("key")),
-        ntile("key").over(
-          Window.partitionBy("value")
-            .orderBy("key")),
-        ntile($"key").over(
-          Window.partitionBy("value")
-            .orderBy("key")),
-        rowNumber().over(
-          Window.partitionBy("value")
-            .orderBy("key")),
-        denseRank().over(
-          Window.partitionBy("value")
-            .orderBy("key")),
-        rank().over(
-          Window.partitionBy("value")
-            .orderBy("key")),
-        cumeDist().over(
-          Window.partitionBy("value")
-            .orderBy("key")),
-        percentRank().over(
-          Window.partitionBy("value")
-            .orderBy("key"))),
+        max("key").over(Window.partitionBy("value").orderBy("key")),
+        min("key").over(Window.partitionBy("value").orderBy("key")),
+        mean("key").over(Window.partitionBy("value").orderBy("key")),
+        count("key").over(Window.partitionBy("value").orderBy("key")),
+        sum("key").over(Window.partitionBy("value").orderBy("key")),
+        ntile("key").over(Window.partitionBy("value").orderBy("key")),
+        ntile($"key").over(Window.partitionBy("value").orderBy("key")),
+        rowNumber().over(Window.partitionBy("value").orderBy("key")),
+        denseRank().over(Window.partitionBy("value").orderBy("key")),
+        rank().over(Window.partitionBy("value").orderBy("key")),
+        cumeDist().over(Window.partitionBy("value").orderBy("key")),
+        percentRank().over(Window.partitionBy("value").orderBy("key"))),
       sql(
         s"""SELECT
            |key,
@@ -184,10 +142,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
     df.registerTempTable("window_table")
     checkAnswer(
       df.select(
-        avg("key").over(
-          Window.partitionBy($"value")
-            .orderBy($"key")
-            .rowsBetween(Frame.preceding(1), Frame.following(1)))),
+        avg("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 1))),
       sql(
         """SELECT
           | avg(key) OVER
@@ -200,10 +155,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
     df.registerTempTable("window_table")
     checkAnswer(
       df.select(
-        avg("key").over(
-          Window.partitionBy($"value")
-          .orderBy($"key")
-          .rangeBetween(Frame.preceding(1), Frame.following(1)))),
+        avg("key").over(Window.partitionBy($"value").orderBy($"key").rangeBetween(-1, 1))),
       sql(
         """SELECT
           | avg(key) OVER
@@ -217,14 +169,8 @@ class HiveDataFrameWindowSuite extends QueryTest {
     checkAnswer(
       df.select(
         $"key",
-        first("value").over(
-          Window.partitionBy($"value")
-          .orderBy($"key")
-          .rowsBetween(Frame.preceding(1), Frame.currentRow)),
-        first("value").over(
-          Window.partitionBy($"value")
-            .orderBy($"key")
-            .rowsBetween(Frame.preceding(2), Frame.preceding(1)))),
+        first("value").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 0)),
+        first("value").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-2, 1))),
       sql(
         """SELECT
           | key,
@@ -242,17 +188,10 @@ class HiveDataFrameWindowSuite extends QueryTest {
       df.select(
         $"key",
         last("value").over(
-          Window.partitionBy($"value")
-            .orderBy($"key")
-            .rowsBetween(Frame.currentRow, Frame.unbounded)),
+          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, Long.MaxValue)),
         last("value").over(
-          Window.partitionBy($"value")
-            .orderBy($"key")
-            .rowsBetween(Frame.unbounded, Frame.currentRow)),
-        last("value").over(
-          Window.partitionBy($"value")
-          .orderBy($"key")
-          .rowsBetween(Frame.preceding(1), Frame.following(1)))),
+          Window.partitionBy($"value").orderBy($"key").rowsBetween(Long.MinValue, 0)),
+        last("value").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 1))),
       sql(
         """SELECT
           | key,
@@ -270,18 +209,9 @@ class HiveDataFrameWindowSuite extends QueryTest {
     df.registerTempTable("window_table")
     checkAnswer(
       df.select(
-        avg("key").over(
-          Window.partitionBy($"key")
-            .orderBy($"value")
-            .rowsBetween(Frame.preceding(1), Frame.currentRow)),
-        avg("key").over(
-          Window.partitionBy($"key")
-            .orderBy($"value")
-            .rowsBetween(Frame.currentRow, Frame.currentRow)),
-        avg("key").over(
-          Window.partitionBy($"key")
-            .orderBy($"value")
-            .rowsBetween(Frame.preceding(2), Frame.preceding(1)))),
+        avg("key").over(Window.partitionBy($"key").orderBy($"value").rowsBetween(-1, 0)),
+        avg("key").over(Window.partitionBy($"key").orderBy($"value").rowsBetween(0, 0)),
+        avg("key").over(Window.partitionBy($"key").orderBy($"value").rowsBetween(-2, 1))),
       sql(
         """SELECT
           | avg(key) OVER
@@ -300,28 +230,14 @@ class HiveDataFrameWindowSuite extends QueryTest {
       df.select(
         $"key",
         last("value").over(
-          Window.partitionBy($"value")
-            .orderBy($"key")
-            .rangeBetween(Frame.following(1), Frame.unbounded))
+          Window.partitionBy($"value").orderBy($"key").rangeBetween(1, Long.MaxValue))
           .equalTo("2")
           .as("last_v"),
-        avg("key")
-          .over(
-            Window.partitionBy("value")
-              .orderBy("key")
-              .rangeBetween(Frame.preceding(2), Frame.following(1)))
+        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(-2, 1))
           .as("avg_key1"),
-        avg("key")
-          .over(
-            Window.partitionBy("value")
-              .orderBy("key")
-              .rangeBetween(Frame.currentRow, Frame.following(1)))
+        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(0, 1))
           .as("avg_key2"),
-        avg("key")
-          .over(
-            Window.partitionBy("value")
-              .orderBy("key")
-              .rangeBetween(Frame.preceding(1), Frame.currentRow))
+        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(-1, 0))
           .as("avg_key3")
       ),
       sql(
