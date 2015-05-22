@@ -260,104 +260,6 @@ class DataFrameSuite extends QueryTest {
       mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
   }
 
-  test("average") {
-    checkAnswer(
-      testData2.agg(avg('a)),
-      Row(2.0))
-
-    checkAnswer(
-      testData2.agg(avg('a), sumDistinct('a)), // non-partial
-      Row(2.0, 6.0) :: Nil)
-
-    checkAnswer(
-      decimalData.agg(avg('a)),
-      Row(new java.math.BigDecimal(2.0)))
-    checkAnswer(
-      decimalData.agg(avg('a), sumDistinct('a)), // non-partial
-      Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
-
-    checkAnswer(
-      decimalData.agg(avg('a cast DecimalType(10, 2))),
-      Row(new java.math.BigDecimal(2.0)))
-    checkAnswer(
-      decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))), // non-partial
-      Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
-  }
-
-  test("null average") {
-    checkAnswer(
-      testData3.agg(avg('b)),
-      Row(2.0))
-
-    checkAnswer(
-      testData3.agg(avg('b), countDistinct('b)),
-      Row(2.0, 1))
-
-    checkAnswer(
-      testData3.agg(avg('b), sumDistinct('b)), // non-partial
-      Row(2.0, 2.0))
-  }
-
-  test("zero average") {
-    checkAnswer(
-      emptyTableData.agg(avg('a)),
-      Row(null))
-
-    checkAnswer(
-      emptyTableData.agg(avg('a), sumDistinct('b)), // non-partial
-      Row(null, null))
-  }
-
-  test("count") {
-    assert(testData2.count() === testData2.map(_ => 1).count())
-
-    checkAnswer(
-      testData2.agg(count('a), sumDistinct('a)), // non-partial
-      Row(6, 6.0))
-  }
-
-  test("null count") {
-    checkAnswer(
-      testData3.groupBy('a).agg('a, count('b)),
-      Seq(Row(1,0), Row(2, 1))
-    )
-
-    checkAnswer(
-      testData3.groupBy('a).agg('a, count('a + 'b)),
-      Seq(Row(1,0), Row(2, 1))
-    )
-
-    checkAnswer(
-      testData3.agg(count('a), count('b), count(lit(1)), countDistinct('a), countDistinct('b)),
-      Row(2, 1, 2, 2, 1)
-    )
-
-    checkAnswer(
-      testData3.agg(count('b), countDistinct('b), sumDistinct('b)), // non-partial
-      Row(1, 1, 2)
-    )
-  }
-
-  test("zero count") {
-    assert(emptyTableData.count() === 0)
-
-    checkAnswer(
-      emptyTableData.agg(count('a), sumDistinct('a)), // non-partial
-      Row(0, null))
-  }
-
-  test("zero sum") {
-    checkAnswer(
-      emptyTableData.agg(sum('a)),
-      Row(null))
-  }
-
-  test("zero sum distinct") {
-    checkAnswer(
-      emptyTableData.agg(sumDistinct('a)),
-      Row(null))
-  }
-
  test("stddev") {
     val testData2ADev = math.sqrt(4/5.0)
     checkAnswer(
@@ -372,7 +274,7 @@ class DataFrameSuite extends QueryTest {
       decimalData.agg(stddev('a), sumDistinct('a)), // non-partial
       Row(testData2ADev, new java.math.BigDecimal(6)) :: Nil)
   }
- 
+
  test("except") {
     checkAnswer(
       lowerCaseData.except(upperCaseData),
@@ -607,10 +509,10 @@ class DataFrameSuite extends QueryTest {
   test("SPARK-7324 dropDuplicates") {
     val testData = TestSQLContext.sparkContext.parallelize(
       (2, 1, 2) :: (1, 1, 1) ::
-      (1, 2, 1) :: (2, 1, 2) ::
-      (2, 2, 2) :: (2, 2, 1) ::
-      (2, 1, 1) :: (1, 1, 2) ::
-      (1, 2, 2) :: (1, 2, 1) :: Nil).toDF("key", "value1", "value2")
+        (1, 2, 1) :: (2, 1, 2) ::
+        (2, 2, 2) :: (2, 2, 1) ::
+        (2, 1, 1) :: (1, 1, 2) ::
+        (1, 2, 2) :: (1, 2, 1) :: Nil).toDF("key", "value1", "value2")
 
     checkAnswer(
       testData.dropDuplicates(),
