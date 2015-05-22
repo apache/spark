@@ -459,18 +459,6 @@ object functions {
     UnresolvedWindowFunction("lead", e.expr :: Literal(count) :: Literal(defaultValue) :: Nil)
   }
 
-  /**
-   * NTILE for specified expression.
-   * NTILE allows easy calculation of tertiles, quartiles, deciles and other
-   * common summary statistics. This function divides an ordered partition into a specified
-   * number of groups called buckets and assigns a bucket number to each row in the partition.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def ntile(e: Column): Column = {
-    UnresolvedWindowFunction("ntile", e.expr :: Nil)
-  }
 
   /**
    * NTILE for specified column.
@@ -481,8 +469,8 @@ object functions {
    * @group window_funcs
    * @since 1.4.0
    */
-  def ntile(columnName: String): Column = {
-    ntile(Column(columnName))
+  def ntile(n: Int): Column = {
+    UnresolvedWindowFunction("ntile", lit(n).expr :: Nil)
   }
 
   /**

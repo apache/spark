@@ -67,6 +67,17 @@ def _create_binary_mathfunction(name, doc=""):
     return _
 
 
+def _create_window_function(name, doc=''):
+    """ Create a window function by name """
+    def _():
+        sc = SparkContext._active_spark_context
+        jc = getattr(sc._jvm.functions, name)()
+        return Column(jc)
+    _.__name__ = name
+    _.__doc__ = doc
+    return _
+
+
 _functions = {
     'lit': 'Creates a :class:`Column` of literal value.',
     'col': 'Returns a :class:`Column` based on the given column name.',
@@ -130,12 +141,40 @@ _binary_mathfunctions = {
     'pow': 'Returns the value of the first argument raised to the power of the second argument.'
 }
 
+_window_functions = {
+    'lag': 'Window function: returns the lag value of current row of the expression, ' +
+           'null when the current row extends before the beginning of the window.',
+    'rowNumber': """Window function: Assigns a unique number (sequentially, starting from 1,
+                 as defined by ORDER BY) to each row within the partition.""",
+    'denseRank': 'The difference between RANK and DENSE_RANK is that DENSE_RANK' +
+                 'leaves no gaps in ranking sequence when there are ties. That is, if you were' +
+                 'ranking a competition using DENSE_RANK and had three people tie for second ' +
+                 'place, you would say that all three were in second place and that the next ' +
+                 'person came in third.',
+    'rank': 'The difference between RANK and DENSE_RANK is that DENSE_RANK' +
+            'leaves no gaps in ranking sequence when there are ties. That is, if you were' +
+            'ranking a competition using DENSE_RANK and had three people tie for second place,' +
+            'you would say that all three were in second place and that the next person came in ' +
+            'third.',
+    'cumeDist': 'CUME_DIST (defined as the inverse of percentile in some' +
+                'statistical books) computes the position of a specified value relative to' +
+                'a set of values. To compute the CUME_DIST of a value x in a set S of size N,' +
+                'you use the formula: CUME_DIST(x) = number of values in S coming before and' +
+                'including x in the specified order / N',
+    'percentRank': 'PERCENT_RANK is similar to CUME_DIST, but it uses rank values rather than' +
+                   'row counts in its numerator. The formula: ' +
+                   '(rank of row in its partition - 1) / (number of rows in the partition - 1)',
+
+}
+
 for _name, _doc in _functions.items():
     globals()[_name] = since(1.3)(_create_function(_name, _doc))
 for _name, _doc in _functions_1_4.items():
     globals()[_name] = since(1.4)(_create_function(_name, _doc))
 for _name, _doc in _binary_mathfunctions.items():
     globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
+for _name, _doc in _window_functions.items():
+    globals()[_name] = since(1.4)(_create_window_function(_name, _doc))
 del _name, _doc
 __all__ += _functions.keys()
 __all__ += _binary_mathfunctions.keys()
@@ -347,6 +386,50 @@ def when(condition, value):
     v = value._jc if isinstance(value, Column) else value
     jc = sc._jvm.functions.when(condition._jc, v)
     return Column(jc)
+
+
+@since(1.4)
+def lag(col, count=1, default=None):
+    """
+    Window function: returns the lag values of current row of the expression,
+    given default value when the current row extends before the beginning
+    of the window.
+
+    :param col: name of column or expression
+    :param count: number of row to extend
+    :param default: default value
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.lag(_to_java_column(col), count, default))
+
+
+@since(1.4)
+def lead(col, count=1, default=None):
+    """
+    Window function: returns the lead values of current row of the column,
+    given default value when the current row extends before the end of the window.
+
+    :param col: name of column or expression
+    :param count: number of row to extend
+    :param default: default value
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.lead(_to_java_column(col), count, default))
+
+
+@since(1.4)
+def ntile(n):
+    """
+    NTILE for specified column or expression.
+
+    NTILE allows easy calculation of tertiles, quartiles, deciles and other
+    common summary statistics. This function divides an ordered partition into a specified
+    number of groups called buckets and assigns a bucket number to each row in the partition.
+
+    :param n: an integer
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.ntile(int(n)))
 
 
 class UserDefinedFunction(object):
