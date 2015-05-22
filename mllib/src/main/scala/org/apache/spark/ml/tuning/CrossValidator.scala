@@ -102,12 +102,6 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
   /** @group setParam */
   def setNumFolds(value: Int): this.type = set(numFolds, value)
 
-  override def validateParams(paramMap: ParamMap): Unit = {
-    getEstimatorParamMaps.foreach { eMap =>
-      getEstimator.validateParams(eMap ++ paramMap)
-    }
-  }
-
   override def fit(dataset: DataFrame): CrossValidatorModel = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
@@ -159,8 +153,8 @@ class CrossValidatorModel private[ml] (
     val bestModel: Model[_])
   extends Model[CrossValidatorModel] with CrossValidatorParams {
 
-  override def validateParams(paramMap: ParamMap): Unit = {
-    bestModel.validateParams(paramMap)
+  override def validateParams(): Unit = {
+    bestModel.validateParams()
   }
 
   override def transform(dataset: DataFrame): DataFrame = {
@@ -170,5 +164,10 @@ class CrossValidatorModel private[ml] (
 
   override def transformSchema(schema: StructType): StructType = {
     bestModel.transformSchema(schema)
+  }
+
+  override def copy(extra: ParamMap): CrossValidatorModel = {
+    val copied = new CrossValidatorModel(uid, bestModel.copy(extra).asInstanceOf[Model[_]])
+    copyValues(copied, extra)
   }
 }

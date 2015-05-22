@@ -17,8 +17,10 @@
 
 package org.apache.spark.ml.evaluation
 
+import scala.annotation.varargs
+
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.param.{ParamMap, Params}
+import org.apache.spark.ml.param.{ParamMap, ParamPair, Params}
 import org.apache.spark.sql.DataFrame
 
 /**
@@ -40,11 +42,30 @@ abstract class Evaluator extends Params {
   }
 
   /**
-   * Evaluates the output.
+   * Evaluates model output and returns a scalar metric (larger is better).
    * @param dataset a dataset that contains labels/observations and predictions.
    * @return metric
    */
   def evaluate(dataset: DataFrame): Double
+
+  /**
+   * Evaluates model output and returns a scalar metric (larger is better).
+   * @param dataset a dataset that contains labels/observations and predictions.
+   * @param firstParamPair the first param pair, overrides embedded params
+   * @param otherParamPairs other param pair. These values override any specified in this
+   *                        Evaluator's embedded param map.
+   * @return metric
+   */
+  @varargs
+  def evaluate(
+      dataset: DataFrame,
+      firstParamPair: ParamPair[_],
+      otherParamPairs: ParamPair[_]*): Double = {
+    val map = new ParamMap()
+      .put(firstParamPair)
+      .put(otherParamPairs: _*)
+    evaluate(dataset, map)
+  }
 
   override def copy(extra: ParamMap): Evaluator = {
     super.copy(extra).asInstanceOf[Evaluator]
