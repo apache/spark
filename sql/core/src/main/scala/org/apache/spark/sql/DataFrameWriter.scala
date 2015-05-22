@@ -20,6 +20,8 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.jdbc.{JDBCWriteDetails, JdbcUtils}
 import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
 
@@ -151,19 +153,52 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   /**
    * Saves the content of the [[DataFrame]] as the specified table.
    *
+   * In the case the table already exists, behavior of this function depends on the
+   * save mode, specified by the `mode` function (default to throwing an exception).
+   *
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    val cmd =
-      CreateTableUsingAsSelect(
-        tableName,
-        source,
-        temporary = false,
-        partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
-        mode,
-        extraOptions.toMap,
-        df.logicalPlan)
-    df.sqlContext.executePlan(cmd).toRdd
+    if (df.sqlContext.catalog.tableExists(tableName :: Nil)) {
+      if (partitioningColumns.isDefined) {
+        sys.error("Inserting data into an existing partitioned table is not yet supported.")
+      }
+
+      mode match {
+        case SaveMode.Ignore =>
+          // Do nothing
+
+        case SaveMode.ErrorIfExists =>
+          sys.error(s"Table $tableName already exists.")
+
+        case SaveMode.Overwrite =>
+          df.sqlContext.executePlan(InsertIntoTable(
+            UnresolvedRelation(Seq(tableName)),
+            Map.empty,
+            df.logicalPlan,
+            overwrite = true,
+            ifNotExists = false)).toRdd
+
+        case SaveMode.Append =>
+          df.sqlContext.executePlan(InsertIntoTable(
+            UnresolvedRelation(Seq(tableName)),
+            Map.empty,
+            df.logicalPlan,
+            overwrite = false,
+            ifNotExists = false)).toRdd
+      }
+    } else {
+      val cmd =
+        CreateTableUsingAsSelect(
+          tableName,
+          source,
+          temporary = false,
+          partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+          mode,
+          extraOptions.toMap,
+          df.logicalPlan)
+      df.sqlContext.executePlan(cmd).toRdd
+    }
   }
 
   /**

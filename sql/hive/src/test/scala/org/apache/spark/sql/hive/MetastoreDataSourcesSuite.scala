@@ -608,7 +608,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       StructType(
         StructField("a", ArrayType(IntegerType, containsNull = false), nullable = true) :: Nil)
     assert(df2.schema === expectedSchema2)
-    df2.insertInto("arrayInParquet", overwrite = false)
+    df2.write.mode(SaveMode.Append).saveAsTable("arrayInParquet")
     createDataFrame(Tuple1(Seq(4, 5)) :: Nil).toDF("a").write.mode(SaveMode.Append)
       .saveAsTable("arrayInParquet") // This one internally calls df2.insertInto.
     createDataFrame(Tuple1(Seq(Int.box(6), null.asInstanceOf[Integer])) :: Nil).toDF("a").write
@@ -642,7 +642,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       StructType(
         StructField("a", mapType2, nullable = true) :: Nil)
     assert(df2.schema === expectedSchema2)
-    df2.insertInto("mapInParquet", overwrite = false)
+    df2.write.mode(SaveMode.Append).saveAsTable("mapInParquet")
     createDataFrame(Tuple1(Map(4 -> 5)) :: Nil).toDF("a").write.mode(SaveMode.Append)
       .saveAsTable("mapInParquet") // This one internally calls df2.insertInto.
     createDataFrame(Tuple1(Map(6 -> null.asInstanceOf[Integer])) :: Nil).toDF("a").write
@@ -768,7 +768,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 35"),
       (6 to 34).map(i => Row(i, s"str$i")))
 
-    createDF(40, 49).insertInto("insertParquet")
+    createDF(40, 49).write.mode(SaveMode.Append).saveAsTable("insertParquet")
     checkAnswer(
       sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 45"),
       (6 to 44).map(i => Row(i, s"str$i")))
@@ -782,7 +782,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT p.c1, c2 FROM insertParquet p"),
       (50 to 59).map(i => Row(i, s"str$i")))
 
-    createDF(70, 79).insertInto("insertParquet", overwrite = true)
+    createDF(70, 79).write.mode(SaveMode.Overwrite).saveAsTable("insertParquet")
     checkAnswer(
       sql("SELECT p.c1, c2 FROM insertParquet p"),
       (70 to 79).map(i => Row(i, s"str$i")))
