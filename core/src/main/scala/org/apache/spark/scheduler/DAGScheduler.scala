@@ -386,13 +386,15 @@ class DAGScheduler(
     def visit(rdd: RDD[_]) {
       if (!visited(rdd)) {
         visited += rdd
-        if (getCacheLocs(rdd).contains(Nil)) {
+        if (rdd.dependencies.size < 2 || getCacheLocs(rdd).contains(Nil)) {
           for (dep <- rdd.dependencies) {
             dep match {
               case shufDep: ShuffleDependency[_, _, _] =>
-                val mapStage = getShuffleMapStage(shufDep, stage.jobId)
-                if (!mapStage.isAvailable) {
-                  missing += mapStage
+                if (getCacheLocs(rdd).contains(Nil)) {
+                  val mapStage = getShuffleMapStage(shufDep, stage.jobId)
+                  if (!mapStage.isAvailable) {
+                    missing += mapStage
+                  }
                 }
               case narrowDep: NarrowDependency[_] =>
                 waitingForVisit.push(narrowDep.rdd)
