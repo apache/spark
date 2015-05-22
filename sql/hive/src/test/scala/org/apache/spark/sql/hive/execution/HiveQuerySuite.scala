@@ -20,12 +20,9 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.util.{Locale, TimeZone}
 
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDTF
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorFactory, StructObjectInspector, ObjectInspector}
-import org.scalatest.BeforeAndAfter
-
 import scala.util.Try
+
+import org.scalatest.BeforeAndAfter
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
@@ -111,13 +108,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |  SELECT key FROM gen_tmp ORDER BY key ASC;
     """.stripMargin)
 
-  test("multiple generator in projection") {
+  test("multiple generators in projection") {
     intercept[AnalysisException] {
-      sql("SELECT explode(map(key, value)), key FROM src").collect()
+      sql("SELECT explode(array(key, key)), explode(array(key, key)) FROM src").collect()
     }
 
     intercept[AnalysisException] {
-      sql("SELECT explode(map(key, value)) as k1, k2, key FROM src").collect()
+      sql("SELECT explode(array(key, key)) as k1, explode(array(key, key)) FROM src").collect()
     }
   }
 

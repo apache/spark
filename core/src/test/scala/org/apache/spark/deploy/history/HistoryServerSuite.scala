@@ -198,11 +198,11 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
   }
 
   def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
-    HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/json/v1/$path"))
+    HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/api/v1/$path"))
   }
 
   def getUrl(path: String): String = {
-    HistoryServerSuite.getUrl(new URL(s"http://localhost:$port/json/v1/$path"))
+    HistoryServerSuite.getUrl(new URL(s"http://localhost:$port/api/v1/$path"))
   }
 
   def generateExpectation(name: String, path: String): Unit = {

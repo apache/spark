@@ -132,7 +132,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
     def load(sc: SparkContext, path: String): GaussianMixtureModel = {
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
-      val dataFrame = sqlContext.parquetFile(dataPath)
+      val dataFrame = sqlContext.read.parquet(dataPath)
       val dataArray = dataFrame.select("weight", "mu", "sigma").collect()
 
       // Check schema explicitly since erasure makes it hard to use match-case for checking.

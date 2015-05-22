@@ -864,7 +864,11 @@ def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
         for i in cluster_instances:
             i.update()
 
-        statuses = conn.get_all_instance_status(instance_ids=[i.id for i in cluster_instances])
+        max_batch = 100
+        statuses = []
+        for j in xrange(0, len(cluster_instances), max_batch):
+            batch = [i.id for i in cluster_instances[j:j + max_batch]]
+            statuses.extend(conn.get_all_instance_status(instance_ids=batch))
 
         if cluster_state == 'ssh-ready':
             if all(i.state == 'running' for i in cluster_instances) and \

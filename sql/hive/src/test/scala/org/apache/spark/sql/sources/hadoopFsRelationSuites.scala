@@ -22,13 +22,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.parquet.ParquetTest
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
-// TODO Don't extend ParquetTest
-// This test suite extends ParquetTest for some convenient utility methods. These methods should be
-// moved to some more general places, maybe QueryTest.
-class HadoopFsRelationTest extends QueryTest with ParquetTest {
+abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   override val sqlContext: SQLContext = TestHive
 
   import sqlContext._
@@ -239,10 +236,6 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
     }
   }
 
-  def withTable(tableName: String)(f: => Unit): Unit = {
-    try f finally sql(s"DROP TABLE $tableName")
-  }
-
   test("saveAsTable()/load() - non-partitioned table - Overwrite") {
     testDF.write.format(dataSourceName).mode(SaveMode.Overwrite)
       .option("dataSchema", dataSchema.json)
@@ -446,6 +439,23 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
       checkAnswer(df, partitionedTestDF.collect())
     }
   }
+
+  test("Partition column type casting") {
+    withTempPath { file =>
+      val input = partitionedTestDF.select('a, 'b, 'p1.cast(StringType).as('ps), 'p2)
+
+      input
+        .write
+        .format(dataSourceName)
+        .mode(SaveMode.Overwrite)
+        .partitionBy("ps", "p2")
+        .saveAsTable("t")
+
+      withTempTable("t") {
+        checkAnswer(table("t"), input.collect())
+      }
+    }
+  }
 }
 
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
@@ -504,6 +514,20 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
+    }
+  }
+
+  test("SPARK-7616: adjust column name order accordingly when saving partitioned table") {
+    val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+
+    df.write
+      .format("parquet")
+      .mode(SaveMode.Overwrite)
+      .partitionBy("c", "a")
+      .saveAsTable("t")
+
+    withTable("t") {
+      checkAnswer(table("t"), df.select('b, 'c, 'a).collect())
     }
   }
 }

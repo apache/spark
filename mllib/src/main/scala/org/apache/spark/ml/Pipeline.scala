@@ -170,7 +170,7 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] {
 
 /**
  * :: AlphaComponent ::
- * Represents a compiled pipeline.
+ * Represents a fitted pipeline.
  */
 @AlphaComponent
 class PipelineModel private[ml] (

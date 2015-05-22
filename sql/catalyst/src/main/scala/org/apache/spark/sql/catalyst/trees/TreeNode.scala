@@ -385,6 +385,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def argString: String = productIterator.flatMap {
     case tn: TreeNode[_] if children contains tn => Nil
     case tn: TreeNode[_] if tn.toString contains "\n" => s"(${tn.simpleString})" :: Nil
+    case seq: Seq[BaseType] if seq.toSet.subsetOf(children.toSet) => Nil
     case seq: Seq[_] => seq.mkString("[", ",", "]") :: Nil
     case set: Set[_] => set.mkString("{", ",", "}") :: Nil
     case other => other :: Nil

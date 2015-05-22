@@ -357,7 +357,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient
   override protected[sql] lazy val functionRegistry =
     new HiveFunctionRegistry with OverrideFunctionRegistry {
-      def caseSensitive: Boolean = false
+      override def conf: CatalystConf = currentSession().conf
     }
 
   /* An analyzer that uses the Hive metastore. */
