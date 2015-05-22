@@ -330,6 +330,7 @@ object functions {
    * null when the current row extends before the beginning of the window.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def lag(columnName: String): Column = {
     lag(columnName, 1)
@@ -340,6 +341,7 @@ object functions {
    * null when the current row extends before the beginning of the window.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def lag(e: Column): Column = {
     lag(e, 1)
@@ -350,6 +352,7 @@ object functions {
    * null when the current row extends before the beginning of the window.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def lag(e: Column, count: Int): Column = {
     lag(e, count, null)
@@ -360,6 +363,7 @@ object functions {
    * null when the current row extends before the beginning of the window.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def lag(columnName: String, count: Int): Column = {
     lag(columnName, count, null)
@@ -371,6 +375,7 @@ object functions {
    * of the window.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def lag(columnName: String, count: Int, defaultValue: Any): Column = {
     lag(Column(columnName), count, defaultValue)
@@ -382,6 +387,7 @@ object functions {
    * of the window.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def lag(e: Column, count: Int, defaultValue: Any): Column = {
     UnresolvedWindowFunction("lag", e.expr :: Literal(count) :: Literal(defaultValue) :: Nil)
@@ -392,6 +398,7 @@ object functions {
    * null when the current row extends before the end of the window.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def lead(columnName: String): Column = {
     lead(columnName, 1)
@@ -402,6 +409,7 @@ object functions {
    * null when the current row extends before the end of the window.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def lead(e: Column): Column = {
     lead(e, 1)
@@ -412,6 +420,7 @@ object functions {
    * null when the current row extends before the end of the window.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def lead(columnName: String, count: Int): Column = {
     lead(columnName, count, null)
@@ -422,6 +431,7 @@ object functions {
    * null when the current row extends before the end of the window.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def lead(e: Column, count: Int): Column = {
     lead(e, count, null)
@@ -432,6 +442,7 @@ object functions {
    * given default value when the current row extends before the end of the window.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def lead(columnName: String, count: Int, defaultValue: Any): Column = {
     lead(Column(columnName), count, defaultValue)
@@ -442,6 +453,7 @@ object functions {
    * given default value when the current row extends before the end of the window.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def lead(e: Column, count: Int, defaultValue: Any): Column = {
     UnresolvedWindowFunction("lead", e.expr :: Literal(count) :: Literal(defaultValue) :: Nil)
@@ -454,6 +466,7 @@ object functions {
    * number of groups called buckets and assigns a bucket number to each row in the partition.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def ntile(e: Column): Column = {
     UnresolvedWindowFunction("ntile", e.expr :: Nil)
@@ -466,6 +479,7 @@ object functions {
    * number of groups called buckets and assigns a bucket number to each row in the partition.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def ntile(columnName: String): Column = {
     ntile(Column(columnName))
@@ -476,6 +490,7 @@ object functions {
    * row within the partition.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def rowNumber(): Column = {
     UnresolvedWindowFunction("row_number", Nil)
@@ -488,6 +503,7 @@ object functions {
    * place and that the next person came in third.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def denseRank(): Column = {
     UnresolvedWindowFunction("dense_rank", Nil)
@@ -500,6 +516,7 @@ object functions {
    * place and that the next person came in third.
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def rank(): Column = {
     UnresolvedWindowFunction("rank", Nil)
@@ -512,6 +529,7 @@ object functions {
    * CUME_DIST(x) = number of values in S coming before and including x in the specified order / N
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def cumeDist(): Column = {
     UnresolvedWindowFunction("cume_dist", Nil)
@@ -524,6 +542,7 @@ object functions {
    * (rank of row in its partition - 1) / (number of rows in the partition - 1)
    *
    * @group window_funcs
+   * @since 1.4.0
    */
   def percentRank(): Column = {
     UnresolvedWindowFunction("percent_rank", Nil)

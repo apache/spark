@@ -47,7 +47,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
       Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
   }
 
-  test("lead in window") {
+  test("lead") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     df.registerTempTable("window_table")
 
@@ -60,7 +60,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
           | FROM window_table""".stripMargin).collect())
   }
 
-  test("lag in window") {
+  test("lag") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     df.registerTempTable("window_table")
 
@@ -75,7 +75,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
           | FROM window_table""".stripMargin).collect())
   }
 
-  test("lead in window with default value") {
+  test("lead with default value") {
     val df = Seq((1, "1"), (1, "1"), (2, "2"), (1, "1"),
                  (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     df.registerTempTable("window_table")
@@ -88,7 +88,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
           | FROM window_table""".stripMargin).collect())
   }
 
-  test("lag in window with default value") {
+  test("lag with default value") {
     val df = Seq((1, "1"), (1, "1"), (2, "2"), (1, "1"),
                  (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     df.registerTempTable("window_table")
@@ -134,23 +134,23 @@ class HiveDataFrameWindowSuite extends QueryTest {
            |rank() over (partition by value order by key),
            |cume_dist() over (partition by value order by key),
            |percent_rank() over (partition by value order by key)
-           |FROM window_table""".stripMargin).collect)
+           |FROM window_table""".stripMargin).collect())
   }
 
-  test("aggregation in a row window") {
+  test("aggregation and rows between") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     df.registerTempTable("window_table")
     checkAnswer(
       df.select(
-        avg("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 1))),
+        avg("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 2))),
       sql(
         """SELECT
           | avg(key) OVER
-          |   (PARTITION BY value ORDER BY key ROWS BETWEEN 1 preceding and 1 following)
+          |   (PARTITION BY value ORDER BY key ROWS BETWEEN 1 preceding and 2 following)
           | FROM window_table""".stripMargin).collect())
   }
 
-  test("aggregation in a Range window") {
+  test("aggregation and range betweens") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     df.registerTempTable("window_table")
     checkAnswer(
@@ -163,25 +163,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
           | FROM window_table""".stripMargin).collect())
   }
 
-  test("Aggregate function in Row preceding Window") {
-    val df = Seq((1, "1"), (2, "2"), (2, "3"), (1, "3"), (3, "3"), (4, "3")).toDF("key", "value")
-    df.registerTempTable("window_table")
-    checkAnswer(
-      df.select(
-        $"key",
-        first("value").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 0)),
-        first("value").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-2, 1))),
-      sql(
-        """SELECT
-          | key,
-          | first_value(value) OVER
-          |   (PARTITION BY value ORDER BY key ROWS 1 preceding),
-          | first_value(value) OVER
-          |   (PARTITION BY value ORDER BY key ROWS between 2 preceding and 1 preceding)
-          | FROM window_table""".stripMargin).collect())
-  }
-
-  test("Aggregate function in Row following Window") {
+  test("aggregation and rows betweens with unbounded") {
     val df = Seq((1, "1"), (2, "2"), (2, "3"), (1, "3"), (3, "2"), (4, "3")).toDF("key", "value")
     df.registerTempTable("window_table")
     checkAnswer(
@@ -191,7 +173,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
           Window.partitionBy($"value").orderBy($"key").rowsBetween(0, Long.MaxValue)),
         last("value").over(
           Window.partitionBy($"value").orderBy($"key").rowsBetween(Long.MinValue, 0)),
-        last("value").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 1))),
+        last("value").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 3))),
       sql(
         """SELECT
           | key,
@@ -204,26 +186,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
           | FROM window_table""".stripMargin).collect())
   }
 
-  test("Multiple aggregate functions in row window") {
-    val df = Seq((1, "1"), (1, "2"), (3, "2"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.registerTempTable("window_table")
-    checkAnswer(
-      df.select(
-        avg("key").over(Window.partitionBy($"key").orderBy($"value").rowsBetween(-1, 0)),
-        avg("key").over(Window.partitionBy($"key").orderBy($"value").rowsBetween(0, 0)),
-        avg("key").over(Window.partitionBy($"key").orderBy($"value").rowsBetween(-2, 1))),
-      sql(
-        """SELECT
-          | avg(key) OVER
-          |   (partition by key ORDER BY value rows 1 preceding),
-          | avg(key) OVER
-          |   (partition by key ORDER BY value rows between current row and current row),
-          | avg(key) OVER
-          |   (partition by key ORDER BY value rows between 2 preceding and 1 preceding)
-          | FROM window_table""".stripMargin).collect())
-  }
-
-  test("Multiple aggregate functions in range window") {
+  test("aggregation and range betweens with unbounded") {
     val df = Seq((1, "1"), (2, "2"), (2, "2"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     df.registerTempTable("window_table")
     checkAnswer(
@@ -233,9 +196,9 @@ class HiveDataFrameWindowSuite extends QueryTest {
           Window.partitionBy($"value").orderBy($"key").rangeBetween(1, Long.MaxValue))
           .equalTo("2")
           .as("last_v"),
-        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(-2, 1))
+        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(Long.MinValue, 1))
           .as("avg_key1"),
-        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(0, 1))
+        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(0, Long.MaxValue))
           .as("avg_key2"),
         avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(-1, 0))
           .as("avg_key3")
@@ -246,9 +209,9 @@ class HiveDataFrameWindowSuite extends QueryTest {
           | last_value(value) OVER
           |   (PARTITION BY value ORDER BY key RANGE 1 preceding) == "2",
           | avg(key) OVER
-          |   (PARTITION BY value ORDER BY key RANGE BETWEEN 2 preceding and 1 following),
+          |   (PARTITION BY value ORDER BY key RANGE BETWEEN unbounded preceding and 1 following),
           | avg(key) OVER
-          |   (PARTITION BY value ORDER BY key RANGE BETWEEN current row and 1 following),
+          |   (PARTITION BY value ORDER BY key RANGE BETWEEN current row and unbounded following),
           | avg(key) OVER
           |   (PARTITION BY value ORDER BY key RANGE BETWEEN 1 preceding and current row)
           | FROM window_table""".stripMargin).collect())
