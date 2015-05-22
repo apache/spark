@@ -121,14 +121,21 @@ def _parse_memory(s):
 
 
 def _load_from_socket(port, serializer):
-    sock = socket.socket()
-    sock.settimeout(3)
-    try:
-        sock.connect(("localhost", port))
+    sock = None
+    for res in socket.getaddrinfo("localhost", port, socket.AF_UNSPEC, socket.SOCK_STREAM):
+        af, socktype, proto, canonname, sa = res
+        try:
+            sock = socket.socket(af, socktype, proto)
+            sock.settimeout(3)
+            sock.connect(sa)
+        except socket.error:
+            sock = None
+            continue
+        break
+    if sock:
         rf = sock.makefile("rb", 65536)
         for item in serializer.load_stream(rf):
             yield item
-    finally:
         sock.close()
 
 
