@@ -20,50 +20,70 @@ import java.io.{BufferedInputStream, FileInputStream, OutputStream}
 import javax.ws.rs.{GET, Produces}
 import javax.ws.rs.core.{Response, StreamingOutput, MediaType}
 
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.util.Utils
 
 @Produces(Array(MediaType.APPLICATION_OCTET_STREAM))
-private[v1] class EventLogDownloadResource(val uIRoot: UIRoot, val appId: String) {
+private[v1] class EventLogDownloadResource(
+    val uIRoot: UIRoot,
+    val appId: String,
+    val attemptId: Option[String]) extends Logging {
+  val conf = SparkHadoopUtil.get.newConfiguration(new SparkConf)
 
   @GET
   def getEventLogs(): Response = {
     uIRoot match {
       case hs: HistoryServer =>
-        val dir = Utils.createTempDir()
-        Utils.chmod700(dir)
-        hs.copyEventLogsToDirectory(appId, dir)
-        dir.listFiles().headOption.foreach { file =>
-          val stream  = new StreamingOutput {
-            override def write(output: OutputStream): Unit = {
-              try {
-                val inStream = new BufferedInputStream(new FileInputStream(file))
-                val buffer = new Array[Byte](1024 * 1024)
-                var dataRemains = true
-                while (dataRemains) {
-                  val read = inStream.read(buffer)
-                  if (read > 0) {
-                    output.write(buffer, 0, read)
-                  } else {
-                    dataRemains = false
-                  }
-                }
-                output.flush()
-              } finally {
-                Utils.deleteRecursively(dir)
-              }
-            }
+        var logsNotFound = false
+        val fileName: String = {
+          attemptId match {
+            case Some(id) => s"eventLogs-$appId-$id.zip"
+            case None => s"eventLogs-$appId.zip"
           }
-          return Response.ok(stream)
-            .header("Content-Length", file.length().toString)
-            .header("Content-Disposition", s"attachment; filename=${file.getName}")
+        }
+        val stream = new StreamingOutput {
+          override def write(output: OutputStream): Unit = {
+            attemptId match {
+              case Some(id) =>
+                Utils.zipFilesToStream(hs.getEventLogPaths(appId, id), conf, output)
+              case None =>
+                val appInfo = hs.getApplicationInfoList.find(_.id == appId)
+                appInfo match {
+                  case Some(info) =>
+                    val attempts = info.attempts
+                    val files = new ArrayBuffer[Path]
+                    attempts.foreach { attempt =>
+                      attempt.attemptId.foreach { attemptId =>
+                        logInfo(s"Attempt found: ${attemptId}")
+                        files ++= hs.getEventLogPaths(appId, attemptId)
+                      }
+                    }
+                    if (files.nonEmpty) {
+                      Utils.zipFilesToStream(files, conf, output)
+                    }
+                  case None => logsNotFound = true
+                }
+            }
+            output.flush()
+          }
+        }
+        if (logsNotFound) {
+          Response.serverError()
+            .entity(s"Event logs are not available for app: $appId.")
+            .status(Response.Status.SERVICE_UNAVAILABLE)
+            .build()
+        } else {
+          Response.ok(stream)
+            .header("Content-Disposition", s"attachment; filename=$fileName")
             .header("Content-Type", MediaType.APPLICATION_OCTET_STREAM)
             .build()
         }
-        Response.serverError()
-          .entity(s"Event logs for $appId not found.")
-          .status(Response.Status.NOT_FOUND)
-          .build()
       case _ =>
         Response.serverError()
           .entity("History Server is not running - cannot return event logs.")

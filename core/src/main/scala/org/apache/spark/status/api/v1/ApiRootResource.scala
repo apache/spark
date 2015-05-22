@@ -164,6 +164,18 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
     }
   }
 
+  @Path("applications/{appId}/download")
+  def getEventLogs(
+    @PathParam("appId") appId: String): EventLogDownloadResource = {
+    new EventLogDownloadResource(uiRoot, appId, None)
+  }
+
+  @Path("applications/{appId}/{attemptId}/download")
+  def getEventLogs(
+    @PathParam("appId") appId: String,
+    @PathParam("attemptId") attemptId: String): EventLogDownloadResource = {
+    new EventLogDownloadResource(uiRoot, appId, Some(attemptId))
+  }
 }
 
 private[spark] object ApiRootResource {

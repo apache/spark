@@ -17,15 +17,15 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{FileOutputStream, File, BufferedInputStream, FileNotFoundException,
-  IOException, InputStream}
+import java.io.{OutputStream, FileOutputStream, File, BufferedInputStream, FileNotFoundException, IOException, InputStream}
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FSDataInputStream, FileStatus, Path}
 import org.apache.hadoop.fs.permission.AccessControlException
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -221,44 +221,29 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  override def copyApplicationEventLogs(appId: String, directory: File): Unit = {
-    val buffer = new Array[Byte](64 * 1024)
-    /**
-     * Copy the data from the path specified into a new [[ZipEntry]] with the remotePath's name.
-     */
-    def copyToZipStream(remotePath: Path, zipStream: ZipOutputStream): Unit = {
-      val inputStream = fs.open(remotePath, 1 * 1024 * 1024) // 1MB Buffer
-      zipStream.putNextEntry(new ZipEntry(remotePath.getName))
-      var dataRemaining = true
-      while (dataRemaining) {
-        val length = inputStream.read(buffer)
-        if (length != -1) {
-          zipStream.write(buffer, 0, length)
-        } else {
-          dataRemaining = false
-        }
-      }
-      zipStream.closeEntry()
-      inputStream.close()
-    }
+  override def getEventLogPaths(
+      appId: String,
+      attemptId: String): Seq[Path] = {
+
+    var filePaths = new ArrayBuffer[Path]()
 
     applications.get(appId).foreach { appInfo =>
-      val outFile = new File(directory, s"eventLogs-$appId.zip")
-      val zipStream = new ZipOutputStream(new FileOutputStream(outFile))
-      appInfo.attempts.foreach { attempt =>
+      appInfo.attempts.find { attempt =>
+        if (attempt.attemptId.isDefined && attempt.attemptId.get == attemptId) true
+        else false
+      }.foreach { attempt =>
         val remotePath = new Path(logDir, attempt.logPath)
         if (isLegacyLogDirectory(fs.getFileStatus(remotePath))) {
           val filesIter = fs.listFiles(remotePath, true)
           while (filesIter.hasNext) {
-            copyToZipStream(filesIter.next().getPath, zipStream)
+            filePaths += filesIter.next().getPath
           }
         } else {
-          copyToZipStream(remotePath, zipStream)
+          filePaths += remotePath
         }
       }
-      zipStream.finish()
-      zipStream.close()
     }
+    filePaths
   }
 
 

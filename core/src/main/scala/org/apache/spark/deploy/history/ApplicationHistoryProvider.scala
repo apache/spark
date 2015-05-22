@@ -17,7 +17,9 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.File
+import java.io.{OutputStream, File}
+
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.ui.SparkUI
 
@@ -65,9 +67,8 @@ private[history] abstract class ApplicationHistoryProvider {
   def getConfig(): Map[String, String] = Map()
 
   /**
-   * Get the event logs for the given application. The event logs are compressed into a zip file
-   * and copied into the directory passed in.
+   * Get the [[Path]]s to the Event log directories.
    */
-  def copyApplicationEventLogs(appId: String, directory: File): Unit = { }
+  def getEventLogPaths(appId: String, attemptId: String): Seq[Path] = Seq.empty
 
 }

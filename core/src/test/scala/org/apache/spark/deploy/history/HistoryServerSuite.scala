@@ -16,8 +16,10 @@
  */
 package org.apache.spark.deploy.history
 
-import java.io.{File, FileInputStream, FileWriter, IOException}
+import java.io.{FileOutputStream, BufferedOutputStream, InputStream, File, FileInputStream, FileWriter, IOException}
 import java.net.{HttpURLConnection, URL}
+import java.util.zip.ZipInputStream
+import javax.servlet.http
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import org.apache.commons.io.{FileUtils, IOUtils}
@@ -147,6 +149,14 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     }
   }
 
+  test("download all logs for app with multiple attempts") {
+    val (code, inputStream, error) =
+      HistoryServerSuite.connectAndGetInputStream(generateURL("applications/local-1426533911241"))
+    code should be (HttpServletResponse.SC_OK)
+    inputStream should not be None
+    error should be (None)
+  }
+
   test("response codes on bad paths") {
     val badAppId = getContentAndCode("applications/foobar")
     badAppId._1 should be (HttpServletResponse.SC_NOT_FOUND)
@@ -202,7 +212,11 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
   }
 
   def getUrl(path: String): String = {
-    HistoryServerSuite.getUrl(new URL(s"http://localhost:$port/api/v1/$path"))
+    HistoryServerSuite.getUrl(generateURL(path))
+  }
+
+  def generateURL(path: String): URL = {
+    new URL(s"http://localhost:$port/api/v1/$path")
   }
 
   def generateExpectation(name: String, path: String): Unit = {
@@ -211,6 +225,23 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     val out = new FileWriter(file)
     out.write(json)
     out.close()
+  }
+
+  def unzipToDir(inputStream: InputStream, dir: File): Unit = {
+    val unzipStream = new ZipInputStream(inputStream)
+    val buffer = new Array[Byte](64 * 1024 * 1024)
+    var nextEntry = unzipStream.getNextEntry
+    while(nextEntry != null) {
+      val file = new File(dir, nextEntry.getName)
+      val outputStream = new BufferedOutputStream(new FileOutputStream(file))
+      var read = Integer.MAX_VALUE
+      while (read != -1) {
+        read = unzipStream.read(buffer)
+        outputStream.write(buffer, 0, read)
+      }
+      outputStream.close()
+      nextEntry = unzipStream.getNextEntry
+    }
   }
 }
 
@@ -233,13 +264,18 @@ object HistoryServerSuite {
   }
 
   def getContentAndCode(url: URL): (Int, Option[String], Option[String]) = {
+    val (code, in, errString) = connectAndGetInputStream(url)
+    val inString = in.map(IOUtils.toString)
+    (code, inString, errString)
+  }
+
+  def connectAndGetInputStream(url: URL): (Int, Option[InputStream], Option[String]) = {
     val connection = url.openConnection().asInstanceOf[HttpURLConnection]
     connection.setRequestMethod("GET")
     connection.connect()
     val code = connection.getResponseCode()
-    val inString = try {
-      val in = Option(connection.getInputStream())
-      in.map(IOUtils.toString)
+    val inStream = try {
+      Option(connection.getInputStream())
     } catch {
       case io: IOException => None
     }
@@ -249,7 +285,7 @@ object HistoryServerSuite {
     } catch {
       case io: IOException => None
     }
-    (code, inString, errString)
+    (code, inStream, errString)
   }
 
 

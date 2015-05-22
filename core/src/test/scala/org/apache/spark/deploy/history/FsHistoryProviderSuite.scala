@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{FileInputStream, BufferedOutputStream, File, FileOutputStream, OutputStreamWriter}
+import java.io.{ByteArrayOutputStream, FileInputStream, BufferedOutputStream, File, FileOutputStream, OutputStreamWriter}
 import java.net.URI
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
@@ -382,39 +382,15 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
         .currentTimeMillis() - 400, "test", Some("attempt1")),
       SparkListenerApplicationEnd(System.currentTimeMillis() - 200)
     )
-    val log1Buffer = getFileContent(log1)
     val log2 = newLogFile("downloadApp1", Some("attempt2"), inProgress = false)
     writeFile(log2, true, None,
       SparkListenerApplicationStart("downloadApp1", Some("downloadApp1"), System
         .currentTimeMillis() - 100, "test", Some("attempt2")),
       SparkListenerApplicationEnd(System.currentTimeMillis())
     )
-    val log2Buffer = getFileContent(log2)
     provider.checkForLogs()
-    var inputDir: File = null
-    var outputDir: File = null
-    try {
-      inputDir = Utils.createTempDir()
-      Utils.chmod700(inputDir)
-      outputDir = Utils.createTempDir()
-      Utils.chmod700(outputDir)
-      provider.copyApplicationEventLogs("downloadApp1", inputDir)
-      val zipFile = inputDir.listFiles.headOption
-      zipFile.foreach { file =>
-        unzipToDir(file, outputDir)
-      }
-      var filesCompared = 0
-      outputDir.listFiles().foreach { outputFile =>
-        val bufferToCompare = if (outputFile.getName == log1.getName) log1Buffer else log2Buffer
-        val result = getFileContent(outputFile)
-        result should equal (bufferToCompare)
-        filesCompared += 1
-      }
-      assert(filesCompared === 2)
-    } finally {
-      if (inputDir != null) Utils.deleteRecursively(inputDir)
-      if (outputDir != null) Utils.deleteRecursively(outputDir)
-    }
+    provider.getEventLogPaths("downloadApp1", "attempt1").head.getName should be (log1.getName)
+    provider.getEventLogPaths("downloadApp1", "attempt2").head.getName should be (log2.getName)
   }
 
   /**
