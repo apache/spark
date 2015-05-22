@@ -74,7 +74,7 @@ class RegressionEvaluatorSuite extends FunSuite with MLlibTestSparkContext {
 
     // r2 score
     evaluator.setMetricName("r2")
-    assert(evaluator.evaluate(predictions) ~== 0.01 relTol 0.002)
+    assert(evaluator.evaluate(predictions) ~== 1.0 relTol 0.1)
 
     // mae
     evaluator.setMetricName("mae")
