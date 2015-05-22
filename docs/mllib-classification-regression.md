@@ -20,7 +20,7 @@ the supported algorithms for each type of problem.
       <td>Binary Classification</td><td>linear SVMs, logistic regression, decision trees, random forests, gradient-boosted trees, naive Bayes</td>
     </tr>
     <tr>
-      <td>Multiclass Classification</td><td>decision trees, random forests, naive Bayes</td>
+      <td>Multiclass Classification</td><td>logistic regression, decision trees, random forests, naive Bayes</td>
     </tr>
     <tr>
       <td>Regression</td><td>linear least squares, Lasso, ridge regression, decision trees, random forests, gradient-boosted trees, isotonic regression</td>
