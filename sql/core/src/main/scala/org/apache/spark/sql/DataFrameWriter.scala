@@ -151,6 +151,20 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * Inserts the content of the [[DataFrame]] to the specified table. It requires that
+   * the schema of the [[DataFrame]] is the same as the schema of the table.
+   *
+   * @since 1.4.0
+   */
+  def insertInto(tableName: String): Unit = {
+    val overwrite = (mode == SaveMode.Overwrite)
+    df.sqlContext.executePlan(InsertIntoTable(UnresolvedRelation(Seq(tableName)),
+      Map.empty, df.logicalPlan, overwrite, ifNotExists = false)).toRdd
+  }
+
+
+
+  /**
    * Saves the content of the [[DataFrame]] as the specified table.
    *
    * In the case the table already exists, behavior of this function depends on the
@@ -159,25 +173,13 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    if (df.sqlContext.catalog.tableExists(tableName :: Nil)) {
-      if (partitioningColumns.isDefined) {
-        sys.error("Inserting data into an existing partitioned table is not yet supported.")
-      }
-
+    if (df.sqlContext.catalog.tableExists(tableName :: Nil) && mode != SaveMode.Overwrite) {
       mode match {
         case SaveMode.Ignore =>
           // Do nothing
 
         case SaveMode.ErrorIfExists =>
-          sys.error(s"Table $tableName already exists.")
-
-        case SaveMode.Overwrite =>
-          df.sqlContext.executePlan(InsertIntoTable(
-            UnresolvedRelation(Seq(tableName)),
-            Map.empty,
-            df.logicalPlan,
-            overwrite = true,
-            ifNotExists = false)).toRdd
+          throw new AnalysisException(s"Table $tableName already exists.")
 
         case SaveMode.Append =>
           df.sqlContext.executePlan(InsertIntoTable(

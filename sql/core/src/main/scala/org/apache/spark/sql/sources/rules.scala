@@ -35,9 +35,9 @@ private[sql] object PreInsertCastAndRename extends Rule[LogicalPlan] {
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
 
-      // We are inserting into an InsertableRelation.
+      // We are inserting into an InsertableRelation or HadoopFsRelation.
       case i @ InsertIntoTable(
-      l @ LogicalRelation(r: InsertableRelation), partition, child, overwrite, ifNotExists) => {
+      l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation), _, child, _, _) => {
         // First, make sure the data to be inserted have the same number of fields with the
         // schema of the relation.
         if (l.output.size != child.output.size) {

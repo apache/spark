@@ -425,10 +425,10 @@ class SQLQuerySuite extends QueryTest {
   test("SPARK-4825 save join to table") {
     val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
     sql("CREATE TABLE test1 (key INT, value STRING)")
-    testData.write.mode(SaveMode.Append).saveAsTable("test1")
+    testData.write.mode(SaveMode.Append).insertInto("test1")
     sql("CREATE TABLE test2 (key INT, value STRING)")
-    testData.write.mode(SaveMode.Append).saveAsTable("test2")
-    testData.write.mode(SaveMode.Append).saveAsTable("test2")
+    testData.write.mode(SaveMode.Append).insertInto("test2")
+    testData.write.mode(SaveMode.Append).insertInto("test2")
     sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
     checkAnswer(
       table("test"),
