@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.types.{UTF8String, DataType, StructType, AtomicType, DateUtils}
+import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.types.{UTF8String, DataType, StructType, AtomicType}
 
 /**
  * An extended interface to [[Row]] that allows the values for each column to be updated.  Setting

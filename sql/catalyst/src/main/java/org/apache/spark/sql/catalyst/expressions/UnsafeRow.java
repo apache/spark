@@ -27,9 +27,9 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.*;
 
+import org.apache.spark.sql.catalyst.util.DateUtils;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.DateUtils;
 import static org.apache.spark.sql.types.DataTypes.*;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.UTF8String;
