@@ -31,14 +31,14 @@ import org.apache.spark.sql.types.DoubleType
  * Evaluator for regression, which expects two input columns: prediction and label.
  */
 @AlphaComponent
-class RegressionEvaluator(override val uid: String)
+final class RegressionEvaluator(override val uid: String)
   extends Evaluator with HasPredictionCol with HasLabelCol {
 
   def this() = this(Identifiable.randomUID("regEval"))
 
   /**
    * param for metric name in evaluation
-   * @group param
+   * @group param supports mse, rmse, r2, mae as valid metric names.
    */
   val metricName: Param[String] = {
     val allowedParams = ParamValidators.inArray(Array("mse", "rmse", "r2", "mae"))
