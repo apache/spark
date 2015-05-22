@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
 
-private[serializer] object SerializationDebugger extends Logging {
+private[spark] object SerializationDebugger extends Logging {
 
   /**
    * Improve the given NotSerializableException with the serialization path leading from the given

@@ -31,7 +31,10 @@ import org.apache.spark.util.Utils
 
 private[kinesis]
 case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
-  extends BasicAWSCredentials(accessKeyId, secretKey) with Serializable
+  extends AWSCredentials {
+  override def getAWSAccessKeyId: String = accessKeyId
+  override def getAWSSecretKey: String = secretKey
+}
 
 /**
  * Custom AWS Kinesis-specific implementation of Spark Streaming's Receiver.

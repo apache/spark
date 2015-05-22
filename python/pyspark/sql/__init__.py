@@ -41,6 +41,13 @@ Important classes of Spark SQL and DataFrames:
 """
 from __future__ import absolute_import
 
+
+def since(version):
+    def deco(f):
+        f.__doc__ = f.__doc__.rstrip() + "\n\n.. versionadded:: %s" % version
+        return f
+    return deco
+
 # fix the module name conflict for Python 3+
 import sys
 from . import _types as types

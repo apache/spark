@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.{MultiAlias, ResolvedStar, Unresol
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, ScalaReflection, SqlParser}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
 import org.apache.spark.sql.json.JacksonGenerator
 import org.apache.spark.sql.sources.CreateTableUsingAsSelect
@@ -411,7 +411,7 @@ class DataFrame private[sql](
         joined.left,
         joined.right,
         joinType = Inner,
-        Some(expressions.EqualTo(
+        Some(catalyst.expressions.EqualTo(
           joined.left.resolve(usingColumn),
           joined.right.resolve(usingColumn))))
     )
@@ -480,8 +480,9 @@ class DataFrame private[sql](
     // By the time we get here, since we have already run analysis, all attributes should've been
     // resolved and become AttributeReference.
     val cond = plan.condition.map { _.transform {
-      case expressions.EqualTo(a: AttributeReference, b: AttributeReference) if a.sameRef(b) =>
-        expressions.EqualTo(plan.left.resolve(a.name), plan.right.resolve(b.name))
+      case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
+          if a.sameRef(b) =>
+        catalyst.expressions.EqualTo(plan.left.resolve(a.name), plan.right.resolve(b.name))
     }}
     plan.copy(condition = cond)
   }

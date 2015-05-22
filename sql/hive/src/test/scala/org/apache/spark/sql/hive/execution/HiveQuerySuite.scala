@@ -20,12 +20,9 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.util.{Locale, TimeZone}
 
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDTF
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorFactory, StructObjectInspector, ObjectInspector}
-import org.scalatest.BeforeAndAfter
-
 import scala.util.Try
+
+import org.scalatest.BeforeAndAfter
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 

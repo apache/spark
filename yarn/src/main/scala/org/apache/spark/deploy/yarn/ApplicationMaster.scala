@@ -345,7 +345,7 @@ private[spark] class ApplicationMaster(
               if (numPendingAllocate > 0) {
                 val currentAllocationInterval =
                   math.min(heartbeatInterval, nextAllocationInterval)
-                nextAllocationInterval *= 2
+                nextAllocationInterval = currentAllocationInterval * 2 // avoid overflow
                 currentAllocationInterval
               } else {
                 nextAllocationInterval = initialAllocationInterval
