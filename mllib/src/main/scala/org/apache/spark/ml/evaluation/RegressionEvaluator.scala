@@ -65,7 +65,7 @@ class RegressionEvaluator(override val uid: String)
 
     val scoreAndLabels = dataset.select($(predictionCol), $(labelCol))
       .map { case Row(prediction: Double, label: Double) =>
-      (prediction, label)
+        (prediction, label)
     }
     val metrics = new RegressionMetrics(scoreAndLabels)
     val metric = $(metricName) match {
