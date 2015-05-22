@@ -144,6 +144,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     getConf("spark.sql.hive.metastore.barrierPrefixes", "")
       .split(",").filterNot(_ == "")
 
+  /*
+   * hive thrift server use background spark sql thread pool to execute sql queries
+   */
+  protected[hive] def hiveThriftServerAsync: Boolean =
+    getConf("spark.sql.hive.thriftServer.async", "true") == "true"
+
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
 
