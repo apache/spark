@@ -15,13 +15,72 @@
 # limitations under the License.
 #
 
-from pyspark.ml.wrapper import JavaEvaluator
+from abc import abstractmethod, ABCMeta
+
+from pyspark.ml.wrapper import JavaWrapper
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasLabelCol, HasRawPredictionCol
 from pyspark.ml.util import keyword_only
 from pyspark.mllib.common import inherit_doc
 
-__all__ = ['BinaryClassificationEvaluator']
+__all__ = ['Evaluator', 'BinaryClassificationEvaluator']
+
+
+@inherit_doc
+class Evaluator(Params):
+    """
+    Base class for evaluators that compute metrics from predictions.
+    """
+
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def _evaluate(self, dataset):
+        """
+        Evaluates the output.
+
+        :param dataset: a dataset that contains labels/observations and
+               predictions
+        :return: metric
+        """
+        raise NotImplementedError()
+
+    def evaluate(self, dataset, params={}):
+        """
+        Evaluates the output with optional parameters.
+
+        :param dataset: a dataset that contains labels/observations and
+                        predictions
+        :param params: an optional param map that overrides embedded
+                       params
+        :return: metric
+        """
+        if isinstance(params, dict):
+            if params:
+                return self.copy(params)._evaluate(dataset)
+            else:
+                return self._evaluate(dataset)
+        else:
+            raise ValueError("Params must be a param map but got %s." % type(params))
+
+
+@inherit_doc
+class JavaEvaluator(Evaluator, JavaWrapper):
+    """
+    Base class for :py:class:`Evaluator`s that wrap Java/Scala
+    implementations.
+    """
+
+    __metaclass__ = ABCMeta
+
+    def _evaluate(self, dataset):
+        """
+        Evaluates the output.
+        :param dataset: a dataset that contains labels/observations and predictions.
+        :return: evaluation metric
+        """
+        self._transfer_params_to_java()
+        return self._java_obj.evaluate(dataset._jdf)
 
 
 @inherit_doc

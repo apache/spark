@@ -548,11 +548,34 @@ class SQLQuerySuite extends QueryTest {
     dropTempTable("data")
   }
 
-  test("resolve udtf with single alias") {
+  test("resolve udtf in projection #1") {
     val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
     read.json(rdd).registerTempTable("data")
     val df = sql("SELECT explode(a) AS val FROM data")
     val col = df("val")
+  }
+
+  test("resolve udtf in projection #2") {
+    val rdd = sparkContext.makeRDD((1 to 2).map(i => s"""{"a":[$i, ${i + 1}]}"""))
+    jsonRDD(rdd).registerTempTable("data")
+    checkAnswer(sql("SELECT explode(map(1, 1)) FROM data LIMIT 1"), Row(1, 1) :: Nil)
+    checkAnswer(sql("SELECT explode(map(1, 1)) as (k1, k2) FROM data LIMIT 1"), Row(1, 1) :: Nil)
+    intercept[AnalysisException] {
+      sql("SELECT explode(map(1, 1)) as k1 FROM data LIMIT 1")
+    }
+
+    intercept[AnalysisException] {
+      sql("SELECT explode(map(1, 1)) as (k1, k2, k3) FROM data LIMIT 1")
+    }
+  }
+
+  // TGF with non-TGF in project is allowed in Spark SQL, but not in Hive
+  test("TGF with non-TGF in projection") {
+    val rdd = sparkContext.makeRDD( """{"a": "1", "b":"1"}""" :: Nil)
+    jsonRDD(rdd).registerTempTable("data")
+    checkAnswer(
+      sql("SELECT explode(map(a, b)) as (k1, k2), a, b FROM data"),
+      Row("1", "1", "1", "1") :: Nil)
   }
 
   test("logical.Project should not be resolved if it contains aggregates or generators") {
@@ -790,5 +813,28 @@ class SQLQuerySuite extends QueryTest {
     intercept[AnalysisException] {
       sql("SELECT cast(key+2 as Int) from df_analysis A group by cast(key+1 as int)")
     }
+  }
+
+  // `Math.exp(1.0)` has different result for different jdk version, so not use createQueryTest
+  test("udf_java_method") {
+    checkAnswer(sql(
+      """
+        |SELECT java_method("java.lang.String", "valueOf", 1),
+        |       java_method("java.lang.String", "isEmpty"),
+        |       java_method("java.lang.Math", "max", 2, 3),
+        |       java_method("java.lang.Math", "min", 2, 3),
+        |       java_method("java.lang.Math", "round", 2.5),
+        |       java_method("java.lang.Math", "exp", 1.0),
+        |       java_method("java.lang.Math", "floor", 1.9)
+        |FROM src tablesample (1 rows)
+      """.stripMargin),
+      Row(
+        "1",
+        "true",
+        java.lang.Math.max(2, 3).toString,
+        java.lang.Math.min(2, 3).toString,
+        java.lang.Math.round(2.5).toString,
+        java.lang.Math.exp(1.0).toString,
+        java.lang.Math.floor(1.9).toString))
   }
 }
