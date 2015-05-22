@@ -129,8 +129,8 @@ private object GBTClassifierSuite {
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 2)
     val newModel = gbt.fit(newData)
     // Use parent, fittingParamMap from newTree since these are not checked anyways.
-    val oldModelAsNew = GBTClassificationModel.fromOld(oldModel, newModel.parent,
-      newModel.fittingParamMap, categoricalFeatures)
+    val oldModelAsNew = GBTClassificationModel.fromOld(
+      oldModel, newModel.parent.asInstanceOf[GBTClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
   }
 }

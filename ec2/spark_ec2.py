@@ -48,7 +48,7 @@ else:
     from urllib.request import urlopen, Request
     from urllib.error import HTTPError
 
-SPARK_EC2_VERSION = "1.2.1"
+SPARK_EC2_VERSION = "1.3.1"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 VALID_SPARK_VERSIONS = set([
@@ -65,6 +65,8 @@ VALID_SPARK_VERSIONS = set([
     "1.1.1",
     "1.2.0",
     "1.2.1",
+    "1.3.0",
+    "1.3.1",
 ])
 
 SPARK_TACHYON_MAP = {
@@ -75,6 +77,8 @@ SPARK_TACHYON_MAP = {
     "1.1.1": "0.5.0",
     "1.2.0": "0.5.0",
     "1.2.1": "0.5.0",
+    "1.3.0": "0.5.0",
+    "1.3.1": "0.5.0",
 }
 
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
@@ -347,46 +351,57 @@ def get_validate_spark_version(version, repo):
 
 
 # Source: http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
-# Last Updated: 2014-06-20
+# Last Updated: 2015-05-08
 # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
 EC2_INSTANCE_TYPES = {
     "c1.medium":   "pvm",
     "c1.xlarge":   "pvm",
+    "c3.large":    "pvm",
+    "c3.xlarge":   "pvm",
     "c3.2xlarge":  "pvm",
     "c3.4xlarge":  "pvm",
     "c3.8xlarge":  "pvm",
-    "c3.large":    "pvm",
-    "c3.xlarge":   "pvm",
+    "c4.large":    "hvm",
+    "c4.xlarge":   "hvm",
+    "c4.2xlarge":  "hvm",
+    "c4.4xlarge":  "hvm",
+    "c4.8xlarge":  "hvm",
     "cc1.4xlarge": "hvm",
     "cc2.8xlarge": "hvm",
     "cg1.4xlarge": "hvm",
     "cr1.8xlarge": "hvm",
+    "d2.xlarge":   "hvm",
+    "d2.2xlarge":  "hvm",
+    "d2.4xlarge":  "hvm",
+    "d2.8xlarge":  "hvm",
+    "g2.2xlarge":  "hvm",
+    "g2.8xlarge":  "hvm",
     "hi1.4xlarge": "pvm",
     "hs1.8xlarge": "pvm",
+    "i2.xlarge":   "hvm",
     "i2.2xlarge":  "hvm",
     "i2.4xlarge":  "hvm",
     "i2.8xlarge":  "hvm",
-    "i2.xlarge":   "hvm",
-    "m1.large":    "pvm",
-    "m1.medium":   "pvm",
     "m1.small":    "pvm",
+    "m1.medium":   "pvm",
+    "m1.large":    "pvm",
     "m1.xlarge":   "pvm",
+    "m2.xlarge":   "pvm",
     "m2.2xlarge":  "pvm",
     "m2.4xlarge":  "pvm",
-    "m2.xlarge":   "pvm",
-    "m3.2xlarge":  "hvm",
-    "m3.large":    "hvm",
     "m3.medium":   "hvm",
+    "m3.large":    "hvm",
     "m3.xlarge":   "hvm",
+    "m3.2xlarge":  "hvm",
+    "r3.large":    "hvm",
+    "r3.xlarge":   "hvm",
     "r3.2xlarge":  "hvm",
     "r3.4xlarge":  "hvm",
     "r3.8xlarge":  "hvm",
-    "r3.large":    "hvm",
-    "r3.xlarge":   "hvm",
     "t1.micro":    "pvm",
-    "t2.medium":   "hvm",
     "t2.micro":    "hvm",
     "t2.small":    "hvm",
+    "t2.medium":   "hvm",
 }
 
 
@@ -849,7 +864,11 @@ def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
         for i in cluster_instances:
             i.update()
 
-        statuses = conn.get_all_instance_status(instance_ids=[i.id for i in cluster_instances])
+        max_batch = 100
+        statuses = []
+        for j in xrange(0, len(cluster_instances), max_batch):
+            batch = [i.id for i in cluster_instances[j:j + max_batch]]
+            statuses.extend(conn.get_all_instance_status(instance_ids=batch))
 
         if cluster_state == 'ssh-ready':
             if all(i.state == 'running' for i in cluster_instances) and \
@@ -878,44 +897,57 @@ def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
 # Get number of local disks available for a given EC2 instance type.
 def get_num_disks(instance_type):
     # Source: http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html
-    # Last Updated: 2014-06-20
+    # Last Updated: 2015-05-08
     # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
     disks_by_instance = {
         "c1.medium":   1,
         "c1.xlarge":   4,
+        "c3.large":    2,
+        "c3.xlarge":   2,
         "c3.2xlarge":  2,
         "c3.4xlarge":  2,
         "c3.8xlarge":  2,
-        "c3.large":    2,
-        "c3.xlarge":   2,
+        "c4.large":    0,
+        "c4.xlarge":   0,
+        "c4.2xlarge":  0,
+        "c4.4xlarge":  0,
+        "c4.8xlarge":  0,
         "cc1.4xlarge": 2,
         "cc2.8xlarge": 4,
         "cg1.4xlarge": 2,
         "cr1.8xlarge": 2,
+        "d2.xlarge":   3,
+        "d2.2xlarge":  6,
+        "d2.4xlarge":  12,
+        "d2.8xlarge":  24,
         "g2.2xlarge":  1,
+        "g2.8xlarge":  2,
         "hi1.4xlarge": 2,
         "hs1.8xlarge": 24,
+        "i2.xlarge":   1,
         "i2.2xlarge":  2,
         "i2.4xlarge":  4,
         "i2.8xlarge":  8,
-        "i2.xlarge":   1,
-        "m1.large":    2,
-        "m1.medium":   1,
         "m1.small":    1,
+        "m1.medium":   1,
+        "m1.large":    2,
         "m1.xlarge":   4,
+        "m2.xlarge":   1,
         "m2.2xlarge":  1,
         "m2.4xlarge":  2,
-        "m2.xlarge":   1,
-        "m3.2xlarge":  2,
-        "m3.large":    1,
         "m3.medium":   1,
+        "m3.large":    1,
         "m3.xlarge":   2,
+        "m3.2xlarge":  2,
+        "r3.large":    1,
+        "r3.xlarge":   1,
         "r3.2xlarge":  1,
         "r3.4xlarge":  1,
         "r3.8xlarge":  2,
-        "r3.large":    1,
-        "r3.xlarge":   1,
         "t1.micro":    0,
+        "t2.micro":    0,
+        "t2.small":    0,
+        "t2.medium":   0,
     }
     if instance_type in disks_by_instance:
         return disks_by_instance[instance_type]

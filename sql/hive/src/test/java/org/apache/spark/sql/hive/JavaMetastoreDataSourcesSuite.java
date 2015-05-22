@@ -81,7 +81,7 @@ public class JavaMetastoreDataSourcesSuite {
       jsonObjects.add("{\"a\":" + i + ", \"b\":\"str" + i + "\"}");
     }
     JavaRDD<String> rdd = sc.parallelize(jsonObjects);
-    df = sqlContext.jsonRDD(rdd);
+    df = sqlContext.read().json(rdd);
     df.registerTempTable("jsonTable");
   }
 
@@ -96,7 +96,11 @@ public class JavaMetastoreDataSourcesSuite {
   public void saveExternalTableAndQueryIt() {
     Map<String, String> options = new HashMap<String, String>();
     options.put("path", path.toString());
-    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", SaveMode.Append, options);
+    df.write()
+      .format("org.apache.spark.sql.json")
+      .mode(SaveMode.Append)
+      .options(options)
+      .saveAsTable("javaSavedTable");
 
     checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),
@@ -115,7 +119,11 @@ public class JavaMetastoreDataSourcesSuite {
   public void saveExternalTableWithSchemaAndQueryIt() {
     Map<String, String> options = new HashMap<String, String>();
     options.put("path", path.toString());
-    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", SaveMode.Append, options);
+    df.write()
+      .format("org.apache.spark.sql.json")
+      .mode(SaveMode.Append)
+      .options(options)
+      .saveAsTable("javaSavedTable");
 
     checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),
@@ -138,7 +146,11 @@ public class JavaMetastoreDataSourcesSuite {
   @Test
   public void saveTableAndQueryIt() {
     Map<String, String> options = new HashMap<String, String>();
-    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", SaveMode.Append, options);
+    df.write()
+      .format("org.apache.spark.sql.json")
+      .mode(SaveMode.Append)
+      .options(options)
+      .saveAsTable("javaSavedTable");
 
     checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),

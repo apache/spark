@@ -112,7 +112,7 @@ object DecisionTreeExample {
         .text(s"input path to test dataset.  If given, option fracTest is ignored." +
           s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
-      opt[String]("<dataFormat>")
+      opt[String]("dataFormat")
         .text("data format: libsvm (default), dense (deprecated in Spark v1.1)")
         .action((x, c) => c.copy(dataFormat = x))
       arg[String]("<input>")
@@ -276,16 +276,14 @@ object DecisionTreeExample {
     // Get the trained Decision Tree from the fitted PipelineModel
     algo match {
       case "classification" =>
-        val treeModel = pipelineModel.getModel[DecisionTreeClassificationModel](
-          dt.asInstanceOf[DecisionTreeClassifier])
+        val treeModel = pipelineModel.stages.last.asInstanceOf[DecisionTreeClassificationModel]
         if (treeModel.numNodes < 20) {
           println(treeModel.toDebugString) // Print full model.
         } else {
           println(treeModel) // Print model summary.
         }
       case "regression" =>
-        val treeModel = pipelineModel.getModel[DecisionTreeRegressionModel](
-          dt.asInstanceOf[DecisionTreeRegressor])
+        val treeModel = pipelineModel.stages.last.asInstanceOf[DecisionTreeRegressionModel]
         if (treeModel.numNodes < 20) {
           println(treeModel.toDebugString) // Print full model.
         } else {

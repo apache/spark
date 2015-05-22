@@ -68,14 +68,14 @@ if __name__ == "__main__":
         closest = data.map(
             lambda p: (closestPoint(p, kPoints), (p, 1)))
         pointStats = closest.reduceByKey(
-            lambda (x1, y1), (x2, y2): (x1 + x2, y1 + y2))
+            lambda (p1, c1), (p2, c2): (p1 + p2, c1 + c2))
         newPoints = pointStats.map(
-            lambda xy: (xy[0], xy[1][0] / xy[1][1])).collect()
+            lambda st: (st[0], st[1][0] / st[1][1])).collect()
 
-        tempDist = sum(np.sum((kPoints[x] - y) ** 2) for (x, y) in newPoints)
+        tempDist = sum(np.sum((kPoints[iK] - p) ** 2) for (iK, p) in newPoints)
 
-        for (x, y) in newPoints:
-            kPoints[x] = y
+        for (iK, p) in newPoints:
+            kPoints[iK] = p
 
     print("Final centers: " + str(kPoints))
 

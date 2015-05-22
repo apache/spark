@@ -267,8 +267,8 @@ private[ml] object DecisionTreeClassifierSuite extends FunSuite {
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
     // Use parent, fittingParamMap from newTree since these are not checked anyways.
-    val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(oldTree, newTree.parent,
-      newTree.fittingParamMap, categoricalFeatures)
+    val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(
+      oldTree, newTree.parent.asInstanceOf[DecisionTreeClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
   }
 }

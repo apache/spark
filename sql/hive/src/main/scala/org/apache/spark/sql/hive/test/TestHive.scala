@@ -20,20 +20,22 @@ package org.apache.spark.sql.hive.test
 import java.io.File
 import java.util.{Set => JavaSet}
 
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.processors._
-import org.apache.hadoop.hive.serde2.RegexSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe
-import org.apache.spark.sql.SQLConf
+
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.util.Utils
 import org.apache.spark.{SparkConf, SparkContext}
 
@@ -46,7 +48,14 @@ import scala.collection.JavaConversions._
 // SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive
   extends TestHiveContext(
-    new SparkContext("local[2]", "TestSQLContext", new SparkConf().set("spark.sql.test", "")))
+    new SparkContext(
+      "local[2]",
+      "TestSQLContext",
+      new SparkConf()
+        .set("spark.sql.test", "")
+        .set(
+          "spark.sql.hive.metastore.barrierPrefixes",
+          "org.apache.spark.sql.hive.execution.PairSerDe")))
 
 /**
  * A locally running test instance of Spark's Hive execution engine.
@@ -62,6 +71,8 @@ object TestHive
 class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   self =>
 
+  import HiveContext._
+
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
@@ -70,23 +81,15 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   hiveconf.set("hive.plan.serialization.format", "javaXML")
 
   lazy val warehousePath = Utils.createTempDir()
-  lazy val metastorePath = Utils.createTempDir()
 
   /** Sets up the system initially or after a RESET command */
-  protected def configure(): Unit = {
-    warehousePath.delete()
-    metastorePath.delete()
-    setConf("javax.jdo.option.ConnectionURL",
-      s"jdbc:derby:;databaseName=$metastorePath;create=true")
-    setConf("hive.metastore.warehouse.dir", warehousePath.toString)
-  }
+  protected override def configure(): Map[String, String] =
+   newTemporaryConfiguration() ++ Map("hive.metastore.warehouse.dir" -> warehousePath.toString)
 
   val testTempDir = Utils.createTempDir()
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
-
-  configure() // Must be called before initializing the catalog below.
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
@@ -94,7 +97,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   lazy val hiveDevHome = envVarToFile("HIVE_DEV_HOME")
 
   // Override so we can intercept relative paths and rewrite them to point at hive.
-  override def runSqlHive(sql: String): Seq[String] = super.runSqlHive(rewritePaths(sql))
+  override def runSqlHive(sql: String): Seq[String] =
+    super.runSqlHive(rewritePaths(substitutor.substitute(this.hiveconf, sql)))
 
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
@@ -107,7 +111,11 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     /** Fewer partitions to speed up testing. */
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
-      override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+      // TODO as in unit test, conf.clear() probably be called, all of the value will be cleared.
+      // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
+      override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
+      override def caseSensitiveAnalysis: Boolean =
+        getConf(SQLConf.CASE_SENSITIVE, "false").toBoolean
     }
   }
 
@@ -154,22 +162,12 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   val describedTable = "DESCRIBE (\\w+)".r
 
-  val vs = new VariableSubstitution()
-
-  // we should substitute variables in hql to pass the text to parseSql() as a parameter.
-  // Hive parser need substituted text. HiveContext.sql() does this but return a DataFrame,
-  // while we need a logicalPlan so we cannot reuse that.
-  protected[hive] class HiveQLQueryExecution(hql: String)
-    extends this.QueryExecution(HiveQl.parseSql(vs.substitute(hiveconf, hql))) {
-    def hiveExec(): Seq[String] = runSqlHive(hql)
-    override def toString: String = hql + "\n" + super.toString
-  }
-
   /**
    * Override QueryExecution with special debug workflow.
    */
   class QueryExecution(logicalPlan: LogicalPlan)
     extends super.QueryExecution(logicalPlan) {
+    def this(sql: String) = this(parseSql(sql))
     override lazy val analyzed = {
       val describedTables = logical match {
         case HiveNativeCommand(describedTable(tbl)) => tbl :: Nil
@@ -193,7 +191,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
-      () => new HiveQLQueryExecution(sql).stringResult(): Unit
+      () => new QueryExecution(sql).stringResult(): Unit
     }
   }
 
@@ -201,6 +199,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * A list of test tables and the DDL required to initialize them.  A test table is loaded on
    * demand when a query are run against it.
    */
+  @transient
   lazy val testTables = new mutable.HashMap[String, TestTable]()
 
   def registerTestTable(testTable: TestTable): Unit = {
@@ -210,6 +209,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   // The test tables that are defined in the Hive QTestUtil.
   // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
   // https://github.com/apache/hive/blob/branch-0.13/data/scripts/q_test_init.sql
+  @transient
   val hiveQTestUtilTables = Seq(
     TestTable("src",
       "CREATE TABLE src (key INT, value STRING)".cmd,
@@ -242,16 +242,18 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       import org.apache.hadoop.mapred.{SequenceFileInputFormat, SequenceFileOutputFormat}
       import org.apache.thrift.protocol.TBinaryProtocol
 
-      val srcThrift = new Table("default", "src_thrift")
-      srcThrift.setFields(Nil)
-      srcThrift.setInputFormatClass(classOf[SequenceFileInputFormat[_,_]].getName)
-      // In Hive, SequenceFileOutputFormat will be substituted by HiveSequenceFileOutputFormat.
-      srcThrift.setOutputFormatClass(classOf[SequenceFileOutputFormat[_,_]].getName)
-      srcThrift.setSerializationLib(classOf[ThriftDeserializer].getName)
-      srcThrift.setSerdeParam("serialization.class", classOf[Complex].getName)
-      srcThrift.setSerdeParam("serialization.format", classOf[TBinaryProtocol].getName)
-      catalog.client.createTable(srcThrift)
-
+      runSqlHive(
+        s"""
+         |CREATE TABLE src_thrift(fake INT)
+         |ROW FORMAT SERDE '${classOf[ThriftDeserializer].getName}'
+         |WITH SERDEPROPERTIES(
+         |  'serialization.class'='${classOf[Complex].getName}',
+         |  'serialization.format'='${classOf[TBinaryProtocol].getName}'
+         |)
+         |STORED AS
+         |INPUTFORMAT '${classOf[SequenceFileInputFormat[_,_]].getName}'
+         |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_,_]].getName}'
+        """.stripMargin)
 
       runSqlHive(
         s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/complex.seq")}' INTO TABLE src_thrift")
@@ -373,7 +375,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     if (!(loadedTables contains name)) {
       // Marks the table as loaded first to prevent infinite mutually recursive table loading.
       loadedTables += name
-      logInfo(s"Loading test table $name")
+      logDebug(s"Loading test table $name")
       val createCmds =
         testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
       createCmds.foreach(_())
@@ -390,9 +392,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    */
   protected val originalUdfs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
-  // Database default may not exist in 0.13.1, create it if not exist
-  HiveShim.createDefaultDBIfNeeded(this)
-
   /**
    * Resets the test instance by deleting any tables that have been created.
    * TODO: also clear out UDFs, views, etc.
@@ -407,24 +406,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       cacheManager.clearCache()
       loadedTables.clear()
       catalog.cachedDataSourceTables.invalidateAll()
-      catalog.client.getAllTables("default").foreach { t =>
-        logDebug(s"Deleting table $t")
-        val table = catalog.client.getTable("default", t)
-
-        catalog.client.getIndexes("default", t, 255).foreach { index =>
-          catalog.client.dropIndex("default", t, index.getIndexName, true)
-        }
-
-        if (!table.isIndexTable) {
-          catalog.client.dropTable("default", t)
-        }
-      }
-
-      catalog.client.getAllDatabases.filterNot(_ == "default").foreach { db =>
-        logDebug(s"Dropping Database: $db")
-        catalog.client.dropDatabase(db, true, false, true)
-      }
-
+      catalog.client.reset()
       catalog.unregisterAllTables()
 
       FunctionRegistry.getFunctionNames.filterNot(originalUdfs.contains(_)).foreach { udfName =>
@@ -435,7 +417,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       hiveconf.set("fs.default.name", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
-      runSqlHive("RESET")
+      executionHive.runSqlHive("RESET")
+      metadataHive.runSqlHive("RESET")
       // For some reason, RESET does not reset the following variables...
       // https://issues.apache.org/jira/browse/HIVE-9004
       runSqlHive("set hive.table.parameters.default=")
@@ -443,7 +426,11 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
       runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
-      configure()
+
+      configure().foreach {
+        case (k, v) =>
+          metadataHive.runSqlHive(s"SET $k=$v")
+      }
 
       runSqlHive("USE default")
 

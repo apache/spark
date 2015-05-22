@@ -21,10 +21,9 @@ import java.io.File
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
-import scala.util.Try
 
-import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.{DataFrame, SaveMode}
 
 /**
  * A helper trait that provides convenient facilities for Parquet testing.
@@ -33,54 +32,9 @@ import org.apache.spark.util.Utils
  * convenient to use tuples rather than special case classes when writing test cases/suites.
  * Especially, `Tuple1.apply` can be used to easily wrap a single type/value.
  */
-private[sql] trait ParquetTest {
-  val sqlContext: SQLContext
-
+private[sql] trait ParquetTest extends SQLTestUtils {
   import sqlContext.implicits.{localSeqToDataFrameHolder, rddToDataFrameHolder}
-  import sqlContext.{conf, sparkContext}
-
-  protected def configuration = sparkContext.hadoopConfiguration
-
-  /**
-   * Sets all SQL configurations specified in `pairs`, calls `f`, and then restore all SQL
-   * configurations.
-   *
-   * @todo Probably this method should be moved to a more general place
-   */
-  protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(conf.getConf(key)).toOption)
-    (keys, values).zipped.foreach(conf.setConf)
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => conf.setConf(key, value)
-        case (key, None) => conf.unsetConf(key)
-      }
-    }
-  }
-
-  /**
-   * Generates a temporary path without creating the actual file/directory, then pass it to `f`. If
-   * a file/directory is created there by `f`, it will be delete after `f` returns.
-   *
-   * @todo Probably this method should be moved to a more general place
-   */
-  protected def withTempPath(f: File => Unit): Unit = {
-    val path = Utils.createTempDir()
-    path.delete()
-    try f(path) finally Utils.deleteRecursively(path)
-  }
-
-  /**
-   * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
-   * returns.
-   *
-   * @todo Probably this method should be moved to a more general place
-   */
-  protected def withTempDir(f: File => Unit): Unit = {
-    val dir = Utils.createTempDir().getCanonicalFile
-    try f(dir) finally Utils.deleteRecursively(dir)
-  }
+  import sqlContext.sparkContext
 
   /**
    * Writes `data` to a Parquet file, which is then passed to `f` and will be deleted after `f`
@@ -90,7 +44,7 @@ private[sql] trait ParquetTest {
       (data: Seq[T])
       (f: String => Unit): Unit = {
     withTempPath { file =>
-      sparkContext.parallelize(data).toDF().saveAsParquetFile(file.getCanonicalPath)
+      sparkContext.parallelize(data).toDF().write.parquet(file.getCanonicalPath)
       f(file.getCanonicalPath)
     }
   }
@@ -102,14 +56,7 @@ private[sql] trait ParquetTest {
   protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: DataFrame => Unit): Unit = {
-    withParquetFile(data)(path => f(sqlContext.parquetFile(path)))
-  }
-
-  /**
-   * Drops temporary table `tableName` after calling `f`.
-   */
-  protected def withTempTable(tableName: String)(f: => Unit): Unit = {
-    try f finally sqlContext.dropTempTable(tableName)
+    withParquetFile(data)(path => f(sqlContext.read.parquet(path)))
   }
 
   /**
@@ -128,12 +75,12 @@ private[sql] trait ParquetTest {
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {
-    data.toDF().save(path.getCanonicalPath, "org.apache.spark.sql.parquet", SaveMode.Overwrite)
+    data.toDF().write.mode(SaveMode.Overwrite).parquet(path.getCanonicalPath)
   }
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
       df: DataFrame, path: File): Unit = {
-    df.save(path.getCanonicalPath, "org.apache.spark.sql.parquet", SaveMode.Overwrite)
+    df.write.mode(SaveMode.Overwrite).parquet(path.getCanonicalPath)
   }
 
   protected def makePartitionDir(

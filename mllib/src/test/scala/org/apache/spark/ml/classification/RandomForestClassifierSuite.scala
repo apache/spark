@@ -159,8 +159,10 @@ private object RandomForestClassifierSuite {
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
     val newModel = rf.fit(newData)
     // Use parent, fittingParamMap from newTree since these are not checked anyways.
-    val oldModelAsNew = RandomForestClassificationModel.fromOld(oldModel, newModel.parent,
-      newModel.fittingParamMap, categoricalFeatures)
+    val oldModelAsNew = RandomForestClassificationModel.fromOld(
+      oldModel, newModel.parent.asInstanceOf[RandomForestClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
+    assert(newModel.hasParent)
+    assert(!newModel.trees.head.asInstanceOf[DecisionTreeClassificationModel].hasParent)
   }
 }

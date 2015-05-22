@@ -71,9 +71,22 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 </tr>
 <tr>
   <td><code>spark.yarn.scheduler.heartbeat.interval-ms</code></td>
-  <td>5000</td>
+  <td>3000</td>
   <td>
     The interval in ms in which the Spark application master heartbeats into the YARN ResourceManager.
+    The value is capped at half the value of YARN's configuration for the expiry interval
+    (<code>yarn.am.liveness-monitor.expiry-interval-ms</code>).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.scheduler.initial-allocation.interval</code></td>
+  <td>200ms</td>
+  <td>
+    The initial interval in which the Spark application master eagerly heartbeats to the YARN ResourceManager
+    when there are pending container allocation requests. It should be no larger than
+    <code>spark.yarn.scheduler.heartbeat.interval-ms</code>. The allocation interval will doubled on
+    successive eager heartbeats if pending containers still exist, until
+    <code>spark.yarn.scheduler.heartbeat.interval-ms</code> is reached.
   </td>
 </tr>
 <tr>
@@ -131,6 +144,13 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>AM memory * 0.07, with minimum of 384 </td>
   <td>
     Same as <code>spark.yarn.driver.memoryOverhead</code>, but for the Application Master in client mode.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.am.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the YARN Application Master to listen on. In YARN client mode, this is used to communicate between the Spark driver running on a gateway and the Application Master running on YARN. In YARN cluster mode, this is used for the dynamic executor feature, where it handles the kill from the scheduler backend.
   </td>
 </tr>
 <tr>
@@ -211,6 +231,15 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   In YARN cluster mode, controls whether the client waits to exit until the application completes.
   If set to true, the client process will stay alive reporting the application's status.
   Otherwise, the client process will exit after submission.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.executor.nodeLabelExpression</code></td>
+  <td>(none)</td>
+  <td>
+  A YARN node label expression that restricts the set of nodes executors will be scheduled on.
+  Only versions of YARN greater than or equal to 2.6 support node label expressions, so when
+  running against earlier versions, this property will be ignored.
   </td>
 </tr>
 </table>

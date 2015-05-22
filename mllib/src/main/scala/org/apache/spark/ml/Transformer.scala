@@ -37,13 +37,18 @@ abstract class Transformer extends PipelineStage with Params {
   /**
    * Transforms the dataset with optional parameters
    * @param dataset input dataset
-   * @param paramPairs optional list of param pairs, overwrite embedded params
+   * @param firstParamPair the first param pair, overwrite embedded params
+   * @param otherParamPairs other param pairs, overwrite embedded params
    * @return transformed dataset
    */
   @varargs
-  def transform(dataset: DataFrame, paramPairs: ParamPair[_]*): DataFrame = {
+  def transform(
+      dataset: DataFrame,
+      firstParamPair: ParamPair[_],
+      otherParamPairs: ParamPair[_]*): DataFrame = {
     val map = new ParamMap()
-    paramPairs.foreach(map.put(_))
+      .put(firstParamPair)
+      .put(otherParamPairs: _*)
     transform(dataset, map)
   }
 
@@ -53,7 +58,18 @@ abstract class Transformer extends PipelineStage with Params {
    * @param paramMap additional parameters, overwrite embedded params
    * @return transformed dataset
    */
-  def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame
+  def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
+    this.copy(paramMap).transform(dataset)
+  }
+
+  /**
+   * Transforms the input dataset.
+   */
+  def transform(dataset: DataFrame): DataFrame
+
+  override def copy(extra: ParamMap): Transformer = {
+    super.copy(extra).asInstanceOf[Transformer]
+  }
 }
 
 /**
@@ -74,7 +90,7 @@ private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, O
    * account of the embedded param map. So the param values should be determined solely by the input
    * param map.
    */
-  protected def createTransformFunc(paramMap: ParamMap): IN => OUT
+  protected def createTransformFunc: IN => OUT
 
   /**
    * Returns the data type of the output column.
@@ -86,22 +102,20 @@ private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, O
    */
   protected def validateInputType(inputType: DataType): Unit = {}
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
-    val inputType = schema(map(inputCol)).dataType
+  override def transformSchema(schema: StructType): StructType = {
+    val inputType = schema($(inputCol)).dataType
     validateInputType(inputType)
-    if (schema.fieldNames.contains(map(outputCol))) {
-      throw new IllegalArgumentException(s"Output column ${map(outputCol)} already exists.")
+    if (schema.fieldNames.contains($(outputCol))) {
+      throw new IllegalArgumentException(s"Output column ${$(outputCol)} already exists.")
     }
     val outputFields = schema.fields :+
-      StructField(map(outputCol), outputDataType, nullable = false)
+      StructField($(outputCol), outputDataType, nullable = false)
     StructType(outputFields)
   }
 
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
-    dataset.withColumn(map(outputCol),
-      callUDF(this.createTransformFunc(map), outputDataType, dataset(map(inputCol))))
+  override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+    dataset.withColumn($(outputCol),
+      callUDF(this.createTransformFunc, outputDataType, dataset($(inputCol))))
   }
 }

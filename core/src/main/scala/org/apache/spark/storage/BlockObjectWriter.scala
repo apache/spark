@@ -59,7 +59,7 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) extends Ou
   def write(key: Any, value: Any)
 
   /**
-   * Notify the writer that a record worth of bytes has been written with writeBytes.
+   * Notify the writer that a record worth of bytes has been written with OutputStream#write.
    */
   def recordWritten()
 
@@ -86,16 +86,6 @@ private[spark] class DiskBlockObjectWriter(
   extends BlockObjectWriter(blockId)
   with Logging
 {
-  /** Intercepts write calls and tracks total time spent writing. Not thread safe. */
-  private class TimeTrackingOutputStream(out: OutputStream) extends OutputStream {
-    override def write(i: Int): Unit = callWithTiming(out.write(i))
-    override def write(b: Array[Byte]): Unit = callWithTiming(out.write(b))
-    override def write(b: Array[Byte], off: Int, len: Int): Unit = {
-      callWithTiming(out.write(b, off, len))
-    }
-    override def close(): Unit = out.close()
-    override def flush(): Unit = out.flush()
-  }
 
   /** The file channel, used for repositioning / truncating the file. */
   private var channel: FileChannel = null
@@ -136,7 +126,7 @@ private[spark] class DiskBlockObjectWriter(
       throw new IllegalStateException("Writer already closed. Cannot be reopened.")
     }
     fos = new FileOutputStream(file, true)
-    ts = new TimeTrackingOutputStream(fos)
+    ts = new TimeTrackingOutputStream(writeMetrics, fos)
     channel = fos.getChannel()
     bs = compressStream(new BufferedOutputStream(ts, bufferSize))
     objOut = serializerInstance.serializeStream(bs)
@@ -150,9 +140,9 @@ private[spark] class DiskBlockObjectWriter(
         if (syncWrites) {
           // Force outstanding writes to disk and track how long it takes
           objOut.flush()
-          callWithTiming {
-            fos.getFD.sync()
-          }
+          val start = System.nanoTime()
+          fos.getFD.sync()
+          writeMetrics.incShuffleWriteTime(System.nanoTime() - start)
         }
       } {
         objOut.close()
@@ -215,12 +205,7 @@ private[spark] class DiskBlockObjectWriter(
 
     objOut.writeKey(key)
     objOut.writeValue(value)
-    numRecordsWritten += 1
-    writeMetrics.incShuffleRecordsWritten(1)
-
-    if (numRecordsWritten % 32 == 0) {
-      updateBytesWritten()
-    }
+    recordWritten()
   }
 
   override def write(b: Int): Unit = throw new UnsupportedOperationException()
@@ -254,12 +239,6 @@ private[spark] class DiskBlockObjectWriter(
     val pos = channel.position()
     writeMetrics.incShuffleBytesWritten(pos - reportedPosition)
     reportedPosition = pos
-  }
-
-  private def callWithTiming(f: => Unit) = {
-    val start = System.nanoTime()
-    f
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - start)
   }
 
   // For testing
