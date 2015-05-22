@@ -142,6 +142,7 @@ class GaussianMixtureModel(object):
 
     """A clustering model derived from the Gaussian Mixture Model method.
 
+    >>> from pyspark.mllib.linalg import Vectors, DenseMatrix
     >>> clusterdata_1 =  sc.parallelize(array([-0.1,-0.05,-0.01,-0.1,
     ...                                         0.9,0.8,0.75,0.935,
     ...                                        -0.83,-0.68,-0.91,-0.76 ]).reshape(6, 2))
@@ -154,11 +155,12 @@ class GaussianMixtureModel(object):
     True
     >>> labels[4]==labels[5]
     True
-    >>> clusterdata_2 =  sc.parallelize(array([-5.1971, -2.5359, -3.8220,
-    ...                                        -5.2211, -5.0602,  4.7118,
-    ...                                         6.8989, 3.4592,  4.6322,
-    ...                                         5.7048,  4.6567, 5.5026,
-    ...                                         4.5605,  5.2043,  6.2734]).reshape(5, 3))
+    >>> data =  array([-5.1971, -2.5359, -3.8220,
+    ...                -5.2211, -5.0602,  4.7118,
+    ...                 6.8989, 3.4592,  4.6322,
+    ...                 5.7048,  4.6567, 5.5026,
+    ...                 4.5605,  5.2043,  6.2734])
+    >>> clusterdata_2 = sc.parallelize(data.reshape(5,3))
     >>> model = GaussianMixture.train(clusterdata_2, 2, convergenceTol=0.0001,
     ...                               maxIterations=150, seed=10)
     >>> labels = model.predict(clusterdata_2).collect()
@@ -166,12 +168,38 @@ class GaussianMixtureModel(object):
     True
     >>> labels[3]==labels[4]
     True
+    >>> clusterdata_3 = sc.parallelize(data.reshape(15, 1))
+    >>> im = GaussianMixtureModel([0.5, 0.5],
+    ...      [MultivariateGaussian(Vectors.dense([-1.0]), DenseMatrix(1, 1, [1.0])),
+    ...      MultivariateGaussian(Vectors.dense([1.0]), DenseMatrix(1, 1, [1.0]))])
+    >>> model = GaussianMixture.train(clusterdata_3, 2, initialModel=im)
     """
 
     def __init__(self, weights, gaussians):
-        self.weights = weights
-        self.gaussians = gaussians
-        self.k = len(self.weights)
+        self._weights = weights
+        self._gaussians = gaussians
+        self._k = len(self._weights)
+
+    @property
+    def weights(self):
+        """
+        Weights for each Gaussian distribution in the mixture, where weights[i] is
+        the weight for Gaussian i, and weights.sum == 1.
+        """
+        return self._weights
+
+    @property
+    def gaussians(self):
+        """
+        Array of MultivariateGaussian where gaussians[i] represents
+        the Multivariate Gaussian (Normal) Distribution for Gaussian i.
+        """
+        return self._gaussians
+
+    @property
+    def k(self):
+        """Number of gaussians in mixture."""
+        return self._k
 
     def predict(self, x):
         """
@@ -184,6 +212,9 @@ class GaussianMixtureModel(object):
         if isinstance(x, RDD):
             cluster_labels = self.predictSoft(x).map(lambda z: z.index(max(z)))
             return cluster_labels
+        else:
+            raise TypeError("x should be represented by an RDD, "
+                            "but got %s." % type(x))
 
     def predictSoft(self, x):
         """
@@ -193,10 +224,13 @@ class GaussianMixtureModel(object):
         :return:     membership_matrix. RDD of array of double values.
         """
         if isinstance(x, RDD):
-            means, sigmas = zip(*[(g.mu, g.sigma) for g in self.gaussians])
+            means, sigmas = zip(*[(g.mu, g.sigma) for g in self._gaussians])
             membership_matrix = callMLlibFunc("predictSoftGMM", x.map(_convert_to_vector),
-                                              _convert_to_vector(self.weights), means, sigmas)
+                                              _convert_to_vector(self._weights), means, sigmas)
             return membership_matrix.map(lambda x: pyarray.array('d', x))
+        else:
+            raise TypeError("x should be represented by an RDD, "
+                            "but got %s." % type(x))
 
 
 class GaussianMixture(object):
@@ -208,13 +242,24 @@ class GaussianMixture(object):
     :param convergenceTol:  Threshold value to check the convergence criteria. Defaults to 1e-3
     :param maxIterations:   Number of iterations. Default to 100
     :param seed:            Random Seed
+    :param initialModel:    GaussianMixtureModel for initializing learning
     """
     @classmethod
-    def train(cls, rdd, k, convergenceTol=1e-3, maxIterations=100, seed=None):
+    def train(cls, rdd, k, convergenceTol=1e-3, maxIterations=100, seed=None, initialModel=None):
         """Train a Gaussian Mixture clustering model."""
-        weight, mu, sigma = callMLlibFunc("trainGaussianMixture",
-                                          rdd.map(_convert_to_vector), k,
-                                          convergenceTol, maxIterations, seed)
+        initialModelWeights = None
+        initialModelMu = None
+        initialModelSigma = None
+        if initialModel is not None:
+            if initialModel.k != k:
+                raise Exception("Mismatched cluster count, initialModel.k = %s, however k = %s"
+                                % (initialModel.k, k))
+            initialModelWeights = initialModel.weights
+            initialModelMu = [initialModel.gaussians[i].mu for i in range(initialModel.k)]
+            initialModelSigma = [initialModel.gaussians[i].sigma for i in range(initialModel.k)]
+        weight, mu, sigma = callMLlibFunc("trainGaussianMixture", rdd.map(_convert_to_vector), k,
+                                          convergenceTol, maxIterations, seed, initialModelWeights,
+                                          initialModelMu, initialModelSigma)
         mvg_obj = [MultivariateGaussian(mu[i], sigma[i]) for i in range(k)]
         return GaussianMixtureModel(weight, mvg_obj)
 

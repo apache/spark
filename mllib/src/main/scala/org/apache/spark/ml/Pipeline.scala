@@ -22,6 +22,7 @@ import scala.collection.mutable.ListBuffer
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
 
@@ -80,7 +81,9 @@ abstract class PipelineStage extends Params with Logging {
  * an identity transformer.
  */
 @AlphaComponent
-class Pipeline extends Estimator[PipelineModel] {
+class Pipeline(override val uid: String) extends Estimator[PipelineModel] {
+
+  def this() = this(Identifiable.randomUID("pipeline"))
 
   /**
    * param for pipeline stages
@@ -148,7 +151,7 @@ class Pipeline extends Estimator[PipelineModel] {
       }
     }
 
-    new PipelineModel(this, transformers.toArray)
+    new PipelineModel(uid, transformers.toArray).setParent(this)
   }
 
   override def copy(extra: ParamMap): Pipeline = {
@@ -171,7 +174,7 @@ class Pipeline extends Estimator[PipelineModel] {
  */
 @AlphaComponent
 class PipelineModel private[ml] (
-    override val parent: Pipeline,
+    override val uid: String,
     val stages: Array[Transformer])
   extends Model[PipelineModel] with Logging {
 
@@ -190,6 +193,6 @@ class PipelineModel private[ml] (
   }
 
   override def copy(extra: ParamMap): PipelineModel = {
-    new PipelineModel(parent, stages)
+    new PipelineModel(uid, stages)
   }
 }

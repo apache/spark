@@ -813,12 +813,20 @@ class RDD(object):
     def fold(self, zeroValue, op):
         """
         Aggregate the elements of each partition, and then the results for all
-        the partitions, using a given associative function and a neutral "zero
-        value."
+        the partitions, using a given associative and commutative function and
+        a neutral "zero value."
 
         The function C{op(t1, t2)} is allowed to modify C{t1} and return it
         as its result value to avoid object allocation; however, it should not
         modify C{t2}.
+
+        This behaves somewhat differently from fold operations implemented
+        for non-distributed collections in functional languages like Scala.
+        This fold operation may be applied to partitions individually, and then
+        fold those results into the final result, rather than apply the fold
+        to each element sequentially in some defined ordering. For functions
+        that are not commutative, the result may differ from that of a fold
+        applied to a non-distributed collection.
 
         >>> from operator import add
         >>> sc.parallelize([1, 2, 3, 4, 5]).fold(0, add)
@@ -2239,8 +2247,6 @@ class RDD(object):
         """
         if relativeSD < 0.000017:
             raise ValueError("relativeSD should be greater than 0.000017")
-        if relativeSD > 0.37:
-            raise ValueError("relativeSD should be smaller than 0.37")
         # the hash space in Java is 2^32
         hashRDD = self.map(lambda x: portable_hash(x) & 0xFFFFFFFF)
         return hashRDD._to_java_object_rdd().countApproxDistinct(relativeSD)
@@ -2262,7 +2268,7 @@ class RDD(object):
 def _prepare_for_python_RDD(sc, command, obj=None):
     # the serialized command will be compressed by broadcast
     ser = CloudPickleSerializer()
-    pickled_command = ser.dumps((command, sys.version_info[:2]))
+    pickled_command = ser.dumps(command)
     if len(pickled_command) > (1 << 20):  # 1M
         # The broadcast will have same life cycle as created PythonRDD
         broadcast = sc.broadcast(pickled_command)
@@ -2346,7 +2352,7 @@ class PipelinedRDD(RDD):
         python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(),
                                              bytearray(pickled_cmd),
                                              env, includes, self.preservesPartitioning,
-                                             self.ctx.pythonExec,
+                                             self.ctx.pythonExec, self.ctx.pythonVer,
                                              bvars, self.ctx._javaAccumulator)
         self._jrdd_val = python_rdd.asJavaRDD()
 

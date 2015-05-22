@@ -32,9 +32,10 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
 
 import org.apache.spark.SerializableWritable
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.Logging
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.DateUtils
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -57,7 +58,7 @@ class HadoopTableReader(
     @transient relation: MetastoreRelation,
     @transient sc: HiveContext,
     @transient hiveExtraConf: HiveConf)
-  extends TableReader {
+  extends TableReader with Logging {
 
   // Hadoop honors "mapred.map.tasks" as hint, but will ignore when mapred.job.tracker is "local".
   // https://hadoop.apache.org/docs/r1.0.4/mapred-default.html
@@ -78,7 +79,7 @@ class HadoopTableReader(
     makeRDDForTable(
       hiveTable,
       Class.forName(
-        relation.tableDesc.getSerdeClassName, true, sc.sessionState.getConf.getClassLoader)
+        relation.tableDesc.getSerdeClassName, true, Utils.getSparkClassLoader)
         .asInstanceOf[Class[Deserializer]],
       filterOpt = None)
 
@@ -145,7 +146,7 @@ class HadoopTableReader(
       partitionToDeserializer: Map[HivePartition,
       Class[_ <: Deserializer]],
       filterOpt: Option[PathFilter]): RDD[Row] = {
-        
+
     // SPARK-5068:get FileStatus and do the filtering locally when the path is not exists
     def verifyPartitionPath(
         partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]]):
@@ -288,7 +289,7 @@ class HadoopTableReader(
   }
 }
 
-private[hive] object HadoopTableReader extends HiveInspectors {
+private[hive] object HadoopTableReader extends HiveInspectors with Logging {
   /**
    * Curried. After given an argument for 'path', the resulting JobConf => Unit closure is used to
    * instantiate a HadoopRDD.
@@ -328,6 +329,8 @@ private[hive] object HadoopTableReader extends HiveInspectors {
         rawDeser.getObjectInspector,
         tableDeser.getObjectInspector).asInstanceOf[StructObjectInspector]
     }
+
+    logDebug(soi.toString)
 
     val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map { case (attr, ordinal) =>
       soi.getStructFieldRef(attr.name) -> ordinal

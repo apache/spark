@@ -158,6 +158,9 @@ class Word2Vec extends Serializable with Logging {
       .sortWith((a, b) => a.cn > b.cn)
     
     vocabSize = vocab.length
+    require(vocabSize > 0, "The vocabulary size should be > 0. You may need to check " +
+      "the setting of minCount, which could be large enough to remove all your words in sentences.")
+
     var a = 0
     while (a < vocabSize) {
       vocabHash += vocab(a).word -> a
@@ -556,7 +559,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
     def load(sc: SparkContext, path: String): Word2VecModel = {
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
-      val dataFrame = sqlContext.parquetFile(dataPath)
+      val dataFrame = sqlContext.read.parquet(dataPath)
 
       val dataArray = dataFrame.select("word", "vector").collect()
 
@@ -580,7 +583,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val dataArray = model.toSeq.map { case (w, v) => Data(w, v) }
-      sc.parallelize(dataArray.toSeq, 1).toDF().saveAsParquetFile(Loader.dataPath(path))
+      sc.parallelize(dataArray.toSeq, 1).toDF().write.parquet(Loader.dataPath(path))
     }
   }
 

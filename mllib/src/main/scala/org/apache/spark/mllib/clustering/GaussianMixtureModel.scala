@@ -38,11 +38,10 @@ import org.apache.spark.sql.{SQLContext, Row}
  * are drawn from each Gaussian i=1..k with probability w(i); mu(i) and sigma(i) are 
  * the respective mean and covariance for each Gaussian distribution i=1..k. 
  * 
- * @param weight Weights for each Gaussian distribution in the mixture, where weight(i) is
- *               the weight for Gaussian i, and weight.sum == 1
- * @param mu Means for each Gaussian in the mixture, where mu(i) is the mean for Gaussian i
- * @param sigma Covariance maxtrix for each Gaussian in the mixture, where sigma(i) is the
- *              covariance matrix for Gaussian i
+ * @param weights Weights for each Gaussian distribution in the mixture, where weights(i) is
+ *                the weight for Gaussian i, and weights.sum == 1
+ * @param gaussians Array of MultivariateGaussian where gaussians(i) represents
+ *                  the Multivariate Gaussian (Normal) Distribution for Gaussian i
  */
 @Experimental
 class GaussianMixtureModel(
@@ -127,13 +126,13 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       val dataArray = Array.tabulate(weights.length) { i =>
         Data(weights(i), gaussians(i).mu, gaussians(i).sigma)
       }
-      sc.parallelize(dataArray, 1).toDF().saveAsParquetFile(Loader.dataPath(path))
+      sc.parallelize(dataArray, 1).toDF().write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): GaussianMixtureModel = {
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
-      val dataFrame = sqlContext.parquetFile(dataPath)
+      val dataFrame = sqlContext.read.parquet(dataPath)
       val dataArray = dataFrame.select("weight", "mu", "sigma").collect()
 
       // Check schema explicitly since erasure makes it hard to use match-case for checking.

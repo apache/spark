@@ -414,7 +414,7 @@ private[tree] object TreeEnsembleModel extends Logging {
       val dataRDD = sc.parallelize(model.trees.zipWithIndex).flatMap { case (tree, treeId) =>
         tree.topNode.subtreeIterator.toSeq.map(node => NodeData(treeId, node))
       }.toDF()
-      dataRDD.saveAsParquetFile(Loader.dataPath(path))
+      dataRDD.write.parquet(Loader.dataPath(path))
     }
 
     /**
@@ -437,7 +437,7 @@ private[tree] object TreeEnsembleModel extends Logging {
         treeAlgo: String): Array[DecisionTreeModel] = {
       val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
-      val nodes = sqlContext.parquetFile(datapath).map(NodeData.apply)
+      val nodes = sqlContext.read.parquet(datapath).map(NodeData.apply)
       val trees = constructTrees(nodes)
       trees.map(new DecisionTreeModel(_, Algo.fromString(treeAlgo)))
     }
