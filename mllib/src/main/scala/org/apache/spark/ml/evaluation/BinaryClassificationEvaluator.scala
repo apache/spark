@@ -18,7 +18,7 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.Evaluator
+import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
