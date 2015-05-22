@@ -63,9 +63,11 @@ object KinesisUtils {
       checkpointInterval: Duration,
       storageLevel: StorageLevel
     ): ReceiverInputDStream[Array[Byte]] = {
-    ssc.receiverStream(
-      new KinesisReceiver(kinesisAppName, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, checkpointInterval, storageLevel, None))
+    ssc.withNamedScope("kinesis stream") {
+      ssc.receiverStream(
+        new KinesisReceiver(kinesisAppName, streamName, endpointUrl, validateRegion(regionName),
+          initialPositionInStream, checkpointInterval, storageLevel, None))
+    }
   }
 
   /**
