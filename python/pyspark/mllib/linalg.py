@@ -876,6 +876,23 @@ class DenseMatrix(Matrix):
             self.numRows, self.numCols, self.values.tostring(),
             int(self.isTransposed))
 
+    def __str__(self):
+        mattoarr = self.toArray()
+        matstr = ""
+        for row in mattoarr:
+            for ind, col in enumerate(row):
+                if ind != 0:
+                    matstr += "  "
+                matstr += str(col)
+            matstr += '\n'
+
+        return matstr[:-1]
+
+    def __repr__(self):
+        entries = ', '.join([_format_float(val) for val in self.values])
+        return "DenseMatrix({0}, {1}, [{2}], {3})".format(
+            self.numRows, self.numCols, entries, str(self.isTransposed))
+
     def toArray(self):
         """
         Return an numpy.ndarray
@@ -951,6 +968,35 @@ class SparseMatrix(Matrix):
         if self.rowIndices.size != self.values.size:
             raise ValueError("Expected rowIndices of length %d, got %d."
                              % (self.rowIndices.size, self.values.size))
+
+    def __str__(self):
+        spstr = "{0} X {1} ".format(self.numRows, self.numCols)
+        if self.isTransposed:
+            spstr += "CSRMatrix\n"
+        else:
+            spstr += "CSCMatrix\n"
+
+        for i, colPtr in enumerate(self.colPtrs[:-1]):
+            endptr = self.colPtrs[i + 1]
+            values = self.values[colPtr: endptr]
+            rowindices = self.rowIndices[colPtr: endptr]
+            for j, rowInd in enumerate(rowindices):
+                if self.isTransposed:
+                    spstr += '({0},{1}) {2}\n'.format(
+                        i, rowInd, _format_float(values[j]))
+                else:
+                    spstr += '({0},{1}) {2}\n'.format(
+                        rowInd, i, _format_float(values[j]))
+
+        return spstr[:-1]
+
+    def __repr__(self):
+        colPtrs = ", ".join([str(i) for i in self.colPtrs])
+        rowIndices = ", ".join([str(i) for i in self.rowIndices])
+        values = ", ".join([_format_float(val) for val in self.values])
+        return "SparseMatrix({0}, {1}, [{2}], [{3}], [{4}], {5})".format(
+            self.numRows, self.numCols, colPtrs, rowIndices, values,
+            str(self.isTransposed))
 
     def __reduce__(self):
         return SparseMatrix, (
