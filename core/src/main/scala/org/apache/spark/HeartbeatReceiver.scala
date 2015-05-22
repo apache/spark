@@ -155,9 +155,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    * If the heartbeat receiver is not stopped, notify it of executor registrations.
    */
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
-    if (self != null) {
-      self.send(ExecutorRegistered(executorAdded.executorId))
-    }
+    Option(self).foreach(_.send(ExecutorRegistered(executorAdded.executorId)))
   }
 
   /**
@@ -171,9 +169,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    * and expire it with loud error messages.
    */
   override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
-    if (self != null) {
-      self.send(ExecutorRemoved(executorRemoved.executorId))
-    }
+    Option(self).foreach(_.send(ExecutorRemoved(executorRemoved.executorId))
   }
 
   private def expireDeadHosts(): Unit = {
