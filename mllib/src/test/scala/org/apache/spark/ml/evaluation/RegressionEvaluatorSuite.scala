@@ -32,7 +32,7 @@ class RegressionEvaluatorSuite extends FunSuite with MLlibTestSparkContext {
     super.beforeAll()
     /**
      * Here is the instruction describing how to export the test data into CSV format
-     * so we can validate the metrics compared with scikit learns regression metrics package.
+     * so we can validate the metrics compared with R's mmetric package.
      *
      * import org.apache.spark.mllib.util.LinearDataGenerator
      * val data = sc.parallelize(LinearDataGenerator.generateLinearInput(6.3,
