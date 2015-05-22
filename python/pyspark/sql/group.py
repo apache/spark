@@ -165,6 +165,18 @@ class GroupedData(object):
         [Row(SUM(age)=7, SUM(height)=165)]
         """
 
+    @df_varargs_api
+    @since(1.4)
+    def stddev(self, *cols):
+        """Compute the standard deviation of the value for each numeric columns for each group.
+
+        :param cols: list of column names (string). Non-numeric columns are ignored.
+
+        >>> df.groupBy().stddev('age').collect()
+        [Row(STDDEV(age)=1.5)]
+        """
+
+
 
 def _test():
     import doctest

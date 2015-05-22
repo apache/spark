@@ -321,6 +321,20 @@ object functions {
    */
   def max(columnName: String): Column = max(Column(columnName))
 
+  /**
+   * Aggregate func:compute the stand devivation of the specific column.
+   *
+   * @group agg_funcs
+   */
+  def stddev(e: Column): Column = StdDeviation(e.expr)
+
+  /**
+   * Aggregate func:compute the stand devivation of the specific column.
+   *
+   * @group agg_funcs
+   */
+  def stddev(columnName: String): Column = stddev(Column(columnName))
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////

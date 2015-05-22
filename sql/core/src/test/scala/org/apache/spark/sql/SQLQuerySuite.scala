@@ -549,6 +549,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(2.0))
   }
 
+  test("stddev") {
+    checkAnswer(
+      sql("SELECT STDDEV(a) FROM testData2"),
+      Row(math.sqrt(4/5.0))
+    )
+  }
+
   test("average overflow") {
     checkAnswer(
       sql("SELECT AVG(a),b FROM largeAndSmallInts group by b"),

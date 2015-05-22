@@ -260,7 +260,22 @@ class DataFrameSuite extends QueryTest {
       mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
   }
 
-  test("except") {
+ test("stddev") {
+    val testData2ADev = math.sqrt(4/5.0)
+    checkAnswer(
+      testData2.agg(stddev('a)),
+      Row(testData2ADev))
+
+    checkAnswer(
+      testData2.agg(stddev(testData2("a"))),
+      Row(testData2ADev))
+
+    checkAnswer(
+      decimalData.agg(stddev('a), sumDistinct('a)), // non-partial
+      Row(testData2ADev, new java.math.BigDecimal(6)) :: Nil)
+  }
+
+ test("except") {
     checkAnswer(
       lowerCaseData.except(upperCaseData),
       Row(1, "a") ::
@@ -494,10 +509,10 @@ class DataFrameSuite extends QueryTest {
   test("SPARK-7324 dropDuplicates") {
     val testData = TestSQLContext.sparkContext.parallelize(
       (2, 1, 2) :: (1, 1, 1) ::
-      (1, 2, 1) :: (2, 1, 2) ::
-      (2, 2, 2) :: (2, 2, 1) ::
-      (2, 1, 1) :: (1, 1, 2) ::
-      (1, 2, 2) :: (1, 2, 1) :: Nil).toDF("key", "value1", "value2")
+        (1, 2, 1) :: (2, 1, 2) ::
+        (2, 2, 2) :: (2, 2, 1) ::
+        (2, 1, 1) :: (1, 1, 2) ::
+        (1, 2, 2) :: (1, 2, 1) :: Nil).toDF("key", "value1", "value2")
 
     checkAnswer(
       testData.dropDuplicates(),
