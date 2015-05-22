@@ -125,6 +125,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
 
   @transient private var path_ : Path = null
   @transient private var fs_ : FileSystem = null
+  @transient private var flag : Boolean = ssc.display_filename
 
   override def start() { }
 
@@ -253,13 +254,19 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
     val fileRDDs = files.map(file =>{
       val rdd = serializableConfOpt.map(_.value) match {
-        case Some(config) => context.sparkContext.newAPIHadoopFile(
+        case Some(config) => {
+          if(flag){ println("PROCESSING FILE :"+file) }
+          context.sparkContext.newAPIHadoopFile(
           file,
           fm.runtimeClass.asInstanceOf[Class[F]],
           km.runtimeClass.asInstanceOf[Class[K]],
           vm.runtimeClass.asInstanceOf[Class[V]],
           config)
-        case None => context.sparkContext.newAPIHadoopFile[K, V, F](file)
+        }
+        case None => {
+          if(flag){ println("PROCESSING FILE :"+file) }
+          context.sparkContext.newAPIHadoopFile[K, V, F](file)
+        }
       }
       if (rdd.partitions.size == 0) {
         logError("File " + file + " has no data in it. Spark Streaming can only ingest " +

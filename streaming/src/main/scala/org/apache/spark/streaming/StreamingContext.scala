@@ -427,6 +427,17 @@ class StreamingContext private[streaming] (
     new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly, Option(conf))
   }
 
+  /** Private variable to display the filenames being processesd */
+  private[streaming] var display_filename : Boolean = false
+
+  /**
+   * Function sets the display_filename parameter
+   * @param flag paramater to which display_filename will be set
+   */
+  def display_filename_enable(flag: Boolean){
+    display_filename = flag
+  }
+  
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as text files (using key as LongWritable, value
