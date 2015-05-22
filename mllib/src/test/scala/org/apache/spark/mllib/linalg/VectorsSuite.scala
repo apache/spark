@@ -91,10 +91,10 @@ class VectorsSuite extends FunSuite {
     val max = vec2.argmax
     assert(max === 3)
 
-    // check for case that sparse vector is created with a zero value in it by mistake
-    val vec3 = Vectors.sparse(5,Array(0, 2, 4),Array(-1.0, 0.0, -.7))
+    // check for case that sparse vector is created with only negative vaues {0.0,0.0,-1.0,0.0,-0.7}
+    val vec3 = Vectors.sparse(5,Array(2, 4),Array(-1.0,-.7))
     val max2 = vec3.argmax
-    assert(max2 === 4)
+    assert(max2 === 0)
   }
 
   test("vector equals") {
