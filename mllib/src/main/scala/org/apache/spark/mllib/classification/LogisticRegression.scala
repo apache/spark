@@ -325,7 +325,7 @@ object LogisticRegressionWithSGD {
  *
  * Earlier implementations of LogisticRegressionWithLBFGS applies a regularization
  * penalty to all elements including the intercept. If this is called with one of
- * standard updaters (SimpleUpdater, L1Updater, or SquaredL2Updater) this is translated
+ * standard updaters (L1Updater, or SquaredL2Updater) this is translated
  * into a call to ml.LogisticRegression, otherwise this will use the existing mllib
  * GeneralizedLinearAlgorithm trainer, resulting in a regularization penalty to the
  * intercept.
@@ -379,5 +379,15 @@ class LogisticRegressionWithLBFGS
    * defaults to the mllib implementation.
    */
   override def run(input: RDD[LabeledPoint], initialWeights: Vector): LogisticRegressionModel = {
+    def runWithMlLogisitcRegression(elasticNetParam: Double) {
+      val lr = new org.apache.spark.ml.classification.LogisticRegression()
+      lr.setRegParam(optimizer.getRegParam())
+
+    }
+    optimizer.getUpdater() match {
+      case SquaredL2Updater => runWithMlLogisticRegression(1.0)
+      case L2Updater => runWithMlLogisticRegression(0.0)
+      case _ => super.run(input, initialWeights)
+    }
   }
 }

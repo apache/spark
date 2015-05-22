@@ -95,6 +95,13 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   }
 
   /**
+   * Get the regularization parameter.
+   */
+  private[mllib] def getRegParam(): Double = {
+    this.regParam
+  }
+
+  /**
    * Set the gradient function (of the loss function of one single data example)
    * to be used for L-BFGS.
    */
@@ -111,6 +118,13 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   def setUpdater(updater: Updater): this.type = {
     this.updater = updater
     this
+  }
+
+  /**
+   * Returns the updater, limited to internal use.
+   */
+  protected[mllib] getUpdater(): Updater = {
+    updater
   }
 
   override def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
