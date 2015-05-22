@@ -27,8 +27,7 @@ import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{DataValidators, Saveable, Loader}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.SqlContext
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Classification model trained using Multinomial/Binary Logistic Regression.
@@ -340,8 +339,6 @@ class LogisticRegressionWithLBFGS
 
   override protected val validators = List(multiLabelValidator)
 
-  private var classes = 2
-
   private def multiLabelValidator: RDD[LabeledPoint] => Boolean = { data =>
     if (numOfLinearPredictor > 1) {
       DataValidators.multiLabelValidator(numOfLinearPredictor + 1)(data)
@@ -363,7 +360,6 @@ class LogisticRegressionWithLBFGS
     if (numClasses > 2) {
       optimizer.setGradient(new LogisticGradient(numClasses))
     }
-    classes = numClasses
     this
   }
 
@@ -385,18 +381,24 @@ class LogisticRegressionWithLBFGS
    */
   override def run(input: RDD[LabeledPoint], initialWeights: Vector): LogisticRegressionModel = {
     // ml's Logisitic regression only supports binary classifcation currently.
-    if (classes == 2) {
-      def runWithMlLogisitcRegression(elasticNetParam: Double) {
+    if (numOfLinearPredictor == 1) {
+      def runWithMlLogisitcRegression(elasticNetParam: Double) = {
         val lr = new org.apache.spark.ml.classification.LogisticRegression()
         lr.setRegParam(optimizer.getRegParam())
-        lr.trainOnPoints(input, Some(initialWeights))
+        val handlePersistence = input.getStorageLevel == StorageLevel.NONE
+        val instances = input.map {
+          case LabeledPoint(label: Double, features: Vector) => (label, features)
+        }
+        val mlLogisticRegresionModel = lr.trainOnInstances(instances, handlePersistence, Some(initialWeights))
+        createModel(mlLogisticRegresionModel.weights, mlLogisticRegresionModel.intercept)
       }
       optimizer.getUpdater() match {
-        case SquaredL2Updater => runWithMlLogisticRegression(1.0)
-        case L2Updater => runWithMlLogisticRegression(0.0)
+        case x: SquaredL2Updater => runWithMlLogisitcRegression(1.0)
+        case x: L1Updater => runWithMlLogisitcRegression(0.0)
         case _ => super.run(input, initialWeights)
-      } else {
-        super.run(input, initialWeights)
       }
+    } else {
+      super.run(input, initialWeights)
+    }
   }
 }

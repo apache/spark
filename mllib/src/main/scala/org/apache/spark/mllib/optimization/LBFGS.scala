@@ -123,7 +123,7 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   /**
    * Returns the updater, limited to internal use.
    */
-  protected[mllib] getUpdater(): Updater = {
+  private[mllib] def getUpdater(): Updater = {
     updater
   }
 

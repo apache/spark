@@ -105,11 +105,11 @@ class LogisticRegression(override val uid: String)
     val instances = extractLabeledPoints(dataset).map {
       case LabeledPoint(label: Double, features: Vector) => (label, features)
     }
-    trainOnPoints(instances)
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    trainOnInstances(instances, handlePersistence)
   }
 
-  private[mllib] def trainOnPoints(input: RDD[LabeledPoint], optInitialWeights: Option[Vector]=None): LogisitcRegressionModel = {
-    val handlePersistence = rdd.getStorageLevel == StorageLevel.NONE
+  protected[spark] def trainOnInstances(instances: RDD[(Double, Vector)], handlePersistence: Boolean, optInitialWeights: Option[Vector]=None): LogisticRegressionModel = {
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (summarizer, labelSummarizer) = instances.treeAggregate(
@@ -164,7 +164,7 @@ class LogisticRegression(override val uid: String)
       new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
     }
 
-    val initialWeightsWithIntercept = opInitialWeights.getOrElse(
+    val initialWeightsWithIntercept = optInitialWeights.getOrElse(
       Vectors.zeros(if ($(fitIntercept)) numFeatures + 1 else numFeatures))
 
     if ($(fitIntercept)) {
