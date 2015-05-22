@@ -251,10 +251,10 @@ trait HiveTypeCoercion {
         p.makeCopy(Array(Cast(p.left, StringType), p.right))
       case p: BinaryComparison if p.left.dataType == StringType &&
                                   p.right.dataType == TimestampType =>
-        p.makeCopy(Array(p.left, Cast(p.right, StringType)))
+        p.makeCopy(Array(Cast(p.left, TimestampType), p.right))
       case p: BinaryComparison if p.left.dataType == TimestampType &&
                                   p.right.dataType == StringType =>
-        p.makeCopy(Array(Cast(p.left, StringType), p.right))
+        p.makeCopy(Array(p.left, Cast(p.right, TimestampType)))
       case p: BinaryComparison if p.left.dataType == TimestampType &&
                                   p.right.dataType == DateType =>
         p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
@@ -274,7 +274,7 @@ trait HiveTypeCoercion {
         i.makeCopy(Array(Cast(a, StringType), b))
       case i @ In(a, b) if a.dataType == TimestampType &&
                            b.forall(_.dataType == StringType) =>
-        i.makeCopy(Array(Cast(a, StringType), b))
+        i.makeCopy(Array(a, b.map(Cast(_, TimestampType))))
       case i @ In(a, b) if a.dataType == DateType &&
                            b.forall(_.dataType == TimestampType) =>
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
@@ -296,6 +296,9 @@ trait HiveTypeCoercion {
    */
   object InConversion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e 
+      
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
         i.makeCopy(Array(a, b.map(Cast(_, a.dataType))))
     }
@@ -631,31 +634,24 @@ trait HiveTypeCoercion {
     import HiveTypeCoercion._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      case cw @ CaseWhen(branches) if !cw.resolved && !branches.exists(!_.resolved)  =>
-        val valueTypes = branches.sliding(2, 2).map {
-          case Seq(_, value) => value.dataType
-          case Seq(elseVal) => elseVal.dataType
-        }.toSeq
-
-        logDebug(s"Input values for null casting ${valueTypes.mkString(",")}")
-
-        if (valueTypes.distinct.size > 1) {
-          val commonType = valueTypes.reduce { (v1, v2) =>
-            findTightestCommonType(v1, v2)
-              .getOrElse(sys.error(
-                s"Types in CASE WHEN must be the same or coercible to a common type: $v1 != $v2"))
-          }
-          val transformedBranches = branches.sliding(2, 2).map {
-            case Seq(cond, value) if value.dataType != commonType =>
-              Seq(cond, Cast(value, commonType))
-            case Seq(elseVal) if elseVal.dataType != commonType =>
-              Seq(Cast(elseVal, commonType))
-            case s => s
-          }.reduce(_ ++ _)
-          CaseWhen(transformedBranches)
-        } else {
-          // Types match up.  Hopefully some other rule fixes whatever is wrong with resolution.
-          cw
+      case cw: CaseWhenLike if !cw.resolved && cw.childrenResolved && !cw.valueTypesEqual  =>
+        logDebug(s"Input values for null casting ${cw.valueTypes.mkString(",")}")
+        val commonType = cw.valueTypes.reduce { (v1, v2) =>
+          findTightestCommonType(v1, v2).getOrElse(sys.error(
+            s"Types in CASE WHEN must be the same or coercible to a common type: $v1 != $v2"))
+        }
+        val transformedBranches = cw.branches.sliding(2, 2).map {
+          case Seq(when, value) if value.dataType != commonType =>
+            Seq(when, Cast(value, commonType))
+          case Seq(elseVal) if elseVal.dataType != commonType =>
+            Seq(Cast(elseVal, commonType))
+          case s => s
+        }.reduce(_ ++ _)
+        cw match {
+          case _: CaseWhen =>
+            CaseWhen(transformedBranches)
+          case CaseKeyWhen(key, _) =>
+            CaseKeyWhen(key, transformedBranches)
         }
     }
   }

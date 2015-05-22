@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import java.io.NotSerializableException
+import java.util.Random
 
 import org.scalatest.FunSuite
 
@@ -92,6 +93,11 @@ class ClosureCleanerSuite extends FunSuite {
       expectCorrectException { TestUserClosuresActuallyCleaned.testKeyBy(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitions(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitionsWithIndex(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitionsWithContext(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testFlatMapWith(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testFilterWith(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testForEachWith(rdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testMapWith(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions2(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions3(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions4(rdd) }
@@ -106,6 +112,7 @@ class ClosureCleanerSuite extends FunSuite {
       expectCorrectException { TestUserClosuresActuallyCleaned.testAggregateByKey(pairRdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testFoldByKey(pairRdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testReduceByKey(pairRdd) }
+      expectCorrectException { TestUserClosuresActuallyCleaned.testReduceByKeyLocally(pairRdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapValues(pairRdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testFlatMapValues(pairRdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testForeachAsync(rdd) }
@@ -260,6 +267,21 @@ private object TestUserClosuresActuallyCleaned {
   def testMapPartitionsWithIndex(rdd: RDD[Int]): Unit = {
     rdd.mapPartitionsWithIndex { (_, it) => return; it }.count()
   }
+  def testFlatMapWith(rdd: RDD[Int]): Unit = {
+    rdd.flatMapWith ((index: Int) => new Random(index + 42)){ (_, it) => return; Seq() }.count()
+  }
+  def testMapWith(rdd: RDD[Int]): Unit = {
+    rdd.mapWith ((index: Int) => new Random(index + 42)){ (_, it) => return; 0 }.count()
+  }
+  def testFilterWith(rdd: RDD[Int]): Unit = {
+    rdd.filterWith ((index: Int) => new Random(index + 42)){ (_, it) => return; true }.count()
+  }
+  def testForEachWith(rdd: RDD[Int]): Unit = {
+    rdd.foreachWith ((index: Int) => new Random(index + 42)){ (_, it) => return }
+  }
+  def testMapPartitionsWithContext(rdd: RDD[Int]): Unit = {
+    rdd.mapPartitionsWithContext { (_, it) => return; it }.count()
+  }
   def testZipPartitions2(rdd: RDD[Int]): Unit = {
     rdd.zipPartitions(rdd) { case (it1, it2) => return; it1 }.count()
   }
@@ -294,6 +316,9 @@ private object TestUserClosuresActuallyCleaned {
   }
   def testFoldByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.foldByKey(0) { case (_, _) => return; 1 } }
   def testReduceByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.reduceByKey { case (_, _) => return; 1 } }
+  def testReduceByKeyLocally(rdd: RDD[(Int, Int)]): Unit = {
+    rdd.reduceByKeyLocally { case (_, _) => return; 1 }
+  }
   def testMapValues(rdd: RDD[(Int, Int)]): Unit = { rdd.mapValues { _ => return; 1 } }
   def testFlatMapValues(rdd: RDD[(Int, Int)]): Unit = { rdd.flatMapValues { _ => return; Seq() } }
 

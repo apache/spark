@@ -19,6 +19,7 @@ package org.apache.spark.mllib.evaluation
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
+import org.apache.spark.sql.DataFrame
 
 /**
  * Evaluator for multilabel classification.
@@ -26,6 +27,13 @@ import org.apache.spark.SparkContext._
  * both are non-null Arrays, each with unique elements.
  */
 class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]) {
+
+  /**
+   * An auxiliary constructor taking a DataFrame.
+   * @param predictionAndLabels a DataFrame with two double array columns: prediction and label
+   */
+  private[mllib] def this(predictionAndLabels: DataFrame) =
+    this(predictionAndLabels.map(r => (r.getSeq[Double](0).toArray, r.getSeq[Double](1).toArray)))
 
   private lazy val numDocs: Long = predictionAndLabels.count()
 

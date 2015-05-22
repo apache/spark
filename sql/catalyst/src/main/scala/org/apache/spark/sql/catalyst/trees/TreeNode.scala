@@ -131,6 +131,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
+   * Finds and returns the first [[TreeNode]] of the tree for which the given partial function
+   * is defined (pre-order), and applies the partial function to it.
+   */
+  def collectFirst[B](pf: PartialFunction[BaseType, B]): Option[B] = {
+    val lifted = pf.lift
+    lifted(this).orElse {
+      children.foldLeft(None: Option[B]) { (l, r) => l.orElse(r.collectFirst(pf)) }
+    }
+  }
+
+  /**
    * Returns a copy of this node where `f` has been applied to all the nodes children.
    */
   def mapChildren(f: BaseType => BaseType): this.type = {
@@ -160,7 +171,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     val remainingNewChildren = newChildren.toBuffer
     val remainingOldChildren = children.toBuffer
     val newArgs = productIterator.map {
-      // This rule is used to handle children is a input argument.
+      // Handle Seq[TreeNode] in TreeNode parameters.
       case s: Seq[_] => s.map {
         case arg: TreeNode[_] if children contains arg =>
           val newChild = remainingNewChildren.remove(0)
@@ -374,6 +385,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def argString: String = productIterator.flatMap {
     case tn: TreeNode[_] if children contains tn => Nil
     case tn: TreeNode[_] if tn.toString contains "\n" => s"(${tn.simpleString})" :: Nil
+    case seq: Seq[BaseType] if seq.toSet.subsetOf(children.toSet) => Nil
     case seq: Seq[_] => seq.mkString("[", ",", "]") :: Nil
     case set: Set[_] => set.mkString("{", ",", "}") :: Nil
     case other => other :: Nil

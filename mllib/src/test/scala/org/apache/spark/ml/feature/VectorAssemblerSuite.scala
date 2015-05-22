@@ -20,18 +20,11 @@ package org.apache.spark.ml.feature
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.Row
 
 class VectorAssemblerSuite extends FunSuite with MLlibTestSparkContext {
-
-  @transient var sqlContext: SQLContext = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sqlContext = new SQLContext(sc)
-  }
 
   test("assemble") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
@@ -46,6 +39,14 @@ class VectorAssemblerSuite extends FunSuite with MLlibTestSparkContext {
       intercept[SparkException](assemble(v))
       intercept[SparkException](assemble(1.0, v))
     }
+  }
+
+  test("assemble should compress vectors") {
+    import org.apache.spark.ml.feature.VectorAssembler.assemble
+    val v1 = assemble(0.0, 0.0, 0.0, Vectors.dense(4.0))
+    assert(v1.isInstanceOf[SparseVector])
+    val v2 = assemble(1.0, 2.0, 3.0, Vectors.sparse(1, Array(0), Array(4.0)))
+    assert(v2.isInstanceOf[DenseVector])
   }
 
   test("VectorAssembler") {

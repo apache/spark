@@ -21,7 +21,7 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.Evaluator
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Row}
@@ -33,7 +33,10 @@ import org.apache.spark.sql.types.DoubleType
  * Evaluator for binary classification, which expects two input columns: score and label.
  */
 @AlphaComponent
-class BinaryClassificationEvaluator extends Evaluator with HasRawPredictionCol with HasLabelCol {
+class BinaryClassificationEvaluator(override val uid: String)
+  extends Evaluator with HasRawPredictionCol with HasLabelCol {
+
+  def this() = this(Identifiable.randomUID("binEval"))
 
   /**
    * param for metric name in evaluation

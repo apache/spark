@@ -18,14 +18,14 @@
 package org.apache.spark.streaming.receiver
 
 import java.nio.ByteBuffer
+import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent._
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
-import java.util.concurrent.CountDownLatch
-import scala.concurrent._
-import ExecutionContext.Implicits.global
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Abstract class that is responsible for supervising a Receiver in the worker.
@@ -45,6 +45,9 @@ private[streaming] abstract class ReceiverSupervisor(
 
   // Attach the executor to the receiver
   receiver.attachExecutor(this)
+
+  private val futureExecutionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("receiver-supervisor-future", 128))
 
   /** Receiver id */
   protected val streamId = receiver.streamId
@@ -111,6 +114,7 @@ private[streaming] abstract class ReceiverSupervisor(
     stoppingError = error.orNull
     stopReceiver(message, error)
     onStop(message, error)
+    futureExecutionContext.shutdownNow()
     stopLatch.countDown()
   }
 
@@ -150,6 +154,8 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Restart receiver with delay */
   def restartReceiver(message: String, error: Option[Throwable], delay: Int) {
     Future {
+      // This is a blocking action so we should use "futureExecutionContext" which is a cached
+      // thread pool.
       logWarning("Restarting receiver with delay " + delay + " ms: " + message,
         error.getOrElse(null))
       stopReceiver("Restarting receiver with delay " + delay + "ms: " + message, error)
@@ -158,7 +164,7 @@ private[streaming] abstract class ReceiverSupervisor(
       logInfo("Starting receiver again")
       startReceiver()
       logInfo("Receiver started again")
-    }
+    }(futureExecutionContext)
   }
 
   /** Check if receiver has been marked for stopping */

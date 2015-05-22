@@ -59,6 +59,9 @@ case class Generate(
     child: LogicalPlan)
   extends UnaryNode {
 
+  /** The set of all attributes produced by this node. */
+  def generatedSet: AttributeSet = AttributeSet(generatorOutput)
+
   override lazy val resolved: Boolean = {
     generator.resolved &&
       childrenResolved &&
@@ -149,16 +152,6 @@ case class InsertIntoTable(
   }
 }
 
-case class CreateTableAsSelect[T](
-    databaseName: Option[String],
-    tableName: String,
-    child: LogicalPlan,
-    allowExisting: Boolean,
-    desc: Option[T] = None) extends UnaryNode {
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
-  override lazy val resolved: Boolean = databaseName != None && childrenResolved
-}
-
 /**
  * A container for holding named common table expressions (CTEs) and a query plan.
  * This operator will be removed during analysis and the relations will be substituted into child.
@@ -184,10 +177,10 @@ case class WriteToFile(
 }
 
 /**
- * @param order  The ordering expressions 
- * @param global True means global sorting apply for entire data set, 
+ * @param order  The ordering expressions
+ * @param global True means global sorting apply for entire data set,
  *               False means sorting only apply within the partition.
- * @param child  Child logical plan              
+ * @param child  Child logical plan
  */
 case class Sort(
     order: Seq[SortOrder],
