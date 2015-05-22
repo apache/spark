@@ -22,14 +22,10 @@ import org.scalatest.FunSuite
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.DataFrame
 
 class RegressionEvaluatorSuite extends FunSuite with MLlibTestSparkContext {
 
-  @transient var dataset: DataFrame = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
+  test("Regression Evaluator: default params") {
     /**
      * Here is the instruction describing how to export the test data into CSV format
      * so we can validate the metrics compared with R's mmetric package.
@@ -40,12 +36,9 @@ class RegressionEvaluatorSuite extends FunSuite with MLlibTestSparkContext {
      * data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1))
      *   .saveAsTextFile("path")
      */
-    dataset = sqlContext.createDataFrame(
+    val dataset = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2))
-  }
-
-  test("Regression Evaluator: default params") {
     /**
      * Using the following R code to load the data, train the model and evaluate metrics.
      *
@@ -65,14 +58,14 @@ class RegressionEvaluatorSuite extends FunSuite with MLlibTestSparkContext {
 
     // default = rmse
     val evaluator = new RegressionEvaluator()
-    assert(evaluator.evaluate(predictions) ~== 0.1 relTol 0.02)
+    assert(evaluator.evaluate(predictions) ~== 0.1019382 absTol 0.001)
 
     // r2 score
     evaluator.setMetricName("r2")
-    assert(evaluator.evaluate(predictions) ~== 1.0 relTol 0.1)
+    assert(evaluator.evaluate(predictions) ~== 0.9998196 absTol 0.001)
 
     // mae
     evaluator.setMetricName("mae")
-    assert(evaluator.evaluate(predictions) ~== 0.08 relTol 0.01)
+    assert(evaluator.evaluate(predictions) ~== 0.08036075 absTol 0.001)
   }
 }

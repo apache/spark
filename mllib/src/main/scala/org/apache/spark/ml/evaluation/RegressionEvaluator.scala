@@ -18,8 +18,7 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.Evaluator
-import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.param.{Param, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.evaluation.RegressionMetrics
@@ -29,7 +28,7 @@ import org.apache.spark.sql.types.DoubleType
 /**
  * :: AlphaComponent ::
  *
- * Evaluator for regression, which expects two input columns: score and label.
+ * Evaluator for regression, which expects two input columns: prediction and label.
  */
 @AlphaComponent
 class RegressionEvaluator(override val uid: String)
@@ -42,7 +41,7 @@ class RegressionEvaluator(override val uid: String)
    * @group param
    */
   val metricName: Param[String] = new Param(this, "metricName",
-    "metric name in evaluation (rmse|r2|mae)")
+    "metric name in evaluation (rmse|r2|mae)", ParamValidators.inArray(Array("rmse", "r2", "mae")))
 
   /** @group getParam */
   def getMetricName: String = $(metricName)
@@ -51,7 +50,7 @@ class RegressionEvaluator(override val uid: String)
   def setMetricName(value: String): this.type = set(metricName, value)
 
   /** @group setParam */
-  def setScoreCol(value: String): this.type = set(predictionCol, value)
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
   def setLabelCol(value: String): this.type = set(labelCol, value)
@@ -66,7 +65,7 @@ class RegressionEvaluator(override val uid: String)
     val scoreAndLabels = dataset.select($(predictionCol), $(labelCol))
       .map { case Row(prediction: Double, label: Double) =>
         (prediction, label)
-    }
+      }
     val metrics = new RegressionMetrics(scoreAndLabels)
     val metric = $(metricName) match {
       case "rmse" =>
@@ -77,8 +76,6 @@ class RegressionEvaluator(override val uid: String)
         metrics.r2
       case "mae" =>
         metrics.meanAbsoluteError
-      case other =>
-        throw new IllegalArgumentException(s"Does not support metric $other.")
     }
     metric
   }
