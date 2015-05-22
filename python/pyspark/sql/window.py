@@ -26,6 +26,8 @@ __all__ = ["Window", "WindowSpec"]
 
 def _to_java_cols(cols):
     sc = SparkContext._active_spark_context
+    if len(cols) == 1 and isinstance(cols[0], list):
+        cols = cols[0]
     return _to_seq(sc, cols, _to_java_column)
 
 

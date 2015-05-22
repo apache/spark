@@ -74,7 +74,7 @@ def _create_window_function(name, doc=''):
         jc = getattr(sc._jvm.functions, name)()
         return Column(jc)
     _.__name__ = name
-    _.__doc__ = doc
+    _.__doc__ = 'Window function: ' + doc
     return _
 
 
@@ -142,28 +142,28 @@ _binary_mathfunctions = {
 }
 
 _window_functions = {
-    'lag': 'Window function: returns the lag value of current row of the expression, ' +
-           'null when the current row extends before the beginning of the window.',
-    'rowNumber': """Window function: Assigns a unique number (sequentially, starting from 1,
+    'lag': """returns the lag value of current row of the expression,
+           null when the current row extends before the beginning of the window.""",
+    'rowNumber': """Assigns a unique number (sequentially, starting from 1,
                  as defined by ORDER BY) to each row within the partition.""",
-    'denseRank': 'The difference between RANK and DENSE_RANK is that DENSE_RANK' +
-                 'leaves no gaps in ranking sequence when there are ties. That is, if you were' +
-                 'ranking a competition using DENSE_RANK and had three people tie for second ' +
-                 'place, you would say that all three were in second place and that the next ' +
-                 'person came in third.',
-    'rank': 'The difference between RANK and DENSE_RANK is that DENSE_RANK' +
-            'leaves no gaps in ranking sequence when there are ties. That is, if you were' +
-            'ranking a competition using DENSE_RANK and had three people tie for second place,' +
-            'you would say that all three were in second place and that the next person came in ' +
-            'third.',
-    'cumeDist': 'CUME_DIST (defined as the inverse of percentile in some' +
-                'statistical books) computes the position of a specified value relative to' +
-                'a set of values. To compute the CUME_DIST of a value x in a set S of size N,' +
-                'you use the formula: CUME_DIST(x) = number of values in S coming before and' +
-                'including x in the specified order / N',
-    'percentRank': 'PERCENT_RANK is similar to CUME_DIST, but it uses rank values rather than' +
-                   'row counts in its numerator. The formula: ' +
-                   '(rank of row in its partition - 1) / (number of rows in the partition - 1)',
+    'denseRank': """The difference between RANK and DENSE_RANK is that DENSE_RANK
+                 leaves no gaps in ranking sequence when there are ties. That is, if you were
+                 ranking a competition using DENSE_RANK and had three people tie for second
+                 place, you would say that all three were in second place and that the next
+                 person came in third.""",
+    'rank': """The difference between RANK and DENSE_RANK is that DENSE_RANK
+            leaves no gaps in ranking sequence when there are ties. That is, if you were
+            ranking a competition using DENSE_RANK and had three people tie for second place,
+            you would say that all three were in second place and that the next person came in
+            third.""",
+    'cumeDist': """CUME_DIST (defined as the inverse of percentile in some
+                statistical books) computes the position of a specified value relative to
+                a set of values. To compute the CUME_DIST of a value x in a set S of size N,
+                you use the formula: CUME_DIST(x) = number of values in S coming before and
+                including x in the specified order / N""",
+    'percentRank': """PERCENT_RANK is similar to CUME_DIST, but it uses rank values rather than
+                   row counts in its numerator. The formula:
+                   (rank of row in its partition - 1) / (number of rows in the partition - 1)""",
 
 }
 
@@ -420,7 +420,7 @@ def lead(col, count=1, default=None):
 @since(1.4)
 def ntile(n):
     """
-    NTILE for specified column or expression.
+    Window function: NTILE for specified column or expression.
 
     NTILE allows easy calculation of tertiles, quartiles, deciles and other
     common summary statistics. This function divides an ordered partition into a specified
