@@ -503,9 +503,10 @@ private[hive] object HiveContext {
   val HIVE_METASTORE_VERSION: String = "spark.sql.hive.metastore.version"
   val HIVE_METASTORE_JARS: String = "spark.sql.hive.metastore.jars"
 
+  private val tempDir = Utils.createTempDir()
+
   /** Constructs a configuration for hive, where the metastore is located in a temp directory. */
   def newTemporaryConfiguration(): Map[String, String] = {
-    val tempDir = Utils.createTempDir()
     val localMetastore = new File(tempDir, "metastore").getAbsolutePath
     Map(
       "javax.jdo.option.ConnectionURL" -> s"jdbc:derby:;databaseName=$localMetastore;create=true")
