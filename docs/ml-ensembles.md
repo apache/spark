@@ -37,7 +37,8 @@ import org.apache.spark.sql.{Row, SQLContext}
 val sqlContext = new SQLContext(sc)
 
 // parse data into dataframe
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_multiclass_classification_data.txt")
+val data = MLUtils.loadLibSVMFile(sc, 
+  "data/mllib/sample_multiclass_classification_data.txt")
 val Array(train, test) = data.toDF().randomSplit(Array(0.7, 0.3))
 
 // instantiate multiclass learner and train
@@ -123,7 +124,6 @@ for (int index = 0; index < numClasses; index++) {
   System.out.print(metrics.falsePositiveRate(label));
   System.out.println();
 }
-
 {% endhighlight %}
 </div>
 </div>
