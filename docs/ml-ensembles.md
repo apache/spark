@@ -23,8 +23,8 @@ Predictions are done by evaluating each binary classifier and the index of the m
 
 ### Example
 
-The example below demonstrates how to load a
-[LIBSVM data file](http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/), parse it as a DataFrame and perform multiclass classification using `OneVsRest`. The test error is calculated to measure the algorithm accuracy.
+The example below demonstrates how to load the
+[Iris dataset](http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/multiclass/iris.scale), parse it as a DataFrame and perform multiclass classification using `OneVsRest`. The test error is calculated to measure the algorithm accuracy.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -35,7 +35,6 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{Row, SQLContext}
 
 val sqlContext = new SQLContext(sc)
-import sqlContext.implicits._
 
 // parse data into dataframe
 val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_multiclass_classification_data.txt")
@@ -57,8 +56,8 @@ println(metrics.confusionMatrix)
 // the Iris DataSet has three classes
 val numClasses = 3
 
-val fprs = (0 until numClasses).map(label => (label, metrics.falsePositiveRate(label.toDouble)))
-println("label\tfpr\n%s".format(fprs.map {case (label, fpr) => label + "\t" + fpr}.mkString("\n")))
+val fprs = (0 until numClasses).map(label => label + "\t" + metrics.falsePositiveRate(label.toDouble)).mkString("\n")
+println("label\tfpr\n" + fprs)
 {% endhighlight %}
 </div>
 <div data-lang="java" markdown="1">
@@ -81,7 +80,8 @@ SparkConf conf = new SparkConf().setAppName("JavaOneVsRestExample");
 JavaSparkContext jsc = new JavaSparkContext(conf);
 SQLContext jsql = new SQLContext(jsc);
     
-RDD<LabeledPoint> data = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_multiclass_classification_data.txt");
+RDD<LabeledPoint> data = MLUtils.loadLibSVMFile(jsc.sc(),
+  "data/mllib/sample_multiclass_classification_data.txt");
 
 RDD<LabeledPoint>[] split = data.randomSplit(new double[]{0.7, 0.3}, 12345);
 RDD<LabeledPoint> train = split[0];
