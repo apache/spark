@@ -102,6 +102,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   }
 
   override def receive: PartialFunction[Any, Unit] = {
+    case TaskSchedulerIsSet =>
+      scheduler = sc.taskScheduler
+    case ExpireDeadHosts =>
+      expireDeadHosts()
     case ExecutorRegistered(executorId) =>
       executorLastSeen(executorId) = clock.getTimeMillis()
     case ExecutorRemoved(executorId) =>
@@ -109,12 +113,6 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case TaskSchedulerIsSet =>
-      scheduler = sc.taskScheduler
-      context.reply(true)
-    case ExpireDeadHosts =>
-      expireDeadHosts()
-      context.reply(true)
     case heartbeat @ Heartbeat(executorId, taskMetrics, blockManagerId) =>
       if (scheduler != null) {
         if (executorLastSeen.contains(executorId)) {
@@ -142,6 +140,15 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
         logWarning(s"Dropping $heartbeat because TaskScheduler is not ready yet")
         context.reply(HeartbeatResponse(reregisterBlockManager = true))
       }
+    // TODO: these are duplicated from `receive` to make tests deterministic
+    // We still need to keep those there because messages we received
+    // through `send` are not automatically routed to `receiveAndReply`
+    case TaskSchedulerIsSet =>
+      scheduler = sc.taskScheduler
+      context.reply(true)
+    case ExpireDeadHosts =>
+      expireDeadHosts()
+      context.reply(true)
   }
 
   /**
