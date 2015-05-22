@@ -508,7 +508,8 @@ private[hive] object HiveContext {
     val tempDir = Utils.createTempDir()
     val localMetastore = new File(tempDir, "metastore").getAbsolutePath
     Map(
-      "datanucleus.rdbms.datastoreAdapterClassName" -> "org.datanucleus.store.rdbms.adapter.DerbyAdapter",
+      "datanucleus.rdbms.datastoreAdapterClassName" ->
+        "org.datanucleus.store.rdbms.adapter.DerbyAdapter",
       "javax.jdo.option.ConnectionDriverName" -> "org.apache.derby.jdbc.EmbeddedDriver",
       "javax.jdo.option.ConnectionPassword" -> "mine",
       "javax.jdo.option.ConnectionURL" -> s"jdbc:derby:;databaseName=$localMetastore;create=true",
