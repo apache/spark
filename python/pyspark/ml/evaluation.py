@@ -147,6 +147,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+
 @inherit_doc
 class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     """
