@@ -64,11 +64,11 @@ class RegressionEvaluator(override val uid: String)
     SchemaUtils.checkColumnType(schema, $(predictionCol), DoubleType)
     SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
 
-    val scoreAndLabels = dataset.select($(predictionCol), $(labelCol))
+    val predictionAndLabels = dataset.select($(predictionCol), $(labelCol))
       .map { case Row(prediction: Double, label: Double) =>
         (prediction, label)
       }
-    val metrics = new RegressionMetrics(scoreAndLabels)
+    val metrics = new RegressionMetrics(predictionAndLabels)
     val metric = $(metricName) match {
       case "rmse" =>
         metrics.rootMeanSquaredError
