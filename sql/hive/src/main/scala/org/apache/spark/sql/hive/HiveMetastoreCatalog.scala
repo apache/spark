@@ -491,13 +491,13 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           .take(child.output.length).map(_.dataType)
 
       if (childOutputDataTypes == tableOutputDataTypes) {
-        InsertIntoHiveTable(p.table, p.partition, p.child, p.overwrite, p.ifNotExists)
+        InsertIntoHiveTable(table, p.partition, p.child, p.overwrite, p.ifNotExists)
       } else if (childOutputDataTypes.size == tableOutputDataTypes.size &&
         childOutputDataTypes.zip(tableOutputDataTypes)
           .forall { case (left, right) => left.sameType(right) }) {
         // If both types ignoring nullability of ArrayType, MapType, StructType are the same,
         // use InsertIntoHiveTable instead of InsertIntoTable.
-        InsertIntoHiveTable(p.table, p.partition, p.child, p.overwrite, p.ifNotExists)
+        InsertIntoHiveTable(table, p.partition, p.child, p.overwrite, p.ifNotExists)
       } else {
         // Only do the casting when child output data types differ from table output data types.
         val castedChildOutput = child.output.zip(table.output).map {
@@ -532,7 +532,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
  * because Hive table doesn't have nullability for ARRAY, MAP, STRUCT types.
  */
 private[hive] case class InsertIntoHiveTable(
-    table: LogicalPlan,
+    table: MetastoreRelation,
     partition: Map[String, Option[String]],
     child: LogicalPlan,
     overwrite: Boolean,
@@ -543,11 +543,10 @@ private[hive] case class InsertIntoHiveTable(
   override def output: Seq[Attribute] = child.output
 
   val numDynamicPartitions = partition.values.count(_.isEmpty)
-  val tableOutput = {
-    val hiveTable = table.asInstanceOf[MetastoreRelation]
-    (hiveTable.attributes ++ hiveTable.partitionKeys.takeRight(numDynamicPartitions))
-      .take(child.output.length)
-  }
+
+  // This is the expected schema of the table prepared to be inserted into,
+  // including dynamic partition columns.
+  val tableOutput = table.attributes ++ table.partitionKeys.takeRight(numDynamicPartitions)
 
   override lazy val resolved: Boolean = childrenResolved && child.output.zip(tableOutput).forall {
     case (childAttr, tableAttr) => childAttr.dataType.sameType(tableAttr.dataType)
