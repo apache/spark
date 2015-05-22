@@ -33,6 +33,8 @@ class FilterPushdownSuite extends PlanTest {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubQueries) ::
+      Batch("Transform Condition", Once,
+        TransformCondition) ::
       Batch("Filter Pushdown", Once,
         CombineFilters,
         PushPredicateThroughProject,
@@ -197,6 +199,26 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+  
+  test("joins: push to one side after transformCondition") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery = {
+      x.join(y, Inner)
+       .where(("x.a".attr === 1 && "y.d".attr === "x.b".attr) || 
+              ("x.a".attr === 1 && "y.d".attr === "x.c".attr))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.where('a === 1)
+    val right = testRelation1
+    val correctAnswer =
+      left.join(right, condition = Some("d".attr === "b".attr || "d".attr === "c".attr)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+  
 
   test("joins: rewrite filter to push to either side") {
     val x = testRelation.subquery('x)
