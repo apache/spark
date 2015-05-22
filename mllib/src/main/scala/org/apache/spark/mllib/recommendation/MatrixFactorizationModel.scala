@@ -281,8 +281,8 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("rank" -> model.rank)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
-      model.userFeatures.toDF("id", "features").saveAsParquetFile(userPath(path))
-      model.productFeatures.toDF("id", "features").saveAsParquetFile(productPath(path))
+      model.userFeatures.toDF("id", "features").write.parquet(userPath(path))
+      model.productFeatures.toDF("id", "features").write.parquet(productPath(path))
     }
 
     def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
@@ -292,11 +292,11 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
       val rank = (metadata \ "rank").extract[Int]
-      val userFeatures = sqlContext.parquetFile(userPath(path))
+      val userFeatures = sqlContext.read.parquet(userPath(path))
         .map { case Row(id: Int, features: Seq[_]) =>
           (id, features.asInstanceOf[Seq[Double]].toArray)
         }
-      val productFeatures = sqlContext.parquetFile(productPath(path))
+      val productFeatures = sqlContext.read.parquet(productPath(path))
         .map { case Row(id: Int, features: Seq[_]) =>
         (id, features.asInstanceOf[Seq[Double]].toArray)
       }

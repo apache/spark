@@ -43,6 +43,8 @@ private[spark] object SQLConf {
   val PARQUET_FILTER_PUSHDOWN_ENABLED = "spark.sql.parquet.filterPushdown"
   val PARQUET_USE_DATA_SOURCE_API = "spark.sql.parquet.useDataSourceApi"
 
+  val ORC_FILTER_PUSHDOWN_ENABLED = "spark.sql.orc.filterPushdown"
+
   val HIVE_VERIFY_PARTITIONPATH = "spark.sql.hive.verifyPartitionPath"
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = "spark.sql.columnNameOfCorruptRecord"
@@ -66,6 +68,13 @@ private[spark] object SQLConf {
   // to its length exceeds the threshold.
   val SCHEMA_STRING_LENGTH_THRESHOLD = "spark.sql.sources.schemaStringLengthThreshold"
 
+  // Whether to perform partition discovery when loading external data sources.  Default to true.
+  val PARTITION_DISCOVERY_ENABLED = "spark.sql.sources.partitionDiscovery.enabled"
+
+  // The output committer class used by FSBasedRelation. The specified class needs to be a
+  // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
+  val OUTPUT_COMMITTER_CLASS = "spark.sql.sources.outputCommitterClass"
+
   // Whether to perform eager analysis when constructing a dataframe.
   // Set to false when debugging requires the ability to look at invalid query plans.
   val DATAFRAME_EAGER_ANALYSIS = "spark.sql.eagerAnalysis"
@@ -73,6 +82,9 @@ private[spark] object SQLConf {
   // Whether to automatically resolve ambiguity in join conditions for self-joins.
   // See SPARK-6231.
   val DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY = "spark.sql.selfJoinAutoResolveAmbiguity"
+
+  // Whether to retain group by columns or not in GroupedData.agg.
+  val DATAFRAME_RETAIN_GROUP_COLUMNS = "spark.sql.retainGroupColumns"
 
   val USE_SQL_SERIALIZER2 = "spark.sql.useSerializer2"
 
@@ -136,6 +148,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   /** When true uses Parquet implementation based on data source API */
   private[spark] def parquetUseDataSourceApi =
     getConf(PARQUET_USE_DATA_SOURCE_API, "true").toBoolean
+
+  private[spark] def orcFilterPushDown =
+    getConf(ORC_FILTER_PUSHDOWN_ENABLED, "false").toBoolean
 
   /** When true uses verifyPartitionPath to prune the path which is not exists. */
   private[spark] def verifyPartitionPath =
@@ -232,6 +247,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def defaultDataSourceName: String =
     getConf(DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.parquet")
 
+  private[spark] def partitionDiscoveryEnabled() =
+    getConf(SQLConf.PARTITION_DISCOVERY_ENABLED, "true").toBoolean
+
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
   private[spark] def schemaStringLengthThreshold: Int =
@@ -242,7 +260,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY, "true").toBoolean
-  
+
+  private[spark] def dataFrameRetainGroupColumns: Boolean =
+    getConf(DATAFRAME_RETAIN_GROUP_COLUMNS, "true").toBoolean
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

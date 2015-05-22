@@ -371,6 +371,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       throw new SparkException("An application name must be set in your configuration")
     }
 
+    // System property spark.yarn.app.id must be set if user code ran by AM on a YARN cluster
+    // yarn-standalone is deprecated, but still supported
+    if ((master == "yarn-cluster" || master == "yarn-standalone") &&
+        !_conf.contains("spark.yarn.app.id")) {
+      throw new SparkException("Detected yarn-cluster mode, but isn't running on a cluster. " +
+        "Deployment to YARN is not supported directly by SparkContext. Please use spark-submit.")
+    }
+
     if (_conf.getBoolean("spark.logConf", false)) {
       logInfo("Spark configuration:\n" + _conf.toDebugString)
     }
@@ -670,7 +678,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *
    * Note: Return statements are NOT allowed in the given body.
    */
-  private def withScope[U](body: => U): U = RDDOperationScope.withScope[U](this)(body)
+  private[spark] def withScope[U](body: => U): U = RDDOperationScope.withScope[U](this)(body)
 
   // Methods for creating RDDs
 
@@ -687,6 +695,78 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       numSlices: Int = defaultParallelism): RDD[T] = withScope {
     assertNotStopped()
     new ParallelCollectionRDD[T](this, seq, numSlices, Map[Int, Seq[String]]())
+  }
+
+  /**
+   * Creates a new RDD[Long] containing elements from `start` to `end`(exclusive), increased by
+   * `step` every element.
+   *
+   * @note if we need to cache this RDD, we should make sure each partition does not exceed limit.
+   *
+   * @param start the start value.
+   * @param end the end value.
+   * @param step the incremental step
+   * @param numSlices the partition number of the new RDD.
+   * @return
+   */
+  def range(
+      start: Long,
+      end: Long,
+      step: Long = 1,
+      numSlices: Int = defaultParallelism): RDD[Long] = withScope {
+    assertNotStopped()
+    // when step is 0, range will run infinitely
+    require(step != 0, "step cannot be 0")
+    val numElements: BigInt = {
+      val safeStart = BigInt(start)
+      val safeEnd = BigInt(end)
+      if ((safeEnd - safeStart) % step == 0 || safeEnd > safeStart ^ step > 0) {
+        (safeEnd - safeStart) / step
+      } else {
+        // the remainder has the same sign with range, could add 1 more
+        (safeEnd - safeStart) / step + 1
+      }
+    }
+    parallelize(0 until numSlices, numSlices).mapPartitionsWithIndex((i, _) => {
+      val partitionStart = (i * numElements) / numSlices * step + start
+      val partitionEnd = (((i + 1) * numElements) / numSlices) * step + start
+      def getSafeMargin(bi: BigInt): Long =
+        if (bi.isValidLong) {
+          bi.toLong
+        } else if (bi > 0) {
+          Long.MaxValue
+        } else {
+          Long.MinValue
+        }
+      val safePartitionStart = getSafeMargin(partitionStart)
+      val safePartitionEnd = getSafeMargin(partitionEnd)
+
+      new Iterator[Long] {
+        private[this] var number: Long = safePartitionStart
+        private[this] var overflow: Boolean = false
+
+        override def hasNext =
+          if (!overflow) {
+            if (step > 0) {
+              number < safePartitionEnd
+            } else {
+              number > safePartitionEnd
+            }
+          } else false
+
+        override def next() = {
+          val ret = number
+          number += step
+          if (number < ret ^ step < 0) {
+            // we have Long.MaxValue + Long.MaxValue < Long.MaxValue
+            // and Long.MinValue + Long.MinValue > Long.MinValue, so iff the step causes a step
+            // back, we are pretty sure that we have an overflow.
+            overflow = true
+          }
+          ret
+        }
+      }
+    })
   }
 
   /** Distribute a local Scala collection to form an RDD.
@@ -1079,8 +1159,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         kcf: () => WritableConverter[K], vcf: () => WritableConverter[V]): RDD[(K, V)] = {
     withScope {
       assertNotStopped()
-      val kc = kcf()
-      val vc = vcf()
+      val kc = clean(kcf)()
+      val vc = clean(vcf)()
       val format = classOf[SequenceFileInputFormat[Writable, Writable]]
       val writables = hadoopFile(path, format,
         kc.writableClass(km).asInstanceOf[Class[Writable]],
@@ -1911,7 +1991,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
-      startTime, sparkUser, applicationAttemptId))
+      startTime, sparkUser, applicationAttemptId, schedulerBackend.getDriverLogUrls))
   }
 
   /** Post the application end event */

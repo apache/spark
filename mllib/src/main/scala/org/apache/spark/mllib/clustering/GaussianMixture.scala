@@ -160,7 +160,7 @@ class GaussianMixture private (
     var llhp = 0.0            // previous log-likelihood
     
     var iter = 0
-    while(iter < maxIterations && Math.abs(llh-llhp) > convergenceTol) {
+    while (iter < maxIterations && math.abs(llh-llhp) > convergenceTol) {
       // create and broadcast curried cluster contribution function
       val compute = sc.broadcast(ExpectationSum.add(weights, gaussians)_)
       

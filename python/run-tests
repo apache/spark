@@ -72,7 +72,9 @@ function run_sql_tests() {
     echo "Run sql tests ..."
     run_test "pyspark/sql/_types.py"
     run_test "pyspark/sql/context.py"
+    run_test "pyspark/sql/column.py"
     run_test "pyspark/sql/dataframe.py"
+    run_test "pyspark/sql/group.py"
     run_test "pyspark/sql/functions.py"
     run_test "pyspark/sql/tests.py"
 }
@@ -98,6 +100,8 @@ function run_ml_tests() {
     echo "Run ml tests ..."
     run_test "pyspark/ml/feature.py"
     run_test "pyspark/ml/classification.py"
+    run_test "pyspark/ml/recommendation.py"
+    run_test "pyspark/ml/regression.py"
     run_test "pyspark/ml/tuning.py"
     run_test "pyspark/ml/tests.py"
     run_test "pyspark/ml/evaluation.py"

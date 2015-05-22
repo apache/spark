@@ -15,9 +15,12 @@
 # limitations under the License.
 #
 
-from pyspark.mllib.common import JavaModelWrapper
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 from pyspark.sql import SQLContext
-from pyspark.sql.types import StructField, StructType, DoubleType
+from pyspark.sql.types import StructField, StructType, DoubleType, IntegerType, ArrayType
+
+__all__ = ['BinaryClassificationMetrics', 'RegressionMetrics',
+           'MulticlassMetrics', 'RankingMetrics']
 
 
 class BinaryClassificationMetrics(JavaModelWrapper):
@@ -268,6 +271,193 @@ class MulticlassMetrics(JavaModelWrapper):
             return self.call("weightedFMeasure")
         else:
             return self.call("weightedFMeasure", beta)
+
+
+class RankingMetrics(JavaModelWrapper):
+    """
+    Evaluator for ranking algorithms.
+
+    >>> predictionAndLabels = sc.parallelize([
+    ...     ([1, 6, 2, 7, 8, 3, 9, 10, 4, 5], [1, 2, 3, 4, 5]),
+    ...     ([4, 1, 5, 6, 2, 7, 3, 8, 9, 10], [1, 2, 3]),
+    ...     ([1, 2, 3, 4, 5], [])])
+    >>> metrics = RankingMetrics(predictionAndLabels)
+    >>> metrics.precisionAt(1)
+    0.33...
+    >>> metrics.precisionAt(5)
+    0.26...
+    >>> metrics.precisionAt(15)
+    0.17...
+    >>> metrics.meanAveragePrecision
+    0.35...
+    >>> metrics.ndcgAt(3)
+    0.33...
+    >>> metrics.ndcgAt(10)
+    0.48...
+
+    """
+
+    def __init__(self, predictionAndLabels):
+        """
+        :param predictionAndLabels: an RDD of (predicted ranking, ground truth set) pairs.
+        """
+        sc = predictionAndLabels.ctx
+        sql_ctx = SQLContext(sc)
+        df = sql_ctx.createDataFrame(predictionAndLabels,
+                                     schema=sql_ctx._inferSchema(predictionAndLabels))
+        java_model = callMLlibFunc("newRankingMetrics", df._jdf)
+        super(RankingMetrics, self).__init__(java_model)
+
+    def precisionAt(self, k):
+        """
+        Compute the average precision of all the queries, truncated at ranking position k.
+
+        If for a query, the ranking algorithm returns n (n < k) results, the precision value
+        will be computed as #(relevant items retrieved) / k. This formula also applies when
+        the size of the ground truth set is less than k.
+
+        If a query has an empty ground truth set, zero will be used as precision together
+        with a log warning.
+        """
+        return self.call("precisionAt", int(k))
+
+    @property
+    def meanAveragePrecision(self):
+        """
+        Returns the mean average precision (MAP) of all the queries.
+        If a query has an empty ground truth set, the average precision will be zero and
+        a log warining is generated.
+        """
+        return self.call("meanAveragePrecision")
+
+    def ndcgAt(self, k):
+        """
+        Compute the average NDCG value of all the queries, truncated at ranking position k.
+        The discounted cumulative gain at position k is computed as:
+        sum,,i=1,,^k^ (2^{relevance of ''i''th item}^ - 1) / log(i + 1),
+        and the NDCG is obtained by dividing the DCG value on the ground truth set.
+        In the current implementation, the relevance value is binary.
+        If a query has an empty ground truth set, zero will be used as NDCG together with
+        a log warning.
+        """
+        return self.call("ndcgAt", int(k))
+
+
+class MultilabelMetrics(JavaModelWrapper):
+    """
+    Evaluator for multilabel classification.
+
+    >>> predictionAndLabels = sc.parallelize([([0.0, 1.0], [0.0, 2.0]), ([0.0, 2.0], [0.0, 1.0]),
+    ...     ([], [0.0]), ([2.0], [2.0]), ([2.0, 0.0], [2.0, 0.0]),
+    ...     ([0.0, 1.0, 2.0], [0.0, 1.0]), ([1.0], [1.0, 2.0])])
+    >>> metrics = MultilabelMetrics(predictionAndLabels)
+    >>> metrics.precision(0.0)
+    1.0
+    >>> metrics.recall(1.0)
+    0.66...
+    >>> metrics.f1Measure(2.0)
+    0.5
+    >>> metrics.precision()
+    0.66...
+    >>> metrics.recall()
+    0.64...
+    >>> metrics.f1Measure()
+    0.63...
+    >>> metrics.microPrecision
+    0.72...
+    >>> metrics.microRecall
+    0.66...
+    >>> metrics.microF1Measure
+    0.69...
+    >>> metrics.hammingLoss
+    0.33...
+    >>> metrics.subsetAccuracy
+    0.28...
+    >>> metrics.accuracy
+    0.54...
+    """
+
+    def __init__(self, predictionAndLabels):
+        sc = predictionAndLabels.ctx
+        sql_ctx = SQLContext(sc)
+        df = sql_ctx.createDataFrame(predictionAndLabels,
+                                     schema=sql_ctx._inferSchema(predictionAndLabels))
+        java_class = sc._jvm.org.apache.spark.mllib.evaluation.MultilabelMetrics
+        java_model = java_class(df._jdf)
+        super(MultilabelMetrics, self).__init__(java_model)
+
+    def precision(self, label=None):
+        """
+        Returns precision or precision for a given label (category) if specified.
+        """
+        if label is None:
+            return self.call("precision")
+        else:
+            return self.call("precision", float(label))
+
+    def recall(self, label=None):
+        """
+        Returns recall or recall for a given label (category) if specified.
+        """
+        if label is None:
+            return self.call("recall")
+        else:
+            return self.call("recall", float(label))
+
+    def f1Measure(self, label=None):
+        """
+        Returns f1Measure or f1Measure for a given label (category) if specified.
+        """
+        if label is None:
+            return self.call("f1Measure")
+        else:
+            return self.call("f1Measure", float(label))
+
+    @property
+    def microPrecision(self):
+        """
+        Returns micro-averaged label-based precision.
+        (equals to micro-averaged document-based precision)
+        """
+        return self.call("microPrecision")
+
+    @property
+    def microRecall(self):
+        """
+        Returns micro-averaged label-based recall.
+        (equals to micro-averaged document-based recall)
+        """
+        return self.call("microRecall")
+
+    @property
+    def microF1Measure(self):
+        """
+        Returns micro-averaged label-based f1-measure.
+        (equals to micro-averaged document-based f1-measure)
+        """
+        return self.call("microF1Measure")
+
+    @property
+    def hammingLoss(self):
+        """
+        Returns Hamming-loss.
+        """
+        return self.call("hammingLoss")
+
+    @property
+    def subsetAccuracy(self):
+        """
+        Returns subset accuracy.
+        (for equal sets of labels)
+        """
+        return self.call("subsetAccuracy")
+
+    @property
+    def accuracy(self):
+        """
+        Returns accuracy.
+        """
+        return self.call("accuracy")
 
 
 def _test():

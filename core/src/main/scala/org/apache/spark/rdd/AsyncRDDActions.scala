@@ -19,8 +19,10 @@ package org.apache.spark.rdd
 
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.spark.util.ThreadUtils
+
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.ExecutionContext
 import scala.reflect.ClassTag
 
 import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
@@ -66,6 +68,8 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
     val f = new ComplexFutureAction[Seq[T]]
 
     f.run {
+      // This is a blocking action so we should use "AsyncRDDActions.futureExecutionContext" which
+      // is a cached thread pool.
       val results = new ArrayBuffer[T](num)
       val totalParts = self.partitions.length
       var partsScanned = 0
@@ -101,7 +105,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
         partsScanned += numPartsToTry
       }
       results.toSeq
-    }
+    }(AsyncRDDActions.futureExecutionContext)
 
     f
   }
@@ -122,4 +126,9 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
     self.context.submitJob[T, Unit, Unit](self, f, Range(0, self.partitions.length),
       (index, data) => Unit, Unit)
   }
+}
+
+private object AsyncRDDActions {
+  val futureExecutionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("AsyncRDDActions-future", 128))
 }

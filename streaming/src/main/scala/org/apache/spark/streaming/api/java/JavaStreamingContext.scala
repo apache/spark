@@ -579,6 +579,28 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   }
 
   /**
+   * :: DeveloperApi ::
+   *
+   * Return the current state of the context. The context can be in three possible states -
+   * <ul>
+   *   <li>
+   *   StreamingContextState.INTIALIZED - The context has been created, but not been started yet.
+   *   Input DStreams, transformations and output operations can be created on the context.
+   *   </li>
+   *   <li>
+   *   StreamingContextState.ACTIVE - The context has been started, and been not stopped.
+   *   Input DStreams, transformations and output operations cannot be created on the context.
+   *   </li>
+   *   <li>
+   *   StreamingContextState.STOPPED - The context has been stopped and cannot be used any more.
+   *   </li>
+   * </ul>
+   */
+  def getState(): StreamingContextState = {
+    ssc.getState()
+  }
+
+  /**
    * Start the execution of the streams.
    */
   def start(): Unit = {
@@ -779,51 +801,6 @@ object JavaStreamingContext {
     val ssc = StreamingContext.getOrCreate(checkpointPath, () => {
       creatingFunc.call().ssc
     }, hadoopConf, createOnError)
-    new JavaStreamingContext(ssc)
-  }
-
-  /**
-   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
-   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
-   * recreated from the checkpoint data. If the data does not exist, then the provided factory
-   * will be used to create a JavaStreamingContext.
-   *
-   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
-   * @param creatingFunc   Function to create a new JavaStreamingContext
-   * @param sparkContext   SparkContext using which the StreamingContext will be created
-   */
-  def getOrCreate(
-      checkpointPath: String,
-      creatingFunc: JFunction[JavaSparkContext, JavaStreamingContext],
-      sparkContext: JavaSparkContext
-    ): JavaStreamingContext = {
-    val ssc = StreamingContext.getOrCreate(checkpointPath, (sparkContext: SparkContext) => {
-      creatingFunc.call(new JavaSparkContext(sparkContext)).ssc
-    }, sparkContext.sc)
-    new JavaStreamingContext(ssc)
-  }
-
-  /**
-   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
-   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
-   * recreated from the checkpoint data. If the data does not exist, then the provided factory
-   * will be used to create a JavaStreamingContext.
-   *
-   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
-   * @param creatingFunc   Function to create a new JavaStreamingContext
-   * @param sparkContext   SparkContext using which the StreamingContext will be created
-   * @param createOnError  Whether to create a new JavaStreamingContext if there is an
-   *                       error in reading checkpoint data.
-   */
-  def getOrCreate(
-      checkpointPath: String,
-      creatingFunc: JFunction[JavaSparkContext, JavaStreamingContext],
-      sparkContext: JavaSparkContext,
-      createOnError: Boolean
-    ): JavaStreamingContext = {
-    val ssc = StreamingContext.getOrCreate(checkpointPath, (sparkContext: SparkContext) => {
-      creatingFunc.call(new JavaSparkContext(sparkContext)).ssc
-    }, sparkContext.sc, createOnError)
     new JavaStreamingContext(ssc)
   }
 
