@@ -162,8 +162,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       Map.empty, df.logicalPlan, overwrite, ifNotExists = false)).toRdd
   }
 
-
-
   /**
    * Saves the content of the [[DataFrame]] as the specified table.
    *
