@@ -153,11 +153,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * Hive 13 as this is the version of Hive that is packaged with Spark SQL.  This copy of the
    * client is used for execution related tasks like registering temporary functions or ensuring
    * that the ThreadLocal SessionState is correctly populated.  This copy of Hive is *not* used
-   * for storing peristent metadata, and only point to a dummy metastore in a temporary directory.
+   * for storing persistent metadata, and only point to a dummy metastore in a temporary directory.
    */
   @transient
   protected[hive] lazy val executionHive: ClientWrapper = {
-    logInfo(s"Initilizing execution hive, version $hiveExecutionVersion")
+    logInfo(s"Initializing execution hive, version $hiveExecutionVersion")
     new ClientWrapper(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
       config = newTemporaryConfiguration())
@@ -503,10 +503,9 @@ private[hive] object HiveContext {
   val HIVE_METASTORE_VERSION: String = "spark.sql.hive.metastore.version"
   val HIVE_METASTORE_JARS: String = "spark.sql.hive.metastore.jars"
 
-  private val tempDir = Utils.createTempDir()
-
   /** Constructs a configuration for hive, where the metastore is located in a temp directory. */
   def newTemporaryConfiguration(): Map[String, String] = {
+    val tempDir = Utils.createTempDir()
     val localMetastore = new File(tempDir, "metastore").getAbsolutePath
     Map(
       "javax.jdo.option.ConnectionURL" -> s"jdbc:derby:;databaseName=$localMetastore;create=true")
