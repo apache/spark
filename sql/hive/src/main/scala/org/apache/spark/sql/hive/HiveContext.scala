@@ -373,6 +373,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         ResolveHiveWindowFunction ::
         sources.PreInsertCastAndRename ::
         Nil
+
+      override val extendedCheckRules = Seq(
+        sources.PreWriteCheck(catalog)
+      )
     }
 
   override protected[sql] def createSession(): SQLSession = {

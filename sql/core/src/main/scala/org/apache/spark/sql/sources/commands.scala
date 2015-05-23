@@ -61,7 +61,6 @@ private[sql] case class InsertIntoDataSource(
 private[sql] case class InsertIntoHadoopFsRelation(
     @transient relation: HadoopFsRelation,
     @transient query: LogicalPlan,
-    partitionColumns: Array[String],
     mode: SaveMode)
   extends RunnableCommand {
 
@@ -100,6 +99,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
         relation.schema,
         needsConversion = false)
 
+      val partitionColumns = relation.partitionColumns.fieldNames
       if (partitionColumns.isEmpty) {
         insert(new DefaultWriterContainer(relation, job), df)
       } else {
