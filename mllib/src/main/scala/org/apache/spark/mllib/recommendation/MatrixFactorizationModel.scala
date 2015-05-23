@@ -174,7 +174,8 @@ class MatrixFactorizationModel(
     val kernel = CosineKernel(userNorms, threshold)
 
     val similarUsers =
-      MatrixFactorizationModel.recommendForAll(rank, kernel, userFeatures, userFeatures, num).flatMap {
+      MatrixFactorizationModel.recommendForAll(
+        rank, kernel, userFeatures, userFeatures, num).flatMap {
         case (user, top) => top.map { case (index, value) => MatrixEntry(user, index, value) }
       }
     new CoordinateMatrix(similarUsers)
