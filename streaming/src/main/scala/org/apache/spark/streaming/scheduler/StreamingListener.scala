@@ -86,7 +86,7 @@ trait StreamingListener {
  * @param numBatchInfos Number of last batches to consider for generating statistics (default: 10)
  */
 @DeveloperApi
-class StatsReportListener(numBatchInfos: Int = 10) extends StreamingListener {
+class StatsReportListener(numBatchInfos: Int) extends StreamingListener {
 
   def this() = this(10)
 
