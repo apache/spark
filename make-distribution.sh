@@ -229,6 +229,8 @@ cp "$SPARK_HOME"/conf/*.template "$DISTDIR"/conf
 cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
+mkdir -p "$DISTDIR"/R/lib
+cp -r "$SPARK_HOME/R/lib/SparkR" "$DISTDIR"/R/lib
 cp -r "$SPARK_HOME/sbin" "$DISTDIR"
 cp -r "$SPARK_HOME/ec2" "$DISTDIR"
 

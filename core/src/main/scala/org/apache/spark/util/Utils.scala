@@ -2201,6 +2201,24 @@ private[spark] object Utils extends Logging {
     shutdownHooks.remove(ref)
   }
 
+  /**
+   * To avoid calling `Utils.getCallSite` for every single RDD we create in the body,
+   * set a dummy call site that RDDs use instead. This is for performance optimization.
+   */
+  def withDummyCallSite[T](sc: SparkContext)(body: => T): T = {
+    val oldShortCallSite = sc.getLocalProperty(CallSite.SHORT_FORM)
+    val oldLongCallSite = sc.getLocalProperty(CallSite.LONG_FORM)
+    try {
+      sc.setLocalProperty(CallSite.SHORT_FORM, "")
+      sc.setLocalProperty(CallSite.LONG_FORM, "")
+      body
+    } finally {
+      // Restore the old ones here
+      sc.setLocalProperty(CallSite.SHORT_FORM, oldShortCallSite)
+      sc.setLocalProperty(CallSite.LONG_FORM, oldLongCallSite)
+    }
+  }
+
 }
 
 private [util] class SparkShutdownHookManager {

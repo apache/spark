@@ -98,9 +98,9 @@ to your version of HDFS. Some common HDFS version tags are listed on the
 [Prebuilt packages](http://spark.apache.org/downloads.html) are also available on the Spark homepage
 for common HDFS versions.
 
-Finally, you need to import some Spark classes into your program. Add the following lines:
+Finally, you need to import some Spark classes into your program. Add the following line:
 
-{% highlight scala %}
+{% highlight python %}
 from pyspark import SparkContext, SparkConf
 {% endhighlight %}
 
@@ -478,7 +478,6 @@ the [Converter examples]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main
 for examples of using Cassandra / HBase ```InputFormat``` and ```OutputFormat``` with custom converters.
 
 </div>
-
 </div>
 
 ## RDD Operations
@@ -915,7 +914,8 @@ The following table lists some of the common transformations supported by Spark.
 RDD API doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/pyspark.html#pyspark.RDD))
+ [Python](api/python/pyspark.html#pyspark.RDD),
+ [R](api/R/index.html))
 and pair RDD functions doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
@@ -1028,7 +1028,9 @@ The following table lists some of the common actions supported by Spark. Refer t
 RDD API doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/pyspark.html#pyspark.RDD))
+ [Python](api/python/pyspark.html#pyspark.RDD),
+ [R](api/R/index.html))
+ 
 and pair RDD functions doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
@@ -1565,7 +1567,8 @@ You can see some [example Spark programs](http://spark.apache.org/examples.html)
 In addition, Spark includes several samples in the `examples` directory
 ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
- [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python)).
+ [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
+ [R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r)).
 You can run Java and Scala examples by passing the class name to Spark's `bin/run-example` script; for instance:
 
     ./bin/run-example SparkPi
@@ -1574,6 +1577,10 @@ For Python examples, use `spark-submit` instead:
 
     ./bin/spark-submit examples/src/main/python/pi.py
 
+For R examples, use `spark-submit` instead:
+
+    ./bin/spark-submit examples/src/main/r/dataframe.R
+
 For help on optimizing your programs, the [configuration](configuration.html) and
 [tuning](tuning.html) guides provide information on best practices. They are especially important for
 making sure that your data is stored in memory in an efficient format.
@@ -1581,4 +1588,4 @@ For help on deploying, the [cluster mode overview](cluster-overview.html) descri
 in distributed operation and supported cluster managers.
 
 Finally, full API documentation is available in
-[Scala](api/scala/#org.apache.spark.package), [Java](api/java/) and [Python](api/python/).
+[Scala](api/scala/#org.apache.spark.package), [Java](api/java/), [Python](api/python/) and [R](api/R/).

@@ -6,7 +6,7 @@ description: Apache Spark SPARK_VERSION_SHORT documentation homepage
 ---
 
 Apache Spark is a fast and general-purpose cluster computing system.
-It provides high-level APIs in Java, Scala and Python,
+It provides high-level APIs in Java, Scala, Python and R,
 and an optimized engine that supports general execution graphs.
 It also supports a rich set of higher-level tools including [Spark SQL](sql-programming-guide.html) for SQL and structured data processing, [MLlib](mllib-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
 
@@ -20,13 +20,13 @@ Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy
 locally on one machine --- all you need is to have `java` installed on your system `PATH`,
 or the `JAVA_HOME` environment variable pointing to a Java installation.
 
-Spark runs on Java 6+ and Python 2.6+. For the Scala API, Spark {{site.SPARK_VERSION}} uses
+Spark runs on Java 6+, Python 2.6+ and R 3.1+. For the Scala API, Spark {{site.SPARK_VERSION}} uses
 Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version 
 ({{site.SCALA_BINARY_VERSION}}.x).
 
 # Running the Examples and Shell
 
-Spark comes with several sample programs.  Scala, Java and Python examples are in the
+Spark comes with several sample programs.  Scala, Java, Python and R examples are in the
 `examples/src/main` directory. To run one of the Java or Scala sample programs, use
 `bin/run-example <class> [params]` in the top-level Spark directory. (Behind the scenes, this
 invokes the more general
@@ -54,6 +54,15 @@ Example applications are also provided in Python. For example,
 
     ./bin/spark-submit examples/src/main/python/pi.py 10
 
+Spark also provides an experimental R API since 1.4 (only DataFrames APIs included).
+To run Spark interactively in a R interpreter, use `bin/sparkR`:
+
+    ./bin/sparkR --master local[2]
+
+Example applications are also provided in R. For example,
+    
+    ./bin/spark-submit examples/src/main/r/dataframe.R
+
 # Launching on a Cluster
 
 The Spark [cluster mode overview](cluster-overview.html) explains the key concepts in running on a cluster.
@@ -71,7 +80,7 @@ options for deployment:
 
 * [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
 * [Spark Programming Guide](programming-guide.html): detailed overview of Spark
-  in all supported languages (Scala, Java, Python)
+  in all supported languages (Scala, Java, Python, R)
 * Modules built on Spark:
   * [Spark Streaming](streaming-programming-guide.html): processing real-time data streams
   * [Spark SQL and DataFrames](sql-programming-guide.html): support for structured data and relational queries
@@ -83,7 +92,8 @@ options for deployment:
 
 * [Spark Scala API (Scaladoc)](api/scala/index.html#org.apache.spark.package)
 * [Spark Java API (Javadoc)](api/java/index.html)
-* [Spark Python API (Epydoc)](api/python/index.html)
+* [Spark Python API (Sphinx)](api/python/index.html)
+* [Spark R API (Roxygen2)](api/R/index.html)
 
 **Deployment Guides:**
 
@@ -124,4 +134,5 @@ options for deployment:
   available online for free.
 * [Code Examples](http://spark.apache.org/examples.html): more are also available in the `examples` subfolder of Spark ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
- [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python))
+ [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
+ [R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r))

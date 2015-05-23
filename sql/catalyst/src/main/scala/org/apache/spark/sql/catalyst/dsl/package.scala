@@ -276,6 +276,10 @@ package object dsl {
 
     def unionAll(otherPlan: LogicalPlan): LogicalPlan = Union(logicalPlan, otherPlan)
 
+    def except(otherPlan: LogicalPlan): LogicalPlan = Except(logicalPlan, otherPlan)
+
+    def intersect(otherPlan: LogicalPlan): LogicalPlan = Intersect(logicalPlan, otherPlan)
+
     def sfilter[T1](arg1: Symbol)(udf: (T1) => Boolean): LogicalPlan =
       Filter(ScalaUdf(udf, BooleanType, Seq(UnresolvedAttribute(arg1.name))), logicalPlan)
 
