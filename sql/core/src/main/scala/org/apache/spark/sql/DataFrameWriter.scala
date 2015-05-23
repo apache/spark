@@ -167,6 +167,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * In the case the table already exists, behavior of this function depends on the
    * save mode, specified by the `mode` function (default to throwing an exception).
+   * When `mode` is `Overwrite`, the schema of the [[DataFrame]] does not need to be
+   * the same as that of the existing table.
    *
    * @since 1.4.0
    */
@@ -180,9 +182,12 @@ final class DataFrameWriter private[sql](df: DataFrame) {
           throw new AnalysisException(s"Table $tableName already exists.")
 
         case SaveMode.Append =>
+          val partitions =
+            partitioningColumns.map(_.map(col => col -> (None: Option[String])).toMap)
+
           df.sqlContext.executePlan(InsertIntoTable(
             UnresolvedRelation(Seq(tableName)),
-            Map.empty,
+            partitions.getOrElse(Map.empty[String, Option[String]]),
             df.logicalPlan,
             overwrite = false,
             ifNotExists = false)).toRdd
