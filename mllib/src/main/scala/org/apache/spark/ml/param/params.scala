@@ -24,7 +24,7 @@ import scala.annotation.varargs
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.{DeveloperApi, AlphaComponent}
 import org.apache.spark.ml.util.Identifiable
 
 /**
@@ -92,9 +92,11 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
 }
 
 /**
+ * :: DeveloperApi ::
  * Factory methods for common validation functions for [[Param.isValid]].
  * The numerical methods only support Int, Long, Float, and Double.
  */
+@DeveloperApi
 object ParamValidators {
 
   /** (private[param]) Default validation always return true */
@@ -438,19 +440,18 @@ trait Params extends Identifiable with Serializable {
    * @param value  the default value
    */
   protected final def setDefault[T](param: Param[T], value: T): this.type = {
-    defaultParamMap.put(param, value)
+    defaultParamMap.put(param -> value)
     this
   }
 
   /**
    * Sets default values for a list of params.
    *
-   * Note: Java developers should use the single-parameter [[setDefault()]].
-   *       Annotating this with varargs causes compilation failures. See SPARK-7498.
    * @param paramPairs  a list of param pairs that specify params and their default values to set
    *                    respectively. Make sure that the params are initialized before this method
    *                    gets called.
    */
+  @varargs
   protected final def setDefault(paramPairs: ParamPair[_]*): this.type = {
     paramPairs.foreach { p =>
       setDefault(p.param.asInstanceOf[Param[Any]], p.value)
@@ -483,16 +484,15 @@ trait Params extends Identifiable with Serializable {
   def copy(extra: ParamMap): Params = {
     val that = this.getClass.getConstructor(classOf[String]).newInstance(uid)
     copyValues(that, extra)
-    that
   }
 
   /**
    * Extracts the embedded default param values and user-supplied values, and then merges them with
    * extra values from input into a flat param map, where the latter value is used if there exist
-   * conflicts, i.e., with ordering: default param values < user-supplied values < extraParamMap.
+   * conflicts, i.e., with ordering: default param values < user-supplied values < extra.
    */
-  final def extractParamMap(extraParamMap: ParamMap): ParamMap = {
-    defaultParamMap ++ paramMap ++ extraParamMap
+  final def extractParamMap(extra: ParamMap): ParamMap = {
+    defaultParamMap ++ paramMap ++ extra
   }
 
   /**
@@ -531,11 +531,13 @@ trait Params extends Identifiable with Serializable {
 }
 
 /**
+ * :: DeveloperApi ::
  * Java-friendly wrapper for [[Params]].
  * Java developers who need to extend [[Params]] should use this class instead.
  * If you need to extend a abstract class which already extends [[Params]], then that abstract
  * class should be Java-friendly as well.
  */
+@DeveloperApi
 abstract class JavaParams extends Params
 
 /**
@@ -560,7 +562,7 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
   /**
    * Puts a (param, value) pair (overwrites if the input param exists).
    */
-  def put[T](param: Param[T], value: T): this.type = put(ParamPair(param, value))
+  def put[T](param: Param[T], value: T): this.type = put(param -> value)
 
   /**
    * Puts a list of param pairs (overwrites if the input params exists).

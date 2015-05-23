@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -142,25 +141,6 @@ class Analyzer(
   }
 
   object ResolveGroupingAnalytics extends Rule[LogicalPlan] {
-    /**
-     * Extract attribute set according to the grouping id
-     * @param bitmask bitmask to represent the selected of the attribute sequence
-     * @param exprs the attributes in sequence
-     * @return the attributes of non selected specified via bitmask (with the bit set to 1)
-     */
-    private def buildNonSelectExprSet(bitmask: Int, exprs: Seq[Expression])
-    : OpenHashSet[Expression] = {
-      val set = new OpenHashSet[Expression](2)
-
-      var bit = exprs.length - 1
-      while (bit >= 0) {
-        if (((bitmask >> bit) & 1) == 0) set.add(exprs(bit))
-        bit -= 1
-      }
-
-      set
-    }
-
     /*
      *  GROUP BY a, b, c WITH ROLLUP
      *  is equivalent to
@@ -197,10 +177,15 @@ class Analyzer(
 
       g.bitmasks.foreach { bitmask =>
         // get the non selected grouping attributes according to the bit mask
-        val nonSelectedGroupExprSet = buildNonSelectExprSet(bitmask, g.groupByExprs)
+        val nonSelectedGroupExprs = ArrayBuffer.empty[Expression]
+        var bit = g.groupByExprs.length - 1
+        while (bit >= 0) {
+          if (((bitmask >> bit) & 1) == 0) nonSelectedGroupExprs += g.groupByExprs(bit)
+          bit -= 1
+        }
 
         val substitution = (g.child.output :+ g.gid).map(expr => expr transformDown {
-          case x: Expression if nonSelectedGroupExprSet.contains(x) =>
+          case x: Expression if nonSelectedGroupExprs.find(_ semanticEquals x).isDefined =>
             // if the input attribute in the Invalid Grouping Expression set of for this group
             // replace it with constant null
             Literal.create(null, expr.dataType)
@@ -576,6 +561,21 @@ class Analyzer(
     /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
     private object AliasedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
+        case Alias(g: Generator, name)
+          if g.elementTypes.size > 1 && java.util.regex.Pattern.matches("_c[0-9]+", name) => {
+          // Assume the default name given by parser is "_c[0-9]+",
+          // TODO in long term, move the naming logic from Parser to Analyzer.
+          // In projection, Parser gave default name for TGF as does for normal UDF,
+          // but the TGF probably have multiple output columns/names.
+          //    e.g. SELECT explode(map(key, value)) FROM src;
+          // Let's simply ignore the default given name for this case.
+          Some((g, Nil))
+        }
+        case Alias(g: Generator, name) if g.elementTypes.size > 1 =>
+          // If not given the default names, and the TGF with multiple output columns
+          failAnalysis(
+            s"""Expect multiple names given for ${g.getClass.getName},
+               |but only single name '${name}' specified""".stripMargin)
         case Alias(g: Generator, name) => Some((g, name :: Nil))
         case MultiAlias(g: Generator, names) => Some(g, names)
         case _ => None
