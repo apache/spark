@@ -23,7 +23,7 @@ from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredict
 from pyspark.ml.util import keyword_only
 from pyspark.mllib.common import inherit_doc
 
-__all__ = ['Evaluator', 'BinaryClassificationEvaluator']
+__all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator']
 
 
 @inherit_doc
