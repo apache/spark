@@ -226,17 +226,25 @@ class DataFrameWriter(object):
         else:
             jwrite.save(path)
 
+    def insertInto(self, tableName, overwrite=False):
+        """
+        Inserts the content of the :class:`DataFrame` to the specified table.
+        It requires that the schema of the class:`DataFrame` is the same as the
+        schema of the table.
+
+        Optionally overwriting any existing data.
+        """
+        self._jwrite.mode("overwrite" if overwrite else "append").insertInto(tableName)
+
     @since(1.4)
     def saveAsTable(self, name, format=None, mode="error", **options):
         """
-        Saves the contents of this :class:`DataFrame` to a data source as a table.
+        Saves the content of the :class:`DataFrame` as the specified table.
 
-        The data source is specified by the ``source`` and a set of ``options``.
-        If ``source`` is not specified, the default data source configured by
-        ``spark.sql.sources.default`` will be used.
-
-        Additionally, mode is used to specify the behavior of the saveAsTable operation when
-        table already exists in the data source. There are four modes:
+        In the case the table already exists, behavior of this function depends on the
+        save mode, specified by the `mode` function (default to throwing an exception).
+        When `mode` is `Overwrite`, the schema of the [[DataFrame]] does not need to be
+        the same as that of the existing table.
 
         * `append`: Append contents of this :class:`DataFrame` to existing data.
         * `overwrite`: Overwrite existing data.
