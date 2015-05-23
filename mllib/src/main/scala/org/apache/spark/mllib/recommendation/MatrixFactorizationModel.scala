@@ -150,9 +150,12 @@ class MatrixFactorizationModel(
 
     val kernel = CosineKernel(productNorms, threshold)
 
-    val similarProducts = MatrixFactorizationModel.recommendAll(rank, kernel, productFeatures, productFeatures, num).flatMap {
-      case (product, top) => top.map { case (index, value) => MatrixEntry(product, index, value) }
-    }
+    val similarProducts =
+      MatrixFactorizationModel.recommendAll(
+        rank, kernel,
+        productFeatures, productFeatures, num).flatMap {
+        case (product, top) => top.map { case (index, value) => MatrixEntry(product, index, value) }
+      }
     new CoordinateMatrix(similarProducts)
   }
 
@@ -170,9 +173,10 @@ class MatrixFactorizationModel(
 
     val kernel = CosineKernel(userNorms, threshold)
 
-    val similarUsers = MatrixFactorizationModel.recommendAll(rank, kernel, userFeatures, userFeatures, num).flatMap {
-      case (user, top) => top.map { case (index, value) => MatrixEntry(user, index, value) }
-    }
+    val similarUsers =
+      MatrixFactorizationModel.recommendAll(rank, kernel, userFeatures, userFeatures, num).flatMap {
+        case (user, top) => top.map { case (index, value) => MatrixEntry(user, index, value) }
+      }
     new CoordinateMatrix(similarUsers)
   }
 
@@ -237,7 +241,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
   /**
    * Makes batch user->product, user->user and product->product recommendations
    * @param rank rank
-   * @param kernel user defined kernels for distance calculation where computation is dot decomposable
+   * @param kernel kernels for distance calculation where computation is dot decomposable
    * @param srcFeatures src features to receive recommendations
    * @param dstFeatures dst features used to make recommendations
    * @param num number of recommendations for each record
