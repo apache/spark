@@ -29,6 +29,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkSubmit._
+import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 // Note: this suite mixes in ResetSystemProperties because SparkSubmit.main() sets a bunch
@@ -338,18 +339,22 @@ class SparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  ignore("includes jars passed in through --packages") {
+  test("includes jars passed in through --packages") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
-    val packagesString = "com.databricks:spark-csv_2.10:0.1,com.databricks:spark-avro_2.10:0.1"
-    val args = Seq(
-      "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
-      "--name", "testApp",
-      "--master", "local-cluster[2,1,512]",
-      "--packages", packagesString,
-      "--conf", "spark.ui.enabled=false",
-      unusedJar.toString,
-      "com.databricks.spark.csv.DefaultSource", "com.databricks.spark.avro.DefaultSource")
-    runSparkSubmit(args)
+    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, Some(dep.toString), None) { repo =>
+      val args = Seq(
+        "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--master", "local-cluster[2,1,512]",
+        "--packages", Seq(main, dep).mkString(","),
+        "--repositories", repo,
+        "--conf", "spark.ui.enabled=false",
+        unusedJar.toString,
+        "my.great.lib.MyLib", "my.great.dep.MyLib")
+      runSparkSubmit(args)
+    }
   }
 
   test("resolves command line argument paths correctly") {
