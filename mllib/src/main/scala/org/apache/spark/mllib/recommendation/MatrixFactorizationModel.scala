@@ -151,7 +151,7 @@ class MatrixFactorizationModel(
     val kernel = CosineKernel(productNorms, threshold)
 
     val similarProducts =
-      MatrixFactorizationModel.recommendAll(
+      MatrixFactorizationModel.recommendForAll(
         rank, kernel,
         productFeatures, productFeatures, num).flatMap {
         case (product, top) => top.map { case (index, value) => MatrixEntry(product, index, value) }
@@ -174,7 +174,7 @@ class MatrixFactorizationModel(
     val kernel = CosineKernel(userNorms, threshold)
 
     val similarUsers =
-      MatrixFactorizationModel.recommendAll(rank, kernel, userFeatures, userFeatures, num).flatMap {
+      MatrixFactorizationModel.recommendForAll(rank, kernel, userFeatures, userFeatures, num).flatMap {
         case (user, top) => top.map { case (index, value) => MatrixEntry(user, index, value) }
       }
     new CoordinateMatrix(similarUsers)
@@ -196,7 +196,7 @@ class MatrixFactorizationModel(
    */
   def recommendProductsForUsers(num: Int): RDD[(Int, Array[Rating])] = {
     val kernel = ProductKernel()
-    MatrixFactorizationModel.recommendAll(rank, kernel, userFeatures, productFeatures, num).map {
+    MatrixFactorizationModel.recommendForAll(rank, kernel, userFeatures, productFeatures, num).map {
       case (user, top) =>
         val ratings = top.map { case (product, rating) => Rating(user, product, rating) }
         (user, ratings)
@@ -213,7 +213,7 @@ class MatrixFactorizationModel(
    */
   def recommendUsersForProducts(num: Int): RDD[(Int, Array[Rating])] = {
     val kernel = ProductKernel()
-    MatrixFactorizationModel.recommendAll(rank, kernel, productFeatures, userFeatures, num).map {
+    MatrixFactorizationModel.recommendForAll(rank, kernel, productFeatures, userFeatures, num).map {
       case (product, top) =>
         val ratings = top.map { case (user, rating) => Rating(user, product, rating) }
         (product, ratings)
@@ -248,7 +248,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
    * @return an RDD of (srcId: Int, recommendations), where recommendations are stored as an array
    *         of (dstId, rating) pairs.
    */
-  private def recommendAll(
+  private def recommendForAll(
       rank: Int,
       kernel: Kernel,
       srcFeatures: RDD[(Int, Array[Double])],
