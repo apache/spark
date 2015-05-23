@@ -31,8 +31,8 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
     checkAnswer(
       df.select(
-        lead("key").over(w),
-        lead("value").over(w)),
+        lead("key", 1).over(w),
+        lead("value", 1).over(w)),
       Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
   }
 
@@ -42,8 +42,8 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
     checkAnswer(
       df.select(
-        lead("key").over(w),
-        lead("value").over(w)),
+        lead("key", 1).over(w),
+        lead("value", 1).over(w)),
       Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
   }
 
@@ -53,7 +53,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
     checkAnswer(
       df.select(
-        lead("value").over(Window.partitionBy($"key").orderBy($"value"))),
+        lead("value", 1).over(Window.partitionBy($"key").orderBy($"value"))),
       sql(
         """SELECT
           | lead(value) OVER (PARTITION BY key ORDER BY value)
@@ -66,9 +66,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
     checkAnswer(
       df.select(
-        lag("value").over(
-          Window.partitionBy($"key")
-          .orderBy($"value"))),
+        lag("value", 1).over(Window.partitionBy($"key").orderBy($"value"))),
       sql(
         """SELECT
           | lag(value) OVER (PARTITION BY key ORDER BY value)
@@ -112,8 +110,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
         mean("key").over(Window.partitionBy("value").orderBy("key")),
         count("key").over(Window.partitionBy("value").orderBy("key")),
         sum("key").over(Window.partitionBy("value").orderBy("key")),
-        ntile("key").over(Window.partitionBy("value").orderBy("key")),
-        ntile($"key").over(Window.partitionBy("value").orderBy("key")),
+        ntile(2).over(Window.partitionBy("value").orderBy("key")),
         rowNumber().over(Window.partitionBy("value").orderBy("key")),
         denseRank().over(Window.partitionBy("value").orderBy("key")),
         rank().over(Window.partitionBy("value").orderBy("key")),
@@ -127,8 +124,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
            |avg(key) over (partition by value order by key),
            |count(key) over (partition by value order by key),
            |sum(key) over (partition by value order by key),
-           |ntile(key) over (partition by value order by key),
-           |ntile(key) over (partition by value order by key),
+           |ntile(2) over (partition by value order by key),
            |row_number() over (partition by value order by key),
            |dense_rank() over (partition by value order by key),
            |rank() over (partition by value order by key),

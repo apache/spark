@@ -62,6 +62,8 @@ class DataFrame(object):
         people.filter(people.age > 30).join(department, people.deptId == department.id)) \
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
 
+    .. note:: Experimental
+
     .. versionadded:: 1.3
     """
 
