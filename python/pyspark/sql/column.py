@@ -304,7 +304,6 @@ class Column(object):
 
     astype = cast
 
-    @ignore_unicode_prefix
     @since(1.3)
     def between(self, lowerBound, upperBound):
         """ A boolean expression that is evaluated to true if the value of this
@@ -312,7 +311,6 @@ class Column(object):
         """
         return (self >= lowerBound) & (self <= upperBound)
 
-    @ignore_unicode_prefix
     @since(1.4)
     def when(self, condition, value):
         """Evaluates a list of conditions and returns one of multiple possible result expressions.
@@ -322,7 +320,6 @@ class Column(object):
 
         :param condition: a boolean :class:`Column` expression.
         :param value: a literal value, or a :class:`Column` expression.
-
         """
         sc = SparkContext._active_spark_context
         if not isinstance(condition, Column):
@@ -331,7 +328,6 @@ class Column(object):
         jc = sc._jvm.functions.when(condition._jc, v)
         return Column(jc)
 
-    @ignore_unicode_prefix
     @since(1.4)
     def otherwise(self, value):
         """Evaluates a list of conditions and returns one of multiple possible result expressions.
@@ -343,6 +339,27 @@ class Column(object):
         """
         v = value._jc if isinstance(value, Column) else value
         jc = self._jc.otherwise(value)
+        return Column(jc)
+
+    @since(1.4)
+    def over(self, window):
+        """
+        Define a windowing column.
+
+        :param window: a :class:`WindowSpec`
+        :return: a Column
+
+        >>> from pyspark.sql import Window
+        >>> window = Window.partitionBy("name").orderBy("age").rowsBetween(-1, 1)
+        >>> from pyspark.sql.functions import rank, min
+        >>> # df.select(rank().over(window), min('age').over(window))
+
+        .. note:: Window functions is only supported with HiveContext in 1.4
+        """
+        from pyspark.sql.window import WindowSpec
+        if not isinstance(window, WindowSpec):
+            raise TypeError("window should be WindowSpec")
+        jc = self._jc.over(window._jspec)
         return Column(jc)
 
     def __repr__(self):
