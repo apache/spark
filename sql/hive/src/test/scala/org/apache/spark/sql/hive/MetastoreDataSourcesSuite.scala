@@ -776,7 +776,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils {
   }
 
   test("insert into a table") {
-    def createDF(from: Int, to: Int) = (from to to).map(i => i -> s"str$i").toDF("c1", "c2")
+    def createDF(from: Int, to: Int): DataFrame = {
+      (from to to).map(i => i -> s"str$i").toDF("c1", "c2")
+    }
 
     withTable("insertParquet") {
       createDF(0, 9).write.format("parquet").saveAsTable("insertParquet")
