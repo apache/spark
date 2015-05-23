@@ -222,7 +222,7 @@ sparkR.init <- function(
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
+#' sqlContext <- sparkRSQL.init(sc)
 #'}
 
 sparkRSQL.init <- function(jsc) {
@@ -230,11 +230,11 @@ sparkRSQL.init <- function(jsc) {
     return(get(".sparkRSQLsc", envir = .sparkREnv))
   }
 
-  sqlCtx <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+  sqlContext <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                         "createSQLContext",
                         jsc)
-  assign(".sparkRSQLsc", sqlCtx, envir = .sparkREnv)
-  sqlCtx
+  assign(".sparkRSQLsc", sqlContext, envir = .sparkREnv)
+  sqlContext
 }
 
 #' Initialize a new HiveContext.
@@ -246,7 +246,7 @@ sparkRSQL.init <- function(jsc) {
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' sqlCtx <- sparkRHive.init(sc)
+#' sqlContext <- sparkRHive.init(sc)
 #'}
 
 sparkRHive.init <- function(jsc) {
