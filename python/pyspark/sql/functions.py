@@ -142,29 +142,12 @@ _binary_mathfunctions = {
 }
 
 _window_functions = {
-    'lag': """returns the lag value of current row of the expression,
-           null when the current row extends before the beginning of the window.""",
-    'rowNumber': """Assigns a unique number (sequentially, starting from 1,
-                 as defined by ORDER BY) to each row within the partition.""",
-    'denseRank': """The difference between RANK and DENSE_RANK is that DENSE_RANK
-                 leaves no gaps in ranking sequence when there are ties. That is, if you were
-                 ranking a competition using DENSE_RANK and had three people tie for second
-                 place, you would say that all three were in second place and that the next
-                 person came in third.""",
-    'rank': """The difference between RANK and DENSE_RANK is that DENSE_RANK
-            leaves no gaps in ranking sequence when there are ties. That is, if you were
-            ranking a competition using DENSE_RANK and had three people tie for second place,
-            you would say that all three were in second place and that the next person came in
-            third.""",
-    'cumeDist': """CUME_DIST (defined as the inverse of percentile in some
-                statistical books) computes the position of a specified value relative to
-                a set of values. To compute the CUME_DIST of a value x in a set S of size N,
-                you use the formula: CUME_DIST(x) = number of values in S coming before and
-                including x in the specified order / N""",
-    'percentRank': """PERCENT_RANK is similar to CUME_DIST, but it uses rank values rather than
-                   row counts in its numerator. The formula:
-                   (rank of row in its partition - 1) / (number of rows in the partition - 1)""",
-
+    'rowNumber': """returns a sequential number starting at 1 within a window partition.""",
+    'denseRank': """returns the rank of rows within a window partition, without any gaps.""",
+    'rank': """returns the rank of rows within a window partition.""",
+    'cumeDist': """returns the cumulative distribution of values within a window partition,
+                i.e. the fraction of rows that are below the current row.""",
+    'percentRank': "returns the relative rank (i.e. percentile) of rows within a window partition.",
 }
 
 for _name, _doc in _functions.items():
@@ -391,9 +374,11 @@ def when(condition, value):
 @since(1.4)
 def lag(col, count=1, default=None):
     """
-    Window function: returns the lag values of current row of the expression,
-    given default value when the current row extends before the beginning
-    of the window.
+    Window function: returns the value that is `offset` rows before the current row, and
+    `defaultValue` if there is less than `offset` rows before the current row. For example,
+    an `offset` of one will return the previous row at any given point in the window partition.
+
+    This is equivalent to the LAG function in SQL.
 
     :param col: name of column or expression
     :param count: number of row to extend
@@ -406,8 +391,11 @@ def lag(col, count=1, default=None):
 @since(1.4)
 def lead(col, count=1, default=None):
     """
-    Window function: returns the lead values of current row of the column,
-    given default value when the current row extends before the end of the window.
+    Window function: returns the value that is `offset` rows after the current row, and
+    `defaultValue` if there is less than `offset` rows after the current row. For example,
+    an `offset` of one will return the next row at any given point in the window partition.
+
+    This is equivalent to the LEAD function in SQL.
 
     :param col: name of column or expression
     :param count: number of row to extend
@@ -420,11 +408,11 @@ def lead(col, count=1, default=None):
 @since(1.4)
 def ntile(n):
     """
-    Window function: NTILE for specified column or expression.
+    Window function: returns a group id from 1 to `n` (inclusive) in a round-robin fashion in
+    a window partition. Fow example, if `n` is 3, the first row will get 1, the second row will
+    get 2, the third row will get 3, and the fourth row will get 1...
 
-    NTILE allows easy calculation of tertiles, quartiles, deciles and other
-    common summary statistics. This function divides an ordered partition into a specified
-    number of groups called buckets and assigns a bucket number to each row in the partition.
+    This is equivalent to the NTILE function in SQL.
 
     :param n: an integer
     """
