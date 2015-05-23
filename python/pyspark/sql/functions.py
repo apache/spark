@@ -162,12 +162,12 @@ _window_functions = {
         This is equivalent to the DENSE_RANK function in SQL.""",
     'rank':
         """returns the rank of rows within a window partition.
-   
+
         The difference between rank and denseRank is that denseRank leaves no gaps in ranking
         sequence when there are ties. That is, if you were ranking a competition using denseRank
         and had three people tie for second place, you would say that all three were in second
         place and that the next person came in third.
-       
+
         This is equivalent to the RANK function in SQL.""",
     'cumeDist':
         """returns the cumulative distribution of values within a window partition,
