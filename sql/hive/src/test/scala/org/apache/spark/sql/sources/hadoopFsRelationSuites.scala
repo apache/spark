@@ -362,16 +362,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         .partitionBy("p1")
         .saveAsTable("t")
     }
-
-    // Using different order of partition columns
-    intercept[Throwable] {
-      partitionedTestDF2.write
-        .format(dataSourceName)
-        .mode(SaveMode.Append)
-        .option("dataSchema", dataSchema.json)
-        .partitionBy("p2", "p1")
-        .saveAsTable("t")
-    }
   }
 
   test("saveAsTable()/load() - partitioned table - ErrorIfExists") {
