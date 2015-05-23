@@ -40,7 +40,7 @@ class Window(object):
 
     PARTITION BY country ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
 
-    >>> window = Window.partitionBy("country").orderBy("date").rowsBetween(-sys.maxint, 0)
+    >>> window = Window.partitionBy("country").orderBy("date").rowsBetween(-sys.maxsize, 0)
 
     PARTITION BY country ORDER BY date RANGE BETWEEN 3 PRECEDING AND 3 FOLLOWING
 
@@ -104,7 +104,7 @@ class WindowSpec(object):
         return WindowSpec(self._jspec.orderBy(_to_java_cols(cols)))
 
     @since(1.4)
-    def rowsBetween(self, start=-sys.maxint, end=0):
+    def rowsBetween(self, start=-sys.maxsize, end=0):
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
 
@@ -113,18 +113,18 @@ class WindowSpec(object):
         the current row, and "5" means the fifth row after the current row.
 
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is -sys.maxint(or lower).
+                      The frame is unbounded if this is -sys.maxsize(or lower).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is sys.maxint(or higher).
+                    The frame is unbounded if this is sys.maxsize(or higher).
         """
-        if start <= -sys.maxint:
+        if start <= -sys.maxsize:
             start = self.JAVA_MIN_LONG
-        if end >= sys.maxint:
+        if end >= sys.maxsize:
             end = self.JAVA_MAX_LONG
         return WindowSpec(self._jspec.rowsBetween(start, end))
 
     @since(1.4)
-    def rangeBetween(self, start=-sys.maxint, end=0):
+    def rangeBetween(self, start=-sys.maxsize, end=0):
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
 
@@ -133,13 +133,13 @@ class WindowSpec(object):
         and "5" means the five off after the current row.
 
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is -sys.maxint(or lower).
+                      The frame is unbounded if this is -sys.maxsize(or lower).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is sys.maxint(or higher).
+                    The frame is unbounded if this is sys.maxsize(or higher).
         """
-        if start <= -sys.maxint:
+        if start <= -sys.maxsize:
             start = self.JAVA_MIN_LONG
-        if end >= sys.maxint:
+        if end >= sys.maxsize:
             end = self.JAVA_MAX_LONG
         return WindowSpec(self._jspec.rangeBetween(start, end))
 
