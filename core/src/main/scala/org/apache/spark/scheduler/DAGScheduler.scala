@@ -192,8 +192,9 @@ class DAGScheduler(
   private[scheduler]
   def getCacheLocs(rdd: RDD[_]): Seq[Seq[TaskLocation]] = cacheLocs.synchronized {
     // Note: if the storage level is NONE, we don't need to get locations from block manager.
-    if (rdd.getStorageLevel == StorageLevel.NONE)
+    if (rdd.getStorageLevel == StorageLevel.NONE) {
       return Seq.fill(rdd.partitions.size)(Nil)
+    }
 
     // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
     if (!cacheLocs.contains(rdd.id)) {

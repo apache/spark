@@ -343,13 +343,13 @@ class DAGSchedulerSuite
   }
 
   /**
-   * ┌───┐ shuffle ┌───┐    ┌───┐
-   * │ A │< ─ ─ ─ ─│ B │< ─ │ C │< ─┐
-   * └───┘         └───┘    └───┘   │  ┌───┐
-   *                                ├──│ E │
-   *                        ┌───┐   │  └───┘
-   *                        │ D │< ─┘
-   *                        └───┘
+   * +---+ shuffle +---+    +---+
+   * | A |<--------| B |<---| C |<--+
+   * +---+         +---+    +---+   |  +---+
+   *                                +--| E |
+   *                        +---+   |  +---+
+   *                        | D |<--+
+   *                        +---+
    * Here, E has one-to-one dependencies on C and D. C is derived from A by performing a shuffle
    * and then a map. If we're trying to determine which ancestor stages need to be computed in
    * order to compute E, we need to figure out whether the shuffle A -> B should be performed.
