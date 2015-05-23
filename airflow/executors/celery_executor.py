@@ -15,7 +15,7 @@ To start the celery worker, run the command:
 airflow worker
 '''
 
-CELERY_DEFAULT_QUEUE = conf.get('celery', 'CELERY_DEFAULT_QUEUE')
+DEFAULT_QUEUE = conf.get('celery', 'DEFAULT_QUEUE')
 
 
 class CeleryConfig(object):
@@ -25,7 +25,7 @@ class CeleryConfig(object):
     BROKER_URL = conf.get('celery', 'BROKER_URL')
     CELERY_RESULT_BACKEND = conf.get('celery', 'CELERY_RESULT_BACKEND')
     CELERYD_CONCURRENCY = conf.getint('celery', 'CELERYD_CONCURRENCY')
-    CELERY_DEFAULT_QUEUE = CELERY_DEFAULT_QUEUE
+    CELERY_DEFAULT_QUEUE = DEFAULT_QUEUE
 
 app = Celery(
     conf.get('celery', 'CELERY_APP_NAME'),
@@ -55,7 +55,7 @@ class CeleryExecutor(BaseExecutor):
         self.tasks = {}
         self.last_state = {}
 
-    def execute_async(self, key, command, queue=CELERY_DEFAULT_QUEUE):
+    def execute_async(self, key, command, queue=DEFAULT_QUEUE):
         self.tasks[key] = execute_command.apply_async(
             args=[command], queue=queue)
         self.last_state[key] = celery_states.PENDING

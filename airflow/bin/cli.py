@@ -498,7 +498,7 @@ def get_parser():
     parser_worker.add_argument(
         "-q", "--queues",
         help="Coma delimeted list of queues to cater serve",
-        default=conf.get('celery', 'celery_default_queue'))
+        default=conf.get('celery', 'DEFAULT_QUEUE'))
     parser_worker.set_defaults(func=worker)
 
     ht = "Serve logs generate by worker"
