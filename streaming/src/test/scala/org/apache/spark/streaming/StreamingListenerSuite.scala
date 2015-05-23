@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming:
+package org.apache.spark.streaming
 
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.collection.JavaConversions._
