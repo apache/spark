@@ -377,7 +377,8 @@ class DAGScheduler(
     parents
   }
 
-  private def getMissingParentStages(stage: Stage): List[Stage] = {
+  private[scheduler]
+  def getMissingParentStages(stage: Stage): List[Stage] = {
     val missing = new HashSet[Stage]
     val visited = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
