@@ -25,6 +25,7 @@ SciPy is available in their environment.
 
 import sys
 import array
+from itertools import izip
 
 if sys.version >= '3':
     basestring = str
@@ -877,18 +878,31 @@ class DenseMatrix(Matrix):
             int(self.isTransposed))
 
     def __str__(self):
-        mattoarr = self.toArray()
-        matstr = ""
-        for row in mattoarr:
-            for ind, col in enumerate(row):
-                if ind != 0:
-                    matstr += "  "
-                matstr += str(col)
-            matstr += '\n'
+        """
+        Pretty printing of a DenseMatrix
 
-        return matstr[:-1]
+        >>> dm = DenseMatrix(2, 2, range(4))
+        >>> print(dm)
+        0.0  2.0
+        1.0  3.0
+        >>> dm = DenseMatrix(2, 2, range(4), isTransposed=True)
+        >>> print(dm)
+        0.0  1.0
+        2.0  3.0
+        """
+        ds = []
+        for row in self.toArray():
+            ds.append("  ".join([str(col) for col in row]))
+        return "\n".join(ds)
 
     def __repr__(self):
+        """
+        Representation of a DenseMatrix
+
+        >>> dm = DenseMatrix(2, 2, range(4))
+        >>> dm
+        DenseMatrix(2, 2, [0.0, 1.0, 2.0, 3.0], False)
+        """
         entries = ', '.join([_format_float(val) for val in self.values])
         return "DenseMatrix({0}, {1}, [{2}], {3})".format(
             self.numRows, self.numCols, entries, self.isTransposed)
@@ -970,27 +984,50 @@ class SparseMatrix(Matrix):
                              % (self.rowIndices.size, self.values.size))
 
     def __str__(self):
+        """
+        Pretty printing of a SparseMatrix
+
+        >>> sm1 = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        >>> print(sm1)
+        2 X 2 CSCMatrix
+        (0,0) 2.0
+        (1,0) 3.0
+        (1,1) 4.0
+        >>> sm1 = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4], True)
+        >>> print(sm1)
+        2 X 2 CSRMatrix
+        (0,0) 2.0
+        (0,1) 3.0
+        (1,1) 4.0
+        """
         spstr = "{0} X {1} ".format(self.numRows, self.numCols)
         if self.isTransposed:
             spstr += "CSRMatrix\n"
         else:
             spstr += "CSCMatrix\n"
 
-        for i, colPtr in enumerate(self.colPtrs[:-1]):
-            endptr = self.colPtrs[i + 1]
-            values = self.values[colPtr: endptr]
-            rowindices = self.rowIndices[colPtr: endptr]
-            for j, rowInd in enumerate(rowindices):
-                if self.isTransposed:
-                    spstr += '({0},{1}) {2}\n'.format(
-                        i, rowInd, _format_float(values[j]))
-                else:
-                    spstr += '({0},{1}) {2}\n'.format(
-                        rowInd, i, _format_float(values[j]))
-
-        return spstr[:-1]
+        cur_col = 0
+        smlist = []
+        zipindval = izip(self.rowIndices, self.values)
+        for i, (rowInd, value) in enumerate(zipindval):
+            if self.colPtrs[cur_col + 1] <= i:
+                cur_col += 1
+            if self.isTransposed:
+                smlist.append('({0},{1}) {2}'.format(
+                    cur_col, rowInd, _format_float(value)))
+            else:
+                smlist.append('({0},{1}) {2}'.format(
+                    rowInd, cur_col, _format_float(value)))
+        return spstr + "\n".join(smlist)
 
     def __repr__(self):
+        """
+        Representation of a SparseMatrix
+
+        >>> sm1 = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        >>> sm1
+        SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2.0, 3.0, 4.0], False)
+        """
         values = ", ".join([_format_float(val) for val in self.values])
         return "SparseMatrix({0}, {1}, {2!r}, {3!r}, [{4}], {5})".format(
             self.numRows, self.numCols, list(self.colPtrs),
