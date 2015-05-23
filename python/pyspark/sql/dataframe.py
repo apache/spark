@@ -161,7 +161,7 @@ class DataFrame(object):
 
         Optionally overwriting any existing data.
         """
-        self._jdf.insertInto(tableName, overwrite)
+        self.write.insertInto(tableName, overwrite)
 
     @since(1.3)
     def saveAsTable(self, tableName, source=None, mode="error", **options):
