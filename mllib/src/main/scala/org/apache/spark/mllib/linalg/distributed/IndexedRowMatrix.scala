@@ -20,6 +20,7 @@ package org.apache.spark.mllib.linalg.distributed
 import breeze.linalg.{DenseMatrix => BDM}
 import org.apache.spark.HashPartitioner
 
+import scala.collection.Map
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg._
@@ -191,28 +192,44 @@ class IndexedRowMatrix(
     mat
   }
 
-  def rowSimilarities(
-      kernelType: KernelType = COSINE,
-      topk: Int = nRows.toInt,
-      threshold: Double = 1e-4): CoordinateMatrix = {
-    val rowNorms = IndexedRowMatrix.rowMagnitudes(rows, 2)
-    val kernel = kernelType match {
-      case COSINE => CosineKernel(rowNorms, threshold)
-      case EUCLIDEAN => EuclideanKernel(rowNorms, threshold)
-      case RBF => RBFKernel(rowNorms, threshold)
-    }
-    IndexedRowMatrix.multiply(rows, rows, kernel, topk)
-  }
-}
-
-object IndexedRowMatrix {
-  def rowMagnitudes(rows: RDD[IndexedRow], norm: Int) : Map[Long, Double] = {
+  /**
+   * Computes the row norm of each entry from IndexedRowMatrix
+   * @param norm L1/L2 norm of each row
+   * @return Map of row index and norm
+   */
+  def rowMagnitudes(norm: Int): Map[Long, Double] = {
     rows.map { indexedRow =>
       (indexedRow.index, Vectors.norm(indexedRow.vector, norm))
-    }.collect().toMap
+    }.collectAsMap()
   }
 
-  def blockify(features: RDD[IndexedRow], blockSize: Int): RDD[(Int, Array[IndexedRow])] = {
+  /**
+   * row similarity calculation with user defined kernel
+   * @param kernel vector based kernel computation
+   * @param topk topk similar rows to each row
+   * @return CoordinateMatrix of rows similar to every row
+   */
+  def rowSimilarities(
+      kernel: Kernel,
+      topk: Int): CoordinateMatrix = {
+    multiply(rows, kernel, topk)
+  }
+
+  /**
+   * row similarity calculation with cosine kernel
+   * @param topk topk similar rows to each row
+   * @param threshold cosine similarity threshold
+   * @return CoordinateMatrix of rows similar to every row
+   */
+  def rowSimilarities(
+      topk: Int = nRows.toInt,
+      threshold: Double = 1e-4): CoordinateMatrix = {
+    val rowNorms = rowMagnitudes(2)
+    val kernel = CosineKernel(rowNorms, threshold)
+    rowSimilarities(kernel, topk)
+  }
+
+  private def blockify(features: RDD[IndexedRow], blockSize: Int): RDD[(Int, Array[IndexedRow])] = {
     val featurePartitioner = new HashPartitioner(blockSize)
     val blockedFeatures = features.map { row =>
       (featurePartitioner.getPartition(row.index), row)
@@ -223,20 +240,17 @@ object IndexedRowMatrix {
     blockedFeatures
   }
 
-  // TO DO: Explore LSH and KDTree ideas to further improve runtime
-  def multiply(
-      small: RDD[IndexedRow],
-      big: RDD[IndexedRow],
+  private def multiply(query: RDD[IndexedRow],
       kernel: Kernel,
       topk: Int): CoordinateMatrix = {
     val ord = Ordering[(Float, Long)].on[(Long, Double)](x => (x._2.toFloat, x._1))
-    val defaultParallelism = big.sparkContext.defaultParallelism
+    val defaultParallelism = rows.sparkContext.defaultParallelism
 
-    val smallBlocks = math.max(small.sparkContext.defaultParallelism, small.partitions.size) / 2
-    val bigBlocks = math.max(defaultParallelism, big.partitions.size) / 2
+    val queryBlocks = math.max(query.sparkContext.defaultParallelism, query.partitions.size) / 2
+    val dictionaryBlocks = math.max(defaultParallelism, rows.partitions.size) / 2
 
-    val blockedSmall = blockify(small, smallBlocks)
-    val blockedBig = blockify(big, bigBlocks)
+    val blockedSmall = blockify(query, queryBlocks)
+    val blockedBig = blockify(rows, dictionaryBlocks)
 
     blockedSmall.setName("blockedSmallMatrix")
     blockedBig.setName("blockedBigMatrix")
@@ -271,4 +285,3 @@ object IndexedRowMatrix {
     new CoordinateMatrix(topkSims)
   }
 }
-
