@@ -891,7 +891,7 @@ class DenseMatrix(Matrix):
     def __repr__(self):
         entries = ', '.join([_format_float(val) for val in self.values])
         return "DenseMatrix({0}, {1}, [{2}], {3})".format(
-            self.numRows, self.numCols, entries, str(self.isTransposed))
+            self.numRows, self.numCols, entries, self.isTransposed)
 
     def toArray(self):
         """
@@ -991,12 +991,10 @@ class SparseMatrix(Matrix):
         return spstr[:-1]
 
     def __repr__(self):
-        colPtrs = ", ".join([str(i) for i in self.colPtrs])
-        rowIndices = ", ".join([str(i) for i in self.rowIndices])
         values = ", ".join([_format_float(val) for val in self.values])
-        return "SparseMatrix({0}, {1}, [{2}], [{3}], [{4}], {5})".format(
-            self.numRows, self.numCols, colPtrs, rowIndices, values,
-            str(self.isTransposed))
+        return "SparseMatrix({0}, {1}, {2!r}, {3!r}, [{4}], {5})".format(
+            self.numRows, self.numCols, list(self.colPtrs),
+            list(self.rowIndices), values, self.isTransposed)
 
     def __reduce__(self):
         return SparseMatrix, (
