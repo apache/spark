@@ -158,10 +158,8 @@ class FilterPushdownSuite extends PlanTest {
         .where('a === 1 && 'a === 2)
         .select('a).analyze
 
-
     comparePlans(optimized, correctAnswer)
   }
-
 
   test("joins: push to either side") {
     val x = testRelation.subquery('x)
@@ -218,7 +216,6 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
-  
 
   test("joins: rewrite filter to push to either side") {
     val x = testRelation.subquery('x)
@@ -596,6 +593,5 @@ class FilterPushdownSuite extends PlanTest {
         .select('b).analyze
 
     comparePlans(optimized1, analysis.EliminateSubQueries(correctAnswer1))
-
   }
 }
