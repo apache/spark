@@ -31,8 +31,8 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
     checkAnswer(
       df.select(
-        lead("key").over(w),
-        lead("value").over(w)),
+        lead("key", 1).over(w),
+        lead("value", 1).over(w)),
       Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
   }
 
@@ -42,8 +42,8 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
     checkAnswer(
       df.select(
-        lead("key").over(w),
-        lead("value").over(w)),
+        lead("key", 1).over(w),
+        lead("value", 1).over(w)),
       Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
   }
 
@@ -53,7 +53,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
     checkAnswer(
       df.select(
-        lead("value").over(Window.partitionBy($"key").orderBy($"value"))),
+        lead("value", 1).over(Window.partitionBy($"key").orderBy($"value"))),
       sql(
         """SELECT
           | lead(value) OVER (PARTITION BY key ORDER BY value)
@@ -66,9 +66,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
 
     checkAnswer(
       df.select(
-        lag("value").over(
-          Window.partitionBy($"key")
-          .orderBy($"value"))),
+        lag("value", 1).over(Window.partitionBy($"key").orderBy($"value"))),
       sql(
         """SELECT
           | lag(value) OVER (PARTITION BY key ORDER BY value)
