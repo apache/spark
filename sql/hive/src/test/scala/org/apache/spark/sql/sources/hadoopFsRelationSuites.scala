@@ -22,13 +22,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.parquet.ParquetTest
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
-// TODO Don't extend ParquetTest
-// This test suite extends ParquetTest for some convenient utility methods. These methods should be
-// moved to some more general places, maybe QueryTest.
-class HadoopFsRelationTest extends QueryTest with ParquetTest {
+abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   override val sqlContext: SQLContext = TestHive
 
   import sqlContext._
@@ -120,10 +117,7 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
   test("save()/load() - non-partitioned table - ErrorIfExists") {
     withTempDir { file =>
       intercept[RuntimeException] {
-        testDF.save(
-          path = file.getCanonicalPath,
-          source = dataSourceName,
-          mode = SaveMode.ErrorIfExists)
+        testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).save(file.getCanonicalPath)
       }
     }
   }
@@ -233,10 +227,8 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
 
   test("save()/load() - partitioned table - Ignore") {
     withTempDir { file =>
-      partitionedTestDF.save(
-        path = file.getCanonicalPath,
-        source = dataSourceName,
-        mode = SaveMode.Ignore)
+      partitionedTestDF.write
+        .format(dataSourceName).mode(SaveMode.Ignore).save(file.getCanonicalPath)
 
       val path = new Path(file.getCanonicalPath)
       val fs = path.getFileSystem(SparkHadoopUtil.get.conf)
@@ -244,16 +236,10 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
     }
   }
 
-  def withTable(tableName: String)(f: => Unit): Unit = {
-    try f finally sql(s"DROP TABLE $tableName")
-  }
-
   test("saveAsTable()/load() - non-partitioned table - Overwrite") {
-    testDF.saveAsTable(
-      tableName = "t",
-      source = dataSourceName,
-      mode = SaveMode.Overwrite,
-      Map("dataSchema" -> dataSchema.json))
+    testDF.write.format(dataSourceName).mode(SaveMode.Overwrite)
+      .option("dataSchema", dataSchema.json)
+      .saveAsTable("t")
 
     withTable("t") {
       checkAnswer(table("t"), testDF.collect())
@@ -261,15 +247,8 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
   }
 
   test("saveAsTable()/load() - non-partitioned table - Append") {
-    testDF.saveAsTable(
-      tableName = "t",
-      source = dataSourceName,
-      mode = SaveMode.Overwrite)
-
-    testDF.saveAsTable(
-      tableName = "t",
-      source = dataSourceName,
-      mode = SaveMode.Append)
+    testDF.write.format(dataSourceName).mode(SaveMode.Overwrite).saveAsTable("t")
+    testDF.write.format(dataSourceName).mode(SaveMode.Append).saveAsTable("t")
 
     withTable("t") {
       checkAnswer(table("t"), testDF.unionAll(testDF).orderBy("a").collect())
@@ -281,10 +260,7 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
 
     withTempTable("t") {
       intercept[AnalysisException] {
-        testDF.saveAsTable(
-          tableName = "t",
-          source = dataSourceName,
-          mode = SaveMode.ErrorIfExists)
+        testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).saveAsTable("t")
       }
     }
   }
@@ -293,21 +269,16 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
     Seq.empty[(Int, String)].toDF().registerTempTable("t")
 
     withTempTable("t") {
-      testDF.saveAsTable(
-        tableName = "t",
-        source = dataSourceName,
-        mode = SaveMode.Ignore)
-
+      testDF.write.format(dataSourceName).mode(SaveMode.Ignore).saveAsTable("t")
       assert(table("t").collect().isEmpty)
     }
   }
 
   test("saveAsTable()/load() - partitioned table - simple queries") {
-    partitionedTestDF.saveAsTable(
-      tableName = "t",
-      source = dataSourceName,
-      mode = SaveMode.Overwrite,
-      Map("dataSchema" -> dataSchema.json))
+    partitionedTestDF.write.format(dataSourceName)
+      .mode(SaveMode.Overwrite)
+      .option("dataSchema", dataSchema.json)
+      .saveAsTable("t")
 
     withTable("t") {
       checkQueries(table("t"))
@@ -468,6 +439,23 @@ class HadoopFsRelationTest extends QueryTest with ParquetTest {
       checkAnswer(df, partitionedTestDF.collect())
     }
   }
+
+  test("Partition column type casting") {
+    withTempPath { file =>
+      val input = partitionedTestDF.select('a, 'b, 'p1.cast(StringType).as('ps), 'p2)
+
+      input
+        .write
+        .format(dataSourceName)
+        .mode(SaveMode.Overwrite)
+        .partitionBy("ps", "p2")
+        .saveAsTable("t")
+
+      withTempTable("t") {
+        checkAnswer(table("t"), input.collect())
+      }
+    }
+  }
 }
 
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
@@ -492,11 +480,9 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        load(
-          source = dataSourceName,
-          options = Map(
-            "path" -> file.getCanonicalPath,
-            "dataSchema" -> dataSchemaWithPartition.json)))
+        read.format(dataSourceName)
+          .option("dataSchema", dataSchemaWithPartition.json)
+          .load(file.getCanonicalPath))
     }
   }
 }
@@ -518,18 +504,30 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         sparkContext
           .parallelize(for (i <- 1 to 3) yield (i, s"val_$i", p1))
           .toDF("a", "b", "p1")
-          .saveAsParquetFile(partitionDir.toString)
+          .write.parquet(partitionDir.toString)
       }
 
       val dataSchemaWithPartition =
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        load(
-          source = dataSourceName,
-          options = Map(
-            "path" -> file.getCanonicalPath,
-            "dataSchema" -> dataSchemaWithPartition.json)))
+        read.format(dataSourceName)
+          .option("dataSchema", dataSchemaWithPartition.json)
+          .load(file.getCanonicalPath))
+    }
+  }
+
+  test("SPARK-7616: adjust column name order accordingly when saving partitioned table") {
+    val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+
+    df.write
+      .format("parquet")
+      .mode(SaveMode.Overwrite)
+      .partitionBy("c", "a")
+      .saveAsTable("t")
+
+    withTable("t") {
+      checkAnswer(table("t"), df.select('b, 'c, 'a).collect())
     }
   }
 }

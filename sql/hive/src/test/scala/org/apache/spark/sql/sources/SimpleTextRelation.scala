@@ -21,7 +21,7 @@ import java.text.NumberFormat
 import java.util.UUID
 
 import com.google.common.base.Objects
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
@@ -99,12 +99,12 @@ class SimpleTextRelation(
   }
 
   override def hashCode(): Int =
-    Objects.hashCode(paths, maybeDataSchema, dataSchema)
+    Objects.hashCode(paths, maybeDataSchema, dataSchema, partitionColumns)
 
-  override def buildScan(inputPaths: Array[String]): RDD[Row] = {
+  override def buildScan(inputStatuses: Array[FileStatus]): RDD[Row] = {
     val fields = dataSchema.map(_.dataType)
 
-    sparkContext.textFile(inputPaths.mkString(",")).map { record =>
+    sparkContext.textFile(inputStatuses.map(_.getPath).mkString(",")).map { record =>
       Row(record.split(",").zip(fields).map { case (value, dataType) =>
         Cast(Literal(value), dataType).eval()
       }: _*)

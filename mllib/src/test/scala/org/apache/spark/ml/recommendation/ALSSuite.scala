@@ -38,14 +38,12 @@ import org.apache.spark.util.Utils
 
 class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
 
-  private var sqlContext: SQLContext = _
   private var tempDir: File = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     tempDir = Utils.createTempDir()
     sc.setCheckpointDir(tempDir.getAbsolutePath)
-    sqlContext = new SQLContext(sc)
   }
 
   override def afterAll(): Unit = {
@@ -345,6 +343,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       .setImplicitPrefs(implicitPrefs)
       .setNumUserBlocks(numUserBlocks)
       .setNumItemBlocks(numItemBlocks)
+      .setSeed(0)
     val alpha = als.getAlpha
     val model = als.fit(training.toDF())
     val predictions = model.transform(test.toDF())
@@ -425,17 +424,18 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
 
     val longRatings = ratings.map(r => Rating(r.user.toLong, r.item.toLong, r.rating))
-    val (longUserFactors, _) = ALS.train(longRatings, rank = 2, maxIter = 4)
+    val (longUserFactors, _) = ALS.train(longRatings, rank = 2, maxIter = 4, seed = 0)
     assert(longUserFactors.first()._1.getClass === classOf[Long])
 
     val strRatings = ratings.map(r => Rating(r.user.toString, r.item.toString, r.rating))
-    val (strUserFactors, _) = ALS.train(strRatings, rank = 2, maxIter = 4)
+    val (strUserFactors, _) = ALS.train(strRatings, rank = 2, maxIter = 4, seed = 0)
     assert(strUserFactors.first()._1.getClass === classOf[String])
   }
 
   test("nonnegative constraint") {
     val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
-    val (userFactors, itemFactors) = ALS.train(ratings, rank = 2, maxIter = 4, nonnegative = true)
+    val (userFactors, itemFactors) =
+      ALS.train(ratings, rank = 2, maxIter = 4, nonnegative = true, seed = 0)
     def isNonnegative(factors: RDD[(Int, Array[Float])]): Boolean = {
       factors.values.map { _.forall(_ >= 0.0) }.reduce(_ && _)
     }
@@ -459,7 +459,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
   test("partitioner in returned factors") {
     val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
     val (userFactors, itemFactors) = ALS.train(
-      ratings, rank = 2, maxIter = 4, numUserBlocks = 3, numItemBlocks = 4)
+      ratings, rank = 2, maxIter = 4, numUserBlocks = 3, numItemBlocks = 4, seed = 0)
     for ((tpe, factors) <- Seq(("User", userFactors), ("Item", itemFactors))) {
       assert(userFactors.partitioner.isDefined, s"$tpe factors should have partitioner.")
       val part = userFactors.partitioner.get
@@ -476,8 +476,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
 
   test("als with large number of iterations") {
     val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
-    ALS.train(ratings, rank = 1, maxIter = 50, numUserBlocks = 2, numItemBlocks = 2)
-    ALS.train(
-      ratings, rank = 1, maxIter = 50, numUserBlocks = 2, numItemBlocks = 2, implicitPrefs = true)
+    ALS.train(ratings, rank = 1, maxIter = 50, numUserBlocks = 2, numItemBlocks = 2, seed = 0)
+    ALS.train(ratings, rank = 1, maxIter = 50, numUserBlocks = 2, numItemBlocks = 2,
+      implicitPrefs = true, seed = 0)
   }
 }

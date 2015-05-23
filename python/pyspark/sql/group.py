@@ -16,6 +16,7 @@
 #
 
 from pyspark.rdd import ignore_unicode_prefix
+from pyspark.sql import since
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import *
@@ -47,6 +48,8 @@ class GroupedData(object):
     """
     A set of methods for aggregations on a :class:`DataFrame`,
     created by :func:`DataFrame.groupBy`.
+
+    .. versionadded:: 1.3
     """
 
     def __init__(self, jdf, sql_ctx):
@@ -54,6 +57,7 @@ class GroupedData(object):
         self.sql_ctx = sql_ctx
 
     @ignore_unicode_prefix
+    @since(1.3)
     def agg(self, *exprs):
         """Compute aggregates and returns the result as a :class:`DataFrame`.
 
@@ -86,6 +90,7 @@ class GroupedData(object):
         return DataFrame(jdf, self.sql_ctx)
 
     @dfapi
+    @since(1.3)
     def count(self):
         """Counts the number of records for each group.
 
@@ -94,6 +99,7 @@ class GroupedData(object):
         """
 
     @df_varargs_api
+    @since(1.3)
     def mean(self, *cols):
         """Computes average values for each numeric columns for each group.
 
@@ -108,6 +114,7 @@ class GroupedData(object):
         """
 
     @df_varargs_api
+    @since(1.3)
     def avg(self, *cols):
         """Computes average values for each numeric columns for each group.
 
@@ -122,6 +129,7 @@ class GroupedData(object):
         """
 
     @df_varargs_api
+    @since(1.3)
     def max(self, *cols):
         """Computes the max value for each numeric columns for each group.
 
@@ -132,6 +140,7 @@ class GroupedData(object):
         """
 
     @df_varargs_api
+    @since(1.3)
     def min(self, *cols):
         """Computes the min value for each numeric column for each group.
 
@@ -144,6 +153,7 @@ class GroupedData(object):
         """
 
     @df_varargs_api
+    @since(1.3)
     def sum(self, *cols):
         """Compute the sum for each numeric columns for each group.
 
