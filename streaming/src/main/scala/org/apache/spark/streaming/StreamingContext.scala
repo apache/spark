@@ -564,7 +564,7 @@ class StreamingContext private[streaming] (
                 " parameter from breaking Spark's ability to find a valid constructor.")
           }
         }
-        scheduler.listenerBus.addListener(listener)
+        addStreamingListener(listener)
         logInfo(s"Registered streaming listener $className")
       }
     } catch {

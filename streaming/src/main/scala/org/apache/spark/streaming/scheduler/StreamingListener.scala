@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.scheduler
 
+import org.apache.spark.scheduler.StatsReportListener
+
 import scala.collection.mutable.Queue
 
 import org.apache.spark.util.Distribution
@@ -85,6 +87,9 @@ trait StreamingListener {
  */
 @DeveloperApi
 class StatsReportListener(numBatchInfos: Int = 10) extends StreamingListener {
+
+  def this() = this(10)
+
   // Queue containing latest completed batches
   val batchInfos = new Queue[BatchInfo]()
 
