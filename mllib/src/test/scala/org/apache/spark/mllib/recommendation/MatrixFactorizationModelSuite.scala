@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.recommendation
 
+import org.apache.spark.mllib.linalg.{DenseMatrix, Vectors}
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -91,5 +92,52 @@ class MatrixFactorizationModelSuite extends FunSuite with MLlibTestSparkContext 
     assert(recommendations(2)(0).rating ~== 39.0 relTol 1e-14)
     assert(recommendations(2)(1).user == 0)
     assert(recommendations(2)(1).rating ~== 17.0 relTol 1e-14)
+  }
+
+  test("batch similar users/products") {
+    val n = 3
+
+    val userFeatures = sc.parallelize(Seq(
+      (0, Array(0.0, 3.0, 6.0, 9.0)),
+      (1, Array(1.0, 4.0, 7.0, 0.0)),
+      (2, Array(2.0, 5.0, 8.0, 1.0))
+    ), 2)
+
+    val model = new MatrixFactorizationModel(4, userFeatures, userFeatures)
+
+    val topk = 2
+
+    val similarUsers = model.similarUsers(topk)
+
+    val similarProducts = model.similarProducts(topk)
+
+    assert(similarUsers.numRows() == n)
+    assert(similarUsers.entries.count() == n * topk)
+
+    assert(similarProducts.numRows() == n)
+    assert(similarProducts.entries.count() == n * topk)
+
+    val similarEntriesUsers = similarUsers.entries.collect()
+    val similarEntriesProducts = similarProducts.entries.collect()
+
+    val colMags = Vectors.dense(Math.sqrt(126), Math.sqrt(66), Math.sqrt(94))
+
+    val expected =
+      new DenseMatrix(3, 3,
+        Array(126.0, 54.0, 72.0, 54.0, 66.0, 78.0, 72.0, 78.0, 94.0))
+
+    for (i <- 0 until n; j <- 0 until n) expected(i, j) /= (colMags(i) * colMags(j))
+
+    similarEntriesUsers.foreach { entry =>
+      val row = entry.i.toInt
+      val col = entry.j.toInt
+      assert(entry.value ~== expected(row, col) relTol 1e-6)
+    }
+
+    similarEntriesProducts.foreach { entry =>
+      val row = entry.i.toInt
+      val col = entry.j.toInt
+      assert(entry.value ~== expected(row, col) relTol 1e-6)
+    }
   }
 }
