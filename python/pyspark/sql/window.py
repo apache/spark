@@ -38,13 +38,13 @@ class Window(object):
 
     For example:
 
-    PARTITION BY country ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-
+    >>> # PARTITION BY country ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
     >>> window = Window.partitionBy("country").orderBy("date").rowsBetween(-sys.maxsize, 0)
 
-    PARTITION BY country ORDER BY date RANGE BETWEEN 3 PRECEDING AND 3 FOLLOWING
-
+    >>> # PARTITION BY country ORDER BY date RANGE BETWEEN 3 PRECEDING AND 3 FOLLOWING
     >>> window = Window.orderBy("date").partitionBy("country").rangeBetween(-3, 3)
+
+    .. note:: Experimental
 
     .. versionadded:: 1.4
     """
@@ -52,7 +52,7 @@ class Window(object):
     @since(1.4)
     def partitionBy(*cols):
         """
-        Creates a [[WindowSpec]] with the partitioning defined.
+        Creates a :class:`WindowSpec` with the partitioning defined.
         """
         sc = SparkContext._active_spark_context
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.partitionBy(_to_java_cols(cols))
@@ -62,7 +62,7 @@ class Window(object):
     @since(1.4)
     def orderBy(*cols):
         """
-        Creates a [[WindowSpec]] with the partitioning defined.
+        Creates a :class:`WindowSpec` with the partitioning defined.
         """
         sc = SparkContext._active_spark_context
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.partitionBy(_to_java_cols(cols))
@@ -76,11 +76,13 @@ class WindowSpec(object):
 
     Use the static methods in :class:`Window` to create a :class:`WindowSpec`.
 
+    .. note:: Experimental
+
     .. versionadded:: 1.4
     """
 
-    JAVA_MAX_LONG = (1 << 63) - 1
-    JAVA_MIN_LONG = - (1 << 63)
+    _JAVA_MAX_LONG = (1 << 63) - 1
+    _JAVA_MIN_LONG = - (1 << 63)
 
     def __init__(self, jspec):
         self._jspec = jspec
@@ -88,7 +90,7 @@ class WindowSpec(object):
     @since(1.4)
     def partitionBy(self, *cols):
         """
-        Defines the partitioning columns in a [[WindowSpec]].
+        Defines the partitioning columns in a :class:`WindowSpec`.
 
         :param cols: names of columns or expressions
         """
@@ -97,14 +99,14 @@ class WindowSpec(object):
     @since(1.4)
     def orderBy(self, *cols):
         """
-        Defines the ordering columns in a [[WindowSpec]].
+        Defines the ordering columns in a :class:`WindowSpec`.
 
         :param cols: names of columns or expressions
         """
         return WindowSpec(self._jspec.orderBy(_to_java_cols(cols)))
 
     @since(1.4)
-    def rowsBetween(self, start=-sys.maxsize, end=0):
+    def rowsBetween(self, start, end):
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
 
@@ -113,18 +115,18 @@ class WindowSpec(object):
         the current row, and "5" means the fifth row after the current row.
 
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is -sys.maxsize(or lower).
+                      The frame is unbounded if this is ``-sys.maxsize`` (or lower).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is sys.maxsize(or higher).
+                    The frame is unbounded if this is ``sys.maxsize`` (or higher).
         """
         if start <= -sys.maxsize:
-            start = self.JAVA_MIN_LONG
+            start = self._JAVA_MIN_LONG
         if end >= sys.maxsize:
-            end = self.JAVA_MAX_LONG
+            end = self._JAVA_MAX_LONG
         return WindowSpec(self._jspec.rowsBetween(start, end))
 
     @since(1.4)
-    def rangeBetween(self, start=-sys.maxsize, end=0):
+    def rangeBetween(self, start, end):
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
 
@@ -133,14 +135,14 @@ class WindowSpec(object):
         and "5" means the five off after the current row.
 
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is -sys.maxsize(or lower).
+                      The frame is unbounded if this is ``-sys.maxsize`` (or lower).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is sys.maxsize(or higher).
+                    The frame is unbounded if this is ``sys.maxsize`` (or higher).
         """
         if start <= -sys.maxsize:
-            start = self.JAVA_MIN_LONG
+            start = self._JAVA_MIN_LONG
         if end >= sys.maxsize:
-            end = self.JAVA_MAX_LONG
+            end = self._JAVA_MAX_LONG
         return WindowSpec(self._jspec.rangeBetween(start, end))
 
 

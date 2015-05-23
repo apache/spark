@@ -32,15 +32,20 @@ from pyspark.sql.column import Column, _to_java_column, _to_seq
 
 
 __all__ = [
+    'array',
     'approxCountDistinct',
     'coalesce',
     'countDistinct',
+    'explode',
     'monotonicallyIncreasingId',
     'rand',
     'randn',
     'sparkPartitionId',
+    'struct',
     'udf',
     'when']
+
+__all__ += ['lag', 'lead', 'ntile']
 
 
 def _create_function(name, doc=""):
@@ -142,12 +147,37 @@ _binary_mathfunctions = {
 }
 
 _window_functions = {
-    'rowNumber': """returns a sequential number starting at 1 within a window partition.""",
-    'denseRank': """returns the rank of rows within a window partition, without any gaps.""",
-    'rank': """returns the rank of rows within a window partition.""",
-    'cumeDist': """returns the cumulative distribution of values within a window partition,
-                i.e. the fraction of rows that are below the current row.""",
-    'percentRank': "returns the relative rank (i.e. percentile) of rows within a window partition.",
+    'rowNumber':
+        """returns a sequential number starting at 1 within a window partition.
+
+        This is equivalent to the ROW_NUMBER function in SQL.""",
+    'denseRank':
+        """returns the rank of rows within a window partition, without any gaps.
+
+        The difference between rank and denseRank is that denseRank leaves no gaps in ranking
+        sequence when there are ties. That is, if you were ranking a competition using denseRank
+        and had three people tie for second place, you would say that all three were in second
+        place and that the next person came in third.
+
+        This is equivalent to the DENSE_RANK function in SQL.""",
+    'rank':
+        """returns the rank of rows within a window partition.
+   
+        The difference between rank and denseRank is that denseRank leaves no gaps in ranking
+        sequence when there are ties. That is, if you were ranking a competition using denseRank
+        and had three people tie for second place, you would say that all three were in second
+        place and that the next person came in third.
+       
+        This is equivalent to the RANK function in SQL.""",
+    'cumeDist':
+        """returns the cumulative distribution of values within a window partition,
+        i.e. the fraction of rows that are below the current row.
+
+        This is equivalent to the CUME_DIST function in SQL.""",
+    'percentRank':
+        """returns the relative rank (i.e. percentile) of rows within a window partition.
+
+        This is equivalent to the PERCENT_RANK function in SQL.""",
 }
 
 for _name, _doc in _functions.items():
@@ -160,7 +190,9 @@ for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.4)(_create_window_function(_name, _doc))
 del _name, _doc
 __all__ += _functions.keys()
+__all__ += _functions_1_4.keys()
 __all__ += _binary_mathfunctions.keys()
+__all__ += _window_functions.keys()
 __all__.sort()
 
 
@@ -195,27 +227,6 @@ def approxCountDistinct(col, rsd=None):
         jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col))
     else:
         jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col), rsd)
-    return Column(jc)
-
-
-@since(1.4)
-def explode(col):
-    """Returns a new row for each element in the given array or map.
-
-    >>> from pyspark.sql import Row
-    >>> eDF = sqlContext.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
-    >>> eDF.select(explode(eDF.intlist).alias("anInt")).collect()
-    [Row(anInt=1), Row(anInt=2), Row(anInt=3)]
-
-    >>> eDF.select(explode(eDF.mapfield).alias("key", "value")).show()
-    +---+-----+
-    |key|value|
-    +---+-----+
-    |  a|    b|
-    +---+-----+
-    """
-    sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.explode(_to_java_column(col))
     return Column(jc)
 
 
@@ -272,6 +283,27 @@ def countDistinct(col, *cols):
 
 
 @since(1.4)
+def explode(col):
+    """Returns a new row for each element in the given array or map.
+
+    >>> from pyspark.sql import Row
+    >>> eDF = sqlContext.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
+    >>> eDF.select(explode(eDF.intlist).alias("anInt")).collect()
+    [Row(anInt=1), Row(anInt=2), Row(anInt=3)]
+
+    >>> eDF.select(explode(eDF.mapfield).alias("key", "value")).show()
+    +---+-----+
+    |key|value|
+    +---+-----+
+    |  a|    b|
+    +---+-----+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.explode(_to_java_column(col))
+    return Column(jc)
+
+
+@since(1.4)
 def monotonicallyIncreasingId():
     """A column that generates monotonically increasing 64-bit integers.
 
@@ -280,7 +312,7 @@ def monotonicallyIncreasingId():
     within each partition in the lower 33 bits. The assumption is that the data frame has
     less than 1 billion partitions, and each partition has less than 8 billion records.
 
-    As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+    As an example, consider a :class:`DataFrame` with two partitions, each with 3 records.
     This expression would return the following IDs:
     0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
 

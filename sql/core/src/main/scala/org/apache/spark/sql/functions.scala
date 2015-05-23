@@ -438,9 +438,9 @@ object functions {
   }
 
   /**
-   * Window function: returns a group id from 1 to `n` (inclusive) in a round-robin fashion in
-   * a window partition. Fow example, if `n` is 3, the first row will get 1, the second row will
-   * get 2, the third row will get 3, and the fourth row will get 1...
+   * Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
+   * partition. Fow example, if `n` is 4, the first quarter of the rows will get value 1, the second
+   * quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
    *
    * This is equivalent to the NTILE function in SQL.
    *
@@ -506,11 +506,6 @@ object functions {
    *   cumeDist(x) = number of values before (and including) x / N
    * }}}
    *
-   *
-   * This is computed by:
-   * {{{
-   *   (rank of row in its partition - 1) / (number of rows in the partition - 1)
-   * }}}
    *
    * This is equivalent to the CUME_DIST function in SQL.
    *
