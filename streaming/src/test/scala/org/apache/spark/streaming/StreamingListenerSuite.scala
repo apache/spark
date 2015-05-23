@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming
+package org.apache.spark.streaming:
 
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import scala.collection.JavaConversions._
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -29,7 +30,7 @@ import org.apache.spark.streaming.scheduler._
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 
 class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
@@ -137,6 +138,18 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
       if (seq(i - 1) > seq(i)) return false
     }
     true
+  }
+
+  test("registering listeners via spark.streamingListeners") {
+    val conf = new SparkConf().setMaster("local").setAppName("test")
+      .set("spark.streamingListeners", classOf[BatchInfoCollector].getName + "," +
+        classOf[ReceiverInfoCollector].getName)
+    val scc = new StreamingContext(conf, Seconds(1))
+
+    scc.scheduler.listenerBus.listeners.collect { case x: BatchInfoCollector => x}.size should be (1)
+    scc.scheduler.listenerBus.listeners.collect {
+      case x: ReceiverInfoCollector =>
+    }.size should be (1)
   }
 }
 
