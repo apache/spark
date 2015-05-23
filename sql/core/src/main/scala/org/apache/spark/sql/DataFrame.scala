@@ -1692,7 +1692,7 @@ class DataFrame private[sql](
    */
   @deprecated("Use write.mode(SaveMode.Append|SaveMode.Overwrite).saveAsTable(tableName)", "1.4.0")
   def insertInto(tableName: String, overwrite: Boolean): Unit = {
-    write.mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append).saveAsTable(tableName)
+    write.mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append).insertInto(tableName)
   }
 
   /**
@@ -1702,7 +1702,7 @@ class DataFrame private[sql](
    */
   @deprecated("Use write.mode(SaveMode.Append).saveAsTable(tableName)", "1.4.0")
   def insertInto(tableName: String): Unit = {
-    write.mode(SaveMode.Append).saveAsTable(tableName)
+    write.mode(SaveMode.Append).insertInto(tableName)
   }
 
   ////////////////////////////////////////////////////////////////////////////

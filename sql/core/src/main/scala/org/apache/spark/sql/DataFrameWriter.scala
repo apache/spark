@@ -154,12 +154,20 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * Inserts the content of the [[DataFrame]] to the specified table. It requires that
    * the schema of the [[DataFrame]] is the same as the schema of the table.
    *
+   * Because it inserts data to an existing table, format or options will be ignored.
+   *
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
+    val partitions =
+      partitioningColumns.map(_.map(col => col -> (None: Option[String])).toMap)
     val overwrite = (mode == SaveMode.Overwrite)
-    df.sqlContext.executePlan(InsertIntoTable(UnresolvedRelation(Seq(tableName)),
-      Map.empty, df.logicalPlan, overwrite, ifNotExists = false)).toRdd
+    df.sqlContext.executePlan(InsertIntoTable(
+      UnresolvedRelation(Seq(tableName)),
+      partitions.getOrElse(Map.empty[String, Option[String]]),
+      df.logicalPlan,
+      overwrite,
+      ifNotExists = false)).toRdd
   }
 
   /**
@@ -169,6 +177,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * save mode, specified by the `mode` function (default to throwing an exception).
    * When `mode` is `Overwrite`, the schema of the [[DataFrame]] does not need to be
    * the same as that of the existing table.
+   * When `mode` is `Append`, the schema of the [[DataFrame]] need to be
+   * the same as that of the existing table, and format or options will be ignored.
    *
    * @since 1.4.0
    */
@@ -182,15 +192,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
           throw new AnalysisException(s"Table $tableName already exists.")
 
         case SaveMode.Append =>
-          val partitions =
-            partitioningColumns.map(_.map(col => col -> (None: Option[String])).toMap)
-
-          df.sqlContext.executePlan(InsertIntoTable(
-            UnresolvedRelation(Seq(tableName)),
-            partitions.getOrElse(Map.empty[String, Option[String]]),
-            df.logicalPlan,
-            overwrite = false,
-            ifNotExists = false)).toRdd
+          // If it is Append, we just ask insertInto to handle it. We will not use insertInto
+          // to handle saveAsTable with Overwrite because saveAsTable can change the schema of
+          // the table. But, insertInto with Overwrite requires the schema of data be the same
+          // the schema of the table.
+          insertInto(tableName)
       }
     } else {
       val cmd =
