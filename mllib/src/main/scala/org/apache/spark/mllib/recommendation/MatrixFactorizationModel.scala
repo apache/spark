@@ -360,5 +360,4 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       new Path(dataPath(path), "product").toUri.toString
     }
   }
-
 }
