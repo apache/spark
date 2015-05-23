@@ -513,7 +513,6 @@ class MatrixUDTTests(MLlibTestCase):
     dm2 = DenseMatrix(3, 2, [0, 1, 4, 5, 9, 10], isTransposed=True)
     sm1 = SparseMatrix(1, 1, [0, 1], [0], [2.0])
     sm2 = SparseMatrix(2, 1, [0, 0, 1], [0], [5.0], isTransposed=True)
-
     udt = MatrixUDT()
 
     def test_json_schema(self):

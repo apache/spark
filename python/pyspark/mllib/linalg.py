@@ -199,7 +199,7 @@ class MatrixUDT(UserDefinedType):
             return (1, obj.numRows, obj.numCols, None, None, values,
                     bool(obj.isTransposed))
         else:
-            raise TypeError("cannot serialize %r of type %r" % (obj, type(obj)))
+            raise TypeError("cannot serialize type %r" % (type(obj)))
 
     def deserialize(self, datum):
         assert len(datum) == 7, \
