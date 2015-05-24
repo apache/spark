@@ -62,6 +62,8 @@ class DataFrame(object):
         people.filter(people.age > 30).join(department, people.deptId == department.id)) \
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
 
+    .. note:: Experimental
+
     .. versionadded:: 1.3
     """
 
@@ -161,7 +163,7 @@ class DataFrame(object):
 
         Optionally overwriting any existing data.
         """
-        self._jdf.insertInto(tableName, overwrite)
+        self.write.insertInto(tableName, overwrite)
 
     @since(1.3)
     def saveAsTable(self, tableName, source=None, mode="error", **options):

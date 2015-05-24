@@ -335,7 +335,6 @@ private[sql] object ResolvedDataSource {
           InsertIntoHadoopFsRelation(
             r,
             project,
-            partitionColumns.toArray,
             mode)).toRdd
         r
       case _ =>

@@ -133,7 +133,10 @@ object MimaExcludes {
               "org.apache.spark.sql.parquet.TestGroupWriteSupport"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CachedData"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CachedData$"),
-            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CacheManager")
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CacheManager"),
+            // TODO: Remove the following rule once ParquetTest has been moved to src/test.
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetTest")
           ) ++ Seq(
             // SPARK-7530 Added StreamingContext.getState()
             ProblemFilters.exclude[MissingMethodProblem](

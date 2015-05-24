@@ -177,6 +177,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
 
   override def serialize[T: ClassTag](t: T): ByteBuffer = {
     output.clear()
+    kryo.reset() // We must reset in case this serializer instance was reused (see SPARK-7766)
     try {
       kryo.writeClassAndObject(output, t)
     } catch {
@@ -202,6 +203,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
   }
 
   override def serializeStream(s: OutputStream): SerializationStream = {
+    kryo.reset() // We must reset in case this serializer instance was reused (see SPARK-7766)
     new KryoSerializationStream(kryo, s)
   }
 
