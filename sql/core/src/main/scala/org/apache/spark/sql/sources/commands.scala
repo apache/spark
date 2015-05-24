@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext, SaveMode}
 
 private[sql] case class InsertIntoDataSource(
@@ -207,9 +208,11 @@ private[sql] case class InsertIntoHadoopFsRelation(
           writerContainer.outputWriterForRow(partitionPart).write(convertedDataPart)
         }
       } else {
+        val partitionSchema = StructType.fromAttributes(partitionOutput)
+        val converter = CatalystTypeConverters.createToScalaConverter(partitionSchema)
         while (iterator.hasNext) {
           val row = iterator.next()
-          val partitionPart = partitionProj(row)
+          val partitionPart = converter(partitionProj(row)).asInstanceOf[Row]
           val dataPart = dataProj(row)
           writerContainer.outputWriterForRow(partitionPart).write(dataPart)
         }
