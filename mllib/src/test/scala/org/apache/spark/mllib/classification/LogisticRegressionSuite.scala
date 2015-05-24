@@ -219,7 +219,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     updaters.foreach(testLBFGS)
   }
 
-  def testLBFGS(myUpdater: Updater) = {
+  private def testLBFGS(myUpdater: Updater): Unit = {
     val nPoints = 10000
     val A = 2.0
     val B = -1.5
