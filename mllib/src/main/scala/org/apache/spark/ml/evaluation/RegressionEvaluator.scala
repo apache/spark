@@ -37,8 +37,8 @@ final class RegressionEvaluator(override val uid: String)
   def this() = this(Identifiable.randomUID("regEval"))
 
   /**
-   * param for metric name in evaluation
-   * @group param supports mse, rmse, r2, mae as valid metric names.
+   * param for metric name in evaluation (supports rmse, mse, r2, and mae)
+   * @group param
    */
   val metricName: Param[String] = {
     val allowedParams = ParamValidators.inArray(Array("mse", "rmse", "r2", "mae"))
