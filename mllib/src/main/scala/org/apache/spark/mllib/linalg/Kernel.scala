@@ -20,8 +20,15 @@ package org.apache.spark.mllib.linalg
 import org.apache.spark.mllib.util.MLUtils
 import scala.collection.Map
 
-trait Kernel {
+/**
+ * Represents a Kernel abstraction for vector and gemv/gemm based computation
+ */
+trait Kernel extends Serializable {
+
+  /** compute the kernel value using vector. */
   def compute(vi: Vector, indexi: Long, vj: Vector, indexj: Long): Double
+
+  /** update the kernel value after gemv/gemm computation is done. */
   def compute(indexi: Long, indexj: Long, value: Double): Double
 }
 
@@ -31,11 +38,13 @@ trait Kernel {
  * @param threshold don't shuffle if similarity is less than the threshold specified by user
  */
 case class CosineKernel(rowNorms: Map[Long, Double], threshold: Double) extends Kernel {
+
   override def compute(vi: Vector, indexi: Long, vj: Vector, indexj: Long): Double = {
     val similarity = BLAS.dot(vi, vj) / rowNorms(indexi) / rowNorms(indexj)
     if (similarity <= threshold) return 0.0
     similarity
   }
+
   override def compute(indexi: Long, indexj: Long, value: Double): Double = {
     value / rowNorms(indexi) / rowNorms(indexj)
   }
@@ -43,14 +52,17 @@ case class CosineKernel(rowNorms: Map[Long, Double], threshold: Double) extends 
 
 // For distributed matrix multiplication with user defined normalization
 case class ProductKernel() extends Kernel {
+
   override def compute(vi: Vector, indexi: Long, vj: Vector, indexj: Long): Double = {
     BLAS.dot(vi, vj)
   }
+
   override def compute(indexi: Long, indexj: Long, value: Double): Double = value
 }
 
 // For PowerIterationClustering flow
 case class RBFKernel(rowNorms: Map[Long, Double], sigma: Double, threshold: Double) extends Kernel {
+
   val coeff = 1.0 / (math.sqrt(2.0 * math.Pi) * sigma)
   val expCoeff = -1.0 / 2.0 * math.pow(sigma, 2.0)
 

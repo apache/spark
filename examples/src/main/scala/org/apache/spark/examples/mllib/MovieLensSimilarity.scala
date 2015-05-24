@@ -16,14 +16,12 @@
  */
 
 /**
- * An example app for running item similarity computation on MovieLens data
- * (http://grouplens.org/datasets/movielens/) through column based similarity
- * calculation flow compared with ALS + row based similarity calculation flow
+ * An example app for running item similarity computation on MovieLens format
+ * sparse data (http://grouplens.org/datasets/movielens/) through column based
+ * similarity calculation and compare with row based similarity calculation and
+ * ALS + row based similarity calculation flow. For running row and column based
+ * similarity on raw features, we are using implicit matrix factorization.
  *
- * Run with
- * {{{
- * bin/run-example org.apache.spark.examples.mllib.MovieLensALS
- * }}}
  *
  * A synthetic dataset in MovieLens format can be found at `data/mllib/sample_movielens_data.txt`.
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
@@ -34,52 +32,53 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
 import org.apache.spark.{SparkContext, SparkConf}
 import scopt.OptionParser
-import org.apache.spark.mllib.recommendation.Rating
-
+import org.apache.spark.mllib.recommendation.{ALS, Rating}
+import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
+import org.apache.spark.mllib.evaluation.RankingMetrics
 import scala.collection.mutable
 
 object MovieLensSimilarity {
 
   case class Params(
       input: String = null,
-      kryo: Boolean = false,
       numIterations: Int = 20,
-      lambda: Double = 1.0,
-      rank: Int = 10,
+      rank: Int = 50,
+      alpha: Double = 0.0,
       numUserBlocks: Int = -1,
       numProductBlocks: Int = -1,
-      implicitPrefs: Boolean = false,
-      threshold: Double = 1e-4) extends AbstractParams[Params]
+      delim: String = "::",
+      topk: Int = 50,
+      threshold: Double = 1e-2) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
 
-    val parser = new OptionParser[Params]("MovieLensALS") {
-      head("MovieLensALS: an example app for ALS on MovieLens data.")
+    val parser = new OptionParser[Params]("MovieLensSimilarity") {
+      head("MovieLensSimilarity: an example app for similarity flows on MovieLens data.")
       opt[Int]("rank")
         .text(s"rank, default: ${defaultParams.rank}}")
         .action((x, c) => c.copy(rank = x))
       opt[Int]("numIterations")
         .text(s"number of iterations, default: ${defaultParams.numIterations}")
         .action((x, c) => c.copy(numIterations = x))
-      opt[Double]("lambda")
-        .text(s"lambda (smoothing constant), default: ${defaultParams.lambda}")
-        .action((x, c) => c.copy(lambda = x))
-      opt[Unit]("kryo")
-        .text("use Kryo serialization")
-        .action((_, c) => c.copy(kryo = true))
       opt[Int]("numUserBlocks")
         .text(s"number of user blocks, default: ${defaultParams.numUserBlocks} (auto)")
         .action((x, c) => c.copy(numUserBlocks = x))
       opt[Int]("numProductBlocks")
         .text(s"number of product blocks, default: ${defaultParams.numProductBlocks} (auto)")
         .action((x, c) => c.copy(numProductBlocks = x))
-      opt[Unit]("implicitPrefs")
-        .text("use implicit preference")
-        .action((_, c) => c.copy(implicitPrefs = true))
+      opt[Double]("alpha")
+        .text(s"alpha for implicit feedback")
+        .action((x, c) => c.copy(alpha = x))
+      opt[Int]("topk")
+        .text("topk for ALS validation")
+        .action((x, c) => c.copy(topk = x))
       opt[Double]("threshold")
-        .text("similarity threshold for dimsum sampling and kernel shuffle optimization")
+        .text("threshold for dimsum sampling and kernel sparsity")
         .action((x, c) => c.copy(threshold = x))
+      opt[String]("delim")
+        .text("use delimiter, default ::")
+        .action((x, c) => c.copy(delim = x))
       arg[String]("<input>")
         .required()
         .text("input paths to a MovieLens dataset of ratings")
@@ -88,9 +87,8 @@ object MovieLensSimilarity {
         """
           |For example, the following command runs this app on a synthetic dataset:
           |
-          | bin/spark-submit --class org.apache.spark.examples.mllib.MovieLensALS \
-          |  examples/target/scala-*/spark-examples-*.jar \
-          |  --rank 5 --numIterations 20 --lambda 1.0 --kryo \
+          | bin/run-example mllib.MovieLensSimilarity \
+          |  --rank 25 --numIterations 20 --alpha 0.01 --topk 25\
           |  data/mllib/sample_movielens_data.txt
         """.stripMargin)
     }
@@ -103,21 +101,18 @@ object MovieLensSimilarity {
   }
 
   def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"MovieLensSimilarity with $params")
-    if (params.kryo) {
-      conf.registerKryoClasses(Array(classOf[mutable.BitSet], classOf[Rating]))
-        .set("spark.kryoserializer.buffer.mb", "8")
-    }
-    val sc = new SparkContext(conf)
+    val conf =
+      new SparkConf()
+        .setAppName(s"MovieLensSimilarity with $params")
+        .registerKryoClasses(Array(classOf[mutable.BitSet], classOf[Rating]))
 
+    val sc = new SparkContext(conf)
     Logger.getRootLogger.setLevel(Level.WARN)
 
-    val implicitPrefs = params.implicitPrefs
-
+    val delim = params.delim
     val ratings = sc.textFile(params.input).map { line =>
-      val fields = line.split("::")
-      if (implicitPrefs) {
-        /*
+      val fields = line.split(delim)
+      /*
          * MovieLens ratings are on a scale of 1-5:
          * 5: Must see
          * 4: Will enjoy
@@ -131,10 +126,7 @@ object MovieLensSimilarity {
          * The semantics of 0 in this expanded world of non-positive weights
          * are "the same as never having interacted at all".
          */
-        Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble - 2.5)
-      } else {
-        Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)
-      }
+      Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble - 2.5)
     }.cache()
 
     val numRatings = ratings.count()
@@ -147,25 +139,76 @@ object MovieLensSimilarity {
       MatrixEntry(entry.product, entry.user, entry.rating)
     }
     val productMatrix = new CoordinateMatrix(productFeatures).toIndexedRowMatrix()
-    val rowSimilarities = productMatrix.rowSimilarities(threshold=params.threshold)
 
-    // Compute similar rows through dimsum sampling
+    // brute force row similarities
+    println("Running row similarities with threshold 1e-4")
+    val rowSimilarities = productMatrix.rowSimilarities()
+
+    // Row similarities using user defined threshold
+    println(s"Running row similarities with threshold ${params.threshold}")
+    val rowSimilaritiesApprox = productMatrix.rowSimilarities(threshold = params.threshold)
+
+    // Compute similar columns on transpose matrix
     val userFeatures = ratings.map { entry =>
       MatrixEntry(entry.user, entry.product, entry.rating)
-    }
+    }.repartition(sc.defaultParallelism).cache()
+
     val featureMatrix = new CoordinateMatrix(userFeatures).toRowMatrix()
+    // Compute similar columns with dimsum sampling
+    println(s"Running column similarity with threshold ${params.threshold}")
     val colSimilarities = featureMatrix.columnSimilarities(params.threshold)
 
-    val rowEntries = rowSimilarities.entries.map { case MatrixEntry(i, j, u) => ((i, j), u) }
-    val colEntries = colSimilarities.entries.map { case MatrixEntry(i, j, v) => ((i, j), v) }
-    val MAE = colEntries.leftOuterJoin(rowEntries).values.map {
-      case (u, Some(v)) =>
-        math.abs(u - v)
-      case (u, None) =>
-        math.abs(u)
-    }.mean()
+    val exactEntries = rowSimilarities.entries.map { case MatrixEntry(i, j, u) => ((i, j), u) }
+    val rowEntriesApprox = rowSimilaritiesApprox.entries.map { case MatrixEntry(i, j, u) =>
+      ((i, j), u)
+    }
+    val colEntriesApprox = colSimilarities.entries.map { case MatrixEntry(i, j, v) => ((i, j), v) }
 
-    println(s"Average absolute error in estimate is: $MAE")
+    val rowMAE = exactEntries.join(rowEntriesApprox).values.map {
+      case (u, v) => math.abs(u - v)
+    }
+
+    val colMAE = exactEntries.join(colEntriesApprox).values.map {
+      case (u, v) => math.abs(u - v)
+    }
+
+    println(s"Common entries row: ${rowMAE.count()} col: ${colMAE.count()}")
+    println(s"Average absolute error in estimate row: ${rowMAE.mean()} col: ${colMAE.mean()}")
+
+    val model = new ALS()
+      .setRank(params.rank)
+      .setIterations(params.numIterations)
+      .setLambda(0.0)
+      .setAlpha(params.alpha)
+      .setImplicitPrefs(true)
+      .setUserBlocks(params.numUserBlocks)
+      .setProductBlocks(params.numProductBlocks)
+      .run(ratings)
+
+    // Compute similar columns through low rank approximation using ALS
+    println(s"Running ALS based row similarities")
+
+    val lowRankedSimilarities = model.similarProducts(params.topk)
+
+    val labels = rowSimilarities.entries.map { case (entry) =>
+      (entry.i, (entry.j, entry.value))
+    }.topByKey(params.topk)(Ordering.by(_._2)).map { case (item, similarItems) =>
+      (item, similarItems.map(_._1))
+    }
+
+    val predicted = lowRankedSimilarities.entries.map { case (entry) =>
+      (entry.i, (entry.j, entry.value))
+    }.topByKey(params.topk)(Ordering.by(_._2)).map { case (item, similarItems) =>
+      (item, similarItems.map(_._1))
+    }
+
+    val predictionAndLabels =
+      predicted.join(labels).map { case (item, (predicted, labels)) =>
+        (predicted, labels)
+      }
+
+    val rankingMetrics = new RankingMetrics[Long](predictionAndLabels)
+    println(s"MAP ${rankingMetrics.meanAveragePrecision}")
 
     sc.stop()
   }
