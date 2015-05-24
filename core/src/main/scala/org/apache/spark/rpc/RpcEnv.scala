@@ -265,15 +265,16 @@ object RpcTimeout {
 
     // Find the first set property or use the default value with the first property
     val itr = timeoutPropList.iterator
-    var foundProp =  (timeoutPropList.head,defaultValue)
-    while (itr.hasNext && (foundProp == (timeoutPropList.head,defaultValue))){
+    var foundProp =  None: Option[(String, String)]
+    while (itr.hasNext && foundProp.isEmpty){
       val propKey = itr.next()
       conf.getOption(propKey) match {
-        case Some(prop) => foundProp = (propKey,prop)
+        case Some(prop) => foundProp = Some(propKey,prop)
         case None =>
       }
     }
-    val timeout = { Utils.timeStringAsSeconds(foundProp._2) seconds }
-    new RpcTimeout(timeout, messagePrefix + foundProp._1)
+    val finalProp = foundProp.getOrElse(timeoutPropList.head, defaultValue)
+    val timeout = { Utils.timeStringAsSeconds(finalProp._2) seconds }
+    new RpcTimeout(timeout, messagePrefix + finalProp._1)
   }
 }
