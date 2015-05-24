@@ -126,7 +126,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * translated back to resulting model weights, so it's transparent to users.
    * Note: This technique is used in both libsvm and glmnet packages. Default false.
    */
-  private var useFeatureScaling = false
+  private[mllib] var useFeatureScaling = false
 
   /**
    * The dimension of training features.

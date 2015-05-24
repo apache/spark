@@ -101,16 +101,16 @@ class LogisticRegression(override val uid: String)
   setDefault(threshold -> 0.5)
 
   override protected def train(dataset: DataFrame): LogisticRegressionModel = {
-    // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
-    val instances = extractLabeledPoints(dataset).map {
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    train(extractLabeledPoints(dataset), handlePersistence, None)
+  }
+  private [spark] def train(dataset: RDD[LabeledPoint], handlePersistence: Boolean,
+    optInitialWeights: Option[Vector]=None): LogisticRegressionModel = {
+    // Extract columns from data.  If dataset is persisted, do not persist instances.
+    val instances = dataset.map {
       case LabeledPoint(label: Double, features: Vector) => (label, features)
     }
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-    trainOnInstances(instances, handlePersistence)
-  }
 
-  protected[spark] def trainOnInstances(instances: RDD[(Double, Vector)],
-    handlePersistence: Boolean, optInitialWeights: Option[Vector]=None): LogisticRegressionModel = {
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (summarizer, labelSummarizer) = instances.treeAggregate(

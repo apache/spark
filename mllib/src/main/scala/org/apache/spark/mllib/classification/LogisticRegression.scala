@@ -21,7 +21,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 import org.apache.spark.mllib.linalg.BLAS.dot
-import org.apache.spark.mllib.linalg.{DenseVector, Vector}
+import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression._
@@ -377,20 +377,18 @@ class LogisticRegressionWithLBFGS
    * If a known updater is used calls the ml implementation, to avoid
    * applying a regularization penalty to the intercept, otherwise
    * defaults to the mllib implementation. If more than two classes
-   * always uses mllib implementation.
+   * or feature scaling is disabled, always uses mllib implementation.
    */
   override def run(input: RDD[LabeledPoint], initialWeights: Vector): LogisticRegressionModel = {
     // ml's Logisitic regression only supports binary classifcation currently.
-    if (numOfLinearPredictor == 1) {
+    if (numOfLinearPredictor == 1 && useFeatureScaling) {
       def runWithMlLogisitcRegression(elasticNetParam: Double) = {
         val lr = new org.apache.spark.ml.classification.LogisticRegression()
         lr.setRegParam(optimizer.getRegParam())
         val handlePersistence = input.getStorageLevel == StorageLevel.NONE
-        val instances = input.map {
-          case LabeledPoint(label: Double, features: Vector) => (label, features)
-        }
-        val mlLogisticRegresionModel = lr.trainOnInstances(instances, handlePersistence,
-          Some(initialWeights))
+        val initialWeightsWithIntercept = Vectors.dense(0.0, initialWeights.toArray:_*)
+        val mlLogisticRegresionModel = lr.train(input, handlePersistence,
+          Some(initialWeightsWithIntercept))// TODO swap back to including the initialWeights
         createModel(mlLogisticRegresionModel.weights, mlLogisticRegresionModel.intercept)
       }
       optimizer.getUpdater() match {
