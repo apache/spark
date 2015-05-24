@@ -73,13 +73,25 @@ object MultivariateSummarizer {
     println(s"Summary of data file: ${params.input}")
     println(s"${examples.count()} data points")
 
+    val labelSummarizer = new MultivariateOnlineSummarizer()
+      .withMean(true)
+      .withVariance(true)
+      .withMax(true)
+      .withMin(true)
+ 
+    val featureSummarizer = new MultivariateOnlineSummarizer()
+      .withMean(true)
+      .withVariance(true)
+      .withMax(true)
+      .withMin(true)
+ 
     // Summarize labels
-    val labelSummary = examples.aggregate(new MultivariateOnlineSummarizer())(
+    val labelSummary = examples.aggregate(labelSummarizer)(
       (summary, lp) => summary.add(Vectors.dense(lp.label)),
       (sum1, sum2) => sum1.merge(sum2))
 
     // Summarize features
-    val featureSummary = examples.aggregate(new MultivariateOnlineSummarizer())(
+    val featureSummary = examples.aggregate(featureSummarizer)(
       (summary, lp) => summary.add(lp.features),
       (sum1, sum2) => sum1.merge(sum2))
 

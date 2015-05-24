@@ -390,7 +390,14 @@ class RowMatrix(
    * Computes column-wise summary statistics.
    */
   def computeColumnSummaryStatistics(): MultivariateStatisticalSummary = {
-    val summary = rows.treeAggregate(new MultivariateOnlineSummarizer)(
+    val summarizer = new MultivariateOnlineSummarizer()
+      .withMean(true)
+      .withVariance(true)
+      .withNormL1(true)
+      .withNormL2(true)
+      .withMax(true)
+      .withMin(true)
+    val summary = rows.treeAggregate(summarizer)(
       (aggregator, data) => aggregator.add(data),
       (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
     updateNumRows(summary.count)

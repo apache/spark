@@ -54,7 +54,10 @@ class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
   )
 
   private def computeSummary(data: RDD[Vector]): MultivariateStatisticalSummary = {
-    data.treeAggregate(new MultivariateOnlineSummarizer)(
+    val summarizer = new MultivariateOnlineSummarizer()
+      .withMean(true)
+      .withVariance(true)
+    data.treeAggregate(summarizer)(
       (aggregator, data) => aggregator.add(data),
       (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
   }

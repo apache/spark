@@ -107,9 +107,11 @@ class LinearRegression(override val uid: String)
     }
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
-
+    val onlineSummarizer = new MultivariateOnlineSummarizer()
+      .withMean(true)
+      .withVariance(true)
     val (summarizer, statCounter) = instances.treeAggregate(
-      (new MultivariateOnlineSummarizer, new StatCounter))(
+      (onlineSummarizer, new StatCounter))(
         seqOp = (c, v) => (c, v) match {
           case ((summarizer: MultivariateOnlineSummarizer, statCounter: StatCounter),
           (label: Double, features: Vector)) =>

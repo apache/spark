@@ -45,9 +45,13 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
    * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.
    */
   private lazy val summary: MultivariateStatisticalSummary = {
+    val summarizer = new MultivariateOnlineSummarizer()
+      .withVariance(true)
+      .withNormL1(true)
+      .withNormL2(true)
     val summary: MultivariateStatisticalSummary = predictionAndObservations.map {
       case (prediction, observation) => Vectors.dense(observation, observation - prediction)
-    }.aggregate(new MultivariateOnlineSummarizer())(
+    }.aggregate(summarizer)(
         (summary, v) => summary.add(v),
         (sum1, sum2) => sum1.merge(sum2)
       )

@@ -49,7 +49,10 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
    */
   def fit(data: RDD[Vector]): StandardScalerModel = {
     // TODO: skip computation if both withMean and withStd are false
-    val summary = data.treeAggregate(new MultivariateOnlineSummarizer)(
+    val summarizer = new MultivariateOnlineSummarizer()
+      .withMean(true)
+      .withVariance(true)
+    val summary = data.treeAggregate(summarizer)(
       (aggregator, data) => aggregator.add(data),
       (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
     new StandardScalerModel(

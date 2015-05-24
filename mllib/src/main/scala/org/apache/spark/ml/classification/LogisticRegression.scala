@@ -107,9 +107,11 @@ class LogisticRegression(override val uid: String)
     }
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
-
+    val onlineSummarizer = new MultivariateOnlineSummarizer()
+      .withMean(true)
+      .withVariance(true)
     val (summarizer, labelSummarizer) = instances.treeAggregate(
-      (new MultivariateOnlineSummarizer, new MultiClassSummarizer))(
+      (onlineSummarizer, new MultiClassSummarizer))(
         seqOp = (c, v) => (c, v) match {
           case ((summarizer: MultivariateOnlineSummarizer, labelSummarizer: MultiClassSummarizer),
           (label: Double, features: Vector)) =>

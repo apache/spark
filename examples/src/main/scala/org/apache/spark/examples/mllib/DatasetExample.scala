@@ -94,7 +94,9 @@ object DatasetExample {
 
     val featuresDf: DataFrame = df.select("features")
     val features: RDD[Vector] = featuresDf.map { case Row(v: Vector) => v }
-    val featureSummary = features.aggregate(new MultivariateOnlineSummarizer())(
+    val featureSummarizer = new MultivariateOnlineSummarizer()
+      .withMean(true)
+    val featureSummary = features.aggregate(featureSummarizer)(
       (summary, feat) => summary.add(feat),
       (sum1, sum2) => sum1.merge(sum2))
     println(s"Selected features column with average values:\n ${featureSummary.mean.toString}")
@@ -110,7 +112,9 @@ object DatasetExample {
 
     println(s"Schema from Parquet: ${newDataset.schema.prettyJson}")
     val newFeatures = newDataset.select("features").map { case Row(v: Vector) => v }
-    val newFeaturesSummary = newFeatures.aggregate(new MultivariateOnlineSummarizer())(
+    val newFeaturesSummarizer = new MultivariateOnlineSummarizer()
+      .withMean(true)
+    val newFeaturesSummary = newFeatures.aggregate(newFeaturesSummarizer)(
       (summary, feat) => summary.add(feat),
       (sum1, sum2) => sum1.merge(sum2))
     println(s"Selected features column with average values:\n ${newFeaturesSummary.mean.toString}")
