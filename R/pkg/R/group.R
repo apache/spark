@@ -102,9 +102,7 @@ setMethod("agg",
                 }
               }
               jcols <- lapply(cols, function(c) { c@jc })
-              # the GroupedData.agg(col, cols*) API does not contain grouping Column
-              sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "aggWithGrouping",
-                                 x@sgd, listToSeq(jcols))
+              sdf <- callJMethod(x@sgd, "agg", jcols[[1]], listToSeq(jcols[-1]))
             } else {
               stop("agg can only support Column or character")
             }

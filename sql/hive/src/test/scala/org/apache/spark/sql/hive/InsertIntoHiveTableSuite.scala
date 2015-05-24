@@ -53,7 +53,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
     sql("CREATE TABLE createAndInsertTest (key int, value string)")
 
     // Add some data.
-    testData.insertInto("createAndInsertTest")
+    testData.write.mode(SaveMode.Append).insertInto("createAndInsertTest")
 
     // Make sure the table has also been updated.
     checkAnswer(
@@ -62,7 +62,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
     )
 
     // Add more data.
-    testData.insertInto("createAndInsertTest")
+    testData.write.mode(SaveMode.Append).insertInto("createAndInsertTest")
 
     // Make sure the table has been updated.
     checkAnswer(
@@ -71,7 +71,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
     )
 
     // Now overwrite.
-    testData.insertInto("createAndInsertTest", overwrite = true)
+    testData.write.mode(SaveMode.Overwrite).insertInto("createAndInsertTest")
 
     // Make sure the registered table has also been updated.
     checkAnswer(

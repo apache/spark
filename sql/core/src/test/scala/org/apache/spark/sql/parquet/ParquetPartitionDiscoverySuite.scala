@@ -16,12 +16,15 @@
  */
 package org.apache.spark.sql.parquet
 
+import java.io.File
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.parquet.ParquetRelation2._
+import org.apache.spark.sql.sources.PartitioningUtils._
+import org.apache.spark.sql.sources.{LogicalRelation, Partition, PartitionSpec}
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, Row, SQLContext}
@@ -38,7 +41,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
   import sqlContext._
   import sqlContext.implicits._
 
-  val defaultPartitionName = "__NULL__"
+  val defaultPartitionName = "__HIVE_DEFAULT_PARTITION__"
 
   test("column type inference") {
     def check(raw: String, literal: Literal): Unit = {
@@ -53,44 +56,45 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
   }
 
   test("parse partition") {
-    def check(path: String, expected: PartitionValues): Unit = {
+    def check(path: String, expected: Option[PartitionValues]): Unit = {
       assert(expected === parsePartition(new Path(path), defaultPartitionName))
     }
 
     def checkThrows[T <: Throwable: Manifest](path: String, expected: String): Unit = {
       val message = intercept[T] {
-        parsePartition(new Path(path), defaultPartitionName)
+        parsePartition(new Path(path), defaultPartitionName).get
       }.getMessage
 
       assert(message.contains(expected))
     }
 
-    check(
-      "file:///",
-      PartitionValues(
-        ArrayBuffer.empty[String],
-        ArrayBuffer.empty[Literal]))
-
-    check(
-      "file://path/a=10",
+    check("file://path/a=10", Some {
       PartitionValues(
         ArrayBuffer("a"),
-        ArrayBuffer(Literal.create(10, IntegerType))))
+        ArrayBuffer(Literal.create(10, IntegerType)))
+    })
 
-    check(
-      "file://path/a=10/b=hello/c=1.5",
+    check("file://path/a=10/b=hello/c=1.5", Some {
       PartitionValues(
         ArrayBuffer("a", "b", "c"),
         ArrayBuffer(
           Literal.create(10, IntegerType),
           Literal.create("hello", StringType),
-          Literal.create(1.5, FloatType))))
+          Literal.create(1.5, FloatType)))
+    })
 
-    check(
-      "file://path/a=10/b_hello/c=1.5",
+    check("file://path/a=10/b_hello/c=1.5", Some {
       PartitionValues(
         ArrayBuffer("c"),
-        ArrayBuffer(Literal.create(1.5, FloatType))))
+        ArrayBuffer(Literal.create(1.5, FloatType)))
+    })
+
+    check("file:///", None)
+    check("file:///path/_temporary", None)
+    check("file:///path/_temporary/c=1.5", None)
+    check("file:///path/_temporary/path", None)
+    check("file://path/a=10/_temporary/c=1.5", None)
+    check("file://path/a=10/c=1.5/_temporary", None)
 
     checkThrows[AssertionError]("file://path/=10", "Empty partition column name")
     checkThrows[AssertionError]("file://path/a=", "Empty partition column value")
@@ -121,6 +125,25 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           Partition(Row(10.5, "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
 
     check(Seq(
+      "hdfs://host:9000/path/_temporary",
+      "hdfs://host:9000/path/a=10/b=20",
+      "hdfs://host:9000/path/a=10.5/b=hello",
+      "hdfs://host:9000/path/a=10.5/_temporary",
+      "hdfs://host:9000/path/a=10.5/_TeMpOrArY",
+      "hdfs://host:9000/path/a=10.5/b=hello/_temporary",
+      "hdfs://host:9000/path/a=10.5/b=hello/_TEMPORARY",
+      "hdfs://host:9000/path/_temporary/path",
+      "hdfs://host:9000/path/a=11/_temporary/path",
+      "hdfs://host:9000/path/a=10.5/b=world/_temporary/path"),
+      PartitionSpec(
+        StructType(Seq(
+          StructField("a", FloatType),
+          StructField("b", StringType))),
+        Seq(
+          Partition(Row(10, "20"), "hdfs://host:9000/path/a=10/b=20"),
+          Partition(Row(10.5, "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
+
+    check(Seq(
       s"hdfs://host:9000/path/a=10/b=20",
       s"hdfs://host:9000/path/a=$defaultPartitionName/b=hello"),
       PartitionSpec(
@@ -141,6 +164,11 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         Seq(
           Partition(Row(10, null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
           Partition(Row(10.5, null), s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"))))
+
+    check(Seq(
+      s"hdfs://host:9000/path1",
+      s"hdfs://host:9000/path2"),
+      PartitionSpec.emptySpec)
   }
 
   test("read partitioned table - normal case") {
@@ -149,12 +177,18 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         pi <- Seq(1, 2)
         ps <- Seq("foo", "bar")
       } {
+        val dir = makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
         makeParquetFile(
           (1 to 10).map(i => ParquetData(i, i.toString)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
+          dir)
+        // Introduce _temporary dir to test the robustness of the schema discovery process.
+        new File(dir.toString, "_temporary").mkdir()
       }
+      // Introduce _temporary dir to the base dir the robustness of the schema discovery process.
+      new File(base.getCanonicalPath, "_temporary").mkdir()
 
-      parquetFile(base.getCanonicalPath).registerTempTable("t")
+      println("load the partitioned table")
+      read.parquet(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -201,7 +235,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      parquetFile(base.getCanonicalPath).registerTempTable("t")
+      read.parquet(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -249,12 +283,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      val parquetRelation = load(
-        "org.apache.spark.sql.parquet",
-        Map(
-          "path" -> base.getCanonicalPath,
-          ParquetRelation2.DEFAULT_PARTITION_NAME -> defaultPartitionName))
-
+      val parquetRelation = read.format("org.apache.spark.sql.parquet").load(base.getCanonicalPath)
       parquetRelation.registerTempTable("t")
 
       withTempTable("t") {
@@ -294,12 +323,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      val parquetRelation = load(
-        "org.apache.spark.sql.parquet",
-        Map(
-          "path" -> base.getCanonicalPath,
-          ParquetRelation2.DEFAULT_PARTITION_NAME -> defaultPartitionName))
-
+      val parquetRelation = read.format("org.apache.spark.sql.parquet").load(base.getCanonicalPath)
       parquetRelation.registerTempTable("t")
 
       withTempTable("t") {
@@ -331,12 +355,25 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         (1 to 10).map(i => (i, i.toString)).toDF("intField", "stringField"),
         makePartitionDir(base, defaultPartitionName, "pi" -> 2))
 
-      load(base.getCanonicalPath, "org.apache.spark.sql.parquet").registerTempTable("t")
+      read.format("org.apache.spark.sql.parquet").load(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
           sql("SELECT * FROM t"),
           (1 to 10).map(i => Row(i, null, 1)) ++ (1 to 10).map(i => Row(i, i.toString, 2)))
+      }
+    }
+  }
+
+  test("SPARK-7749 Non-partitioned table should have empty partition spec") {
+    withTempPath { dir =>
+      (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
+      val queryExecution = read.parquet(dir.getCanonicalPath).queryExecution
+      queryExecution.analyzed.collectFirst {
+        case LogicalRelation(relation: ParquetRelation2) =>
+          assert(relation.partitionSpec === PartitionSpec.emptySpec)
+      }.getOrElse {
+        fail(s"Expecting a ParquetRelation2, but got:\n$queryExecution")
       }
     }
   }

@@ -59,6 +59,9 @@ case class Generate(
     child: LogicalPlan)
   extends UnaryNode {
 
+  /** The set of all attributes produced by this node. */
+  def generatedSet: AttributeSet = AttributeSet(generatorOutput)
+
   override lazy val resolved: Boolean = {
     generator.resolved &&
       childrenResolved &&

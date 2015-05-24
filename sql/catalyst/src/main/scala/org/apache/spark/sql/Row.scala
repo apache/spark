@@ -55,6 +55,9 @@ object Row {
     // TODO: Improve the performance of this if used in performance critical part.
     new GenericRow(rows.flatMap(_.toSeq).toArray)
   }
+
+  /** Returns an empty row. */
+  val empty = apply()
 }
 
 

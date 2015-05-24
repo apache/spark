@@ -239,7 +239,7 @@ setMethod("cache",
 # @aliases persist,RDD-method
 setMethod("persist",
           signature(x = "RDD", newLevel = "character"),
-          function(x, newLevel) {
+          function(x, newLevel = "MEMORY_ONLY") {
             callJMethod(getJRDD(x), "persist", getStorageLevel(newLevel))
             x@env$isCached <- TRUE
             x
@@ -927,7 +927,7 @@ setMethod("takeSample", signature(x = "RDD", withReplacement = "logical",
                                                                     MAXINT)))))
 
             # TODO(zongheng): investigate if this call is an in-place shuffle?
-            sample(samples)[1:total]
+            base::sample(samples)[1:total]
           })
 
 # Creates tuples of the elements in this RDD by applying a function.
@@ -996,7 +996,7 @@ setMethod("coalesce",
              if (shuffle || numPartitions > SparkR:::numPartitions(x)) {
                func <- function(partIndex, part) {
                  set.seed(partIndex)  # partIndex as seed
-                 start <- as.integer(sample(numPartitions, 1) - 1)
+                 start <- as.integer(base::sample(numPartitions, 1) - 1)
                  lapply(seq_along(part),
                         function(i) {
                           pos <- (start + i) %% numPartitions

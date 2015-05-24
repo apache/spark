@@ -343,17 +343,21 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case c: CreateTableUsing if c.temporary && c.allowExisting =>
         sys.error("allowExisting should be set to false when creating a temporary table.")
 
-      case CreateTableUsingAsSelect(tableName, provider, true, mode, opts, query) =>
-        val cmd =
-          CreateTempTableUsingAsSelect(tableName, provider, mode, opts, query)
+      case CreateTableUsingAsSelect(tableName, provider, true, partitionsCols, mode, opts, query)
+          if partitionsCols.nonEmpty =>
+        sys.error("Cannot create temporary partitioned table.")
+
+      case CreateTableUsingAsSelect(tableName, provider, true, _, mode, opts, query) =>
+        val cmd = CreateTempTableUsingAsSelect(
+          tableName, provider, Array.empty[String], mode, opts, query)
         ExecutedCommand(cmd) :: Nil
       case c: CreateTableUsingAsSelect if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
 
-      case LogicalDescribeCommand(table, isExtended) =>
+      case describe @ LogicalDescribeCommand(table, isExtended) =>
         val resultPlan = self.sqlContext.executePlan(table).executedPlan
         ExecutedCommand(
-          RunnableDescribeCommand(resultPlan, resultPlan.output, isExtended)) :: Nil
+          RunnableDescribeCommand(resultPlan, describe.output, isExtended)) :: Nil
 
       case _ => Nil
     }

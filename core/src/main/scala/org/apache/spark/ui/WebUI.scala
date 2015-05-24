@@ -77,7 +77,10 @@ private[spark] abstract class WebUI(
     val pagePath = "/" + page.prefix
     val renderHandler = createServletHandler(pagePath,
       (request: HttpServletRequest) => page.render(request), securityManager, basePath)
+    val renderJsonHandler = createServletHandler(pagePath.stripSuffix("/") + "/json",
+      (request: HttpServletRequest) => page.renderJson(request), securityManager, basePath)
     attachHandler(renderHandler)
+    attachHandler(renderJsonHandler)
     pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
       .append(renderHandler)
   }
@@ -94,7 +97,7 @@ private[spark] abstract class WebUI(
   }
 
   /** Detach a handler from this UI. */
-  protected def detachHandler(handler: ServletContextHandler) {
+  def detachHandler(handler: ServletContextHandler) {
     handlers -= handler
     serverInfo.foreach { info =>
       info.rootHandler.removeHandler(handler)

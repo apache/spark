@@ -456,19 +456,19 @@ setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 #' @export
 setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
 
-#' @rdname sampleDF
+#' @rdname sample
+#' @export
+setGeneric("sample",
+           function(x, withReplacement, fraction, seed) {
+             standardGeneric("sample")
+           })
+
+#' @rdname sample
 #' @export
 setGeneric("sample_frac",
            function(x, withReplacement, fraction, seed) {
              standardGeneric("sample_frac")
-          })
-
-#' @rdname sampleDF
-#' @export
-setGeneric("sampleDF",
-           function(x, withReplacement, fraction, seed) {
-             standardGeneric("sampleDF")
-          })
+           })
 
 #' @rdname saveAsParquetFile
 #' @export
@@ -480,7 +480,11 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
   standardGeneric("saveAsTable")
 })
 
-#' @rdname saveAsTable
+#' @rdname write.df
+#' @export
+setGeneric("write.df", function(df, path, source, mode, ...) { standardGeneric("write.df") })
+
+#' @rdname write.df
 #' @export
 setGeneric("saveDF", function(df, path, source, mode, ...) { standardGeneric("saveDF") })
 
@@ -550,6 +554,10 @@ setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
 
 #' @rdname column
 #' @export
+setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
+
+#' @rdname column
+#' @export
 setGeneric("contains", function(x, ...) { standardGeneric("contains") })
 #' @rdname column
 #' @export
@@ -570,6 +578,10 @@ setGeneric("getField", function(x, ...) { standardGeneric("getField") })
 #' @rdname column
 #' @export
 setGeneric("getItem", function(x, ...) { standardGeneric("getItem") })
+
+#' @rdname column
+#' @export
+setGeneric("hypot", function(y, x) { standardGeneric("hypot") })
 
 #' @rdname column
 #' @export
@@ -601,6 +613,10 @@ setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
 
 #' @rdname column
 #' @export
+setGeneric("rint", function(x, ...) { standardGeneric("rint") })
+
+#' @rdname column
+#' @export
 setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 
 #' @rdname column
@@ -610,6 +626,14 @@ setGeneric("startsWith", function(x, ...) { standardGeneric("startsWith") })
 #' @rdname column
 #' @export
 setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
+
+#' @rdname column
+#' @export
+setGeneric("toDegrees", function(x) { standardGeneric("toDegrees") })
+
+#' @rdname column
+#' @export
+setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 
 #' @rdname column
 #' @export
