@@ -377,4 +377,12 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       }
     }
   }
+
+  test("SPARK-7847: Dynamic partition directory path escaping and unescaping") {
+    withTempPath { dir =>
+      val df = Seq("/", "[]", "?").zipWithIndex.map(_.swap).toDF("i", "s")
+      df.write.format("parquet").partitionBy("s").save(dir.getCanonicalPath)
+      checkAnswer(read.parquet(dir.getCanonicalPath), df.collect())
+    }
+  }
 }
