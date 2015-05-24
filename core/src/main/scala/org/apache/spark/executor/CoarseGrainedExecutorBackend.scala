@@ -170,9 +170,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           driverConf.set(key, value)
         }
       }
-      if (driverConf.contains("spark.internal.yarn.credentials.file")) {
+      if (driverConf.contains("spark.yarn.credentials.file")) {
         logInfo("Will periodically update credentials from: " +
-          driverConf.get("spark.internal.yarn.credentials.file"))
+          driverConf.get("spark.yarn.credentials.file"))
         SparkHadoopUtil.get.startExecutorDelegationTokenRenewer(driverConf)
       }
 

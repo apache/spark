@@ -60,11 +60,11 @@ private[yarn] class AMDelegationTokenRenewer(
 
   private val hadoopUtil = YarnSparkHadoopUtil.get
 
-  private val credentialsFile = sparkConf.get("spark.internal.yarn.credentials.file")
+  private val credentialsFile = sparkConf.get("spark.yarn.credentials.file")
   private val daysToKeepFiles =
-    sparkConf.getInt("spark.internal.yarn.credentials.file.retention.days", 5)
+    sparkConf.getInt("spark.yarn.credentials.file.retention.days", 5)
   private val numFilesToKeep =
-    sparkConf.getInt("spark.internal.yarn.credentials.file.retention.count", 5)
+    sparkConf.getInt("spark.yarn.credentials.file.retention.count", 5)
 
   /**
    * Schedule a login from the keytab and principal set using the --principal and --keytab
@@ -74,8 +74,8 @@ private[yarn] class AMDelegationTokenRenewer(
    *
    */
   private[spark] def scheduleLoginFromKeytab(): Unit = {
-    val principal = sparkConf.get("spark.internal.yarn.principal")
-    val keytab = sparkConf.get("spark.internal.yarn.keytab")
+    val principal = sparkConf.get("spark.yarn.principal")
+    val keytab = sparkConf.get("spark.yarn.keytab")
 
     /**
      * Schedule re-login and creation of new tokens. If tokens have already expired, this method

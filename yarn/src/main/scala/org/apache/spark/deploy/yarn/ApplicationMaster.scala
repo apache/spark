@@ -133,7 +133,7 @@ private[spark] class ApplicationMaster(
 
       // If the credentials file config is present, we must periodically renew tokens. So create
       // a new AMDelegationTokenRenewer
-      if (sparkConf.contains("spark.internal.yarn.credentials.file")) {
+      if (sparkConf.contains("spark.yarn.credentials.file")) {
         delegationTokenRenewerOption = Some(new AMDelegationTokenRenewer(sparkConf, yarnConf))
         // If a principal and keytab have been set, use that to create new credentials for executors
         // periodically
