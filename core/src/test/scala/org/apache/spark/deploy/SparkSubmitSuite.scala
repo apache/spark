@@ -335,7 +335,8 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     runSparkSubmit(args)
   }
 
-  test("includes jars passed in through --packages") {
+  // SPARK-7287
+  ignore("includes jars passed in through --packages") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
