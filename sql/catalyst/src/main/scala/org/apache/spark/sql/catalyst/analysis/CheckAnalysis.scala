@@ -65,6 +65,11 @@ trait CheckAnalysis {
             failAnalysis(
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
 
+          case b: BinaryExpression if !b.resolved =>
+            failAnalysis(
+              s"invalid expression ${b.prettyString} " +
+              s"between ${b.left.dataType.simpleString} and ${b.right.dataType.simpleString}")
+
           case w @ WindowExpression(windowFunction, windowSpec: WindowSpecDefinition, _, _)
             if windowSpec.validate.nonEmpty =>
             // The window spec is not valid.

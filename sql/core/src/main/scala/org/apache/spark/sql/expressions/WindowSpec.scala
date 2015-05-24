@@ -139,7 +139,7 @@ class WindowSpec private[sql](
    * Converts this [[WindowSpec]] into a [[Column]] with an aggregate expression.
    */
   private[sql] def withAggregate(aggregate: Column): Column = {
-    val windowExpr = WindowExpression(aggregate.expr, 
+    val windowExpr = WindowExpression(aggregate.expr,
       WindowSpecDefinition(partitionSpec, orderSpec, frame))
     new Column(windowExpr)
   }
