@@ -28,7 +28,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater, Updater}
+import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater, Updater, LBFGS, LogisticGradient}
 import org.apache.spark.util.Utils
 
 
@@ -219,7 +219,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     updaters.foreach(testLBFGS)
   }
 
-  def testLBFGS(updater: Updater) = {
+  def testLBFGS(myUpdater: Updater) = {
     val nPoints = 10000
     val A = 2.0
     val B = -1.5
@@ -229,7 +229,14 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val lr = new LogisticRegressionWithLBFGS().setIntercept(true)
+    // Override the updater
+    class LogisticRegressionWithLBFGSCustomUpdater
+        extends LogisticRegressionWithLBFGS {
+      override val optimizer =
+        new LBFGS(new LogisticGradient, myUpdater)
+    }
+
+    val lr = new LogisticRegressionWithLBFGSCustomUpdater().setIntercept(true)
 
     val model = lr.run(testRDD)
 
