@@ -65,7 +65,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     val conf5 = conf.clone()
     conf5.set(kryoBufferProperty, "8m")
     conf5.set(kryoBufferMaxProperty, "9m")
-    KryoSerializer(conf5).newInstance()
+    new KryoSerializer(conf5).newInstance()
   }
   
   test("basic types") {
