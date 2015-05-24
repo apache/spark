@@ -51,7 +51,7 @@ class KryoSerializer(conf: SparkConf)
   with Serializable {
 
   private val bufferSize = conf.get("spark.kryoserializer.buffer", "64k")
-  private val bufferSizeKb
+  private val bufferSizeKb = _
   if (bufferSize.endsWith("k") || bufferSize.endsWith("kb")) {
     bufferSizeKb = conf.getSizeAsKb("spark.kryoserializer.buffer", "64k")
   } else {
