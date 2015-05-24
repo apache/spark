@@ -62,6 +62,10 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     val thrown3 = intercept[IllegalArgumentException](new KryoSerializer(conf4).newInstance())
     assert(thrown3.getMessage.contains(kryoBufferProperty))
     assert(!thrown3.getMessage.contains(kryoBufferMaxProperty))
+    val conf5 = conf.clone()
+    conf5.set(kryoBufferProperty, "8m")
+    conf5.set(kryoBufferMaxProperty, "9m")
+    KryoSerializer(conf2).newInstance()
   }
   
   test("basic types") {
