@@ -266,10 +266,9 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
 
     resolve = filter(lambda a: a['name'] == "Resolve Issue", asf_jira.transitions(jira_id))[0]
     resolution = filter(lambda r: r.raw['name'] == "Fixed", asf_jira.resolutions())[0]
-    custom_fields = {'resolution': {'id': resolution.raw['id']}}
     asf_jira.transition_issue(
         jira_id, resolve["id"], fixVersions = jira_fix_versions, 
-        comment = comment, fields = custom_fields)
+        comment = comment, resolution = {'id': resolution.raw['id']})
 
     print "Successfully resolved %s with fixVersions=%s!" % (jira_id, fix_versions)
 
@@ -427,7 +426,7 @@ def main():
             print "JIRA_USERNAME and JIRA_PASSWORD not set"
             print "Exiting without trying to close the associated JIRA."
     else:
-        print "Could not find jira-python library. Run 'sudo pip install jira-python' to install."
+        print "Could not find jira-python library. Run 'sudo pip install jira' to install."
         print "Exiting without trying to close the associated JIRA."
 
 if __name__ == "__main__":

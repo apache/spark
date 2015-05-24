@@ -22,7 +22,10 @@ import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.{Date, Random}
 
+import scala.util.control.NonFatal
+
 import com.google.common.io.ByteStreams
+
 import tachyon.client.{ReadType, WriteType, TachyonFS, TachyonFile}
 import tachyon.TachyonURI
 
@@ -38,7 +41,6 @@ import org.apache.spark.util.Utils
  */
 private[spark] class TachyonBlockManager() extends ExternalBlockManager with Logging {
 
-  var blockManager: BlockManager =_
   var rootDirs: String = _
   var master: String = _
   var client: tachyon.client.TachyonFS = _
@@ -52,7 +54,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
 
 
   override def init(blockManager: BlockManager, executorId: String): Unit = {
-    this.blockManager = blockManager
+    super.init(blockManager, executorId)
     val storeDir = blockManager.conf.get(ExternalBlockStore.BASE_DIR, "/tmp_spark_tachyon")
     val appFolderName = blockManager.conf.get(ExternalBlockStore.FOLD_NAME)
 
@@ -95,8 +97,29 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
   override def putBytes(blockId: BlockId, bytes: ByteBuffer): Unit = {
     val file = getFile(blockId)
     val os = file.getOutStream(WriteType.TRY_CACHE)
-    os.write(bytes.array())
-    os.close()
+    try {
+      os.write(bytes.array())
+    } catch {
+      case NonFatal(e) => 
+        logWarning(s"Failed to put bytes of block $blockId into Tachyon", e)
+        os.cancel()
+    } finally {
+      os.close()
+    }
+  }
+
+  override def putValues(blockId: BlockId, values: Iterator[_]): Unit = {
+    val file = getFile(blockId)
+    val os = file.getOutStream(WriteType.TRY_CACHE)
+    try {
+      blockManager.dataSerializeStream(blockId, os, values)
+    } catch {
+      case NonFatal(e) => 
+        logWarning(s"Failed to put values of block $blockId into Tachyon", e)
+        os.cancel()
+    } finally {
+      os.close()
+    }
   }
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
@@ -105,18 +128,28 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
       return None
     }
     val is = file.getInStream(ReadType.CACHE)
-    assert (is != null)
     try {
       val size = file.length
       val bs = new Array[Byte](size.asInstanceOf[Int])
       ByteStreams.readFully(is, bs)
       Some(ByteBuffer.wrap(bs))
     } catch {
-      case ioe: IOException =>
-        logWarning(s"Failed to fetch the block $blockId from Tachyon", ioe)
+      case NonFatal(e) =>
+        logWarning(s"Failed to get bytes of block $blockId from Tachyon", e)
         None
     } finally {
       is.close()
+    }
+  }
+
+  override def getValues(blockId: BlockId): Option[Iterator[_]] = {
+    val file = getFile(blockId)
+    if (file == null || file.getLocationHosts().size() == 0) {
+      return None
+    }
+    val is = file.getInStream(ReadType.CACHE)
+    Option(is).map { is =>
+      blockManager.dataDeserializeStream(blockId, is)
     }
   }
 
@@ -184,7 +217,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
             tachyonDir = client.getFile(path)
           }
         } catch {
-          case e: Exception =>
+          case NonFatal(e) =>
             logWarning("Attempt " + tries + " to create tachyon dir " + tachyonDir + " failed", e)
         }
       }
@@ -206,7 +239,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
           Utils.deleteRecursively(tachyonDir, client)
         }
       } catch {
-        case e: Exception =>
+        case NonFatal(e) =>
           logError("Exception while deleting tachyon spark dir: " + tachyonDir, e)
       }
     }

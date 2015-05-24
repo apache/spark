@@ -56,9 +56,10 @@ def _gen_param_header(name, doc, defaultValueStr):
     def __init__(self):
         super(Has$Name, self).__init__()
         #: param for $doc
-        self.$name = Param(self, "$name", "$doc")
-        if $defaultValueStr is not None:
-            self._setDefault($name=$defaultValueStr)'''
+        self.$name = Param(self, "$name", "$doc")'''
+    if defaultValueStr is not None:
+        template += '''
+        self._setDefault($name=$defaultValueStr)'''
 
     Name = name[0].upper() + name[1:]
     return template \
@@ -83,7 +84,7 @@ def _gen_param_code(name, doc, defaultValueStr):
         """
         Sets the value of :py:attr:`$name`.
         """
-        self.paramMap[self.$name] = value
+        self._paramMap[self.$name] = value
         return self
 
     def get$Name(self):
@@ -109,13 +110,16 @@ if __name__ == "__main__":
         ("featuresCol", "features column name", "'features'"),
         ("labelCol", "label column name", "'label'"),
         ("predictionCol", "prediction column name", "'prediction'"),
+        ("probabilityCol", "Column name for predicted class conditional probabilities. " +
+         "Note: Not all models output well-calibrated probability estimates! These probabilities " +
+         "should be treated as confidences, not precise probabilities.", "'probability'"),
         ("rawPredictionCol", "raw prediction (a.k.a. confidence) column name", "'rawPrediction'"),
         ("inputCol", "input column name", None),
         ("inputCols", "input column names", None),
-        ("outputCol", "output column name", None),
+        ("outputCol", "output column name", "self.uid + '__output'"),
         ("numFeatures", "number of features", None),
         ("checkpointInterval", "checkpoint interval (>= 1)", None),
-        ("seed", "random seed", None),
+        ("seed", "random seed", "hash(type(self).__name__)"),
         ("tol", "the convergence tolerance for iterative algorithms", None),
         ("stepSize", "Step size to be used for each iteration of optimization.", None)]
     code = []
@@ -156,6 +160,7 @@ if __name__ == "__main__":
     for name, doc in decisionTreeParams:
         variable = paramTemplate.replace("$name", name).replace("$doc", doc)
         dummyPlaceholders += variable.replace("$owner", "Params._dummy()") + "\n    "
+        realParams += "#: param for " + doc + "\n        "
         realParams += "self." + variable.replace("$owner", "self") + "\n        "
         dtParamMethods += _gen_param_code(name, doc, None) + "\n"
     code.append(decisionTreeCode.replace("$dummyPlaceHolders", dummyPlaceholders)

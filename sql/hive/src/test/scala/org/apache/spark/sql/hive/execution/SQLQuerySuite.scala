@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.errors.DialectException
-import org.apache.spark.sql.DefaultParserDialect
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
-import org.apache.spark.sql.hive.MetastoreRelation
+import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.hive.{HiveQLDialect, HiveShim}
+import org.apache.spark.sql.hive.{HiveQLDialect, HiveShim, MetastoreRelation}
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.types._
@@ -426,10 +425,10 @@ class SQLQuerySuite extends QueryTest {
   test("SPARK-4825 save join to table") {
     val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
     sql("CREATE TABLE test1 (key INT, value STRING)")
-    testData.insertInto("test1")
+    testData.write.mode(SaveMode.Append).insertInto("test1")
     sql("CREATE TABLE test2 (key INT, value STRING)")
-    testData.insertInto("test2")
-    testData.insertInto("test2")
+    testData.write.mode(SaveMode.Append).insertInto("test2")
+    testData.write.mode(SaveMode.Append).insertInto("test2")
     sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
     checkAnswer(
       table("test"),
@@ -536,24 +535,47 @@ class SQLQuerySuite extends QueryTest {
 
   test("SPARK-4296 Grouping field with Hive UDF as sub expression") {
     val rdd = sparkContext.makeRDD( """{"a": "str", "b":"1", "c":"1970-01-01 00:00:00"}""" :: Nil)
-    jsonRDD(rdd).registerTempTable("data")
+    read.json(rdd).registerTempTable("data")
     checkAnswer(
       sql("SELECT concat(a, '-', b), year(c) FROM data GROUP BY concat(a, '-', b), year(c)"),
       Row("str-1", 1970))
 
     dropTempTable("data")
 
-    jsonRDD(rdd).registerTempTable("data")
+    read.json(rdd).registerTempTable("data")
     checkAnswer(sql("SELECT year(c) + 1 FROM data GROUP BY year(c) + 1"), Row(1971))
 
     dropTempTable("data")
   }
 
-  test("resolve udtf with single alias") {
+  test("resolve udtf in projection #1") {
     val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
-    jsonRDD(rdd).registerTempTable("data")
+    read.json(rdd).registerTempTable("data")
     val df = sql("SELECT explode(a) AS val FROM data")
     val col = df("val")
+  }
+
+  test("resolve udtf in projection #2") {
+    val rdd = sparkContext.makeRDD((1 to 2).map(i => s"""{"a":[$i, ${i + 1}]}"""))
+    jsonRDD(rdd).registerTempTable("data")
+    checkAnswer(sql("SELECT explode(map(1, 1)) FROM data LIMIT 1"), Row(1, 1) :: Nil)
+    checkAnswer(sql("SELECT explode(map(1, 1)) as (k1, k2) FROM data LIMIT 1"), Row(1, 1) :: Nil)
+    intercept[AnalysisException] {
+      sql("SELECT explode(map(1, 1)) as k1 FROM data LIMIT 1")
+    }
+
+    intercept[AnalysisException] {
+      sql("SELECT explode(map(1, 1)) as (k1, k2, k3) FROM data LIMIT 1")
+    }
+  }
+
+  // TGF with non-TGF in project is allowed in Spark SQL, but not in Hive
+  test("TGF with non-TGF in projection") {
+    val rdd = sparkContext.makeRDD( """{"a": "1", "b":"1"}""" :: Nil)
+    jsonRDD(rdd).registerTempTable("data")
+    checkAnswer(
+      sql("SELECT explode(map(a, b)) as (k1, k2), a, b FROM data"),
+      Row("1", "1", "1", "1") :: Nil)
   }
 
   test("logical.Project should not be resolved if it contains aggregates or generators") {
@@ -564,7 +586,7 @@ class SQLQuerySuite extends QueryTest {
     // PreInsertionCasts will actually start to work before ImplicitGenerate and then
     // generates an invalid query plan.
     val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
-    jsonRDD(rdd).registerTempTable("data")
+    read.json(rdd).registerTempTable("data")
     val originalConf = getConf("spark.sql.hive.convertCTAS", "false")
     setConf("spark.sql.hive.convertCTAS", "false")
 
@@ -596,7 +618,7 @@ class SQLQuerySuite extends QueryTest {
       sql(s"DROP TABLE $tableName")
     }
   }
-  
+
   test("SPARK-5203 union with different decimal precision") {
     Seq.empty[(Decimal, Decimal)]
       .toDF("d1", "d2")
@@ -763,5 +785,56 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT CASE k WHEN 2 THEN 22 WHEN 4 THEN 44 ELSE 0 END, v FROM t"),
       Row(0, "1") :: Row(22, "2") :: Row(0, "3") :: Row(44, "4") :: Row(0, "5") :: Nil)
+  }
+
+  test("SPARK-7595: Window will cause resolve failed with self join") {
+    checkAnswer(sql(
+      """
+        |with
+        | v1 as (select key, count(value) over (partition by key) cnt_val from src),
+        | v2 as (select v1.key, v1_lag.cnt_val from v1, v1 v1_lag where v1.key = v1_lag.key)
+        | select * from v2 order by key limit 1
+      """.stripMargin), Row(0, 3))
+  }
+
+  test("SPARK-7269 Check analysis failed in case in-sensitive") {
+    Seq(1, 2, 3).map { i =>
+      (i.toString, i.toString)
+    }.toDF("key", "value").registerTempTable("df_analysis")
+    sql("SELECT kEy from df_analysis group by key").collect()
+    sql("SELECT kEy+3 from df_analysis group by key+3").collect()
+    sql("SELECT kEy+3, a.kEy, A.kEy from df_analysis A group by key").collect()
+    sql("SELECT cast(kEy+1 as Int) from df_analysis A group by cast(key+1 as int)").collect()
+    sql("SELECT cast(kEy+1 as Int) from df_analysis A group by key+1").collect()
+    sql("SELECT 2 from df_analysis A group by key+1").collect()
+    intercept[AnalysisException] {
+      sql("SELECT kEy+1 from df_analysis group by key+3")
+    }
+    intercept[AnalysisException] {
+      sql("SELECT cast(key+2 as Int) from df_analysis A group by cast(key+1 as int)")
+    }
+  }
+
+  // `Math.exp(1.0)` has different result for different jdk version, so not use createQueryTest
+  test("udf_java_method") {
+    checkAnswer(sql(
+      """
+        |SELECT java_method("java.lang.String", "valueOf", 1),
+        |       java_method("java.lang.String", "isEmpty"),
+        |       java_method("java.lang.Math", "max", 2, 3),
+        |       java_method("java.lang.Math", "min", 2, 3),
+        |       java_method("java.lang.Math", "round", 2.5),
+        |       java_method("java.lang.Math", "exp", 1.0),
+        |       java_method("java.lang.Math", "floor", 1.9)
+        |FROM src tablesample (1 rows)
+      """.stripMargin),
+      Row(
+        "1",
+        "true",
+        java.lang.Math.max(2, 3).toString,
+        java.lang.Math.min(2, 3).toString,
+        java.lang.Math.round(2.5).toString,
+        java.lang.Math.exp(1.0).toString,
+        java.lang.Math.floor(1.9).toString))
   }
 }

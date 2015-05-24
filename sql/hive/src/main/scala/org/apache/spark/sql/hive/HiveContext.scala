@@ -25,6 +25,7 @@ import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.spark.sql.catalyst.ParserDialect
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -63,6 +64,8 @@ private[hive] class HiveQLDialect extends ParserDialect {
 /**
  * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
  * Configuration for Hive is read from hive-site.xml on the classpath.
+ *
+ * @since 1.0.0
  */
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
@@ -120,6 +123,29 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[hive] def hiveMetastoreJars: String =
     getConf(HIVE_METASTORE_JARS, "builtin")
 
+  /**
+   * A comma separated list of class prefixes that should be loaded using the classloader that
+   * is shared between Spark SQL and a specific version of Hive. An example of classes that should
+   * be shared is JDBC drivers that are needed to talk to the metastore. Other classes that need
+   * to be shared are those that interact with classes that are already shared.  For example,
+   * custom appenders that are used by log4j.
+   */
+  protected[hive] def hiveMetastoreSharedPrefixes: Seq[String] =
+    getConf("spark.sql.hive.metastore.sharedPrefixes", jdbcPrefixes)
+      .split(",").filterNot(_ == "")
+
+  private def jdbcPrefixes = Seq(
+    "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc").mkString(",")
+
+  /**
+   * A comma separated list of class prefixes that should explicitly be reloaded for each version
+   * of Hive that Spark SQL is communicating with.  For example, Hive UDFs that are declared in a
+   * prefix that typically would be shared (i.e. org.apache.spark.*)
+   */
+  protected[hive] def hiveMetastoreBarrierPrefixes: Seq[String] =
+    getConf("spark.sql.hive.metastore.barrierPrefixes", "")
+      .split(",").filterNot(_ == "")
+
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
 
@@ -128,7 +154,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * Hive 13 as this is the version of Hive that is packaged with Spark SQL.  This copy of the
    * client is used for execution related tasks like registering temporary functions or ensuring
    * that the ThreadLocal SessionState is correctly populated.  This copy of Hive is *not* used
-   * for storing peristent metadata, and only point to a dummy metastore in a temporary directory.
+   * for storing persistent metadata, and only point to a dummy metastore in a temporary directory.
    */
   @transient
   protected[hive] lazy val executionHive: ClientWrapper = {
@@ -177,12 +203,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         version = metaVersion,
         execJars = jars.toSeq,
         config = allConfig,
-        isolationOn = true)
+        isolationOn = true,
+        barrierPrefixes = hiveMetastoreBarrierPrefixes,
+        sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else if (hiveMetastoreJars == "maven") {
       // TODO: Support for loading the jars from an already downloaded location.
       logInfo(
         s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using maven.")
-      IsolatedClientLoader.forVersion(hiveMetastoreVersion, allConfig )
+      IsolatedClientLoader.forVersion(hiveMetastoreVersion, allConfig)
     } else {
       // Convert to files and expand any directories.
       val jars =
@@ -208,7 +236,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         version = metaVersion,
         execJars = jars.toSeq,
         config = allConfig,
-        isolationOn = true)
+        isolationOn = true,
+        barrierPrefixes = hiveMetastoreBarrierPrefixes,
+        sharedPrefixes = hiveMetastoreSharedPrefixes)
     }
     isolatedLoader.client
   }
@@ -225,6 +255,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * Spark SQL or the external data source library it uses might cache certain metadata about a
    * table, such as the location of blocks. When those change outside of Spark SQL, users should
    * call this function to invalidate the cache.
+   *
+   * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
     // TODO: Database support...
@@ -242,6 +274,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    *
    * Right now, it only supports Hive tables and it only updates the size of a Hive table
    * in the Hive metastore.
+   *
+   * @since 1.2.0
    */
   @Experimental
   def analyze(tableName: String) {
@@ -324,12 +358,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient
   override protected[sql] lazy val functionRegistry =
     new HiveFunctionRegistry with OverrideFunctionRegistry {
-      def caseSensitive: Boolean = false
+      override def conf: CatalystConf = currentSession().conf
     }
 
   /* An analyzer that uses the Hive metastore. */
   @transient
-  override protected[sql] lazy val analyzer =
+  override protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
@@ -339,6 +373,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         ResolveHiveWindowFunction ::
         sources.PreInsertCastAndRename ::
         Nil
+
+      override val extendedCheckRules = Seq(
+        sources.PreWriteCheck(catalog)
+      )
     }
 
   override protected[sql] def createSession(): SQLSession = {
@@ -474,8 +512,19 @@ private[hive] object HiveContext {
   def newTemporaryConfiguration(): Map[String, String] = {
     val tempDir = Utils.createTempDir()
     val localMetastore = new File(tempDir, "metastore").getAbsolutePath
-    Map(
-      "javax.jdo.option.ConnectionURL" -> s"jdbc:derby:;databaseName=$localMetastore;create=true")
+    val propMap: HashMap[String, String] = HashMap()
+    // We have to mask all properties in hive-site.xml that relates to metastore data source
+    // as we used a local metastore here.
+    HiveConf.ConfVars.values().foreach { confvar  =>
+      if (confvar.varname.contains("datanucleus") || confvar.varname.contains("jdo")) {
+        propMap.put(confvar.varname, confvar.defaultVal)
+      }
+    }
+    propMap.put("javax.jdo.option.ConnectionURL",
+      s"jdbc:derby:;databaseName=$localMetastore;create=true")
+    propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
+      "org.datanucleus.store.rdbms.adapter.DerbyAdapter")
+    propMap.toMap
   }
 
   protected val primitiveTypes =
