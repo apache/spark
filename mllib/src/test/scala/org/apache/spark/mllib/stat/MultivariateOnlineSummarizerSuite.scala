@@ -86,6 +86,10 @@ class MultivariateOnlineSummarizerSuite extends FunSuite {
     // the zeros; it's a case we need to test. For column 3, the minimum will be 0.0 which we
     // need to test as well.
     val summarizer = (new MultivariateOnlineSummarizer)
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
       .add(Vectors.dense(-1.0, 0.0, 6.0))
       .add(Vectors.dense(3.0, -3.0, 0.0))
 
@@ -104,6 +108,10 @@ class MultivariateOnlineSummarizerSuite extends FunSuite {
 
   test("sparse vector input") {
     val summarizer = (new MultivariateOnlineSummarizer)
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
       .add(Vectors.sparse(3, Seq((0, -1.0), (2, 6.0))))
       .add(Vectors.sparse(3, Seq((0, 3.0), (1, -3.0))))
 
@@ -122,6 +130,10 @@ class MultivariateOnlineSummarizerSuite extends FunSuite {
 
   test("mixing dense and sparse vector input") {
     val summarizer = (new MultivariateOnlineSummarizer)
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
       .add(Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))))
       .add(Vectors.dense(0.0, -1.0, -3.0))
       .add(Vectors.sparse(3, Seq((1, -5.1))))
@@ -147,10 +159,18 @@ class MultivariateOnlineSummarizerSuite extends FunSuite {
 
   test("merging two summarizers") {
     val summarizer1 = (new MultivariateOnlineSummarizer)
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
       .add(Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))))
       .add(Vectors.dense(0.0, -1.0, -3.0))
 
     val summarizer2 = (new MultivariateOnlineSummarizer)
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
       .add(Vectors.sparse(3, Seq((1, -5.1))))
       .add(Vectors.dense(3.8, 0.0, 1.9))
       .add(Vectors.dense(1.7, -0.6, 0.0))
@@ -178,14 +198,44 @@ class MultivariateOnlineSummarizerSuite extends FunSuite {
     // If one of two is non-empty, this should return the non-empty summarizer.
     // If both of them are empty, then just return the empty summarizer.
     val summarizer1 = (new MultivariateOnlineSummarizer)
-      .add(Vectors.dense(0.0, -1.0, -3.0)).merge(new MultivariateOnlineSummarizer)
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
+      .add(Vectors.dense(0.0, -1.0, -3.0))
+    val merged_summarizer1 = (new MultivariateOnlineSummarizer)
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
+    summarizer1.merge(merged_summarizer1)
     assert(summarizer1.count === 1)
 
     val summarizer2 = (new MultivariateOnlineSummarizer)
-      .merge((new MultivariateOnlineSummarizer).add(Vectors.dense(0.0, -1.0, -3.0)))
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
+    val merged_summarizer2 = (new MultivariateOnlineSummarizer)
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
+      .add(Vectors.dense(0.0, -1.0, -3.0))
+    summarizer2.merge(merged_summarizer2)
     assert(summarizer2.count === 1)
 
-    val summarizer3 = (new MultivariateOnlineSummarizer).merge(new MultivariateOnlineSummarizer)
+    val summarizer3 = (new MultivariateOnlineSummarizer)
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
+    val merged_summarizer3 = (new MultivariateOnlineSummarizer)
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
+    summarizer3.merge(new MultivariateOnlineSummarizer)
     assert(summarizer3.count === 0)
 
     assert(summarizer1.mean ~== Vectors.dense(0.0, -1.0, -3.0) absTol 1E-5, "mean mismatch")
@@ -211,12 +261,80 @@ class MultivariateOnlineSummarizerSuite extends FunSuite {
 
   test("merging summarizer when one side has zero mean (SPARK-4355)") {
     val s0 = new MultivariateOnlineSummarizer()
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
       .add(Vectors.dense(2.0))
       .add(Vectors.dense(2.0))
     val s1 = new MultivariateOnlineSummarizer()
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
       .add(Vectors.dense(1.0))
       .add(Vectors.dense(-1.0))
     s0.merge(s1)
     assert(s0.mean(0) ~== 1.0 absTol 1e-14)
   }
+
+  test("merging summarizers when configurations mismatch") {
+    val s0 = new MultivariateOnlineSummarizer()
+      .withMean(true)
+      .withMin(true)
+      .add(Vectors.dense(2.0))
+      .add(Vectors.dense(2.0))
+    val s1 = new MultivariateOnlineSummarizer()
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
+      .add(Vectors.dense(1.0))
+      .add(Vectors.dense(-1.0))
+    withClue("Merging a new summarizer with different configuration should throw exception.") {
+      intercept[IllegalArgumentException] {
+        s0.merge(s1)
+      }
+    }
+  }
+  test("configuration") {
+    val summarizer = (new MultivariateOnlineSummarizer)
+      .withMin(true)
+      .withMax(true)
+      .withVariance(true)
+      .add(Vectors.dense(-1.0, 0.0, 6.0))
+      .add(Vectors.dense(3.0, -3.0, 0.0))
+
+    withClue("Require statistics that is not configured should throw exception") {
+      intercept[IllegalArgumentException] {
+        summarizer.mean
+      }
+    }
+
+    assert(summarizer.min ~== Vectors.dense(-1.0, -3, 0.0) absTol 1E-5, "min mismatch")
+    assert(summarizer.max ~== Vectors.dense(3.0, 0.0, 6.0) absTol 1E-5, "max mismatch")
+    assert(summarizer.numNonzeros ~== Vectors.dense(2, 1, 1) absTol 1E-5, "numNonzeros mismatch")
+    assert(summarizer.variance ~== Vectors.dense(8.0, 4.5, 18.0) absTol 1E-5, "variance mismatch")
+    assert(summarizer.count === 2)
+
+    val summarizer2 = (new MultivariateOnlineSummarizer)
+      .withMean(true)
+      .withMin(true)
+      .withMax(true)
+      .add(Vectors.sparse(3, Seq((0, -1.0), (2, 6.0))))
+      .add(Vectors.sparse(3, Seq((0, 3.0), (1, -3.0))))
+ 
+    withClue("Require statistics that is not configured should throw exception") {
+      intercept[IllegalArgumentException] {
+        summarizer2.variance
+      }
+    }
+ 
+    assert(summarizer2.mean ~== Vectors.dense(1.0, -1.5, 3.0) absTol 1E-5, "mean mismatch")
+    assert(summarizer2.min ~== Vectors.dense(-1.0, -3, 0.0) absTol 1E-5, "min mismatch")
+    assert(summarizer2.max ~== Vectors.dense(3.0, 0.0, 6.0) absTol 1E-5, "max mismatch")
+    assert(summarizer2.numNonzeros ~== Vectors.dense(2, 1, 1) absTol 1E-5, "numNonzeros mismatch")
+    assert(summarizer.count === 2)
+  }
+ 
 }
