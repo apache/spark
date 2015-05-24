@@ -374,10 +374,14 @@ class TaskInstance(Base):
     hostname = Column(String(1000))
     unixname = Column(String(1000))
     job_id = Column(Integer)
+    pool = Column(String(50))
+    queue = Column(String(50))
+    priority_weight = Column(Integer)
 
     __table_args__ = (
         Index('ti_dag_state', dag_id, state),
         Index('ti_state_lkp', dag_id, task_id, execution_date, state),
+        Index('ti_pool', pool, state, priority_weight),
     )
 
     def __init__(self, task, execution_date, state=None, job=None):
@@ -386,6 +390,9 @@ class TaskInstance(Base):
         self.execution_date = execution_date
         self.state = state
         self.task = task
+        self.queue = task.queue
+        self.pool = task.pool
+        self.priority_weight = task.priority_weight_total
         self.try_number = 1
         self.unixname = getpass.getuser()
         if job:
@@ -616,6 +623,40 @@ class TaskInstance(Base):
         return self.state == State.UP_FOR_RETRY and \
             self.end_date + self.task.retry_delay < datetime.now()
 
+    def pool_full(self, session=None):
+        """
+        Returns a boolean as to whether the slot pool has room for this
+        task to run
+        """
+        if not self.task.pool:
+            return True
+
+        close_session = False
+        if not session:
+            session = settings.Session()
+            close_session = True
+
+        running = (
+            session
+            .query(func.count('*'))
+            .select_from(TaskInstance)
+            .scalar()
+        )
+        pool_size = (
+            session
+            .query(Pool)
+            .filter(Pool.pool == self.task.pool)
+            .first()
+        )
+        if not pool_size:
+            return False
+
+        if close_session:
+            session.commit()
+            session.close()
+        return running < pool_size
+
+
     def run(
             self,
             verbose=True,
@@ -661,6 +702,11 @@ class TaskInstance(Base):
                 "Next run after {0}".format(next_run)
             )
         elif force or self.state in State.runnable():
+            if not force and task.pool and self.pool_full(session):
+                self.state = State.QUEUED
+                session.commit()
+                logging.info("Pool {} is full, queuing".format(task.pool))
+                return
             if self.state == State.UP_FOR_RETRY:
                 self.try_number += 1
             else:
@@ -908,6 +954,9 @@ class BaseOperator(Base):
         This allows the executor to trigger higher priority tasks before
         others when things get backed up.
     :type priority_weight: int
+    :param pool: the slot pool this task should run in, slot pools are a
+        way to limit concurrency for certain tasks
+    :type pool: str
     """
 
     # For derived classes to define which fields will get jinjaified
@@ -954,6 +1003,7 @@ class BaseOperator(Base):
             adhoc=False,
             priority_weight=1,
             queue=None,
+            pool=None,
             *args,
             **kwargs):
 
@@ -1737,3 +1787,15 @@ class Variable(Base):
 
     def __repr__(self):
         return '{} : {}'.format(self.key, self.val)
+
+
+class Pool(Base):
+    __tablename__ = "slot_pool"
+
+    id = Column(Integer, primary_key=True)
+    pool = Column(String(50), unique=True)
+    slots = Column(Integer, default=0)
+    description = Column(Text)
+
+    def __repr__(self):
+        return self.id
