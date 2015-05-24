@@ -60,3 +60,7 @@
 span.expand-input-rate {
   cursor: pointer;
 }
+
+tr.batch-table-cell-highlight > td {
+  background-color: #D6FFE4 !important;
+}

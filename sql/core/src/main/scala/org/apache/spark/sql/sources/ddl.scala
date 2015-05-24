@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.RunnableCommand
@@ -188,18 +188,20 @@ private[sql] class DDLParser(
 private[sql] object ResolvedDataSource {
 
   private val builtinSources = Map(
-    "jdbc" -> classOf[org.apache.spark.sql.jdbc.DefaultSource],
-    "json" -> classOf[org.apache.spark.sql.json.DefaultSource],
-    "parquet" -> classOf[org.apache.spark.sql.parquet.DefaultSource]
+    "jdbc" -> "org.apache.spark.sql.jdbc.DefaultSource",
+    "json" -> "org.apache.spark.sql.json.DefaultSource",
+    "parquet" -> "org.apache.spark.sql.parquet.DefaultSource",
+    "orc" -> "org.apache.spark.sql.hive.orc.DefaultSource"
   )
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String): Class[_] = {
+    val loader = Utils.getContextOrSparkClassLoader
+
     if (builtinSources.contains(provider)) {
-      return builtinSources(provider)
+      return loader.loadClass(builtinSources(provider))
     }
 
-    val loader = Utils.getContextOrSparkClassLoader
     try {
       loader.loadClass(provider)
     } catch {
@@ -208,7 +210,11 @@ private[sql] object ResolvedDataSource {
           loader.loadClass(provider + ".DefaultSource")
         } catch {
           case cnf: java.lang.ClassNotFoundException =>
-            sys.error(s"Failed to load class for data source: $provider")
+            if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
+              sys.error("The ORC data source must be used with Hive support enabled.")
+            } else {
+              sys.error(s"Failed to load class for data source: $provider")
+            }
         }
     }
   }
@@ -226,7 +232,7 @@ private[sql] object ResolvedDataSource {
       case Some(schema: StructType) => clazz.newInstance() match {
         case dataSource: SchemaRelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
-        case dataSource: FSBasedRelationProvider =>
+        case dataSource: HadoopFsRelationProvider =>
           val maybePartitionsSchema = if (partitionColumns.isEmpty) {
             None
           } else {
@@ -239,12 +245,13 @@ private[sql] object ResolvedDataSource {
             SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray
           }
 
-          val dataSchema = StructType(schema.filterNot(f => partitionColumns.contains(f.name)))
+          val dataSchema =
+            StructType(schema.filterNot(f => partitionColumns.contains(f.name))).asNullable
 
           dataSource.createRelation(
             sqlContext,
             paths,
-            Some(schema),
+            Some(dataSchema),
             maybePartitionsSchema,
             caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.RelationProvider =>
@@ -256,7 +263,7 @@ private[sql] object ResolvedDataSource {
       case None => clazz.newInstance() match {
         case dataSource: RelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
-        case dataSource: FSBasedRelationProvider =>
+        case dataSource: HadoopFsRelationProvider =>
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
             val patternPath = new Path(caseInsensitiveOptions("path"))
@@ -296,7 +303,7 @@ private[sql] object ResolvedDataSource {
     val relation = clazz.newInstance() match {
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(sqlContext, mode, options, data)
-      case dataSource: FSBasedRelationProvider =>
+      case dataSource: HadoopFsRelationProvider =>
         // Don't glob path for the write path.  The contracts here are:
         //  1. Only one output path can be specified on the write path;
         //  2. Output path must be a legal HDFS style file system path;
@@ -314,11 +321,20 @@ private[sql] object ResolvedDataSource {
           Some(dataSchema.asNullable),
           Some(partitionColumnsSchema(data.schema, partitionColumns)),
           caseInsensitiveOptions)
+
+        // For partitioned relation r, r.schema's column ordering is different with the column
+        // ordering of data.logicalPlan. We need a Project to adjust the ordering.
+        // So, inside InsertIntoHadoopFsRelation, we can safely apply the schema of r.schema to
+        // the data.
+        val project =
+          Project(
+            r.schema.map(field => new UnresolvedAttribute(Seq(field.name))),
+            data.logicalPlan)
+
         sqlContext.executePlan(
-          InsertIntoFSBasedRelation(
+          InsertIntoHadoopFsRelation(
             r,
-            data.logicalPlan,
-            partitionColumns.toArray,
+            project,
             mode)).toRdd
         r
       case _ =>

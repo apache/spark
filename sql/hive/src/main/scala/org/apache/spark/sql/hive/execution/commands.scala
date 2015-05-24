@@ -146,6 +146,7 @@ case class CreateMetastoreDataSource(
     hiveContext.catalog.createDataSourceTable(
       tableName,
       userSpecifiedSchema,
+      Array.empty[String],
       provider,
       optionsWithPath,
       isExternal)
@@ -194,7 +195,7 @@ case class CreateMetastoreDataSourceAsSelect(
             sqlContext, Some(query.schema.asNullable), partitionColumns, provider, optionsWithPath)
           val createdRelation = LogicalRelation(resolved.relation)
           EliminateSubQueries(sqlContext.table(tableName).logicalPlan) match {
-            case l @ LogicalRelation(_: InsertableRelation | _: FSBasedRelation) =>
+            case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation) =>
               if (l.relation != createdRelation.relation) {
                 val errorDescription =
                   s"Cannot append to table $tableName because the resolved relation does not " +
@@ -244,6 +245,7 @@ case class CreateMetastoreDataSourceAsSelect(
       hiveContext.catalog.createDataSourceTable(
         tableName,
         Some(resolved.relation.schema),
+        partitionColumns,
         provider,
         optionsWithPath,
         isExternal)

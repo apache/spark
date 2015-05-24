@@ -36,6 +36,24 @@ import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{ManualClock, Utils}
 
 /**
+ * A dummy stream that does absolutely nothing.
+ */
+private[streaming] class DummyDStream(ssc: StreamingContext) extends DStream[Int](ssc) {
+  override def dependencies: List[DStream[Int]] = List.empty
+  override def slideDuration: Duration = Seconds(1)
+  override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.emptyRDD[Int])
+}
+
+/**
+ * A dummy input stream that does absolutely nothing.
+ */
+private[streaming] class DummyInputDStream(ssc: StreamingContext) extends InputDStream[Int](ssc) {
+  override def start(): Unit = { }
+  override def stop(): Unit = { }
+  override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.emptyRDD[Int])
+}
+
+/**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
  * replayable, reliable message queue like Kafka. It requires a sequence as input, and
  * returns the i_th element at the i_th batch unde manual clock.

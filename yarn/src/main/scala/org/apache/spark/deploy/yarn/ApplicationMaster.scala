@@ -300,11 +300,14 @@ private[spark] class ApplicationMaster(
     val expiryInterval = yarnConf.getInt(YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS, 120000)
 
     // we want to be reasonably responsive without causing too many requests to RM.
-    val schedulerInterval =
-      sparkConf.getTimeAsMs("spark.yarn.scheduler.heartbeat.interval-ms", "5s")
+    val heartbeatInterval = math.max(0, math.min(expiryInterval / 2,
+      sparkConf.getTimeAsMs("spark.yarn.scheduler.heartbeat.interval-ms", "3s")))
 
-    // must be <= expiryInterval / 2.
-    val interval = math.max(0, math.min(expiryInterval / 2, schedulerInterval))
+    // we want to check more frequently for pending containers
+    val initialAllocationInterval = math.min(heartbeatInterval,
+      sparkConf.getTimeAsMs("spark.yarn.scheduler.initial-allocation.interval", "200ms"))
+
+    var nextAllocationInterval = initialAllocationInterval
 
     // The number of failures in a row until Reporter thread give up
     val reporterMaxFailures = sparkConf.getInt("spark.yarn.scheduler.reporterThread.maxFailures", 5)
@@ -330,15 +333,27 @@ private[spark] class ApplicationMaster(
               if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
-                    s"${failureCount} time(s) from Reporter thread.")
-
+                    s"$failureCount time(s) from Reporter thread.")
               } else {
-                logWarning(s"Reporter thread fails ${failureCount} time(s) in a row.", e)
+                logWarning(s"Reporter thread fails $failureCount time(s) in a row.", e)
               }
             }
           }
           try {
-            Thread.sleep(interval)
+            val numPendingAllocate = allocator.getNumPendingAllocate
+            val sleepInterval =
+              if (numPendingAllocate > 0) {
+                val currentAllocationInterval =
+                  math.min(heartbeatInterval, nextAllocationInterval)
+                nextAllocationInterval = currentAllocationInterval * 2 // avoid overflow
+                currentAllocationInterval
+              } else {
+                nextAllocationInterval = initialAllocationInterval
+                heartbeatInterval
+              }
+            logDebug(s"Number of pending allocations is $numPendingAllocate. " +
+                     s"Sleeping for $sleepInterval.")
+            Thread.sleep(sleepInterval)
           } catch {
             case e: InterruptedException =>
           }
@@ -349,7 +364,8 @@ private[spark] class ApplicationMaster(
     t.setDaemon(true)
     t.setName("Reporter")
     t.start()
-    logInfo("Started progress reporter thread - sleep time : " + interval)
+    logInfo(s"Started progress reporter thread with (heartbeat : $heartbeatInterval, " +
+            s"initial allocation : $initialAllocationInterval) intervals")
     t
   }
 

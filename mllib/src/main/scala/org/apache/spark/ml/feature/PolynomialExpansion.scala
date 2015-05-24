@@ -75,7 +75,7 @@ class PolynomialExpansion(override val uid: String)
  * To handle sparsity, if c is zero, we can skip all monomials that contain it. We remember the
  * current index and increment it properly for sparse input.
  */
-object PolynomialExpansion {
+private[feature] object PolynomialExpansion {
 
   private def choose(n: Int, k: Int): Int = {
     Range(n, n - k, -1).product / Range(k, 1, -1).product

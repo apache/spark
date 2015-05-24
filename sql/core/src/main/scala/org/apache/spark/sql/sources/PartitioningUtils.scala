@@ -23,8 +23,7 @@ import java.math.{BigDecimal => JBigDecimal}
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
-import com.google.common.cache.{CacheBuilder, Cache}
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
@@ -34,7 +33,15 @@ private[sql] case class Partition(values: Row, path: String)
 
 private[sql] case class PartitionSpec(partitionColumns: StructType, partitions: Seq[Partition])
 
+private[sql] object PartitionSpec {
+  val emptySpec = PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[Partition])
+}
+
 private[sql] object PartitioningUtils {
+  // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since sql/core doesn't
+  // depend on Hive.
+  private[sql] val DEFAULT_PARTITION_NAME = "__HIVE_DEFAULT_PARTITION__"
+
   private[sql] case class PartitionValues(columnNames: Seq[String], literals: Seq[Literal]) {
     require(columnNames.size == literals.size)
   }
@@ -65,20 +72,37 @@ private[sql] object PartitioningUtils {
   private[sql] def parsePartitions(
       paths: Seq[Path],
       defaultPartitionName: String): PartitionSpec = {
-    val partitionValues = resolvePartitions(paths.map(parsePartition(_, defaultPartitionName)))
-    val fields = {
-      val (PartitionValues(columnNames, literals)) = partitionValues.head
-      columnNames.zip(literals).map { case (name, Literal(_, dataType)) =>
-        StructField(name, dataType, nullable = true)
+    // First, we need to parse every partition's path and see if we can find partition values.
+    val pathsWithPartitionValues = paths.flatMap { path =>
+      parsePartition(path, defaultPartitionName).map(path -> _)
+    }
+
+    if (pathsWithPartitionValues.isEmpty) {
+      // This dataset is not partitioned.
+      PartitionSpec.emptySpec
+    } else {
+      // This dataset is partitioned. We need to check whether all partitions have the same
+      // partition columns and resolve potential type conflicts.
+      val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues.map(_._2))
+
+      // Creates the StructType which represents the partition columns.
+      val fields = {
+        val PartitionValues(columnNames, literals) = resolvedPartitionValues.head
+        columnNames.zip(literals).map { case (name, Literal(_, dataType)) =>
+          // We always assume partition columns are nullable since we've no idea whether null values
+          // will be appended in the future.
+          StructField(name, dataType, nullable = true)
+        }
       }
-    }
 
-    val partitions = partitionValues.zip(paths).map {
-      case (PartitionValues(_, literals), path) =>
-        Partition(Row(literals.map(_.value): _*), path.toString)
-    }
+      // Finally, we create `Partition`s based on paths and resolved partition values.
+      val partitions = resolvedPartitionValues.zip(pathsWithPartitionValues).map {
+        case (PartitionValues(_, literals), (path, _)) =>
+          Partition(Row.fromSeq(literals.map(_.value)), path.toString)
+      }
 
-    PartitionSpec(StructType(fields), partitions)
+      PartitionSpec(StructType(fields), partitions)
+    }
   }
 
   /**
@@ -99,21 +123,31 @@ private[sql] object PartitioningUtils {
    */
   private[sql] def parsePartition(
       path: Path,
-      defaultPartitionName: String): PartitionValues = {
+      defaultPartitionName: String): Option[PartitionValues] = {
     val columns = ArrayBuffer.empty[(String, Literal)]
     // Old Hadoop versions don't have `Path.isRoot`
     var finished = path.getParent == null
     var chopped = path
 
     while (!finished) {
+      // Sometimes (e.g., when speculative task is enabled), temporary directories may be left
+      // uncleaned.  Here we simply ignore them.
+      if (chopped.getName.toLowerCase == "_temporary") {
+        return None
+      }
+
       val maybeColumn = parsePartitionColumn(chopped.getName, defaultPartitionName)
       maybeColumn.foreach(columns += _)
       chopped = chopped.getParent
       finished = maybeColumn.isEmpty || chopped.getParent == null
     }
 
-    val (columnNames, values) = columns.reverse.unzip
-    PartitionValues(columnNames, values)
+    if (columns.isEmpty) {
+      None
+    } else {
+      val (columnNames, values) = columns.reverse.unzip
+      Some(PartitionValues(columnNames, values))
+    }
   }
 
   private def parsePartitionColumn(
@@ -147,20 +181,25 @@ private[sql] object PartitioningUtils {
   private[sql] def resolvePartitions(values: Seq[PartitionValues]): Seq[PartitionValues] = {
     // Column names of all partitions must match
     val distinctPartitionsColNames = values.map(_.columnNames).distinct
-    assert(distinctPartitionsColNames.size == 1, {
-      val list = distinctPartitionsColNames.mkString("\t", "\n", "")
-      s"Conflicting partition column names detected:\n$list"
-    })
 
-    // Resolves possible type conflicts for each column
-    val columnCount = values.head.columnNames.size
-    val resolvedValues = (0 until columnCount).map { i =>
-      resolveTypeConflicts(values.map(_.literals(i)))
-    }
+    if (distinctPartitionsColNames.isEmpty) {
+      Seq.empty
+    } else {
+      assert(distinctPartitionsColNames.size == 1, {
+        val list = distinctPartitionsColNames.mkString("\t", "\n", "")
+        s"Conflicting partition column names detected:\n$list"
+      })
 
-    // Fills resolved literals back to each partition
-    values.zipWithIndex.map { case (d, index) =>
-      d.copy(literals = resolvedValues.map(_(index)))
+      // Resolves possible type conflicts for each column
+      val columnCount = values.head.columnNames.size
+      val resolvedValues = (0 until columnCount).map { i =>
+        resolveTypeConflicts(values.map(_.literals(i)))
+      }
+
+      // Fills resolved literals back to each partition
+      values.zipWithIndex.map { case (d, index) =>
+        d.copy(literals = resolvedValues.map(_(index)))
+      }
     }
   }
 
