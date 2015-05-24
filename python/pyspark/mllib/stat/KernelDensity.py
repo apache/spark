@@ -15,14 +15,34 @@
 # limitations under the License.
 #
 
-"""
-Python package for statistical functions in MLlib.
-"""
+import sys
 
-from pyspark.mllib.stat._statistics import *
-from pyspark.mllib.stat.distribution import MultivariateGaussian
-from pyspark.mllib.stat.test import ChiSqTestResult
-from pyspark.mllib.stat.KernelDensity import KernelDensity
+if sys.version > '3':
+    xrange = range
 
-__all__ = ["Statistics", "MultivariateStatisticalSummary", "ChiSqTestResult",
-           "MultivariateGaussian", "KernelDensity"]
+import numpy as np
+
+from pyspark.mllib.common import callMLlibFunc
+
+class KernelDensity(object):
+    """
+    .. note:: Experimental
+
+    Estimate probabiltiy density at required points given a sample from the
+    population.
+    """
+    def __init__(self):
+        self._bandwidth = 1.0
+        self._sample = 0
+
+    def setBandwidth(self, bandwidth):
+        self._bandwidth = bandwidth
+
+    def setSample(self, sample):
+        self._sample = sample
+
+    def estimate(self, points):
+        points = list(points)
+        densities = callMLlibFunc(
+            "estimateKernelDensity", self._sample, self._bandwidth, points) 
+        return np.asarray(densities)

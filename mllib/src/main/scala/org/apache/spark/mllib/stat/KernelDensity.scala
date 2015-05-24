@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.stat
 
+import java.util.ArrayList
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.annotation.Experimental
