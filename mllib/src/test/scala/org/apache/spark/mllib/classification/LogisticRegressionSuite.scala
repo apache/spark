@@ -28,7 +28,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.mllib.optimization._
+import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater, Updater}
 import org.apache.spark.util.Utils
 
 
@@ -215,6 +215,11 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
 
   // Test if we can correctly learn A, B where Y = logistic(A + B*X)
   test("logistic regression with LBFGS") {
+    val updaters: List[Updater] = List(new SquaredL2Updater(), new L1Updater())
+    updaters.foreach(testLBFGS)
+  }
+
+  def testLBFGS(updater: Updater) = {
     val nPoints = 10000
     val A = 2.0
     val B = -1.5
@@ -223,27 +228,23 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val updaters = List(new SquaredL2Updater(), new L1Updater())
-    updaters.foreach(updater: Updater => {
 
-      val lr = new LogisticRegressionWithLBFGS().setIntercept(true)
+    val lr = new LogisticRegressionWithLBFGS().setIntercept(true)
 
-      val model = lr.run(testRDD)
+    val model = lr.run(testRDD)
 
-      // Test the weights
-      assert(model.weights(0) ~== B relTol 0.02)
-      assert(model.intercept ~== A relTol 0.02)
+    // Test the weights
+    assert(model.weights(0) ~== B relTol 0.02)
+    assert(model.intercept ~== A relTol 0.02)
 
-      val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
-      val validationRDD = sc.parallelize(validationData, 2)
-      // Test prediction on RDD.
-      validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
+    val validationRDD = sc.parallelize(validationData, 2)
+    // Test prediction on RDD.
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
 
-      // Test prediction on Array.
-      validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
-    })
+    // Test prediction on Array.
+    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
-
 
   test("logistic regression with initial weights with SGD") {
     val nPoints = 10000
