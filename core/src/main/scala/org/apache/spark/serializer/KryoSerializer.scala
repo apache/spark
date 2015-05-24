@@ -50,13 +50,7 @@ class KryoSerializer(conf: SparkConf)
   with Logging
   with Serializable {
 
-  private val bufferSize = conf.get("spark.kryoserializer.buffer", "64k")
-  private val bufferSizeKb = _
-  if (bufferSize.endsWith("k") || bufferSize.endsWith("kb")) {
-    bufferSizeKb = conf.getSizeAsKb("spark.kryoserializer.buffer", "64k")
-  } else {
-    bufferSizeKb = conf.getSizeAsMb("spark.kryoserializer.buffer", "64k")
-  }
+  private val bufferSizeKb = conf.getSizeAsKb("spark.kryoserializer.buffer", "64k")
   
   if (bufferSizeKb >= ByteUnit.GiB.toKiB(2)) {
     throw new IllegalArgumentException("spark.kryoserializer.buffer must be less than " +
