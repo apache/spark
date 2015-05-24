@@ -1214,9 +1214,11 @@ storage levels is:
     Compared to MEMORY_ONLY_SER, OFF_HEAP reduces garbage collection overhead and allows executors
     to be smaller and to share a pool of memory, making it attractive in environments with
     large heaps or multiple concurrent applications. Furthermore, as the RDDs reside in Tachyon,
-    the crash of an executor does not lead to losing the in-memory cache. In this mode, the memory 
+    the crash of an executor does not lead to losing the in-memory cache. In this mode, the memory
     in Tachyon is discardable. Thus, Tachyon does not attempt to reconstruct a block that it evicts
-    from memory.
+    from memory. If you plan to use Tachyon as the off heap store, Spark is compatible with Tachyon
+    out-of-the-box. Please refer to this <a href="http://tachyon-project.org/master/Running-Spark-on-Tachyon.html">page</a>
+    for the suggested version pairings.
   </td>
 </tr>
 </table>
@@ -1256,35 +1258,6 @@ mode has several advantages:
 Spark automatically monitors cache usage on each node and drops out old data partitions in a
 least-recently-used (LRU) fashion. If you would like to manually remove an RDD instead of waiting for
 it to fall out of the cache, use the `RDD.unpersist()` method.
-
-### Tachyon Compatibility
-
-If you plan to use [Tachyon](http://tachyon-project.org/) as an off-heap store for Spark, the
-following version pairings will work together out-of-the-box.
-
-<table class="table">
-<tr><th style="width:23%">Spark Version</th><th>Tachyon Version</th></tr>
-<tr>
-  <td> 1.0.x and Below </td>
-  <td> v0.4.1 </td>
-</tr>
-<tr>
-  <td> 1.1.x </td>
-  <td> v0.5.0 </td>
-</tr>
-<tr>
-  <td> 1.2.x </td>
-  <td> v0.5.0 </td>
-</tr>
-<tr>
-  <td> 1.3.x </td>
-  <td> v0.5.0 </td>
-</tr>
-<tr>
-  <td> 1.4.x and Above </td>
-  <td> v0.6.4 </td>
-</tr>
-</table>
 
 # Shared Variables
 
