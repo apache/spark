@@ -264,10 +264,17 @@ object RpcTimeout {
     require(timeoutPropList.nonEmpty)
 
     // Find the first set property or use the default value with the first property
-    val foundProp = timeoutPropList.view.map(x => (x, conf.getOption(x))).filter(_._2.isDefined).
-      map(y => (y._1, y._2.get)).headOption.getOrElse(timeoutPropList.head, defaultValue)
-
-    val timeout = { Utils.timeStringAsSeconds(foundProp._2) seconds }
-    new RpcTimeout(timeout, messagePrefix + foundProp._1)
+    val itr = timeoutPropList.iterator
+    var foundProp =  None: Option[(String, String)]
+    while (itr.hasNext && foundProp.isEmpty){
+      val propKey = itr.next()
+      conf.getOption(propKey) match {
+        case Some(prop) => foundProp = Some(propKey,prop)
+        case None =>
+      }
+    }
+    val finalProp = foundProp.getOrElse(timeoutPropList.head, defaultValue)
+    val timeout = { Utils.timeStringAsSeconds(finalProp._2) seconds }
+    new RpcTimeout(timeout, messagePrefix + finalProp._1)
   }
 }
