@@ -273,7 +273,7 @@
     <repository>
       <id>spark-1.4-staging</id>
       <name>Spark 1.4 RC1 Staging Repository</name>
-      <url>https://repository.apache.org/content/repositories/orgapachespark-1092</url>
+      <url>https://repository.apache.org/content/repositories/orgapachespark-1104</url>
       <releases>
         <enabled>true</enabled>
       </releases>
