@@ -389,7 +389,8 @@ class LogisticRegressionWithLBFGS
         val instances = input.map {
           case LabeledPoint(label: Double, features: Vector) => (label, features)
         }
-        val mlLogisticRegresionModel = lr.trainOnInstances(instances, handlePersistence, Some(initialWeights))
+        val mlLogisticRegresionModel = lr.trainOnInstances(instances, handlePersistence,
+          Some(initialWeights))
         createModel(mlLogisticRegresionModel.weights, mlLogisticRegresionModel.intercept)
       }
       optimizer.getUpdater() match {

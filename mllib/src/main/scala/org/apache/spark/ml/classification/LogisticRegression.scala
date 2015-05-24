@@ -109,7 +109,8 @@ class LogisticRegression(override val uid: String)
     trainOnInstances(instances, handlePersistence)
   }
 
-  protected[spark] def trainOnInstances(instances: RDD[(Double, Vector)], handlePersistence: Boolean, optInitialWeights: Option[Vector]=None): LogisticRegressionModel = {
+  protected[spark] def trainOnInstances(instances: RDD[(Double, Vector)],
+    handlePersistence: Boolean, optInitialWeights: Option[Vector]=None): LogisticRegressionModel = {
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (summarizer, labelSummarizer) = instances.treeAggregate(
