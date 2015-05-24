@@ -28,6 +28,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.mllib.optimization._
 import org.apache.spark.util.Utils
 
 
@@ -222,22 +223,27 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val lr = new LogisticRegressionWithLBFGS().setIntercept(true)
+    val updaters = List(new SquaredL2Updater(), new L1Updater())
+    updaters.foreach(updater: Updater => {
 
-    val model = lr.run(testRDD)
+      val lr = new LogisticRegressionWithLBFGS().setIntercept(true)
 
-    // Test the weights
-    assert(model.weights(0) ~== B relTol 0.02)
-    assert(model.intercept ~== A relTol 0.02)
+      val model = lr.run(testRDD)
 
-    val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
-    val validationRDD = sc.parallelize(validationData, 2)
-    // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+      // Test the weights
+      assert(model.weights(0) ~== B relTol 0.02)
+      assert(model.intercept ~== A relTol 0.02)
 
-    // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+      val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
+      val validationRDD = sc.parallelize(validationData, 2)
+      // Test prediction on RDD.
+      validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+
+      // Test prediction on Array.
+      validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    })
   }
+
 
   test("logistic regression with initial weights with SGD") {
     val nPoints = 10000
