@@ -27,6 +27,7 @@ import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{DataValidators, Saveable, Loader}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -383,12 +384,28 @@ class LogisticRegressionWithLBFGS
     // ml's Logisitic regression only supports binary classifcation currently.
     if (numOfLinearPredictor == 1 && useFeatureScaling) {
       def runWithMlLogisitcRegression(elasticNetParam: Double) = {
+        // Prepare the ml LogisticRegression based on our settings
         val lr = new org.apache.spark.ml.classification.LogisticRegression()
         lr.setRegParam(optimizer.getRegParam())
-        val handlePersistence = input.getStorageLevel == StorageLevel.NONE
+        lr.setElasticNetParam(elasticNetParam)
         val initialWeightsWithIntercept = Vectors.dense(0.0, initialWeights.toArray:_*)
-        val mlLogisticRegresionModel = lr.train(input, handlePersistence,
-          Some(initialWeightsWithIntercept))// TODO swap back to including the initialWeights
+        lr.setInitialWeights(initialWeightsWithIntercept)
+        // Convert our input into a DataFrame
+        val sqlContext = new SQLContext(input.context)
+        import sqlContext.implicits._
+        val df = input.toDF()
+        // Determine if we should cache the DF
+        val handlePersistence = input.getStorageLevel == StorageLevel.NONE
+        if (handlePersistence) {
+          df.persist(StorageLevel.MEMORY_AND_DISK)
+        }
+        // Train our model
+        val mlLogisticRegresionModel = lr.train(df)
+        // unpersist if we persisted
+        if (handlePersistence) {
+          df.unpersist()
+        }
+        // convert the model
         createModel(mlLogisticRegresionModel.weights, mlLogisticRegresionModel.intercept)
       }
       optimizer.getUpdater() match {

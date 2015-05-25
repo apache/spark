@@ -100,14 +100,17 @@ class LogisticRegression(override val uid: String)
   def setThreshold(value: Double): this.type = set(threshold, value)
   setDefault(threshold -> 0.5)
 
-  override protected def train(dataset: DataFrame): LogisticRegressionModel = {
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-    train(extractLabeledPoints(dataset), handlePersistence, None)
+  private var optInitialWeights: Option[Vector] = None
+  /** @group setParam */
+  def setInitialWeights(value: Vector): this.type = {
+    this.optInitialWeights = Some(value)
+    this
   }
-  private [spark] def train(dataset: RDD[LabeledPoint], handlePersistence: Boolean,
-    optInitialWeights: Option[Vector]=None): LogisticRegressionModel = {
+
+  override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     // Extract columns from data.  If dataset is persisted, do not persist instances.
-    val instances = dataset.map {
+    val instances = extractLabeledPoints(dataset).map {
       case LabeledPoint(label: Double, features: Vector) => (label, features)
     }
 
