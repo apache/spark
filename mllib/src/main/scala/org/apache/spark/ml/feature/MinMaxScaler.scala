@@ -21,8 +21,9 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -33,34 +34,37 @@ import org.apache.spark.sql.types.{StructField, StructType}
 private[feature] trait MinMaxScalerParams extends Params with HasInputCol with HasOutputCol {
 
   /**
-   * new minimum value after transformation, shared by all features
+   * lower bound after transformation, shared by all features
    * Default: 0.0
    * @group param
    */
-  val lowerBound: DoubleParam = new DoubleParam(this, "lowerBound",
+  val min: DoubleParam = new DoubleParam(this, "min",
     "lower bound of the expected feature range")
 
   /**
-   * new maximum value after transformation, shared by all features
+   * upper bound after transformation, shared by all features
    * Default: 1.0
    * @group param
    */
-  val upperBound: DoubleParam = new DoubleParam(this, "upperBound",
+  val max: DoubleParam = new DoubleParam(this, "max",
     "upper bound of the expected feature range")
 }
 
 /**
  * :: AlphaComponent ::
- * Rescale original data values to a new range [lowerBound, upperBound] linearly using column
- * summary statistics (minimum and maximum), which is also known as min-max normalization or
- * Rescaling. The rescaled value for feature E is calculated as,
+ * Rescale each feature individually to a common range [min, max] linearly using column summary
+ * statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
+ * feature E is calculated as, *
  *
- * Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (upperBound - lowerBound) + lowerBound
+ * Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
  */
 @AlphaComponent
-class MinMaxScaler extends Estimator[MinMaxScalerModel] with MinMaxScalerParams {
+class MinMaxScaler(override val uid: String)
+  extends Estimator[MinMaxScalerModel] with MinMaxScalerParams {
 
-  setDefault(lowerBound -> 0.0, upperBound -> 1.0)
+  def this() = this(Identifiable.randomUID("minMaxScal"))
+
+  setDefault(min -> 0.0, max -> 1.0)
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -69,17 +73,19 @@ class MinMaxScaler extends Estimator[MinMaxScalerModel] with MinMaxScalerParams 
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
-  def setLowerBound(value: Double): this.type = set(lowerBound, value)
+  def setMin(value: Double): this.type = set(min, value)
 
   /** @group setParam */
-  def setUpperBound(value: Double): this.type = set(upperBound, value)
+  def setMax(value: Double): this.type = set(max, value)
 
   override def fit(dataset: DataFrame): MinMaxScalerModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
-    val scaler = new feature.MinMaxScaler(lowerBound = $(lowerBound), upperBound = $(upperBound))
-    val scalerModel = scaler.fit(input)
-    copyValues(new MinMaxScalerModel(this, scalerModel))
+    val summary = input.treeAggregate(new MultivariateOnlineSummarizer)(
+      (aggregator, data) => aggregator.add(data),
+      (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
+
+    copyValues(new MinMaxScalerModel(uid, summary.min, summary.max).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -91,6 +97,11 @@ class MinMaxScaler extends Estimator[MinMaxScalerModel] with MinMaxScalerParams 
     val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
     StructType(outputFields)
   }
+
+  override def validateParams(): Unit = {
+    require($(min) <= $(max))
+  }
+
 }
 
 /**
@@ -99,8 +110,9 @@ class MinMaxScaler extends Estimator[MinMaxScalerModel] with MinMaxScalerParams 
  */
 @AlphaComponent
 class MinMaxScalerModel private[ml] (
-    override val parent: MinMaxScaler,
-    scaler: feature.MinMaxScalerModel)
+    override val uid: String,
+    val originMin: Vector,
+    val originMax: Vector)
   extends Model[MinMaxScalerModel] with MinMaxScalerParams {
 
   /** @group setParam */
@@ -111,7 +123,39 @@ class MinMaxScalerModel private[ml] (
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val scale = udf { scaler.transform _ }
+
+    val scale = udf { (vector: Vector) => {
+      val scale = $(max) - $(min)
+      val result = vector match {
+        case DenseVector(vs) =>
+          val values = vs.clone()
+          val size = values.size
+          var i = 0
+          while(i < size) {
+            val originalRange = originMax(i) - originMin(i)
+            val raw = if(originalRange != 0) (values(i) - originMin(i)) / originalRange else 0.5
+            values(i) =  raw * scale + $(min)
+            i += 1
+          }
+          Vectors.dense(values)
+        case SparseVector(size, indices, vs) =>
+          // For sparse vector, the `index` array inside sparse vector object will not be changed,
+          // so we can re-use it to save memory.
+          val values = vs.clone()
+          val nnz = values.size
+          var i = 0
+          while (i < nnz) {
+            val index = indices(i)
+            val originRange = originMax(index) - originMin(index)
+            val raw = if(originRange != 0) (values(i) - originMin(index)) / originRange else 0.5
+            values(i) = raw  * scale + $(min)
+            i += 1
+          }
+          Vectors.sparse(size, indices, values)
+        case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
+      }
+      result
+    }}
     dataset.withColumn($(outputCol), scale(col($(inputCol))))
   }
 
