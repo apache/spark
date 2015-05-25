@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.mock.MockitoSugar
@@ -85,14 +87,17 @@ class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAf
   }
 
   test("cache remotely block") {
+    val memoryStore = mock[MemoryStore]
     val blockInfo = new TimeStampedHashMap[BlockId, Boolean]
-    val result = new BlockResult(Array(5, 6, 7).iterator, DataReadMethod.Memory, 12)
+    val values = Array(5, 6, 7).iterator
+    val result = new BlockResult(values, DataReadMethod.Memory, 12)
     // mock remotely received block
     when(blockManager.get(RDDBlockId(0, 0))).thenReturn(Some(result))
     when(blockManager.containsBlockId(RDDBlockId(0, 0)))
       .thenReturn(false)
-    when(blockManager.putArray(RDDBlockId(0, 0), Array(5, 6, 7), StorageLevel.MEMORY_ONLY))
-      .thenThrow(new RuntimeException("putArray"))
+    when(blockManager.memoryStore).thenReturn(memoryStore)
+    when(memoryStore.unrollSafely(RDDBlockId(0, 0), values,
+      new ArrayBuffer[(BlockId, BlockStatus)])).thenThrow(new RuntimeException("putInBlockManager"))
 
     assert(!blockInfo.contains(RDDBlockId(0, 0)))
 
@@ -102,7 +107,7 @@ class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAf
         cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY, cacheRemote = true)
     } catch {
       case e: RuntimeException =>
-        if (e.getMessage().contains("putArray")) {
+        if (e.getMessage().contains("putInBlockManager")) {
           blockInfo.putIfAbsent(RDDBlockId(0, 0), true)
         }
     }

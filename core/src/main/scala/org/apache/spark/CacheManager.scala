@@ -49,14 +49,14 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           .getInputMetricsForReadMethod(blockResult.readMethod)
         existingMetrics.incBytesRead(blockResult.bytes)
 
-        val buf = blockResult.data.toArray
+        var iter = blockResult.data.asInstanceOf[Iterator[T]]
           // If the block is retrieved remotely, try to cache it locally
         if (cacheRemote && !blockManager.containsBlockId(key)) {
-            blockManager.putArray(key, buf, storageLevel)
+            val updatedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
+            iter = putInBlockManager(key, iter, storageLevel, updatedBlocks)
         }
 
-        val iter = buf.toIterator.asInstanceOf[Iterator[T]]
-        new InterruptibleIterator[T](context, iter) {
+        new InterruptibleIterator(context, iter) {
           override def next(): T = {
             existingMetrics.incRecordsRead(1)
             delegate.next()
