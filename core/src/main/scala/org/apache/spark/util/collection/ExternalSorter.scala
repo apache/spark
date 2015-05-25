@@ -30,7 +30,7 @@ import org.apache.spark._
 import org.apache.spark.serializer._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.shuffle.sort.{SortShuffleWriter, SortShuffleSorter}
-import org.apache.spark.storage.BlockId
+import org.apache.spark.storage.{BlockId, BlockObjectWriter}
 
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner
@@ -246,10 +246,17 @@ private[spark] class ExternalSorter[K, V, C](
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
     // createTempShuffleBlock here; see SPARK-3426 for more context.
     val (blockId, file) = diskBlockManager.createTempShuffleBlock()
-    var curWriteMetrics = new ShuffleWriteMetrics()
-    var writer = blockManager.getDiskWriter(
-      blockId, file, serInstance, fileBufferSize, curWriteMetrics)
-    var objectsWritten = 0   // Objects written since the last flush
+
+    // These variables are reset after each flush
+    var objectsWritten: Long = 0
+    var spillMetrics: ShuffleWriteMetrics = null
+    var writer: BlockObjectWriter = null
+    def openWriter(): Unit = {
+      assert (writer == null && spillMetrics == null)
+      spillMetrics = new ShuffleWriteMetrics
+      writer = blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, spillMetrics)
+    }
+    openWriter()
 
     // List of batch sizes (bytes) in the order they are written to disk
     val batchSizes = new ArrayBuffer[Long]
@@ -263,8 +270,9 @@ private[spark] class ExternalSorter[K, V, C](
       val w = writer
       writer = null
       w.commitAndClose()
-      _diskBytesSpilled += curWriteMetrics.shuffleBytesWritten
-      batchSizes.append(curWriteMetrics.shuffleBytesWritten)
+      _diskBytesSpilled += spillMetrics.shuffleBytesWritten
+      batchSizes.append(spillMetrics.shuffleBytesWritten)
+      spillMetrics = null
       objectsWritten = 0
     }
 
@@ -279,9 +287,7 @@ private[spark] class ExternalSorter[K, V, C](
 
         if (objectsWritten == serializerBatchSize) {
           flush()
-          curWriteMetrics = new ShuffleWriteMetrics()
-          writer = blockManager.getDiskWriter(
-            blockId, file, serInstance, fileBufferSize, curWriteMetrics)
+          openWriter()
         }
       }
       if (objectsWritten > 0) {
