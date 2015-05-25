@@ -158,7 +158,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   @transient
   protected[hive] lazy val executionHive: ClientWrapper = {
-    logInfo(s"Initilizing execution hive, version $hiveExecutionVersion")
+    logInfo(s"Initializing execution hive, version $hiveExecutionVersion")
     new ClientWrapper(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
       config = newTemporaryConfiguration())
