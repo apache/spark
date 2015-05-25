@@ -127,21 +127,23 @@ private[spark] class ExternalSorter[K, V, C](
     if (shouldPartition) partitioner.get.getPartition(key) else 0
   }
 
-  private val metaInitialRecords = 256
-  private val kvChunkSize = conf.getInt("spark.shuffle.sort.kvChunkSize", 1 << 22) // 4 MB
-  private val useSerializedPairBuffer =
-    !ordering.isDefined && conf.getBoolean("spark.shuffle.sort.serializeMapOutputs", true) &&
-    ser.supportsRelocationOfSerializedObjects
-
   // Data structures to store in-memory objects before we spill. Depending on whether we have an
   // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
   // store them in an array buffer.
-  private var map = new PartitionedAppendOnlyMap[K, C]
-  private var buffer = if (useSerializedPairBuffer) {
-    new PartitionedSerializedPairBuffer[K, C](metaInitialRecords, kvChunkSize, serInstance)
-  } else {
-    new PartitionedPairBuffer[K, C]
+  private def newBuffer: () => WritablePartitionedPairCollection[K, C] with SizeTracker = {
+    val useSerializedPairBuffer =
+      ordering.isEmpty &&
+        conf.getBoolean("spark.shuffle.sort.serializeMapOutputs", true) &&
+        ser.supportsRelocationOfSerializedObjects
+    if (useSerializedPairBuffer) {
+      val kvChunkSize = conf.getInt("spark.shuffle.sort.kvChunkSize", 1 << 22) // 4 MB
+      () => new PartitionedSerializedPairBuffer(metaInitialRecords = 256, kvChunkSize, serInstance)
+    } else {
+      () => new PartitionedPairBuffer[K, C]
+    }
   }
+  private var map = new PartitionedAppendOnlyMap[K, C]
+  private var buffer = newBuffer()
 
   // Total spilling statistics
   private var _diskBytesSpilled = 0L
@@ -190,6 +192,7 @@ private[spark] class ExternalSorter[K, V, C](
     blockId: BlockId,
     serializerBatchSizes: Array[Long],
     elementsPerPartition: Array[Long])
+
   private val spills = new ArrayBuffer[SpilledFile]
 
   def insertAll(records: Iterator[_ <: Product2[K, V]]): Unit = {
@@ -246,11 +249,7 @@ private[spark] class ExternalSorter[K, V, C](
       }
     } else {
       if (maybeSpill(buffer, buffer.estimateSize())) {
-        buffer = if (useSerializedPairBuffer) {
-          new PartitionedSerializedPairBuffer[K, C](metaInitialRecords, kvChunkSize, serInstance)
-        } else {
-          new PartitionedPairBuffer[K, C]
-        }
+        buffer = newBuffer()
       }
     }
   }
