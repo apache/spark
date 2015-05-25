@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle.sort
 
-import org.apache.spark.{SparkEnv, Logging, TaskContext}
+import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleWriter, BaseShuffleHandle}
@@ -49,24 +49,18 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
-    val env = SparkEnv.get
-    val conf = env.conf
-    val bypassMergeThreshold = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
-    val bypassMergeSort = dep.partitioner.numPartitions <= bypassMergeThreshold &&
-      dep.aggregator.isEmpty && dep.keyOrdering.isEmpty
-
     sorter = if (dep.mapSideCombine) {
       require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
       new ExternalSorter[K, V, C](
         dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
-    } else if (bypassMergeSort) {
+    } else if (SortShuffleWriter.shouldBypassMergeSort(SparkEnv.get.conf, dep)) {
       // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't
       // need local aggregation and sorting, write numPartitions files directly and just concatenate
       // them at the end. This avoids doing serialization and deserialization twice to merge
       // together the spilled files, which would happen with the normal code path. The downside is
       // having multiple files open at a time and thus more memory allocated to buffers.
       new BypassMergeSortShuffleWriter[K, V](
-        conf, blockManager, dep.partitioner, writeMetrics, dep.serializer)
+        SparkEnv.get.conf, blockManager, dep.partitioner, writeMetrics, dep.serializer)
     } else {
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
       // care whether the keys get sorted in each partition; that will be done on the reduce side
@@ -110,5 +104,20 @@ private[spark] class SortShuffleWriter[K, V, C](
         sorter = null
       }
     }
+  }
+}
+
+private[spark] object SortShuffleWriter {
+  def shouldBypassMergeSort(conf: SparkConf, dep: ShuffleDependency[_, _, _]): Boolean = {
+    shouldBypassMergeSort(conf, dep.partitioner.numPartitions, dep.aggregator, dep.keyOrdering)
+  }
+
+  def shouldBypassMergeSort(
+      conf: SparkConf,
+      numPartitions: Int,
+      aggregator: Option[Aggregator[_, _, _]],
+      keyOrdering: Option[Ordering[_]]): Boolean = {
+    val bypassMergeThreshold: Int = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
+    numPartitions <= bypassMergeThreshold && aggregator.isEmpty && keyOrdering.isEmpty
   }
 }

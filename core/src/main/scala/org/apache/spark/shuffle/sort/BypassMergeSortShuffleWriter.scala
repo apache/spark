@@ -19,7 +19,7 @@ package org.apache.spark.shuffle.sort
 
 import java.io.{File, FileInputStream, FileOutputStream}
 
-import org.apache.spark.{Logging, Partitioner, SparkConf, TaskContext}
+import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, BlockManager, BlockObjectWriter}
