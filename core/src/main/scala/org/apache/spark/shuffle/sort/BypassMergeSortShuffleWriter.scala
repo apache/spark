@@ -105,7 +105,7 @@ private[spark] class BypassMergeSortShuffleWriter[K, V](
           } {
             in.close()
           }
-          if (blockManager.diskBlockManager.getFile(partitionWriters(i).blockId).delete()) {
+          if (!blockManager.diskBlockManager.getFile(partitionWriters(i).blockId).delete()) {
             logError("Unable to delete file for partition i. ")
           }
         }
