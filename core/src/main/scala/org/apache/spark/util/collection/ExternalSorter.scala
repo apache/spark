@@ -96,6 +96,8 @@ private[spark] class ExternalSorter[K, V, C](
   with Spillable[WritablePartitionedPairCollection[K, C]]
   with SortShuffleSorter[K, V] {
 
+  private val conf = SparkEnv.get.conf
+
   // The bypassMergeSort optimization is no longer performed as part of this class. As a sanity
   // check, make sure that we're not handling a shuffle which should have used that path:
   {
@@ -119,7 +121,6 @@ private[spark] class ExternalSorter[K, V, C](
   private val ser = Serializer.getSerializer(serializer)
   private val serInstance = ser.newInstance()
 
-  private val conf = SparkEnv.get.conf
   private val spillingEnabled = conf.getBoolean("spark.shuffle.spill", true)
   
   // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
