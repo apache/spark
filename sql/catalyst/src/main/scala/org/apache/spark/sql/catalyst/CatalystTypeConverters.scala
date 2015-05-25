@@ -272,46 +272,46 @@ object CatalystTypeConverters {
     }
   }
 
-  private object BooleanConverter extends CatalystTypeConverter[Boolean, Boolean, Boolean] {
+  private object BooleanConverter extends CatalystTypeConverter[Boolean, Any, Any] {
     override def toScalaImpl(row: Row, column: Int): Boolean = row.getBoolean(column)
-    override def toScala(catalystValue: Boolean): Boolean = catalystValue
-    override protected def toCatalystImpl(scalaValue: Boolean): Boolean = scalaValue
+    override def toScala(catalystValue: Any): Any = catalystValue
+    override def toCatalystImpl(scalaValue: Boolean): Boolean = scalaValue
   }
 
-  private object ByteConverter extends CatalystTypeConverter[Byte, Byte, Byte] {
+  private object ByteConverter extends CatalystTypeConverter[Byte, Any, Any] {
     override def toScalaImpl(row: Row, column: Int): Byte = row.getByte(column)
-    override def toScala(catalystValue: Byte): Byte = catalystValue
-    override protected def toCatalystImpl(scalaValue: Byte): Byte = scalaValue
+    override def toScala(catalystValue: Any): Any = catalystValue
+    override def toCatalystImpl(scalaValue: Byte): Byte = scalaValue
   }
 
-  private object ShortConverter extends CatalystTypeConverter[Short, Short, Short] {
+  private object ShortConverter extends CatalystTypeConverter[Short, Any, Any] {
     override def toScalaImpl(row: Row, column: Int): Short = row.getShort(column)
-    override def toScala(catalystValue: Short): Short = catalystValue
-    override protected def toCatalystImpl(scalaValue: Short): Short = scalaValue
+    override def toScala(catalystValue: Any): Any = catalystValue
+    override def toCatalystImpl(scalaValue: Short): Short = scalaValue
   }
 
-  private object IntConverter extends CatalystTypeConverter[Int, Int, Int] {
+  private object IntConverter extends CatalystTypeConverter[Int, Any, Any] {
     override def toScalaImpl(row: Row, column: Int): Int = row.getInt(column)
-    override def toScala(catalystValue: Int): Int = catalystValue
-    override protected def toCatalystImpl(scalaValue: Int): Int = scalaValue
+    override def toScala(catalystValue: Any): Any = catalystValue
+    override def toCatalystImpl(scalaValue: Int): Int = scalaValue
   }
 
-  private object LongConverter extends CatalystTypeConverter[Long, Long, Long] {
+  private object LongConverter extends CatalystTypeConverter[Long, Any, Any] {
     override def toScalaImpl(row: Row, column: Int): Long = row.getLong(column)
-    override def toScala(catalystValue: Long): Long = catalystValue
-    override protected def toCatalystImpl(scalaValue: Long): Long = scalaValue
+    override def toScala(catalystValue: Any): Any = catalystValue
+    override def toCatalystImpl(scalaValue: Long): Long = scalaValue
   }
 
-  private object FloatConverter extends CatalystTypeConverter[Float, Float, Float] {
+  private object FloatConverter extends CatalystTypeConverter[Float, Any, Any] {
     override def toScalaImpl(row: Row, column: Int): Float = row.getFloat(column)
-    override def toScala(catalystValue: Float): Float = catalystValue
-    override protected def toCatalystImpl(scalaValue: Float): Float = scalaValue
+    override def toScala(catalystValue: Any): Any = catalystValue
+    override def toCatalystImpl(scalaValue: Float): Float = scalaValue
   }
 
-  private object DoubleConverter extends CatalystTypeConverter[Double, Double, Double] {
+  private object DoubleConverter extends CatalystTypeConverter[Double, Any, Any] {
     override def toScalaImpl(row: Row, column: Int): Double = row.getDouble(column)
-    override def toScala(catalystValue: Double): Double = catalystValue
-    override protected def toCatalystImpl(scalaValue: Double): Double = scalaValue
+    override def toScala(catalystValue: Any): Any = catalystValue
+    override def toCatalystImpl(scalaValue: Double): Double = scalaValue
   }
 
   /**
