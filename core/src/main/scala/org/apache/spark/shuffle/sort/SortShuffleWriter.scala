@@ -65,7 +65,8 @@ private[spark] class SortShuffleWriter[K, V, C](
       // them at the end. This avoids doing serialization and deserialization twice to merge
       // together the spilled files, which would happen with the normal code path. The downside is
       // having multiple files open at a time and thus more memory allocated to buffers.
-      new BypassMergeSortShuffleWriter[K, V](conf, blockManager, dep.partitioner, dep.serializer)
+      new BypassMergeSortShuffleWriter[K, V](
+        conf, blockManager, dep.partitioner, writeMetrics, dep.serializer)
     } else {
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
       // care whether the keys get sorted in each partition; that will be done on the reduce side

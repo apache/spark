@@ -119,10 +119,6 @@ private[spark] class PartitionedSerializedPairBuffer[K, V](
   override def destructiveSortedWritablePartitionedIterator(keyComparator: Option[Comparator[K]])
     : WritablePartitionedIterator = {
     sort(keyComparator)
-    writablePartitionedIterator
-  }
-
-  override def writablePartitionedIterator(): WritablePartitionedIterator = {
     new WritablePartitionedIterator {
       // current position in the meta buffer in ints
       var pos = 0
