@@ -406,7 +406,11 @@ class LogisticRegressionWithLBFGS
           df.unpersist()
         }
         // convert the model
-        createModel(mlLogisticRegresionModel.weights, mlLogisticRegresionModel.intercept)
+        val weights = mlLogisticRegresionModel.weights match {
+          case x: DenseVector => x
+          case y: Vector => Vectors.dense(y.toArray)
+        }
+        createModel(weights, mlLogisticRegresionModel.intercept)
       }
       optimizer.getUpdater() match {
         case x: SquaredL2Updater => runWithMlLogisitcRegression(1.0)
