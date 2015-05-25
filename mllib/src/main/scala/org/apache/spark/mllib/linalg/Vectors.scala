@@ -594,7 +594,7 @@ class DenseVector(val values: Array[Double]) extends Vector {
     new SparseVector(size, ii, vv)
   }
 
-  def argmax: Int = {
+  override def argmax: Int = {
     if (size == 0) {
       -1
     } else {
@@ -726,17 +726,42 @@ class SparseVector(
     } else {
 
       var maxIdx = 0
-      var maxValue = if(indices(0) != 0) 0 else values(0)
+      var maxValue = if(indices(0) != 0) 0.0 else values(0)
 
       foreachActive { (i, v) =>
-        if(v > maxValue){
+        if (v > maxValue) {
           maxIdx = i
           maxValue = v
         }
       }
+
+      // look for inactive values incase all active node values are negative
+      if(size != values.size && maxValue < 0){
+        maxIdx = calcInactiveIdx(indices(0))
+        maxValue = 0
+      }
       maxIdx
     }
   }
+
+  /**
+   * Calculates the first instance of an inactive node in a sparse vector and returns the Idx
+   * of the element.
+   * @param idx starting index of computation
+   * @return index of first inactive node or -1 if it cannot find one
+   */
+  private[SparseVector] def calcInactiveIdx(idx: Int): Int ={
+    if(idx < size){
+      if(!indices.contains(idx)){
+        idx
+      }else{
+        calcInactiveIdx(idx+1)
+      }
+    }else{
+      -1
+    }
+  }
+
 }
 
 object SparseVector {
