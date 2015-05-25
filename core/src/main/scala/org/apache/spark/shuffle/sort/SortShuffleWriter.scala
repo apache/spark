@@ -17,8 +17,6 @@
 
 package org.apache.spark.shuffle.sort
 
-import scala.util.control.NonFatal
-
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
@@ -77,13 +75,7 @@ private[spark] class SortShuffleWriter[K, V, C](
     // (see SPARK-3570).
     val outputFile = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
     val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
-    val partitionLengths = try {
-      sorter.writePartitionedFile(blockId, context, outputFile)
-    } catch {
-      case NonFatal(e) =>
-        outputFile.delete()
-        throw e
-    }
+    val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile)
     shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
 
     mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
