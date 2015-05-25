@@ -30,7 +30,7 @@ import org.apache.spark._
 import org.apache.spark.serializer._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.shuffle.sort.SortShuffleSorter
-import org.apache.spark.storage.{BlockObjectWriter, BlockId}
+import org.apache.spark.storage.BlockId
 
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner

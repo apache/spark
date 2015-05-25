@@ -47,17 +47,6 @@ private[spark] class BypassMergeSortShuffleWriter[K, V](
   extends Logging with SortShuffleSorter[K, V] {
 
   private[this] val numPartitions = partitioner.numPartitions
-  private[this] val shouldPartition = numPartitions > 1
-  private def getPartition(key: K): Int = {
-    if (shouldPartition) partitioner.getPartition(key) else 0
-  }
-
-  // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
-  private val fileBufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
-  private val transferToEnabled = conf.getBoolean("spark.file.transferTo", true)
-
-  private val ser = Serializer.getSerializer(serializer)
-  private val serInstance = ser.newInstance()
 
   /** Array of file writers for each partition */
   private var partitionWriters: Array[BlockObjectWriter] = _
@@ -65,6 +54,9 @@ private[spark] class BypassMergeSortShuffleWriter[K, V](
   def insertAll(records: Iterator[_ <: Product2[K, V]]): Unit = {
     assert (partitionWriters == null)
     if (records.hasNext) {
+      val serInstance = Serializer.getSerializer(serializer).newInstance()
+      // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
+      val fileBufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
       val openStartTime = System.nanoTime
       partitionWriters = Array.fill(numPartitions) {
         val (blockId, file) = blockManager.diskBlockManager.createTempShuffleBlock()
@@ -80,7 +72,7 @@ private[spark] class BypassMergeSortShuffleWriter[K, V](
       while (records.hasNext) {
         val record = records.next()
         val key: K = record._1
-        partitionWriters(getPartition(key)).write(key, record._2)
+        partitionWriters(partitioner.getPartition(key)).write(key, record._2)
       }
     }
   }
@@ -94,19 +86,15 @@ private[spark] class BypassMergeSortShuffleWriter[K, V](
    * @param context a TaskContext for a running Spark task, for us to update shuffle metrics.
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
    */
-  def writePartitionedFile(
-    blockId: BlockId,
-    context: TaskContext,
-    outputFile: File): Array[Long] = {
+  def writePartitionedFile(blockId: BlockId, context: TaskContext, file: File): Array[Long] = {
+    // TODO: handle case where partition writers is null (e.g. we haven't written any data).
+    partitionWriters.foreach(_.commitAndClose())
 
     // Track location of each range in the output file
     val lengths = new Array[Long](numPartitions)
 
-    // TODO: handle case where partition writers is null (e.g. we haven't written any data).
-
-    partitionWriters.foreach(_.commitAndClose())
-    // Concatenate the per-partition files.
-    val out = new FileOutputStream(outputFile, true)
+    val transferToEnabled = conf.getBoolean("spark.file.transferTo", true)
+    val out = new FileOutputStream(file, true)
     val writeStartTime = System.nanoTime
     Utils.tryWithSafeFinally {
       for (i <- 0 until numPartitions) {
@@ -122,7 +110,7 @@ private[spark] class BypassMergeSortShuffleWriter[K, V](
       }
     } {
       out.close()
-      context.taskMetrics.shuffleWriteMetrics.foreach { m =>
+      context.taskMetrics().shuffleWriteMetrics.foreach { m =>
         m.incShuffleWriteTime(System.nanoTime - writeStartTime)
       }
     }
