@@ -41,7 +41,7 @@ private[spark] class BypassMergeSortShuffleWriter[K, V](
     blockManager: BlockManager,
     partitioner: Partitioner,
     writeMetrics: ShuffleWriteMetrics,
-    serializer: Option[Serializer] = None)
+    serializer: Serializer)
   extends Logging with SortShuffleSorter[K, V] {
 
   private[this] val numPartitions = partitioner.numPartitions
@@ -52,7 +52,7 @@ private[spark] class BypassMergeSortShuffleWriter[K, V](
   def insertAll(records: Iterator[_ <: Product2[K, V]]): Unit = {
     assert (partitionWriters == null)
     if (records.hasNext) {
-      val serInstance = Serializer.getSerializer(serializer).newInstance()
+      val serInstance = serializer.newInstance()
       // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
       val fileBufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
       val openStartTime = System.nanoTime
@@ -85,35 +85,39 @@ private[spark] class BypassMergeSortShuffleWriter[K, V](
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
    */
   def writePartitionedFile(blockId: BlockId, context: TaskContext, file: File): Array[Long] = {
-    // TODO: handle case where partition writers is null (e.g. we haven't written any data).
-    partitionWriters.foreach(_.commitAndClose())
+    if (partitionWriters == null) {
+      // We were passed an empty iterator
+      Array.fill(numPartitions)(0L)
+    } else {
+      partitionWriters.foreach(_.commitAndClose())
 
-    // Track location of each range in the output file
-    val lengths = new Array[Long](numPartitions)
+      // Track location of each range in the output file
+      val lengths = new Array[Long](numPartitions)
 
-    val transferToEnabled = conf.getBoolean("spark.file.transferTo", true)
-    val out = new FileOutputStream(file, true)
-    val writeStartTime = System.nanoTime
-    Utils.tryWithSafeFinally {
-      for (i <- 0 until numPartitions) {
-        val in = new FileInputStream(partitionWriters(i).fileSegment().file)
-        Utils.tryWithSafeFinally {
-          lengths(i) = Utils.copyStream(in, out, closeStreams = false, transferToEnabled)
-        } {
-          in.close()
+      val transferToEnabled = conf.getBoolean("spark.file.transferTo", true)
+      val out = new FileOutputStream(file, true)
+      val writeStartTime = System.nanoTime
+      Utils.tryWithSafeFinally {
+        for (i <- 0 until numPartitions) {
+          val in = new FileInputStream(partitionWriters(i).fileSegment().file)
+          Utils.tryWithSafeFinally {
+            lengths(i) = Utils.copyStream(in, out, closeStreams = false, transferToEnabled)
+          } {
+            in.close()
+          }
+          if (blockManager.diskBlockManager.getFile(partitionWriters(i).blockId).delete()) {
+            logError("Unable to delete file for partition i. ")
+          }
         }
-        if (blockManager.diskBlockManager.getFile(partitionWriters(i).blockId).delete()) {
-          logError("Unable to delete file for partition i. ")
+      } {
+        out.close()
+        context.taskMetrics().shuffleWriteMetrics.foreach { m =>
+          m.incShuffleWriteTime(System.nanoTime - writeStartTime)
         }
       }
-    } {
-      out.close()
-      context.taskMetrics().shuffleWriteMetrics.foreach { m =>
-        m.incShuffleWriteTime(System.nanoTime - writeStartTime)
-      }
+
+      lengths
     }
-
-    lengths
   }
 
   def stop(): Unit = {
