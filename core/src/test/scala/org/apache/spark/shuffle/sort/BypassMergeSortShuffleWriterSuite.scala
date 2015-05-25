@@ -127,7 +127,8 @@ class BypassMergeSortShuffleWriterSuite extends FunSuite with BeforeAndAfterEach
   }
 
   test("write with some empty partitions") {
-    def records = Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))
+    def records: Iterator[(Int, Int)] = 
+      Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))
     val writer = new BypassMergeSortShuffleWriter[Int, Int](
       new SparkConf(loadDefaults = false),
       blockManager,
