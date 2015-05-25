@@ -147,6 +147,7 @@ private[spark] class ExternalSorter[K, V, C](
 
   // Total spilling statistics
   private var _diskBytesSpilled = 0L
+  def diskBytesSpilled: Long = _diskBytesSpilled
 
   // Write metrics for current spill
   private var curWriteMetrics: ShuffleWriteMetrics = _
@@ -817,8 +818,6 @@ private[spark] class ExternalSorter[K, V, C](
       partitionWriters = null
     }
   }
-
-  def diskBytesSpilled: Long = _diskBytesSpilled
 
   /**
    * Given a stream of ((partition, key), combiner) pairs *assumed to be sorted by partition ID*,
