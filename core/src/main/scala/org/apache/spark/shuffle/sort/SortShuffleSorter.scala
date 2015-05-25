@@ -17,13 +17,14 @@
 
 package org.apache.spark.shuffle.sort
 
-import java.io.File
+import java.io.{IOException, File}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.storage.BlockId
 
-trait SortShuffleSorter[K, V] {
+private[spark] trait SortShuffleSorter[K, V] {
 
+  @throws[IOException]
   def insertAll(records: Iterator[_ <: Product2[K, V]]): Unit
 
   /**
@@ -35,10 +36,12 @@ trait SortShuffleSorter[K, V] {
    * @param context a TaskContext for a running Spark task, for us to update shuffle metrics.
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
    */
+  @throws[IOException]
   def writePartitionedFile(
     blockId: BlockId,
     context: TaskContext,
     outputFile: File): Array[Long]
 
+  @throws[IOException]
   def stop(): Unit
 }
