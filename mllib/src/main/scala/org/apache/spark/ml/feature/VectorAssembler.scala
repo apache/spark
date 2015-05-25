@@ -78,8 +78,7 @@ class VectorAssembler(override val uid: String)
   }
 }
 
-@AlphaComponent
-object VectorAssembler {
+private object VectorAssembler {
 
   private[feature] def assemble(vv: Any*): Vector = {
     val indices = ArrayBuilder.make[Int]

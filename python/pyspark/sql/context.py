@@ -585,8 +585,6 @@ class SQLContext(object):
         Returns a :class:`DataFrameReader` that can be used to read data
         in as a :class:`DataFrame`.
 
-        .. note:: Experimental
-
         >>> sqlContext.read
         <pyspark.sql.readwriter.DataFrameReader object at ...>
         """

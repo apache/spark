@@ -69,6 +69,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
 
+    // If this DriverEndpoint is changed to support multiple threads,
+    // then this may need to be changed so that we don't share the serializer
+    // instance across threads
+    private val ser = SparkEnv.get.closureSerializer.newInstance()
+
     override protected def log = CoarseGrainedSchedulerBackend.this.log
 
     private val addressToExecutorId = new HashMap[RpcAddress, String]
@@ -163,7 +168,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     // Make fake resource offers on all executors
-    def makeOffers() {
+    private def makeOffers() {
       launchTasks(scheduler.resourceOffers(executorDataMap.map { case (id, executorData) =>
         new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
       }.toSeq))
@@ -175,16 +180,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     // Make fake resource offers on just one executor
-    def makeOffers(executorId: String) {
+    private def makeOffers(executorId: String) {
       val executorData = executorDataMap(executorId)
       launchTasks(scheduler.resourceOffers(
         Seq(new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))))
     }
 
     // Launch tasks returned by a set of resource offers
-    def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
+    private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
-        val ser = SparkEnv.get.closureSerializer.newInstance()
         val serializedTask = ser.serialize(task)
         if (serializedTask.limit >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
           val taskSetId = scheduler.taskIdToTaskSetId(task.taskId)

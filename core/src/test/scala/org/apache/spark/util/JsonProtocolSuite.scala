@@ -75,10 +75,12 @@ class JsonProtocolSuite extends FunSuite {
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
       BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
+    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val applicationStart = SparkListenerApplicationStart("The winner of all", Some("appId"),
       42L, "Garfield", Some("appAttempt"))
+    val applicationStartWithLogs = SparkListenerApplicationStart("The winner of all", Some("appId"),
+      42L, "Garfield", Some("appAttempt"), Some(logUrlMap))
     val applicationEnd = SparkListenerApplicationEnd(42L)
-    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
@@ -97,6 +99,7 @@ class JsonProtocolSuite extends FunSuite {
     testEvent(blockManagerRemoved, blockManagerRemovedJsonString)
     testEvent(unpersistRdd, unpersistRDDJsonString)
     testEvent(applicationStart, applicationStartJsonString)
+    testEvent(applicationStartWithLogs, applicationStartJsonWithLogUrlsString)
     testEvent(applicationEnd, applicationEndJsonString)
     testEvent(executorAdded, executorAddedJsonString)
     testEvent(executorRemoved, executorRemovedJsonString)
@@ -277,10 +280,12 @@ class JsonProtocolSuite extends FunSuite {
   test("SparkListenerApplicationStart backwards compatibility") {
     // SparkListenerApplicationStart in Spark 1.0.0 do not have an "appId" property.
     // SparkListenerApplicationStart pre-Spark 1.4 does not have "appAttemptId".
-    val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user", None)
+    // SparkListenerApplicationStart pre-Spark 1.5 does not have "driverLogs
+    val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user", None, None)
     val oldEvent = JsonProtocol.applicationStartToJson(applicationStart)
       .removeField({ _._1 == "App ID" })
       .removeField({ _._1 == "App Attempt ID" })
+      .removeField({ _._1 == "Driver Logs"})
     assert(applicationStart === JsonProtocol.applicationStartFromJson(oldEvent))
   }
 
@@ -1541,6 +1546,22 @@ class JsonProtocolSuite extends FunSuite {
       |  "Timestamp": 42,
       |  "User": "Garfield",
       |  "App Attempt ID": "appAttempt"
+      |}
+    """
+
+  private val applicationStartJsonWithLogUrlsString =
+    """
+      |{
+      |  "Event": "SparkListenerApplicationStart",
+      |  "App Name": "The winner of all",
+      |  "App ID": "appId",
+      |  "Timestamp": 42,
+      |  "User": "Garfield",
+      |  "App Attempt ID": "appAttempt",
+      |  "Driver Logs" : {
+      |      "stderr" : "mystderr",
+      |      "stdout" : "mystdout"
+      |  }
       |}
     """
 
