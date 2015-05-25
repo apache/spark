@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.io.{ObjectInputStream, IOException}
+
 import scala.collection.Map
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, trees}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * An expression that produces zero or more rows given a single input row.
@@ -71,11 +74,24 @@ case class UserDefinedGenerator(
     children: Seq[Expression])
   extends Generator {
 
-  private[this] val inputRow: InterpretedProjection = new InterpretedProjection(children)
-  private[this] val convertToScala: (Row) => Row = {
-    val inputSchema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
-    CatalystTypeConverters.createToScalaConverter(inputSchema)
-  }.asInstanceOf[(Row => Row)]
+  @transient private[this] var inputRow: InterpretedProjection = _
+  @transient private[this] var convertToScala: (Row) => Row = _
+
+  private def initializeConverters(): Unit = {
+    inputRow = new InterpretedProjection(children)
+    convertToScala = {
+      val inputSchema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
+      CatalystTypeConverters.createToScalaConverter(inputSchema)
+    }.asInstanceOf[(Row => Row)]
+  }
+
+  initializeConverters()
+
+  @throws(classOf[IOException])
+  private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
+    ois.defaultReadObject()
+    initializeConverters()
+  }
 
   override def eval(input: Row): TraversableOnce[Row] = {
     // TODO(davies): improve this
