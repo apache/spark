@@ -696,16 +696,6 @@ private[spark] class ExternalSorter[K, V, C](
     lengths
   }
 
-  /**
-   * Read a partition file back as an iterator (used in our iterator method)
-   */
-  private def readPartitionFile(writer: BlockObjectWriter): Iterator[Product2[K, C]] = {
-    if (writer.isOpen) {
-      writer.commitAndClose()
-    }
-    new PairIterator[K, C](blockManager.diskStore.getValues(writer.blockId, ser).get)
-  }
-
   def stop(): Unit = {
     spills.foreach(s => s.file.delete())
     spills.clear()
