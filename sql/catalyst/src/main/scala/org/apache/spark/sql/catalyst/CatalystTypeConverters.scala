@@ -37,7 +37,7 @@ object CatalystTypeConverters {
   // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
   import scala.collection.Map
 
-  private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any] = {
+  private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
     val converter = dataType match {
       case udt: UserDefinedType[_] => UDTConverter(udt)
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
@@ -55,13 +55,18 @@ object CatalystTypeConverters {
       case DoubleType => DoubleConverter
       case _ => IdentityConverter
     }
-    converter.asInstanceOf[CatalystTypeConverter[Any, Any]]
+    converter.asInstanceOf[CatalystTypeConverter[Any, Any, Any]]
   }
 
   /**
    * Converts a Scala type to its Catalyst equivalent (and vice versa).
+   *
+   * @tparam ScalaInputType The type of Scala values that can be converted to Catalyst.
+   * @tparam ScalaOutputType The type of Scala values returned when converting Catalyst to Scala.
+   * @tparam CatalystType The internal Catalyst type used to represent values of this Scala type.
    */
-  private abstract class CatalystTypeConverter[ScalaType, CatalystType] extends Serializable {
+  private abstract class CatalystTypeConverter[ScalaInputType, ScalaOutputType, CatalystType]
+    extends Serializable {
 
     /**
      * Converts a Scala type to its Catalyst equivalent while automatically handling nulls
@@ -69,67 +74,59 @@ object CatalystTypeConverters {
      */
     final def toCatalyst(@Nullable maybeScalaValue: Any): CatalystType = {
       maybeScalaValue match {
-        case opt: Option[ScalaType] =>
+        case opt: Option[ScalaInputType] =>
           if (opt.isDefined) {
             toCatalystImpl(opt.get)
           } else {
             null.asInstanceOf[CatalystType]
           }
         case null => null.asInstanceOf[CatalystType]
-        case scalaValue: ScalaType => toCatalystImpl(scalaValue)
+        case scalaValue: ScalaInputType => toCatalystImpl(scalaValue)
       }
     }
 
     /**
      * Given a Catalyst row, convert the value at column `column` to its Scala equivalent.
      */
-    final def toScala(row: Row, column: Int): Any = {
-      if (row.isNullAt(column)) null else toScalaImpl(row, column)
+    final def toScala(row: Row, column: Int): ScalaOutputType = {
+      if (row.isNullAt(column)) null.asInstanceOf[ScalaOutputType] else toScalaImpl(row, column)
     }
 
     /**
      * Convert a Catalyst value to its Scala equivalent.
      */
-    def toScala(@Nullable catalystValue: CatalystType): ScalaType
+    def toScala(@Nullable catalystValue: CatalystType): ScalaOutputType
 
     /**
      * Converts a Scala value to its Catalyst equivalent.
      * @param scalaValue the Scala value, guaranteed not to be null.
      * @return the Catalyst value.
      */
-    protected def toCatalystImpl(scalaValue: ScalaType): CatalystType
+    protected def toCatalystImpl(scalaValue: ScalaInputType): CatalystType
 
     /**
      * Given a Catalyst row, convert the value at column `column` to its Scala equivalent.
      * This method will only be called on non-null columns.
      */
-    protected def toScalaImpl(row: Row, column: Int): ScalaType
+    protected def toScalaImpl(row: Row, column: Int): ScalaOutputType
   }
 
-  /**
-   * Convenience wrapper to write type converters for primitives. We use a converter for primitives
-   * so that we can use type-specific field accessors when converting Catalyst rows to Scala rows.
-   */
-  private abstract class PrimitiveCatalystTypeConverter[T] extends CatalystTypeConverter[T, T] {
-    override final def toScala(catalystValue: T): T = catalystValue
-    override final def toCatalystImpl(scalaValue: T): T = scalaValue
-  }
-
-  private object IdentityConverter extends CatalystTypeConverter[Any, Any] {
+  private object IdentityConverter extends CatalystTypeConverter[Any, Any, Any] {
     override def toCatalystImpl(scalaValue: Any): Any = scalaValue
     override def toScala(catalystValue: Any): Any = catalystValue
     override def toScalaImpl(row: Row, column: Int): Any = row(column)
   }
 
-  private case class UDTConverter(udt: UserDefinedType[_]) extends CatalystTypeConverter[Any, Any] {
+  private case class UDTConverter(
+      udt: UserDefinedType[_]) extends CatalystTypeConverter[Any, Any, Any] {
     override def toCatalystImpl(scalaValue: Any): Any = udt.serialize(scalaValue)
     override def toScala(catalystValue: Any): Any = udt.deserialize(catalystValue)
     override def toScalaImpl(row: Row, column: Int): Any = toScala(row(column))
   }
 
-  // Converter for array, seq, iterables.
+  /** Converter for arrays, sequences, and Java iterables. */
   private case class ArrayConverter(
-      elementType: DataType) extends CatalystTypeConverter[Any, Seq[Any]] {
+      elementType: DataType) extends CatalystTypeConverter[Any, Seq[Any], Seq[Any]] {
 
     private[this] val elementConverter = getConverterForType(elementType)
 
@@ -162,8 +159,8 @@ object CatalystTypeConverters {
 
   private case class MapConverter(
       keyType: DataType,
-      valueType: DataType
-    ) extends CatalystTypeConverter[Any, Map[Any, Any]] {
+      valueType: DataType)
+    extends CatalystTypeConverter[Any, Map[Any, Any], Map[Any, Any]] {
 
     private[this] val keyConverter = getConverterForType(keyType)
     private[this] val valueConverter = getConverterForType(valueType)
@@ -200,7 +197,7 @@ object CatalystTypeConverters {
   }
 
   private case class StructConverter(
-      structType: StructType) extends CatalystTypeConverter[Any, Row] {
+      structType: StructType) extends CatalystTypeConverter[Any, Row, Row] {
 
     private[this] val converters = structType.fields.map { f => getConverterForType(f.dataType) }
 
@@ -242,7 +239,7 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: Row, column: Int): Row = toScala(row(column).asInstanceOf[Row])
   }
 
-  private object StringConverter extends CatalystTypeConverter[Any, Any] {
+  private object StringConverter extends CatalystTypeConverter[Any, String, Any] {
     override def toCatalystImpl(scalaValue: Any): UTF8String = scalaValue match {
       case str: String => UTF8String(str)
       case utf8: UTF8String => utf8
@@ -255,14 +252,14 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: Row, column: Int): String = row(column).toString
   }
 
-  private object DateConverter extends CatalystTypeConverter[Date, Any] {
+  private object DateConverter extends CatalystTypeConverter[Date, Date, Any] {
     override def toCatalystImpl(scalaValue: Date): Int = DateUtils.fromJavaDate(scalaValue)
     override def toScala(catalystValue: Any): Date =
       if (catalystValue == null) null else DateUtils.toJavaDate(catalystValue.asInstanceOf[Int])
     override def toScalaImpl(row: Row, column: Int): Date = toScala(row.getInt(column))
   }
 
-  private object BigDecimalConverter extends CatalystTypeConverter[Any, Decimal] {
+  private object BigDecimalConverter extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
     override def toCatalystImpl(scalaValue: Any): Decimal = scalaValue match {
       case d: BigDecimal => Decimal(d)
       case d: JavaBigDecimal => Decimal(d)
@@ -275,32 +272,46 @@ object CatalystTypeConverters {
     }
   }
 
-  private object BooleanConverter extends PrimitiveCatalystTypeConverter[Boolean] {
+  private object BooleanConverter extends CatalystTypeConverter[Boolean, Boolean, Boolean] {
     override def toScalaImpl(row: Row, column: Int): Boolean = row.getBoolean(column)
+    override def toScala(catalystValue: Boolean): Boolean = catalystValue
+    override protected def toCatalystImpl(scalaValue: Boolean): Boolean = scalaValue
   }
 
-  private object ByteConverter extends PrimitiveCatalystTypeConverter[Byte] {
+  private object ByteConverter extends CatalystTypeConverter[Byte, Byte, Byte] {
     override def toScalaImpl(row: Row, column: Int): Byte = row.getByte(column)
+    override def toScala(catalystValue: Byte): Byte = catalystValue
+    override protected def toCatalystImpl(scalaValue: Byte): Byte = scalaValue
   }
 
-  private object ShortConverter extends PrimitiveCatalystTypeConverter[Short] {
+  private object ShortConverter extends CatalystTypeConverter[Short, Short, Short] {
     override def toScalaImpl(row: Row, column: Int): Short = row.getShort(column)
+    override def toScala(catalystValue: Short): Short = catalystValue
+    override protected def toCatalystImpl(scalaValue: Short): Short = scalaValue
   }
 
-  private object IntConverter extends PrimitiveCatalystTypeConverter[Int] {
+  private object IntConverter extends CatalystTypeConverter[Int, Int, Int] {
     override def toScalaImpl(row: Row, column: Int): Int = row.getInt(column)
+    override def toScala(catalystValue: Int): Int = catalystValue
+    override protected def toCatalystImpl(scalaValue: Int): Int = scalaValue
   }
 
-  private object LongConverter extends PrimitiveCatalystTypeConverter[Long] {
+  private object LongConverter extends CatalystTypeConverter[Long, Long, Long] {
     override def toScalaImpl(row: Row, column: Int): Long = row.getLong(column)
+    override def toScala(catalystValue: Long): Long = catalystValue
+    override protected def toCatalystImpl(scalaValue: Long): Long = scalaValue
   }
 
-  private object FloatConverter extends PrimitiveCatalystTypeConverter[Float] {
+  private object FloatConverter extends CatalystTypeConverter[Float, Float, Float] {
     override def toScalaImpl(row: Row, column: Int): Float = row.getFloat(column)
+    override def toScala(catalystValue: Float): Float = catalystValue
+    override protected def toCatalystImpl(scalaValue: Float): Float = scalaValue
   }
 
-  private object DoubleConverter extends PrimitiveCatalystTypeConverter[Double] {
+  private object DoubleConverter extends CatalystTypeConverter[Double, Double, Double] {
     override def toScalaImpl(row: Row, column: Int): Double = row.getDouble(column)
+    override def toScala(catalystValue: Double): Double = catalystValue
+    override protected def toCatalystImpl(scalaValue: Double): Double = scalaValue
   }
 
   /**
