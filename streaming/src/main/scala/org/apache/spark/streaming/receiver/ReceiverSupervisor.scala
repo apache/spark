@@ -141,16 +141,17 @@ private[streaming] abstract class ReceiverSupervisor(
   def stopReceiver(message: String, error: Option[Throwable]): Unit = synchronized {
     try {
       logInfo("Stopping receiver with message: " + message + ": " + error.getOrElse(""))
-      if (receiverState == Started) {
-        receiverState = Stopped
-        receiver.onStop()
-      } else {
-        // "receiver.onStart()" is not called. So we should not call "receiver.onStop()"
-        receiverState = Stopped
+      receiverState match {
+        case Initialized =>
+          logWarning("Skip stopping receiver because it has not yet stared")
+        case Started =>
+          receiverState = Stopped
+          receiver.onStop()
+          logInfo("Called receiver onStop")
+          onReceiverStop(message, error)
+        case Stopped =>
+          logWarning("Receiver has been stopped")
       }
-      receiver.onStop()
-      logInfo("Called receiver onStop")
-      onReceiverStop(message, error)
     } catch {
       case NonFatal(t) =>
         logError("Error stopping receiver " + streamId + t.getStackTraceString)
