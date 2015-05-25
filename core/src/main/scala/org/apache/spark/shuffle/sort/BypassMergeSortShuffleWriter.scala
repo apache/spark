@@ -19,24 +19,22 @@ package org.apache.spark.shuffle.sort
 
 import java.io.{File, FileInputStream, FileOutputStream}
 
+import org.apache.spark.{Logging, Partitioner, SparkConf, TaskContext}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, BlockManager, BlockObjectWriter}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection._
-import org.apache.spark.{Logging, Partitioner, SparkConf, TaskContext}
-
 
 /**
- * This class handles the `bypassMergeSort` sort-shuffle write path. This path used to be part of
- * [[ExternalSorter]]. Here is its original documentation:
+ * This class handles sort-based shuffle's `bypassMergeSort` write path, which is used for shuffles
+ * for which no Ordering and no Aggregator is given and the number of partitions is
+ * less than `spark.shuffle.sort.bypassMergeThreshold`.
  *
- * As a special case, if no Ordering and no Aggregator is given, and the number of partitions is
- * less than spark.shuffle.sort.bypassMergeThreshold, we bypass the merge-sort and just write to
- * separate files for each partition each time we spill, similar to the HashShuffleWriter. We can
- * then concatenate these files to produce a single sorted file, without having to serialize and
- * de-serialize each item twice (as is needed during the merge). This speeds up the map side of
- * groupBy, sort, etc operations since they do no partial aggregation.
+ * This path used to be part of [[ExternalSorter]] but was refactored into its own class in order to
+ * reduce code complexity; see SPARK-7855 for more details.
+ *
+ * There have been proposals to completely remove this code path; see SPARK-6026 for details.
  */
 private[spark] class BypassMergeSortShuffleWriter[K, V](
     conf: SparkConf,
@@ -49,7 +47,7 @@ private[spark] class BypassMergeSortShuffleWriter[K, V](
   private[this] val numPartitions = partitioner.numPartitions
 
   /** Array of file writers for each partition */
-  private var partitionWriters: Array[BlockObjectWriter] = _
+  private[this] var partitionWriters: Array[BlockObjectWriter] = _
 
   def insertAll(records: Iterator[_ <: Product2[K, V]]): Unit = {
     assert (partitionWriters == null)

@@ -26,7 +26,7 @@ trait SortShuffleSorter[K, V] {
 
   def insertAll(records: Iterator[_ <: Product2[K, V]]): Unit
 
-    /**
+  /**
    * Write all the data added into this shuffle sorter into a file in the disk store. This is
    * called by the SortShuffleWriter and can go through an efficient path of just concatenating
    * binary files if we decided to avoid merge-sorting.
