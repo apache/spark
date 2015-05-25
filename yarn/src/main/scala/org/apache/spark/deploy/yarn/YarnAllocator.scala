@@ -267,13 +267,25 @@ private[yarn] class YarnAllocator(
    */
   private def createContainerRequest(resource: Resource): ContainerRequest = {
     // filter nodes which don't have containers but node preference is required.
-    val nodes = preferredNodeLocationToUses.filterKeys(_ == false).keys.toArray
+    val nodes = {
+      val unusedNodes = preferredNodeLocationToUses.filterKeys(_ == false).keys
+      if (unusedNodes.isEmpty) {
+        null
+      } else {
+        unusedNodes.toArray
+      }
+    }
+
+    val racks = if (preferredRackLocations.isEmpty) {
+      null
+    } else {
+      preferredRackLocations.toArray
+    }
 
     nodeLabelConstructor.map { constructor =>
-      constructor.newInstance(resource, nodes, preferredRackLocations.toArray, RM_REQUEST_PRIORITY,
-        true: java.lang.Boolean, labelExpression.orNull)
-    }.getOrElse(new ContainerRequest(resource, nodes, preferredRackLocations.toArray,
-      RM_REQUEST_PRIORITY))
+      constructor.newInstance(resource, nodes, racks, RM_REQUEST_PRIORITY, true: java.lang.Boolean,
+        labelExpression.orNull)
+    }.getOrElse(new ContainerRequest(resource, nodes, racks, RM_REQUEST_PRIORITY))
   }
 
   /**
@@ -290,7 +302,7 @@ private[yarn] class YarnAllocator(
     // Match incoming requests by host
     val remainingAfterHostMatches = new ArrayBuffer[Container]
     for (allocatedContainer <- allocatedContainers) {
-      matchNodeLocalityContainerToRequest(allocatedContainer, allocatedContainer.getNodeId.getHost,
+      matchContainerToRequest(allocatedContainer, allocatedContainer.getNodeId.getHost,
         containersToUse, remainingAfterHostMatches)
     }
 
@@ -298,7 +310,7 @@ private[yarn] class YarnAllocator(
     val remainingAfterRackMatches = new ArrayBuffer[Container]
     for (allocatedContainer <- remainingAfterHostMatches) {
       val rack = RackResolver.resolve(conf, allocatedContainer.getNodeId.getHost).getNetworkLocation
-      matchRackLocalityContainerToRequest(allocatedContainer, rack, containersToUse,
+      matchContainerToRequest(allocatedContainer, rack, containersToUse,
         remainingAfterRackMatches)
     }
 
@@ -314,6 +326,21 @@ private[yarn] class YarnAllocator(
         s"allocated to us")
       for (container <- remainingAfterOffRackMatches) {
         internalReleaseContainer(container)
+      }
+    }
+
+    // Marking all the valid containers where preferred locality is matched to true,
+    // to avoid allocate several containers on the same node and increase the coverage of all the
+    // preferred node localities.
+    containersToUse.foreach { container =>
+      val location = container.getNodeId.getHost
+      if (preferredNodeLocationToUses.contains(location)) {
+        val isHostUsed = preferredNodeLocationToUses(location)
+        if (isHostUsed) {
+          logDebug(s"Create a container on host $location where already has a container")
+        } else {
+          preferredNodeLocationToUses(location) = true
+        }
       }
     }
 
@@ -352,46 +379,6 @@ private[yarn] class YarnAllocator(
       val containerRequest = matchingRequests.get(0).iterator.next
       amClient.removeContainerRequest(containerRequest)
       containersToUse += allocatedContainer
-    } else {
-      remaining += allocatedContainer
-    }
-  }
-
-  /**
-   * Looks for requests for the given node that matches the preferred node location,
-   * also matches the give container allocation. If it finds one, removes the request so that it
-   * won't be submitted again. Places the container into containersToUse or remaining.
-   */
-  private def matchNodeLocalityContainerToRequest(
-      allocatedContainer: Container,
-      location: String,
-      containersToUse: ArrayBuffer[Container],
-      remaining: ArrayBuffer[Container]): Unit = {
-    if (preferredNodeLocationToUses.contains(location)) {
-      val isHostUsed = preferredNodeLocationToUses(location)
-      if (isHostUsed) {
-        logInfo(s"Create a container on host $location where already has a container")
-      } else {
-        preferredNodeLocationToUses(location) = true
-      }
-      matchContainerToRequest(allocatedContainer, location, containersToUse, remaining)
-    } else {
-      remaining += allocatedContainer
-    }
-  }
-
-  /**
-   * Looks for requests for the given rack that matches the preferred rack location,
-   * also matches the give container allocation. If it finds one, removes the request so that it
-   * won't be submitted again. Places the container into containersToUse or remaining.
-   */
-  private def matchRackLocalityContainerToRequest(
-      allocatedContainer: Container,
-      location: String,
-      containerToUse: ArrayBuffer[Container],
-      remaining: ArrayBuffer[Container]): Unit = {
-    if (preferredRackLocations.contains(location)) {
-      matchContainerToRequest(allocatedContainer, location, containerToUse, remaining)
     } else {
       remaining += allocatedContainer
     }
