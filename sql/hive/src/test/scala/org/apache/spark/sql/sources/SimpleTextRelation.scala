@@ -28,7 +28,7 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{Row, SQLContext}
 
 /**
@@ -67,7 +67,9 @@ class SimpleTextOutputWriter(path: String, context: TaskAttemptContext) extends 
     recordWriter.write(null, new Text(serialized))
   }
 
-  override def close(): Unit = recordWriter.close(context)
+  override def close(): Unit = {
+    recordWriter.close(context)
+  }
 }
 
 /**
@@ -117,6 +119,42 @@ class SimpleTextRelation(
         dataSchema: StructType,
         context: TaskAttemptContext): OutputWriter = {
       new SimpleTextOutputWriter(path, context)
+    }
+  }
+}
+
+/**
+ * A simple example [[HadoopFsRelationProvider]].
+ */
+class CommitFailureTestSource extends HadoopFsRelationProvider {
+  override def createRelation(
+      sqlContext: SQLContext,
+      paths: Array[String],
+      schema: Option[StructType],
+      partitionColumns: Option[StructType],
+      parameters: Map[String, String]): HadoopFsRelation = {
+    new CommitFailureTestRelation(paths, schema, partitionColumns, parameters)(sqlContext)
+  }
+}
+
+class CommitFailureTestRelation(
+    override val paths: Array[String],
+    maybeDataSchema: Option[StructType],
+    override val userDefinedPartitionColumns: Option[StructType],
+    parameters: Map[String, String])(
+    @transient sqlContext: SQLContext)
+  extends SimpleTextRelation(
+    paths, maybeDataSchema, userDefinedPartitionColumns, parameters)(sqlContext) {
+  override def prepareJobForWrite(job: Job): OutputWriterFactory = new OutputWriterFactory {
+    override def newInstance(
+        path: String,
+        dataSchema: StructType,
+        context: TaskAttemptContext): OutputWriter = {
+      new SimpleTextOutputWriter(path, context) {
+        override def close(): Unit = {
+          sys.error("Intentional task commitment failure for testing purpose.")
+        }
+      }
     }
   }
 }
