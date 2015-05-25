@@ -20,8 +20,7 @@ package org.apache.spark.ml.classification
 import scala.collection.mutable
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.{PredictionModelBroadcasting, Predictor}
+import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{RandomForestParams, TreeClassifierParams, DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
@@ -124,7 +123,7 @@ object RandomForestClassifier {
 final class RandomForestClassificationModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel])
-  extends PredictionModelBroadcasting[Vector, RandomForestClassificationModel]
+  extends PredictionModel[Vector, RandomForestClassificationModel]
   with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
@@ -138,19 +137,14 @@ final class RandomForestClassificationModel private[ml] (
 
   override def transform(dataset: DataFrame): DataFrame = {
     val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
-    transformImpl(dataset, bcastModel)
+    val predictFunc = (features: Vector) => predictImpl(features, () => bcastModel.value)
+    transformImpl(dataset, predictFunc)
   }
 
   override protected def predict(features: Vector): Double = {
     // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
-    // Predict without using a broadcasted mode
+    // Predict without using a broadcasted model
     predictImpl(features, () => this)
-  }
-
-  override protected def predictWithBroadcastModel(features: Vector,
-      bcastModel: Broadcast[RandomForestClassificationModel]): Double = {
-    // Predict using the given broadcasted model
-    predictImpl(features, () => bcastModel.value)
   }
 
   protected def predictImpl(features: Vector, modelAccesor: () => TreeEnsembleModel): Double = {
