@@ -564,6 +564,88 @@ class GBTClassificationModel(JavaModel):
     """
 
 
+@inherit_doc
+class OneVsRest(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
+    """
+    `http://en.wikipedia.org/wiki/Multiclass_classification#One-vs.-rest`
+    Reduction of Multiclass Classification to Binary Classification.
+
+    >>> from pyspark.sql import Row
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sc.parallelize([
+    ...     Row(label=1.0, features=Vectors.dense(1.0)),
+    ...     Row(label=0.0, features=Vectors.sparse(1, [], []))]).toDF()
+    >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
+    >>> ovr = OneVsRest(classifier=lr).setPredictionCol("indexed")
+    >>> model = ovr.fit(df)
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
+    >>> model.transform(test0).head().indexed
+    0.0
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
+    >>> model.transform(test1).head().indexed
+    1.0
+    """
+
+    # a placeholder to make it appear in the generated doc
+    classifier = Param(Params._dummy(), "classifier", "base binary classifier")
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label",
+                 predictionCol="prediction", classifier=None):
+        """
+        __init__(self, featuresCol="features", labelCol="label", \
+                 predictionCol="prediction", classifier=None)
+        """
+        super(OneVsRest, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.OneVsRest", self.uid)
+        #: param for base binary classifier
+        self.classifier = Param(self, "classifier", "base binary classifier")
+        kwargs = self.__init__._input_kwargs
+        self._set(**kwargs)
+
+    @keyword_only
+    def setParams(self, featuresCol="features", labelCol="label",
+                  predictionCol="prediction", classifier=None):
+        """
+        setParams(self, featuresCol="features", labelCol="label", \
+                  predictionCol="prediction", classifier=None):
+        Sets params for OneVsRest.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setClassifier(self, value):
+        """
+        Sets the value of :py:attr:`estimator`.
+        """
+        self._paramMap[self.classifier] = value
+        return self
+
+    def getClassifier(self):
+        """
+        Gets the value of classifier or its default value.
+        """
+        return self.getOrDefault(self.classifier)
+
+    def _create_model(self, java_model):
+        return OneVsRestModel(java_model)
+
+    def _make_java_param_pair(self, param, value):
+        if param.name == self.classifier.name:
+            java_param = self._java_obj.getParam(param.name)
+            java_value = self.getClassifier()._java_obj
+            return java_param.w(java_value)
+        else:
+            return super(OneVsRest, self)._make_java_param_pair(param, value)
+
+
+
+class OneVsRestModel(JavaModel):
+    """
+   Model fitted by OneVsRest.
+   """
+
 if __name__ == "__main__":
     import doctest
     from pyspark.context import SparkContext

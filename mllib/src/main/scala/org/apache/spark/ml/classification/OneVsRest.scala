@@ -176,7 +176,7 @@ final class OneVsRest(override val uid: String)
     }
 
     // create k columns, one for each binary classifier.
-    val models = Range(0, numClasses).par.map { index =>
+    val models = Range(0, numClasses).map { index =>
 
       val label: Double => Double = (label: Double) => {
         if (label.toInt == index) 1.0 else 0.0
