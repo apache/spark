@@ -236,19 +236,12 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   /**
-   * Spill the current in-memory collection to disk, adding a new file to spills, and clear it.
-   */
-  override protected[this] def spill(collection: WritablePartitionedPairCollection[K, C]): Unit = {
-    spillToMergeableFile(collection)
-  }
-
-  /**
-   * Spill our in-memory collection to a sorted file that we can merge later (normal code path).
-   * We add this file into spilledFiles to find it later.
+   * Spill our in-memory collection to a sorted file that we can merge later.
+   * We add this file into `spilledFiles` to find it later.
    *
    * @param collection whichever collection we're using (map or buffer)
    */
-  private def spillToMergeableFile(collection: WritablePartitionedPairCollection[K, C]): Unit = {
+  override protected[this] def spill(collection: WritablePartitionedPairCollection[K, C]): Unit = {
     // Because these files may be read during shuffle, their compression must be controlled by
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
     // createTempShuffleBlock here; see SPARK-3426 for more context.
