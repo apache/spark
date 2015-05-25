@@ -20,6 +20,7 @@ package org.apache.spark.deploy.yarn
 import java.io.{ByteArrayInputStream, DataInputStream, File, FileOutputStream, IOException}
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
+import java.util.Date
 import java.security.PrivilegedExceptionAction
 import java.util.UUID
 import java.util.zip.{ZipEntry, ZipOutputStream}
@@ -80,8 +81,134 @@ private[spark] class Client(
   private val fireAndForget = isClusterMode &&
     !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
 
+  private val listeners = ListBuffer[YarnApplicationListener]()
 
   def stop(): Unit = yarnClient.stop()
+
+  def killApplication(appId: ApplicationId ) = {
+    yarnClient.killApplication(appId)
+  }
+
+
+  /* ------------------------------------------------------------------------------------- *
+   | The following methods have much in common in the stable and alpha versions of Client, |
+   | but cannot be implemented in the parent trait due to subtle API differences across    |
+   | hadoop versions.                                                                      |
+   * ------------------------------------------------------------------------------------- */
+
+  def addApplicationListener(listener: YarnApplicationListener) {
+    listeners += listener
+  }
+
+  private def notifyAppInit(appId: ApplicationId) {
+    for (l <- listeners) {
+      //async {
+      l.onApplicationInit(new java.util.Date().getTime, appId)
+      //}
+    }
+  }
+
+
+  def getApplicationInfo(report: ApplicationReport): YarnAppInfo = {
+    import scala.collection.JavaConverters._
+    YarnAppInfo(report.getApplicationId,
+      report.getUser,
+      report.getQueue,
+      report.getName,
+      report.getHost,
+      report.getRpcPort,
+      report.getYarnApplicationState.name(),
+      report.getDiagnostics,
+      report.getTrackingUrl,
+      report.getStartTime)
+
+  }
+
+
+  private def notifyAppStart(report: ApplicationReport) {
+    val appInfo: YarnAppInfo = getApplicationInfo(report)
+    for (l <- listeners) {
+      //async {
+      l.onApplicationStart(appInfo.startTime, appInfo)
+      //}
+    }
+  }
+
+
+  private def notifyAppFailed(report: ApplicationReport) {
+    val appProgress: YarnAppProgress = getAppProgress(report)
+    for (l <- listeners) {
+      //async {
+      l.onApplicationFailed(new Date().getTime, appProgress)
+      //}
+    }
+  }
+
+  private def notifyAppKilled(report: ApplicationReport) {
+    val appProgress: YarnAppProgress = getAppProgress(report)
+    for (l <- listeners) {
+      //async {
+      l.onApplicationKilled(new Date().getTime, appProgress)
+      //}
+    }
+  }
+
+
+
+
+  private def getResourceUsage(report: ApplicationResourceUsageReport): YarnResourceUsage = {
+
+    def getYarnAppResource(res: Resource) = YarnAppResource(res.getMemory, res.getVirtualCores)
+
+    YarnResourceUsage(report.getNumUsedContainers,
+      report.getNumReservedContainers,
+      getYarnAppResource(report.getUsedResources),
+      getYarnAppResource(report.getReservedResources),
+      getYarnAppResource(report.getNeededResources))
+  }
+
+
+  private def getAppProgress(report: ApplicationReport): YarnAppProgress = {
+
+    val appUsageReport = report.getApplicationResourceUsageReport
+    YarnAppProgress(report.getApplicationId,
+                    report.getTrackingUrl,
+                    getResourceUsage(appUsageReport),
+                    report.getProgress)
+  }
+
+
+  private def notifyAppProgress(report: ApplicationReport) {
+    val appProgress: YarnAppProgress = getAppProgress(report)
+    for (l <- listeners) {
+      //async {
+      l.onApplicationProgress(new Date().getTime, appProgress)
+      //}
+    }
+  }
+
+  private def notifyAppFinished(report: ApplicationReport) {
+    val appProgress: YarnAppProgress = getAppProgress(report)
+    for (l <- listeners) {
+      //async {
+      l.onApplicationEnd(new Date().getTime, appProgress)
+      //}
+    }
+  }
+
+
+
+
+  private def createYarnApplication() : YarnClientApplication = {
+    yarnClient.init(yarnConf)
+    yarnClient.start()
+
+    logInfo("Requesting a new application from cluster with %d NodeManagers"
+      .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
+
+    // Get a new application from our RM
+    yarnClient.createApplication()
+  }
 
   /**
    * Submit an application running our ApplicationMaster to the ResourceManager.
@@ -106,6 +233,8 @@ private[spark] class Client(
       val newApp = yarnClient.createApplication()
       val newAppResponse = newApp.getNewApplicationResponse()
       appId = newAppResponse.getApplicationId()
+
+      notifyAppInit(appId)
 
       // Verify whether the cluster has enough resources for our AM
       verifyClusterResources(newAppResponse)
@@ -754,6 +883,7 @@ private[spark] class Client(
       returnOnRunning: Boolean = false,
       logApplicationReport: Boolean = true): (YarnApplicationState, FinalApplicationStatus) = {
     val interval = sparkConf.getLong("spark.yarn.report.interval", 1000)
+    val initialReport = getApplicationReport(appId)
     var lastState: YarnApplicationState = null
     while (true) {
       Thread.sleep(interval)
@@ -766,6 +896,20 @@ private[spark] class Client(
             return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
         }
       val state = report.getYarnApplicationState
+
+
+      state match {
+        case YarnApplicationState.RUNNING =>
+          notifyAppProgress(report)
+        case YarnApplicationState.FINISHED =>
+          notifyAppFinished(report)
+        case YarnApplicationState.FAILED =>
+          notifyAppFailed(report)
+        case YarnApplicationState.KILLED =>
+          notifyAppKilled(report)
+        case _ =>
+          notifyAppProgress(report)
+      }
 
       if (logApplicationReport) {
         logInfo(s"Application report for $appId (state: $state)")
