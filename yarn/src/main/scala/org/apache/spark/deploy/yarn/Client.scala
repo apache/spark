@@ -381,11 +381,11 @@ private[spark] class Client(
       sparkConf.set(CONF_SPARK_YARN_SECONDARY_JARS, cachedSecondaryJarLinks.mkString(","))
     }
 
-    if (args.primaryPyFile != null) {
-      distribute(args.primaryPyFile)
+    if (isClusterMode && args.primaryPyFile != null) {
+      distribute(args.primaryPyFile, appMasterOnly = true)
     }
 
-    // The python files list needs to be treated especially. All files that are not in an
+    // The python files list needs to be treated especially. All files that are not an
     // archive need to be placed in a subdirectory that will be added to PYTHONPATH.
     args.pyFiles.foreach { f =>
       val targetDir = if (f.endsWith(".py")) Some(LOCALIZED_PYTHON_DIR) else None
