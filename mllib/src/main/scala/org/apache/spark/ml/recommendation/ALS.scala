@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.netlib.util.intW
 
 import org.apache.spark.{Logging, Partitioner}
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -169,8 +169,10 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
 }
 
 /**
+ * :: Experimental ::
  * Model fitted by ALS.
  */
+@Experimental
 class ALSModel private[ml] (
     override val uid: String,
     k: Int,
@@ -208,6 +210,7 @@ class ALSModel private[ml] (
 
 
 /**
+ * :: Experimental ::
  * Alternating Least Squares (ALS) matrix factorization.
  *
  * ALS attempts to estimate the ratings matrix `R` as the product of two lower-rank matrices,
@@ -236,6 +239,7 @@ class ALSModel private[ml] (
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
+@Experimental
 class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
 
   import org.apache.spark.ml.recommendation.ALS.Rating

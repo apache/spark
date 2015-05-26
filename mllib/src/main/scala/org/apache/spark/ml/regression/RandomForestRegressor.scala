@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.regression
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.{Experimental, AlphaComponent}
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{RandomForestParams, TreeRegressorParams, DecisionTreeModel, TreeEnsembleModel}
@@ -31,12 +31,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] learning algorithm for regression.
  * It supports both continuous and categorical features.
  */
-@AlphaComponent
+@Experimental
 final class RandomForestRegressor(override val uid: String)
   extends Predictor[Vector, RandomForestRegressor, RandomForestRegressionModel]
   with RandomForestParams with TreeRegressorParams {
@@ -99,13 +98,12 @@ object RandomForestRegressor {
 }
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for regression.
  * It supports both continuous and categorical features.
  * @param _trees  Decision trees in the ensemble.
  */
-@AlphaComponent
+@Experimental
 final class RandomForestRegressionModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel])
