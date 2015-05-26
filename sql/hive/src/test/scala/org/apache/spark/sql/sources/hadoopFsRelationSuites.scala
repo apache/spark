@@ -542,4 +542,20 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       checkAnswer(table("t"), df.select('b, 'c, 'a).collect())
     }
   }
+
+  test("SPARK-7868: _temporary directories should be ignored") {
+    withTempPath { dir =>
+      val df = Seq("a", "b", "c").zipWithIndex.toDF()
+
+      df.write
+        .format("parquet")
+        .save(dir.getCanonicalPath)
+
+      df.write
+        .format("parquet")
+        .save(s"${dir.getCanonicalPath}/_temporary")
+
+      checkAnswer(read.format("parquet").load(dir.getCanonicalPath), df.collect())
+    }
+  }
 }
