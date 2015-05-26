@@ -21,9 +21,13 @@ import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
+import org.apache.spark.scheduler.MyRDD
 import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.{ShuffleDataBlockId, ShuffleBlockId}
+import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
@@ -282,6 +286,44 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     // This count should retry the execution of the previous stage and rerun shuffle.
     rdd.count()
   }
+
+  test("multiple attempts for one task") {
+    sc = new SparkContext("local", "test", conf)
+    val mapTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    val manager = sc.env.shuffleManager
+    val taskMemoryManager = new TaskMemoryManager(sc.env.executorMemoryManager)
+    println("shuffle manager = " + manager)
+    val shuffleMapRdd = new MyRDD(sc, 1, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    val shuffleHandle = manager.registerShuffle(0, 1, shuffleDep)
+
+    // first attempt -- its successful
+    val writer = manager.getWriter[Int,Int](shuffleHandle, 0,
+      new TaskContextImpl(0, 0, 0L, 0, taskMemoryManager, false, new TaskMetrics))
+    println("writer = " + writer)
+    val data = (1 to 10).map{x => x -> x}
+    writer.write(data.iterator)
+    val mapOutput = writer.stop(true)
+    mapOutput.foreach { mapStatus => mapTrackerMaster.registerMapOutputs(0,Array(mapStatus))}
+
+    // second attempt -- also successful.  We'll write out different data,
+    // just to simulate the fact that the records may get written differently
+    // depending on what gets spilled, what gets combined, etc.
+    val writer2 = manager.getWriter[Int,Int](shuffleHandle, 0,
+      new TaskContextImpl(0, 0, 1L, 0, taskMemoryManager, false, new TaskMetrics))
+    println("writer2 = " + writer2)
+    val data2 = (11 to 20).map { x => x -> x }
+    writer2.write(data2.iterator)
+    val mapOutput2 = writer2.stop(true)
+    mapOutput2.foreach { mapStatus => mapTrackerMaster.registerMapOutputs(0,Array(mapStatus))}
+
+    val reader = manager.getReader[Int,Int](shuffleHandle, 0, 1,
+      new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, false, new TaskMetrics))
+    reader.read().toIndexedSeq should be (data2.toIndexedSeq)
+
+  }
+
+
 }
 
 object ShuffleSuite {

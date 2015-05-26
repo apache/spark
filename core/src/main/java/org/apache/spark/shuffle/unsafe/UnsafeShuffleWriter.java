@@ -90,6 +90,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private MyByteArrayOutputStream serBuffer;
   private SerializationStream serOutputStream;
 
+  private final boolean allowSpillMove;
+
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
    * and then call stop() with success = false if they get an exception, we want to make sure
@@ -125,6 +127,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     taskContext.taskMetrics().shuffleWriteMetrics_$eq(Option.apply(writeMetrics));
     this.taskContext = taskContext;
     this.sparkConf = sparkConf;
+    this.allowSpillMove = sparkConf.getBoolean("spark.shuffle.unsafe.testing.allowSpillMove", true);
     this.transferToEnabled = sparkConf.getBoolean("spark.file.transferTo", true);
     open();
   }
@@ -175,6 +178,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final SpillInfo[] spills = sorter.closeAndGetSpills();
     sorter = null;
     final long[] partitionLengths;
+    final File outputFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+    final long initialFileLength = outputFile.length();
     try {
       partitionLengths = mergeSpills(spills);
     } finally {
@@ -184,7 +189,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
     }
-    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
+    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths, initialFileLength);
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
   }
 
@@ -228,7 +233,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       if (spills.length == 0) {
         new FileOutputStream(outputFile).close(); // Create an empty file
         return new long[partitioner.numPartitions()];
-      } else if (spills.length == 1) {
+      } else if (spills.length == 1 && allowSpillMove) {
         // Here, we don't need to perform any metrics updates because the bytes written to this
         // output file would have already been counted as shuffle bytes written.
         Files.move(spills[0].file, outputFile);
@@ -293,7 +298,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       SpillInfo[] spills,
       File outputFile,
       @Nullable CompressionCodec compressionCodec) throws IOException {
-    assert (spills.length >= 2);
+    assert (spills.length >= 2 || !allowSpillMove);
     final int numPartitions = partitioner.numPartitions();
     final long[] partitionLengths = new long[numPartitions];
     final InputStream[] spillInputStreams = new FileInputStream[spills.length];
@@ -347,7 +352,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    * @return the partition lengths in the merged file.
    */
   private long[] mergeSpillsWithTransferTo(SpillInfo[] spills, File outputFile) throws IOException {
-    assert (spills.length >= 2);
+    assert (spills.length >= 2 || !allowSpillMove);
     final int numPartitions = partitioner.numPartitions();
     final long[] partitionLengths = new long[numPartitions];
     final FileChannel[] spillInputChannels = new FileChannel[spills.length];
