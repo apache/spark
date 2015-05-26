@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.RunnableCommand
@@ -245,12 +245,13 @@ private[sql] object ResolvedDataSource {
             SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray
           }
 
-          val dataSchema = StructType(schema.filterNot(f => partitionColumns.contains(f.name)))
+          val dataSchema =
+            StructType(schema.filterNot(f => partitionColumns.contains(f.name))).asNullable
 
           dataSource.createRelation(
             sqlContext,
             paths,
-            Some(schema),
+            Some(dataSchema),
             maybePartitionsSchema,
             caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.RelationProvider =>
@@ -320,11 +321,20 @@ private[sql] object ResolvedDataSource {
           Some(dataSchema.asNullable),
           Some(partitionColumnsSchema(data.schema, partitionColumns)),
           caseInsensitiveOptions)
+
+        // For partitioned relation r, r.schema's column ordering is different with the column
+        // ordering of data.logicalPlan. We need a Project to adjust the ordering.
+        // So, inside InsertIntoHadoopFsRelation, we can safely apply the schema of r.schema to
+        // the data.
+        val project =
+          Project(
+            r.schema.map(field => new UnresolvedAttribute(Seq(field.name))),
+            data.logicalPlan)
+
         sqlContext.executePlan(
           InsertIntoHadoopFsRelation(
             r,
-            data.logicalPlan,
-            partitionColumns.toArray,
+            project,
             mode)).toRdd
         r
       case _ =>

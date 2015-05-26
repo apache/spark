@@ -17,14 +17,16 @@
 
 package org.apache.spark.ml.tree
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.model.{InformationGainStats => OldInformationGainStats,
   Node => OldNode, Predict => OldPredict}
 
-
 /**
+ * :: DeveloperApi ::
  * Decision tree node interface.
  */
+@DeveloperApi
 sealed abstract class Node extends Serializable {
 
   // TODO: Add aggregate stats (once available).  This will happen after we move the DecisionTree
@@ -89,10 +91,12 @@ private[ml] object Node {
 }
 
 /**
+ * :: DeveloperApi ::
  * Decision tree leaf node.
  * @param prediction  Prediction this node makes
  * @param impurity  Impurity measure at this node (for training data)
  */
+@DeveloperApi
 final class LeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double) extends Node {
@@ -118,6 +122,7 @@ final class LeafNode private[ml] (
 }
 
 /**
+ * :: DeveloperApi ::
  * Internal Decision Tree node.
  * @param prediction  Prediction this node would make if it were a leaf node
  * @param impurity  Impurity measure at this node (for training data)
@@ -127,6 +132,7 @@ final class LeafNode private[ml] (
  * @param rightChild  Right-hand child node
  * @param split  Information about the test used to split to the left or right child.
  */
+@DeveloperApi
 final class InternalNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,

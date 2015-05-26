@@ -18,16 +18,17 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.attribute.{Attribute, BinaryAttribute, NominalAttribute}
-import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 /**
+ * :: Experimental ::
  * A one-hot encoder that maps a column of label indices to a column of binary vectors, with
  * at most a single one-value. By default, the binary vector has an element for each category, so
  * with 5 categories, an input value of 2.0 would map to an output vector of
@@ -36,7 +37,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  * of 0.0 would map to a vector of all zeros. Including the first category makes the vector columns
  * linearly dependent because they sum up to one.
  */
-@AlphaComponent
+@Experimental
 class OneHotEncoder(override val uid: String)
   extends UnaryTransformer[Double, Vector, OneHotEncoder] with HasInputCol with HasOutputCol {
 

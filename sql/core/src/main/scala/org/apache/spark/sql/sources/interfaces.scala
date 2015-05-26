@@ -28,7 +28,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SerializableWritable
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Row, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -120,11 +120,13 @@ trait HadoopFsRelationProvider {
    * Returns a new base relation with the given parameters, a user defined schema, and a list of
    * partition columns. Note: the parameters' keywords are case insensitive and this insensitivity
    * is enforced by the Map that is passed to the function.
+   *
+   * @param dataSchema Schema of data columns (i.e., columns that are not partition columns).
    */
   def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
-      schema: Option[StructType],
+      dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation
 }
@@ -375,8 +377,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
 
-    var leafDirs = mutable.Map.empty[Path, FileStatus]
-
     def refresh(): Unit = {
       def listLeafFilesAndDirs(fs: FileSystem, status: FileStatus): Set[FileStatus] = {
         val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
@@ -384,7 +384,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         files.toSet ++ leafDirs ++ dirs.flatMap(dir => listLeafFilesAndDirs(fs, dir))
       }
 
-      leafDirs.clear()
       leafFiles.clear()
 
       // We don't filter files/directories like _temporary/_SUCCESS here, as specific data sources
@@ -397,7 +396,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       }
 
       val (dirs, files) = statuses.partition(_.isDir)
-      leafDirs ++= dirs.map(d => d.getPath -> d).toMap
       leafFiles ++= files.map(f => f.getPath -> f).toMap
       leafDirToChildrenFiles ++= files.groupBy(_.getPath.getParent)
     }
@@ -416,8 +414,29 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   final private[sql] def partitionSpec: PartitionSpec = {
     if (_partitionSpec == null) {
       _partitionSpec = maybePartitionSpec
-        .map(spec => spec.copy(partitionColumns = spec.partitionColumns.asNullable))
-        .orElse(userDefinedPartitionColumns.map(PartitionSpec(_, Array.empty[Partition])))
+        .flatMap {
+          case spec if spec.partitions.nonEmpty =>
+            Some(spec.copy(partitionColumns = spec.partitionColumns.asNullable))
+          case _ =>
+            None
+        }
+        .orElse {
+          // We only know the partition columns and their data types. We need to discover
+          // partition values.
+          userDefinedPartitionColumns.map { partitionSchema =>
+            val spec = discoverPartitions()
+            val castedPartitions = spec.partitions.map { case p @ Partition(values, path) =>
+              val literals = values.toSeq.zip(spec.partitionColumns.map(_.dataType)).map {
+                case (value, dataType) => Literal.create(value, dataType)
+              }
+              val castedValues = partitionSchema.zip(literals).map { case (field, literal) =>
+                Cast(literal, field.dataType).eval()
+              }
+              p.copy(values = Row.fromSeq(castedValues))
+            }
+            PartitionSpec(partitionSchema, castedPartitions)
+          }
+        }
         .getOrElse {
           if (sqlContext.conf.partitionDiscoveryEnabled()) {
             discoverPartitions()
@@ -461,13 +480,9 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   }
 
   private def discoverPartitions(): PartitionSpec = {
-    val leafDirs = fileStatusCache.leafDirs.keys.toSeq
-
-    if (leafDirs.nonEmpty) {
-      PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME)
-    } else {
-      PartitionSpec(StructType(Array.empty[StructField]), Array.empty[Partition])
-    }
+    // We use leaf dirs containing data files to discover the schema.
+    val leafDirs = fileStatusCache.leafDirToChildrenFiles.keys.toSeq
+    PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME)
   }
 
   /**
