@@ -37,8 +37,6 @@ object RDDConversions {
       val mutableRow = new GenericMutableRow(numColumns)
       val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
       iterator.map { r =>
-        assert (r.productArity == numColumns,
-          s"Expected row with $numColumns but got ${r.productArity} instead")
         var i = 0
         while (i < numColumns) {
           mutableRow(i) = converters(i)(r.productElement(i))
@@ -59,8 +57,6 @@ object RDDConversions {
       val mutableRow = new GenericMutableRow(numColumns)
       val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
       iterator.map { r =>
-        assert (r.length == numColumns,
-          s"Expected row with $numColumns but got ${r.length} instead")
         var i = 0
         while (i < numColumns) {
           mutableRow(i) = converters(i)(r(i))

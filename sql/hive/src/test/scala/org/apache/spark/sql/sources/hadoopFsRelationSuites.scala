@@ -76,6 +76,12 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       df.filter('a > 1 && 'p1 < 2).select('b, 'p1),
       for (i <- 2 to 3; _ <- Seq("foo", "bar")) yield Row(s"val_$i", 1))
 
+    // Project many copies of columns with different types (reproduction for SPARK-7858)
+    checkAnswer(
+      df.filter('a > 1 && 'p1 < 2).select('b, 'b, 'b, 'b, 'p1, 'p1, 'p1, 'p1),
+      for (i <- 2 to 3; _ <- Seq("foo", "bar"))
+        yield Row(s"val_$i", s"val_$i", s"val_$i", s"val_$i", 1, 1, 1, 1))
+
     // Self-join
     df.registerTempTable("t")
     withTempTable("t") {
