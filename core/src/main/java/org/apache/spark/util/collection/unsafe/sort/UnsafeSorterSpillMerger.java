@@ -26,8 +26,8 @@ final class UnsafeSorterSpillMerger {
   private final PriorityQueue<UnsafeSorterIterator> priorityQueue;
 
   public UnsafeSorterSpillMerger(
-    final RecordComparator recordComparator,
-    final PrefixComparator prefixComparator) {
+      final RecordComparator recordComparator,
+      final PrefixComparator prefixComparator) {
     final Comparator<UnsafeSorterIterator> comparator = new Comparator<UnsafeSorterIterator>() {
 
       @Override
