@@ -86,7 +86,7 @@ abstract class Attribute extends NamedExpression {
   def withQualifiers(newQualifiers: Seq[String]): Attribute
   def withName(newName: String): Attribute
 
-  def toAttribute: Attribute = this
+  override def toAttribute: Attribute = this
   def newInstance(): Attribute
 
 }
@@ -178,6 +178,11 @@ case class AttributeReference(
 
   override def equals(other: Any): Boolean = other match {
     case ar: AttributeReference => name == ar.name && exprId == ar.exprId && dataType == ar.dataType
+    case _ => false
+  }
+
+  override def semanticEquals(other: Expression): Boolean = other match {
+    case ar: AttributeReference => sameRef(ar)
     case _ => false
   }
 

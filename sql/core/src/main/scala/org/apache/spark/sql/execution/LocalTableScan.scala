@@ -30,7 +30,7 @@ private[sql] case class LocalTableScan(output: Seq[Attribute], rows: Seq[Row]) e
 
   private lazy val rdd = sqlContext.sparkContext.parallelize(rows)
 
-  override def execute(): RDD[Row] = rdd
+  protected override def doExecute(): RDD[Row] = rdd
 
 
   override def executeCollect(): Array[Row] = {

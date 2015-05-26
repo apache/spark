@@ -52,25 +52,25 @@
  */
 
 var VizConstants = {
-  svgMarginX: 20,
-  svgMarginY: 20,
-  stageSep: 50,
+  svgMarginX: 16,
+  svgMarginY: 16,
+  stageSep: 40,
   graphPrefix: "graph_",
   nodePrefix: "node_",
-  stagePrefix: "stage_",
-  clusterPrefix: "cluster_",
-  stageClusterPrefix: "cluster_stage_"
+  clusterPrefix: "cluster_"
 };
 
 var JobPageVizConstants = {
-  clusterLabelSize: 11,
-  stageClusterLabelSize: 14
-}
+  clusterLabelSize: 12,
+  stageClusterLabelSize: 14,
+  rankSep: 40
+};
 
 var StagePageVizConstants = {
   clusterLabelSize: 14,
-  stageClusterLabelSize: 18
-}
+  stageClusterLabelSize: 14,
+  rankSep: 40
+};
 
 /*
  * Show or hide the RDD DAG visualization.
@@ -84,7 +84,7 @@ function toggleDagViz(forJob) {
   $(arrowSelector).toggleClass('arrow-open');
   var shouldShow = $(arrowSelector).hasClass("arrow-open");
   if (shouldShow) {
-    var shouldRender = graphContainer().select("svg").empty();
+    var shouldRender = graphContainer().select("*").empty();
     if (shouldRender) {
       renderDagViz(forJob);
     }
@@ -106,7 +106,7 @@ function toggleDagViz(forJob) {
  * Output DOM hierarchy:
  *   div#dag-viz-graph >
  *   svg >
- *   g#cluster_stage_[stageId]
+ *   g.cluster_stage_[stageId]
  *
  * Note that the input metadata is populated by o.a.s.ui.UIUtils.showDagViz.
  * Any changes in the input format here must be reflected there.
@@ -115,17 +115,23 @@ function renderDagViz(forJob) {
 
   // If there is not a dot file to render, fail fast and report error
   var jobOrStage = forJob ? "job" : "stage";
-  if (metadataContainer().empty()) {
-    graphContainer()
-      .append("div")
-      .text("No visualization information available for this " + jobOrStage);
+  if (metadataContainer().empty() ||
+      metadataContainer().selectAll("div").empty()) {
+    var message =
+      "<b>No visualization information available for this " + jobOrStage + "!</b><br/>" +
+      "If this is an old " + jobOrStage + ", its visualization metadata may have been " +
+      "cleaned up over time.<br/> You may consider increasing the value of ";
+    if (forJob) {
+      message += "<i>spark.ui.retainedJobs</i> and <i>spark.ui.retainedStages</i>.";
+    } else {
+      message += "<i>spark.ui.retainedStages</i>";
+    }
+    graphContainer().append("div").attr("id", "empty-dag-viz-message").html(message);
     return;
   }
 
   // Render
-  var svg = graphContainer()
-    .append("svg")
-    .attr("class", jobOrStage);
+  var svg = graphContainer().append("svg").attr("class", jobOrStage);
   if (forJob) {
     renderDagVizForJob(svg);
   } else {
@@ -135,11 +141,9 @@ function renderDagViz(forJob) {
   // Find cached RDDs and mark them as such
   metadataContainer().selectAll(".cached-rdd").each(function(v) {
     var nodeId = VizConstants.nodePrefix + d3.select(this).text();
-    svg.selectAll("#" + nodeId).classed("cached", true);
+    svg.selectAll("g." + nodeId).classed("cached", true);
   });
 
-  // More post-processing
-  drawClusterLabels(svg, forJob);
   resizeSvg(svg);
 }
 
@@ -149,11 +153,11 @@ function renderDagVizForStage(svgContainer) {
   var dot = metadata.select(".dot-file").text();
   var containerId = VizConstants.graphPrefix + metadata.attr("stage-id");
   var container = svgContainer.append("g").attr("id", containerId);
-  renderDot(dot, container);
+  renderDot(dot, container, false);
 
-  // Round corners on RDDs
+  // Round corners on rectangles
   svgContainer
-    .selectAll("g.node rect")
+    .selectAll("rect")
     .attr("rx", "5")
     .attr("ry", "5");
 }
@@ -177,29 +181,35 @@ function renderDagVizForJob(svgContainer) {
     var dot = metadata.select(".dot-file").text();
     var stageId = metadata.attr("stage-id");
     var containerId = VizConstants.graphPrefix + stageId;
-    // Link each graph to the corresponding stage page (TODO: handle stage attempts)
-    var stageLink =
-      "/stages/stage/?id=" + stageId.replace(VizConstants.stagePrefix, "") + "&attempt=0";
-    var container = svgContainer
-      .append("a")
-      .attr("xlink:href", stageLink)
-      .append("g")
-      .attr("id", containerId);
+    var isSkipped = metadata.attr("skipped") == "true";
+    var container;
+    if (isSkipped) {
+      container = svgContainer
+        .append("g")
+        .attr("id", containerId)
+        .attr("skipped", "true");
+    } else {
+      // Link each graph to the corresponding stage page (TODO: handle stage attempts)
+      // Use the link from the stage table so it also works for the history server
+      var attemptId = 0
+      var stageLink = d3.select("#stage-" + stageId + "-" + attemptId)
+        .select("a")
+        .attr("href") + "&expandDagViz=true";
+      container = svgContainer
+        .append("a")
+        .attr("xlink:href", stageLink)
+        .append("g")
+        .attr("id", containerId);
+    }
 
     // Now we need to shift the container for this stage so it doesn't overlap with
     // existing ones, taking into account the position and width of the last stage's
     // container. We do not need to do this for the first stage of this job.
     if (i > 0) {
-      var existingStages = svgContainer
-        .selectAll("g.cluster")
-        .filter("[id*=\"" + VizConstants.stageClusterPrefix + "\"]");
+      var existingStages = svgContainer.selectAll("g.cluster.stage")
       if (!existingStages.empty()) {
         var lastStage = d3.select(existingStages[0].pop());
-        var lastStageId = lastStage.attr("id");
-        var lastStageWidth = toFloat(svgContainer
-          .select("#" + lastStageId)
-          .select("rect")
-          .attr("width"));
+        var lastStageWidth = toFloat(lastStage.select("rect").attr("width"));
         var lastStagePosition = getAbsolutePosition(lastStage);
         var offset = lastStagePosition.x + lastStageWidth + VizConstants.stageSep;
         container.attr("transform", "translate(" + offset + ", 0)");
@@ -207,7 +217,19 @@ function renderDagVizForJob(svgContainer) {
     }
 
     // Actually render the stage
-    renderDot(dot, container);
+    renderDot(dot, container, true);
+
+    // Mark elements as skipped if appropriate. Unfortunately we need to mark all
+    // elements instead of the parent container because of CSS override rules.
+    if (isSkipped) {
+      container.selectAll("g").classed("skipped", true);
+    }
+
+    // Round corners on rectangles
+    container
+      .selectAll("rect")
+      .attr("rx", "4")
+      .attr("ry", "4");
 
     // If there are any incoming edges into this graph, keep track of them to render
     // them separately later. Note that we cannot draw them now because we need to
@@ -218,18 +240,23 @@ function renderDagVizForJob(svgContainer) {
     });
   });
 
+  addTooltipsForRDDs(svgContainer);
   drawCrossStageEdges(crossStageEdges, svgContainer);
 }
 
 /* Render the dot file as an SVG in the given container. */
-function renderDot(dot, container) {
+function renderDot(dot, container, forJob) {
   var escaped_dot = dot
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, "\"");
   var g = graphlibDot.read(escaped_dot);
   var renderer = new dagreD3.render();
+  preprocessGraphLayout(g, forJob);
   renderer(container, g);
+
+  // Find the stage cluster and mark it for styling and post-processing
+  container.selectAll("g.cluster[name*=\"Stage\"]").classed("stage", true);
 }
 
 /* -------------------- *
@@ -241,49 +268,38 @@ function graphContainer() { return d3.select("#dag-viz-graph"); }
 function metadataContainer() { return d3.select("#dag-viz-metadata"); }
 
 /*
- * Helper function to create draw a label for each cluster.
- *
- * We need to do this manually because dagre-d3 does not support labeling clusters.
- * In general, the clustering support for dagre-d3 is quite limited at this point.
+ * Helper function to pre-process the graph layout.
+ * This step is necessary for certain styles that affect the positioning
+ * and sizes of graph elements, e.g. padding, font style, shape.
  */
-function drawClusterLabels(svgContainer, forJob) {
-  if (forJob) {
-    var clusterLabelSize = JobPageVizConstants.clusterLabelSize;
-    var stageClusterLabelSize = JobPageVizConstants.stageClusterLabelSize;
-  } else {
-    var clusterLabelSize = StagePageVizConstants.clusterLabelSize;
-    var stageClusterLabelSize = StagePageVizConstants.stageClusterLabelSize;
+function preprocessGraphLayout(g, forJob) {
+  var nodes = g.nodes();
+  for (var i = 0; i < nodes.length; i++) {
+    var isCluster = g.children(nodes[i]).length > 0;
+    if (!isCluster) {
+      var node = g.node(nodes[i]);
+      if (forJob) {
+        // Do not display RDD name on job page
+        node.shape = "circle";
+        node.labelStyle = "font-size: 0px";
+      } else {
+        node.labelStyle = "font-size: 12px";
+      }
+      node.padding = "5";
+    }
   }
-  svgContainer.selectAll("g.cluster").each(function() {
-    var cluster = d3.select(this);
-    var isStage = cluster.attr("id").indexOf(VizConstants.stageClusterPrefix) > -1;
-    var labelSize = isStage ? stageClusterLabelSize : clusterLabelSize;
-    drawClusterLabel(cluster, labelSize);
-  });
-}
-
-/*
- * Helper function to draw a label for the given cluster element based on its name.
- *
- * In the process, we need to expand the bounding box to make room for the label.
- * We need to do this because dagre-d3 did not take this into account when it first
- * rendered the bounding boxes. Note that this means we need to adjust the view box
- * of the SVG afterwards since we shifted a few boxes around.
- */
-function drawClusterLabel(d3cluster, fontSize) {
-  var cluster = d3cluster;
-  var rect = d3cluster.select("rect");
-  rect.attr("y", toFloat(rect.attr("y")) - fontSize);
-  rect.attr("height", toFloat(rect.attr("height")) + fontSize);
-  var labelX = toFloat(rect.attr("x")) + toFloat(rect.attr("width")) - fontSize / 2;
-  var labelY = toFloat(rect.attr("y")) + fontSize * 1.5;
-  var labelText = cluster.attr("name").replace(VizConstants.clusterPrefix, "");
-  cluster.append("text")
-    .attr("x", labelX)
-    .attr("y", labelY)
-    .attr("text-anchor", "end")
-    .style("font-size", fontSize)
-    .text(labelText);
+  // Curve the edges
+  var edges = g.edges();
+  for (var j = 0; j < edges.length; j++) {
+    var edge = g.edge(edges[j]);
+    edge.lineInterpolate = "basis";
+  }
+  // Adjust vertical separation between nodes
+  if (forJob) {
+    g.graph().rankSep = JobPageVizConstants.rankSep;
+  } else {
+    g.graph().rankSep = StagePageVizConstants.rankSep;
+  }
 }
 
 /*
@@ -302,12 +318,12 @@ function resizeSvg(svg) {
     }));
   var endX = VizConstants.svgMarginX +
     toFloat(d3.max(allClusters, function(e) {
-      var t = d3.select(e)
+      var t = d3.select(e);
       return getAbsolutePosition(t).x + toFloat(t.attr("width"));
     }));
   var endY = VizConstants.svgMarginY +
     toFloat(d3.max(allClusters, function(e) {
-      var t = d3.select(e)
+      var t = d3.select(e);
       return getAbsolutePosition(t).y + toFloat(t.attr("height"));
     }));
   var width = endX - startX;
@@ -337,7 +353,7 @@ function drawCrossStageEdges(edges, svgContainer) {
   if (!dagreD3Marker.empty()) {
     svgContainer
       .append(function() { return dagreD3Marker.node().cloneNode(true); })
-      .attr("id", "marker-arrow")
+      .attr("id", "marker-arrow");
     svgContainer.selectAll("g > path").attr("marker-end", "url(#marker-arrow)");
     svgContainer.selectAll("g.edgePaths def").remove(); // We no longer need these
   }
@@ -375,14 +391,14 @@ function getAbsolutePosition(d3selection) {
 function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
   var fromNodeId = VizConstants.nodePrefix + fromRDDId;
   var toNodeId = VizConstants.nodePrefix + toRDDId;
-  var fromPos = getAbsolutePosition(svgContainer.select("#" + fromNodeId));
-  var toPos = getAbsolutePosition(svgContainer.select("#" + toNodeId));
+  var fromPos = getAbsolutePosition(svgContainer.select("g." + fromNodeId));
+  var toPos = getAbsolutePosition(svgContainer.select("g." + toNodeId));
 
   // On the job page, RDDs are rendered as dots (circles). When rendering the path,
   // we need to account for the radii of these circles. Otherwise the arrow heads
   // will bleed into the circle itself.
   var delta = toFloat(svgContainer
-    .select("g.node#" + toNodeId)
+    .select("g.node." + toNodeId)
     .select("circle")
     .attr("r"));
   if (fromPos.x < toPos.x) {
@@ -393,12 +409,13 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
     toPos.x += delta;
   }
 
+  var points;
   if (fromPos.y == toPos.y) {
     // If they are on the same rank, curve the middle part of the edge
     // upward a little to avoid interference with things in between
     // e.g.       _______
     //      _____/       \_____
-    var points = [
+    points = [
       [fromPos.x, fromPos.y],
       [fromPos.x + (toPos.x - fromPos.x) * 0.2, fromPos.y],
       [fromPos.x + (toPos.x - fromPos.x) * 0.3, fromPos.y - 20],
@@ -412,7 +429,7 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
     //           /
     //          |
     //    _____/
-    var points = [
+    points = [
       [fromPos.x, fromPos.y],
       [fromPos.x + (toPos.x - fromPos.x) * 0.4, fromPos.y],
       [fromPos.x + (toPos.x - fromPos.x) * 0.6, toPos.y],
@@ -422,6 +439,46 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
 
   var line = d3.svg.line().interpolate("basis");
   edgesContainer.append("path").datum(points).attr("d", line);
+}
+
+/* (Job page only) Helper function to add tooltips for RDDs. */
+function addTooltipsForRDDs(svgContainer) {
+  svgContainer.selectAll("g.node").each(function() {
+    var node = d3.select(this);
+    var tooltipText = node.attr("name");
+    if (tooltipText) {
+      node.select("circle")
+        .attr("data-toggle", "tooltip")
+        .attr("data-placement", "bottom")
+        .attr("title", tooltipText);
+    }
+    // Link tooltips for all nodes that belong to the same RDD
+    node.on("mouseenter", function() { triggerTooltipForRDD(node, true); });
+    node.on("mouseleave", function() { triggerTooltipForRDD(node, false); });
+  });
+
+  $("[data-toggle=tooltip]")
+    .filter("g.node circle")
+    .tooltip({ container: "body", trigger: "manual" });
+}
+
+/*
+ * (Job page only) Helper function to show or hide tooltips for all nodes
+ * in the graph that refer to the same RDD the specified node represents.
+ */
+function triggerTooltipForRDD(d3node, show) {
+  var classes = d3node.node().classList;
+  for (var i = 0; i < classes.length; i++) {
+    var clazz = classes[i];
+    var isRDDClass = clazz.indexOf(VizConstants.nodePrefix) == 0;
+    if (isRDDClass) {
+      graphContainer().selectAll("g." + clazz).each(function() {
+        var circle = d3.select(this).select("circle").node();
+        var showOrHide = show ? "show" : "hide";
+        $(circle).tooltip(showOrHide);
+      });
+    }
+  }
 }
 
 /* Helper function to convert attributes to numeric values. */

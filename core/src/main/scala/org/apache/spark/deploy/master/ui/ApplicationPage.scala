@@ -23,10 +23,8 @@ import scala.concurrent.Await
 import scala.xml.Node
 
 import akka.pattern.ask
-import org.json4s.JValue
-import org.json4s.JsonAST.JNothing
 
-import org.apache.spark.deploy.{ExecutorState, JsonProtocol}
+import org.apache.spark.deploy.ExecutorState
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.ExecutorDesc
 import org.apache.spark.ui.{UIUtils, WebUIPage}
@@ -36,21 +34,6 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
 
   private val master = parent.masterActorRef
   private val timeout = parent.timeout
-
-  /** Executor details for a particular application */
-  override def renderJson(request: HttpServletRequest): JValue = {
-    val appId = request.getParameter("appId")
-    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
-    val state = Await.result(stateFuture, timeout)
-    val app = state.activeApps.find(_.id == appId).getOrElse({
-      state.completedApps.find(_.id == appId).getOrElse(null)
-    })
-    if (app == null) {
-      JNothing
-    } else {
-      JsonProtocol.writeApplicationInfo(app)
-    }
-  }
 
   /** Executor details for a particular application */
   def render(request: HttpServletRequest): Seq[Node] = {

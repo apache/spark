@@ -16,9 +16,9 @@ Spark SQL is a Spark module for structured data processing. It provides a progra
 
 A DataFrame is a distributed collection of data organized into named columns. It is conceptually equivalent to a table in a relational database or a data frame in R/Python, but with richer optimizations under the hood. DataFrames can be constructed from a wide array of sources such as: structured data files, tables in Hive, external databases, or existing RDDs.
 
-The DataFrame API is available in [Scala](api/scala/index.html#org.apache.spark.sql.DataFrame), [Java](api/java/index.html?org/apache/spark/sql/DataFrame.html), and [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame).
+The DataFrame API is available in [Scala](api/scala/index.html#org.apache.spark.sql.DataFrame), [Java](api/java/index.html?org/apache/spark/sql/DataFrame.html), [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame), and [R](api/R/index.html).
 
-All of the examples on this page use sample data included in the Spark distribution and can be run in the `spark-shell` or the `pyspark` shell.
+All of the examples on this page use sample data included in the Spark distribution and can be run in the `spark-shell`, `pyspark` shell, or `sparkR` shell.
 
 
 ## Starting Point: `SQLContext`
@@ -62,6 +62,17 @@ of its decedents.  To create a basic `SQLContext`, all you need is a SparkContex
 {% highlight python %}
 from pyspark.sql import SQLContext
 sqlContext = SQLContext(sc)
+{% endhighlight %}
+
+</div>
+
+<div data-lang="r"  markdown="1">
+
+The entry point into all relational functionality in Spark is the
+`SQLContext` class, or one of its decedents.  To create a basic `SQLContext`, all you need is a SparkContext.
+
+{% highlight r %}
+sqlContext <- sparkRSQL.init(sc)
 {% endhighlight %}
 
 </div>
@@ -130,6 +141,19 @@ df.show()
 {% endhighlight %}
 
 </div>
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+sqlContext <- SQLContext(sc)
+
+df <- jsonFile(sqlContext, "examples/src/main/resources/people.json")
+
+# Displays the content of the DataFrame to stdout
+showDF(df)
+{% endhighlight %}
+
+</div>
+
 </div>
 
 
@@ -138,7 +162,6 @@ df.show()
 DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/index.html#org.apache.spark.sql.DataFrame), [Java](api/java/index.html?org/apache/spark/sql/DataFrame.html), and [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame).
 
 Here we include some basic examples of structured data processing using DataFrames:
-
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
@@ -242,6 +265,12 @@ df.groupBy("age").count().show();
 </div>
 
 <div data-lang="python"  markdown="1">
+In Python it's possible to access a DataFrame's columns either by attribute
+(`df.age`) or by indexing (`df['age']`). While the former is convenient for
+interactive data exploration, users are highly encouraged to use the
+latter form, which is future proof and won't break with column names that
+are also attributes on the DataFrame class.
+
 {% highlight python %}
 from pyspark.sql import SQLContext
 sqlContext = SQLContext(sc)
@@ -270,14 +299,14 @@ df.select("name").show()
 ## Justin
 
 # Select everybody, but increment the age by 1
-df.select(df.name, df.age + 1).show()
+df.select(df['name'], df['age'] + 1).show()
 ## name    (age + 1)
 ## Michael null
 ## Andy    31
 ## Justin  20
 
 # Select people older than 21
-df.filter(df.age > 21).show()
+df.filter(df['age'] > 21).show()
 ## age name
 ## 30  Andy
 
@@ -291,6 +320,57 @@ df.groupBy("age").count().show()
 {% endhighlight %}
 
 </div>
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+sqlContext <- sparkRSQL.init(sc)
+
+# Create the DataFrame
+df <- jsonFile(sqlContext, "examples/src/main/resources/people.json")
+
+# Show the content of the DataFrame
+showDF(df)
+## age  name
+## null Michael
+## 30   Andy
+## 19   Justin
+
+# Print the schema in a tree format
+printSchema(df)
+## root
+## |-- age: long (nullable = true)
+## |-- name: string (nullable = true)
+
+# Select only the "name" column
+showDF(select(df, "name"))
+## name
+## Michael
+## Andy
+## Justin
+
+# Select everybody, but increment the age by 1
+showDF(select(df, df$name, df$age + 1))
+## name    (age + 1)
+## Michael null
+## Andy    31
+## Justin  20
+
+# Select people older than 21
+showDF(where(df, df$age > 21))
+## age name
+## 30  Andy
+
+# Count people by age
+showDF(count(groupBy(df, "age")))
+## age  count
+## null 1
+## 19   1
+## 30   1
+
+{% endhighlight %}
+
+</div>
+
 </div>
 
 
@@ -320,6 +400,14 @@ sqlContext = SQLContext(sc)
 df = sqlContext.sql("SELECT * FROM table")
 {% endhighlight %}
 </div>
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+sqlContext <- sparkRSQL.init(sc)
+df <- sql(sqlContext, "SELECT * FROM table")
+{% endhighlight %}
+</div>
+
 </div>
 
 
@@ -362,11 +450,18 @@ val people = sc.textFile("examples/src/main/resources/people.txt").map(_.split("
 people.registerTempTable("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
-val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+val teenagers = sqlContext.sql("SELECT name, age FROM people WHERE age >= 13 AND age <= 19")
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
-// The columns of a row in the result can be accessed by ordinal.
+// The columns of a row in the result can be accessed by field index:
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
+
+// or by field name:
+teenagers.map(t => "Name: " + t.getAs[String]("name")).collect().foreach(println)
+
+// row.getValuesMap[T] retrieves multiple columns at once into a Map[String, T]
+teenagers.map(_.getValuesMap[Any](List("name", "age"))).collect().foreach(println)
+// Map("name" -> "Justin", "age" -> 19)
 {% endhighlight %}
 
 </div>
@@ -465,7 +560,7 @@ parts = lines.map(lambda l: l.split(","))
 people = parts.map(lambda p: Row(name=p[0], age=int(p[1])))
 
 # Infer the schema, and register the DataFrame as a table.
-schemaPeople = sqlContext.inferSchema(people)
+schemaPeople = sqlContext.createDataFrame(people)
 schemaPeople.registerTempTable("people")
 
 # SQL can be run over DataFrames that have been registered as a table.
@@ -533,7 +628,7 @@ peopleDataFrame.registerTempTable("people")
 val results = sqlContext.sql("SELECT name FROM people")
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
-// The columns of a row in the result can be accessed by ordinal.
+// The columns of a row in the result can be accessed by field index or by field name.
 results.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
 
@@ -708,6 +803,15 @@ df.select("name", "favorite_color").save("namesAndFavColors.parquet")
 {% endhighlight %}
 
 </div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+df <- loadDF(sqlContext, "people.parquet")
+saveDF(select(df, "name", "age"), "namesAndAges.parquet")
+{% endhighlight %}
+
+</div>
 </div>
 
 ### Manually Specifying Options
@@ -745,6 +849,16 @@ df.select("name", "age").save("namesAndAges.parquet", "parquet");
 
 df = sqlContext.load("examples/src/main/resources/people.json", "json")
 df.select("name", "age").save("namesAndAges.parquet", "parquet")
+
+{% endhighlight %}
+
+</div>
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+
+df <- loadDF(sqlContext, "people.json", "json")
+saveDF(select(df, "name", "age"), "namesAndAges.parquet", "parquet")
 
 {% endhighlight %}
 
@@ -896,6 +1010,31 @@ for teenName in teenNames.collect():
 
 </div>
 
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+# sqlContext from the previous example is used in this example.
+
+schemaPeople # The DataFrame from the previous example.
+
+# DataFrames can be saved as Parquet files, maintaining the schema information.
+saveAsParquetFile(schemaPeople, "people.parquet")
+
+# Read in the Parquet file created above.  Parquet files are self-describing so the schema is preserved.
+# The result of loading a parquet file is also a DataFrame.
+parquetFile <- parquetFile(sqlContext, "people.parquet")
+
+# Parquet files can also be registered as tables and then used in SQL statements.
+registerTempTable(parquetFile, "parquetFile");
+teenagers <- sql(sqlContext, "SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
+teenNames <- map(teenagers, function(p) { paste("Name:", p$name)})
+for (teenName in collect(teenNames)) {
+  cat(teenName, "\n")
+} 
+{% endhighlight %}
+
+</div>
+
 <div data-lang="sql"  markdown="1">
 
 {% highlight sql %}
@@ -1021,8 +1160,35 @@ df2 = sqlContext.createDataFrame(sc.parallelize(range(6, 11))
 df2.save("data/test_table/key=2", "parquet")
 
 # Read the partitioned table
-df3 = sqlContext.parquetFile("data/test_table")
+df3 = sqlContext.load("data/test_table", "parquet")
 df3.printSchema()
+
+# The final schema consists of all 3 columns in the Parquet files together
+# with the partiioning column appeared in the partition directory paths.
+# root
+# |-- single: int (nullable = true)
+# |-- double: int (nullable = true)
+# |-- triple: int (nullable = true)
+# |-- key : int (nullable = true)
+{% endhighlight %}
+
+</div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+# sqlContext from the previous example is used in this example.
+
+# Create a simple DataFrame, stored into a partition directory
+saveDF(df1, "data/test_table/key=1", "parquet", "overwrite")
+
+# Create another DataFrame in a new partition directory,
+# adding a new column and dropping an existing column
+saveDF(df2, "data/test_table/key=2", "parquet", "overwrite")
+
+# Read the partitioned table
+df3 <- loadDF(sqlContext, "data/test_table", "parquet")
+printSchema(df3)
 
 # The final schema consists of all 3 columns in the Parquet files together
 # with the partiioning column appeared in the partition directory paths.
@@ -1226,6 +1392,40 @@ anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD)
 {% endhighlight %}
 </div>
 
+<div data-lang="r"  markdown="1">
+Spark SQL can automatically infer the schema of a JSON dataset and load it as a DataFrame.
+This conversion can be done using one of two methods in a `SQLContext`:
+
+* `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
+
+Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
+line must contain a separate, self-contained valid JSON object. As a consequence,
+a regular multi-line JSON file will most often fail.
+
+{% highlight r %}
+# sc is an existing SparkContext.
+sqlContext <- sparkRSQL.init(sc)
+
+# A JSON dataset is pointed to by path.
+# The path can be either a single text file or a directory storing text files.
+path <- "examples/src/main/resources/people.json"
+# Create a DataFrame from the file(s) pointed to by path
+people <- jsonFile(sqlContex,t path)
+
+# The inferred schema can be visualized using the printSchema() method.
+printSchema(people)
+# root
+#  |-- age: integer (nullable = true)
+#  |-- name: string (nullable = true)
+
+# Register this DataFrame as a table.
+registerTempTable(people, "people")
+
+# SQL statements can be run by using the sql methods provided by `sqlContext`.
+teenagers <- sql(sqlContext, "SELECT name FROM people WHERE age >= 13 AND age <= 19")
+{% endhighlight %}
+</div>
+
 <div data-lang="sql"  markdown="1">
 
 {% highlight sql %}
@@ -1302,10 +1502,7 @@ Row[] results = sqlContext.sql("FROM src SELECT key, value").collect();
 <div data-lang="python"  markdown="1">
 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
-adds support for finding tables in the MetaStore and writing queries using HiveQL. In addition to
-the `sql` method a `HiveContext` also provides an `hql` methods, which allows queries to be
-expressed in HiveQL.
-
+adds support for finding tables in the MetaStore and writing queries using HiveQL. 
 {% highlight python %}
 # sc is an existing SparkContext.
 from pyspark.sql import HiveContext
@@ -1313,6 +1510,24 @@ sqlContext = HiveContext(sc)
 
 sqlContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 sqlContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+
+# Queries can be expressed in HiveQL.
+results = sqlContext.sql("FROM src SELECT key, value").collect()
+
+{% endhighlight %}
+
+</div>
+
+<div data-lang="r"  markdown="1">
+
+When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
+adds support for finding tables in the MetaStore and writing queries using HiveQL.
+{% highlight r %}
+# sc is an existing SparkContext.
+sqlContext <- sparkRHive.init(sc)
+
+hql(sqlContext, "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+hql(sqlContext, "LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 # Queries can be expressed in HiveQL.
 results = sqlContext.sql("FROM src SELECT key, value").collect()
@@ -1413,6 +1628,16 @@ DataFrame jdbcDF = sqlContext.load("jdbc", options)
 {% highlight python %}
 
 df = sqlContext.load(source="jdbc", url="jdbc:postgresql:dbserver", dbtable="schema.tablename")
+
+{% endhighlight %}
+
+</div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+
+df <- loadDF(sqlContext, source="jdbc", url="jdbc:postgresql:dbserver", dbtable="schema.tablename")
 
 {% endhighlight %}
 
@@ -1589,6 +1814,64 @@ options.
 
 # Migration Guide
 
+## Upgrading from Spark SQL 1.3 to 1.4
+
+Based on user feedback, we changed the default behavior of `DataFrame.groupBy().agg()` to retain the grouping columns in the resulting `DataFrame`. To keep the behavior in 1.3, set `spark.sql.retainGroupColumns` to `false`.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+
+// In 1.3.x, in order for the grouping column "department" to show up,
+// it must be included explicitly as part of the agg function call.
+df.groupBy("department").agg($"department", max("age"), sum("expense"))
+
+// In 1.4+, grouping column "department" is included automatically.
+df.groupBy("department").agg(max("age"), sum("expense"))
+
+// Revert to 1.3 behavior (not retaining grouping column) by:
+sqlContext.setConf("spark.sql.retainGroupColumns", "false")
+
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+
+// In 1.3.x, in order for the grouping column "department" to show up,
+// it must be included explicitly as part of the agg function call.
+df.groupBy("department").agg(col("department"), max("age"), sum("expense"));
+
+// In 1.4+, grouping column "department" is included automatically.
+df.groupBy("department").agg(max("age"), sum("expense"));
+
+// Revert to 1.3 behavior (not retaining grouping column) by:
+sqlContext.setConf("spark.sql.retainGroupColumns", "false");
+
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+
+import pyspark.sql.functions as func
+
+# In 1.3.x, in order for the grouping column "department" to show up,
+# it must be included explicitly as part of the agg function call.
+df.groupBy("department").agg("department"), func.max("age"), func.sum("expense"))
+
+# In 1.4+, grouping column "department" is included automatically.
+df.groupBy("department").agg(func.max("age"), func.sum("expense"))
+
+# Revert to 1.3.x behavior (not retaining grouping column) by:
+sqlContext.setConf("spark.sql.retainGroupColumns", "false")
+
+{% endhighlight %}
+</div>
+
+</div>
+
+
 ## Upgrading from Spark SQL 1.0-1.2 to 1.3
 
 In Spark 1.3 we removed the "Alpha" label from Spark SQL and as part of this did a cleanup of the
@@ -1646,7 +1929,7 @@ moved into the udf object in `SQLContext`.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% highlight java %}
+{% highlight scala %}
 
 sqlContext.udf.register("strLen", (s: String) => s.length())
 
@@ -2278,6 +2561,152 @@ from pyspark.sql.types import *
   (For example, Int for a StructField with the data type IntegerType) </td>
   <td>
   StructField(<i>name</i>, <i>dataType</i>, <i>nullable</i>)
+  </td>
+</tr>
+</table>
+
+</div>
+
+<div data-lang="r"  markdown="1">
+
+<table class="table">
+<tr>
+  <th style="width:20%">Data type</th>
+  <th style="width:40%">Value type in R</th>
+  <th>API to access or create a data type</th></tr>
+<tr>
+  <td> <b>ByteType</b> </td>
+  <td>
+  integer <br />
+  <b>Note:</b> Numbers will be converted to 1-byte signed integer numbers at runtime.
+  Please make sure that numbers are within the range of -128 to 127.
+  </td>
+  <td>
+  "byte"
+  </td>
+</tr>
+<tr>
+  <td> <b>ShortType</b> </td>
+  <td>
+  integer <br />
+  <b>Note:</b> Numbers will be converted to 2-byte signed integer numbers at runtime.
+  Please make sure that numbers are within the range of -32768 to 32767.
+  </td>
+  <td>
+  "short"
+  </td>
+</tr>
+<tr>
+  <td> <b>IntegerType</b> </td>
+  <td> integer </td>
+  <td>
+  "integer"
+  </td>
+</tr>
+<tr>
+  <td> <b>LongType</b> </td>
+  <td>
+  integer <br />
+  <b>Note:</b> Numbers will be converted to 8-byte signed integer numbers at runtime.
+  Please make sure that numbers are within the range of
+  -9223372036854775808 to 9223372036854775807.
+  Otherwise, please convert data to decimal.Decimal and use DecimalType.
+  </td>
+  <td>
+  "long"
+  </td>
+</tr>
+<tr>
+  <td> <b>FloatType</b> </td>
+  <td>
+  numeric <br />
+  <b>Note:</b> Numbers will be converted to 4-byte single-precision floating
+  point numbers at runtime.
+  </td>
+  <td>
+  "float"
+  </td>
+</tr>
+<tr>
+  <td> <b>DoubleType</b> </td>
+  <td> numeric </td>
+  <td>
+  "double"
+  </td>
+</tr>
+<tr>
+  <td> <b>DecimalType</b> </td>
+  <td> Not supported </td>
+  <td>
+   Not supported
+  </td>
+</tr>
+<tr>
+  <td> <b>StringType</b> </td>
+  <td> character </td>
+  <td>
+  "string"
+  </td>
+</tr>
+<tr>
+  <td> <b>BinaryType</b> </td>
+  <td> raw </td>
+  <td>
+  "binary"
+  </td>
+</tr>
+<tr>
+  <td> <b>BooleanType</b> </td>
+  <td> logical </td>
+  <td>
+  "bool"
+  </td>
+</tr>
+<tr>
+  <td> <b>TimestampType</b> </td>
+  <td> POSIXct </td>
+  <td>
+  "timestamp"
+  </td>
+</tr>
+<tr>
+  <td> <b>DateType</b> </td>
+  <td> Date </td>
+  <td>
+  "date"
+  </td>
+</tr>
+<tr>
+  <td> <b>ArrayType</b> </td>
+  <td> vector or list </td>
+  <td>
+  list(type="array", elementType=<i>elementType</i>, containsNull=[<i>containsNull</i>])<br />
+  <b>Note:</b> The default value of <i>containsNull</i> is <i>True</i>.
+  </td>
+</tr>
+<tr>
+  <td> <b>MapType</b> </td>
+  <td> enviroment </td>
+  <td>
+  list(type="map", keyType=<i>keyType</i>, valueType=<i>valueType</i>, valueContainsNull=[<i>valueContainsNull</i>])<br />
+  <b>Note:</b> The default value of <i>valueContainsNull</i> is <i>True</i>.
+  </td>
+</tr>
+<tr>
+  <td> <b>StructType</b> </td>
+  <td> named list</td>
+  <td>
+  list(type="struct", fields=<i>fields</i>)<br />
+  <b>Note:</b> <i>fields</i> is a Seq of StructFields. Also, two fields with the same
+  name are not allowed.
+  </td>
+</tr>
+<tr>
+  <td> <b>StructField</b> </td>
+  <td> The value type in R of the data type of this field
+  (For example, integer for a StructField with the data type IntegerType) </td>
+  <td>
+  list(name=<i>name</i>, type=<i>dataType</i>, nullable=<i>nullable</i>)
   </td>
 </tr>
 </table>

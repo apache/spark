@@ -35,6 +35,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -49,7 +50,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * Common params for ALS.
  */
 private[recommendation] trait ALSParams extends Params with HasMaxIter with HasRegParam
-  with HasPredictionCol with HasCheckpointInterval {
+  with HasPredictionCol with HasCheckpointInterval with HasSeed {
 
   /**
    * Param for rank of the matrix factorization (>= 1).
@@ -171,7 +172,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
  * Model fitted by ALS.
  */
 class ALSModel private[ml] (
-    override val parent: ALS,
+    override val uid: String,
     k: Int,
     userFactors: RDD[(Int, Array[Float])],
     itemFactors: RDD[(Int, Array[Float])])
@@ -235,9 +236,11 @@ class ALSModel private[ml] (
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
-class ALS extends Estimator[ALSModel] with ALSParams {
+class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
 
   import org.apache.spark.ml.recommendation.ALS.Rating
+
+  def this() = this(Identifiable.randomUID("als"))
 
   /** @group setParam */
   def setRank(value: Int): this.type = set(rank, value)
@@ -278,6 +281,9 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   /** @group setParam */
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
+  /** @group setParam */
+  def setSeed(value: Long): this.type = set(seed, value)
+
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.
    * @group setParam
@@ -290,7 +296,8 @@ class ALS extends Estimator[ALSModel] with ALSParams {
 
   override def fit(dataset: DataFrame): ALSModel = {
     val ratings = dataset
-      .select(col($(userCol)), col($(itemCol)), col($(ratingCol)).cast(FloatType))
+      .select(col($(userCol)).cast(IntegerType), col($(itemCol)).cast(IntegerType),
+        col($(ratingCol)).cast(FloatType))
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
@@ -298,8 +305,9 @@ class ALS extends Estimator[ALSModel] with ALSParams {
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
       alpha = $(alpha), nonnegative = $(nonnegative),
-      checkpointInterval = $(checkpointInterval))
-    copyValues(new ALSModel(this, $(rank), userFactors, itemFactors))
+      checkpointInterval = $(checkpointInterval), seed = $(seed))
+    val model = new ALSModel(uid, $(rank), userFactors, itemFactors).setParent(this)
+    copyValues(model)
   }
 
   override def transformSchema(schema: StructType): StructType = {

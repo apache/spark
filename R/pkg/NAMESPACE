@@ -1,6 +1,9 @@
 # Imports from base R
 importFrom(methods, setGeneric, setMethod, setOldClass)
-useDynLib(SparkR, stringHashCode)
+
+# Disable native libraries till we figure out how to package it
+# See SPARKR-7839
+#useDynLib(SparkR, stringHashCode)
 
 # S3 methods exported
 export("sparkR.init")
@@ -9,7 +12,8 @@ export("print.jobj")
 
 exportClasses("DataFrame")
 
-exportMethods("cache",
+exportMethods("arrange",
+              "cache",
               "collect",
               "columns",
               "count",
@@ -20,21 +24,24 @@ exportMethods("cache",
               "explain",
               "filter",
               "first",
+              "group_by",
               "groupBy",
               "head",
               "insertInto",
               "intersect",
               "isLocal",
               "join",
-              "length",
               "limit",
               "orderBy",
+              "mutate",
               "names",
               "persist",
               "printSchema",
               "registerTempTable",
+              "rename",
               "repartition",
-              "sampleDF",
+              "sample",
+              "sample_frac",
               "saveAsParquetFile",
               "saveAsTable",
               "saveDF",
@@ -43,42 +50,68 @@ exportMethods("cache",
               "selectExpr",
               "show",
               "showDF",
-              "sortDF",
+              "summarize",
               "take",
               "unionAll",
               "unpersist",
               "where",
               "withColumn",
-              "withColumnRenamed")
+              "withColumnRenamed",
+              "write.df")
 
 exportClasses("Column")
 
 exportMethods("abs",
+              "acos",
               "alias",
               "approxCountDistinct",
               "asc",
+              "asin",
+              "atan",
+              "atan2",
               "avg",
               "cast",
+              "cbrt",
+              "ceiling",
               "contains",
+              "cos",
+              "cosh",
               "countDistinct",
               "desc",
               "endsWith",
+              "exp",
+              "expm1",
+              "floor",
               "getField",
               "getItem",
+              "hypot",
               "isNotNull",
               "isNull",
               "last",
               "like",
+              "log",
+              "log10",
+              "log1p",
               "lower",
               "max",
               "mean",
               "min",
+              "n",
+              "n_distinct",
+              "rint",
               "rlike",
+              "sign",
+              "sin",
+              "sinh",
               "sqrt",
               "startsWith",
               "substr",
               "sum",
               "sumDistinct",
+              "tan",
+              "tanh",
+              "toDegrees",
+              "toRadians",
               "upper")
 
 exportClasses("GroupedData")
@@ -95,14 +128,12 @@ export("cacheTable",
        "jsonFile",
        "loadDF",
        "parquetFile",
+       "read.df",
        "sql",
        "table",
        "tableNames",
        "tables",
        "uncacheTable")
-
-export("sparkRSQL.init",
-       "sparkRHive.init")
 
 export("structField",
        "structField.jobj",
