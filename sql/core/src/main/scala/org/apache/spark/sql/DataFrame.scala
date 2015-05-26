@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.{MultiAlias, ResolvedStar, Unresol
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, ScalaReflection, SqlParser}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
 import org.apache.spark.sql.json.JacksonGenerator
 import org.apache.spark.sql.sources.CreateTableUsingAsSelect
@@ -411,7 +411,7 @@ class DataFrame private[sql](
         joined.left,
         joined.right,
         joinType = Inner,
-        Some(expressions.EqualTo(
+        Some(catalyst.expressions.EqualTo(
           joined.left.resolve(usingColumn),
           joined.right.resolve(usingColumn))))
     )
@@ -480,8 +480,9 @@ class DataFrame private[sql](
     // By the time we get here, since we have already run analysis, all attributes should've been
     // resolved and become AttributeReference.
     val cond = plan.condition.map { _.transform {
-      case expressions.EqualTo(a: AttributeReference, b: AttributeReference) if a.sameRef(b) =>
-        expressions.EqualTo(plan.left.resolve(a.name), plan.right.resolve(b.name))
+      case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
+          if a.sameRef(b) =>
+        catalyst.expressions.EqualTo(plan.left.resolve(a.name), plan.right.resolve(b.name))
     }}
     plan.copy(condition = cond)
   }
@@ -1394,28 +1395,6 @@ class DataFrame private[sql](
   def write: DataFrameWriter = new DataFrameWriter(this)
 
   /**
-   * :: Experimental ::
-   * Adds the rows from this RDD to the specified table, optionally overwriting the existing data.
-   * @group output
-   * @since 1.3.0
-   */
-  @Experimental
-  def insertInto(tableName: String, overwrite: Boolean): Unit = {
-    sqlContext.executePlan(InsertIntoTable(UnresolvedRelation(Seq(tableName)),
-      Map.empty, logicalPlan, overwrite, ifNotExists = false)).toRdd
-  }
-
-  /**
-   * :: Experimental ::
-   * Adds the rows from this RDD to the specified table.
-   * Throws an exception if the table already exists.
-   * @group output
-   * @since 1.3.0
-   */
-  @Experimental
-  def insertInto(tableName: String): Unit = insertInto(tableName, overwrite = false)
-
-  /**
    * Returns the content of the [[DataFrame]] as a RDD of JSON strings.
    * @group rdd
    * @since 1.3.0
@@ -1550,13 +1529,7 @@ class DataFrame private[sql](
    */
   @deprecated("Use write.mode(mode).saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String, mode: SaveMode): Unit = {
-    if (sqlContext.catalog.tableExists(Seq(tableName)) && mode == SaveMode.Append) {
-      // If table already exists and the save mode is Append,
-      // we will just call insertInto to append the contents of this DataFrame.
-      insertInto(tableName, overwrite = false)
-    } else {
-      write.mode(mode).saveAsTable(tableName)
-    }
+    write.mode(mode).saveAsTable(tableName)
   }
 
   /**
@@ -1712,9 +1685,29 @@ class DataFrame private[sql](
     write.format(source).mode(mode).options(options).save()
   }
 
+
+  /**
+   * Adds the rows from this RDD to the specified table, optionally overwriting the existing data.
+   * @group output
+   */
+  @deprecated("Use write.mode(SaveMode.Append|SaveMode.Overwrite).saveAsTable(tableName)", "1.4.0")
+  def insertInto(tableName: String, overwrite: Boolean): Unit = {
+    write.mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append).insertInto(tableName)
+  }
+
+  /**
+   * Adds the rows from this RDD to the specified table.
+   * Throws an exception if the table already exists.
+   * @group output
+   */
+  @deprecated("Use write.mode(SaveMode.Append).saveAsTable(tableName)", "1.4.0")
+  def insertInto(tableName: String): Unit = {
+    write.mode(SaveMode.Append).insertInto(tableName)
+  }
+
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
-  // End of eeprecated methods
+  // End of deprecated methods
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
 
