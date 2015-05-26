@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param.{Param, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
@@ -26,11 +26,10 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * Evaluator for regression, which expects two input columns: prediction and label.
  */
-@AlphaComponent
+@Experimental
 final class RegressionEvaluator(override val uid: String)
   extends Evaluator with HasPredictionCol with HasLabelCol {
 

@@ -377,13 +377,22 @@ private[sql] class DefaultWriterContainer(
   override def outputWriterForRow(row: Row): OutputWriter = writer
 
   override def commitTask(): Unit = {
-    writer.close()
-    super.commitTask()
+    try {
+      writer.close()
+      super.commitTask()
+    } catch {
+      case cause: Throwable =>
+        super.abortTask()
+        throw new RuntimeException("Failed to commit task", cause)
+    }
   }
 
   override def abortTask(): Unit = {
-    writer.close()
-    super.abortTask()
+    try {
+      writer.close()
+    } finally {
+      super.abortTask()
+    }
   }
 }
 
@@ -422,13 +431,21 @@ private[sql] class DynamicPartitionWriterContainer(
   }
 
   override def commitTask(): Unit = {
-    outputWriters.values.foreach(_.close())
-    super.commitTask()
+    try {
+      outputWriters.values.foreach(_.close())
+      super.commitTask()
+    } catch { case cause: Throwable =>
+      super.abortTask()
+      throw new RuntimeException("Failed to commit task", cause)
+    }
   }
 
   override def abortTask(): Unit = {
-    outputWriters.values.foreach(_.close())
-    super.abortTask()
+    try {
+      outputWriters.values.foreach(_.close())
+    } finally {
+      super.abortTask()
+    }
   }
 }
 
