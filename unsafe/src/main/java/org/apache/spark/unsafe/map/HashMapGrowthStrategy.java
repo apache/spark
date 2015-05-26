@@ -32,7 +32,9 @@ public interface HashMapGrowthStrategy {
   class Doubling implements HashMapGrowthStrategy {
     @Override
     public int nextCapacity(int currentCapacity) {
-      return currentCapacity * 2;
+      assert (currentCapacity > 0);
+      // Guard against overflow
+      return (currentCapacity * 2 > 0) ? (currentCapacity * 2) : Integer.MAX_VALUE;
     }
   }
 

@@ -608,7 +608,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       StructType(
         StructField("a", ArrayType(IntegerType, containsNull = false), nullable = true) :: Nil)
     assert(df2.schema === expectedSchema2)
-    df2.insertInto("arrayInParquet", overwrite = false)
+    df2.write.mode(SaveMode.Append).insertInto("arrayInParquet")
     createDataFrame(Tuple1(Seq(4, 5)) :: Nil).toDF("a").write.mode(SaveMode.Append)
       .saveAsTable("arrayInParquet") // This one internally calls df2.insertInto.
     createDataFrame(Tuple1(Seq(Int.box(6), null.asInstanceOf[Integer])) :: Nil).toDF("a").write
@@ -642,7 +642,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       StructType(
         StructField("a", mapType2, nullable = true) :: Nil)
     assert(df2.schema === expectedSchema2)
-    df2.insertInto("mapInParquet", overwrite = false)
+    df2.write.mode(SaveMode.Append).insertInto("mapInParquet")
     createDataFrame(Tuple1(Map(4 -> 5)) :: Nil).toDF("a").write.mode(SaveMode.Append)
       .saveAsTable("mapInParquet") // This one internally calls df2.insertInto.
     createDataFrame(Tuple1(Map(6 -> null.asInstanceOf[Integer])) :: Nil).toDF("a").write
@@ -670,6 +670,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     catalog.createDataSourceTable(
       tableName = "wide_schema",
       userSpecifiedSchema = Some(schema),
+      partitionColumns = Array.empty[String],
       provider = "json",
       options = Map("path" -> "just a dummy path"),
       isExternal = false)
@@ -705,6 +706,35 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     sql(s"drop table $tableName")
   }
 
+  test("Saving partition columns information") {
+    val df =
+      sparkContext.parallelize(1 to 10, 4).map { i =>
+        Tuple4(i, i + 1, s"str$i", s"str${i + 1}")
+      }.toDF("a", "b", "c", "d")
+
+    val tableName = s"partitionInfo_${System.currentTimeMillis()}"
+    df.write.format("parquet").partitionBy("d", "b").saveAsTable(tableName)
+    invalidateTable(tableName)
+    val metastoreTable = catalog.client.getTable("default", tableName)
+    val expectedPartitionColumns =
+      StructType(df.schema("d") :: df.schema("b") :: Nil)
+    val actualPartitionColumns =
+      StructType(
+        metastoreTable.partitionColumns.map(c =>
+          StructField(c.name, HiveMetastoreTypes.toDataType(c.hiveType))))
+    // Make sure partition columns are correctly stored in metastore.
+    assert(
+      expectedPartitionColumns.sameType(actualPartitionColumns),
+      s"Partitions columns stored in metastore $actualPartitionColumns is not the " +
+        s"partition columns defined by the saveAsTable operation $expectedPartitionColumns.")
+
+    // Check the content of the saved table.
+    checkAnswer(
+      table(tableName).selectExpr("c", "b", "d", "a"),
+      df.selectExpr("c", "b", "d", "a").collect())
+
+    sql(s"drop table $tableName")
+  }
 
   test("insert into a table") {
     def createDF(from: Int, to: Int): DataFrame =
@@ -738,7 +768,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 35"),
       (6 to 34).map(i => Row(i, s"str$i")))
 
-    createDF(40, 49).insertInto("insertParquet")
+    createDF(40, 49).write.mode(SaveMode.Append).insertInto("insertParquet")
     checkAnswer(
       sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 45"),
       (6 to 44).map(i => Row(i, s"str$i")))
@@ -752,7 +782,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT p.c1, c2 FROM insertParquet p"),
       (50 to 59).map(i => Row(i, s"str$i")))
 
-    createDF(70, 79).insertInto("insertParquet", overwrite = true)
+    createDF(70, 79).write.mode(SaveMode.Overwrite).insertInto("insertParquet")
     checkAnswer(
       sql("SELECT p.c1, c2 FROM insertParquet p"),
       (70 to 79).map(i => Row(i, s"str$i")))

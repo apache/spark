@@ -25,7 +25,6 @@ import org.scalactic.Tolerance._
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.util.DateUtils
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.json.InferSchema.compatibleType
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.test.TestSQLContext
@@ -1072,6 +1071,33 @@ class JsonSuite extends QueryTest {
     // This is really a test that it doesn't throw an exception
     val emptySchema = InferSchema(empty, 1.0, "")
     assert(StructType(Seq()) === emptySchema)
+  }
+
+  test("SPARK-7565 MapType in JsonRDD") {
+    val useStreaming = getConf(SQLConf.USE_JACKSON_STREAMING_API, "true")
+    val oldColumnNameOfCorruptRecord = TestSQLContext.conf.columnNameOfCorruptRecord
+    TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, "_unparsed")
+
+    val schemaWithSimpleMap = StructType(
+      StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
+    try{
+      for (useStreaming <- List("true", "false")) {
+        setConf(SQLConf.USE_JACKSON_STREAMING_API, useStreaming)
+        val temp = Utils.createTempDir().getPath
+
+        val df = read.schema(schemaWithSimpleMap).json(mapType1)
+        df.write.mode("overwrite").parquet(temp)
+        // order of MapType is not defined
+        assert(read.parquet(temp).count() == 5)
+
+        val df2 = read.json(corruptRecords)
+        df2.write.mode("overwrite").parquet(temp)
+        checkAnswer(read.parquet(temp), df2.collect())
+      }
+    } finally {
+      setConf(SQLConf.USE_JACKSON_STREAMING_API, useStreaming)
+      setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, oldColumnNameOfCorruptRecord)
+    }
   }
 
 }

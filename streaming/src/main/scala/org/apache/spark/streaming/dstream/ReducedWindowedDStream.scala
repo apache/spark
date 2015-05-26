@@ -40,12 +40,12 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
     partitioner: Partitioner
   ) extends DStream[(K,V)](parent.ssc) {
 
-  assert(_windowDuration.isMultipleOf(parent.slideDuration),
+  require(_windowDuration.isMultipleOf(parent.slideDuration),
     "The window duration of ReducedWindowedDStream (" + _windowDuration + ") " +
       "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
   )
 
-  assert(_slideDuration.isMultipleOf(parent.slideDuration),
+  require(_slideDuration.isMultipleOf(parent.slideDuration),
     "The slide duration of ReducedWindowedDStream (" + _slideDuration + ") " +
       "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
   )

@@ -61,7 +61,6 @@ private[sql] case class InsertIntoDataSource(
 private[sql] case class InsertIntoHadoopFsRelation(
     @transient relation: HadoopFsRelation,
     @transient query: LogicalPlan,
-    partitionColumns: Array[String],
     mode: SaveMode)
   extends RunnableCommand {
 
@@ -93,11 +92,14 @@ private[sql] case class InsertIntoHadoopFsRelation(
       job.setOutputValueClass(classOf[Row])
       FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
 
+      // We create a DataFrame by applying the schema of relation to the data to make sure.
+      // We are writing data based on the expected schema,
       val df = sqlContext.createDataFrame(
         DataFrame(sqlContext, query).queryExecution.toRdd,
         relation.schema,
         needsConversion = false)
 
+      val partitionColumns = relation.partitionColumns.fieldNames
       if (partitionColumns.isEmpty) {
         insert(new DefaultWriterContainer(relation, job), df)
       } else {
@@ -375,13 +377,22 @@ private[sql] class DefaultWriterContainer(
   override def outputWriterForRow(row: Row): OutputWriter = writer
 
   override def commitTask(): Unit = {
-    writer.close()
-    super.commitTask()
+    try {
+      writer.close()
+      super.commitTask()
+    } catch {
+      case cause: Throwable =>
+        super.abortTask()
+        throw new RuntimeException("Failed to commit task", cause)
+    }
   }
 
   override def abortTask(): Unit = {
-    writer.close()
-    super.abortTask()
+    try {
+      writer.close()
+    } finally {
+      super.abortTask()
+    }
   }
 }
 
@@ -420,13 +431,21 @@ private[sql] class DynamicPartitionWriterContainer(
   }
 
   override def commitTask(): Unit = {
-    outputWriters.values.foreach(_.close())
-    super.commitTask()
+    try {
+      outputWriters.values.foreach(_.close())
+      super.commitTask()
+    } catch { case cause: Throwable =>
+      super.abortTask()
+      throw new RuntimeException("Failed to commit task", cause)
+    }
   }
 
   override def abortTask(): Unit = {
-    outputWriters.values.foreach(_.close())
-    super.abortTask()
+    try {
+      outputWriters.values.foreach(_.close())
+    } finally {
+      super.abortTask()
+    }
   }
 }
 

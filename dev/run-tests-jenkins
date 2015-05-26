@@ -185,6 +185,8 @@ done
 
 # run tests
 {
+  # Marks this build is a pull request build.
+  export AMP_JENKINS_PRB=true
   timeout "${TESTS_TIMEOUT}" ./dev/run-tests
   test_result="$?"
 
