@@ -49,7 +49,7 @@ private[spark] trait WritablePartitionedPairCollection[K, V] {
     : WritablePartitionedIterator = {
     val it = partitionedDestructiveSortedIterator(keyComparator)
     new WritablePartitionedIterator {
-      var cur = if (it.hasNext) it.next() else null
+      private[this] var cur = if (it.hasNext) it.next() else null
 
       def writeNext(writer: BlockObjectWriter): Unit = {
         writer.write(cur._1._2, cur._2)
