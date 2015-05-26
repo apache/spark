@@ -42,7 +42,7 @@ private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
     case _ => false
   }
 
-  override def toString =
+  override def toString: String =
     '[' + data.mkString(",") + ']'
 }
 
