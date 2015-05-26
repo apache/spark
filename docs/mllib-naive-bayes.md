@@ -14,9 +14,8 @@ and use it for prediction.
 
 MLlib supports [multinomial naive
 Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
-and [Bernoulli naive Bayes] (http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
-These models are typically used for [document classification]
-(http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
+and [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
+These models are typically used for [document classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
 Within that context, each observation is a document and each
 feature represents a term whose value is the frequency of the term (in multinomial naive Bayes) or
 a zero or one indicating whether the term was found in the document (in Bernoulli naive Bayes).
