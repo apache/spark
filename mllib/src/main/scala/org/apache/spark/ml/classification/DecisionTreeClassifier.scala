@@ -32,7 +32,6 @@ import org.apache.spark.sql.DataFrame
 
 /**
  * :: Experimental ::
- *
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
  * for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
@@ -89,6 +88,7 @@ final class DecisionTreeClassifier(override val uid: String)
   }
 }
 
+@Experimental
 object DecisionTreeClassifier {
   /** Accessor for supported impurities: entropy, gini */
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
