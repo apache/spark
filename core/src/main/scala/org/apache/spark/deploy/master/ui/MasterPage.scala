@@ -110,9 +110,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                 }.getOrElse { Seq.empty }
               }
               <li><strong>Alive Workers:</strong> {aliveWorkers.size}</li>
-              <li><strong>Alive Cores:</strong> {aliveWorkers.map(_.cores).sum} Total,
+              <li><strong>Cores in use:</strong> {aliveWorkers.map(_.cores).sum} Total,
                 {aliveWorkers.map(_.coresUsed).sum} Used</li>
-              <li><strong>Alive Memory:</strong>
+              <li><strong>Memory in use:</strong>
                 {Utils.megabytesToString(aliveWorkers.map(_.memory).sum)} Total,
                 {Utils.megabytesToString(aliveWorkers.map(_.memoryUsed).sum)} Used</li>
               <li><strong>Applications:</strong>
