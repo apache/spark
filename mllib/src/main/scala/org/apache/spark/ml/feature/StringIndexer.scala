@@ -18,7 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
@@ -52,13 +52,13 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * A label indexer that maps a string column of labels to an ML column of label indices.
  * If the input column is numeric, we cast it to string and index the string values.
  * The indices are in [0, numLabels), ordered by label frequencies.
  * So the most frequent label gets index 0.
  */
-@AlphaComponent
+@Experimental
 class StringIndexer(override val uid: String) extends Estimator[StringIndexerModel]
   with StringIndexerBase {
 
@@ -86,10 +86,10 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Model fitted by [[StringIndexer]].
  */
-@AlphaComponent
+@Experimental
 class StringIndexerModel private[ml] (
     override val uid: String,
     labels: Array[String]) extends Model[StringIndexerModel] with StringIndexerBase {
