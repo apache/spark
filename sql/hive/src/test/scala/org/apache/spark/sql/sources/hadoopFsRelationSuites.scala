@@ -18,7 +18,9 @@
 package org.apache.spark.sql.sources
 
 import org.apache.hadoop.fs.Path
+import org.scalatest.FunSuite
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
@@ -362,16 +364,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         .partitionBy("p1")
         .saveAsTable("t")
     }
-
-    // Using different order of partition columns
-    intercept[Throwable] {
-      partitionedTestDF2.write
-        .format(dataSourceName)
-        .mode(SaveMode.Append)
-        .option("dataSchema", dataSchema.json)
-        .partitionBy("p2", "p1")
-        .saveAsTable("t")
-    }
   }
 
   test("saveAsTable()/load() - partitioned table - ErrorIfExists") {
@@ -483,6 +475,26 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
         read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
+    }
+  }
+}
+
+class CommitFailureTestRelationSuite extends FunSuite with SQLTestUtils {
+  import TestHive.implicits._
+
+  override val sqlContext = TestHive
+
+  val dataSourceName: String = classOf[CommitFailureTestSource].getCanonicalName
+
+  test("SPARK-7684: commitTask() failure should fallback to abortTask()") {
+    withTempPath { file =>
+      val df = (1 to 3).map(i => i -> s"val_$i").toDF("a", "b")
+      intercept[SparkException] {
+        df.write.format(dataSourceName).save(file.getCanonicalPath)
+      }
+
+      val fs = new Path(file.getCanonicalPath).getFileSystem(SparkHadoopUtil.get.conf)
+      assert(!fs.exists(new Path(file.getCanonicalPath, "_temporary")))
     }
   }
 }

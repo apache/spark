@@ -1194,7 +1194,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.executorIdleTimeout</code></td>
-  <td>600s</td>
+  <td>60s</td>
   <td>
     If dynamic allocation is enabled and an executor has been idle for more than this duration, 
     the executor will be removed. For more detail, see this
@@ -1224,7 +1224,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.schedulerBacklogTimeout</code></td>
-  <td>5s</td>
+  <td>1s</td>
   <td>
     If dynamic allocation is enabled and there have been pending tasks backlogged for more than
     this duration, new executors will be requested. For more detail, see this

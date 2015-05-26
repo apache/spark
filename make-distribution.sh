@@ -231,6 +231,11 @@ cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
 cp -r "$SPARK_HOME/sbin" "$DISTDIR"
 cp -r "$SPARK_HOME/ec2" "$DISTDIR"
+# Copy SparkR if it exists
+if [ -d "$SPARK_HOME"/R/lib/SparkR ]; then
+  mkdir -p "$DISTDIR"/R/lib
+  cp -r "$SPARK_HOME/R/lib/SparkR" "$DISTDIR"/R/lib
+fi
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then
