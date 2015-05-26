@@ -130,6 +130,7 @@ private[hive] object HiveQl {
     "TOK_MSCK",
 
     "TOK_REVOKE",
+    "TOK_REVOKE_ROLE",
 
     "TOK_SHOW_COMPACTIONS",
     "TOK_SHOW_CREATETABLE",
