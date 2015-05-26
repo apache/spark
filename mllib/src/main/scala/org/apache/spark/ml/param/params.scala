@@ -24,7 +24,7 @@ import scala.annotation.varargs
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Experimental, DeveloperApi, AlphaComponent}
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.ml.util.Identifiable
 
 /**

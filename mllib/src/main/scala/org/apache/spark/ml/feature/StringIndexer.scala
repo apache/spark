@@ -18,7 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, AlphaComponent}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._

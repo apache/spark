@@ -20,10 +20,10 @@ package org.apache.spark.ml.regression
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.{Experimental, AlphaComponent}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.{Param, ParamMap}
-import org.apache.spark.ml.tree.{GBTParams, TreeRegressorParams, DecisionTreeModel, TreeEnsembleModel}
+import org.apache.spark.ml.tree.{DecisionTreeModel, GBTParams, TreeEnsembleModel, TreeRegressorParams}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
