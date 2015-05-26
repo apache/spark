@@ -55,7 +55,7 @@ import org.apache.spark.util.Utils._
 /**
  * This class provides the UDF creation and also the UDF instance serialization and
  * de-serialization cross process boundary.
- * 
+ *
  * Detail discussion can be found at https://github.com/apache/spark/pull/3640
  *
  * @param functionClassName UDF class name
@@ -355,7 +355,7 @@ private[hive] object HiveShim {
   }
 
   /*
-   * Bug introdiced in hive-0.13. FileSinkDesc is serializable, but its member path is not.
+   * Bug introduced in hive-0.13. FileSinkDesc is serializable, but its member path is not.
    * Fix it through wrapper.
    * */
   implicit def wrapperToFileSinkDesc(w: ShimFileSinkDesc): FileSinkDesc = {
