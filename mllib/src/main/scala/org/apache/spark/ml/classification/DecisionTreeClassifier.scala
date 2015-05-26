@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.{Experimental, AlphaComponent}
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{TreeClassifierParams, DecisionTreeParams, DecisionTreeModel, Node}
@@ -31,14 +31,14 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  *
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
  * for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
-@AlphaComponent
+@Experimental
 final class DecisionTreeClassifier(override val uid: String)
   extends Predictor[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
   with DecisionTreeParams with TreeClassifierParams {
@@ -95,13 +95,12 @@ object DecisionTreeClassifier {
 }
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] model for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
-@AlphaComponent
+@Experimental
 final class DecisionTreeClassificationModel private[ml] (
     override val uid: String,
     override val rootNode: Node)
