@@ -38,7 +38,9 @@ object RDDConversions {
       } else {
         val bufferedIterator = iterator.buffered
         val mutableRow = new SpecificMutableRow(schema.fields.map(_.dataType))
-        val schemaFields = schema.fields.toArray
+        val schemaFields = schema.fields
+        assert(mutableRow.length == schemaFields.length,
+          s"Input row has ${mutableRow.length} fields but schema has ${schemaFields.length}")
         val converters = schemaFields.map {
           f => CatalystTypeConverters.createToCatalystConverter(f.dataType)
         }
@@ -65,7 +67,9 @@ object RDDConversions {
       } else {
         val bufferedIterator = iterator.buffered
         val mutableRow = new GenericMutableRow(bufferedIterator.head.toSeq.toArray)
-        val schemaFields = schema.fields.toArray
+        val schemaFields = schema.fields
+        assert(mutableRow.length == schemaFields.length,
+          s"Input row has ${mutableRow.length} fields but schema has ${schemaFields.length}")
         val converters = schemaFields.map {
           f => CatalystTypeConverters.createToCatalystConverter(f.dataType)
         }
