@@ -42,7 +42,8 @@ object RuleExecutor {
   case class FixedPoint(maxIterations: Int) extends Strategy
 
   /** A batch of rules. */
-  case class Batch[TreeType <: TreeNode[_]](name: String, strategy: Strategy, rules: Rule[TreeType]*)
+  case class Batch[TreeType <: TreeNode[_]](
+    name: String, strategy: Strategy, rules: Rule[TreeType]*)
 
 }
 
