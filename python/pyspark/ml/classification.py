@@ -640,11 +640,10 @@ class OneVsRest(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
             return super(OneVsRest, self)._make_java_param_pair(param, value)
 
 
-
 class OneVsRestModel(JavaModel):
     """
-   Model fitted by OneVsRest.
-   """
+    Model fitted by OneVsRest.
+    """
 
 if __name__ == "__main__":
     import doctest
