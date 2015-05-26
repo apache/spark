@@ -105,7 +105,7 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
       };
 
       $(this).click(function() {
-        var stagePagePath = $(getSelectorForStageEntry(this)).find("a").attr("href")
+        var stagePagePath = $(getSelectorForStageEntry(this)).find("a.name-link").attr("href")
         window.location.href = stagePagePath
       });
 
