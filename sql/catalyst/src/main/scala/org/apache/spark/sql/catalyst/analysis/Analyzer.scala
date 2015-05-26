@@ -227,7 +227,7 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case i@InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
+      case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
         i.copy(table = EliminateSubQueries(getTable(u)))
       case u: UnresolvedRelation =>
         getTable(u)

@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.mathfuncs
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, BinaryExpression, Expression, Row}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
 /**
@@ -27,27 +26,20 @@ import org.apache.spark.sql.types._
  * @param f The math function.
  * @param name The short name of the function
  */
-abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String) 
-  extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
+abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
+  extends BinaryExpression
+  with Serializable
+  with ExpectsInputTypes
+  with TypeEqualConstraint
+  with DataTypeMerger { self: Product =>
+
   type EvaluatedType = Any
-  override def symbol: String = null
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
   override def nullable: Boolean = left.nullable || right.nullable
   override def toString: String = s"$name($left, $right)"
 
-  override lazy val resolved =
-    left.resolved && right.resolved &&
-      left.dataType == right.dataType &&
-      !DecimalType.isFixed(left.dataType)
-
-  override def dataType: DataType = {
-    if (!resolved) {
-      throw new UnresolvedException(this,
-        s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
-    }
-    left.dataType
-  }
+  override protected def typeChecker = !DecimalType.isFixed(_)
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
