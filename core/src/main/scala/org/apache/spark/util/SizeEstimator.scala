@@ -75,7 +75,8 @@ private[spark] object SizeEstimator extends Logging {
   // Sets object size, pointer size based on architecture and CompressedOops settings
   // from the JVM.
   private def initialize() {
-    is64bit = System.getProperty("os.arch").contains("64")
+    val arch = System.getProperty("os.arch")
+    is64bit = arch.contains("64") || arch.contains("s390x")
     isCompressedOops = getIsCompressedOops
 
     objectSize = if (!is64bit) 8 else {
@@ -95,6 +96,11 @@ private[spark] object SizeEstimator extends Logging {
     // actually uses a system property instead of a SparkConf, so we'll stick with that.
     if (System.getProperty("spark.test.useCompressedOops") != null) {
       return System.getProperty("spark.test.useCompressedOops").toBoolean
+    }
+
+    // java.vm.info provides compressed ref info for IBM JDKs
+    if (System.getProperty("java.vendor").contains("IBM")) {
+      return System.getProperty("java.vm.info").contains("Compressed Ref")
     }
 
     try {

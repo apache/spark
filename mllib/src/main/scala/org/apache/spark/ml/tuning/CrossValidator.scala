@@ -22,7 +22,9 @@ import com.github.fommil.netlib.F2jBLAS
 import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
+import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
@@ -52,10 +54,12 @@ private[ml] trait CrossValidatorParams extends Params {
   def getEstimatorParamMaps: Array[ParamMap] = $(estimatorParamMaps)
 
   /**
-   * param for the evaluator for selection
+   * param for the evaluator used to select hyper-parameters that maximize the cross-validated
+   * metric
    * @group param
    */
-  val evaluator: Param[Evaluator] = new Param(this, "evaluator", "evaluator for selection")
+  val evaluator: Param[Evaluator] = new Param(this, "evaluator",
+    "evaluator used to select hyper-parameters that maximize the cross-validated metric")
 
   /** @group getParam */
   def getEvaluator: Evaluator = $(evaluator)
@@ -79,7 +83,10 @@ private[ml] trait CrossValidatorParams extends Params {
  * K-fold cross validation.
  */
 @AlphaComponent
-class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorParams with Logging {
+class CrossValidator(override val uid: String) extends Estimator[CrossValidatorModel]
+  with CrossValidatorParams with Logging {
+
+  def this() = this(Identifiable.randomUID("cv"))
 
   private val f2jBLAS = new F2jBLAS
 
@@ -103,7 +110,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
 
   override def fit(dataset: DataFrame): CrossValidatorModel = {
     val schema = dataset.schema
-    transformSchema(dataset.schema, logging = true)
+    transformSchema(schema, logging = true)
     val sqlCtx = dataset.sqlContext
     val est = $(estimator)
     val eval = $(evaluator)
@@ -120,6 +127,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
       trainingDataset.unpersist()
       var i = 0
       while (i < numModels) {
+        // TODO: duplicate evaluator to take extra params from input
         val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)))
         logDebug(s"Got metric $metric for model trained with ${epm(i)}.")
         metrics(i) += metric
@@ -133,7 +141,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
-    copyValues(new CrossValidatorModel(this, bestModel))
+    copyValues(new CrossValidatorModel(uid, bestModel).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -147,7 +155,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
  */
 @AlphaComponent
 class CrossValidatorModel private[ml] (
-    override val parent: CrossValidator,
+    override val uid: String,
     val bestModel: Model[_])
   extends Model[CrossValidatorModel] with CrossValidatorParams {
 
@@ -156,6 +164,7 @@ class CrossValidatorModel private[ml] (
   }
 
   override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)
   }
 

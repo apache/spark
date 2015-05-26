@@ -18,11 +18,10 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
-import org.apache.spark.ml.impl.tree._
+import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.tree.{DecisionTreeModel, Node}
-import org.apache.spark.ml.util.MetadataUtils
+import org.apache.spark.ml.tree.{TreeRegressorParams, DecisionTreeParams, DecisionTreeModel, Node}
+import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
@@ -39,9 +38,11 @@ import org.apache.spark.sql.DataFrame
  * It supports both continuous and categorical features.
  */
 @AlphaComponent
-final class DecisionTreeRegressor
+final class DecisionTreeRegressor(override val uid: String)
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
   with DecisionTreeParams with TreeRegressorParams {
+
+  def this() = this(Identifiable.randomUID("dtr"))
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -92,7 +93,7 @@ object DecisionTreeRegressor {
  */
 @AlphaComponent
 final class DecisionTreeRegressionModel private[ml] (
-    override val parent: DecisionTreeRegressor,
+    override val uid: String,
     override val rootNode: Node)
   extends PredictionModel[Vector, DecisionTreeRegressionModel]
   with DecisionTreeModel with Serializable {
@@ -105,7 +106,7 @@ final class DecisionTreeRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): DecisionTreeRegressionModel = {
-    copyValues(new DecisionTreeRegressionModel(parent, rootNode), extra)
+    copyValues(new DecisionTreeRegressionModel(uid, rootNode), extra)
   }
 
   override def toString: String = {
@@ -129,6 +130,7 @@ private[ml] object DecisionTreeRegressionModel {
       s"Cannot convert non-regression DecisionTreeModel (old API) to" +
         s" DecisionTreeRegressionModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
-    new DecisionTreeRegressionModel(parent, rootNode)
+    val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtr")
+    new DecisionTreeRegressionModel(uid, rootNode)
   }
 }

@@ -267,7 +267,7 @@ private[sql] case class InMemoryColumnarTableScan(
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
-  override def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[Row] = {
     if (enableAccumulators) {
       readPartitions.setValue(0)
       readBatches.setValue(0)
@@ -314,7 +314,7 @@ private[sql] case class InMemoryColumnarTableScan(
                 columnAccessors(i).extractTo(nextRow, i)
                 i += 1
               }
-              nextRow
+              if (attributes.isEmpty) Row.empty else nextRow
             }
 
             override def hasNext: Boolean = columnAccessors(0).hasNext

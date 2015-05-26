@@ -134,6 +134,10 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
   }
 
+  private[sql] def getFieldIndex(name: String): Option[Int] = {
+    nameToIndex.get(name)
+  }
+
   protected[sql] def toAttributes: Seq[AttributeReference] =
     map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
 

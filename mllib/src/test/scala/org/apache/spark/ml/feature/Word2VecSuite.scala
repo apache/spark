@@ -52,6 +52,7 @@ class Word2VecSuite extends FunSuite with MLlibTestSparkContext {
       .setVectorSize(3)
       .setInputCol("text")
       .setOutputCol("result")
+      .setSeed(42L)
       .fit(docDF)
 
     model.transform(docDF).select("result", "expected").collect().foreach {

@@ -40,18 +40,20 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("predictionCol", "prediction column name", Some("\"prediction\"")),
       ParamDesc[String]("rawPredictionCol", "raw prediction (a.k.a. confidence) column name",
         Some("\"rawPrediction\"")),
-      ParamDesc[String]("probabilityCol",
-        "column name for predicted class conditional probabilities", Some("\"probability\"")),
+      ParamDesc[String]("probabilityCol", "Column name for predicted class conditional" +
+        " probabilities. Note: Not all models output well-calibrated probability estimates!" +
+        " These probabilities should be treated as confidences, not precise probabilities.",
+        Some("\"probability\"")),
       ParamDesc[Double]("threshold",
         "threshold in binary classification prediction, in range [0, 1]",
         isValid = "ParamValidators.inRange(0, 1)"),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
-      ParamDesc[String]("outputCol", "output column name"),
+      ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
       ParamDesc[Int]("checkpointInterval", "checkpoint interval (>= 1)",
         isValid = "ParamValidators.gtEq(1)"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
-      ParamDesc[Long]("seed", "random seed", Some("Utils.random.nextLong()")),
+      ParamDesc[Long]("seed", "random seed", Some("this.getClass.getName.hashCode.toLong")),
       ParamDesc[Double]("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]." +
         " For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.",
         isValid = "ParamValidators.inRange(0, 1)"),
@@ -83,6 +85,7 @@ private[shared] object SharedParamsCodeGen {
         case _ if c == classOf[Float] => "FloatParam"
         case _ if c == classOf[Double] => "DoubleParam"
         case _ if c == classOf[Boolean] => "BooleanParam"
+        case _ if c.isArray && c.getComponentType == classOf[String] => s"StringArrayParam"
         case _ => s"Param[${getTypeString(c)}]"
       }
     }

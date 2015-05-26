@@ -61,12 +61,12 @@ class FPGrowth(object):
     def train(cls, data, minSupport=0.3, numPartitions=-1):
         """
         Computes an FP-Growth model that contains frequent itemsets.
-        :param data:            The input data set, each element
-                                contains a transaction.
-        :param minSupport:      The minimal support level
-                                (default: `0.3`).
-        :param numPartitions:   The number of partitions used by parallel
-                                FP-growth (default: same as input data).
+
+        :param data: The input data set, each element contains a
+            transaction.
+        :param minSupport: The minimal support level (default: `0.3`).
+        :param numPartitions: The number of partitions used by
+            parallel FP-growth (default: same as input data).
         """
         model = callMLlibFunc("trainFPGrowthModel", data, float(minSupport), int(numPartitions))
         return FPGrowthModel(model)

@@ -72,6 +72,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
+   * Find the first [[TreeNode]] that satisfies the condition specified by `f`.
+   * The condition is recursively applied to this node and all of its children (pre-order).
+   */
+  def find(f: BaseType => Boolean): Option[BaseType] = f(this) match {
+    case true => Some(this)
+    case false => children.foldLeft(None: Option[BaseType]) { (l, r) => l.orElse(r.find(f)) }
+  }
+
+  /**
    * Runs the given function on this node and then recursively on [[children]].
    * @param f the function to be applied to each node in the tree.
    */
@@ -122,6 +131,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
+   * Finds and returns the first [[TreeNode]] of the tree for which the given partial function
+   * is defined (pre-order), and applies the partial function to it.
+   */
+  def collectFirst[B](pf: PartialFunction[BaseType, B]): Option[B] = {
+    val lifted = pf.lift
+    lifted(this).orElse {
+      children.foldLeft(None: Option[B]) { (l, r) => l.orElse(r.collectFirst(pf)) }
+    }
+  }
+
+  /**
    * Returns a copy of this node where `f` has been applied to all the nodes children.
    */
   def mapChildren(f: BaseType => BaseType): this.type = {
@@ -151,6 +171,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     val remainingNewChildren = newChildren.toBuffer
     val remainingOldChildren = children.toBuffer
     val newArgs = productIterator.map {
+      // Handle Seq[TreeNode] in TreeNode parameters.
+      case s: Seq[_] => s.map {
+        case arg: TreeNode[_] if children contains arg =>
+          val newChild = remainingNewChildren.remove(0)
+          val oldChild = remainingOldChildren.remove(0)
+          if (newChild fastEquals oldChild) {
+            oldChild
+          } else {
+            changed = true
+            newChild
+          }
+        case nonChild: AnyRef => nonChild
+        case null => null
+      }
       case arg: TreeNode[_] if children contains arg =>
         val newChild = remainingNewChildren.remove(0)
         val oldChild = remainingOldChildren.remove(0)
@@ -351,6 +385,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def argString: String = productIterator.flatMap {
     case tn: TreeNode[_] if children contains tn => Nil
     case tn: TreeNode[_] if tn.toString contains "\n" => s"(${tn.simpleString})" :: Nil
+    case seq: Seq[BaseType] if seq.toSet.subsetOf(children.toSet) => Nil
     case seq: Seq[_] => seq.mkString("[", ",", "]") :: Nil
     case set: Set[_] => set.mkString("{", ",", "}") :: Nil
     case other => other :: Nil
