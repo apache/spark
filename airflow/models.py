@@ -632,7 +632,7 @@ class TaskInstance(Base):
         task to run
         """
         if not self.task.pool:
-            return True
+            return False
 
         close_session = False
         if not session:
@@ -641,25 +641,25 @@ class TaskInstance(Base):
 
         running = (
             session
-            .query(func.count('*'))
-            .select_from(TaskInstance)
+            .query(TaskInstance)
             .filter(TaskInstance.pool == self.task.pool)
             .filter(TaskInstance.state == State.RUNNING)
-            .scalar()
+            .count()
         )
-        pool_size = (
+        pool = (
             session
             .query(Pool)
             .filter(Pool.pool == self.task.pool)
             .first()
         )
-        if not pool_size:
+        if not pool:
             return False
 
         if close_session:
+            session.expunge_all()
             session.commit()
             session.close()
-        return running < pool_size
+        return running >= pool.slots
 
 
     def run(
