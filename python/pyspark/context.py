@@ -173,6 +173,7 @@ class SparkContext(object):
             self._jvm.PythonAccumulatorParam(host, port))
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
+        self.pythonVer = "%d.%d" % sys.version_info[:2]
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
@@ -267,6 +268,13 @@ class SparkContext(object):
         """
         self.stop()
 
+    def setLogLevel(self, logLevel):
+        """
+        Control our logLevel. This overrides any user-defined log settings.
+        Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
+        """
+        self._jsc.setLogLevel(logLevel)
+
     @classmethod
     def setSystemProperty(cls, key, value):
         """
@@ -282,6 +290,11 @@ class SparkContext(object):
         The version of Spark on which this application is running.
         """
         return self._jsc.version()
+
+    @property
+    def startTime(self):
+        """Return the epoch time when the Spark Context was started."""
+        return self._jsc.startTime()
 
     @property
     def defaultParallelism(self):
@@ -310,6 +323,22 @@ class SparkContext(object):
             self._accumulatorServer = None
         with SparkContext._lock:
             SparkContext._active_spark_context = None
+
+    def range(self, start, end, step=1, numSlices=None):
+        """
+        Create a new RDD of int containing elements from `start` to `end`
+        (exclusive), increased by `step` every element.
+
+        :param start: the start value
+        :param end: the end value (exclusive)
+        :param step: the incremental step (default: 1)
+        :param numSlices: the number of partitions of the new RDD
+        :return: An RDD of int
+
+        >>> sc.range(1, 7, 2).collect()
+        [1, 3, 5]
+        """
+        return self.parallelize(xrange(start, end, step), numSlices)
 
     def parallelize(self, c, numSlices=None):
         """

@@ -24,7 +24,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.ui.JettyUtils
-import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.util.{ThreadUtils, RpcUtils}
 
 import scala.util.control.NonFatal
 
@@ -53,14 +53,14 @@ private[spark] abstract class YarnSchedulerBackend(
    * This includes executors already pending or running.
    */
   override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
-    yarnSchedulerEndpoint.askWithReply[Boolean](RequestExecutors(requestedTotal))
+    yarnSchedulerEndpoint.askWithRetry[Boolean](RequestExecutors(requestedTotal))
   }
 
   /**
    * Request that the ApplicationMaster kill the specified executors.
    */
   override def doKillExecutors(executorIds: Seq[String]): Boolean = {
-    yarnSchedulerEndpoint.askWithReply[Boolean](KillExecutors(executorIds))
+    yarnSchedulerEndpoint.askWithRetry[Boolean](KillExecutors(executorIds))
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
@@ -97,7 +97,7 @@ private[spark] abstract class YarnSchedulerBackend(
     private var amEndpoint: Option[RpcEndpointRef] = None
 
     private val askAmThreadPool =
-      Utils.newDaemonCachedThreadPool("yarn-scheduler-ask-am-thread-pool")
+      ThreadUtils.newDaemonCachedThreadPool("yarn-scheduler-ask-am-thread-pool")
     implicit val askAmExecutor = ExecutionContext.fromExecutor(askAmThreadPool)
 
     override def receive: PartialFunction[Any, Unit] = {
@@ -115,7 +115,7 @@ private[spark] abstract class YarnSchedulerBackend(
         amEndpoint match {
           case Some(am) =>
             Future {
-              context.reply(am.askWithReply[Boolean](r))
+              context.reply(am.askWithRetry[Boolean](r))
             } onFailure {
               case NonFatal(e) =>
                 logError(s"Sending $r to AM was unsuccessful", e)
@@ -130,7 +130,7 @@ private[spark] abstract class YarnSchedulerBackend(
         amEndpoint match {
           case Some(am) =>
             Future {
-              context.reply(am.askWithReply[Boolean](k))
+              context.reply(am.askWithRetry[Boolean](k))
             } onFailure {
               case NonFatal(e) =>
                 logError(s"Sending $k to AM was unsuccessful", e)

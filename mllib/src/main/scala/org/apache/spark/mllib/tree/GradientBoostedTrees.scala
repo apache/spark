@@ -177,8 +177,11 @@ object GradientBoostedTrees extends Logging {
     treeStrategy.assertValid()
 
     // Cache input
-    if (input.getStorageLevel == StorageLevel.NONE) {
+    val persistedInput = if (input.getStorageLevel == StorageLevel.NONE) {
       input.persist(StorageLevel.MEMORY_AND_DISK)
+      true
+    } else {
+      false
     }
 
     timer.stop("init")
@@ -265,6 +268,9 @@ object GradientBoostedTrees extends Logging {
 
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
+
+    if (persistedInput) input.unpersist()
+    
     if (validate) {
       new GradientBoostedTreesModel(
         boostingStrategy.treeStrategy.algo,

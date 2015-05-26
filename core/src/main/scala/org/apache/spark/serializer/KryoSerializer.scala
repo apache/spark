@@ -32,6 +32,7 @@ import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.HttpBroadcast
 import org.apache.spark.network.nio.{GetBlock, GotBlock, PutBlock}
+import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
 import org.apache.spark.util.BoundedPriorityQueue
@@ -49,19 +50,20 @@ class KryoSerializer(conf: SparkConf)
   with Logging
   with Serializable {
 
-  private val bufferSizeMb = conf.getDouble("spark.kryoserializer.buffer.mb", 0.064)
-  if (bufferSizeMb >= 2048) {
-    throw new IllegalArgumentException("spark.kryoserializer.buffer.mb must be less than " +
-      s"2048 mb, got: + $bufferSizeMb mb.")
+  private val bufferSizeKb = conf.getSizeAsKb("spark.kryoserializer.buffer", "64k")
+  
+  if (bufferSizeKb >= ByteUnit.GiB.toKiB(2)) {
+    throw new IllegalArgumentException("spark.kryoserializer.buffer must be less than " +
+      s"2048 mb, got: + ${ByteUnit.KiB.toMiB(bufferSizeKb)} mb.")
   }
-  private val bufferSize = (bufferSizeMb * 1024 * 1024).toInt
+  private val bufferSize = ByteUnit.KiB.toBytes(bufferSizeKb).toInt
 
-  val maxBufferSizeMb = conf.getInt("spark.kryoserializer.buffer.max.mb", 64)
-  if (maxBufferSizeMb >= 2048) {
-    throw new IllegalArgumentException("spark.kryoserializer.buffer.max.mb must be less than " +
+  val maxBufferSizeMb = conf.getSizeAsMb("spark.kryoserializer.buffer.max", "64m").toInt
+  if (maxBufferSizeMb >= ByteUnit.GiB.toMiB(2)) {
+    throw new IllegalArgumentException("spark.kryoserializer.buffer.max must be less than " +
       s"2048 mb, got: + $maxBufferSizeMb mb.")
   }
-  private val maxBufferSize = maxBufferSizeMb * 1024 * 1024
+  private val maxBufferSize = ByteUnit.MiB.toBytes(maxBufferSizeMb).toInt
 
   private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
   private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", false)
@@ -124,6 +126,13 @@ class KryoSerializer(conf: SparkConf)
   override def newInstance(): SerializerInstance = {
     new KryoSerializerInstance(this)
   }
+
+  private[spark] override lazy val supportsRelocationOfSerializedObjects: Boolean = {
+    // If auto-reset is disabled, then Kryo may store references to duplicate occurrences of objects
+    // in the stream rather than writing those objects' serialized bytes, breaking relocation. See
+    // https://groups.google.com/d/msg/kryo-users/6ZUSyfjjtdo/FhGG1KHDXPgJ for more details.
+    newInstance().asInstanceOf[KryoSerializerInstance].getAutoReset()
+  }
 }
 
 private[spark]
@@ -168,12 +177,13 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
 
   override def serialize[T: ClassTag](t: T): ByteBuffer = {
     output.clear()
+    kryo.reset() // We must reset in case this serializer instance was reused (see SPARK-7766)
     try {
       kryo.writeClassAndObject(output, t)
     } catch {
       case e: KryoException if e.getMessage.startsWith("Buffer overflow") =>
         throw new SparkException(s"Kryo serialization failed: ${e.getMessage}. To avoid this, " +
-          "increase spark.kryoserializer.buffer.max.mb value.")
+          "increase spark.kryoserializer.buffer.max value.")
     }
     ByteBuffer.wrap(output.toBytes)
   }
@@ -193,11 +203,22 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
   }
 
   override def serializeStream(s: OutputStream): SerializationStream = {
+    kryo.reset() // We must reset in case this serializer instance was reused (see SPARK-7766)
     new KryoSerializationStream(kryo, s)
   }
 
   override def deserializeStream(s: InputStream): DeserializationStream = {
     new KryoDeserializationStream(kryo, s)
+  }
+
+  /**
+   * Returns true if auto-reset is on. The only reason this would be false is if the user-supplied
+   * registrator explicitly turns auto-reset off.
+   */
+  def getAutoReset(): Boolean = {
+    val field = classOf[Kryo].getDeclaredField("autoReset")
+    field.setAccessible(true)
+    field.get(kryo).asInstanceOf[Boolean]
   }
 }
 

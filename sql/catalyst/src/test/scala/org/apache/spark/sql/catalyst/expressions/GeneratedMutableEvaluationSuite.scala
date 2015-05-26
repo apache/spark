@@ -25,13 +25,13 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
  */
 class GeneratedMutableEvaluationSuite extends ExpressionEvaluationSuite {
   override def checkEvaluation(
-                                expression: Expression,
-                                expected: Any,
-                                inputRow: Row = EmptyRow): Unit = {
+      expression: Expression,
+      expected: Any,
+      inputRow: Row = EmptyRow): Unit = {
     lazy val evaluated = GenerateProjection.expressionEvaluator(expression)
 
     val plan = try {
-      GenerateProjection(Alias(expression, s"Optimized($expression)")() :: Nil)
+      GenerateProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)
     } catch {
       case e: Throwable =>
         fail(

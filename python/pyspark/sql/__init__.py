@@ -18,26 +18,37 @@
 """
 Important classes of Spark SQL and DataFrames:
 
-    - L{SQLContext}
+    - :class:`pyspark.sql.SQLContext`
       Main entry point for :class:`DataFrame` and SQL functionality.
-    - L{DataFrame}
+    - :class:`pyspark.sql.DataFrame`
       A distributed collection of data grouped into named columns.
-    - L{Column}
+    - :class:`pyspark.sql.Column`
       A column expression in a :class:`DataFrame`.
-    - L{Row}
+    - :class:`pyspark.sql.Row`
       A row of data in a :class:`DataFrame`.
-    - L{HiveContext}
+    - :class:`pyspark.sql.HiveContext`
       Main entry point for accessing data stored in Apache Hive.
-    - L{GroupedData}
+    - :class:`pyspark.sql.GroupedData`
       Aggregation methods, returned by :func:`DataFrame.groupBy`.
-    - L{DataFrameNaFunctions}
+    - :class:`pyspark.sql.DataFrameNaFunctions`
       Methods for handling missing data (null values).
-    - L{functions}
+    - :class:`pyspark.sql.DataFrameStatFunctions`
+      Methods for statistics functionality.
+    - :class:`pyspark.sql.functions`
       List of built-in functions available for :class:`DataFrame`.
-    - L{types}
+    - :class:`pyspark.sql.types`
       List of data types available.
+    - :class:`pyspark.sql.Window`
+      For working with window functions.
 """
 from __future__ import absolute_import
+
+
+def since(version):
+    def deco(f):
+        f.__doc__ = f.__doc__.rstrip() + "\n\n.. versionadded:: %s" % version
+        return f
+    return deco
 
 # fix the module name conflict for Python 3+
 import sys
@@ -53,8 +64,13 @@ del modname, sys
 
 from pyspark.sql.types import Row
 from pyspark.sql.context import SQLContext, HiveContext
-from pyspark.sql.dataframe import DataFrame, GroupedData, Column, SchemaRDD, DataFrameNaFunctions
+from pyspark.sql.column import Column
+from pyspark.sql.dataframe import DataFrame, SchemaRDD, DataFrameNaFunctions, DataFrameStatFunctions
+from pyspark.sql.group import GroupedData
+from pyspark.sql.readwriter import DataFrameReader, DataFrameWriter
+from pyspark.sql.window import Window, WindowSpec
 
 __all__ = [
-    'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row', 'DataFrameNaFunctions'
+    'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row',
+    'DataFrameNaFunctions', 'DataFrameStatFunctions', 'Window', 'WindowSpec',
 ]

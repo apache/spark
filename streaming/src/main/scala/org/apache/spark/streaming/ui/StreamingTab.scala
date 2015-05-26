@@ -17,9 +17,11 @@
 
 package org.apache.spark.streaming.ui
 
+import org.eclipse.jetty.servlet.ServletContextHandler
+
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.spark.ui.{JettyUtils, SparkUI, SparkUITab}
 
 import StreamingTab._
 
@@ -27,18 +29,31 @@ import StreamingTab._
  * Spark Web UI tab that shows statistics of a streaming job.
  * This assumes the given SparkContext has enabled its SparkUI.
  */
-private[spark] class StreamingTab(ssc: StreamingContext)
+private[spark] class StreamingTab(val ssc: StreamingContext)
   extends SparkUITab(getSparkUI(ssc), "streaming") with Logging {
+
+  private val STATIC_RESOURCE_DIR = "org/apache/spark/streaming/ui/static"
 
   val parent = getSparkUI(ssc)
   val listener = ssc.progressListener
 
   ssc.addStreamingListener(listener)
+  ssc.sc.addSparkListener(listener)
   attachPage(new StreamingPage(this))
-  parent.attachTab(this)
+  attachPage(new BatchPage(this))
+
+  var staticHandler: ServletContextHandler = null
+
+  def attach() {
+    getSparkUI(ssc).attachTab(this)
+    staticHandler = JettyUtils.createStaticHandler(STATIC_RESOURCE_DIR, "/static/streaming")
+    getSparkUI(ssc).attachHandler(staticHandler)
+  }
 
   def detach() {
     getSparkUI(ssc).detachTab(this)
+    getSparkUI(ssc).detachHandler(staticHandler)
+    staticHandler = null
   }
 }
 

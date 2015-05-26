@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{ScheduledFuture, TimeUnit, Executors}
+import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable
 
@@ -25,7 +25,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcEnv, RpcCallContext}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.scheduler.{SlaveLost, TaskScheduler}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
@@ -76,14 +76,15 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
   
   private var timeoutCheckingTask: ScheduledFuture[_] = null
 
-  private val timeoutCheckingThread = Executors.newSingleThreadScheduledExecutor(
-    Utils.namedThreadFactory("heartbeat-timeout-checking-thread"))
+  // "eventLoopThread" is used to run some pretty fast actions. The actions running in it should not
+  // block the thread for a long time.
+  private val eventLoopThread =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("heartbeat-receiver-event-loop-thread")
 
-  private val killExecutorThread = Executors.newSingleThreadExecutor(
-    Utils.namedThreadFactory("kill-executor-thread"))
+  private val killExecutorThread = ThreadUtils.newDaemonSingleThreadExecutor("kill-executor-thread")
 
   override def onStart(): Unit = {
-    timeoutCheckingTask = timeoutCheckingThread.scheduleAtFixedRate(new Runnable {
+    timeoutCheckingTask = eventLoopThread.scheduleAtFixedRate(new Runnable {
       override def run(): Unit = Utils.tryLogNonFatalError {
         Option(self).foreach(_.send(ExpireDeadHosts))
       }
@@ -100,11 +101,15 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case heartbeat @ Heartbeat(executorId, taskMetrics, blockManagerId) =>
       if (scheduler != null) {
-        val unknownExecutor = !scheduler.executorHeartbeatReceived(
-          executorId, taskMetrics, blockManagerId)
-        val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
         executorLastSeen(executorId) = System.currentTimeMillis()
-        context.reply(response)
+        eventLoopThread.submit(new Runnable {
+          override def run(): Unit = Utils.tryLogNonFatalError {
+            val unknownExecutor = !scheduler.executorHeartbeatReceived(
+              executorId, taskMetrics, blockManagerId)
+            val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
+            context.reply(response)
+          }
+        })
       } else {
         // Because Executor will sleep several seconds before sending the first "Heartbeat", this
         // case rarely happens. However, if it really happens, log it and ask the executor to
@@ -126,7 +131,9 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
         if (sc.supportDynamicAllocation) {
           // Asynchronously kill the executor to avoid blocking the current thread
           killExecutorThread.submit(new Runnable {
-            override def run(): Unit = sc.killExecutor(executorId)
+            override def run(): Unit = Utils.tryLogNonFatalError {
+              sc.killExecutor(executorId)
+            }
           })
         }
         executorLastSeen.remove(executorId)
@@ -138,7 +145,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
     if (timeoutCheckingTask != null) {
       timeoutCheckingTask.cancel(true)
     }
-    timeoutCheckingThread.shutdownNow()
+    eventLoopThread.shutdownNow()
     killExecutorThread.shutdownNow()
   }
 }

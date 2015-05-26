@@ -35,7 +35,6 @@ import org.eclipse.paho.client.mqttv3.MqttMessage
 import org.eclipse.paho.client.mqttv3.MqttTopic
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 
-import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
@@ -56,6 +55,8 @@ class MQTTInputDStream(
     topic: String,
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[String](ssc_) {
+
+  private[streaming] override def name: String = s"MQTT stream [$id]"
 
   def getReceiver(): Receiver[String] = {
     new MQTTReceiver(brokerUrl, topic, storageLevel)

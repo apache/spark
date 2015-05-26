@@ -17,32 +17,40 @@
 
 package org.apache.spark.streaming.ui
 
+import java.text.SimpleDateFormat
+import java.util.Date
+
 import scala.xml.Node
 
-import org.apache.spark.streaming.scheduler.BatchInfo
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 
-private[ui] abstract class BatchTableBase(tableId: String) {
+private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) {
 
   protected def columns: Seq[Node] = {
     <th>Batch Time</th>
       <th>Input Size</th>
-      <th>Scheduling Delay</th>
-      <th>Processing Time</th>
+      <th>Scheduling Delay
+        {SparkUIUtils.tooltip("Time taken by Streaming scheduler to submit jobs of a batch", "top")}
+      </th>
+      <th>Processing Time
+        {SparkUIUtils.tooltip("Time taken to process all jobs of a batch", "top")}</th>
   }
 
-  protected def baseRow(batch: BatchInfo): Seq[Node] = {
+  protected def baseRow(batch: BatchUIData): Seq[Node] = {
     val batchTime = batch.batchTime.milliseconds
-    val formattedBatchTime = UIUtils.formatDate(batch.batchTime.milliseconds)
-    val eventCount = batch.receivedBlockInfo.values.map {
-      receivers => receivers.map(_.numRecords).sum
-    }.sum
+    val formattedBatchTime = UIUtils.formatBatchTime(batchTime, batchInterval)
+    val eventCount = batch.numRecords
     val schedulingDelay = batch.schedulingDelay
-    val formattedSchedulingDelay = schedulingDelay.map(UIUtils.formatDuration).getOrElse("-")
+    val formattedSchedulingDelay = schedulingDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
     val processingTime = batch.processingDelay
-    val formattedProcessingTime = processingTime.map(UIUtils.formatDuration).getOrElse("-")
+    val formattedProcessingTime = processingTime.map(SparkUIUtils.formatDuration).getOrElse("-")
+    val batchTimeId = s"batch-$batchTime"
 
-    <td sorttable_customkey={batchTime.toString}>{formattedBatchTime}</td>
+    <td id={batchTimeId} sorttable_customkey={batchTime.toString}>
+      <a href={s"batch?id=$batchTime"}>
+        {formattedBatchTime}
+      </a>
+    </td>
       <td sorttable_customkey={eventCount.toString}>{eventCount.toString} events</td>
       <td sorttable_customkey={schedulingDelay.getOrElse(Long.MaxValue).toString}>
         {formattedSchedulingDelay}
@@ -73,8 +81,10 @@ private[ui] abstract class BatchTableBase(tableId: String) {
   protected def renderRows: Seq[Node]
 }
 
-private[ui] class ActiveBatchTable(runningBatches: Seq[BatchInfo], waitingBatches: Seq[BatchInfo])
-  extends BatchTableBase("active-batches-table") {
+private[ui] class ActiveBatchTable(
+    runningBatches: Seq[BatchUIData],
+    waitingBatches: Seq[BatchUIData],
+    batchInterval: Long) extends BatchTableBase("active-batches-table", batchInterval) {
 
   override protected def columns: Seq[Node] = super.columns ++ <th>Status</th>
 
@@ -85,27 +95,29 @@ private[ui] class ActiveBatchTable(runningBatches: Seq[BatchInfo], waitingBatche
       runningBatches.flatMap(batch => <tr>{runningBatchRow(batch)}</tr>)
   }
 
-  private def runningBatchRow(batch: BatchInfo): Seq[Node] = {
+  private def runningBatchRow(batch: BatchUIData): Seq[Node] = {
     baseRow(batch) ++ <td>processing</td>
   }
 
-  private def waitingBatchRow(batch: BatchInfo): Seq[Node] = {
+  private def waitingBatchRow(batch: BatchUIData): Seq[Node] = {
     baseRow(batch) ++ <td>queued</td>
   }
 }
 
-private[ui] class CompletedBatchTable(batches: Seq[BatchInfo])
-  extends BatchTableBase("completed-batches-table") {
+private[ui] class CompletedBatchTable(batches: Seq[BatchUIData], batchInterval: Long)
+  extends BatchTableBase("completed-batches-table", batchInterval) {
 
-  override protected def columns: Seq[Node] = super.columns ++ <th>Total Delay</th>
+  override protected def columns: Seq[Node] = super.columns ++
+    <th>Total Delay
+      {SparkUIUtils.tooltip("Total time taken to handle a batch", "top")}</th>
 
   override protected def renderRows: Seq[Node] = {
     batches.flatMap(batch => <tr>{completedBatchRow(batch)}</tr>)
   }
 
-  private def completedBatchRow(batch: BatchInfo): Seq[Node] = {
+  private def completedBatchRow(batch: BatchUIData): Seq[Node] = {
     val totalDelay = batch.totalDelay
-    val formattedTotalDelay = totalDelay.map(UIUtils.formatDuration).getOrElse("-")
+    val formattedTotalDelay = totalDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
     baseRow(batch) ++
       <td sorttable_customkey={totalDelay.getOrElse(Long.MaxValue).toString}>
         {formattedTotalDelay}

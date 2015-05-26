@@ -23,18 +23,14 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.util.TestingUtils
 import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
-
+import org.apache.spark.sql.DataFrame
 
 class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
 
   import VectorIndexerSuite.FeatureData
-
-  @transient var sqlContext: SQLContext = _
 
   // identical, of length 3
   @transient var densePoints1: DataFrame = _
@@ -87,7 +83,6 @@ class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
     checkPair(densePoints1Seq, sparsePoints1Seq)
     checkPair(densePoints2Seq, sparsePoints2Seq)
 
-    sqlContext = new SQLContext(sc)
     densePoints1 = sqlContext.createDataFrame(sc.parallelize(densePoints1Seq, 2).map(FeatureData))
     sparsePoints1 = sqlContext.createDataFrame(sc.parallelize(sparsePoints1Seq, 2).map(FeatureData))
     densePoints2 = sqlContext.createDataFrame(sc.parallelize(densePoints2Seq, 2).map(FeatureData))
@@ -111,8 +106,8 @@ class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
     val model = vectorIndexer.fit(densePoints1) // vectors of length 3
     model.transform(densePoints1) // should work
     model.transform(sparsePoints1) // should work
-    intercept[IllegalArgumentException] {
-      model.transform(densePoints2)
+    intercept[SparkException] {
+      model.transform(densePoints2).collect()
       println("Did not throw error when fit, transform were called on vectors of different lengths")
     }
     intercept[SparkException] {
@@ -245,8 +240,6 @@ class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
           // TODO: Once input features marked as categorical are handled correctly, check that here.
       }
     }
-    // Check that non-ML metadata are preserved.
-    TestingUtils.testPreserveMetadata(densePoints1WithMeta, model, "features", "indexed")
   }
 }
 

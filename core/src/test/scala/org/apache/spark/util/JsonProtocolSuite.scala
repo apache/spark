@@ -29,6 +29,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.executor._
+import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 
@@ -74,9 +75,12 @@ class JsonProtocolSuite extends FunSuite {
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
       BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
-    val applicationStart = SparkListenerApplicationStart("The winner of all", None, 42L, "Garfield")
-    val applicationEnd = SparkListenerApplicationEnd(42L)
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
+    val applicationStart = SparkListenerApplicationStart("The winner of all", Some("appId"),
+      42L, "Garfield", Some("appAttempt"))
+    val applicationStartWithLogs = SparkListenerApplicationStart("The winner of all", Some("appId"),
+      42L, "Garfield", Some("appAttempt"), Some(logUrlMap))
+    val applicationEnd = SparkListenerApplicationEnd(42L)
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
@@ -95,6 +99,7 @@ class JsonProtocolSuite extends FunSuite {
     testEvent(blockManagerRemoved, blockManagerRemovedJsonString)
     testEvent(unpersistRdd, unpersistRDDJsonString)
     testEvent(applicationStart, applicationStartJsonString)
+    testEvent(applicationStartWithLogs, applicationStartJsonWithLogUrlsString)
     testEvent(applicationEnd, applicationEndJsonString)
     testEvent(executorAdded, executorAddedJsonString)
     testEvent(executorRemoved, executorRemovedJsonString)
@@ -161,7 +166,7 @@ class JsonProtocolSuite extends FunSuite {
     assertEquals(exceptionFailure, JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
-  test("StageInfo backward compatibility") {
+  test("StageInfo backward compatibility (details, accumulables)") {
     val info = makeStageInfo(1, 2, 3, 4L, 5L)
     val newJson = JsonProtocol.stageInfoToJson(info)
 
@@ -274,9 +279,13 @@ class JsonProtocolSuite extends FunSuite {
 
   test("SparkListenerApplicationStart backwards compatibility") {
     // SparkListenerApplicationStart in Spark 1.0.0 do not have an "appId" property.
-    val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user")
+    // SparkListenerApplicationStart pre-Spark 1.4 does not have "appAttemptId".
+    // SparkListenerApplicationStart pre-Spark 1.5 does not have "driverLogs
+    val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user", None, None)
     val oldEvent = JsonProtocol.applicationStartToJson(applicationStart)
       .removeField({ _._1 == "App ID" })
+      .removeField({ _._1 == "App Attempt ID" })
+      .removeField({ _._1 == "Driver Logs"})
     assert(applicationStart === JsonProtocol.applicationStartFromJson(oldEvent))
   }
 
@@ -294,7 +303,7 @@ class JsonProtocolSuite extends FunSuite {
     val stageIds = Seq[Int](1, 2, 3, 4)
     val stageInfos = stageIds.map(x => makeStageInfo(x, x * 200, x * 300, x * 400, x * 500))
     val dummyStageInfos =
-      stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, "unknown"))
+      stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown"))
     val jobStart = SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
     val oldEvent = JsonProtocol.jobStartToJson(jobStart).removeField({_._1 == "Stage Infos"})
     val expectedJobStart =
@@ -318,6 +327,25 @@ class JsonProtocolSuite extends FunSuite {
       .removeField({ _._1 == "Completion Time"})
     val expectedJobEnd = SparkListenerJobEnd(11, -1, JobSucceeded)
     assertEquals(expectedJobEnd, JsonProtocol.jobEndFromJson(oldEndEvent))
+  }
+
+  test("RDDInfo backward compatibility (scope, parent IDs)") {
+    // Prior to Spark 1.4.0, RDDInfo did not have the "Scope" and "Parent IDs" properties
+    val rddInfo = new RDDInfo(
+      1, "one", 100, StorageLevel.NONE, Seq(1, 6, 8), Some(new RDDOperationScope("fable")))
+    val oldRddInfoJson = JsonProtocol.rddInfoToJson(rddInfo)
+      .removeField({ _._1 == "Parent IDs"})
+      .removeField({ _._1 == "Scope"})
+    val expectedRddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, Seq.empty, scope = None)
+    assertEquals(expectedRddInfo, JsonProtocol.rddInfoFromJson(oldRddInfoJson))
+  }
+
+  test("StageInfo backward compatibility (parent IDs)") {
+    // Prior to Spark 1.4.0, StageInfo did not have the "Parent IDs" property
+    val stageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq(1, 2, 3), "details")
+    val oldStageInfo = JsonProtocol.stageInfoToJson(stageInfo).removeField({ _._1 == "Parent IDs"})
+    val expectedStageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq.empty, "details")
+    assertEquals(expectedStageInfo, JsonProtocol.stageInfoFromJson(oldStageInfo))
   }
 
   /** -------------------------- *
@@ -642,7 +670,7 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   private def makeRddInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
-    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK)
+    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, Seq(1, 4, 7))
     r.numCachedPartitions = c
     r.memSize = d
     r.diskSize = e
@@ -651,7 +679,7 @@ class JsonProtocolSuite extends FunSuite {
 
   private def makeStageInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
     val rddInfos = (0 until a % 5).map { i => makeRddInfo(a + i, b + i, c + i, d + i, e + i) }
-    val stageInfo = new StageInfo(a, 0, "greetings", b, rddInfos, "details")
+    val stageInfo = new StageInfo(a, 0, "greetings", b, rddInfos, Seq(100, 200, 300), "details")
     val (acc1, acc2) = (makeAccumulableInfo(1), makeAccumulableInfo(2))
     stageInfo.accumulables(acc1.id) = acc1
     stageInfo.accumulables(acc2.id) = acc2
@@ -744,6 +772,7 @@ class JsonProtocolSuite extends FunSuite {
       |    "Stage Name": "greetings",
       |    "Number of Tasks": 200,
       |    "RDD Info": [],
+      |    "ParentIDs" : [100, 200, 300],
       |    "Details": "details",
       |    "Accumulables": [
       |      {
@@ -782,20 +811,22 @@ class JsonProtocolSuite extends FunSuite {
       |      {
       |        "RDD ID": 101,
       |        "Name": "mayor",
+      |        "Parent IDs": [1, 4, 7],
       |        "Storage Level": {
       |          "Use Disk": true,
       |          "Use Memory": true,
-      |          "Use Tachyon": false,
+      |          "Use ExternalBlockStore": false,
       |          "Deserialized": true,
       |          "Replication": 1
       |        },
       |        "Number of Partitions": 201,
       |        "Number of Cached Partitions": 301,
       |        "Memory Size": 401,
-      |        "Tachyon Size": 0,
+      |        "ExternalBlockStore Size": 0,
       |        "Disk Size": 501
       |      }
       |    ],
+      |    "ParentIDs" : [100, 200, 300],
       |    "Details": "details",
       |    "Accumulables": [
       |      {
@@ -969,12 +1000,12 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": false,
       |            "Replication": 2
       |          },
       |          "Memory Size": 0,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 0
       |        }
       |      }
@@ -1052,12 +1083,12 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": false,
       |            "Replication": 2
       |          },
       |          "Memory Size": 0,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 0
       |        }
       |      }
@@ -1135,12 +1166,12 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": false,
       |            "Replication": 2
       |          },
       |          "Memory Size": 0,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 0
       |        }
       |      }
@@ -1165,20 +1196,22 @@ class JsonProtocolSuite extends FunSuite {
       |        {
       |          "RDD ID": 1,
       |          "Name": "mayor",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 200,
       |          "Number of Cached Partitions": 300,
       |          "Memory Size": 400,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 500
       |        }
       |      ],
+      |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
       |      "Accumulables": [
       |        {
@@ -1204,36 +1237,39 @@ class JsonProtocolSuite extends FunSuite {
       |        {
       |          "RDD ID": 2,
       |          "Name": "mayor",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 400,
       |          "Number of Cached Partitions": 600,
       |          "Memory Size": 800,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1000
       |        },
       |        {
       |          "RDD ID": 3,
       |          "Name": "mayor",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 401,
       |          "Number of Cached Partitions": 601,
       |          "Memory Size": 801,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1001
       |        }
       |      ],
+      |      "ParentIDs" : [100, 200, 300],
       |      "Details": "details",
       |      "Accumulables": [
       |        {
@@ -1259,52 +1295,56 @@ class JsonProtocolSuite extends FunSuite {
       |        {
       |          "RDD ID": 3,
       |          "Name": "mayor",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 600,
       |          "Number of Cached Partitions": 900,
       |          "Memory Size": 1200,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1500
       |        },
       |        {
       |          "RDD ID": 4,
       |          "Name": "mayor",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 601,
       |          "Number of Cached Partitions": 901,
       |          "Memory Size": 1201,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1501
       |        },
       |        {
       |          "RDD ID": 5,
       |          "Name": "mayor",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 602,
       |          "Number of Cached Partitions": 902,
       |          "Memory Size": 1202,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1502
       |        }
       |      ],
+      |      "ParentIDs" : [100, 200, 300],
       |      "Details": "details",
       |      "Accumulables": [
       |        {
@@ -1330,68 +1370,73 @@ class JsonProtocolSuite extends FunSuite {
       |        {
       |          "RDD ID": 4,
       |          "Name": "mayor",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 800,
       |          "Number of Cached Partitions": 1200,
       |          "Memory Size": 1600,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 2000
       |        },
       |        {
       |          "RDD ID": 5,
       |          "Name": "mayor",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 801,
       |          "Number of Cached Partitions": 1201,
       |          "Memory Size": 1601,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 2001
       |        },
       |        {
       |          "RDD ID": 6,
       |          "Name": "mayor",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 802,
       |          "Number of Cached Partitions": 1202,
       |          "Memory Size": 1602,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 2002
       |        },
       |        {
       |          "RDD ID": 7,
       |          "Name": "mayor",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 803,
       |          "Number of Cached Partitions": 1203,
       |          "Memory Size": 1603,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 2003
       |        }
       |      ],
+      |      "ParentIDs" : [100, 200, 300],
       |      "Details": "details",
       |      "Accumulables": [
       |        {
@@ -1497,8 +1542,26 @@ class JsonProtocolSuite extends FunSuite {
       |{
       |  "Event": "SparkListenerApplicationStart",
       |  "App Name": "The winner of all",
+      |  "App ID": "appId",
       |  "Timestamp": 42,
-      |  "User": "Garfield"
+      |  "User": "Garfield",
+      |  "App Attempt ID": "appAttempt"
+      |}
+    """
+
+  private val applicationStartJsonWithLogUrlsString =
+    """
+      |{
+      |  "Event": "SparkListenerApplicationStart",
+      |  "App Name": "The winner of all",
+      |  "App ID": "appId",
+      |  "Timestamp": 42,
+      |  "User": "Garfield",
+      |  "App Attempt ID": "appAttempt",
+      |  "Driver Logs" : {
+      |      "stderr" : "mystderr",
+      |      "stdout" : "mystdout"
+      |  }
       |}
     """
 

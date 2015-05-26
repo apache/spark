@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst
 
+import java.lang.{Iterable => JavaIterable}
 import java.util.{Map => JavaMap}
 
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -48,6 +50,16 @@ object CatalystTypeConverters {
 
     case (s: Seq[_], arrayType: ArrayType) =>
       s.map(convertToCatalyst(_, arrayType.elementType))
+
+    case (jit: JavaIterable[_], arrayType: ArrayType) => {
+      val iter = jit.iterator
+      var listOfItems: List[Any] = List()
+      while (iter.hasNext) {
+        val item = iter.next()
+        listOfItems :+= convertToCatalyst(item, arrayType.elementType)
+      }
+      listOfItems
+    }
 
     case (s: Array[_], arrayType: ArrayType) =>
       s.toSeq.map(convertToCatalyst(_, arrayType.elementType))
@@ -124,6 +136,15 @@ object CatalystTypeConverters {
           extractOption(item) match {
             case a: Array[_] => a.toSeq.map(elementConverter)
             case s: Seq[_] => s.map(elementConverter)
+            case i: JavaIterable[_] => {
+              val iter = i.iterator
+              var convertedIterable: List[Any] = List()
+              while (iter.hasNext) {
+                val item = iter.next()
+                convertedIterable :+= elementConverter(item)
+              }
+              convertedIterable
+            }
             case null => null
           }
         }
