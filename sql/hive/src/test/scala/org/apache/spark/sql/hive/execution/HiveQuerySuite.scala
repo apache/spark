@@ -85,6 +85,15 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
 
+  createQueryTest("multi outer joins",
+    """SELECT a.value as c1, b.value as c2, c.value as c3, d.value as c4
+      |FROM src a
+      |  full outer join src b on a.key=b.key + 1
+      |  full outer join src c on a.key=c.key+3
+      |  full outer join src d on a.key=d.key+5
+      |order by c1 desc, c2 desc, c3 desc, c4 desc
+      |limit 30""".stripMargin)
+
   createQueryTest("insert table with generator with column name",
     """
       |  CREATE TABLE gen_tmp (key Int);

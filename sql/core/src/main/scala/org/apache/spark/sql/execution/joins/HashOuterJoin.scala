@@ -47,7 +47,7 @@ case class HashOuterJoin(
   override def outputPartitioning: Partitioning = joinType match {
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
-    case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
+    case FullOuter => left.outputPartitioning
     case x =>
       throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
   }
