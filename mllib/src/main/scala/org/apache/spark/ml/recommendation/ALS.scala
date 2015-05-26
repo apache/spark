@@ -330,7 +330,11 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
 @DeveloperApi
 object ALS extends Logging {
 
-  /** Rating class for better code readability. */
+  /**
+   * :: DeveloperApi ::
+   * Rating class for better code readability.
+   */
+  @DeveloperApi
   case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Float)
 
   /** Trait for least squares solvers applied to the normal equation. */
@@ -491,8 +495,10 @@ object ALS extends Logging {
   }
 
   /**
+   * :: DeveloperApi ::
    * Implementation of the ALS algorithm.
    */
+  @DeveloperApi
   def train[ID: ClassTag]( // scalastyle:ignore
       ratings: RDD[Rating[ID]],
       rank: Int = 10,

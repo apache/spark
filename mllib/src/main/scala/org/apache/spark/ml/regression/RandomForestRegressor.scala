@@ -88,6 +88,7 @@ final class RandomForestRegressor(override val uid: String)
   }
 }
 
+@Experimental
 object RandomForestRegressor {
   /** Accessor for supported impurity settings: variance */
   final val supportedImpurities: Array[String] = TreeRegressorParams.supportedImpurities
