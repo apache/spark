@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.{ObjectInputStream, IOException}
-
 import scala.collection.Map
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, trees}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /**
  * An expression that produces zero or more rows given a single input row.
@@ -85,16 +82,10 @@ case class UserDefinedGenerator(
     }.asInstanceOf[(Row => Row)]
   }
 
-  initializeConverters()
-
-  @throws(classOf[IOException])
-  private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
-    ois.defaultReadObject()
-    initializeConverters()
-  }
-
   override def eval(input: Row): TraversableOnce[Row] = {
-    // TODO(davies): improve this
+    if (inputRow == null) {
+      initializeConverters()
+    }
     // Convert the objects into Scala Type before calling function, we need schema to support UDT
     function(convertToScala(inputRow(input)))
   }
