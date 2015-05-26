@@ -361,6 +361,17 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   }
 }
 
+class KryoSerializerAutoResetDisabledSuite extends FunSuite with SharedSparkContext {
+  conf.set("spark.serializer", classOf[KryoSerializer].getName)
+  conf.set("spark.kryo.registrator", classOf[RegistratorWithoutAutoReset].getName)
+  conf.set("spark.shuffle.manager", "sort")
+  conf.set("spark.shuffle.sort.bypassMergeThreshold", "200")
+
+  test("sort-shuffle with bypassMergeSort (SPARK-7873)") {
+    val myObject = ("Hello", "World")
+    assert(sc.parallelize(Seq.fill(100)(myObject)).repartition(2).collect().toSet === Set(myObject))
+  }
+}
 
 class ClassLoaderTestingObject
 
