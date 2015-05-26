@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow, SpecificMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{Row, SQLContext}
 
 /**
@@ -31,19 +31,16 @@ import org.apache.spark.sql.{Row, SQLContext}
  */
 @DeveloperApi
 object RDDConversions {
-  def productToRowRdd[A <: Product](data: RDD[A], schema: StructType): RDD[Row] = {
+  def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[Row] = {
     data.mapPartitions { iterator =>
       if (iterator.isEmpty) {
         Iterator.empty
       } else {
         val bufferedIterator = iterator.buffered
-        val mutableRow = new SpecificMutableRow(schema.fields.map(_.dataType))
-        val schemaFields = schema.fields
-        assert(mutableRow.length == schemaFields.length,
-          s"Input row has ${mutableRow.length} fields but schema has ${schemaFields.length}")
-        val converters = schemaFields.map {
-          f => CatalystTypeConverters.createToCatalystConverter(f.dataType)
-        }
+        val mutableRow = new SpecificMutableRow(outputTypes)
+        assert(mutableRow.length == outputTypes.length,
+          s"Input row has ${mutableRow.length} fields but outputTypes has ${outputTypes.length}")
+        val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
         bufferedIterator.map { r =>
           var i = 0
           while (i < mutableRow.length) {
@@ -60,19 +57,16 @@ object RDDConversions {
   /**
    * Convert the objects inside Row into the types Catalyst expected.
    */
-  def rowToRowRdd(data: RDD[Row], schema: StructType): RDD[Row] = {
+  def rowToRowRdd(data: RDD[Row], outputTypes: Seq[DataType]): RDD[Row] = {
     data.mapPartitions { iterator =>
       if (iterator.isEmpty) {
         Iterator.empty
       } else {
         val bufferedIterator = iterator.buffered
-        val mutableRow = new GenericMutableRow(bufferedIterator.head.toSeq.toArray)
-        val schemaFields = schema.fields
-        assert(mutableRow.length == schemaFields.length,
-          s"Input row has ${mutableRow.length} fields but schema has ${schemaFields.length}")
-        val converters = schemaFields.map {
-          f => CatalystTypeConverters.createToCatalystConverter(f.dataType)
-        }
+        val mutableRow = new SpecificMutableRow(outputTypes)
+        assert(mutableRow.length == outputTypes.length,
+          s"Input row has ${mutableRow.length} fields but outputTypes has ${outputTypes.length}")
+        val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
         bufferedIterator.map { r =>
           var i = 0
           while (i < mutableRow.length) {
