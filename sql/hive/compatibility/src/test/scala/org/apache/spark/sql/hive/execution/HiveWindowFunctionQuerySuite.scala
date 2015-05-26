@@ -532,7 +532,7 @@ abstract class HiveWindowFunctionQueryBaseSuite extends HiveComparisonTest with 
   // under different JDK
   createQueryTest("windowing.q -- 20. testSTATs",
     """
-      |select p_mfgr,p_name, p_size, sdev, sdev_pop, size(uniq_size), var, cor, covarp
+      |select p_mfgr,p_name, p_size, sdev, sdev_pop, uniq_data, var, cor, covarp
       |from (
       |select  p_mfgr,p_name, p_size,
       |stddev(p_retailprice) over w1 as sdev,
@@ -544,7 +544,7 @@ abstract class HiveWindowFunctionQueryBaseSuite extends HiveComparisonTest with 
       |from part
       |window w1 as (distribute by p_mfgr sort by p_mfgr, p_name
       |             rows between 2 preceding and 2 following)
-      |) t
+      |) t lateral view explode(uniq_size) d as uniq_data
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 21. testDISTs",
