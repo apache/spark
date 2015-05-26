@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.Identifiable
@@ -30,10 +30,10 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * A feature transformer that merges multiple columns into a vector column.
  */
-@AlphaComponent
+@Experimental
 class VectorAssembler(override val uid: String)
   extends Transformer with HasInputCols with HasOutputCol {
 
