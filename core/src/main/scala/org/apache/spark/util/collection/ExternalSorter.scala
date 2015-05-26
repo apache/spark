@@ -130,9 +130,8 @@ private[spark] class ExternalSorter[K, V, C](
   // grow internal data structures by growing + copying every time the number of objects doubles.
   private val serializerBatchSize = conf.getLong("spark.shuffle.spill.batchSize", 10000)
 
-  // Data structures to store in-memory objects before we spill. Depending on whether we have an
-  // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
-  // store them in an array buffer.
+  // The idea here is to reduce minimize the visibility of variables like `kvChunkSize` and
+  // `useSerializedPairBuffer` without recomputing them on each call to `newBuffer()`.
   private def newBuffer: () => WritablePartitionedPairCollection[K, C] with SizeTracker = {
     val useSerializedPairBuffer =
       ordering.isEmpty &&
@@ -145,6 +144,9 @@ private[spark] class ExternalSorter[K, V, C](
       () => new PartitionedPairBuffer[K, C]
     }
   }
+  // Data structures to store in-memory objects before we spill. Depending on whether we have an
+  // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
+  // store them in an array buffer.
   private var map = new PartitionedAppendOnlyMap[K, C]
   private var buffer = newBuffer()
 
