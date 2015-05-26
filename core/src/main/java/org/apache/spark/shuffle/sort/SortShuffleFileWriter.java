@@ -15,20 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.sort
+package org.apache.spark.shuffle.sort;
 
-import java.io.{IOException, File}
+import java.io.File;
+import java.io.IOException;
 
-import org.apache.spark.TaskContext
-import org.apache.spark.storage.BlockId
+import scala.Product2;
+import scala.collection.Iterator;
+
+import org.apache.spark.TaskContext;
+import org.apache.spark.storage.BlockId;
 
 /**
- * Interface for objects that [[SortShuffleWriter]] uses to write its output files.
+ * Interface for objects that {@link SortShuffleWriter} uses to write its output files.
  */
-private[spark] trait SortShuffleFileWriter[K, V] {
+interface SortShuffleFileWriter<K, V> {
 
-  @throws[IOException]
-  def insertAll(records: Iterator[_ <: Product2[K, V]]): Unit
+  void insertAll(Iterator<Product2<K, V>> records) throws IOException;
 
   /**
    * Write all the data added into this shuffle sorter into a file in the disk store. This is
@@ -39,12 +42,10 @@ private[spark] trait SortShuffleFileWriter[K, V] {
    * @param context a TaskContext for a running Spark task, for us to update shuffle metrics.
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
    */
-  @throws[IOException]
-  def writePartitionedFile(
-    blockId: BlockId,
-    context: TaskContext,
-    outputFile: File): Array[Long]
+  long[] writePartitionedFile(
+      BlockId blockId,
+      TaskContext context,
+      File outputFile) throws IOException;
 
-  @throws[IOException]
-  def stop(): Unit
+  void stop() throws IOException;
 }
