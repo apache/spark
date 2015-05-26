@@ -28,7 +28,29 @@ import org.apache.spark.sql.execution.stat._
  */
 @Experimental
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
-
+ 
+  /**
+   * Calculate the estimated frequencies for a numerical column of a DataFrame.
+   * @param col the name of the column
+   * @return the estimated frequencies of columns.
+   *
+   */
+  def countMinSketch(col: String): DataFrame = {
+    CountMinSketch.countMinSketch(df, col, 100, 10)
+  }
+ 
+  /**
+   * Calculate the estimated frequencies for a numerical column of a DataFrame.
+   * @param col the name of the column
+   * @param width the width of the counters
+   * @param depth the depth of the counters
+   * @return the estimated frequencies of columns.
+   *
+   */
+  def countMinSketch(col: String, width: Int, depth: Int): DataFrame = {
+    CountMinSketch.countMinSketch(df, col, width, depth)
+  }
+ 
   /**
    * Calculate the sample covariance of two numerical columns of a DataFrame.
    * @param col1 the name of the first column
