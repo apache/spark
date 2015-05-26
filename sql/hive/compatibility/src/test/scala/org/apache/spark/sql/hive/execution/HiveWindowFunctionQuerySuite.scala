@@ -545,6 +545,7 @@ abstract class HiveWindowFunctionQueryBaseSuite extends HiveComparisonTest with 
       |window w1 as (distribute by p_mfgr sort by p_mfgr, p_name
       |             rows between 2 preceding and 2 following)
       |) t lateral view explode(uniq_size) d as uniq_data
+      |order by p_mfgr,p_name, p_size, sdev, sdev_pop, uniq_data, var, cor, covarp
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 21. testDISTs",
