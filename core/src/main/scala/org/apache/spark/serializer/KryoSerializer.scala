@@ -17,7 +17,7 @@
 
 package org.apache.spark.serializer
 
-import java.io.{EOFException, InputStream, OutputStream}
+import java.io.{EOFException, IOException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
@@ -148,14 +148,22 @@ class KryoSerializationStream(
     this
   }
 
-  override def flush() { output.flush() }
+  override def flush() {
+    if (output == null) {
+      throw new IOException("Stream is closed")
+    }
+    output.flush()
+  }
+
   override def close() {
-    try {
-      output.close()
-    } finally {
-      serInstance.releaseKryo(kryo)
-      kryo = null
-      output = null
+    if (output != null) {
+      try {
+        output.close()
+      } finally {
+        serInstance.releaseKryo(kryo)
+        kryo = null
+        output = null
+      }
     }
   }
 }
@@ -179,13 +187,15 @@ class KryoDeserializationStream(
   }
 
   override def close() {
-    try {
-      // Kryo's Input automatically closes the input stream it is using.
-      input.close()
-    } finally {
-      serInstance.releaseKryo(kryo)
-      kryo = null
-      input = null
+    if (input != null) {
+      try {
+        // Kryo's Input automatically closes the input stream it is using.
+        input.close()
+      } finally {
+        serInstance.releaseKryo(kryo)
+        kryo = null
+        input = null
+      }
     }
   }
 }
