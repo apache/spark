@@ -148,7 +148,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * hive thrift server use background spark sql thread pool to execute sql queries
    */
   protected[hive] def hiveThriftServerAsync: Boolean =
-    getConf("spark.sql.hive.thriftServer.async", "true") == "true"
+    getConf("spark.sql.hive.thriftServer.async", "true").toBoolean
 
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
