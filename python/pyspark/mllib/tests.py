@@ -522,6 +522,22 @@ class MatrixUDTTests(MLlibTestCase):
         for m in [self.dm1, self.dm2, self.sm1, self.sm2]:
             self.assertEqual(m, self.udt.deserialize(self.udt.serialize(m)))
 
+    def test_infer_schema(self):
+        sqlCtx = SQLContext(self.sc)
+        rdd = self.sc.parallelize([("dense", self.dm1), ("sparse", self.sm1)])
+        df = rdd.toDF()
+        schema = df.schema
+        self.assertTrue(schema.fields[1].dataType, self.udt)
+        matrices = df.map(lambda x: x._2).collect()
+        self.assertEqual(len(matrices), 2)
+        for m in matrices:
+            if isinstance(m, DenseMatrix):
+                self.assertTrue(m, self.dm1)
+            elif isinstance(m, SparseMatrix):
+                self.assertTrue(m, self.sm1)
+            else:
+                raise ValueError("Expected a matrix but got type %r" % type(m))
+
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
 class SciPyTests(MLlibTestCase):
