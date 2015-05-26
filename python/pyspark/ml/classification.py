@@ -634,7 +634,11 @@ class OneVsRest(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     def _make_java_param_pair(self, param, value):
         if param.name == self.classifier.name:
             java_param = self._java_obj.getParam(param.name)
-            java_value = self.getClassifier()._java_obj
+            classifier = self.getClassifier()
+            if isinstance(classifier, JavaEstimator):
+                classifier._transfer_params_to_java()
+
+            java_value = classifier._java_obj
             return java_param.w(java_value)
         else:
             return super(OneVsRest, self)._make_java_param_pair(param, value)
