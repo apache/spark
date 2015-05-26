@@ -42,7 +42,7 @@ private[spark] class BypassMergeSortShuffleWriter[K, V](
     partitioner: Partitioner,
     writeMetrics: ShuffleWriteMetrics,
     serializer: Serializer)
-  extends Logging with SortShuffleSorter[K, V] {
+  extends Logging with SortShuffleFileWriter[K, V] {
 
   private[this] val numPartitions = partitioner.numPartitions
 

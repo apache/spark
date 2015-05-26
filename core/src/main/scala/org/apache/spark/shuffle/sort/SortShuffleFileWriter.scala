@@ -22,7 +22,10 @@ import java.io.{IOException, File}
 import org.apache.spark.TaskContext
 import org.apache.spark.storage.BlockId
 
-private[spark] trait SortShuffleSorter[K, V] {
+/**
+ * Interface for objects that [[SortShuffleWriter]] uses to write its output files.
+ */
+private[spark] trait SortShuffleFileWriter[K, V] {
 
   @throws[IOException]
   def insertAll(records: Iterator[_ <: Product2[K, V]]): Unit

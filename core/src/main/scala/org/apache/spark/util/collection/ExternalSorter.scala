@@ -29,7 +29,7 @@ import com.google.common.io.ByteStreams
 import org.apache.spark._
 import org.apache.spark.serializer._
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.shuffle.sort.{SortShuffleWriter, SortShuffleSorter}
+import org.apache.spark.shuffle.sort.{SortShuffleFileWriter, SortShuffleWriter}
 import org.apache.spark.storage.{BlockId, BlockObjectWriter}
 
 /**
@@ -94,7 +94,7 @@ private[spark] class ExternalSorter[K, V, C](
     serializer: Option[Serializer] = None)
   extends Logging
   with Spillable[WritablePartitionedPairCollection[K, C]]
-  with SortShuffleSorter[K, V] {
+  with SortShuffleFileWriter[K, V] {
 
   private val conf = SparkEnv.get.conf
 
