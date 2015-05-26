@@ -107,13 +107,16 @@ class LogisticRegression(override val uid: String)
     this
   }
 
-  /** Validate the initial weights, return an Option, if not the expected size return None and log */
+  /** Validate the initial weights, return an Option, if not the expected size return None
+   * and log a warning.
+   */
   private def validateWeights(vectorOpt: Option[Vector], numFeatures: Int): Option[Vector] = {
     vectorOpt.flatMap(vec =>
       if (vec.size == numFeatures) {
         Some(vec)
       } else {
-        logWarning(s"""Initial weights provided (${vec})did not match the expected size ${numFeatures}""")
+        logWarning(
+          s"""Initial weights provided (${vec})did not match the expected size ${numFeatures}""")
         None
       })
   }
