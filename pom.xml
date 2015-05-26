@@ -114,8 +114,8 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <akka.group>com.typesafe.akka</akka.group>
-    <akka.version>2.3.4</akka.version>
+    <akka.group>org.spark-project.akka</akka.group>
+    <akka.version>2.3.4-spark</akka.version>
     <java.version>1.6</java.version>
     <sbt.project.name>spark</sbt.project.name>
     <scala.macros.version>2.0.1</scala.macros.version>
@@ -1664,8 +1664,6 @@
         <hbase.version>0.98.7-hadoop1</hbase.version>
         <avro.mapred.classifier>hadoop1</avro.mapred.classifier>
         <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
-        <akka.group>org.spark-project.akka</akka.group>
-        <akka.version>2.3.4-spark</akka.version>
       </properties>
     </profile>
 
