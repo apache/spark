@@ -645,6 +645,7 @@ class OneVsRestModel(JavaModel):
     Model fitted by OneVsRest.
     """
 
+
 if __name__ == "__main__":
     import doctest
     from pyspark.context import SparkContext
