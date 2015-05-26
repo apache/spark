@@ -1465,7 +1465,8 @@ admin.add_view(mv)
 
 class TaskInstanceModelView(ModelViewOnly):
     column_filters = (
-        'dag_id', 'task_id', 'state', 'execution_date', 'hostname')
+        'dag_id', 'task_id', 'state', 'execution_date', 'hostname',
+        'queue', 'pool')
     named_filter_urls = True
     column_formatters = dict(
         log=log_link, task_id=task_instance_link,
@@ -1715,4 +1716,10 @@ class VariableView(LoginMixin, ModelView):
 
 mv = VariableView(
     models.Variable, Session, name="Variables", category="Admin")
+admin.add_view(mv)
+
+
+class PoolModelView(SuperUserMixin, ModelView):
+    pass
+mv = PoolModelView(models.Pool, Session, name="Pools", category="Admin")
 admin.add_view(mv)

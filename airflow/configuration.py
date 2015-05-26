@@ -23,6 +23,9 @@ defaults = {
         'scheduler_heartbeat_sec': 60,
         'authenticate': False,
     },
+    'celery': {
+        'default_queue': 'default',
+    },
 }
 
 DEFAULT_CONFIG = """\
@@ -54,6 +57,7 @@ worker_log_server_port = 8793
 broker_url = sqla+mysql://airflow:airflow@localhost:3306/airflow
 celery_result_backend = db+mysql://airflow:airflow@localhost:3306/airflow
 flower_port = 8383
+default_queue = default
 
 [scheduler]
 job_heartbeat_sec = 5
@@ -89,6 +93,7 @@ worker_log_server_port = 8793
 broker_url = sqla+mysql://airflow:airflow@localhost:3306/airflow
 celery_result_backend = db+mysql://airflow:airflow@localhost:3306/airflow
 flower_port = 5555
+default_queue = default
 
 [scheduler]
 job_heartbeat_sec = 1

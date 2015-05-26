@@ -49,7 +49,7 @@ class State(object):
 
     @classmethod
     def runnable(cls):
-        return [None, cls.FAILED, cls.UP_FOR_RETRY]
+        return [None, cls.FAILED, cls.UP_FOR_RETRY, cls.QUEUED]
 
 
 def pessimistic_connection_handling():

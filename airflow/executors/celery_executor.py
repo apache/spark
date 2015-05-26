@@ -15,6 +15,8 @@ To start the celery worker, run the command:
 airflow worker
 '''
 
+DEFAULT_QUEUE = conf.get('celery', 'DEFAULT_QUEUE')
+
 
 class CeleryConfig(object):
     CELERY_ACCEPT_CONTENT = ['json', 'pickle']
@@ -23,6 +25,7 @@ class CeleryConfig(object):
     BROKER_URL = conf.get('celery', 'BROKER_URL')
     CELERY_RESULT_BACKEND = conf.get('celery', 'CELERY_RESULT_BACKEND')
     CELERYD_CONCURRENCY = conf.getint('celery', 'CELERYD_CONCURRENCY')
+    CELERY_DEFAULT_QUEUE = DEFAULT_QUEUE
 
 app = Celery(
     conf.get('celery', 'CELERY_APP_NAME'),
@@ -39,21 +42,22 @@ def execute_command(command):
 
 
 class CeleryExecutor(BaseExecutor):
-    '''
+    """
     CeleryExecutor is recommended for production use of Airflow. It allows
     distributing the execution of task instances to multiple worker nodes.
 
     Celery is a simple, flexible and reliable distributed system to process
     vast amounts of messages, while providing operations with the tools
     required to maintain such a system.
-    '''
+    """
 
     def start(self):
         self.tasks = {}
         self.last_state = {}
 
-    def execute_async(self, key, command):
-        self.tasks[key] = execute_command.delay(command)
+    def execute_async(self, key, command, queue=DEFAULT_QUEUE):
+        self.tasks[key] = execute_command.apply_async(
+            args=[command], queue=queue)
         self.last_state[key] = celery_states.PENDING
 
     def sync(self):

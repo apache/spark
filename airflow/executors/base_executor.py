@@ -29,10 +29,10 @@ class BaseExecutor(object):
         """
         pass
 
-    def queue_command(self, key, command, priority=1):
+    def queue_command(self, key, command, priority=1, queue=None):
         if key not in self.queued_tasks and key not in self.running:
             logging.info("Adding to queue: " + command)
-            self.queued_tasks[key] = (command, priority)
+            self.queued_tasks[key] = (command, priority, queue)
 
     def queue_task_instance(
             self, task_instance, mark_success=False, pickle_id=None,
@@ -46,7 +46,8 @@ class BaseExecutor(object):
         self.queue_command(
             task_instance.key,
             command,
-            priority=task_instance.task.priority_weight_total)
+            priority=task_instance.task.priority_weight_total,
+            queue=task_instance.task.queue)
 
     def sync(self):
         """
@@ -75,10 +76,10 @@ class BaseExecutor(object):
             key=lambda x: x[1][1],
             reverse=True)
         for i in range(min((open_slots, len(self.queued_tasks)))):
-            key, (command, priority) = sorted_queue.pop(0)
+            key, (command, priority, queue) = sorted_queue.pop(0)
             self.running[key] = command
             del self.queued_tasks[key]
-            self.execute_async(key, command)
+            self.execute_async(key, command=command, queue=queue)
 
     def change_state(self, key, state):
         del self.running[key]
@@ -98,7 +99,7 @@ class BaseExecutor(object):
         self.event_buffer = {}
         return d
 
-    def execute_async(self, key, command):  # pragma: no cover
+    def execute_async(self, key, command, queue=None):  # pragma: no cover
         """
         This method will execute the command asynchronously.
         """
