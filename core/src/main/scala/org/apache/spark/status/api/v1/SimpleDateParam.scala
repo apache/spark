@@ -26,17 +26,16 @@ import scala.util.Try
 
 private[v1] class SimpleDateParam(val originalValue: String) {
 
-  private val formats: Seq[SimpleDateFormat] = {
-    val gmtDay = new SimpleDateFormat("yyyy-MM-dd")
-    gmtDay.setTimeZone(TimeZone.getTimeZone("GMT"))
-
-    Seq(
-      new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSz"),
-      gmtDay
-    )
-  }
-
   val timestamp: Long = {
+    val formats: Seq[SimpleDateFormat] = {
+      val gmtDay = new SimpleDateFormat("yyyy-MM-dd")
+      gmtDay.setTimeZone(TimeZone.getTimeZone("GMT"))
+
+      Seq(
+        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSz"),
+        gmtDay
+      )
+    }
     formats.collectFirst {
       case fmt if Try(fmt.parse(originalValue)).isSuccess =>
         fmt.parse(originalValue).getTime()
