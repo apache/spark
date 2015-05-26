@@ -154,7 +154,8 @@ class CliSuite extends FunSuite with BeforeAndAfter with Logging {
 
   test("Single command with --jars") {
     val jarFile =
-      Thread.currentThread().getContextClassLoader.getResource("data/files/hive-hcatalog-core-0.13.1.jar")
+      Thread.currentThread().getContextClassLoader
+        .getResource("data/files/hive-hcatalog-core-0.13.1.jar")
     runCliWithin(1.minute,
       Seq(
         "--jars",
