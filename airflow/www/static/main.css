@@ -44,6 +44,9 @@ span.started{
 span.error{
     background-color:red;
 }
+span.queued{
+    background-color:gray;
+}
 .tooltip-inner {
     text-align:left !important;
     font-size: 12px;
