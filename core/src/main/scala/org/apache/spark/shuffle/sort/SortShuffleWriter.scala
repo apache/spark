@@ -54,7 +54,8 @@ private[spark] class SortShuffleWriter[K, V, C](
       require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
       new ExternalSorter[K, V, C](
         dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
-    } else if (SortShuffleWriter.shouldBypassMergeSort(SparkEnv.get.conf, dep)) {
+    } else if (SortShuffleWriter.shouldBypassMergeSort(
+        SparkEnv.get.conf, dep.partitioner.numPartitions, dep.aggregator, dep.keyOrdering)) {
       // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't
       // need local aggregation and sorting, write numPartitions files directly and just concatenate
       // them at the end. This avoids doing serialization and deserialization twice to merge
@@ -109,10 +110,6 @@ private[spark] class SortShuffleWriter[K, V, C](
 }
 
 private[spark] object SortShuffleWriter {
-  def shouldBypassMergeSort(conf: SparkConf, dep: ShuffleDependency[_, _, _]): Boolean = {
-    shouldBypassMergeSort(conf, dep.partitioner.numPartitions, dep.aggregator, dep.keyOrdering)
-  }
-
   def shouldBypassMergeSort(
       conf: SparkConf,
       numPartitions: Int,
