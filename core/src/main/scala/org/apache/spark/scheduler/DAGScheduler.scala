@@ -1049,7 +1049,7 @@ class DAGScheduler(
       stage.pendingPartitions ++= tasks.map(_.partitionId)
       logDebug("New pending partitions: " + stage.pendingPartitions)
       taskScheduler.submitTasks(new TaskSet(
-        tasks.toArray, stage.id, stage.latestInfo.attemptId, stage.firstJobId, properties))
+        tasks.toArray, stage.id, stage.latestInfo.attemptId, jobId, properties))
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
