@@ -21,9 +21,9 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.{Row, SQLContext}
 
 /**
@@ -33,23 +33,19 @@ import org.apache.spark.sql.{Row, SQLContext}
 object RDDConversions {
   def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[Row] = {
     data.mapPartitions { iterator =>
-      if (iterator.isEmpty) {
-        Iterator.empty
-      } else {
-        val bufferedIterator = iterator.buffered
-        val mutableRow = new SpecificMutableRow(outputTypes)
-        assert(mutableRow.length == outputTypes.length,
-          s"Input row has ${mutableRow.length} fields but outputTypes has ${outputTypes.length}")
-        val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
-        bufferedIterator.map { r =>
-          var i = 0
-          while (i < mutableRow.length) {
-            mutableRow(i) = converters(i)(r.productElement(i))
-            i += 1
-          }
-
-          mutableRow
+      val numColumns = outputTypes.length
+      val mutableRow = new GenericMutableRow(numColumns)
+      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
+      iterator.map { r =>
+        assert (r.productArity == numColumns,
+          s"Expected row with $numColumns but got ${r.productArity} instead")
+        var i = 0
+        while (i < numColumns) {
+          mutableRow(i) = converters(i)(r.productElement(i))
+          i += 1
         }
+
+        mutableRow
       }
     }
   }
@@ -59,23 +55,19 @@ object RDDConversions {
    */
   def rowToRowRdd(data: RDD[Row], outputTypes: Seq[DataType]): RDD[Row] = {
     data.mapPartitions { iterator =>
-      if (iterator.isEmpty) {
-        Iterator.empty
-      } else {
-        val bufferedIterator = iterator.buffered
-        val mutableRow = new SpecificMutableRow(outputTypes)
-        assert(mutableRow.length == outputTypes.length,
-          s"Input row has ${mutableRow.length} fields but outputTypes has ${outputTypes.length}")
-        val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
-        bufferedIterator.map { r =>
-          var i = 0
-          while (i < mutableRow.length) {
-            mutableRow(i) = converters(i)(r(i))
-            i += 1
-          }
-
-          mutableRow
+      val numColumns = outputTypes.length
+      val mutableRow = new GenericMutableRow(numColumns)
+      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
+      iterator.map { r =>
+        assert (r.length == numColumns,
+          s"Expected row with $numColumns but got ${r.length} instead")
+        var i = 0
+        while (i < numColumns) {
+          mutableRow(i) = converters(i)(r(i))
+          i += 1
         }
+
+        mutableRow
       }
     }
   }
