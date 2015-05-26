@@ -528,7 +528,10 @@ class TaskInstance(Base):
             return False
         elif self.task.end_date and self.execution_date > self.task.end_date:
             return False
-        elif self.state in State.runnable() and self.are_dependencies_met():
+        elif (
+                self.state in State.runnable() and
+                self.are_dependencies_met() and
+                not self.pool_full()):
             return True
         else:
             return False
@@ -640,6 +643,8 @@ class TaskInstance(Base):
             session
             .query(func.count('*'))
             .select_from(TaskInstance)
+            .filter(TaskInstance.pool == self.task.pool)
+            .filter(TaskInstance.state == State.RUNNING)
             .scalar()
         )
         pool_size = (
@@ -1021,6 +1026,7 @@ class BaseOperator(Base):
         self._schedule_interval = schedule_interval
         self.retries = retries
         self.queue = queue
+        self.pool = pool
         if isinstance(retry_delay, timedelta):
             self.retry_delay = retry_delay
         else:

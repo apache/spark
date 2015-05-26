@@ -284,7 +284,13 @@ class SchedulerJob(BaseJob):
                     # If task instance if up for retry, make sure
                     # the retry delay is met
                     if ti.is_runnable():
-                        logging.debug('Queuing retry: ' + str(ti))
+                        logging.debug('Triggering retry: ' + str(ti))
+                        executor.queue_task_instance(ti)
+                elif ti.state == State.QUEUED:
+                    # If task instance if up for retry, make sure
+                    if ti.is_runnable():
+                        logging.debug(
+                            'Starting previously queued : ' + str(ti))
                         executor.queue_task_instance(ti)
                 else:
                     # Trying to run the next schedule
