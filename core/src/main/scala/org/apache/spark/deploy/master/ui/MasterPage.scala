@@ -75,7 +75,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
     val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory")
     val workers = state.workers.sortBy(_.id)
-    val aliveWorkers = state.workers.filter(_.state == WorkerState.ALIVE )
+    val aliveWorkers = state.workers.filter(_.state == WorkerState.ALIVE)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
 
     val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Node", "Submitted Time",
@@ -109,10 +109,10 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                   </li>
                 }.getOrElse { Seq.empty }
               }
-              <li><strong>Workers:</strong> {aliveWorkers.size}</li>
-              <li><strong>Cores:</strong> {aliveWorkers.map(_.cores).sum} Total,
+              <li><strong>Alive Workers:</strong> {aliveWorkers.size}</li>
+              <li><strong>Alive Cores:</strong> {aliveWorkers.map(_.cores).sum} Total,
                 {aliveWorkers.map(_.coresUsed).sum} Used</li>
-              <li><strong>Memory:</strong>
+              <li><strong>Alive Memory:</strong>
                 {Utils.megabytesToString(aliveWorkers.map(_.memory).sum)} Total,
                 {Utils.megabytesToString(aliveWorkers.map(_.memoryUsed).sum)} Used</li>
               <li><strong>Applications:</strong>
