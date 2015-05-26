@@ -294,11 +294,11 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def explain(extended: Boolean): Unit = {
-    ExplainCommand(
-      queryExecution.logical,
-      extended = extended).queryExecution.executedPlan.executeCollect().map {
-      r => println(r.getString(0))
-    }
+    println(
+      ExplainCommand(
+        queryExecution.logical,
+        extended = extended).queryExecution.toString
+    )
   }
 
   /**
