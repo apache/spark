@@ -32,7 +32,7 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
   assert(math.pow(2, chunkSizeLog2).toInt == chunkSize,
     s"ChainedBuffer chunk size $chunkSize must be a power of two")
   private val chunks: ArrayBuffer[Array[Byte]] = new ArrayBuffer[Array[Byte]]()
-  private var _size: Int = _
+  private var _size: Long = _
 
   /**
    * Feed bytes from this buffer into a BlockObjectWriter.
@@ -41,13 +41,13 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
    * @param os OutputStream to read into.
    * @param len Number of bytes to read.
    */
-  def read(pos: Int, os: OutputStream, len: Int): Unit = {
+  def read(pos: Long, os: OutputStream, len: Int): Unit = {
     if (pos + len > _size) {
       throw new IndexOutOfBoundsException(
         s"Read of $len bytes at position $pos would go past size ${_size} of buffer")
     }
-    var chunkIndex = pos >> chunkSizeLog2
-    var posInChunk = pos - (chunkIndex << chunkSizeLog2)
+    var chunkIndex = (pos >> chunkSizeLog2).toInt
+    var posInChunk = (pos - (chunkIndex << chunkSizeLog2)).toInt
     var written = 0
     while (written < len) {
       val toRead = math.min(len - written, chunkSize - posInChunk)
@@ -66,13 +66,13 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
    * @param offs Offset in the byte array to read to.
    * @param len Number of bytes to read.
    */
-  def read(pos: Int, bytes: Array[Byte], offs: Int, len: Int): Unit = {
+  def read(pos: Long, bytes: Array[Byte], offs: Int, len: Int): Unit = {
     if (pos + len > _size) {
       throw new IndexOutOfBoundsException(
         s"Read of $len bytes at position $pos would go past size of buffer")
     }
-    var chunkIndex = pos >> chunkSizeLog2
-    var posInChunk = pos - (chunkIndex << chunkSizeLog2)
+    var chunkIndex = (pos >> chunkSizeLog2).toInt
+    var posInChunk = (pos - (chunkIndex << chunkSizeLog2)).toInt
     var written = 0
     while (written < len) {
       val toRead = math.min(len - written, chunkSize - posInChunk)
@@ -91,7 +91,7 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
    * @param offs Offset in the byte array to write from.
    * @param len Number of bytes to write.
    */
-  def write(pos: Int, bytes: Array[Byte], offs: Int, len: Int): Unit = {
+  def write(pos: Long, bytes: Array[Byte], offs: Int, len: Int): Unit = {
     if (pos > _size) {
       throw new IndexOutOfBoundsException(
         s"Write at position $pos starts after end of buffer ${_size}")
@@ -102,8 +102,8 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
       chunks += new Array[Byte](chunkSize)
     }
 
-    var chunkIndex = pos >> chunkSizeLog2
-    var posInChunk = pos - (chunkIndex << chunkSizeLog2)
+    var chunkIndex = (pos >> chunkSizeLog2).toInt
+    var posInChunk = (pos - (chunkIndex << chunkSizeLog2)).toInt
     var written = 0
     while (written < len) {
       val toWrite = math.min(len - written, chunkSize - posInChunk)
@@ -119,12 +119,12 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
   /**
    * Total size of buffer that can be written to without allocating additional memory.
    */
-  def capacity: Int = chunks.size * chunkSize
+  def capacity: Long = chunks.size * chunkSize
 
   /**
    * Size of the logical buffer.
    */
-  def size: Int = _size
+  def size: Long = _size
 }
 
 /**
