@@ -202,8 +202,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       val raw = String.valueOf(value)
       schema(col).dataType match {
         case DateType => DateUtils.toString(raw.toInt)
-        case DecimalType.Unlimited => BigDecimal(raw).toString()
-        case DecimalType.Fixed(_, _) => BigDecimal(raw).toString()
+        case _: DecimalType => BigDecimal(raw).toString()
         case _ => raw
       }
     }

@@ -27,6 +27,7 @@ import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.hive.{HiveQLDialect, HiveShim, MetastoreRelation}
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.LogicalRelation
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 case class Nested1(f1: Nested2)
@@ -59,7 +60,7 @@ class MyDialect extends DefaultParserDialect
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
-class SQLQuerySuite extends QueryTest {
+class SQLQuerySuite extends QueryTest with SQLTestUtils {
   test("SPARK-6835: udtf in lateral view") {
     val df = Seq((1, 1)).toDF("c1", "c2")
     df.registerTempTable("table1")
@@ -839,38 +840,34 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("dynamic partition value test") {
-    try {
-      sql("set hive.exec.dynamic.partition.mode=nonstrict")
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "strict") {
       // date
-      sql("drop table if exists dynparttest1")
-      sql("create table dynparttest1 (value int) partitioned by (pdate date)")
-      sql(
-        """
-        |insert into table dynparttest1 partition(pdate)
-        | select count(*), cast('2015-05-21' as date) as pdate from src
-      """.stripMargin)
-      checkAnswer(
-      sql(
-        "select * from dynparttest1"),
-        Seq(Row(500, java.sql.Date.valueOf("2015-05-21"))))
+      withTable("dynpart1") {
+        sql("drop table if exists dynparttest1")
+        sql("create table dynparttest1 (value int) partitioned by (pdate date)")
+        sql(
+          """
+            |insert into table dynparttest1 partition(pdate)
+            | select count(*), cast('2015-05-21' as date) as pdate from src
+          """.stripMargin)
+        checkAnswer(
+          sql("select * from dynparttest1"),
+          Seq(Row(500, java.sql.Date.valueOf("2015-05-21"))))
+      }
 
       // decimal
-      sql("drop table if exists dynparttest3")
-      sql("create table dynparttest3 (value int) partitioned by (pdec decimal(5, 1))")
-      sql(
-        """
-          |insert into table dynparttest3 partition(pdec)
-          | select count(*), cast('100.12' as decimal(5, 1)) as pdec from src
-        """.stripMargin)
-      checkAnswer(
+      withTable("dynpart2") {
+        sql("drop table if exists dynparttest2")
+        sql("create table dynparttest2 (value int) partitioned by (pdec decimal(5, 1))")
         sql(
-          "select * from dynparttest3"),
-        Seq(Row(500, new java.math.BigDecimal("100.1"))))
-    } finally {
-      sql("drop table if exists dynparttest1")
-      sql("drop table if exists dynparttest2")
-      sql("drop table if exists dynparttest3")
-      sql("set hive.exec.dynamic.partition.mode=strict")
+          """
+            |insert into table dynparttest2 partition(pdec)
+            | select count(*), cast('100.12' as decimal(5, 1)) as pdec from src
+          """.stripMargin)
+        checkAnswer(
+          sql("select * from dynparttest2"),
+          Seq(Row(500, new java.math.BigDecimal("100.1"))))
+      }
     }
   }
 }
