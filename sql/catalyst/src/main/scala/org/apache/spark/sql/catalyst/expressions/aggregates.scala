@@ -37,7 +37,7 @@ abstract class AggregateExpression extends Expression {
    * [[AggregateExpression.eval]] should never be invoked because [[AggregateExpression]]'s are
    * replaced with a physical aggregate operator at runtime.
    */
-  override def eval(input: Row = null): EvaluatedType =
+  override def eval(input: Row = null): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
 
@@ -73,8 +73,6 @@ abstract class PartialAggregate extends AggregateExpression {
 abstract class AggregateFunction
   extends AggregateExpression with Serializable with trees.LeafNode[Expression] {
   self: Product =>
-
-  override type EvaluatedType = Any
 
   /** Base should return the generic aggregate expression that this function is computing */
   val base: AggregateExpression

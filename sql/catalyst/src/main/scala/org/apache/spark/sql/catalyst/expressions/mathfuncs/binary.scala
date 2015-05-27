@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String) 
   extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
-  type EvaluatedType = Any
+
   override def symbol: String = null
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
@@ -68,6 +68,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 case class Atan2(
     left: Expression,
     right: Expression) extends BinaryMathExpression(math.atan2, "ATAN2") {
+
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
     if (evalE1 == null) {

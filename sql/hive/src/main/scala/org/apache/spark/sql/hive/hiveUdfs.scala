@@ -75,7 +75,7 @@ private[hive] abstract class HiveFunctionRegistry
 
 private[hive] case class HiveSimpleUdf(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression with HiveInspectors with Logging {
-  type EvaluatedType = Any
+
   type UDFType = UDF
 
   override def nullable: Boolean = true
@@ -139,7 +139,6 @@ private[hive] class DeferredObjectAdapter(oi: ObjectInspector)
 private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression with HiveInspectors with Logging {
   type UDFType = GenericUDF
-  type EvaluatedType = Any
 
   override def nullable: Boolean = true
 
@@ -335,8 +334,6 @@ private[hive] case class HiveWindowFunction(
     }
 
   def nullable: Boolean = true
-
-  override type EvaluatedType = Any
 
   override def eval(input: Row): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")

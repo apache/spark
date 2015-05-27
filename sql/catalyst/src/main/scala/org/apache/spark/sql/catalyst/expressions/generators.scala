@@ -40,8 +40,6 @@ import org.apache.spark.sql.types._
 abstract class Generator extends Expression {
   self: Product =>
 
-  override type EvaluatedType = TraversableOnce[Row]
-
   // TODO ideally we should return the type of ArrayType(StructType),
   // however, we don't keep the output field names in the Generator.
   override def dataType: DataType = throw new UnsupportedOperationException

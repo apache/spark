@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.types.DataType
 
 case class Coalesce(children: Seq[Expression]) extends Expression {
-  type EvaluatedType = Any
 
   /** Coalesce is nullable if all of its children are nullable, or if it has no children. */
   override def nullable: Boolean = !children.exists(!_.nullable)
