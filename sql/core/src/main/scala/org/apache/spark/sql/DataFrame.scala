@@ -669,6 +669,16 @@ class DataFrame private[sql](
   def where(condition: Column): DataFrame = filter(condition)
 
   /**
+   * Filters rows using the given SQL expression. This is an alias for `filter`.
+   * {{{
+   *   peopleDf.filter("age > 15")
+   * }}}
+   * @group dfops
+   * @since 1.4.0
+   */
+  def where(conditionExpr: String): DataFrame = filter(conditionExpr)
+
+  /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
    * See [[GroupedData]] for all the available aggregate functions.
    *
