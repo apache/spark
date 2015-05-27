@@ -17,7 +17,8 @@
 
 from __future__ import print_function
 
-import pprint, sys
+import pprint
+import sys
 
 from pyspark import SparkContext
 from pyspark.ml.classification import LogisticRegression
@@ -66,7 +67,7 @@ if __name__ == "__main__":
 
     # We may alternatively specify parameters using a parameter map,
     # either overriding the default parameters or specifying new values.
-    paramMap = {lr.maxIter : 20, lr.threshold : 0.55, lr.probabilityCol : "myProbability"}
+    paramMap = {lr.maxIter:20, lr.threshold:0.55, lr.probabilityCol:"myProbability"}
 
     # Now learn a new model using the new parameters.
     model2 = lr.fit(training, paramMap)
@@ -84,8 +85,8 @@ if __name__ == "__main__":
     # Note that model2.transform() outputs a 'myProbability' column instead of the usual
     # 'probability' column since we renamed the lr.probabilityCol parameter previously.
     model2.transform(test) \
-    .select("features", "label", "myProbability", "prediction") \
-    .foreach(lambda x: print("features=%s,label=%s -> prob=%s, prediction=%s"
-                             % (x.features, x.label, x.myProbability, x.prediction)))
+        .select("features", "label", "myProbability", "prediction") \
+        .foreach(lambda x: print("features=%s,label=%s -> prob=%s, prediction=%s"
+                                 % (x.features, x.label, x.myProbability, x.prediction)))
 
     sc.stop()

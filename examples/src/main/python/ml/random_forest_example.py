@@ -33,6 +33,7 @@ Run with:
   bin/spark-submit examples/src/main/python/ml/random_forest_example.py
 """
 
+
 def testClassification(train, test):
     # Train a RandomForest model.
     # Setting featureSubsetStrategy="auto" lets the algorithm choose.
@@ -51,6 +52,7 @@ def testClassification(train, test):
     print("precision %s" % metrics.precision())
     print("recall %s" % metrics.recall())
 
+
 def testRegression(train, test):
     # Train a RandomForest model.
     # Note: Use larger numTrees in practice.
@@ -67,6 +69,7 @@ def testRegression(train, test):
     print("rmse %.3f" % metrics.rootMeanSquaredError)
     print("r2 %.3f" % metrics.r2)
     print("mae %.3f" % metrics.meanAbsoluteError)
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
