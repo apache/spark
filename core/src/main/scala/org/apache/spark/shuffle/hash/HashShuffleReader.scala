@@ -17,10 +17,10 @@
 
 package org.apache.spark.shuffle.hash
 
-import org.apache.spark.{InterruptibleIterator, TaskContext}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
 import org.apache.spark.util.collection.ExternalSorter
+import org.apache.spark.{InterruptibleIterator, SparkEnv, TaskContext}
 
 private[spark] class HashShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
@@ -33,11 +33,34 @@ private[spark] class HashShuffleReader[K, C](
     "Hash shuffle currently only supports fetching one partition")
 
   private val dep = handle.dependency
+  private val blockManager = SparkEnv.get.blockManager
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
+    val blockStreams = BlockStoreShuffleFetcher.fetchBlockStreams(
+                       handle.shuffleId, startPartition, context)
+
+    // Wrap the streams for compression based on configuration
+    val wrappedStreams = blockStreams.map { case (blockId, inputStream) =>
+      blockManager.wrapForCompression(blockId, inputStream)
+    }
+
     val ser = Serializer.getSerializer(dep.serializer)
-    val iter = BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context, ser)
+    val serializerInstance = ser.newInstance()
+
+    // Create a key/value iterator for each stream
+    val recordIterator = wrappedStreams.flatMap { wrappedStream =>
+      serializerInstance.deserializeStream(wrappedStream).asKeyValueIterator
+    }
+
+    // Update read metrics for each record materialized
+    val iter = new InterruptibleIterator[Any](context, recordIterator) {
+     val readMetrics = context.taskMetrics.createShuffleReadMetricsForDependency()
+     override def next(): Any = {
+       readMetrics.incRecordsRead(1)
+       delegate.next()
+     }
+    }.asInstanceOf[Iterator[Nothing]]
 
     val aggregatedIter: Iterator[Product2[K, C]] = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {

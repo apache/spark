@@ -17,21 +17,22 @@
 
 package org.apache.spark.storage
 
+import java.io.InputStream
 import java.util.concurrent.Semaphore
 
-import scala.concurrent.future
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.future
 
 import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 
-import org.apache.spark.{SparkConf, SparkFunSuite, TaskContextImpl}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.shuffle.BlockFetchingListener
-import org.apache.spark.serializer.TestSerializer
+import org.apache.spark.{SparkFunSuite, TaskContextImpl}
+
 
 class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
   // Some of the tests are quite tricky because we are testing the cleanup behavior
@@ -57,7 +58,16 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     transfer
   }
 
-  private val conf = new SparkConf
+  // Create a mock managed buffer for testing
+  def createMockManagedBuffer(): ManagedBuffer = {
+    val mockManagedBuffer = mock(classOf[ManagedBuffer])
+    when(mockManagedBuffer.createInputStream()).thenAnswer(new Answer[InputStream] {
+      override def answer(invocation: InvocationOnMock): InputStream = {
+        mock(classOf[InputStream])
+      }
+    })
+    mockManagedBuffer
+  }
 
   test("successful 3 local reads + 2 remote reads") {
     val blockManager = mock(classOf[BlockManager])
@@ -92,7 +102,6 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       transfer,
       blockManager,
       blocksByAddress,
-      new TestSerializer,
       48 * 1024 * 1024)
 
     // 3 local blocks fetched in initialization
@@ -104,10 +113,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       assert(subIterator.isSuccess,
         s"iterator should have 5 elements defined but actually has $i elements")
 
-      // Make sure we release the buffer once the iterator is exhausted.
+      // Make sure we release buffers when a wrapped input stream is closed.
       val mockBuf = localBlocks.getOrElse(blockId, remoteBlocks(blockId))
+      val wrappedInputStream = new WrappedInputStream(mock(classOf[InputStream]), iterator)
       verify(mockBuf, times(0)).release()
-      subIterator.get.foreach(_ => Unit)  // exhaust the iterator
+      wrappedInputStream.close()
+      verify(mockBuf, times(1)).release()
+      wrappedInputStream.close() // close should be idempotent
       verify(mockBuf, times(1)).release()
     }
 
@@ -125,10 +137,9 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     // Make sure remote blocks would return
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
     val blocks = Map[BlockId, ManagedBuffer](
-      ShuffleBlockId(0, 0, 0) -> mock(classOf[ManagedBuffer]),
-      ShuffleBlockId(0, 1, 0) -> mock(classOf[ManagedBuffer]),
-      ShuffleBlockId(0, 2, 0) -> mock(classOf[ManagedBuffer])
-    )
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 2, 0) -> createMockManagedBuffer())
 
     // Semaphore to coordinate event sequence in two different threads.
     val sem = new Semaphore(0)
@@ -159,11 +170,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       transfer,
       blockManager,
       blocksByAddress,
-      new TestSerializer,
       48 * 1024 * 1024)
 
-    // Exhaust the first block, and then it should be released.
-    iterator.next()._2.get.foreach(_ => Unit)
+    verify(blocks(ShuffleBlockId(0, 0, 0)), times(0)).release()
+    iterator.next()._2.get.close() // close() first block's input stream
     verify(blocks(ShuffleBlockId(0, 0, 0)), times(1)).release()
 
     // Get the 2nd block but do not exhaust the iterator
@@ -222,7 +232,6 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       transfer,
       blockManager,
       blocksByAddress,
-      new TestSerializer,
       48 * 1024 * 1024)
 
     // Continue only after the mock calls onBlockFetchFailure
