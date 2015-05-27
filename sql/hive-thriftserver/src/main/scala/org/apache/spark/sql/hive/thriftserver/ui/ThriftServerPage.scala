@@ -47,7 +47,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       </h4> ++
       generateSessionStatsTable() ++
       generateSQLStatsTable()
-    UIUtils.headerSparkPage("ThriftServer", content, parent, Some(5000))
+    UIUtils.headerSparkPage("JDBCServer", content, parent, Some(5000))
   }
 
   /** Generate basic stats of the thrift server program */
@@ -143,7 +143,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
         "Total Execute")
       def generateDataRow(session: SessionInfo): Seq[Node] = {
-        val sessionLink = "%s/ThriftServer/session?id=%s"
+        val sessionLink = "%s/JDBCServer/session?id=%s"
           .format(UIUtils.prependBaseUri(parent.basePath), session.sessionId)
         <tr>
           <td> {session.userName} </td>
