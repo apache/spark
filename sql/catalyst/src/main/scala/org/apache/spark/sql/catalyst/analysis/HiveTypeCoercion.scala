@@ -407,7 +407,7 @@ trait HiveTypeCoercion {
         Union(newLeft, newRight)
 
       // fix decimal precision for expressions
-      case q => q.transformExpressions {
+      case q => q.transformExpressionsUp {
         // Skip nodes whose children have not been resolved yet
         case e if !e.childrenResolved => e
 

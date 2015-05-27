@@ -31,7 +31,6 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
 
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
-  override def foldable: Boolean = child.foldable
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
 

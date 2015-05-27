@@ -86,12 +86,16 @@ abstract class Expression extends TreeNode[Expression] {
       case (i1, i2) => i1 == i2
     }
   }
+
+  def typeMismatchErrorMessage: Option[String] = None
+
+  def validInputTypes: Boolean = typeMismatchErrorMessage.isEmpty
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
   self: Product =>
 
-  def symbol: String
+  def symbol: String = sys.error(s"BinaryExpressions must either override toString or symbol")
 
   override def foldable: Boolean = left.foldable && right.foldable
 
@@ -106,6 +110,10 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
+
+  override def foldable: Boolean = child.foldable
+
+  override def nullable: Boolean = child.nullable
 }
 
 // TODO Semantically we probably not need GroupExpression
@@ -125,7 +133,9 @@ case class GroupExpression(children: Seq[Expression]) extends Expression {
  * so that the proper type conversions can be performed in the analyzer.
  */
 trait ExpectsInputTypes {
+  self: Expression =>
 
   def expectedChildTypes: Seq[DataType]
 
+  override def validInputTypes: Boolean = children.map(_.dataType) == expectedChildTypes
 }

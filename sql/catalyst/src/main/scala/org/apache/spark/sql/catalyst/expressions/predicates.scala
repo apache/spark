@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.{DataType, BinaryType, BooleanType, AtomicType}
+import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType}
 
 object InterpretedPredicate {
   def create(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
@@ -70,8 +69,6 @@ trait PredicateHelper {
 
 
 case class Not(child: Expression) extends UnaryExpression with Predicate with ExpectsInputTypes {
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
   override def toString: String = s"NOT $child"
 
   override def expectedChildTypes: Seq[DataType] = Seq(BooleanType)
@@ -171,6 +168,16 @@ case class Or(left: Expression, right: Expression)
 
 abstract class BinaryComparison extends BinaryExpression with Predicate {
   self: Product =>
+
+  override def typeMismatchErrorMessage: Option[String] = {
+    if (left.dataType != right.dataType) {
+      Some(s"differing types in BinaryComparisons, ${left.dataType}, ${right.dataType}")
+    } else {
+      errorMessageInternal(left.dataType)
+    }
+  }
+
+  protected def errorMessageInternal(t: DataType): Option[String] = None
 }
 
 case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
@@ -210,16 +217,11 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<"
 
-  lazy val ordering: Ordering[Any] = {
-    if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,
-        s"Types do not match ${left.dataType} != ${right.dataType}")
-    }
-    left.dataType match {
-      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-      case other => sys.error(s"Type $other does not support ordered operations")
-    }
+  override protected def errorMessageInternal(t: DataType) = {
+    TypeUtils.checkForOrderingExpr(t, "todo")
   }
+
+  private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
@@ -239,16 +241,11 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<="
 
-  lazy val ordering: Ordering[Any] = {
-    if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,
-        s"Types do not match ${left.dataType} != ${right.dataType}")
-    }
-    left.dataType match {
-      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-      case other => sys.error(s"Type $other does not support ordered operations")
-    }
+  override protected def errorMessageInternal(t: DataType) = {
+    TypeUtils.checkForOrderingExpr(t, "todo")
   }
+
+  private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
@@ -268,16 +265,11 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = ">"
 
-  lazy val ordering: Ordering[Any] = {
-    if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,
-        s"Types do not match ${left.dataType} != ${right.dataType}")
-    }
-    left.dataType match {
-      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-      case other => sys.error(s"Type $other does not support ordered operations")
-    }
+  override protected def errorMessageInternal(t: DataType) = {
+    TypeUtils.checkForOrderingExpr(t, "todo")
   }
+
+  private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
@@ -297,16 +289,11 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = ">="
 
-  lazy val ordering: Ordering[Any] = {
-    if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,
-        s"Types do not match ${left.dataType} != ${right.dataType}")
-    }
-    left.dataType match {
-      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-      case other => sys.error(s"Type $other does not support ordered operations")
-    }
+  override protected def errorMessageInternal(t: DataType) = {
+    TypeUtils.checkForOrderingExpr(t, "todo")
   }
+
+  private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
@@ -329,15 +316,15 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def children: Seq[Expression] = predicate :: trueValue :: falseValue :: Nil
   override def nullable: Boolean = trueValue.nullable || falseValue.nullable
 
-  override lazy val resolved = childrenResolved && trueValue.dataType == falseValue.dataType
-  override def dataType: DataType = {
-    if (!resolved) {
-      throw new UnresolvedException(
-        this,
-        s"Can not resolve due to differing types ${trueValue.dataType}, ${falseValue.dataType}")
+  override def typeMismatchErrorMessage: Option[String] = {
+    if (trueValue.dataType != falseValue.dataType) {
+      Some(s"differing types in If, ${trueValue.dataType}, ${falseValue.dataType}")
+    } else {
+      None
     }
-    trueValue.dataType
   }
+
+  override def dataType: DataType = trueValue.dataType
 
   override def eval(input: Row): Any = {
     if (true == predicate.eval(input)) {
@@ -368,12 +355,7 @@ trait CaseWhenLike extends Expression {
   def valueTypes: Seq[DataType] = (thenList ++ elseValue).map(_.dataType)
   def valueTypesEqual: Boolean = valueTypes.distinct.size == 1
 
-  override def dataType: DataType = {
-    if (!resolved) {
-      throw new UnresolvedException(this, "cannot resolve due to differing types in some branches")
-    }
-    valueTypes.head
-  }
+  override def dataType: DataType = valueTypes.head
 
   override def nullable: Boolean = {
     // If no value is nullable and no elseValue is provided, the whole statement defaults to null.
@@ -395,10 +377,15 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
 
   override def children: Seq[Expression] = branches
 
-  override lazy val resolved: Boolean =
-    childrenResolved &&
-    whenList.forall(_.dataType == BooleanType) &&
-    valueTypesEqual
+  override def typeMismatchErrorMessage: Option[String] = {
+    if (!whenList.forall(_.dataType == BooleanType)) {
+      Some(s"WHEN expressions should all be boolean type")
+    } else if (!valueTypesEqual) {
+      Some("THEN and ELSE expressions should all be same type")
+    } else {
+      None
+    }
+  }
 
   /** Written in imperative fashion for performance considerations. */
   override def eval(input: Row): Any = {
@@ -441,9 +428,13 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
 
   override def children: Seq[Expression] = key +: branches
 
-  override lazy val resolved: Boolean =
-    childrenResolved && valueTypesEqual &&
-    (key +: whenList).map(_.dataType).distinct.size == 1
+  override def typeMismatchErrorMessage: Option[String] = {
+    if (!valueTypesEqual) {
+      Some("THEN and ELSE expressions should all be same type")
+    } else {
+      None
+    }
+  }
 
   /** Written in imperative fashion for performance considerations. */
   override def eval(input: Row): Any = {

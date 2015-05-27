@@ -62,14 +62,14 @@ trait CheckAnalysis {
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
 
+          case e: Expression if !e.validInputTypes =>
+            e.failAnalysis(
+              s"cannot resolve '${t.prettyString}' due to data type mismatch: " +
+              e.typeMismatchErrorMessage.get)
+
           case c: Cast if !c.resolved =>
             failAnalysis(
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
-
-          case b: BinaryExpression if !b.resolved =>
-            failAnalysis(
-              s"invalid expression ${b.prettyString} " +
-              s"between ${b.left.dataType.simpleString} and ${b.right.dataType.simpleString}")
 
           case WindowExpression(UnresolvedWindowFunction(name, _), _) =>
             failAnalysis(

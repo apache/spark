@@ -29,16 +29,9 @@ import org.apache.spark.sql.types._
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
 
-  override def symbol: String = null
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
-  override def nullable: Boolean = left.nullable || right.nullable
   override def toString: String = s"$name($left, $right)"
-
-  override lazy val resolved =
-    left.resolved && right.resolved &&
-      left.dataType == right.dataType &&
-      !DecimalType.isFixed(left.dataType)
 
   override def dataType: DataType = DoubleType
 
