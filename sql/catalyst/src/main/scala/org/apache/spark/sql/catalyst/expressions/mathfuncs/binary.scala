@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.mathfuncs
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, BinaryExpression, Expression, Row}
 import org.apache.spark.sql.types._
 
@@ -41,13 +40,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
       left.dataType == right.dataType &&
       !DecimalType.isFixed(left.dataType)
 
-  override def dataType: DataType = {
-    if (!resolved) {
-      throw new UnresolvedException(this,
-        s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
-    }
-    left.dataType
-  }
+  override def dataType: DataType = DoubleType
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
