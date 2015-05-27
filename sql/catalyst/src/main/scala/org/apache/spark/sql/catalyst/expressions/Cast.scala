@@ -105,8 +105,6 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   override def toString: String = s"CAST($child, $dataType)"
 
-  type EvaluatedType = Any
-
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
 

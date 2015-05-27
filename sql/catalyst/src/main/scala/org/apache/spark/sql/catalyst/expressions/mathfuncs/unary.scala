@@ -28,7 +28,6 @@ import org.apache.spark.sql.types._
 abstract class MathematicalExpression(f: Double => Double, name: String)
   extends UnaryExpression with Serializable with ExpectsInputTypes {
   self: Product =>
-  type EvaluatedType = Any
 
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
