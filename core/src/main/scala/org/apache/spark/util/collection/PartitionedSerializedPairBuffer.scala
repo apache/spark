@@ -41,15 +41,12 @@ import org.apache.spark.util.collection.PartitionedSerializedPairBuffer._
  *
  * Currently, only sorting by partition is supported.
  *
- * Each record is laid out inside the the metaBuffer as follows:
+ * Each record is laid out inside the the metaBuffer as follows. keyStart, a long, is split across
+ * two integers:
  *
- * ┌─────────────┬────────────┬────────────┬─────────────┐
- * │         keyStart         │ keyValLen  │ partitionId │
- * └─────────────┴────────────┴────────────┴─────────────┘
- *               ▲
- *               └──────┐
- *                      │
- *                     Split across two integers
+ *   +-------------+------------+------------+-------------+
+ *   |         keyStart         | keyValLen  | partitionId |
+ *   +-------------+------------+------------+-------------+
  *
  * @param metaInitialRecords The initial number of entries in the metadata buffer.
  * @param kvBlockSize The size of each byte buffer in the ChainedBuffer used to store the records.
