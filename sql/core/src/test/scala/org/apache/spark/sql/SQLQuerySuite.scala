@@ -184,55 +184,56 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       checkAnswer(df, expectedResults)
     }
 
-    // Just to group rows.
-    testCodeGen(
-      "SELECT key FROM testData3x GROUP BY key",
-      (1 to 100).map(Row(_)))
-    // COUNT
-    testCodeGen(
-      "SELECT key, count(value) FROM testData3x GROUP BY key",
-      (1 to 100).map(i => Row(i, 3)))
-    testCodeGen(
-      "SELECT count(key) FROM testData3x",
-      Row(300) :: Nil)
-    // COUNT DISTINCT ON int
-    testCodeGen(
-      "SELECT value, count(distinct key) FROM testData3x GROUP BY value",
-      (1 to 100).map(i => Row(i.toString, 1)))
-    testCodeGen(
-      "SELECT count(distinct key) FROM testData3x",
-      Row(100) :: Nil)
-    // SUM
-    testCodeGen(
-      "SELECT value, sum(key) FROM testData3x GROUP BY value",
-      (1 to 100).map(i => Row(i.toString, 3 * i)))
-    testCodeGen(
-      "SELECT sum(key), SUM(CAST(key as Double)) FROM testData3x",
-      Row(5050 * 3, 5050 * 3.0) :: Nil)
-    // AVERAGE
-    testCodeGen(
-      "SELECT value, avg(key) FROM testData3x GROUP BY value",
-      (1 to 100).map(i => Row(i.toString, i)))
-    testCodeGen(
-      "SELECT avg(key) FROM testData3x",
-      Row(50.5) :: Nil)
-    // MAX
-    testCodeGen(
-      "SELECT value, max(key) FROM testData3x GROUP BY value",
-      (1 to 100).map(i => Row(i.toString, i)))
-    testCodeGen(
-      "SELECT max(key) FROM testData3x",
-      Row(100) :: Nil)
-    // MIN
-    testCodeGen(
-      "SELECT value, min(key) FROM testData3x GROUP BY value",
-      (1 to 100).map(i => Row(i.toString, i)))
-    testCodeGen(
-      "SELECT min(key) FROM testData3x",
-      Row(1) :: Nil)
-    // Some combinations.
-    testCodeGen(
-      """
+    try {
+      // Just to group rows.
+      testCodeGen(
+        "SELECT key FROM testData3x GROUP BY key",
+        (1 to 100).map(Row(_)))
+      // COUNT
+      testCodeGen(
+        "SELECT key, count(value) FROM testData3x GROUP BY key",
+        (1 to 100).map(i => Row(i, 3)))
+      testCodeGen(
+        "SELECT count(key) FROM testData3x",
+        Row(300) :: Nil)
+      // COUNT DISTINCT ON int
+      testCodeGen(
+        "SELECT value, count(distinct key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, 1)))
+      testCodeGen(
+        "SELECT count(distinct key) FROM testData3x",
+        Row(100) :: Nil)
+      // SUM
+      testCodeGen(
+        "SELECT value, sum(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, 3 * i)))
+      testCodeGen(
+        "SELECT sum(key), SUM(CAST(key as Double)) FROM testData3x",
+        Row(5050 * 3, 5050 * 3.0) :: Nil)
+      // AVERAGE
+      testCodeGen(
+        "SELECT value, avg(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, i)))
+      testCodeGen(
+        "SELECT avg(key) FROM testData3x",
+        Row(50.5) :: Nil)
+      // MAX
+      testCodeGen(
+        "SELECT value, max(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, i)))
+      testCodeGen(
+        "SELECT max(key) FROM testData3x",
+        Row(100) :: Nil)
+      // MIN
+      testCodeGen(
+        "SELECT value, min(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, i)))
+      testCodeGen(
+        "SELECT min(key) FROM testData3x",
+        Row(1) :: Nil)
+      // Some combinations.
+      testCodeGen(
+        """
         |SELECT
         |  value,
         |  sum(key),
@@ -244,17 +245,21 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         |FROM testData3x
         |GROUP BY value
       """.stripMargin,
-      (1 to 100).map(i => Row(i.toString, i*3, i, i, i, 3, 1)))
+      (1 to 100).map(i
+      => Row(i.toString, i*3, i, i, i, 3, 1)))
     testCodeGen(
       "SELECT max(key), min(key), avg(key), count(key), count(distinct key) FROM testData3x",
-      Row(100, 1, 50.5, 300, 100) :: Nil)
-    // Aggregate with Code generation handling all null values
-    testCodeGen(
-      "SELECT  sum('a'), avg('a'), count(null) FROM testData",
-      Row(0, null, 0) :: Nil)
-
-    dropTempTable("testData3x")
-    setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+      Row(100, 1,
+        50.5, 300, 100) :: Nil)
+      // Aggregate with Code generation handling all null values
+      testCodeGen(
+        "SELECT  sum('a'), avg('a'), count(null) FROM testData",
+      Row(0,
+        null, 0) :: Nil)
+    } finally {
+      dropTempTable("testData3x")
+      setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+    }
   }
 
   test("Add Parser of SQL COALESCE()") {
@@ -463,9 +468,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     val codegenbefore = conf.codegenEnabled
     setConf(SQLConf.EXTERNAL_SORT, "false")
     setConf(SQLConf.CODEGEN_ENABLED, "true")
-    sortTest()
-    setConf(SQLConf.EXTERNAL_SORT, externalbefore.toString)
-    setConf(SQLConf.CODEGEN_ENABLED, codegenbefore.toString)
+    try{
+      sortTest()
+    } finally {
+      setConf(SQLConf.EXTERNAL_SORT, externalbefore.toString)
+      setConf(SQLConf.CODEGEN_ENABLED, codegenbefore.toString)
+    }
   }
 
   test("SPARK-6927 external sorting with codegen on") {
@@ -473,9 +481,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     val codegenbefore = conf.codegenEnabled
     setConf(SQLConf.CODEGEN_ENABLED, "true")
     setConf(SQLConf.EXTERNAL_SORT, "true")
-    sortTest()
-    setConf(SQLConf.EXTERNAL_SORT, externalbefore.toString)
-    setConf(SQLConf.CODEGEN_ENABLED, codegenbefore.toString)
+    try {
+      sortTest()
+    } finally {
+      setConf(SQLConf.EXTERNAL_SORT, externalbefore.toString)
+      setConf(SQLConf.CODEGEN_ENABLED, codegenbefore.toString)
+    }
   }
 
   test("limit") {

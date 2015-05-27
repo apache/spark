@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions._
  */
 object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
   import scala.reflect.runtime.{universe => ru}
-  import scala.reflect.runtime.universe._
 
   protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer.execute(in)
 
@@ -32,17 +31,22 @@ object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
     BindReferences.bindReference(in, inputSchema)
 
   protected def create(predicate: Expression): ((Row) => Boolean) = {
-    val cEval = expressionEvaluator(predicate)
+    val ctx = newCodeGenContext()
+    val cEval = expressionEvaluator(predicate, ctx)
 
-    val code =
-      q"""
+    val code = s"""
+      (expressions: Seq[$exprType]) => {
         (i: $rowType) => {
-          ..${cEval.code}
-          if (${cEval.nullTerm}) false else ${cEval.primitiveTerm}
+          ${cEval.code}
+          if (${cEval.nullTerm})
+            false
+          else
+            ${cEval.primitiveTerm}
         }
+      }
       """
 
-    log.debug(s"Generated predicate '$predicate':\n$code")
-    toolBox.eval(code).asInstanceOf[Row => Boolean]
+    logWarning(s"Generated predicate '$predicate':\n$code")
+    toolBox.eval(toolBox.parse(code)).asInstanceOf[(Seq[Expression]) => (Row => Boolean)](ctx.borrowed)
   }
 }

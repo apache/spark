@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.expressions._
  * input [[Row]] for a fixed set of [[Expression Expressions]].
  */
 object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => MutableProjection] {
-  import scala.reflect.runtime.{universe => ru}
   import scala.reflect.runtime.universe._
+  import scala.reflect.runtime.{universe => ru}
 
   val mutableRowName = newTermName("mutableRow")
 
@@ -36,20 +36,21 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
     in.map(BindReferences.bindReference(_, inputSchema))
 
   protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
-    val projectionCode = expressions.zipWithIndex.flatMap { case (e, i) =>
-      val evaluationCode = expressionEvaluator(e)
-
-      evaluationCode.code :+
-      q"""
-        if(${evaluationCode.nullTerm})
-          mutableRow.setNullAt($i)
-        else
-          ${setColumn(mutableRowName, e.dataType, i, evaluationCode.primitiveTerm)}
-      """
-    }
+    val ctx = newCodeGenContext()
+    val projectionCode = expressions.zipWithIndex.map { case (e, i) =>
+      val evaluationCode = expressionEvaluator(e, ctx)
+      evaluationCode.code +
+        s"""
+          if(${evaluationCode.nullTerm})
+            mutableRow.setNullAt($i)
+          else
+            ${setColumn(mutableRowName, e.dataType, i, evaluationCode.primitiveTerm)}
+        """
+    }.mkString("\n")
 
     val code =
-      q"""
+     s"""
+     (expressions: Seq[$exprType]) => {
         () => { new $mutableProjectionType {
 
           private[this] var $mutableRowName: $mutableRowType =
@@ -64,13 +65,15 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           def currentValue: $rowType = mutableRow
 
           def apply(i: $rowType): $rowType = {
-            ..$projectionCode
+            $projectionCode
             mutableRow
           }
-        } }
-      """
+        }}
+     }
+     """
 
-    log.debug(s"code for ${expressions.mkString(",")}:\n$code")
-    toolBox.eval(code).asInstanceOf[() => MutableProjection]
+    logWarning(s"code for ${expressions.mkString(",")}:\n$code")
+    toolBox.eval(toolBox.parse(code)).asInstanceOf[
+      (Seq[Expression]) => (() => MutableProjection)](ctx.borrowed)
   }
 }

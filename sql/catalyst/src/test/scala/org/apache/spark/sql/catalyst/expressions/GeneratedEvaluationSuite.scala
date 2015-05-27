@@ -32,11 +32,12 @@ class GeneratedEvaluationSuite extends ExpressionEvaluationSuite {
       GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)()
     } catch {
       case e: Throwable =>
-        val evaluated = GenerateProjection.expressionEvaluator(expression)
+        val ctx = new GenerateProjection.CodeGenContext(new scala.collection.mutable.Stack[Expression]())
+        val evaluated = GenerateProjection.expressionEvaluator(expression, ctx)
         fail(
           s"""
             |Code generation of $expression failed:
-            |${evaluated.code.mkString("\n")}
+            |${evaluated.code}
             |$e
           """.stripMargin)
     }

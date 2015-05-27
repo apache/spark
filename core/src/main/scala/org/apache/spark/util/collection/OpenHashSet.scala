@@ -37,7 +37,7 @@ import com.google.common.hash.Hashing
  * It uses quadratic probing with a power-of-2 hash table size, which is guaranteed
  * to explore all spaces for each key (see http://en.wikipedia.org/wiki/Quadratic_probing).
  */
-private[spark]
+
 class OpenHashSet[@specialized(Long, Int) T: ClassTag](
     initialCapacity: Int,
     loadFactor: Double)

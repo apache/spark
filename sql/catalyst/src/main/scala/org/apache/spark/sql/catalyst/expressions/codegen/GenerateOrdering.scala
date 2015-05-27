@@ -19,15 +19,15 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{BinaryType, StringType, NumericType}
+import org.apache.spark.sql.types.{BinaryType, NumericType, StringType}
 
 /**
  * Generates bytecode for an [[Ordering]] of [[Row Rows]] for a given set of
  * [[Expression Expressions]].
  */
 object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] with Logging {
-  import scala.reflect.runtime.{universe => ru}
   import scala.reflect.runtime.universe._
+  import scala.reflect.runtime.{universe => ru}
 
  protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
     in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[SortOrder])
@@ -38,13 +38,15 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
   protected def create(ordering: Seq[SortOrder]): Ordering[Row] = {
     val a = newTermName("a")
     val b = newTermName("b")
+    val ctx = newCodeGenContext()
+
     val comparisons = ordering.zipWithIndex.map { case (order, i) =>
-      val evalA = expressionEvaluator(order.child)
-      val evalB = expressionEvaluator(order.child)
+      val evalA = expressionEvaluator(order.child, ctx)
+      val evalB = expressionEvaluator(order.child, ctx)
 
       val compare = order.child.dataType match {
         case BinaryType =>
-          q"""
+          s"""
           val x = ${if (order.direction == Ascending) evalA.primitiveTerm else evalB.primitiveTerm}
           val y = ${if (order.direction != Ascending) evalB.primitiveTerm else evalA.primitiveTerm}
           var i = 0
@@ -56,55 +58,52 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
           return x.length - y.length
           """
         case _: NumericType =>
-          q"""
+          s"""
           val comp = ${evalA.primitiveTerm} - ${evalB.primitiveTerm}
           if(comp != 0) {
-            return ${if (order.direction == Ascending) q"comp.toInt" else q"-comp.toInt"}
+            return ${if (order.direction == Ascending) "comp.toInt" else "-comp.toInt"}
           }
           """
         case StringType =>
           if (order.direction == Ascending) {
-            q"""return ${evalA.primitiveTerm}.compare(${evalB.primitiveTerm})"""
+            s"""return ${evalA.primitiveTerm}.compare(${evalB.primitiveTerm})"""
           } else {
-            q"""return ${evalB.primitiveTerm}.compare(${evalA.primitiveTerm})"""
+            s"""return ${evalB.primitiveTerm}.compare(${evalA.primitiveTerm})"""
           }
       }
 
-      q"""
+      s"""
         i = $a
-        ..${evalA.code}
+        ${evalA.code}
         i = $b
-        ..${evalB.code}
+        ${evalB.code}
         if (${evalA.nullTerm} && ${evalB.nullTerm}) {
           // Nothing
         } else if (${evalA.nullTerm}) {
-          return ${if (order.direction == Ascending) q"-1" else q"1"}
+          return ${if (order.direction == Ascending) "-1" else "1"}
         } else if (${evalB.nullTerm}) {
-          return ${if (order.direction == Ascending) q"1" else q"-1"}
+          return ${if (order.direction == Ascending) "1" else "-1"}
         } else {
           $compare
         }
       """
-    }
+    }.mkString("\n")
 
-    val q"class $orderingName extends $orderingType { ..$body }" = reify {
-      class SpecificOrdering extends Ordering[Row] {
-        val o = ordering
-      }
-    }.tree.children.head
-
-    val code = q"""
-      class $orderingName extends $orderingType {
-        ..$body
-        def compare(a: $rowType, b: $rowType): Int = {
-          var i: $rowType = null // Holds current row being evaluated.
-          ..$comparisons
-          return 0
+    val code = s"""
+      (ordering: Seq[org.apache.spark.sql.catalyst.expressions.SortOrder],
+       expressions: Seq[$exprType]) => {
+        class SpecificOrdering extends scala.math.Ordering[$rowType]  {
+          def compare(a: $rowType, b: $rowType): Int = {
+            var i: $rowType = null // Holds current row being evaluated.
+            $comparisons
+            return 0
+          }
         }
+        new SpecificOrdering()
       }
-      new $orderingName()
       """
-    logDebug(s"Generated Ordering: $code")
-    toolBox.eval(code).asInstanceOf[Ordering[Row]]
+    logWarning(s"Generated Ordering: $code")
+    toolBox.eval(toolBox.parse(code)).asInstanceOf[
+      (Seq[SortOrder], Seq[Expression]) => Ordering[Row]](ordering, ctx.borrowed)
   }
 }
