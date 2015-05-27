@@ -703,9 +703,11 @@ class TaskInstance(Base):
             )
         elif force or self.state in State.runnable():
             self.start_date = datetime.now()
-            if not force and task.pool and self.pool_full(session):
+            if not force and task.pool and self.pool_full(session=session):
                 self.state = State.QUEUED
+                session.merge(self)
                 session.commit()
+                session.close()
                 logging.info("Pool {} is full, queuing".format(task.pool))
                 return
             if self.state == State.UP_FOR_RETRY:
@@ -1814,6 +1816,19 @@ class Pool(Base):
             .count()
         )
         return running
+
+    @provide_session
+    def queued_slots(self, session):
+        """
+        Returns the number of slots used at the moment
+        """
+        return (
+            session
+            .query(TaskInstance)
+            .filter(TaskInstance.pool == self.pool)
+            .filter(TaskInstance.state == State.QUEUED)
+            .count()
+        )
 
     @provide_session
     def open_slots(self, session):

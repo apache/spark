@@ -1724,6 +1724,7 @@ def pool_link(v, c, m, p):
     url = '/admin/taskinstance/?flt1_pool_equals=' + m.pool
     return Markup("<a href='{url}'>{m.pool}</a>".format(**locals()))
 
+
 def fused_slots(v, c, m, p):
     url = (
         '/admin/taskinstance/' +
@@ -1731,9 +1732,18 @@ def fused_slots(v, c, m, p):
         '&flt2_state_equals=running')
     return Markup("<a href='{0}'>{1}</a>".format(url, m.used_slots()))
 
+
+def fqueued_slots(v, c, m, p):
+    url = (
+        '/admin/taskinstance/' +
+        '?flt1_pool_equals=' + m.pool +
+        '&flt2_state_equals=queued')
+    return Markup("<a href='{0}'>{1}</a>".format(url, m.queued_slots()))
+
 class PoolModelView(SuperUserMixin, ModelView):
-    column_list = ('pool', 'slots', 'used_slots')
-    column_formatters = dict(pool=pool_link, used_slots=fused_slots)
+    column_list = ('pool', 'slots', 'used_slots', 'queued_slots')
+    column_formatters = dict(
+        pool=pool_link, used_slots=fused_slots, queued_slots=fqueued_slots)
     named_filter_urls = True
 mv = PoolModelView(models.Pool, Session, name="Pools", category="Admin")
 admin.add_view(mv)
