@@ -50,7 +50,7 @@ private[spark] object SQLConf {
   val COLUMN_NAME_OF_CORRUPT_RECORD = "spark.sql.columnNameOfCorruptRecord"
   val BROADCAST_TIMEOUT = "spark.sql.broadcastTimeout"
 
-  val PARTITIAL_AGGREGATION = "spark.sql.partialAggregation.enable"
+  val PRE_AGGREGATION = "spark.sql.preAggregation.enable"
 
   // Options that control which operators can be chosen by the query planner.  These should be
   // considered hints and may be ignored by future versions of Spark SQL.
@@ -171,8 +171,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   /**
    * The execution.HashAggregation will be apply by default
    */
-  private[spark] def partAggregationEnabled: Boolean =
-    getConf(PARTITIAL_AGGREGATION, "true").toBoolean
+  private[spark] def preAggregationEnabled: Boolean =
+    getConf(PRE_AGGREGATION, "true").toBoolean
 
   /**
    * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode
