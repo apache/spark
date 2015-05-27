@@ -171,15 +171,14 @@ for t in "${PR_TESTS[@]}"; do
   # Ensure the test can be found and is a file
   if [ -f "${this_test}" ]; then
     echo "Running test: $t"
-    this_mssg="$(bash "${this_test}" "${ghprbActualCommit}" "${sha1}" "${current_pr_head}")"
-    # Check if this is the merge test as we submit that note *before* and *after*
-    # the tests run
-    [ "$t" == "pr_merge_ability" ] && merge_note="${this_mssg}"
+    this_mssg="$(bash "${this_test}" "${ghprbActualCommit}" "${sha1}" "${current_pr_head}" "2> /dev/null")"
+
     pr_message="${pr_message}\n${this_mssg}"
     # Ensure, after each test, that we're back on the current PR
     git checkout -f "${current_pr_head}" &>/dev/null
   else
     echo "Cannot find test ${this_test}."
+    exit 1
   fi
 done
 

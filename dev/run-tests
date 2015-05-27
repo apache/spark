@@ -62,7 +62,12 @@ export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pkinesis-asl"
   if test -x "$JAVA_HOME/bin/java"; then
       declare java_cmd="$JAVA_HOME/bin/java"
   else
-      declare java_cmd=java
+      declare java_cmd=$(which java)
+  fi
+
+  if [ ! -x $java_cmd ]; then
+      echo "[error] JAVA_HOME unset and java executable not found in system path: ${PATH}"
+      exit 1
   fi
 
   # We can't use sed -r -e due to OS X / BSD compatibility; hence, all the parentheses.
