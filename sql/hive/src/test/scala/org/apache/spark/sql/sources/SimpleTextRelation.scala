@@ -27,6 +27,7 @@ import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputForma
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{Row, SQLContext}
@@ -108,7 +109,10 @@ class SimpleTextRelation(
 
     sparkContext.textFile(inputStatuses.map(_.getPath).mkString(",")).map { record =>
       Row(record.split(",").zip(fields).map { case (value, dataType) =>
-        Cast(Literal(value), dataType).eval()
+        // `Cast`ed values are always of Catalyst types (i.e. UTF8String instead of String, etc.)
+        val catalystValue = Cast(Literal(value), dataType).eval()
+        // Here we're converting Catalyst values to Scala values to test `needsConversion`
+        CatalystTypeConverters.convertToScala(catalystValue, dataType)
       }: _*)
     }
   }
