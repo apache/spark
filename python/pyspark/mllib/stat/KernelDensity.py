@@ -25,6 +25,7 @@ import numpy as np
 from pyspark.mllib.common import callMLlibFunc
 from pyspark.rdd import RDD
 
+
 class KernelDensity(object):
     """
     .. note:: Experimental
@@ -56,5 +57,5 @@ class KernelDensity(object):
         """Estimate the probability density at points"""
         points = list(points)
         densities = callMLlibFunc(
-            "estimateKernelDensity", self._sample, self._bandwidth, points) 
+            "estimateKernelDensity", self._sample, self._bandwidth, points)
         return np.asarray(densities)
