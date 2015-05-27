@@ -294,8 +294,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           child: SparkPlan,
           alwaysShuffle: Boolean = false): SparkPlan = {
         val needSort = rowOrdering.nonEmpty && child.outputOrdering != rowOrdering
-
-        val needsShuffle = (child.outputPartitioning != partitioning) || alwaysShuffle
+        val needsShuffle = alwaysShuffle || (child.outputPartitioning != partitioning)
 
         val withShuffle = if (needsShuffle) {
           Exchange(partitioning, Nil, child)
@@ -329,7 +328,8 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           case (AllTuples, rowOrdering, child) =>
             addOperatorsIfNecessary(SinglePartition, rowOrdering, child)
           case (ClusteredDistribution(clustering, nullKeySensitive), rowOrdering, child) =>
-            addOperatorsIfNecessary(HashPartitioning(clustering, numPartitions), rowOrdering, child, nullKeySensitive)
+            addOperatorsIfNecessary(
+              HashPartitioning(clustering, numPartitions), rowOrdering, child, nullKeySensitive)
           case (OrderedDistribution(ordering), rowOrdering, child) =>
             addOperatorsIfNecessary(RangePartitioning(ordering, numPartitions), rowOrdering, child)
 
