@@ -42,6 +42,22 @@
     "completed" : true
   } ]
 }, {
+  "id" : "local-1430917381535",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "attemptId" : "1",
+    "startTime" : "2015-05-06T13:03:00.893GMT",
+    "endTime" : "2015-02-03T16:42:46.912GMT",
+    "sparkUser" : "irashid",
+    "completed" : true
+  }, {
+    "attemptId" : "2",
+    "startTime" : "2015-05-06T13:03:00.893GMT",
+    "endTime" : "2015-02-03T16:42:46.912GMT",
+    "sparkUser" : "irashid",
+    "completed" : true
+  } ]
+}, {
   "id" : "local-1422981759269",
   "name" : "Spark shell",
   "attempts" : [ {

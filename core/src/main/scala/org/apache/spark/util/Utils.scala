@@ -21,7 +21,7 @@ import java.io._
 import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
-import java.util.zip.{ZipOutputStream, ZipEntry}
+import java.util.zip.{ZipEntry, ZipOutputStream}
 import java.util.{PriorityQueue, Properties, Locale, Random, UUID}
 import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
@@ -794,23 +794,29 @@ private[spark] object Utils extends Logging {
 
     val fs = FileSystem.get(hadoopConf)
     val buffer = new Array[Byte](64 * 1024)
-    val zipStream = new ZipOutputStream(outputStream)
-    files.foreach { remotePath =>
-      val inputStream = fs.open(remotePath, 1 * 1024 * 1024) // 1MB Buffer
-      zipStream.putNextEntry(new ZipEntry(remotePath.getName))
-      var dataRemaining = true
-      while (dataRemaining) {
-        val length = inputStream.read(buffer)
-        if (length != -1) {
-          zipStream.write(buffer, 0, length)
-        } else {
-          dataRemaining = false
+    val zipStream = Some(new ZipOutputStream(outputStream))
+    try {
+      files.foreach { remotePath =>
+        val inputStream = Some(fs.open(remotePath, 1 * 1024 * 1024)) // 1MB Buffer
+        try {
+          zipStream.get.putNextEntry(new ZipEntry(remotePath.getName))
+          var dataRemaining = true
+          while (dataRemaining) {
+            val length = inputStream.get.read(buffer)
+            if (length != -1) {
+              zipStream.get.write(buffer, 0, length)
+            } else {
+              dataRemaining = false
+            }
+          }
+          zipStream.get.closeEntry()
+        } finally {
+          inputStream.foreach(_.close())
         }
       }
-      zipStream.closeEntry()
-      inputStream.close()
+    } finally {
+      zipStream.foreach(_.close())
     }
-    zipStream.close()
   }
 
   /**

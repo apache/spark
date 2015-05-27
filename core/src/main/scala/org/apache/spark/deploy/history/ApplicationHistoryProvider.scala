@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{OutputStream, File}
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.ui.SparkUI
@@ -67,8 +65,11 @@ private[history] abstract class ApplicationHistoryProvider {
   def getConfig(): Map[String, String] = Map()
 
   /**
-   * Get the [[Path]]s to the Event log directories.
+   * Get the [[Path]]s to the Event log files. For legacy event log directories, directory path
+   * itself is returned. The caller is responsible for listing the files and using them as needed.
+   * If the attemptId is [[None]], event logs corresponding to all attempts for the given
+   * application are downloaded as a single zip file.
    */
-  def getEventLogPaths(appId: String, attemptId: String): Seq[Path] = Seq.empty
+  def getEventLogPaths(appId: String, attemptId: Option[String]): Seq[Path] = Seq.empty
 
 }

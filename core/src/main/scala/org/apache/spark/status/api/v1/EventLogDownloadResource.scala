@@ -16,7 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
-import java.io.{BufferedInputStream, FileInputStream, OutputStream}
+import java.io.{File, FileOutputStream, BufferedInputStream, FileInputStream, OutputStream}
 import javax.ws.rs.{GET, Produces}
 import javax.ws.rs.core.{Response, StreamingOutput, MediaType}
 
@@ -41,7 +41,7 @@ private[v1] class EventLogDownloadResource(
     uIRoot match {
       case hs: HistoryServer =>
         var logsNotFound = false
-        val fileName: String = {
+        val fileName = {
           attemptId match {
             case Some(id) => s"eventLogs-$appId-$id.zip"
             case None => s"eventLogs-$appId.zip"
@@ -49,28 +49,9 @@ private[v1] class EventLogDownloadResource(
         }
         val stream = new StreamingOutput {
           override def write(output: OutputStream): Unit = {
-            attemptId match {
-              case Some(id) =>
-                Utils.zipFilesToStream(hs.getEventLogPaths(appId, id), conf, output)
-              case None =>
-                val appInfo = hs.getApplicationInfoList.find(_.id == appId)
-                appInfo match {
-                  case Some(info) =>
-                    val attempts = info.attempts
-                    val files = new ArrayBuffer[Path]
-                    attempts.foreach { attempt =>
-                      attempt.attemptId.foreach { attemptId =>
-                        logInfo(s"Attempt found: ${attemptId}")
-                        files ++= hs.getEventLogPaths(appId, attemptId)
-                      }
-                    }
-                    if (files.nonEmpty) {
-                      Utils.zipFilesToStream(files, conf, output)
-                    }
-                  case None => logsNotFound = true
-                }
-            }
-            output.flush()
+            val eventLogs = hs.getEventLogPaths(appId, attemptId)
+            if (eventLogs.isEmpty) logsNotFound = true
+            else zipLogFiles(eventLogs, output)
           }
         }
         if (logsNotFound) {
@@ -86,16 +67,44 @@ private[v1] class EventLogDownloadResource(
         }
       case _ =>
         Response.serverError()
-          .entity("History Server is not running - cannot return event logs.")
+          .entity("Event logs are only available through the history server.")
           .status(Response.Status.SERVICE_UNAVAILABLE)
           .build()
     }
   }
-}
 
-private[v1] object EventLogDownloadResource {
-
-  def unapply(resource: EventLogDownloadResource): Option[(UIRoot, String)] = {
-    Some((resource.uIRoot, resource.appId))
+  private def zipLogFiles(eventLogs: Seq[Path], output: OutputStream): Unit = {
+    val areLegacyLogs = eventLogs.headOption.exists { path =>
+      path.getFileSystem(conf).isDirectory(path)
+    }
+    val pathsToZip = if (areLegacyLogs) {
+      new ArrayBuffer[Path]()
+    } else {
+      eventLogs
+    }
+    var tempDir: File = null
+    try {
+      if (areLegacyLogs) {
+        tempDir = Utils.createTempDir()
+        Utils.chmod700(tempDir)
+        eventLogs.foreach { logPath =>
+          // If the event logs are directories (legacy), then create a zip file for each
+          // one and write each of these files to the eventual output.
+          val fs = logPath.getFileSystem(conf)
+          val logFiles = fs.listFiles(logPath, true)
+          val zipFile = new File(tempDir, logPath.getName + ".zip")
+          pathsToZip.asInstanceOf[ArrayBuffer[Path]] += new Path(zipFile.toURI)
+          val outputStream = new FileOutputStream(zipFile)
+          val paths = new ArrayBuffer[Path]()
+          while (logFiles.hasNext) {
+            paths += logFiles.next().getPath
+          }
+          Utils.zipFilesToStream(paths, conf, outputStream)
+        }
+      }
+      Utils.zipFilesToStream(pathsToZip, conf, output)
+    } finally {
+      if (tempDir != null) Utils.deleteRecursively(tempDir)
+    }
   }
 }

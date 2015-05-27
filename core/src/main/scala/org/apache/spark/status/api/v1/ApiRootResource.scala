@@ -22,6 +22,7 @@ import javax.ws.rs.core.{Context, Response}
 
 import com.sun.jersey.api.core.ResourceConfig
 import com.sun.jersey.spi.container.servlet.ServletContainer
+import org.apache.hadoop.fs
 import org.eclipse.jetty.server.handler.ContextHandler
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
@@ -204,6 +205,7 @@ private[spark] object ApiRootResource {
 private[spark] trait UIRoot {
   def getSparkUI(appKey: String): Option[SparkUI]
   def getApplicationInfoList: Iterator[ApplicationInfo]
+  def getEventLogPaths(appId: String, attemptId: Option[String]): Seq[fs.Path] = Seq.empty
 
   /**
    * Get the spark UI with the given appID, and apply a function

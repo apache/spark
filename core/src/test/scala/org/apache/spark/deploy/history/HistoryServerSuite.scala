@@ -27,6 +27,7 @@ import org.mockito.Mockito.when
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import org.scalatest.mock.MockitoSugar
 
+import org.apache.spark.util.Utils
 import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf}
 import org.apache.spark.ui.SparkUI
 
@@ -150,11 +151,47 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
   }
 
   test("download all logs for app with multiple attempts") {
-    val (code, inputStream, error) =
-      HistoryServerSuite.connectAndGetInputStream(generateURL("applications/local-1426533911241"))
+    doDownloadTest(None)
+  }
+
+  test("download one log for app with multiple attempts") {
+    (1 to 2).foreach{ attemptId => doDownloadTest(Some(attemptId)) }
+  }
+
+  // Test that the files are downloaded correctly, and validate them.
+  def doDownloadTest(attemptId: Option[Int]): Unit = {
+
+    val url = attemptId match {
+      case Some(id) =>
+        new URL(s"${generateURL("applications/local-1430917381535")}/$id/download")
+      case None =>
+        new URL(s"${generateURL("applications/local-1430917381535")}/download")
+    }
+
+    val (code, inputStream, error) = HistoryServerSuite.connectAndGetInputStream(url)
     code should be (HttpServletResponse.SC_OK)
     inputStream should not be None
     error should be (None)
+
+    def validateFile(fileName: String, tempDir: File): Unit = {
+      val exp = IOUtils.toString(new FileInputStream(new File(logDir, fileName)))
+      val input = IOUtils.toString(new FileInputStream(new File(tempDir, fileName)))
+      input should be(exp)
+    }
+
+    val dir = Utils.createTempDir()
+    try {
+      Utils.chmod700(dir)
+      unzipToDir(inputStream.get, dir)
+      val files = dir.listFiles()
+      attemptId match {
+        case Some(_) => files.length should be (1)
+        case None => files.length should be (2)
+      }
+      validateFile(files.head.getName, dir)
+    } finally {
+      Utils.deleteRecursively(dir)
+    }
   }
 
   test("response codes on bad paths") {
@@ -234,14 +271,16 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     while(nextEntry != null) {
       val file = new File(dir, nextEntry.getName)
       val outputStream = new BufferedOutputStream(new FileOutputStream(file))
-      var read = Integer.MAX_VALUE
-      while (read != -1) {
-        read = unzipStream.read(buffer)
-        outputStream.write(buffer, 0, read)
+      var dataRemains = true
+      while (dataRemains) {
+        val read = unzipStream.read(buffer)
+        if (read != -1) outputStream.write(buffer, 0, read)
+        else dataRemains = false
       }
       outputStream.close()
       nextEntry = unzipStream.getNextEntry
     }
+    unzipStream.close()
   }
 }
 

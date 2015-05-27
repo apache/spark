@@ -389,8 +389,10 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       SparkListenerApplicationEnd(System.currentTimeMillis())
     )
     provider.checkForLogs()
-    provider.getEventLogPaths("downloadApp1", "attempt1").head.getName should be (log1.getName)
-    provider.getEventLogPaths("downloadApp1", "attempt2").head.getName should be (log2.getName)
+    provider.getEventLogPaths("downloadApp1", Some("attempt1"))
+      .head.getName should be (log1.getName)
+    provider.getEventLogPaths("downloadApp1", Some("attempt2"))
+      .head.getName should be (log2.getName)
   }
 
   /**

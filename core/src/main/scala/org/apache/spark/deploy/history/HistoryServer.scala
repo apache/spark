@@ -174,12 +174,9 @@ class HistoryServer(
     getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
 
-  def getEventLogPaths(
-      appId: String,
-      attemptId: String): Seq[Path] = {
+  override def getEventLogPaths(appId: String, attemptId: Option[String]): Seq[Path] = {
     provider.getEventLogPaths(appId, attemptId)
   }
-
 
   /**
    * Returns the provider configuration to show in the listing page.
