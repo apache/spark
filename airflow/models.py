@@ -24,7 +24,7 @@ from airflow.configuration import conf
 from airflow import settings
 from airflow import utils
 from airflow.utils import State
-from airflow.utils import apply_defaults
+from airflow.utils import apply_defaults, provide_session
 
 Base = declarative_base()
 ID_LEN = 250
@@ -314,6 +314,8 @@ class Connection(Base):
                 return hooks.PrestoHook(presto_conn_id=self.conn_id)
             elif self.conn_type == 'hiveserver2':
                 return hooks.HiveServer2Hook(hiveserver2_conn_id=self.conn_id)
+            elif self.conn_type == 'sqlite':
+                return hooks.SqliteHook(sqlite_conn_id=self.conn_id)
         except:
             return None
 
@@ -515,12 +517,13 @@ class TaskInstance(Base):
         """
         return (self.dag_id, self.task_id, self.execution_date)
 
-    def is_runnable(self):
+    def is_queueable(self):
         """
         Returns a boolean on whether the task instance has met all dependencies
         and is ready to run. It considers the task's state, the state
         of its dependencies, depends_on_past and makes sure the execution
-        isn't in the future.
+        isn't in the future. It doesn't take into
+        account whether the pool has a slot for it to run.
         """
         if self.execution_date > datetime.now() - self.task.schedule_interval:
             return False
@@ -530,11 +533,17 @@ class TaskInstance(Base):
             return False
         elif (
                 self.state in State.runnable() and
-                self.are_dependencies_met() and
-                not self.pool_full()):
+                self.are_dependencies_met()):
             return True
         else:
             return False
+
+    def is_runnable(self):
+        """
+        Returns whether a task is ready to run AND there's room in the
+        queue.
+        """
+        return self.is_queueable() and not self.pool_full()
 
     def are_dependents_done(self, main_session=None):
         """
@@ -626,7 +635,8 @@ class TaskInstance(Base):
         return self.state == State.UP_FOR_RETRY and \
             self.end_date + self.task.retry_delay < datetime.now()
 
-    def pool_full(self, session=None):
+    @provide_session
+    def pool_full(self, session):
         """
         Returns a boolean as to whether the slot pool has room for this
         task to run
@@ -634,18 +644,6 @@ class TaskInstance(Base):
         if not self.task.pool:
             return False
 
-        close_session = False
-        if not session:
-            session = settings.Session()
-            close_session = True
-
-        running = (
-            session
-            .query(TaskInstance)
-            .filter(TaskInstance.pool == self.task.pool)
-            .filter(TaskInstance.state == State.RUNNING)
-            .count()
-        )
         pool = (
             session
             .query(Pool)
@@ -654,12 +652,9 @@ class TaskInstance(Base):
         )
         if not pool:
             return False
+        open_slots = pool.open_slots(session=session)
 
-        if close_session:
-            session.expunge_all()
-            session.commit()
-            session.close()
-        return running >= pool.slots
+        return open_slots <= 0
 
 
     def run(
@@ -707,6 +702,7 @@ class TaskInstance(Base):
                 "Next run after {0}".format(next_run)
             )
         elif force or self.state in State.runnable():
+            self.start_date = datetime.now()
             if not force and task.pool and self.pool_full(session):
                 self.state = State.QUEUED
                 session.commit()
@@ -719,7 +715,6 @@ class TaskInstance(Base):
             if not test_mode:
                 session.add(Log(State.RUNNING, self))
             self.state = State.RUNNING
-            self.start_date = datetime.now()
             self.end_date = None
             if not test_mode:
                 session.merge(self)
@@ -1804,4 +1799,26 @@ class Pool(Base):
     description = Column(Text)
 
     def __repr__(self):
-        return self.id
+        return self.pool
+
+    @provide_session
+    def used_slots(self, session):
+        """
+        Returns the number of slots used at the moment
+        """
+        running = (
+            session
+            .query(TaskInstance)
+            .filter(TaskInstance.pool == self.pool)
+            .filter(TaskInstance.state == State.RUNNING)
+            .count()
+        )
+        return running
+
+    @provide_session
+    def open_slots(self, session):
+        """
+        Returns the number of slots open at the moment
+        """
+        used_slots = self.used_slots(session=session)
+        return self.slots - used_slots

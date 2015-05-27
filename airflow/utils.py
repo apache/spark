@@ -35,7 +35,7 @@ class State(object):
     UP_FOR_RETRY = "up_for_retry"
 
     state_color = {
-        QUEUED: 'grey',
+        QUEUED: 'gray',
         RUNNING: 'lime',
         SUCCESS: 'green',
         SHUTDOWN: 'orange',
@@ -118,6 +118,14 @@ def initdb():
                 conn_id='metastore_default', conn_type='hive_metastore',
                 host='localhost',
                 port=10001))
+        session.commit()
+
+    conn = session.query(C).filter(C.conn_id == 'mysql_default').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='mysql_default', conn_type='mysql',
+                host='localhost'))
         session.commit()
 
     conn = session.query(C).filter(C.conn_id == 'sqlite_default').first()
@@ -215,8 +223,31 @@ def readfile(filepath):
     return content
 
 
+def provide_session(func):
+    """
+    Function decorator that provides a session if it isn't provided.
+    If you want to reuse a session or run the function as part of a
+    database transaction, you pass it to the function, if not this wrapper
+    will create one and close it for you.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        needs_session = False
+        if 'session' not in kwargs:
+            needs_session = True
+            session = settings.Session()
+            kwargs['session'] = session
+        result = func(*args, **kwargs)
+        if needs_session:
+            session.expunge_all()
+            session.commit()
+            session.close()
+        return result
+    return wrapper
+
+
 def apply_defaults(func):
-    '''
+    """
     Function decorator that Looks for an argument named "default_args", and
     fills the unspecified arguments from it.
 
@@ -224,7 +255,7 @@ def apply_defaults(func):
     calling a function, and that this can be quite confusing with multi-level
     inheritance and argument defaults, this decorator also alerts with
     specific information about the missing arguments.
-    '''
+    """
     @wraps(func)
     def wrapper(*args, **kwargs):
         if len(args) > 1:

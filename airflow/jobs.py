@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime
 import getpass
 import logging
@@ -305,7 +306,7 @@ class SchedulerJob(BaseJob):
                         execution_date=next_schedule,
                     )
                     ti.refresh_from_db()
-                    if ti.is_runnable():
+                    if ti.is_queueable():
                         logging.debug('Queuing next run: ' + str(ti))
                         executor.queue_task_instance(ti)
         # Releasing the lock
@@ -321,6 +322,37 @@ class SchedulerJob(BaseJob):
 
         session.close()
 
+    @utils.provide_session
+    def prioritize_queued(self, session, executor, dagbag):
+        # Prioritizing queued task instances
+
+        pools = {p.pool: p for p in session.query(models.Pool).all()}
+        TI = models.TaskInstance
+        queued_tis = (
+            session.query(TI)
+            .filter(TI.state == State.QUEUED)
+            .all()
+        )
+        d = defaultdict(list)
+        for ti in queued_tis:
+            d[ti.pool].append(ti)
+
+        for pool, tis in d.items():
+            open_slots = pools[ti.pool].open_slots(session=session)
+            if open_slots > 0:
+                tis = sorted(
+                    tis, key=lambda ti: ti.priority_weight, reverse=True)
+                for ti in tis[:open_slots]:
+                    task = None
+                    try:
+                        task = dagbag.dags[ti.dag_id].get_task(ti.task_id)
+                    except:
+                        logging.error("Queued task {} seems gone".format(ti))
+                    if task:
+                        ti.task = task
+                        executor.queue_task_instance(ti)
+
+
     def _execute(self):
         dag_id = self.dag_id
 
@@ -331,17 +363,19 @@ class SchedulerJob(BaseJob):
 
         utils.pessimistic_connection_handling()
 
-        # Sleep time (seconds) between scheduler runs
-
         logging.basicConfig(level=logging.DEBUG)
         logging.info("Starting the scheduler")
 
-        # This should get new code
         dagbag = models.DagBag(self.subdir, sync_to_db=True)
         executor = dagbag.executor
         executor.start()
         i = 0
         while (not self.test_mode) or i < 1:
+            try:
+                self.prioritize_queued(executor=executor, dagbag=dagbag)
+            except Exception as e:
+                logging.exception(e)
+
             i += 1
             try:
                 if i % self.refresh_dags_every == 0:
