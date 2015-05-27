@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.serializer.Serializer
@@ -31,8 +34,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.MutablePair
 import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEnv}
-
-import scala.util.control.NonFatal
 
 object Exchange {
   /**
@@ -194,7 +195,6 @@ case class Exchange(
         }
         val shuffled = new ShuffledRDD[InternalRow, InternalRow, InternalRow](rdd, part)
         if (newOrdering.nonEmpty) {
-          println("Shuffling with a key ordering")
           shuffled.setKeyOrdering(keyOrdering)
         }
         shuffled.setSerializer(serializer)
@@ -308,7 +308,6 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           partitioning: Partitioning,
           rowOrdering: Seq[SortOrder],
           child: SparkPlan): SparkPlan = {
-        logInfo("In addOperatorsIfNecessary")
         val needSort = rowOrdering.nonEmpty && child.outputOrdering != rowOrdering
         val needsShuffle = child.outputPartitioning != partitioning
 
@@ -328,13 +327,9 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
               case NonFatal(e) =>
                 false
             }
-            logInfo(s"For row with data types ${withShuffle.schema.map(_.dataType)}, " +
-              s"supportsUnsafeRowConversion = $supportsUnsafeRowConversion")
             if (sqlContext.conf.unsafeEnabled && supportsUnsafeRowConversion) {
-              logInfo("Using unsafe external sort!")
               UnsafeExternalSort(rowOrdering, global = false, withShuffle)
             } else if (sqlContext.conf.externalSortEnabled) {
-              logInfo("Not using unsafe sort")
               ExternalSort(rowOrdering, global = false, withShuffle)
             } else {
               Sort(rowOrdering, global = false, withShuffle)
@@ -352,7 +347,6 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       if (meetsRequirements && compatible && !needsAnySort) {
         operator
       } else {
-        logInfo("Looking through Exchange")
         // At least one child does not satisfies its required data distribution or
         // at least one child's outputPartitioning is not compatible with another child's
         // outputPartitioning. In this case, we need to add Exchange operators.
@@ -379,10 +373,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
               case NonFatal(e) =>
                 false
             }
-            logInfo(s"For row with data types ${child.schema.map(_.dataType)}, " +
-              s"supportsUnsafeRowConversion = $supportsUnsafeRowConversion")
             if (sqlContext.conf.unsafeEnabled && supportsUnsafeRowConversion) {
-              logInfo("Using unsafe external sort!")
               UnsafeExternalSort(rowOrdering, global = false, child)
             } else if (sqlContext.conf.externalSortEnabled) {
               ExternalSort(rowOrdering, global = false, child)

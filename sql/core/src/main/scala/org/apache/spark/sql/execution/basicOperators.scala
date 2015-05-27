@@ -337,7 +337,6 @@ case class UnsafeExternalSort(
           if (hasNext) {
             row.pointTo(
               sortedIterator.getBaseObject, sortedIterator.getBaseOffset, numFields, schema)
-            println("Returned row " + row)
             row
           } else {
             val rowDataCopy = new Array[Byte](sortedIterator.getRecordLength)
