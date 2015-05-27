@@ -21,6 +21,8 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.InvalidInputException
 
@@ -38,10 +40,14 @@ import org.apache.spark.util.Utils
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
-class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils {
+class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
   override val sqlContext = TestHive
 
-  val jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
+  var jsonFilePath: String = _
+
+  override def beforeAll(): Unit = {
+    jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
+  }
 
   test("persistent JSON table") {
     withTable("jsonTable") {
