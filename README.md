@@ -71,9 +71,16 @@ Many of the example programs print usage help if no params are given.
 ## Running Tests
 
 Testing first requires [building Spark](#building-spark). Once Spark is built, tests
-can be run using:
+can be run using the mvn test command. Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin). The following is an example command:
 
-    ./dev/run-tests
+    mvn -Pyarn -Phadoop-2.4 -Phive -Phive-thriftserver test
+
+The ScalaTest plugin also supports running only a specific test suite as follows:
+
+    mvn -Dhadoop.version=... -DwildcardSuites=org.apache.spark.repl.ReplSuite test
+
+More detailed documentation is available from the project site at
+["Building Spark"](http://spark.apache.org/docs/latest/building-spark.html).
 
 Please see the guidance on how to 
 [run tests for a module, or individual tests](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools).
