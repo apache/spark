@@ -20,8 +20,9 @@ package org.apache.spark.ml.tuning
 import com.github.fommil.netlib.F2jBLAS
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
+import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.util.MLUtils
@@ -78,10 +79,10 @@ private[ml] trait CrossValidatorParams extends Params {
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * K-fold cross validation.
  */
-@AlphaComponent
+@Experimental
 class CrossValidator(override val uid: String) extends Estimator[CrossValidatorModel]
   with CrossValidatorParams with Logging {
 
@@ -149,10 +150,10 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Model from k-fold cross validation.
  */
-@AlphaComponent
+@Experimental
 class CrossValidatorModel private[ml] (
     override val uid: String,
     val bestModel: Model[_])

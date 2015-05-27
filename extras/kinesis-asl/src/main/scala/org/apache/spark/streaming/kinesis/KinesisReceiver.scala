@@ -16,8 +16,13 @@
  */
 package org.apache.spark.streaming.kinesis
 
-import java.net.InetAddress
 import java.util.UUID
+
+import scala.util.control.NonFatal
+
+import com.amazonaws.auth.{AWSCredentials, AWSCredentialsProvider, BasicAWSCredentials, DefaultAWSCredentialsProviderChain}
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorFactory}
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration, Worker}
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
@@ -25,23 +30,22 @@ import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
 
-import com.amazonaws.auth.AWSCredentialsProvider
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessor
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorFactory
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.KinesisClientLibConfiguration
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.Worker
+
+private[kinesis]
+case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
+  extends AWSCredentials {
+  override def getAWSAccessKeyId: String = accessKeyId
+  override def getAWSSecretKey: String = secretKey
+}
 
 /**
  * Custom AWS Kinesis-specific implementation of Spark Streaming's Receiver.
  * This implementation relies on the Kinesis Client Library (KCL) Worker as described here:
  * https://github.com/awslabs/amazon-kinesis-client
- * This is a custom receiver used with StreamingContext.receiverStream(Receiver) 
- *   as described here:
- *     http://spark.apache.org/docs/latest/streaming-custom-receivers.html
- * Instances of this class will get shipped to the Spark Streaming Workers 
- *   to run within a Spark Executor.
+ * This is a custom receiver used with StreamingContext.receiverStream(Receiver) as described here:
+ *   http://spark.apache.org/docs/latest/streaming-custom-receivers.html
+ * Instances of this class will get shipped to the Spark Streaming Workers to run within a 
+ *   Spark Executor.
  *
  * @param appName  Kinesis application name. Kinesis Apps are mapped to Kinesis Streams
  *                 by the Kinesis Client Library.  If you change the App name or Stream name,
@@ -49,6 +53,8 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.Worker
  *                 DynamoDB table with the same name this Kinesis application.
  * @param streamName   Kinesis stream name
  * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
+ * @param regionName  Region name used by the Kinesis Client Library for
+ *                    DynamoDB (lease coordination and checkpointing) and CloudWatch (metrics)
  * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
  *                            See the Kinesis Spark Streaming documentation for more
  *                            details on the different types of checkpoints.
@@ -59,92 +65,121 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.Worker
  *                                 (InitialPositionInStream.TRIM_HORIZON) or
  *                                 the tip of the stream (InitialPositionInStream.LATEST).
  * @param storageLevel Storage level to use for storing the received objects
- *
- * @return ReceiverInputDStream[Array[Byte]]   
+ * @param awsCredentialsOption Optional AWS credentials, used when user directly specifies
+ *                             the credentials
  */
 private[kinesis] class KinesisReceiver(
     appName: String,
     streamName: String,
     endpointUrl: String,
-    checkpointInterval: Duration,
+    regionName: String,
     initialPositionInStream: InitialPositionInStream,
-    storageLevel: StorageLevel)
-  extends Receiver[Array[Byte]](storageLevel) with Logging { receiver =>
+    checkpointInterval: Duration,
+    storageLevel: StorageLevel,
+    awsCredentialsOption: Option[SerializableAWSCredentials]
+  ) extends Receiver[Array[Byte]](storageLevel) with Logging { receiver =>
 
   /*
-   * The following vars are built in the onStart() method which executes in the Spark Worker after
-   *   this code is serialized and shipped remotely.
+   * =================================================================================
+   * The following vars are initialize in the onStart() method which executes in the
+   * Spark worker after this Receiver is serialized and shipped to the worker.
+   * =================================================================================
    */
-
-  /*
-   *  workerId should be based on the ip address of the actual Spark Worker where this code runs
-   *   (not the Driver's ip address.)
-   */
-  var workerId: String = null
-
-  /*
-   * This impl uses the DefaultAWSCredentialsProviderChain and searches for credentials 
-   *   in the following order of precedence:
-   * Environment Variables - AWS_ACCESS_KEY_ID and AWS_SECRET_KEY
-   * Java System Properties - aws.accessKeyId and aws.secretKey
-   * Credential profiles file at the default location (~/.aws/credentials) shared by all 
-   *   AWS SDKs and the AWS CLI
-   * Instance profile credentials delivered through the Amazon EC2 metadata service
-   */
-  var credentialsProvider: AWSCredentialsProvider = null
-
-  /* KCL config instance. */
-  var kinesisClientLibConfiguration: KinesisClientLibConfiguration = null
-
-  /*
-   *  RecordProcessorFactory creates impls of IRecordProcessor.
-   *  IRecordProcessor adapts the KCL to our Spark KinesisReceiver via the 
-   *    IRecordProcessor.processRecords() method.
-   *  We're using our custom KinesisRecordProcessor in this case.
-   */
-  var recordProcessorFactory: IRecordProcessorFactory = null
-
-  /*
-   * Create a Kinesis Worker.
-   * This is the core client abstraction from the Kinesis Client Library (KCL).
-   * We pass the RecordProcessorFactory from above as well as the KCL config instance.
-   * A Kinesis Worker can process 1..* shards from the given stream - each with its 
-   *   own RecordProcessor.
-   */
-  var worker: Worker = null
 
   /**
-   *  This is called when the KinesisReceiver starts and must be non-blocking.
-   *  The KCL creates and manages the receiving/processing thread pool through the Worker.run() 
-   *    method.
+   * workerId is used by the KCL should be based on the ip address of the actual Spark Worker 
+   * where this code runs (not the driver's IP address.)
+   */
+  private var workerId: String = null
+
+  /**
+   * Worker is the core client abstraction from the Kinesis Client Library (KCL).
+   * A worker can process more than one shards from the given stream.
+   * Each shard is assigned its own IRecordProcessor and the worker run multiple such
+   * processors.
+   */
+  private var worker: Worker = null
+
+  /** Thread running the worker */
+  private var workerThread: Thread = null
+
+  /**
+   * This is called when the KinesisReceiver starts and must be non-blocking.
+   * The KCL creates and manages the receiving/processing thread pool through Worker.run().
    */
   override def onStart() {
     workerId = Utils.localHostName() + ":" + UUID.randomUUID()
-    credentialsProvider = new DefaultAWSCredentialsProviderChain()
-    kinesisClientLibConfiguration = new KinesisClientLibConfiguration(appName, streamName,
-      credentialsProvider, workerId).withKinesisEndpoint(endpointUrl)
-      .withInitialPositionInStream(initialPositionInStream).withTaskBackoffTimeMillis(500)
-    recordProcessorFactory = new IRecordProcessorFactory {
+
+    // KCL config instance
+    val awsCredProvider = resolveAWSCredentialsProvider()
+    val kinesisClientLibConfiguration =
+      new KinesisClientLibConfiguration(appName, streamName, awsCredProvider, workerId)
+      .withKinesisEndpoint(endpointUrl)
+      .withInitialPositionInStream(initialPositionInStream)
+      .withTaskBackoffTimeMillis(500)
+      .withRegionName(regionName)
+
+   /*
+    *  RecordProcessorFactory creates impls of IRecordProcessor.
+    *  IRecordProcessor adapts the KCL to our Spark KinesisReceiver via the 
+    *  IRecordProcessor.processRecords() method.
+    *  We're using our custom KinesisRecordProcessor in this case.
+    */
+    val recordProcessorFactory = new IRecordProcessorFactory {
       override def createProcessor: IRecordProcessor = new KinesisRecordProcessor(receiver,
         workerId, new KinesisCheckpointState(checkpointInterval))
     }
+
     worker = new Worker(recordProcessorFactory, kinesisClientLibConfiguration)
-    worker.run()
+    workerThread = new Thread() {
+      override def run(): Unit = {
+        try {
+          worker.run()
+        } catch {
+          case NonFatal(e) =>
+            restart("Error running the KCL worker in Receiver", e)
+        }
+      }
+    }
+    workerThread.setName(s"Kinesis Receiver ${streamId}")
+    workerThread.setDaemon(true)
+    workerThread.start()
     logInfo(s"Started receiver with workerId $workerId")
   }
 
   /**
-   *  This is called when the KinesisReceiver stops.
-   *  The KCL worker.shutdown() method stops the receiving/processing threads.
-   *  The KCL will do its best to drain and checkpoint any in-flight records upon shutdown.
+   * This is called when the KinesisReceiver stops.
+   * The KCL worker.shutdown() method stops the receiving/processing threads.
+   * The KCL will do its best to drain and checkpoint any in-flight records upon shutdown.
    */
   override def onStop() {
-    worker.shutdown()
-    logInfo(s"Shut down receiver with workerId $workerId")
+    if (workerThread != null) {
+      if (worker != null) {
+        worker.shutdown()
+        worker = null
+      }
+      workerThread.join()
+      workerThread = null
+      logInfo(s"Stopped receiver for workerId $workerId")
+    }
     workerId = null
-    credentialsProvider = null
-    kinesisClientLibConfiguration = null
-    recordProcessorFactory = null
-    worker = null
+  }
+
+  /**
+   * If AWS credential is provided, return a AWSCredentialProvider returning that credential.
+   * Otherwise, return the DefaultAWSCredentialsProviderChain.
+   */
+  private def resolveAWSCredentialsProvider(): AWSCredentialsProvider = {
+    awsCredentialsOption match {
+      case Some(awsCredentials) =>
+        logInfo("Using provided AWS credentials")
+        new AWSCredentialsProvider {
+          override def getCredentials: AWSCredentials = awsCredentials
+          override def refresh(): Unit = { }
+        }
+      case None =>
+        logInfo("Using DefaultAWSCredentialsProviderChain")
+        new DefaultAWSCredentialsProviderChain()
+    }
   }
 }

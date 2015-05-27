@@ -184,12 +184,12 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
 
       sqlContext.createDataFrame(
         boundaries.toSeq.zip(predictions).map { case (b, p) => Data(b, p) }
-      ).saveAsParquetFile(dataPath(path))
+      ).write.parquet(dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): (Array[Double], Array[Double]) = {
       val sqlContext = new SQLContext(sc)
-      val dataRDD = sqlContext.parquetFile(dataPath(path))
+      val dataRDD = sqlContext.read.parquet(dataPath(path))
 
       checkSchema[Data](dataRDD.schema)
       val dataArray = dataRDD.select("boundary", "prediction").collect()

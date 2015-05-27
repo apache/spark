@@ -33,7 +33,7 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
   override def beforeAll: Unit = {
     path = Utils.createTempDir()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    jsonRDD(rdd).registerTempTable("jt")
+    read.json(rdd).registerTempTable("jt")
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable (a int, b string)
@@ -109,7 +109,7 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
 
     // Writing the table to less part files.
     val rdd1 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""), 5)
-    jsonRDD(rdd1).registerTempTable("jt1")
+    read.json(rdd1).registerTempTable("jt1")
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt1
@@ -121,7 +121,7 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
 
     // Writing the table to more part files.
     val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""), 10)
-    jsonRDD(rdd2).registerTempTable("jt2")
+    read.json(rdd2).registerTempTable("jt2")
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt2
@@ -154,13 +154,13 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
   }
 
   test("save directly to the path of a JSON table") {
-    table("jt").selectExpr("a * 5 as a", "b").save(path.toString, "json", SaveMode.Overwrite)
+    table("jt").selectExpr("a * 5 as a", "b").write.mode(SaveMode.Overwrite).json(path.toString)
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i * 5, s"str$i"))
     )
 
-    table("jt").save(path.toString, "json", SaveMode.Overwrite)
+    table("jt").write.mode(SaveMode.Overwrite).json(path.toString)
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i, s"str$i"))

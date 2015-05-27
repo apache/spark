@@ -34,10 +34,8 @@ import org.apache.hadoop.yarn.util.RackResolver
 
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.{SparkEnv, Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.util.AkkaUtils
 
 /**
  * YarnAllocator is charged with requesting containers from the YARN ResourceManager and deciding
@@ -53,6 +51,7 @@ import org.apache.spark.util.AkkaUtils
  * synchronized.
  */
 private[yarn] class YarnAllocator(
+    driverUrl: String,
     conf: Configuration,
     sparkConf: SparkConf,
     amClient: AMRMClient[ContainerRequest],
@@ -106,13 +105,6 @@ private[yarn] class YarnAllocator(
     new LinkedBlockingQueue[Runnable](),
     new ThreadFactoryBuilder().setNameFormat("ContainerLauncher #%d").setDaemon(true).build())
   launcherPool.allowCoreThreadTimeOut(true)
-
-  private val driverUrl = AkkaUtils.address(
-    AkkaUtils.protocol(securityMgr.akkaSSLOptions.enabled),
-    SparkEnv.driverActorSystemName,
-    sparkConf.get("spark.driver.host"),
-    sparkConf.get("spark.driver.port"),
-    CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
 
   // For testing
   private val launchContainers = sparkConf.getBoolean("spark.yarn.launchContainers", true)

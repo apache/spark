@@ -48,7 +48,14 @@ import scala.collection.JavaConversions._
 // SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive
   extends TestHiveContext(
-    new SparkContext("local[2]", "TestSQLContext", new SparkConf().set("spark.sql.test", "")))
+    new SparkContext(
+      "local[2]",
+      "TestSQLContext",
+      new SparkConf()
+        .set("spark.sql.test", "")
+        .set(
+          "spark.sql.hive.metastore.barrierPrefixes",
+          "org.apache.spark.sql.hive.execution.PairSerDe")))
 
 /**
  * A locally running test instance of Spark's Hive execution engine.
@@ -75,9 +82,11 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   lazy val warehousePath = Utils.createTempDir()
 
+  private lazy val temporaryConfig = newTemporaryConfiguration()
+
   /** Sets up the system initially or after a RESET command */
   protected override def configure(): Map[String, String] =
-   newTemporaryConfiguration() ++ Map("hive.metastore.warehouse.dir" -> warehousePath.toString)
+    temporaryConfig ++ Map("hive.metastore.warehouse.dir" -> warehousePath.toString)
 
   val testTempDir = Utils.createTempDir()
 

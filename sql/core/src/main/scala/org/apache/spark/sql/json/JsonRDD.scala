@@ -20,18 +20,18 @@ package org.apache.spark.sql.json
 import java.sql.Timestamp
 
 import scala.collection.Map
-import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
+import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
 
-import com.fasterxml.jackson.core.{JsonGenerator, JsonProcessingException}
+import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.Logging
 
 private[sql] object JsonRDD extends Logging {
 
@@ -318,7 +318,8 @@ private[sql] object JsonRDD extends Logging {
 
           parsed
         } catch {
-          case e: JsonProcessingException => Map(columnNameOfCorruptRecords -> record) :: Nil
+          case e: JsonProcessingException =>
+            Map(columnNameOfCorruptRecords -> UTF8String(record)) :: Nil
         }
       }
     })
@@ -422,7 +423,10 @@ private[sql] object JsonRDD extends Logging {
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
         case MapType(StringType, valueType, _) =>
           val map = value.asInstanceOf[Map[String, Any]]
-          map.mapValues(enforceCorrectType(_, valueType)).map(identity)
+          map.map {
+            case (k, v) =>
+              (UTF8String(k), enforceCorrectType(v, valueType))
+          }.map(identity)
         case struct: StructType => asRow(value.asInstanceOf[Map[String, Any]], struct)
         case DateType => toDate(value)
         case TimestampType => toTimestamp(value)

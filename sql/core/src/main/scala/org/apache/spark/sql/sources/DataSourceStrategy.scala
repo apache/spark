@@ -17,20 +17,18 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.hadoop.fs.Path
-
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.rdd.{UnionRDD, RDD}
-import org.apache.spark.sql.Row
+import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.types.{StructType, UTF8String, StringType}
-import org.apache.spark.sql._
+import org.apache.spark.sql.types.{StringType, StructType, UTF8String}
+import org.apache.spark.sql.{SaveMode, Strategy, execution, sources}
+import org.apache.spark.util.Utils
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
@@ -58,8 +56,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         filters,
         (a, _) => t.buildScan(a)) :: Nil
 
-    // Scanning partitioned FSBasedRelation
-    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: FSBasedRelation))
+    // Scanning partitioned HadoopFsRelation
+    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: HadoopFsRelation))
         if t.partitionSpec.partitionColumns.nonEmpty =>
       val selectedPartitions = prunePartitions(filters, t.partitionSpec).toArray
 
@@ -86,22 +84,18 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         t.partitionSpec.partitionColumns,
         selectedPartitions) :: Nil
 
-    // Scanning non-partitioned FSBasedRelation
-    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: FSBasedRelation)) =>
-      val inputPaths = t.paths.map(new Path(_)).flatMap { path =>
-        val fs = path.getFileSystem(t.sqlContext.sparkContext.hadoopConfiguration)
-        val qualifiedPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        SparkHadoopUtil.get.listLeafStatuses(fs, qualifiedPath).map(_.getPath).filterNot { path =>
-          val name = path.getName
-          name.startsWith("_") || name.startsWith(".")
-        }.map(fs.makeQualified(_).toString)
-      }
-
+    // Scanning non-partitioned HadoopFsRelation
+    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: HadoopFsRelation)) =>
+      // See buildPartitionedTableScan for the reason that we need to create a shard
+      // broadcast HadoopConf.
+      val sharedHadoopConf = SparkHadoopUtil.get.conf
+      val confBroadcast =
+        t.sqlContext.sparkContext.broadcast(new SerializableWritable(sharedHadoopConf))
       pruneFilterProject(
         l,
         projectList,
         filters,
-        (a, f) => t.buildScan(a, f, inputPaths)) :: Nil
+        (a, f) => t.buildScan(a, f, t.paths, confBroadcast)) :: Nil
 
     case l @ LogicalRelation(t: TableScan) =>
       createPhysicalRDD(l.relation, l.output, t.buildScan()) :: Nil
@@ -111,10 +105,9 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       execution.ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case i @ logical.InsertIntoTable(
-      l @ LogicalRelation(t: FSBasedRelation), part, query, overwrite, false) if part.isEmpty =>
+      l @ LogicalRelation(t: HadoopFsRelation), part, query, overwrite, false) =>
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
-      execution.ExecutedCommand(
-        InsertIntoFSBasedRelation(t, query, Array.empty[String], mode)) :: Nil
+      execution.ExecutedCommand(InsertIntoHadoopFsRelation(t, query, mode)) :: Nil
 
     case _ => Nil
   }
@@ -126,20 +119,16 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       partitionColumns: StructType,
       partitions: Array[Partition]) = {
     val output = projections.map(_.toAttribute)
-    val relation = logicalRelation.relation.asInstanceOf[FSBasedRelation]
+    val relation = logicalRelation.relation.asInstanceOf[HadoopFsRelation]
+
+    // Because we are creating one RDD per partition, we need to have a shared HadoopConf.
+    // Otherwise, the cost of broadcasting HadoopConf in every RDD will be high.
+    val sharedHadoopConf = SparkHadoopUtil.get.conf
+    val confBroadcast =
+      relation.sqlContext.sparkContext.broadcast(new SerializableWritable(sharedHadoopConf))
 
     // Builds RDD[Row]s for each selected partition.
     val perPartitionRows = partitions.map { case Partition(partitionValues, dir) =>
-      // Paths to all data files within this partition
-      val dataFilePaths = {
-        val dirPath = new Path(dir)
-        val fs = dirPath.getFileSystem(SparkHadoopUtil.get.conf)
-        fs.listStatus(dirPath).map(_.getPath).filterNot { path =>
-          val name = path.getName
-          name.startsWith("_") || name.startsWith(".")
-        }.map(fs.makeQualified(_).toString)
-      }
-
       // The table scan operator (PhysicalRDD) which retrieves required columns from data files.
       // Notice that the schema of data files, represented by `relation.dataSchema`, may contain
       // some partition column(s).
@@ -155,7 +144,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
             // assuming partition columns data stored in data files are always consistent with those
             // partition values encoded in partition directory paths.
             val nonPartitionColumns = requiredColumns.filterNot(partitionColNames.contains)
-            val dataRows = relation.buildScan(nonPartitionColumns, filters, dataFilePaths)
+            val dataRows =
+              relation.buildScan(nonPartitionColumns, filters, Array(dir), confBroadcast)
 
             // Merges data values with partition values.
             mergeWithPartitionValues(
@@ -207,7 +197,10 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         }
       }
 
-      dataRows.mapPartitions { iterator =>
+      // Since we know for sure that this closure is serializable, we can avoid the overhead
+      // of cleaning a closure for each RDD by creating our own MapPartitionsRDD. Functionally
+      // this is equivalent to calling `dataRows.mapPartitions(mapPartitionsFunc)` (SPARK-7718).
+      val mapPartitionsFunc = (_: TaskContext, _: Int, iterator: Iterator[Row]) => {
         val dataTypes = requiredColumns.map(schema(_).dataType)
         val mutableRow = new SpecificMutableRow(dataTypes)
         iterator.map { dataRow =>
@@ -219,6 +212,14 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
           mutableRow.asInstanceOf[expressions.Row]
         }
       }
+
+      // This is an internal RDD whose call site the user should not be concerned with
+      // Since we create many of these (one per partition), the time spent on computing
+      // the call site may add up.
+      Utils.withDummyCallSite(dataRows.sparkContext) {
+        new MapPartitionsRDD(dataRows, mapPartitionsFunc, preservesPartitioning = false)
+      }
+
     } else {
       dataRows
     }
@@ -308,7 +309,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       output: Seq[Attribute],
       rdd: RDD[Row]): SparkPlan = {
     val converted = if (relation.needConversion) {
-      execution.RDDConversions.rowToRowRdd(rdd, relation.schema)
+      execution.RDDConversions.rowToRowRdd(rdd, output.map(_.dataType))
     } else {
       rdd
     }

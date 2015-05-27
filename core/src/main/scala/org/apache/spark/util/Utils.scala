@@ -1795,6 +1795,20 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  lazy val isInInterpreter: Boolean = {
+    try {
+      val interpClass = classForName("spark.repl.Main")
+      interpClass.getMethod("interp").invoke(null) != null
+    } catch {
+      // Returning true seems to be a mistake.
+      // Currently changing it to false causes tests failures in Streaming.
+      // For a more detailed discussion, please, refer to
+      // https://github.com/apache/spark/pull/5835#issuecomment-101042271 and subsequent comments.
+      // Addressing this changed is tracked as https://issues.apache.org/jira/browse/SPARK-7527
+      case _: ClassNotFoundException => true
+    }
+  }
+
   /**
    * Return a well-formed URI for the file described by a user input string.
    *
@@ -2185,6 +2199,24 @@ private[spark] object Utils extends Logging {
    */
   def removeShutdownHook(ref: AnyRef): Boolean = {
     shutdownHooks.remove(ref)
+  }
+
+  /**
+   * To avoid calling `Utils.getCallSite` for every single RDD we create in the body,
+   * set a dummy call site that RDDs use instead. This is for performance optimization.
+   */
+  def withDummyCallSite[T](sc: SparkContext)(body: => T): T = {
+    val oldShortCallSite = sc.getLocalProperty(CallSite.SHORT_FORM)
+    val oldLongCallSite = sc.getLocalProperty(CallSite.LONG_FORM)
+    try {
+      sc.setLocalProperty(CallSite.SHORT_FORM, "")
+      sc.setLocalProperty(CallSite.LONG_FORM, "")
+      body
+    } finally {
+      // Restore the old ones here
+      sc.setLocalProperty(CallSite.SHORT_FORM, oldShortCallSite)
+      sc.setLocalProperty(CallSite.LONG_FORM, oldLongCallSite)
+    }
   }
 
 }
