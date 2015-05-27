@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.{BufferedReader, DataInputStream, DataOutputStream, EOFException, InputStreamReader}
+import java.lang.ProcessBuilder.Redirect
 import java.util.Properties
 
 import scala.collection.JavaConversions._
@@ -58,6 +59,7 @@ case class ScriptTransformation(
     child.execute().mapPartitions { iter =>
       val cmd = List("/bin/bash", "-c", script)
       val builder = new ProcessBuilder(cmd)
+      builder.redirectError(Redirect.INHERIT)
       val proc = builder.start()
       val inputStream = proc.getInputStream
       val outputStream = proc.getOutputStream
