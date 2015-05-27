@@ -383,15 +383,15 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         case (Literal(false, BooleanType), r) => r
         // l || false  =>  l
         case (l, Literal(false, BooleanType)) => l
-        // a || b = a
+        // a || b => a
         case (l, r) if l fastEquals r => l
         // (a && b) || (a && c)  =>  a && (b || c)
         case _ =>
-          // 1. Split left and right to get the conjunctive predicates,
-          //   i.e.  lhsSet = (a, b), rhsSet = (a, c)
-          // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
-          // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-          // 4. Apply the formula, get the optimized predicate: common && (ldiff || rdiff)
+           // 1. Split left and right to get the conjunctive predicates,
+           //   i.e.  lhsSet = (a, b), rhsSet = (a, c)
+           // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
+           // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
+           // 4. Apply the formula, get the optimized predicate: common && (ldiff || rdiff)
           val lhsSet = splitConjunctivePredicates(left).toSet
           val rhsSet = splitConjunctivePredicates(right).toSet
           val common = lhsSet.intersect(rhsSet)
