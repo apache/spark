@@ -16,10 +16,10 @@
  */
 package org.apache.spark.deploy.history
 
-import java.io.{FileOutputStream, BufferedOutputStream, InputStream, File, FileInputStream, FileWriter, IOException}
+import java.io.{ BufferedOutputStream, FileOutputStream, File, FileInputStream,
+  FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URL}
 import java.util.zip.ZipInputStream
-import javax.servlet.http
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import org.apache.commons.io.{FileUtils, IOUtils}
@@ -27,9 +27,9 @@ import org.mockito.Mockito.when
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.util.Utils
 import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf}
 import org.apache.spark.ui.SparkUI
+import org.apache.spark.util.Utils
 
 /**
  * A collection of tests against the historyserver, including comparing responses from the json

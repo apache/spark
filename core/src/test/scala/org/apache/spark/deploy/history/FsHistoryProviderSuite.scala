@@ -17,13 +17,12 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{ByteArrayOutputStream, FileInputStream, BufferedOutputStream, File, FileOutputStream, OutputStreamWriter}
+import java.io.{BufferedOutputStream, FileInputStream, File, FileOutputStream, OutputStreamWriter}
 import java.net.URI
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
 
 import scala.io.Source
-import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._

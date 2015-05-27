@@ -16,9 +16,9 @@
  */
 package org.apache.spark.status.api.v1
 
-import java.io.{File, FileOutputStream, BufferedInputStream, FileInputStream, OutputStream}
+import java.io.{File, FileOutputStream, OutputStream}
 import javax.ws.rs.{GET, Produces}
-import javax.ws.rs.core.{Response, StreamingOutput, MediaType}
+import javax.ws.rs.core.{MediaType, Response, StreamingOutput}
 
 import scala.collection.mutable.ArrayBuffer
 

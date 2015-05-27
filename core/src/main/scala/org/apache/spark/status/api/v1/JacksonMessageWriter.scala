@@ -68,7 +68,7 @@ private[v1] class JacksonMessageWriter extends MessageBodyWriter[Object]{
       multivaluedMap: MultivaluedMap[String, AnyRef],
       outputStream: OutputStream): Unit = {
     t match {
-      case ErrorWrapper(err) => outputStream.write(err.getBytes())
+      case ErrorWrapper(err) => outputStream.write(err.getBytes("utf-8"))
       case _ => mapper.writeValue(outputStream, t)
     }
   }

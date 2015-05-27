@@ -21,8 +21,8 @@ import java.io._
 import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
-import java.util.zip.{ZipEntry, ZipOutputStream}
 import java.util.{PriorityQueue, Properties, Locale, Random, UUID}
+import java.util.zip.{ZipEntry, ZipOutputStream}
 import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
 
