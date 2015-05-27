@@ -279,6 +279,37 @@ public final class UnsafeRow extends MutableRow {
     }
   }
 
+  /**
+   * Generic `get()`, for use in toString(). This method is for debugging only and is probably very
+   * slow to call due to having to reflect on the schema.
+   */
+  private Object genericGet(int i) {
+    assertIndexIsValid(i);
+    assert (schema != null) : "Schema must be defined when calling genericGet()";
+    final DataType dataType = schema.fields()[i].dataType();
+    if (isNullAt(i) || dataType == NullType) {
+      return null;
+    } else if (dataType == StringType) {
+      return getUTF8String(i);
+    } else if (dataType == BooleanType) {
+      return getBoolean(i);
+    } else if (dataType == ByteType) {
+      return getByte(i);
+    } else if (dataType == ShortType) {
+      return getShort(i);
+    } else if (dataType == IntegerType) {
+      return getInt(i);
+    } else if (dataType == LongType) {
+      return getLong(i);
+    } else if (dataType == FloatType) {
+      return getFloat(i);
+    } else if (dataType == DoubleType) {
+      return getDouble(i);
+    } else {
+      throw new UnsupportedOperationException();
+    }
+  }
+
   @Override
   public boolean isNullAt(int i) {
     assertIndexIsValid(i);

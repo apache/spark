@@ -32,6 +32,18 @@ import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.MutablePair
 import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEnv}
 
+import scala.util.control.NonFatal
+
+object Exchange {
+  /**
+   * Returns true when the ordering expressions are a subset of the key.
+   * if true, ShuffledRDD can use `setKeyOrdering(orderingKey)` to sort within [[Exchange]].
+   */
+  def canSortWithShuffle(partitioning: Partitioning, desiredOrdering: Seq[SortOrder]): Boolean = {
+    desiredOrdering.map(_.child).toSet.subsetOf(partitioning.keyExpressions.toSet)
+  }
+}
+
 /**
  * :: DeveloperApi ::
  * Performs a shuffle that will result in the desired `newPartitioning`.  Optionally sorts each
@@ -181,6 +193,10 @@ case class Exchange(
           }
         }
         val shuffled = new ShuffledRDD[InternalRow, InternalRow, InternalRow](rdd, part)
+        if (newOrdering.nonEmpty) {
+          println("Shuffling with a key ordering")
+          shuffled.setKeyOrdering(keyOrdering)
+        }
         shuffled.setSerializer(serializer)
         shuffled.map(_._2)
 
@@ -292,6 +308,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           partitioning: Partitioning,
           rowOrdering: Seq[SortOrder],
           child: SparkPlan): SparkPlan = {
+        logInfo("In addOperatorsIfNecessary")
         val needSort = rowOrdering.nonEmpty && child.outputOrdering != rowOrdering
         val needsShuffle = child.outputPartitioning != partitioning
 
@@ -301,9 +318,27 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           child
         }
 
-        val withSort = if (needSort) {
-          if (sqlContext.conf.externalSortEnabled) {
-            ExternalSort(rowOrdering, global = false, withShuffle)
+          val withSort = if (needSort) {
+            // TODO(josh): this is a hack. Need a better way to determine whether UnsafeRow
+            // supports the given schema.
+            val supportsUnsafeRowConversion: Boolean = try {
+              new UnsafeRowConverter(withShuffle.schema.map(_.dataType).toArray)
+              true
+            } catch {
+              case NonFatal(e) =>
+                false
+            }
+            logInfo(s"For row with data types ${withShuffle.schema.map(_.dataType)}, " +
+              s"supportsUnsafeRowConversion = $supportsUnsafeRowConversion")
+            if (sqlContext.conf.unsafeEnabled && supportsUnsafeRowConversion) {
+              logInfo("Using unsafe external sort!")
+              UnsafeExternalSort(rowOrdering, global = false, withShuffle)
+            } else if (sqlContext.conf.externalSortEnabled) {
+              logInfo("Not using unsafe sort")
+              ExternalSort(rowOrdering, global = false, withShuffle)
+            } else {
+              Sort(rowOrdering, global = false, withShuffle)
+            }
           } else {
             Sort(rowOrdering, global = false, withShuffle)
           }
@@ -317,6 +352,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       if (meetsRequirements && compatible && !needsAnySort) {
         operator
       } else {
+        logInfo("Looking through Exchange")
         // At least one child does not satisfies its required data distribution or
         // at least one child's outputPartitioning is not compatible with another child's
         // outputPartitioning. In this case, we need to add Exchange operators.
@@ -334,7 +370,21 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           case (UnspecifiedDistribution, Seq(), child) =>
             child
           case (UnspecifiedDistribution, rowOrdering, child) =>
-            if (sqlContext.conf.externalSortEnabled) {
+            // TODO(josh): this is a hack. Need a better way to determine whether UnsafeRow
+            // supports the given schema.
+            val supportsUnsafeRowConversion: Boolean = try {
+              new UnsafeRowConverter(child.schema.map(_.dataType).toArray)
+              true
+            } catch {
+              case NonFatal(e) =>
+                false
+            }
+            logInfo(s"For row with data types ${child.schema.map(_.dataType)}, " +
+              s"supportsUnsafeRowConversion = $supportsUnsafeRowConversion")
+            if (sqlContext.conf.unsafeEnabled && supportsUnsafeRowConversion) {
+              logInfo("Using unsafe external sort!")
+              UnsafeExternalSort(rowOrdering, global = false, child)
+            } else if (sqlContext.conf.externalSortEnabled) {
               ExternalSort(rowOrdering, global = false, child)
             } else {
               Sort(rowOrdering, global = false, child)

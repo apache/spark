@@ -17,6 +17,12 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.Arrays
+
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.unsafe.PlatformDependent
+import org.apache.spark.util.collection.unsafe.sort.{RecordComparator, PrefixComparator, UnsafeExternalSorter}
+import org.apache.spark.{TaskContext, SparkEnv, HashPartitioner, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -244,6 +250,119 @@ case class ExternalSort(
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
 }
+
+/**
+ * :: DeveloperApi ::
+ * TODO(josh): document
+ * Performs a sort, spilling to disk as needed.
+ * @param global when true performs a global sort of all partitions by shuffling the data first
+ *               if necessary.
+ */
+@DeveloperApi
+case class UnsafeExternalSort(
+    sortOrder: Seq[SortOrder],
+    global: Boolean,
+    child: SparkPlan)
+  extends UnaryNode {
+
+  private[this] val numFields: Int = child.schema.size
+  private[this] val schema: StructType = child.schema
+
+  override def requiredChildDistribution: Seq[Distribution] =
+    if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
+
+  protected override def doExecute(): RDD[Row] = attachTree(this, "sort") {
+    // TODO(josh): This code is unreadably messy; this should be split into a separate file
+    // and written in Java.
+    assert (codegenEnabled)
+    def doSort(iterator: Iterator[Row]): Iterator[Row] = {
+      val ordering = newOrdering(sortOrder, child.output)
+      val rowConverter = new UnsafeRowConverter(schema.map(_.dataType).toArray)
+      var rowConversionScratchSpace = new Array[Long](1024)
+      val prefixComparator = new PrefixComparator {
+        override def compare(prefix1: Long, prefix2: Long): Int = 0
+      }
+      val recordComparator = new RecordComparator {
+        private[this] val row1 = new UnsafeRow
+        private[this] val row2 = new UnsafeRow
+        override def compare(
+            baseObj1: scala.Any, baseOff1: Long, baseObj2: scala.Any, baseOff2: Long): Int = {
+          row1.pointTo(baseObj1, baseOff1, numFields, schema)
+          row2.pointTo(baseObj2, baseOff2, numFields, schema)
+          ordering.compare(row1, row2)
+        }
+      }
+      val sorter = new UnsafeExternalSorter(
+        TaskContext.get.taskMemoryManager(),
+        SparkEnv.get.shuffleMemoryManager,
+        SparkEnv.get.blockManager,
+        TaskContext.get,
+        recordComparator,
+        prefixComparator,
+        4096,
+        SparkEnv.get.conf
+      )
+      while (iterator.hasNext) {
+        val row: Row = iterator.next()
+        val sizeRequirement = rowConverter.getSizeRequirement(row)
+        if (sizeRequirement / 8 > rowConversionScratchSpace.length) {
+          rowConversionScratchSpace = new Array[Long](sizeRequirement / 8)
+        } else {
+          // Zero out the buffer that's used to hold the current row. This is necessary in order
+          // to ensure that rows hash properly, since garbage data from the previous row could
+          // otherwise end up as padding in this row. As a performance optimization, we only zero
+          // out the portion of the buffer that we'll actually write to.
+          Arrays.fill(rowConversionScratchSpace, 0, sizeRequirement / 8, 0)
+        }
+        val bytesWritten =
+          rowConverter.writeRow(row, rowConversionScratchSpace, PlatformDependent.LONG_ARRAY_OFFSET)
+        assert (bytesWritten == sizeRequirement)
+        val prefix: Long = 0  // dummy prefix until we implement prefix calculation
+        sorter.insertRecord(
+          rowConversionScratchSpace,
+          PlatformDependent.LONG_ARRAY_OFFSET,
+          sizeRequirement,
+          prefix
+        )
+      }
+      val sortedIterator = sorter.getSortedIterator
+      // TODO: need to avoid memory leaks on exceptions, etc. by wrapping in resource cleanup blocks
+      // TODO: need to clean up spill files after success or failure.
+      new Iterator[Row] {
+        private[this] val row = new UnsafeRow()
+        override def hasNext: Boolean = sortedIterator.hasNext
+
+        override def next(): Row = {
+          sortedIterator.loadNext()
+          if (hasNext) {
+            row.pointTo(
+              sortedIterator.getBaseObject, sortedIterator.getBaseOffset, numFields, schema)
+            println("Returned row " + row)
+            row
+          } else {
+            val rowDataCopy = new Array[Byte](sortedIterator.getRecordLength)
+            PlatformDependent.copyMemory(
+              sortedIterator.getBaseObject,
+              sortedIterator.getBaseOffset,
+              rowDataCopy,
+              PlatformDependent.BYTE_ARRAY_OFFSET,
+              sortedIterator.getRecordLength
+            )
+            row.pointTo(rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, schema)
+            sorter.freeMemory()
+            row
+          }
+        }
+      }
+    }
+    child.execute().mapPartitions(doSort, preservesPartitioning = true)
+  }
+
+  override def output: Seq[Attribute] = child.output
+
+  override def outputOrdering: Seq[SortOrder] = sortOrder
+}
+
 
 /**
  * :: DeveloperApi ::

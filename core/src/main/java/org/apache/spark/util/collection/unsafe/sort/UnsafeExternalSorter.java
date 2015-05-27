@@ -137,7 +137,7 @@ public final class UnsafeExternalSorter {
     openSorter();
   }
 
-  private long freeMemory() {
+  public long freeMemory() {
     long memoryFreed = 0;
     final Iterator<MemoryBlock> iter = allocatedPages.iterator();
     while (iter.hasNext()) {
@@ -223,13 +223,20 @@ public final class UnsafeExternalSorter {
   }
 
   public UnsafeSorterIterator getSortedIterator() throws IOException {
-    final UnsafeSorterSpillMerger spillMerger =
-      new UnsafeSorterSpillMerger(recordComparator, prefixComparator);
-    for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
-      spillMerger.addSpill(spillWriter.getReader(blockManager));
+    final UnsafeSorterIterator inMemoryIterator = sorter.getSortedIterator();
+    if (!spillWriters.isEmpty()) {
+      final UnsafeSorterSpillMerger spillMerger =
+        new UnsafeSorterSpillMerger(recordComparator, prefixComparator);
+      for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
+        spillMerger.addSpill(spillWriter.getReader(blockManager));
+      }
+      spillWriters.clear();
+      if (inMemoryIterator.hasNext()) {
+        spillMerger.addSpill(inMemoryIterator);
+      }
+      return spillMerger.getSortedIterator();
+    } else {
+      return inMemoryIterator;
     }
-    spillWriters.clear();
-    spillMerger.addSpill(sorter.getSortedIterator());
-    return spillMerger.getSortedIterator();
   }
 }

@@ -74,7 +74,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * [[org.apache.spark.sql.SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]], the planner would mark it as the
    * ''build'' relation and mark the other relation as the ''stream'' side.  The build table will be
    * ''broadcasted'' to all of the executors involved in the join, as a
-   * [[org.apache.spark.broadcast.Broadcast]] object.  If both estimates exceed the threshold, they
+   * [[org.apache.spark.broadcast.Broadcast]] object.  If both   estimates exceed the threshold, they
    * will instead be used to decide the build side in a [[joins.ShuffledHashJoin]].
    */
   object HashJoin extends Strategy with PredicateHelper {
@@ -102,8 +102,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // for now let's support inner join first, then add outer join
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
         if sqlContext.conf.sortMergeJoinEnabled =>
-        val mergeJoin =
+        val mergeJoin = if (sqlContext.conf.unsafeEnabled) {
+          joins.UnsafeSortMergeJoin(leftKeys, rightKeys, planLater(left), planLater(right))
+        } else {
           joins.SortMergeJoin(leftKeys, rightKeys, planLater(left), planLater(right))
+        }
         condition.map(Filter(_, mergeJoin)).getOrElse(mergeJoin) :: Nil
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>

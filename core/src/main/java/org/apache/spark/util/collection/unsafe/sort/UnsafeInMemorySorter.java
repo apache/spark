@@ -19,6 +19,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.util.Comparator;
 
+import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.util.collection.Sorter;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
@@ -50,10 +51,10 @@ public final class UnsafeInMemorySorter {
     public int compare(RecordPointerAndKeyPrefix r1, RecordPointerAndKeyPrefix r2) {
       final int prefixComparisonResult = prefixComparator.compare(r1.keyPrefix, r2.keyPrefix);
       if (prefixComparisonResult == 0) {
-        final Object baseObject1 = memoryManager.getPage(r2.recordPointer);
-        final long baseOffset1 = memoryManager.getOffsetInPage(r1.recordPointer);
+        final Object baseObject1 = memoryManager.getPage(r1.recordPointer);
+        final long baseOffset1 = memoryManager.getOffsetInPage(r1.recordPointer) + 4; // skip length
         final Object baseObject2 = memoryManager.getPage(r2.recordPointer);
-        final long baseOffset2 = memoryManager.getOffsetInPage(r2.recordPointer);
+        final long baseOffset2 = memoryManager.getOffsetInPage(r2.recordPointer) + 4; // skip length
         return recordComparator.compare(baseObject1, baseOffset1, baseObject2, baseOffset2);
       } else {
         return prefixComparisonResult;
@@ -146,7 +147,8 @@ public final class UnsafeInMemorySorter {
     public void loadNext() {
       final long recordPointer = sortBuffer[position];
       baseObject = memoryManager.getPage(recordPointer);
-      baseOffset = memoryManager.getOffsetInPage(recordPointer);
+      baseOffset = memoryManager.getOffsetInPage(recordPointer) + 4;  // Skip over record length
+      recordLength = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset - 4);
       keyPrefix = sortBuffer[position + 1];
       position += 2;
     }
