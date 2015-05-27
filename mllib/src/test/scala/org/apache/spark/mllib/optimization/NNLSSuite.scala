@@ -19,13 +19,12 @@ package org.apache.spark.mllib.optimization
 
 import scala.util.Random
 
-import org.scalatest.FunSuite
-
 import org.jblas.{DoubleMatrix, SimpleBlas}
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.TestingUtils._
 
-class NNLSSuite extends FunSuite {
+class NNLSSuite extends SparkFunSuite {
   /** Generate an NNLS problem whose optimal solution is the all-ones vector. */
   def genOnesData(n: Int, rand: Random): (DoubleMatrix, DoubleMatrix) = {
     val A = new DoubleMatrix(n, n, Array.fill(n*n)(rand.nextDouble()): _*)

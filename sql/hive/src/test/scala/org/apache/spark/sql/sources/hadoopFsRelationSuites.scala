@@ -18,9 +18,8 @@
 package org.apache.spark.sql.sources
 
 import org.apache.hadoop.fs.Path
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
@@ -479,7 +478,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
   }
 }
 
-class CommitFailureTestRelationSuite extends FunSuite with SQLTestUtils {
+class CommitFailureTestRelationSuite extends SparkFunSuite with SQLTestUtils {
   import TestHive.implicits._
 
   override val sqlContext = TestHive

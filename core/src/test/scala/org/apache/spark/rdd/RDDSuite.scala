@@ -25,14 +25,12 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.scalatest.FunSuite
-
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDDSuiteUtils._
 import org.apache.spark.util.Utils
 
-class RDDSuite extends FunSuite with SharedSparkContext {
+class RDDSuite extends SparkFunSuite with SharedSparkContext {
 
   test("basic operations") {
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)

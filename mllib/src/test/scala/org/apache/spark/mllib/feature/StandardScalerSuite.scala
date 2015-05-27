@@ -17,15 +17,14 @@
 
 package org.apache.spark.mllib.feature
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, MultivariateOnlineSummarizer}
 import org.apache.spark.rdd.RDD
 
-class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
+class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // When the input data is all constant, the variance is zero. The standardization against
   // zero variance is not well-defined, but we decide to just set it into zero here.

@@ -21,7 +21,7 @@ import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
-import org.scalatest.{BeforeAndAfter, FunSuiteLike}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
@@ -68,7 +68,7 @@ class MyRDD(
 class DAGSchedulerSuiteDummyException extends Exception
 
 class DAGSchedulerSuite
-  extends FunSuiteLike with BeforeAndAfter with LocalSparkContext with Timeouts {
+  extends SparkFunSuite with BeforeAndAfter with LocalSparkContext with Timeouts {
 
   val conf = new SparkConf
   /** Set of TaskSets the DAGScheduler has requested executed. */

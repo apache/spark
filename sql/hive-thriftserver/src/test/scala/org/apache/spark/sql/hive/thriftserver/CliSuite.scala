@@ -25,12 +25,12 @@ import scala.concurrent.{Await, Promise}
 import scala.sys.process.{Process, ProcessLogger}
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-class CliSuite extends FunSuite with BeforeAndAfter with Logging {
+class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
 

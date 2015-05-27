@@ -24,15 +24,15 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{SparkException, SparkConf}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 
 /**
  * Common tests for an RpcEnv implementation.
  */
-abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
+abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   var env: RpcEnv = _
 

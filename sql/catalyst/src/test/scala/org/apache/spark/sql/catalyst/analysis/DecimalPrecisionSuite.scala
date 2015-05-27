@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Union, Project, LocalRelation}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.SimpleCatalystConf
 
-class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
+class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
   val conf = new SimpleCatalystConf(true)
   val catalog = new SimpleCatalog(conf)
   val analyzer = new Analyzer(catalog, EmptyFunctionRegistry, conf)

@@ -22,11 +22,11 @@ import scala.util.Random
 import kafka.serializer.StringDecoder
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._
 
-class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
+class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private var kafkaTestUtils: KafkaTestUtils = _
 

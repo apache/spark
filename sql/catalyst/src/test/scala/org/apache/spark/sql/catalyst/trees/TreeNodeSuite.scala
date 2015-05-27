@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.trees
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{IntegerType, StringType, NullType}
 
@@ -33,7 +32,7 @@ case class Dummy(optKey: Option[Expression]) extends Expression {
   def eval(input: Row): Any = null.asInstanceOf[Any]
 }
 
-class TreeNodeSuite extends FunSuite {
+class TreeNodeSuite extends SparkFunSuite {
   test("top node changed") {
     val after = Literal(1) transform { case Literal(1, _) => Literal(2) }
     assert(after === Literal(2))

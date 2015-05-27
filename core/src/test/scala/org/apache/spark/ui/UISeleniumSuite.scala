@@ -42,7 +42,7 @@ import org.apache.spark.status.api.v1.{JacksonMessageWriter, StageStatus}
 /**
  * Selenium tests for the Spark Web UI.
  */
-class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
+class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
 
   implicit var webDriver: WebDriver = _
   implicit val formats = DefaultFormats

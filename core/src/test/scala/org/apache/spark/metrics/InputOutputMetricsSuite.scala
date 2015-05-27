@@ -36,14 +36,14 @@ import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat => NewCombi
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 import org.apache.hadoop.mapreduce.{TaskAttemptContext, InputSplit => NewInputSplit,
   RecordReader => NewRecordReader}
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SharedSparkContext
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.util.Utils
 
-class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
+class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
   with BeforeAndAfter {
 
   @transient var tmpDir: File = _

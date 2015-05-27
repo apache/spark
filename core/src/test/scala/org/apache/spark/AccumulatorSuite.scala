@@ -20,11 +20,10 @@ package org.apache.spark
 import scala.collection.mutable
 import scala.ref.WeakReference
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
 
-class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
+class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
 
   implicit def setAccum[A]: AccumulableParam[mutable.Set[A], A] =

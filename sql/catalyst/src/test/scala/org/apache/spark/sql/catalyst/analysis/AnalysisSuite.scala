@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -27,7 +28,7 @@ import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 
-class AnalysisSuite extends FunSuite with BeforeAndAfter {
+class AnalysisSuite extends SparkFunSuite with BeforeAndAfter {
   val caseSensitiveConf = new SimpleCatalystConf(true)
   val caseInsensitiveConf = new SimpleCatalystConf(false)
 

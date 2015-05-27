@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.types._
 
@@ -75,7 +74,7 @@ case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
 
-class ScalaReflectionSuite extends FunSuite {
+class ScalaReflectionSuite extends SparkFunSuite {
   import ScalaReflection._
 
   test("primitive data") {

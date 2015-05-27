@@ -17,14 +17,12 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 
-class VectorAssemblerSuite extends FunSuite with MLlibTestSparkContext {
+class VectorAssemblerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("assemble") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble

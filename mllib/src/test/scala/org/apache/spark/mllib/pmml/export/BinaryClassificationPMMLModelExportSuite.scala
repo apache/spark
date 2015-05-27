@@ -19,13 +19,13 @@ package org.apache.spark.mllib.pmml.export
 
 import org.dmg.pmml.RegressionModel
 import org.dmg.pmml.RegressionNormalizationMethodType
-import org.scalatest.FunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.classification.LogisticRegressionModel
 import org.apache.spark.mllib.classification.SVMModel
 import org.apache.spark.mllib.util.LinearDataGenerator
 
-class BinaryClassificationPMMLModelExportSuite extends FunSuite {
+class BinaryClassificationPMMLModelExportSuite extends SparkFunSuite {
 
   test("logistic regression PMML export") {
     val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)

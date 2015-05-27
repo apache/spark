@@ -23,8 +23,6 @@ import java.util.concurrent.TimeUnit
 import com.google.common.base.Charsets._
 import com.google.common.io.Files
 
-import org.scalatest.FunSuite
-
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
@@ -33,7 +31,7 @@ import org.apache.spark.util.Utils
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-class SparkContextSuite extends FunSuite with LocalSparkContext {
+class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Only one SparkContext may be active at a time") {
     // Regression test for SPARK-4180

@@ -22,10 +22,10 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.mockito.Mockito.when
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf}
+import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.ui.SparkUI
 
 /**
@@ -39,7 +39,7 @@ import org.apache.spark.ui.SparkUI
  * expectations.  However, in general this should be done with extreme caution, as the metrics
  * are considered part of Spark's public api.
  */
-class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with MockitoSugar
+class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers with MockitoSugar
   with JsonTestUtils {
 
   private val logDir = new File("src/test/resources/spark-events")
