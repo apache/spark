@@ -250,6 +250,8 @@ class S3Hook(BaseHook):
         bucket = self.get_bucket(bucket_name)
         prefix = re.split(r'[*]', wildcard_key, 1)[0]
         klist = self.list_keys(bucket_name, prefix=prefix, delimiter=delimiter)
+        if not klist:
+            return None
         key_matches = [k for k in klist if fnmatch.fnmatch(k, wildcard_key)]
         return bucket.get_key(key_matches[0]) if key_matches else None
 
