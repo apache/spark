@@ -25,11 +25,15 @@ import scala.concurrent.{Await, Promise}
 import scala.sys.process.{Process, ProcessLogger}
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
 
+/**
+ * A test suite for the `spark-sql` CLI tool.  Note that all test cases share the same temporary
+ * Hive metastore and warehouse.
+ */
 class CliSuite extends FunSuite with BeforeAndAfter with Logging {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
@@ -58,18 +62,17 @@ class CliSuite extends FunSuite with BeforeAndAfter with Logging {
          |  --master local
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
-         |  --driver-class-path ${sys.props("java.class.path")}
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
 
     var next = 0
     val foundAllExpectedAnswers = Promise.apply[Unit]()
-    val queryStream = new ByteArrayInputStream(queries.mkString("\n").getBytes)
+    // Explicitly adds ENTER for each statement to make sure they are actually entered into the CLI.
+    val queryStream = new ByteArrayInputStream(queries.map(_ + "\n").mkString.getBytes)
     val buffer = new ArrayBuffer[String]()
     val lock = new Object
 
     def captureOutput(source: String)(line: String): Unit = lock.synchronized {
-      println(line)
       buffer += s"$source> $line"
       // If we haven't found all expected answers and another expected answer comes up...
       if (next < expectedAnswers.size && line.startsWith(expectedAnswers(next))) {
@@ -125,7 +128,7 @@ class CliSuite extends FunSuite with BeforeAndAfter with Logging {
       "SELECT COUNT(*) FROM hive_test;"
         -> "5",
       "DROP TABLE hive_test;"
-        -> "Time taken: "
+        -> "OK"
     )
   }
 
@@ -162,12 +165,8 @@ class CliSuite extends FunSuite with BeforeAndAfter with Logging {
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
 
-    runCliWithin(1.minute,
-      Seq(
-        "--jars",
-        s"$jarFile"))(
-      """
-        |CREATE TABLE t1(key string, val string)
+    runCliWithin(1.minute, Seq("--jars", s"$jarFile"))(
+      """CREATE TABLE t1(key string, val string)
         |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
       """.stripMargin
         -> "OK",
@@ -176,7 +175,7 @@ class CliSuite extends FunSuite with BeforeAndAfter with Logging {
       s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTable;"
         -> "OK",
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
-        -> "OK",
+        -> "Time taken:",
       "SELECT count(key) FROM t1;"
         -> "5",
       "DROP TABLE t1;"
