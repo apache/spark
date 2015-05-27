@@ -46,11 +46,11 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
       throw new IndexOutOfBoundsException(
         s"Read of $len bytes at position $pos would go past size ${_size} of buffer")
     }
-    var chunkIndex = (pos >> chunkSizeLog2).toInt
-    var posInChunk = (pos - (chunkIndex << chunkSizeLog2)).toInt
-    var written = 0
+    var chunkIndex: Int = (pos >> chunkSizeLog2).toInt
+    var posInChunk: Int = (pos - (chunkIndex << chunkSizeLog2)).toInt
+    var written: Int = 0
     while (written < len) {
-      val toRead = math.min(len - written, chunkSize - posInChunk)
+      val toRead: Int = math.min(len - written, chunkSize - posInChunk)
       os.write(chunks(chunkIndex), posInChunk, toRead)
       written += toRead
       chunkIndex += 1
@@ -71,11 +71,11 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
       throw new IndexOutOfBoundsException(
         s"Read of $len bytes at position $pos would go past size of buffer")
     }
-    var chunkIndex = (pos >> chunkSizeLog2).toInt
-    var posInChunk = (pos - (chunkIndex << chunkSizeLog2)).toInt
-    var written = 0
+    var chunkIndex: Int = (pos >> chunkSizeLog2).toInt
+    var posInChunk: Int = (pos - (chunkIndex << chunkSizeLog2)).toInt
+    var written: Int = 0
     while (written < len) {
-      val toRead = math.min(len - written, chunkSize - posInChunk)
+      val toRead: Int = math.min(len - written, chunkSize - posInChunk)
       System.arraycopy(chunks(chunkIndex), posInChunk, bytes, offs + written, toRead)
       written += toRead
       chunkIndex += 1
@@ -97,7 +97,7 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
         s"Write at position $pos starts after end of buffer ${_size}")
     }
     // Grow if needed
-    val endChunkIndex = (pos + len - 1) >> chunkSizeLog2
+    val endChunkIndex: Int = ((pos + len - 1) >> chunkSizeLog2).toInt
     while (endChunkIndex >= chunks.length) {
       chunks += new Array[Byte](chunkSize)
     }
@@ -106,7 +106,7 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
     var posInChunk = (pos - (chunkIndex << chunkSizeLog2)).toInt
     var written = 0
     while (written < len) {
-      val toWrite = math.min(len - written, chunkSize - posInChunk)
+      val toWrite: Int = math.min(len - written, chunkSize - posInChunk)
       System.arraycopy(bytes, offs + written, chunks(chunkIndex), posInChunk, toWrite)
       written += toWrite
       chunkIndex += 1
@@ -131,7 +131,7 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
  * Output stream that writes to a ChainedBuffer.
  */
 private[spark] class ChainedBufferOutputStream(chainedBuffer: ChainedBuffer) extends OutputStream {
-  private var pos = 0
+  private var pos: Long = 0
 
   override def write(b: Int): Unit = {
     throw new UnsupportedOperationException()
