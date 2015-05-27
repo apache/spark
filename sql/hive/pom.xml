@@ -143,16 +143,6 @@
         </plugins>
       </build>
     </profile>
-    <profile>
-      <id>hive-0.12.0</id>
-      <dependencies>
-         <dependency>
-           <groupId>com.twitter</groupId>
-           <artifactId>parquet-hive-bundle</artifactId>
-           <version>1.5.0</version>
-        </dependency>
-      </dependencies>
-    </profile>
   </profiles>
 
   <build>

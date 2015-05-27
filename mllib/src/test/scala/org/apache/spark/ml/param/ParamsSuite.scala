@@ -135,7 +135,7 @@ class ParamsSuite extends SparkFunSuite {
     intercept[IllegalArgumentException] {
       solver.validateParams()
     }
-    solver.validateParams(ParamMap(inputCol -> "input"))
+    solver.copy(ParamMap(inputCol -> "input")).validateParams()
     solver.setInputCol("input")
     assert(solver.isSet(inputCol))
     assert(solver.isDefined(inputCol))
