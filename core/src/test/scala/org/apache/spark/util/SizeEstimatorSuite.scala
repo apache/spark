@@ -57,7 +57,6 @@ class DummyString(val arr: Array[Char]) {
 }
 
 class SizeEstimatorSuite
- 
   extends SparkFunSuite
   with BeforeAndAfterEach
   with PrivateMethodTester
