@@ -69,6 +69,7 @@ class CliSuite extends FunSuite with BeforeAndAfter with Logging {
     val lock = new Object
 
     def captureOutput(source: String)(line: String): Unit = lock.synchronized {
+      println(line)
       buffer += s"$source> $line"
       // If we haven't found all expected answers and another expected answer comes up...
       if (next < expectedAnswers.size && line.startsWith(expectedAnswers(next))) {
@@ -152,18 +153,35 @@ class CliSuite extends FunSuite with BeforeAndAfter with Logging {
     )
   }
 
-  test("Single command with --jars") {
+  test("Commands using SerDe provided in --jars") {
     val jarFile =
-      Thread.currentThread().getContextClassLoader
-        .getResource("data/files/hive-hcatalog-core-0.13.1.jar")
+      "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
+        .split("/")
+        .mkString(File.separator)
+
+    val dataFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+
     runCliWithin(1.minute,
       Seq(
         "--jars",
-        s"$jarFile",
-        "-e",
-        """CREATE TABLE t1(a string, b string) ROW FORMAT
-          | SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';""".stripMargin))(
-      ""
+        s"$jarFile"))(
+      """
+        |CREATE TABLE t1(key string, val string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
+      """.stripMargin
+        -> "OK",
+      "CREATE TABLE sourceTable (key INT, val STRING);"
+        -> "OK",
+      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTable;"
+        -> "OK",
+      "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
+        -> "OK",
+      "SELECT count(key) FROM t1;"
+        -> "5",
+      "DROP TABLE t1;"
+        -> "OK",
+      "DROP TABLE sourceTable;"
         -> "OK"
     )
   }

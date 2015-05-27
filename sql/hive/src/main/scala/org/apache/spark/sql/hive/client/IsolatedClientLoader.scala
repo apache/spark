@@ -124,8 +124,6 @@ private[hive] class IsolatedClientLoader(
     name.startsWith("com.google") ||
     name.startsWith("java.lang.") ||
     name.startsWith("java.net") ||
-    name.startsWith("org.apache.hadoop.conf") ||
-    name.startsWith("org.apache.hadoop.hive.serde") || // TODO keep adding?
     sharedPrefixes.exists(name.startsWith)
 
   /** True if `name` refers to a spark class that must see specific version of Hive. */
@@ -152,9 +150,7 @@ private[hive] class IsolatedClientLoader(
         defineClass(name, bytes, 0, bytes.length)
       } else if (!isSharedClass(name)) {
         logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
-        try super.loadClass(name, resolve) catch {
-          case _: ClassNotFoundException => baseClassLoader.loadClass(name)
-        }
+        super.loadClass(name, resolve)
       } else {
         logDebug(s"shared class: $name")
         baseClassLoader.loadClass(name)
