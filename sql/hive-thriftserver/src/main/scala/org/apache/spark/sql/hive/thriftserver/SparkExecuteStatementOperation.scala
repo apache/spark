@@ -28,6 +28,7 @@ import java.util.{ArrayList => JArrayList, List => JList, Map => JMap, UUID}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
+import scala.util.control.NonFatal
 
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
@@ -196,9 +197,13 @@ private[hive] class SparkExecuteStatementOperation(
         setBackgroundHandle(backgroundHandle)
       } catch {
         case rejected: RejectedExecutionException =>
-          setState(OperationState.ERROR);
+          setState(OperationState.ERROR)
           throw new HiveSQLException("The background threadpool cannot accept" +
             " new task for execution, please retry the operation", rejected)
+        case NonFatal(e) =>
+          logError(s"Error executing query in background", e)
+          setState(OperationState.ERROR)
+          throw e
       }
     }
   }
@@ -249,7 +254,7 @@ private[hive] class SparkExecuteStatementOperation(
       // HiveServer will silently swallow them.
       case e: Throwable =>
         val currentState = getStatus().getState()
-        logError(s"Error executing query, currentState $currentState, :", e)
+        logError(s"Error executing query, currentState $currentState, ", e)
         setState(OperationState.ERROR)
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, e.getStackTraceString)

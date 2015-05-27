@@ -358,7 +358,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         statement.executeQuery(largeJoin)
       }
       assert(e.getMessage contains "cancelled")
-      Await.result(f, Duration.Inf)
+      Await.result(f, 3.minute)
 
       // cancel is a noop
       statement.executeQuery("SET spark.sql.hive.thriftServer.async=false")
@@ -366,14 +366,14 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       val smallJoin = "SELECT COUNT(*) FROM test_map " +
         List.fill(4)("join test_map").mkString(" ")
       val rs1 = statement.executeQuery(smallJoin)
-      Await.result(sf, Duration.Inf)
+      Await.result(sf, 3.minute)
       rs1.next()
-      assert(5*5*5*5*5 == rs1.getInt(1))
+      assert(rs1.getInt(1) === math.pow(5, 5))
       rs1.close()
 
       val rs2 = statement.executeQuery("SELECT COUNT(*) FROM test_map")
       rs2.next()
-      assert(5 == rs2.getInt(1))
+      assert(rs2.getInt(1) === 5)
       rs2.close()
     }
   }
