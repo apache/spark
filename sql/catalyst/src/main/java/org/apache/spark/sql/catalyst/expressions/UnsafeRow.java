@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.math.BigDecimal;
+import java.sql.Date;
+import java.util.*;
+import javax.annotation.Nullable;
+
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ObjectPool;
 import org.apache.spark.unsafe.PlatformDependent;
@@ -55,6 +60,8 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public final class UnsafeRow extends MutableRow {
 
+  /** Hack for if we want to pass around an UnsafeRow which also carries around its backing data */
+  @Nullable public byte[] backingArray;
   private Object baseObject;
   private long baseOffset;
 

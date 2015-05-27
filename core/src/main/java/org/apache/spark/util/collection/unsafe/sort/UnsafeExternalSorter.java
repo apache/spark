@@ -151,7 +151,7 @@ public final class UnsafeExternalSorter {
     return memoryFreed;
   }
 
-  private void ensureSpaceInDataPage(int requiredSpace) throws Exception {
+  private void ensureSpaceInDataPage(int requiredSpace) throws IOException {
     // TODO: merge these steps to first calculate total memory requirements for this insert,
     // then try to acquire; no point in acquiring sort buffer only to spill due to no space in the
     // data page.
@@ -176,7 +176,7 @@ public final class UnsafeExternalSorter {
     }
     if (requiredSpace > PAGE_SIZE) {
       // TODO: throw a more specific exception?
-      throw new Exception("Required space " + requiredSpace + " is greater than page size (" +
+      throw new IOException("Required space " + requiredSpace + " is greater than page size (" +
         PAGE_SIZE + ")");
     } else if (requiredSpace > spaceInCurrentPage) {
       if (spillingEnabled) {
@@ -187,7 +187,7 @@ public final class UnsafeExternalSorter {
           final long memoryAcquiredAfterSpill = shuffleMemoryManager.tryToAcquire(PAGE_SIZE);
           if (memoryAcquiredAfterSpill != PAGE_SIZE) {
             shuffleMemoryManager.release(memoryAcquiredAfterSpill);
-            throw new Exception("Can't allocate memory!");
+            throw new IOException("Can't allocate memory!");
           }
         }
       }
@@ -202,7 +202,7 @@ public final class UnsafeExternalSorter {
       Object recordBaseObject,
       long recordBaseOffset,
       int lengthInBytes,
-      long prefix) throws Exception {
+      long prefix) throws IOException {
     // Need 4 bytes to store the record length.
     ensureSpaceInDataPage(lengthInBytes + 4);
 
