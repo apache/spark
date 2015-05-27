@@ -101,6 +101,10 @@ private[spark] class ExecutorAllocationManager(
   private val executorIdleTimeoutS = conf.getTimeAsSeconds(
     "spark.dynamicAllocation.executorIdleTimeout", "60s")
 
+  // How long the scheduler task should be waited before it starts to schedule
+  private val scheduleTaskLazyStartTimeoutS = conf.getTimeAsSeconds(
+    "spark.dynamicAllocation.lazyStartTimeout", "60s")
+
   // During testing, the methods to actually kill and add executors are mocked out
   private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
 
@@ -150,6 +154,9 @@ private[spark] class ExecutorAllocationManager(
   // Metric source for ExecutorAllocationManager to expose internal status to MetricsSystem.
   val executorAllocationManagerSource = new ExecutorAllocationManagerSource
 
+  // Flag to measure whether scheduler should be started
+  @volatile private var shouldScheduleTaskStarted = false
+
   /**
    * Verify that the settings specified through the config are valid.
    * If not, throw an appropriate exception.
@@ -174,6 +181,9 @@ private[spark] class ExecutorAllocationManager(
     }
     if (executorIdleTimeoutS <= 0) {
       throw new SparkException("spark.dynamicAllocation.executorIdleTimeout must be > 0!")
+    }
+    if (scheduleTaskLazyStartTimeoutS <= 0) {
+      throw  new SparkException("spark.dynamicAllocation.lazyStartTimeout must be > 0!")
     }
     // Require external shuffle service for dynamic allocation
     // Otherwise, we may lose shuffle files when killing executors
@@ -200,8 +210,25 @@ private[spark] class ExecutorAllocationManager(
   def start(): Unit = {
     listenerBus.addListener(listener)
 
+    val initialTime = clock.getTimeMillis()
     val scheduleTask = new Runnable() {
-      override def run(): Unit = Utils.logUncaughtExceptions(schedule())
+      override def run(): Unit = Utils.logUncaughtExceptions {
+        if (!shouldScheduleTaskStarted) {
+          val numExecutorsAvailable = synchronized { executorIds.size }
+          val currentTime = clock.getTimeMillis()
+          // Start the scheduler when current available executor number is larger than the target
+          // number, this is to guarantee not to ramp down the target executor immediately when the
+          // application is started. If current time is larger than the lazy start timeout,
+          // force the scheduler to start to avoid infinitely waiting,
+          // since resources will never be satisfied at some conditions.
+          if ((numExecutorsAvailable >= numExecutorsTarget) ||
+            ((currentTime - initialTime) >= scheduleTaskLazyStartTimeoutS * 1000)) {
+            shouldScheduleTaskStarted = true
+          }
+        } else {
+          schedule()
+        }
+      }
     }
     executor.scheduleAtFixedRate(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
   }
