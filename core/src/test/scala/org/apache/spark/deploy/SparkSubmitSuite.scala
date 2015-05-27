@@ -38,6 +38,7 @@ class SparkSubmitSuite
   with Matchers
   with ResetSystemProperties
   with Timeouts {
+
   def beforeAll() {
     System.setProperty("spark.testing", "true")
   }

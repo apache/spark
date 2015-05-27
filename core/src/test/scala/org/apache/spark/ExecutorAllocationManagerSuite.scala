@@ -32,6 +32,7 @@ class ExecutorAllocationManagerSuite
   extends SparkFunSuite
   with LocalSparkContext
   with BeforeAndAfter {
+
   import ExecutorAllocationManager._
   import ExecutorAllocationManagerSuite._
 
