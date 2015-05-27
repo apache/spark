@@ -383,7 +383,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         case (Literal(false, BooleanType), r) => r
         // l || false  =>  l
         case (l, Literal(false, BooleanType)) => l
-        // a || b => a
+        // a || a => a
         case (l, r) if l fastEquals r => l
         // (a && b) || (a && c)  =>  a && (b || c)
         case _ =>
