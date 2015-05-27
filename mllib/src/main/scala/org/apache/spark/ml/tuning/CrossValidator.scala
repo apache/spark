@@ -141,6 +141,14 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
   override def transformSchema(schema: StructType): StructType = {
     $(estimator).transformSchema(schema)
   }
+
+  override def validateParams(): Unit = {
+    super.validateParams()
+    val est = $(estimator)
+    for (paramMap <- $(estimatorParamMaps)) {
+      est.copy(paramMap).validateParams()
+    }
+  }
 }
 
 /**
