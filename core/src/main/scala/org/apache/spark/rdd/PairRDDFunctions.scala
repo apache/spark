@@ -1152,6 +1152,23 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def values: RDD[V] = self.map(_._2)
 
+  /**
+   * Return an RDD that assumes the data in this RDD has been partitioned.  This can be useful
+   * to create narrow dependencies to avoid shuffles.  This can be especially useful when loading
+   * an RDD from HDFS, where that RDD was already partitioned when it was saved.  Note that when
+   * loading a file from HDFS, you must ensure that the input splits are disabled with a custom
+   * FileInputFormat.
+   *
+   * If verify == true, every record will be checked against the Partitioner.  If any record is not
+   * in the correct partition, an exception will be thrown when the RDD is computed.
+   *
+   * If verify == false, and the RDD is not partitioned correctly, the behavior is undefined.  There
+   * may be a runtime error, or there may simply be wildly inaccurate results with no warning.
+   */
+  def assumePartitionedBy(partitioner: Partitioner, verify: Boolean = true): RDD[(K,V)] = {
+    new AssumedPartitionedRDD[K,V](self, partitioner, verify)
+  }
+
   private[spark] def keyClass: Class[_] = kt.runtimeClass
 
   private[spark] def valueClass: Class[_] = vt.runtimeClass

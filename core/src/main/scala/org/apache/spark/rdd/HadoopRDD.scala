@@ -204,7 +204,10 @@ class HadoopRDD[K, V](
     if (inputFormat.isInstanceOf[Configurable]) {
       inputFormat.asInstanceOf[Configurable].setConf(jobConf)
     }
-    val inputSplits = inputFormat.getSplits(jobConf, minPartitions)
+    // we have to sort the partitions here so that part-0000 goes to partition 0, etc.  This is
+    // so we can use the same partitioner after we save an RDD to hdfs and then read it back
+    // SPARK-1061
+    val inputSplits = inputFormat.getSplits(jobConf, minPartitions).sorted(SplitOrdering)
     val array = new Array[Partition](inputSplits.size)
     for (i <- 0 until inputSplits.size) {
       array(i) = new HadoopPartition(id, i, inputSplits(i))
@@ -418,4 +421,17 @@ private[spark] object HadoopRDD extends Logging {
     }}
     out.seq
   }
+}
+
+private[spark] object SplitOrdering extends Ordering[InputSplit] {
+  def compare(x: InputSplit, y: InputSplit): Int = {
+    (x,y) match {
+      case fileSplits: (FileSplit, FileSplit) =>
+       fileSplitOrdering.compare(fileSplits._1, fileSplits._2)
+      case _ => 1
+    }
+  }
+
+  val fileSplitOrdering: Ordering[FileSplit] = Ordering.by{fileSplit =>
+    (fileSplit.getPath.toString, fileSplit.getStart)}
 }

@@ -17,7 +17,10 @@
 
 package org.apache.spark.rdd
 
-import org.apache.hadoop.fs.FileSystem
+import java.io.File
+
+import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.io.IntWritable
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.util.Progressable
 
@@ -25,10 +28,11 @@ import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.util.Random
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
-import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter => NewOutputCommitter,
+import org.apache.hadoop.mapreduce.{JobContext => NewJobContext,
+OutputCommitter => NewOutputCommitter,
 OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
 TaskAttemptContext => NewTaskAttempContext}
-import org.apache.spark.{Partitioner, SharedSparkContext}
+import org.apache.spark.{SparkException, HashPartitioner, Partitioner, SharedSparkContext}
 import org.apache.spark.util.Utils
 
 import org.scalatest.FunSuite
@@ -552,6 +556,68 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     intercept[IllegalArgumentException] {shuffled.lookup(-1)}
   }
 
+  test("assumePartitioned") {
+    val nGroups = 20
+    val nParts = 10
+    val rdd: RDD[(Int, Int)] = sc.parallelize(1 to 100, nParts).map{x => (x % nGroups) -> x}.
+      partitionBy(new HashPartitioner(nParts))
+    val tempDir = Utils.createTempDir()
+    val f = new File(tempDir, "assumedPartitionedSeqFile")
+    val path = f.getAbsolutePath
+    rdd.saveAsSequenceFile(path)
+
+    // this is basically sc.sequenceFile[Int,Int], but with input splits turned off
+    val reloaded: RDD[(Int,Int)] = sc.hadoopFile(
+      path,
+      classOf[NoSplitSequenceFileInputFormat[IntWritable,IntWritable]],
+      classOf[IntWritable],
+      classOf[IntWritable],
+      nParts
+    ).map{case(k,v) => k.get() -> v.get()}
+
+
+    val assumedPartitioned = reloaded.assumePartitionedBy(rdd.partitioner.get)
+    assumedPartitioned.count()  //need an action to run the verify step
+
+    val j1: RDD[(Int, (Iterable[Int], Iterable[Int]))] = rdd.cogroup(assumedPartitioned)
+    assert(j1.getNarrowAncestors.contains(rdd))
+    assert(j1.getNarrowAncestors.contains(assumedPartitioned))
+
+    j1.foreach{case(group, (left, right)) =>
+        //check that we've got the same groups in both RDDs
+        val leftSet = left.toSet
+        val rightSet = right.toSet
+        if (leftSet != rightSet) throw new RuntimeException("left not equal to right")
+        //and check that the groups are correct
+        leftSet.foreach{x =>if (x % nGroups != group) throw new RuntimeException(s"bad grouping")}
+    }
+
+
+    // this is just to make sure the test is actually useful, and would catch a mistake if it was
+    // *not* a narrow dependency
+    val j2 = rdd.cogroup(reloaded)
+    assert(!j2.getNarrowAncestors.contains(reloaded))
+  }
+
+  test("assumePartitioned -- verify works") {
+    val rdd = sc.parallelize(1 to 100, 10).groupBy(identity)
+    //catch wrong number of partitions immediately
+    val exc1 = intercept[SparkException]{rdd.assumePartitionedBy(new HashPartitioner(5))}
+    assert(exc1.getMessage() == ("Assumed Partitioner org.apache.spark.HashPartitioner@5 expects" +
+      " 5 partitions, but there are 10 partitions.  If you are assuming a partitioner on a" +
+      " HadoopRDD, you might need to disable input splits with a custom input format"))
+
+    //also catch wrong partitioner (w/ right number of partitions) during action
+    val assumedPartitioned = rdd.assumePartitionedBy(new Partitioner {
+      override def numPartitions: Int = 10
+      override def getPartition(key: Any): Int = 3
+    })
+    val exc2 = intercept[SparkException] {assumedPartitioned.collect()}
+    assert(exc2.getMessage().contains(" was not in the assumed partition.  If you are assuming a" +
+      " partitioner on a HadoopRDD, you might need to disable input splits with a custom input" +
+      " format"))
+  }
+
   private object StratifiedAuxiliary {
     def stratifier (fractionPositive: Double): (Int) => String = {
       (x: Int) => if (x % 10 < (10 * fractionPositive).toInt) "1" else "0"
@@ -747,4 +813,8 @@ class ConfigTestFormat() extends NewFakeFormat() with Configurable {
     assert(setConfCalled, "setConf was never called")
     super.getRecordWriter(p1)
   }
+}
+
+class NoSplitSequenceFileInputFormat[K,V] extends SequenceFileInputFormat[K,V] {
+  override def isSplitable(fs: FileSystem, file: Path) = false
 }
