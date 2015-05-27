@@ -33,11 +33,10 @@ class FilterPushdownSuite extends PlanTest {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubQueries) ::
-      Batch("Transform Condition", Once,
-        TransformCondition) ::
       Batch("Filter Pushdown", Once,
         CombineFilters,
         PushPredicateThroughProject,
+        BooleanSimplification,
         PushPredicateThroughJoin,
         PushPredicateThroughGenerate,
         ColumnPruning,
