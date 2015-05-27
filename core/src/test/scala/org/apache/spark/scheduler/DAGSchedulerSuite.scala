@@ -343,32 +343,26 @@ class DAGSchedulerSuite
   }
 
   /**
-   * +---+ shuffle +---+    +---+
-   * | A |<--------| B |<---| C |<--+
-   * +---+         +---+    +---+   |  +---+
-   *                                +--| E |
-   *                        +---+   |  +---+
-   *                        | D |<--+
-   *                        +---+
-   * Here, E has one-to-one dependencies on C and D. C is derived from A by performing a shuffle
+   * +---+ shuffle +---+    +---+    +---+
+   * | A |<--------| B |<---| C |<---| D |
+   * +---+         +---+    +---+    +---+
+   * Here, D has one-to-one dependencies on C. C is derived from A by performing a shuffle
    * and then a map. If we're trying to determine which ancestor stages need to be computed in
-   * order to compute E, we need to figure out whether the shuffle A -> B should be performed.
+   * order to compute D, we need to figure out whether the shuffle A -> B should be performed.
    * If the RDD C, which has only one ancestor via a narrow dependency, is cached, then we won't
    * need to compute A, even if it has some unavailable output partitions. The same goes for B:
    * if B is 100% cached, then we can avoid the shuffle on A.
    */
-  test("SPARK-7826: regression test for getMissingParentStages") {
+  test("SPARK-7826: getMissingParentStages should consider all ancestor RDDs' cache statuses") {
     val rddA = new MyRDD(sc, 1, Nil)
     val rddB = new MyRDD(sc, 1, List(new ShuffleDependency(rddA, null)))
     val rddC = new MyRDD(sc, 1, List(new OneToOneDependency(rddB))).cache()
-    val rddD = new MyRDD(sc, 1, Nil)
-    val rddE = new MyRDD(sc, 1,
-      List(new OneToOneDependency(rddC), new OneToOneDependency(rddD)))
+    val rddD = new MyRDD(sc, 1, List(new OneToOneDependency(rddC)))
     cacheLocations(rddC.id -> 0) =
       Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
-    val jobId = submit(rddE, Array(0))
-    val finalStage = scheduler.jobIdToActiveJob(jobId).finalStage
-    assert(scheduler.getMissingParentStages(finalStage).size === 0)
+    submit(rddD, Array(0))
+    assert(scheduler.runningStages.size === 1)
+    assert(scheduler.runningStages.head.id === 1)
   }
 
   test("avoid exponential blowup when getting preferred locs list") {
