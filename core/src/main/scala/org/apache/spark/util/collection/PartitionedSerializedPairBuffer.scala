@@ -127,7 +127,7 @@ private[spark] class PartitionedSerializedPairBuffer[K, V](
       var pos = 0
 
       def writeNext(writer: BlockObjectWriter): Unit = {
-        val keyStart = keyStartPos(metaBuffer, pos)
+        val keyStart = getKeyStartPos(metaBuffer, pos)
         val keyValLen = metaBuffer.get(pos + KEY_VAL_LEN)
         pos += RECORD_SIZE
         kvBuffer.read(keyStart, writer, keyValLen)
@@ -166,7 +166,7 @@ private[spark] class OrderedInputStream(metaBuffer: IntBuffer, kvBuffer: Chained
 
   private var metaBufferPos = 0
   private var kvBufferPos =
-    if (metaBuffer.position > 0) keyStartPos(metaBuffer, metaBufferPos) else 0
+    if (metaBuffer.position > 0) getKeyStartPos(metaBuffer, metaBufferPos) else 0
 
   override def read(bytes: Array[Byte]): Int = read(bytes, 0, bytes.length)
 
@@ -180,7 +180,7 @@ private[spark] class OrderedInputStream(metaBuffer: IntBuffer, kvBuffer: Chained
     if (toRead == bytesRemainingInRecord) {
       metaBufferPos += RECORD_SIZE
       if (metaBufferPos < metaBuffer.position) {
-        kvBufferPos = keyStartPos(metaBuffer, metaBufferPos)
+        kvBufferPos = getKeyStartPos(metaBuffer, metaBufferPos)
       }
     } else {
       kvBufferPos += toRead
@@ -252,8 +252,9 @@ private[spark] object PartitionedSerializedPairBuffer {
   val PARTITION = 3
   val RECORD_SIZE = PARTITION + 1 // num ints of metadata
 
-  def keyStartPos(metaBuffer: IntBuffer, metaBufferPos: Int): Long = {
-    metaBuffer.get(metaBufferPos + KEY_START) +
-      (metaBuffer.get(metaBufferPos + KEY_START + 1).toLong << 32)
+  def getKeyStartPos(metaBuffer: IntBuffer, metaBufferPos: Int): Long = {
+    val lower32 = metaBuffer.get(metaBufferPos + KEY_START)
+    val upper32 = metaBuffer.get(metaBufferPos + KEY_START + 1)
+    (upper32.toLong << 32) | (lower32 & 0xFFFFFFFFL)
   }
 }
