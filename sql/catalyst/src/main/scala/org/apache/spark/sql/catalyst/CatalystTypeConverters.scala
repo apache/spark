@@ -354,6 +354,15 @@ object CatalystTypeConverters {
   }
 
   /**
+   * Converts Catalyst types used internally in rows to standard Scala types
+   * This method is slow, and for batch conversion you should be using converter
+   * produced by createToScalaConverter.
+   */
+  def convertToScala(catalystValue: Any, dataType: DataType): Any = {
+    getConverterForType(dataType).toScala(catalystValue)
+  }
+
+  /**
    * Creates a converter function that will convert Catalyst types to Scala type.
    * Typical use case would be converting a collection of rows that have the same schema. You will
    * call this function once to get a converter, and apply it to every row.
