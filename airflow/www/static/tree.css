@@ -31,6 +31,9 @@ rect.running {
 rect.failed {
     fill: red;
 }
+rect.queued {
+    fill: gray;
+}
 rect.shutdown {
     fill: orange;
 }
