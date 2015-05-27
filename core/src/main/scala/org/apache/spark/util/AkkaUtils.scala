@@ -235,7 +235,7 @@ private[spark] object AkkaUtils extends Logging {
       protocol: String,
       systemName: String,
       host: String,
-      port: Any,
+      port: Int,
       actorName: String): String = {
     s"$protocol://$systemName@$host:$port/user/$actorName"
   }

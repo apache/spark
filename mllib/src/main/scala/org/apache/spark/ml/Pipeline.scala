@@ -20,17 +20,17 @@ package org.apache.spark.ml
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: AlphaComponent ::
+ * :: DeveloperApi ::
  * A stage in a pipeline, either an [[Estimator]] or a [[Transformer]].
  */
-@AlphaComponent
+@DeveloperApi
 abstract class PipelineStage extends Params with Logging {
 
   /**
@@ -69,7 +69,7 @@ abstract class PipelineStage extends Params with Logging {
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * A simple pipeline, which acts as an estimator. A Pipeline consists of a sequence of stages, each
  * of which is either an [[Estimator]] or a [[Transformer]]. When [[Pipeline#fit]] is called, the
  * stages are executed in order. If a stage is an [[Estimator]], its [[Estimator#fit]] method will
@@ -80,7 +80,7 @@ abstract class PipelineStage extends Params with Logging {
  * transformers, corresponding to the pipeline stages. If there are no stages, the pipeline acts as
  * an identity transformer.
  */
-@AlphaComponent
+@Experimental
 class Pipeline(override val uid: String) extends Estimator[PipelineModel] {
 
   def this() = this(Identifiable.randomUID("pipeline"))
@@ -97,12 +97,9 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] {
   /** @group getParam */
   def getStages: Array[PipelineStage] = $(stages).clone()
 
-  override def validateParams(paramMap: ParamMap): Unit = {
-    val map = extractParamMap(paramMap)
-    getStages.foreach {
-      case pStage: Params => pStage.validateParams(map)
-      case _ =>
-    }
+  override def validateParams(): Unit = {
+    super.validateParams()
+    $(stages).foreach(_.validateParams())
   }
 
   /**
@@ -169,10 +166,10 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] {
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Represents a fitted pipeline.
  */
-@AlphaComponent
+@Experimental
 class PipelineModel private[ml] (
     override val uid: String,
     val stages: Array[Transformer])
