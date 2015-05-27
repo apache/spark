@@ -45,7 +45,7 @@ case class Window(
       // This operator will be very expensive.
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(windowSpec.partitionSpec) :: Nil
+      ClusteredDistribution(windowSpec.partitionSpec, true) :: Nil
     }
 
   // Since window functions are adding columns to the input rows, the child's outputPartitioning

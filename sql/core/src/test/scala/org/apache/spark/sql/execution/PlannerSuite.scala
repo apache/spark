@@ -30,6 +30,26 @@ import org.apache.spark.sql.{Row, SQLConf, execution}
 
 
 class PlannerSuite extends SparkFunSuite {
+  test("multiway full outer join") {
+    val planned = testData
+                  .join(testData2, testData("key") === testData2("a"), "outer")
+                  .join(testData3, testData("key") === testData3("a"), "outer")
+                  .queryExecution.executedPlan
+    val exchanges = planned.collect { case n: Exchange => n }
+
+    assert(exchanges.size === 3)
+  }
+
+  test("full outer join followed by aggregation") {
+    val planned = testData
+      .join(testData2, testData("key") === testData2("a"), "outer") // join key testData('key)
+      .groupBy(testData("key")).agg(testData("key"), count("a"))    // group by key testData('key)
+      .queryExecution.executedPlan
+    val exchanges = planned.collect { case n: Exchange => n }
+
+    assert(exchanges.size === 3)
+  }
+
   test("unions are collapsed") {
     val query = testData.unionAll(testData).unionAll(testData).logicalPlan
     val planned = BasicOperators(query).head

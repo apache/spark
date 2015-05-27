@@ -50,8 +50,19 @@ case object AllTuples extends Distribution
  * [[Expression Expressions]] will be co-located. Based on the context, this
  * can mean such tuples are either co-located in the same partition or they will be contiguous
  * within a single partition.
+ * There is also another constraint, the `clustering` value contains null will be considered
+ * as a valid value if `nullKeysSensitive` == true.
+ *
+ * For examples:
+ * JOIN KEYS: values contains null will be considered as invalid values, which means
+ *          the tuples could be in different partition.
+ * GROUP BY KEYS: values contains null will be considered as the valid value, which means
+ *          the tuples should be in the same partition.
  */
-case class ClusteredDistribution(clustering: Seq[Expression]) extends Distribution {
+case class ClusteredDistribution(
+    clustering: Seq[Expression],
+    nullKeysSensitive: Boolean) extends Distribution {
+
   require(
     clustering != Nil,
     "The clustering expressions of a ClusteredDistribution should not be Nil. " +
@@ -157,7 +168,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
-    case ClusteredDistribution(requiredClustering) =>
+    case ClusteredDistribution(requiredClustering, false) =>
       clusteringSet.subsetOf(requiredClustering.toSet)
     case _ => false
   }
@@ -201,7 +212,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     case OrderedDistribution(requiredOrdering) =>
       val minSize = Seq(requiredOrdering.size, ordering.size).min
       requiredOrdering.take(minSize) == ordering.take(minSize)
-    case ClusteredDistribution(requiredClustering) =>
+    case ClusteredDistribution(requiredClustering, false) =>
       clusteringSet.subsetOf(requiredClustering.toSet)
     case _ => false
   }

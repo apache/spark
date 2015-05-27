@@ -51,17 +51,17 @@ class DistributionSuite extends SparkFunSuite {
 
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
-      ClusteredDistribution(Seq('a, 'b, 'c)),
+      ClusteredDistribution(Seq('a, 'b, 'c), false),
       true)
 
     checkSatisfied(
       HashPartitioning(Seq('b, 'c), 10),
-      ClusteredDistribution(Seq('a, 'b, 'c)),
+      ClusteredDistribution(Seq('a, 'b, 'c), false),
       true)
 
     checkSatisfied(
       SinglePartition,
-      ClusteredDistribution(Seq('a, 'b, 'c)),
+      ClusteredDistribution(Seq('a, 'b, 'c), false),
       true)
 
     checkSatisfied(
@@ -72,12 +72,12 @@ class DistributionSuite extends SparkFunSuite {
     // Cases which need an exchange between two data properties.
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
-      ClusteredDistribution(Seq('b, 'c)),
+      ClusteredDistribution(Seq('b, 'c), false),
       false)
 
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
-      ClusteredDistribution(Seq('d, 'e)),
+      ClusteredDistribution(Seq('d, 'e), false),
       false)
 
     checkSatisfied(
@@ -128,17 +128,17 @@ class DistributionSuite extends SparkFunSuite {
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      ClusteredDistribution(Seq('a, 'b, 'c)),
+      ClusteredDistribution(Seq('a, 'b, 'c), false),
       true)
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      ClusteredDistribution(Seq('c, 'b, 'a)),
+      ClusteredDistribution(Seq('c, 'b, 'a), false),
       true)
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      ClusteredDistribution(Seq('b, 'c, 'a, 'd)),
+      ClusteredDistribution(Seq('b, 'c, 'a, 'd), false),
       true)
 
     // Cases which need an exchange between two data properties.
@@ -158,12 +158,12 @@ class DistributionSuite extends SparkFunSuite {
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      ClusteredDistribution(Seq('a, 'b)),
+      ClusteredDistribution(Seq('a, 'b), false),
       false)
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      ClusteredDistribution(Seq('c, 'd)),
+      ClusteredDistribution(Seq('c, 'd), false),
       false)
 
     checkSatisfied(
