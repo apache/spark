@@ -10,12 +10,14 @@ from wtforms.compat import text_type
 def limit_sql(sql, limit):
     sql = sql.strip()
     sql = sql.rstrip(';')
-    return """\
-    SELECT * FROM (
-    {sql}
-    ) qry
-    LIMIT {limit}
-    """.format(**locals())
+    if sql.lower().startswith("select"):
+        sql = """\
+        SELECT * FROM (
+        {sql}
+        ) qry
+        LIMIT {limit}
+        """.format(**locals())
+    return sql
 
 def gzipped(f):
     '''
