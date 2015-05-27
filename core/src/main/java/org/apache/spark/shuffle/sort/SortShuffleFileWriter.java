@@ -23,13 +23,15 @@ import java.io.IOException;
 import scala.Product2;
 import scala.collection.Iterator;
 
+import org.apache.spark.annotation.Private;
 import org.apache.spark.TaskContext;
 import org.apache.spark.storage.BlockId;
 
 /**
  * Interface for objects that {@link SortShuffleWriter} uses to write its output files.
  */
-interface SortShuffleFileWriter<K, V> {
+@Private
+public interface SortShuffleFileWriter<K, V> {
 
   void insertAll(Iterator<Product2<K, V>> records) throws IOException;
 
