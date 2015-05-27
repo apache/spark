@@ -26,6 +26,7 @@ class NettyBlockTransferServiceSuite
   extends SparkFunSuite
   with BeforeAndAfterEach
   with ShouldMatchers {
+
   private var service0: NettyBlockTransferService = _
   private var service1: NettyBlockTransferService = _
 
