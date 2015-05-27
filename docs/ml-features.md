@@ -789,6 +789,19 @@ scaledData = scalerModel.transform(dataFrame)
 </div>
 </div>
 
+## Bucketizer
+
+`Bucketizer` transforms a column of continuous features to a column of feature buckets, where the buckets are specified by users. It takes a parameter:
+
+* `splits`: Parameter for mapping continuous features into buckets. With n+1 splits, there are n buckets. A bucket defined by splits x,y holds values in the range [x,y) except the last bucket, which also includes y. Splits should be strictly increasing. Values at -inf, inf must be explicitly provided to cover all Double values; Otherwise, values outside the splits specified will be treated as errors. Two examples of `splits` are `Array(Double.NegativeInfinity, 0.0, 1.0, Double.PositiveInfinity)` and `Array(0.0, 1.0, 2.0)`.
+
+Note that if the standard deviation of a feature is zero, it will return default `0.0` value in the `Vector` for that feature.
+
+More details can be found in the API docs for [Bucketizer](api/scala/index.html#org.apache.spark.ml.feature.Bucketizer).
+
+The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit standard deviation.
+
+
 
 # Feature Selectors
 
