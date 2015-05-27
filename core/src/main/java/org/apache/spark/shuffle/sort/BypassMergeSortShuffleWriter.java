@@ -41,13 +41,26 @@ import org.apache.spark.storage.*;
 import org.apache.spark.util.Utils;
 
 /**
- * This class handles sort-based shuffle's `bypassMergeSort` write path, which is used for shuffles
- * for which no Ordering and no Aggregator is given and the number of partitions is
- * less than `spark.shuffle.sort.bypassMergeThreshold`.
+ * This class implements sort-based shuffle's hash-style shuffle fallback path. This write path
+ * writes incoming records to separate files, one file per reduce partition, then concatenates these
+ * per-partition files to form a single output file, regions of which are served to reducers.
+ * Records are not buffered in memory. This is essentially identical to
+ * {@link org.apache.spark.shuffle.hash.HashShuffleWriter}, except that it writes output in a format
+ * that can be served / consumed via {@link org.apache.spark.shuffle.IndexShuffleBlockResolver}.
+ * <p>
+ * This write path is inefficient for shuffles with large numbers of reduce partitions because it
+ * simultaneously opens separate serializers and file streams for all partitions. As a result,
+ * {@link SortShuffleManager} only selects this write path when
+ * <ul>
+ *    <li>no Ordering is specified,</li>
+ *    <li>no Aggregator is specific, and</li>
+ *    <li>the number of partitions is less than
+ *      <code>spark.shuffle.sort.bypassMergeThreshold</code>.</li>
+ * </ul>
  *
- * This path used to be part of [[ExternalSorter]] but was refactored into its own class in order to
- * reduce code complexity; see SPARK-7855 for more details.
- *
+ * This code used to be part of {@link org.apache.spark.util.collection.ExternalSorter} but was
+ * refactored into its own class in order to reduce code complexity; see SPARK-7855 for details.
+ * <p>
  * There have been proposals to completely remove this code path; see SPARK-6026 for details.
  */
 final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<K, V> {
