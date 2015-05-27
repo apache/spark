@@ -23,25 +23,37 @@ if sys.version > '3':
 import numpy as np
 
 from pyspark.mllib.common import callMLlibFunc
+from pyspark.rdd import RDD
 
 class KernelDensity(object):
     """
     .. note:: Experimental
 
-    Estimate probabiltiy density at required points given a sample from the
-    population.
+    Estimate probability density at required points given a RDD of samples
+    from the population.
+
+    >>> kd = KernelDensity()
+    >>> sample = sc.parallelize([0.0, 1.0])
+    >>> kd.setSample(sample)
+    >>> kd.estimate([0.0, 1.0])
+    array([ 0.12938758,  0.12938758])
     """
     def __init__(self):
         self._bandwidth = 1.0
-        self._sample = 0
+        self._sample = None
 
     def setBandwidth(self, bandwidth):
+        """Set bandwidth of each sample. Defaults to 1.0"""
         self._bandwidth = bandwidth
 
     def setSample(self, sample):
+        """Set sample points from the population. Should be a RDD"""
+        if not isinstance(sample, RDD):
+            raise TypeError("samples should be a RDD, received %s" % type(sample))
         self._sample = sample
 
     def estimate(self, points):
+        """Estimate the probability density at points"""
         points = list(points)
         densities = callMLlibFunc(
             "estimateKernelDensity", self._sample, self._bandwidth, points) 
