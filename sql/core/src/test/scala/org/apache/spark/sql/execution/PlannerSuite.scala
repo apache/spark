@@ -143,4 +143,15 @@ class PlannerSuite extends FunSuite {
 
     setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold.toString)
   }
+
+  test("SPARK-7885:Turn off the HashAggregation optimization") {
+    setConf(SQLConf.PARTITIAL_AGGREGATION, false.toString)
+    val query = testData.groupBy('value).agg(count('key)).queryExecution.analyzed
+    val planned = HashAggregation(query).head
+    val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
+
+    assert(aggregations.size === 1)
+
+
+  }
 }
