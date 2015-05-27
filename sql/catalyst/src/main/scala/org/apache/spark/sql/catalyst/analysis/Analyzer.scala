@@ -494,7 +494,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _))
           if aggregate.resolved && containsAggregate(havingCondition) => {
-        val evaluatedCondition = Alias(havingCondition,  "havingCondition")()
+        val evaluatedCondition = Alias(havingCondition,  "having-Condition")()
         val aggExprsWithHaving = evaluatedCondition +: originalAggExprs
 
         Project(aggregate.output,

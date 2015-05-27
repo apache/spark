@@ -1331,4 +1331,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
     checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
   }
+
+
+  test("test default column alias") {
+    checkAnswer(
+      sql("select substr(value, 0, 2), key as c0 from testData order by c0 desc limit 2"),
+      Row("10", 100) :: Row("99", 99) :: Nil)
+
+    checkAnswer(
+      sql("select key as havingCondition from testData group by key having key > count(*)"),
+      (2 to 100).map(Row(_)))
+  }
 }

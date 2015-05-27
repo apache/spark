@@ -116,7 +116,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected def assignAliases(exprs: Seq[Expression]): Seq[NamedExpression] = {
     exprs.zipWithIndex.map {
       case (ne: NamedExpression, _) => ne
-      case (e, i) => Alias(e, s"c$i")()
+      case (e, i) => Alias(e, s"col-$i")()
     }
   }
 
