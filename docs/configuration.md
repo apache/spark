@@ -1482,7 +1482,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.streamingListeners</code></td>
+  <td><code>spark.streaming.listeners</code></td>
   <td>(none)</td>
   <td>
     A comma-separated list of classes that implement <code>StreamingListener</code>; when initializing

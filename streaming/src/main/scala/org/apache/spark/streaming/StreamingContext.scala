@@ -530,13 +530,13 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Registers streamingListeners specified in spark.streamingListeners
+   * Registers streamingListeners specified in spark.streaming.listeners
    */
   private def setupStreamingListeners(): Unit = {
     // Use reflection to instantiate listeners specified via `spark.extraListeners`
     try {
       val listenerClassNames: Seq[String] =
-        conf.get("spark.streamingListeners", "").split(',').map(_.trim).filter(_ != "")
+        conf.get("spark.streaming.listeners", "").split(',').map(_.trim).filter(_ != "")
       for (className <- listenerClassNames) {
         // Use reflection to find the right constructor
         val constructors = {
