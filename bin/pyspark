@@ -93,7 +93,7 @@ if [[ -n "$SPARK_TESTING" ]]; then
   if [[ -n "$PYSPARK_DOC_TEST" ]]; then
     exec "$PYSPARK_DRIVER_PYTHON" -m doctest $1
   else
-    exec "$PYSPARK_DRIVER_PYTHON" $1
+    exec "$PYSPARK_DRIVER_PYTHON" -m $1
   fi
   exit
 fi
