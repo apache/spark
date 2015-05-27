@@ -151,4 +151,20 @@ class CliSuite extends FunSuite with BeforeAndAfter with Logging {
         -> "hive_test"
     )
   }
+
+  test("Single command with --jars") {
+    val jarFile =
+      Thread.currentThread().getContextClassLoader
+        .getResource("data/files/hive-hcatalog-core-0.13.1.jar")
+    runCliWithin(1.minute,
+      Seq(
+        "--jars",
+        s"$jarFile",
+        "-e",
+        """CREATE TABLE t1(a string, b string) ROW FORMAT
+          | SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';""".stripMargin))(
+      ""
+        -> "OK"
+    )
+  }
 }
