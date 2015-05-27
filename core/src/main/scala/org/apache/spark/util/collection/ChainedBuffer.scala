@@ -32,7 +32,7 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
   assert(math.pow(2, chunkSizeLog2).toInt == chunkSize,
     s"ChainedBuffer chunk size $chunkSize must be a power of two")
   private val chunks: ArrayBuffer[Array[Byte]] = new ArrayBuffer[Array[Byte]]()
-  private var _size: Long = _
+  private var _size: Long = 0
 
   /**
    * Feed bytes from this buffer into a BlockObjectWriter.
