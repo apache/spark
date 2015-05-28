@@ -343,17 +343,19 @@ class DAGSchedulerSuite
   }
 
   /**
+   * This test ensures that if a particular RDD is cached, RDDs earlier in the dependency chain
+   * are not computed. It constructs the following chain of dependencies:
    * +---+ shuffle +---+    +---+    +---+
    * | A |<--------| B |<---| C |<---| D |
    * +---+         +---+    +---+    +---+
-   * Here, D has one-to-one dependencies on C. C is derived from A by performing a shuffle
-   * and then a map. If we're trying to determine which ancestor stages need to be computed in
-   * order to compute D, we need to figure out whether the shuffle A -> B should be performed.
-   * If the RDD C, which has only one ancestor via a narrow dependency, is cached, then we won't
-   * need to compute A, even if it has some unavailable output partitions. The same goes for B:
-   * if B is 100% cached, then we can avoid the shuffle on A.
+   * Here, B is derived from A by performing a shuffle, C has a one-to-one dependency on B,
+   * and D similarly has a one-to-one dependency on C. If none of the RDDs were cached, this
+   * set of RDDs would result in a two stage job: one ShuffleMapStage, and a ResultStage that
+   * reads the shuffled data from RDD A. This test ensures that if C is cached, the scheduler
+   * doesn't perform a shuffle, and instead computes the result using a single ResultStage
+   * that reads C's cached data.
    */
-  test("SPARK-7826: getMissingParentStages should consider all ancestor RDDs' cache statuses") {
+  test("getMissingParentStages should consider all ancestor RDDs' cache statuses") {
     val rddA = new MyRDD(sc, 1, Nil)
     val rddB = new MyRDD(sc, 1, List(new ShuffleDependency(rddA, null)))
     val rddC = new MyRDD(sc, 1, List(new OneToOneDependency(rddB))).cache()
@@ -362,7 +364,9 @@ class DAGSchedulerSuite
       Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
     submit(rddD, Array(0))
     assert(scheduler.runningStages.size === 1)
-    assert(scheduler.runningStages.head.id === 1)
+    // Make sure that the scheduler is running the final result stage.
+    // Because C is cached, the shuffle map stage to compute A does not need to be run.
+    assert(scheduler.runningStages.head.isInstanceOf[ResultStage])
   }
 
   test("avoid exponential blowup when getting preferred locs list") {
