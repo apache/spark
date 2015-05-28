@@ -21,25 +21,28 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.sideBySide
 
-/**
- * An execution strategy for rules that indicates the maximum number of executions. If the
- * execution reaches fix point (i.e. converge) before maxIterations, it will stop.
- */
-abstract class Strategy { def maxIterations: Int }
+object RuleExecutor {
+  /**
+   * An execution strategy for rules that indicates the maximum number of executions. If the
+   * execution reaches fix point (i.e. converge) before maxIterations, it will stop.
+   */
+  abstract class Strategy { def maxIterations: Int }
 
-/** A strategy that only runs once. */
-case object Once extends Strategy { val maxIterations = 1 }
+  /** A strategy that only runs once. */
+  case object Once extends Strategy { val maxIterations = 1 }
 
-/** A strategy that runs until fix point or maxIterations times, whichever comes first. */
-case class FixedPoint(maxIterations: Int) extends Strategy
+  /** A strategy that runs until fix point or maxIterations times, whichever comes first. */
+  case class FixedPoint(maxIterations: Int) extends Strategy
 
-/** A batch of rules. */
-case class Batch[TreeType <: TreeNode[_]](name: String, strategy: Strategy, rules: Rule[TreeType]*)
+  /** A batch of rules. */
+  case class Batch[TreeType <: TreeNode[_]](name: String, strategy: Strategy, rules: Rule[TreeType]*)
+}
 
 abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
+  type Batch = RuleExecutor.Batch[TreeType]
 
   /** Defines a sequence of rule batches, to be overridden by the implementation. */
-  protected val batches: Seq[Batch[TreeType]]
+  protected val batches: Seq[Batch]
 
   /**
    * Executes the batches of rules defined by the subclass. The batches are executed serially
