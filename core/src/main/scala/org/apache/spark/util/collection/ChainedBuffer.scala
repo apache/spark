@@ -28,8 +28,10 @@ import scala.collection.mutable.ArrayBuffer
  * occupy a contiguous segment of memory.
  */
 private[spark] class ChainedBuffer(chunkSize: Int) {
-  private val chunkSizeLog2 = (math.log(chunkSize) / math.log(2)).toInt
-  assert(math.pow(2, chunkSizeLog2).toInt == chunkSize,
+
+  private val chunkSizeLog2: Int = java.lang.Long.numberOfTrailingZeros(
+    java.lang.Long.highestOneBit(chunkSize))
+  assert((1 << chunkSizeLog2) == chunkSize,
     s"ChainedBuffer chunk size $chunkSize must be a power of two")
   private val chunks: ArrayBuffer[Array[Byte]] = new ArrayBuffer[Array[Byte]]()
   private var _size: Long = 0
@@ -47,7 +49,7 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
         s"Read of $len bytes at position $pos would go past size ${_size} of buffer")
     }
     var chunkIndex: Int = (pos >> chunkSizeLog2).toInt
-    var posInChunk: Int = (pos - (chunkIndex << chunkSizeLog2)).toInt
+    var posInChunk: Int = (pos - (chunkIndex.toLong << chunkSizeLog2)).toInt
     var written: Int = 0
     while (written < len) {
       val toRead: Int = math.min(len - written, chunkSize - posInChunk)
@@ -72,7 +74,7 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
         s"Read of $len bytes at position $pos would go past size of buffer")
     }
     var chunkIndex: Int = (pos >> chunkSizeLog2).toInt
-    var posInChunk: Int = (pos - (chunkIndex << chunkSizeLog2)).toInt
+    var posInChunk: Int = (pos - (chunkIndex.toLong << chunkSizeLog2)).toInt
     var written: Int = 0
     while (written < len) {
       val toRead: Int = math.min(len - written, chunkSize - posInChunk)
@@ -102,9 +104,9 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
       chunks += new Array[Byte](chunkSize)
     }
 
-    var chunkIndex = (pos >> chunkSizeLog2).toInt
-    var posInChunk = (pos - (chunkIndex << chunkSizeLog2)).toInt
-    var written = 0
+    var chunkIndex: Int = (pos >> chunkSizeLog2).toInt
+    var posInChunk: Int = (pos - (chunkIndex.toLong << chunkSizeLog2)).toInt
+    var written: Int = 0
     while (written < len) {
       val toWrite: Int = math.min(len - written, chunkSize - posInChunk)
       System.arraycopy(bytes, offs + written, chunks(chunkIndex), posInChunk, toWrite)
@@ -119,7 +121,7 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
   /**
    * Total size of buffer that can be written to without allocating additional memory.
    */
-  def capacity: Long = chunks.size * chunkSize
+  def capacity: Long = chunks.size.toLong * chunkSize
 
   /**
    * Size of the logical buffer.
