@@ -17,7 +17,7 @@
 
 package org.apache.spark.serializer
 
-import java.io.ByteArrayOutputStream
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -361,6 +361,41 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   }
 }
 
+class KryoSerializerAutoResetDisabledSuite extends FunSuite with SharedSparkContext {
+  conf.set("spark.serializer", classOf[KryoSerializer].getName)
+  conf.set("spark.kryo.registrator", classOf[RegistratorWithoutAutoReset].getName)
+  conf.set("spark.kryo.referenceTracking", "true")
+  conf.set("spark.shuffle.manager", "sort")
+  conf.set("spark.shuffle.sort.bypassMergeThreshold", "200")
+
+  test("sort-shuffle with bypassMergeSort (SPARK-7873)") {
+    val myObject = ("Hello", "World")
+    assert(sc.parallelize(Seq.fill(100)(myObject)).repartition(2).collect().toSet === Set(myObject))
+  }
+
+  test("calling deserialize() after deserializeStream()") {
+    val serInstance = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
+    assert(!serInstance.getAutoReset())
+    val hello = "Hello"
+    val world = "World"
+    // Here, we serialize the same value twice, so the reference-tracking should cause us to store
+    // references to some of these values
+    val helloHello = serInstance.serialize((hello, hello))
+    // Here's a stream which only contains one value
+    val worldWorld: Array[Byte] = {
+      val baos = new ByteArrayOutputStream()
+      val serStream = serInstance.serializeStream(baos)
+      serStream.writeObject(world)
+      serStream.writeObject(world)
+      serStream.close()
+      baos.toByteArray
+    }
+    val deserializationStream = serInstance.deserializeStream(new ByteArrayInputStream(worldWorld))
+    assert(deserializationStream.readValue[Any]() === world)
+    deserializationStream.close()
+    assert(serInstance.deserialize[Any](helloHello) === (hello, hello))
+  }
+}
 
 class ClassLoaderTestingObject
 
