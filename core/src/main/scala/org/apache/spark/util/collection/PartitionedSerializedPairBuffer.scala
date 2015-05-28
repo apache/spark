@@ -48,6 +48,8 @@ import org.apache.spark.util.collection.PartitionedSerializedPairBuffer._
  *   |         keyStart         | keyValLen  | partitionId |
  *   +-------------+------------+------------+-------------+
  *
+ * The buffer can support up to 536870911 records.
+ *
  * @param metaInitialRecords The initial number of entries in the metadata buffer.
  * @param kvBlockSize The size of each byte buffer in the ChainedBuffer used to store the records.
  * @param serializerInstance the serializer used for serializing inserted records.
@@ -63,6 +65,8 @@ private[spark] class PartitionedSerializedPairBuffer[K, V](
       " Java-serialized objects.")
   }
 
+  require(metaInitialRecords <= MAXIMUM_RECORDS,
+    s"Can't make capacity bigger than ${MAXIMUM_RECORDS} records")
   private var metaBuffer = IntBuffer.allocate(metaInitialRecords * RECORD_SIZE)
 
   private val kvBuffer: ChainedBuffer = new ChainedBuffer(kvBlockSize)
@@ -89,11 +93,17 @@ private[spark] class PartitionedSerializedPairBuffer[K, V](
 
   /** Double the size of the array because we've reached capacity */
   private def growMetaBuffer(): Unit = {
-    if (metaBuffer.capacity.toLong * 2 > Int.MaxValue) {
-      // Doubling the capacity would create an array bigger than Int.MaxValue, so don't
-      throw new Exception(s"Can't grow buffer beyond ${Int.MaxValue} bytes")
+    if (metaBuffer.capacity >= MAXIMUM_META_BUFFER_CAPACITY) {
+      throw new IllegalStateException(s"Can't grow buffer beyond ${MAXIMUM_RECORDS} records")
     }
-    val newMetaBuffer = IntBuffer.allocate(metaBuffer.capacity * 2)
+    val newCapacity =
+      if (metaBuffer.capacity * 2 < 0 || metaBuffer.capacity * 2 > MAXIMUM_META_BUFFER_CAPACITY) {
+        // Overflow
+        MAXIMUM_META_BUFFER_CAPACITY
+      } else {
+        metaBuffer.capacity * 2
+      }
+    val newMetaBuffer = IntBuffer.allocate(newCapacity)
     newMetaBuffer.put(metaBuffer.array)
     metaBuffer = newMetaBuffer
   }
@@ -256,6 +266,9 @@ private[spark] object PartitionedSerializedPairBuffer {
   val KEY_VAL_LEN = 2
   val PARTITION = 3
   val RECORD_SIZE = PARTITION + 1 // num ints of metadata
+
+  val MAXIMUM_RECORDS = Int.MaxValue / RECORD_SIZE // (2 ^ 29) - 1
+  val MAXIMUM_META_BUFFER_CAPACITY = MAXIMUM_RECORDS * RECORD_SIZE // (2 ^ 31) - 4
 
   def getKeyStartPos(metaBuffer: IntBuffer, metaBufferPos: Int): Long = {
     val lower32 = metaBuffer.get(metaBufferPos + KEY_START)
