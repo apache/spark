@@ -189,24 +189,22 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           "Specify a vaild path to the correct hive jars using $HIVE_METASTORE_JARS " +
           s"or change $HIVE_METASTORE_VERSION to $hiveExecutionVersion.")
       }
-      // We recursively add all jars in the class loader chain,
-      // starting from the given urlClassLoader.
-      def addJars(urlClassLoader: URLClassLoader): Array[URL] = {
-        val jarsInParent = urlClassLoader.getParent match {
-          case parent: URLClassLoader => addJars(parent)
-          case other => Array.empty[URL]
-        }
 
-        urlClassLoader.getURLs ++ jarsInParent
+      // We recursively find all jars in the class loader chain,
+      // starting from the given classLoader.
+      def allJars(classLoader: ClassLoader): Array[URL] = classLoader match {
+        case null => Array.empty[URL]
+        case urlClassLoader: URLClassLoader =>
+          urlClassLoader.getURLs ++ allJars(urlClassLoader.getParent)
+        case other => allJars(other.getParent)
       }
 
-      val jars = Utils.getContextOrSparkClassLoader match {
-        case urlClassLoader: URLClassLoader => addJars(urlClassLoader)
-        case other =>
-          throw new IllegalArgumentException(
-            "Unable to locate hive jars to connect to metastore " +
-            s"using classloader ${other.getClass.getName}. " +
-            "Please set spark.sql.hive.metastore.jars")
+      val classLoader = Utils.getContextOrSparkClassLoader
+      val jars = allJars(classLoader)
+      if (jars.length == 0) {
+        throw new IllegalArgumentException(
+          "Unable to locate hive jars to connect to metastore. " +
+            "Please set spark.sql.hive.metastore.jars.")
       }
 
       logInfo(
