@@ -19,9 +19,11 @@ package org.apache.spark.rdd
 
 import java.io.{IOException, ObjectOutputStream}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark._
+import org.apache.spark.storage.{BlockId, BlockStatus, RDDBlockId}
 import org.apache.spark.util.Utils
 
 private[spark]
@@ -72,8 +74,21 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
 
   override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {
     val currSplit = split.asInstanceOf[CartesianPartition]
+
+    val key = RDDBlockId(rdd2.id, currSplit.s2.index)
+    val updatedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
+    def cachedValues(): Iterator[U] = {
+      SparkEnv.get.blockManager.memoryStore.unrollSafely(key,
+        rdd2.iterator(currSplit.s2, context), updatedBlocks) match {
+          case Left(arr) =>
+            arr.iterator.asInstanceOf[Iterator[U]]
+          case Right(it) =>
+            it.asInstanceOf[Iterator[U]]
+        }
+    }
+
     for (x <- rdd1.iterator(currSplit.s1, context);
-         y <- rdd2.iterator(currSplit.s2, context)) yield (x, y)
+         y <- new InterruptibleIterator(context, cachedValues())) yield (x, y)
   }
 
   override def getDependencies: Seq[Dependency[_]] = List(

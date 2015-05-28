@@ -132,7 +132,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
     assert(cartRead != 0)
     assert(bytesRead != 0)
     // We read from the first rdd of the cartesian once per partition.
-    assert(cartRead == bytesRead * numPartitions)
+    assert(cartRead == bytesRead + bytesRead2)
   }
 
   test("input metrics for new Hadoop API with coalesce") {
@@ -286,7 +286,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
     // As a result we read from the second partition n times where n is the number of keys in
     // p1. Thus the math below for the test.
     assert(cartesianBytes != 0)
-    assert(cartesianBytes == firstSize * numPartitions + (cartVector.length  * secondSize))
+    assert(cartesianBytes == firstSize + secondSize)
   }
 
   private def runAndReturnBytesRead(job: => Unit): Long = {
