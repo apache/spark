@@ -87,9 +87,10 @@ abstract class Expression extends TreeNode[Expression] {
     }
   }
 
-  def typeMismatchErrorMessage: Option[String] = None
-
-  def validInputTypes: Boolean = typeMismatchErrorMessage.isEmpty
+  /**
+   * todo
+   */
+  def checkInputDataTypes: Option[String] = None
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
@@ -110,10 +111,6 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
-
-  override def foldable: Boolean = child.foldable
-
-  override def nullable: Boolean = child.nullable
 }
 
 // TODO Semantically we probably not need GroupExpression
@@ -137,5 +134,9 @@ trait ExpectsInputTypes {
 
   def expectedChildTypes: Seq[DataType]
 
-  override def validInputTypes: Boolean = children.map(_.dataType) == expectedChildTypes
+  override def checkInputDataTypes: Option[String] = {
+    // We will always do type casting for `ExpectsInputTypes` in `HiveTypeCoercion`,
+    // so type mismatch error won't be reported here, but for underling `Cast`s.
+    None
+  }
 }

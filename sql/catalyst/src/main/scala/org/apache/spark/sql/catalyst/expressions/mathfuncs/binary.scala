@@ -51,9 +51,8 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   }
 }
 
-case class Atan2(
-    left: Expression,
-    right: Expression) extends BinaryMathExpression(math.atan2, "ATAN2") {
+case class Atan2(left: Expression, right: Expression)
+  extends BinaryMathExpression(math.atan2, "ATAN2") {
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
@@ -73,8 +72,7 @@ case class Atan2(
   }
 }
 
-case class Hypot(
-    left: Expression,
-    right: Expression) extends BinaryMathExpression(math.hypot, "HYPOT")
+case class Hypot(left: Expression, right: Expression)
+  extends BinaryMathExpression(math.hypot, "HYPOT")
 
 case class Pow(left: Expression, right: Expression) extends BinaryMathExpression(math.pow, "POWER")

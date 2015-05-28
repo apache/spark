@@ -17,36 +17,18 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.types.{AtomicType, IntegralType, NumericType, DataType}
+import org.apache.spark.sql.types._
 
 /**
  * Helper function to check valid data types
  */
 object TypeUtils {
 
-  def checkForNumericExpr(t: DataType, errorMsg: => String): Option[String] = {
-    if (t.isInstanceOf[NumericType]) {
-      None
-    } else {
-      Some(errorMsg)
-    }
-  }
+  def validForNumericExpr(t: DataType): Boolean = t.isInstanceOf[NumericType] || t == NullType
 
-  def checkForBitwiseExpr(t: DataType, errorMsg: => String): Option[String] = {
-    if (t.isInstanceOf[IntegralType]) {
-      None
-    } else {
-      Some(errorMsg)
-    }
-  }
+  def validForBitwiseExpr(t: DataType): Boolean = t.isInstanceOf[IntegralType] || t == NullType
 
-  def checkForOrderingExpr(t: DataType, errorMsg: => String): Option[String] = {
-    if (t.isInstanceOf[AtomicType]) {
-      None
-    } else {
-      Some(errorMsg)
-    }
-  }
+  def validForOrderingExpr(t: DataType): Boolean = t.isInstanceOf[AtomicType] || t == NullType
 
   def getNumeric(t: DataType): Numeric[Any] =
     t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]

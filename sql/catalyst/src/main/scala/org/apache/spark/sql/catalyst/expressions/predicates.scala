@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType}
+import org.apache.spark.sql.types.{DecimalType, BinaryType, BooleanType, DataType}
 
 object InterpretedPredicate {
   def create(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
@@ -69,6 +69,8 @@ trait PredicateHelper {
 
 
 case class Not(child: Expression) extends UnaryExpression with Predicate with ExpectsInputTypes {
+  override def foldable: Boolean = child.foldable
+  override def nullable: Boolean = child.nullable
   override def toString: String = s"NOT $child"
 
   override def expectedChildTypes: Seq[DataType] = Seq(BooleanType)
@@ -169,30 +171,40 @@ case class Or(left: Expression, right: Expression)
 abstract class BinaryComparison extends BinaryExpression with Predicate {
   self: Product =>
 
-  override def typeMismatchErrorMessage: Option[String] = {
+  override def checkInputDataTypes: Option[String] = {
     if (left.dataType != right.dataType) {
       Some(s"differing types in BinaryComparisons, ${left.dataType}, ${right.dataType}")
     } else {
-      errorMessageInternal(left.dataType)
+      checkTypesInternal(left.dataType)
     }
   }
 
-  protected def errorMessageInternal(t: DataType): Option[String] = None
+  protected def checkTypesInternal(t: DataType): Option[String] = None
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if(evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        evalInternal(evalE1, evalE2)
+      }
+    }
+  }
+
+  protected def evalInternal(evalE1: Any, evalE2: Any): Any =
+    sys.error(s"BinaryArithmetics must either override eval or evalInternal")
 }
 
 case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "="
 
-  override def eval(input: Row): Any = {
-    val l = left.eval(input)
-    if (l == null) {
-      null
-    } else {
-      val r = right.eval(input)
-      if (r == null) null
-      else if (left.dataType != BinaryType) l == r
-      else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
-    }
+  protected override def evalInternal(l: Any, r: Any) = {
+    if (left.dataType != BinaryType) l == r
+    else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
   }
 }
 
@@ -217,97 +229,65 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<"
 
-  override protected def errorMessageInternal(t: DataType) = {
-    TypeUtils.checkForOrderingExpr(t, "todo")
+  override protected def checkTypesInternal(t: DataType) = {
+    if (TypeUtils.validForOrderingExpr(t)) {
+      None
+    } else {
+      Some("todo")
+    }
   }
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    if (evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        ordering.lt(evalE1, evalE2)
-      }
-    }
-  }
+  protected override def evalInternal(evalE1: Any, evalE2: Any) = ordering.lt(evalE1, evalE2)
 }
 
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<="
 
-  override protected def errorMessageInternal(t: DataType) = {
-    TypeUtils.checkForOrderingExpr(t, "todo")
+  override protected def checkTypesInternal(t: DataType) = {
+    if (TypeUtils.validForOrderingExpr(t)) {
+      None
+    } else {
+      Some("todo")
+    }
   }
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    if (evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        ordering.lteq(evalE1, evalE2)
-      }
-    }
-  }
+  protected override def evalInternal(evalE1: Any, evalE2: Any) = ordering.lteq(evalE1, evalE2)
 }
 
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = ">"
 
-  override protected def errorMessageInternal(t: DataType) = {
-    TypeUtils.checkForOrderingExpr(t, "todo")
+  override protected def checkTypesInternal(t: DataType) = {
+    if (TypeUtils.validForOrderingExpr(t)) {
+      None
+    } else {
+      Some("todo")
+    }
   }
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    if(evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        ordering.gt(evalE1, evalE2)
-      }
-    }
-  }
+  protected override def evalInternal(evalE1: Any, evalE2: Any) = ordering.gt(evalE1, evalE2)
 }
 
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = ">="
 
-  override protected def errorMessageInternal(t: DataType) = {
-    TypeUtils.checkForOrderingExpr(t, "todo")
+  override protected def checkTypesInternal(t: DataType) = {
+    if (TypeUtils.validForOrderingExpr(t)) {
+      None
+    } else {
+      Some("todo")
+    }
   }
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    if (evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        ordering.gteq(evalE1, evalE2)
-      }
-    }
-  }
+  protected override def evalInternal(evalE1: Any, evalE2: Any) = ordering.gteq(evalE1, evalE2)
 }
 
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
@@ -316,7 +296,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def children: Seq[Expression] = predicate :: trueValue :: falseValue :: Nil
   override def nullable: Boolean = trueValue.nullable || falseValue.nullable
 
-  override def typeMismatchErrorMessage: Option[String] = {
+  override def checkInputDataTypes: Option[String] = {
     if (trueValue.dataType != falseValue.dataType) {
       Some(s"differing types in If, ${trueValue.dataType}, ${falseValue.dataType}")
     } else {
@@ -377,7 +357,7 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
 
   override def children: Seq[Expression] = branches
 
-  override def typeMismatchErrorMessage: Option[String] = {
+  override def checkInputDataTypes: Option[String] = {
     if (!whenList.forall(_.dataType == BooleanType)) {
       Some(s"WHEN expressions should all be boolean type")
     } else if (!valueTypesEqual) {
@@ -428,7 +408,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
 
   override def children: Seq[Expression] = key +: branches
 
-  override def typeMismatchErrorMessage: Option[String] = {
+  override def checkInputDataTypes: Option[String] = {
     if (!valueTypesEqual) {
       Some("THEN and ELSE expressions should all be same type")
     } else {
