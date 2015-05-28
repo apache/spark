@@ -59,5 +59,6 @@ object HBaseTest {
     hBaseRDD.count()
 
     sc.stop()
+    admin.close()
   }
 }

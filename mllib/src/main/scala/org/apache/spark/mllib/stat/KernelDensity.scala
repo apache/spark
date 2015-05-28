@@ -93,7 +93,7 @@ class KernelDensity extends Serializable {
           x._1(i) += normPdf(y, bandwidth, logStandardDeviationPlusHalfLog2Pi, points(i))
           i += 1
         }
-        (x._1, n)
+        (x._1, x._2 + 1)
       },
       (x, y) => {
         blas.daxpy(n, 1.0, y._1, 1, x._1, 1)
