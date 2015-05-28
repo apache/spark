@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  * The last category is not included by default (configurable via [[OneHotEncoder!.dropLast]]
  * because it makes the vector entries sum up to one, and hence linearly dependent.
  * So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
- * THe output vectors are sparse.
+ * The output vectors are sparse.
  *
  * @see [[StringIndexer]] for converting categorical values into category indices
  */
@@ -108,7 +108,7 @@ class OneHotEncoder(override val uid: String) extends Transformer
     }
 
     val outputAttrGroup = if (filteredOutputAttrNames.isDefined) {
-      val attrs: Array[Attribute] = outputAttrNames.get.map { name =>
+      val attrs: Array[Attribute] = filteredOutputAttrNames.get.map { name =>
         BinaryAttribute.defaultAttr.withName(name)
       }
       new AttributeGroup($(outputCol), attrs)
@@ -141,7 +141,7 @@ class OneHotEncoder(override val uid: String) extends Transformer
             math.max(m0, m1)
           }
         ).toInt + 1
-      val outputAttrNames = Array.tabulate(numAttrs)(i => inputColName + "_is_" + i)
+      val outputAttrNames = Array.tabulate(numAttrs)(i => inputColName + is + i)
       val filtered = if (shouldDropLast) outputAttrNames.dropRight(1) else outputAttrNames
       val outputAttrs: Array[Attribute] =
         filtered.map(name => BinaryAttribute.defaultAttr.withName(name))
