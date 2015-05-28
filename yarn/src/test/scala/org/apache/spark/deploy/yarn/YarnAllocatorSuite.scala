@@ -90,6 +90,7 @@ class YarnAllocatorSuite extends FunSuite with Matchers with BeforeAndAfterEach 
       "--jar", "somejar.jar",
       "--class", "SomeClass")
     new YarnAllocator(
+      "not used",
       conf,
       sparkConf,
       rmClient,

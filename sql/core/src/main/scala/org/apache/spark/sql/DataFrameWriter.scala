@@ -20,6 +20,8 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.jdbc.{JDBCWriteDetails, JdbcUtils}
 import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
 
@@ -149,21 +151,65 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * Inserts the content of the [[DataFrame]] to the specified table. It requires that
+   * the schema of the [[DataFrame]] is the same as the schema of the table.
+   *
+   * Because it inserts data to an existing table, format or options will be ignored.
+   *
+   * @since 1.4.0
+   */
+  def insertInto(tableName: String): Unit = {
+    val partitions =
+      partitioningColumns.map(_.map(col => col -> (None: Option[String])).toMap)
+    val overwrite = (mode == SaveMode.Overwrite)
+    df.sqlContext.executePlan(InsertIntoTable(
+      UnresolvedRelation(Seq(tableName)),
+      partitions.getOrElse(Map.empty[String, Option[String]]),
+      df.logicalPlan,
+      overwrite,
+      ifNotExists = false)).toRdd
+  }
+
+  /**
    * Saves the content of the [[DataFrame]] as the specified table.
+   *
+   * In the case the table already exists, behavior of this function depends on the
+   * save mode, specified by the `mode` function (default to throwing an exception).
+   * When `mode` is `Overwrite`, the schema of the [[DataFrame]] does not need to be
+   * the same as that of the existing table.
+   * When `mode` is `Append`, the schema of the [[DataFrame]] need to be
+   * the same as that of the existing table, and format or options will be ignored.
    *
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    val cmd =
-      CreateTableUsingAsSelect(
-        tableName,
-        source,
-        temporary = false,
-        partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
-        mode,
-        extraOptions.toMap,
-        df.logicalPlan)
-    df.sqlContext.executePlan(cmd).toRdd
+    if (df.sqlContext.catalog.tableExists(tableName :: Nil) && mode != SaveMode.Overwrite) {
+      mode match {
+        case SaveMode.Ignore =>
+          // Do nothing
+
+        case SaveMode.ErrorIfExists =>
+          throw new AnalysisException(s"Table $tableName already exists.")
+
+        case SaveMode.Append =>
+          // If it is Append, we just ask insertInto to handle it. We will not use insertInto
+          // to handle saveAsTable with Overwrite because saveAsTable can change the schema of
+          // the table. But, insertInto with Overwrite requires the schema of data be the same
+          // the schema of the table.
+          insertInto(tableName)
+      }
+    } else {
+      val cmd =
+        CreateTableUsingAsSelect(
+          tableName,
+          source,
+          temporary = false,
+          partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+          mode,
+          extraOptions.toMap,
+          df.logicalPlan)
+      df.sqlContext.executePlan(cmd).toRdd
+    }
   }
 
   /**

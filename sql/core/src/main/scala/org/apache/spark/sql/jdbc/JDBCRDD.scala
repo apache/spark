@@ -46,10 +46,14 @@ private[sql] object JDBCRDD extends Logging {
    * @param sqlType - A field of java.sql.Types
    * @return The Catalyst type corresponding to sqlType.
    */
-  private def getCatalystType(sqlType: Int, precision: Int, scale: Int): DataType = {
+  private def getCatalystType(
+      sqlType: Int,
+      precision: Int,
+      scale: Int,
+      signed: Boolean): DataType = {
     val answer = sqlType match {
       case java.sql.Types.ARRAY         => null
-      case java.sql.Types.BIGINT        => LongType
+      case java.sql.Types.BIGINT        => if (signed) { LongType } else { DecimalType.Unlimited }
       case java.sql.Types.BINARY        => BinaryType
       case java.sql.Types.BIT           => BooleanType // @see JdbcDialect for quirks
       case java.sql.Types.BLOB          => BinaryType
@@ -64,7 +68,7 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.DISTINCT      => null
       case java.sql.Types.DOUBLE        => DoubleType
       case java.sql.Types.FLOAT         => FloatType
-      case java.sql.Types.INTEGER       => IntegerType
+      case java.sql.Types.INTEGER       => if (signed) { IntegerType } else { LongType }
       case java.sql.Types.JAVA_OBJECT   => null
       case java.sql.Types.LONGNVARCHAR  => StringType
       case java.sql.Types.LONGVARBINARY => BinaryType
@@ -123,11 +127,12 @@ private[sql] object JDBCRDD extends Logging {
           val typeName = rsmd.getColumnTypeName(i + 1)
           val fieldSize = rsmd.getPrecision(i + 1)
           val fieldScale = rsmd.getScale(i + 1)
+          val isSigned = rsmd.isSigned(i + 1)
           val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
           val metadata = new MetadataBuilder().putString("name", columnName)
           val columnType =
             dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
-              getCatalystType(dataType, fieldSize, fieldScale))
+              getCatalystType(dataType, fieldSize, fieldScale, isSigned))
           fields(i) = StructField(columnName, columnType, nullable, metadata.build())
           i = i + 1
         }
@@ -211,7 +216,8 @@ private[sql] object JDBCRDD extends Logging {
       fqTable,
       requiredColumns,
       filters,
-      parts)
+      parts,
+      properties)
   }
 }
 
@@ -227,7 +233,8 @@ private[sql] class JDBCRDD(
     fqTable: String,
     columns: Array[String],
     filters: Array[Filter],
-    partitions: Array[Partition])
+    partitions: Array[Partition],
+    properties: Properties)
   extends RDD[Row](sc, Nil) {
 
   /**
@@ -356,6 +363,8 @@ private[sql] class JDBCRDD(
     val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause"
     val stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
+    val fetchSize = properties.getProperty("fetchSize", "0").toInt
+    stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()
 
     val conversions = getConversions(schema)

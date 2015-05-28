@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
+import java.net.{URL, URLClassLoader}
 import java.sql.Timestamp
 import java.util.{ArrayList => JArrayList}
 
@@ -25,6 +26,7 @@ import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.spark.sql.catalyst.ParserDialect
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.language.implicitConversions
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -153,11 +155,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * Hive 13 as this is the version of Hive that is packaged with Spark SQL.  This copy of the
    * client is used for execution related tasks like registering temporary functions or ensuring
    * that the ThreadLocal SessionState is correctly populated.  This copy of Hive is *not* used
-   * for storing peristent metadata, and only point to a dummy metastore in a temporary directory.
+   * for storing persistent metadata, and only point to a dummy metastore in a temporary directory.
    */
   @transient
   protected[hive] lazy val executionHive: ClientWrapper = {
-    logInfo(s"Initilizing execution hive, version $hiveExecutionVersion")
+    logInfo(s"Initializing execution hive, version $hiveExecutionVersion")
     new ClientWrapper(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
       config = newTemporaryConfiguration())
@@ -187,8 +189,19 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           "Specify a vaild path to the correct hive jars using $HIVE_METASTORE_JARS " +
           s"or change $HIVE_METASTORE_VERSION to $hiveExecutionVersion.")
       }
-      val jars = getClass.getClassLoader match {
-        case urlClassLoader: java.net.URLClassLoader => urlClassLoader.getURLs
+      // We recursively add all jars in the class loader chain,
+      // starting from the given urlClassLoader.
+      def addJars(urlClassLoader: URLClassLoader): Array[URL] = {
+        val jarsInParent = urlClassLoader.getParent match {
+          case parent: URLClassLoader => addJars(parent)
+          case other => Array.empty[URL]
+        }
+
+        urlClassLoader.getURLs ++ jarsInParent
+      }
+
+      val jars = Utils.getContextOrSparkClassLoader match {
+        case urlClassLoader: URLClassLoader => addJars(urlClassLoader)
         case other =>
           throw new IllegalArgumentException(
             "Unable to locate hive jars to connect to metastore " +
@@ -372,6 +385,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         ResolveHiveWindowFunction ::
         sources.PreInsertCastAndRename ::
         Nil
+
+      override val extendedCheckRules = Seq(
+        sources.PreWriteCheck(catalog)
+      )
     }
 
   override protected[sql] def createSession(): SQLSession = {
@@ -507,8 +524,19 @@ private[hive] object HiveContext {
   def newTemporaryConfiguration(): Map[String, String] = {
     val tempDir = Utils.createTempDir()
     val localMetastore = new File(tempDir, "metastore").getAbsolutePath
-    Map(
-      "javax.jdo.option.ConnectionURL" -> s"jdbc:derby:;databaseName=$localMetastore;create=true")
+    val propMap: HashMap[String, String] = HashMap()
+    // We have to mask all properties in hive-site.xml that relates to metastore data source
+    // as we used a local metastore here.
+    HiveConf.ConfVars.values().foreach { confvar  =>
+      if (confvar.varname.contains("datanucleus") || confvar.varname.contains("jdo")) {
+        propMap.put(confvar.varname, confvar.defaultVal)
+      }
+    }
+    propMap.put("javax.jdo.option.ConnectionURL",
+      s"jdbc:derby:;databaseName=$localMetastore;create=true")
+    propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
+      "org.datanucleus.store.rdbms.adapter.DerbyAdapter")
+    propMap.toMap
   }
 
   protected val primitiveTypes =

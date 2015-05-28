@@ -19,14 +19,13 @@ package org.apache.spark.sql
 
 import java.beans.Introspector
 import java.util.Properties
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConversions._
 import scala.collection.immutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
-import com.google.common.reflect.TypeToken
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -391,7 +390,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     SparkPlan.currentContext.set(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
-    val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
+    val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
     DataFrame(self, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
@@ -1010,7 +1009,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns a Catalyst Schema for the given java bean class.
    */
   protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
-    val (dataType, _) = JavaTypeInference.inferDataType(TypeToken.of(beanClass))
+    val (dataType, _) = JavaTypeInference.inferDataType(beanClass)
     dataType.asInstanceOf[StructType].fields.map { f =>
       AttributeReference(f.name, f.dataType, f.nullable)()
     }
@@ -1270,9 +1269,53 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
-  // End of eeprecated methods
+  // End of deprecated methods
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
+
+
+  // Register a succesfully instantiatd context to the singleton. This should be at the end of
+  // the class definition so that the singleton is updated only if there is no exception in the
+  // construction of the instance.
+  SQLContext.setLastInstantiatedContext(self)
 }
 
+/**
+ * This SQLContext object contains utility functions to create a singleton SQLContext instance,
+ * or to get the last created SQLContext instance.
+ */
+object SQLContext {
 
+  private val INSTANTIATION_LOCK = new Object()
+
+  /**
+   * Reference to the last created SQLContext.
+   */
+  @transient private val lastInstantiatedContext = new AtomicReference[SQLContext]()
+
+  /**
+   * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
+   * This function can be used to create a singleton SQLContext object that can be shared across
+   * the JVM.
+   */
+  def getOrCreate(sparkContext: SparkContext): SQLContext = {
+    INSTANTIATION_LOCK.synchronized {
+      if (lastInstantiatedContext.get() == null) {
+        new SQLContext(sparkContext)
+      }
+    }
+    lastInstantiatedContext.get()
+  }
+
+  private[sql] def clearLastInstantiatedContext(): Unit = {
+    INSTANTIATION_LOCK.synchronized {
+      lastInstantiatedContext.set(null)
+    }
+  }
+
+  private[sql] def setLastInstantiatedContext(sqlContext: SQLContext): Unit = {
+    INSTANTIATION_LOCK.synchronized {
+      lastInstantiatedContext.set(sqlContext)
+    }
+  }
+}

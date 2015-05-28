@@ -40,7 +40,7 @@ function handle_error () {
 {
   if [ -n "$AMPLAB_JENKINS_BUILD_PROFILE" ]; then
     if [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop1.0" ]; then
-      export SBT_MAVEN_PROFILES_ARGS="-Phadoop-1 -Dhadoop.version=1.0.4"
+      export SBT_MAVEN_PROFILES_ARGS="-Phadoop-1 -Dhadoop.version=1.2.1"
     elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.0" ]; then
       export SBT_MAVEN_PROFILES_ARGS="-Phadoop-1 -Dhadoop.version=2.0.0-mr1-cdh4.1.1"
     elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.2" ]; then
@@ -82,24 +82,31 @@ export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pkinesis-asl"
 if [ -n "$AMPLAB_JENKINS" ]; then
   git fetch origin master:master
 
-  sql_diffs=$(
-    git diff --name-only master \
-    | grep -e "^sql/" -e "^bin/spark-sql" -e "^sbin/start-thriftserver.sh"
-  )
+  # AMP_JENKINS_PRB indicates if the current build is a pull request build.
+  if [ -n "$AMP_JENKINS_PRB" ]; then
+    # It is a pull request build.
+    sql_diffs=$(
+      git diff --name-only master \
+      | grep -e "^sql/" -e "^bin/spark-sql" -e "^sbin/start-thriftserver.sh"
+    )
 
-  non_sql_diffs=$(
-    git diff --name-only master \
-    | grep -v -e "^sql/" -e "^bin/spark-sql" -e "^sbin/start-thriftserver.sh"
-  )
+    non_sql_diffs=$(
+      git diff --name-only master \
+      | grep -v -e "^sql/" -e "^bin/spark-sql" -e "^sbin/start-thriftserver.sh"
+    )
 
-  if [ -n "$sql_diffs" ]; then
-    echo "[info] Detected changes in SQL. Will run Hive test suite."
-    _RUN_SQL_TESTS=true
+    if [ -n "$sql_diffs" ]; then
+      echo "[info] Detected changes in SQL. Will run Hive test suite."
+      _RUN_SQL_TESTS=true
 
-    if [ -z "$non_sql_diffs" ]; then
-      echo "[info] Detected no changes except in SQL. Will only run SQL tests."
-      _SQL_TESTS_ONLY=true
+      if [ -z "$non_sql_diffs" ]; then
+        echo "[info] Detected no changes except in SQL. Will only run SQL tests."
+        _SQL_TESTS_ONLY=true
+      fi
     fi
+  else
+    # It is a regular build. We should run SQL tests.
+    _RUN_SQL_TESTS=true
   fi
 fi
 

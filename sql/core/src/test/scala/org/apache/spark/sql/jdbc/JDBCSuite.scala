@@ -67,7 +67,15 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
-
+ 
+    sql(
+      s"""
+        |CREATE TEMPORARY TABLE fetchtwo
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
+        |         fetchSize '2')
+      """.stripMargin.replaceAll("\n", " "))
+ 
     sql(
       s"""
         |CREATE TEMPORARY TABLE parts
@@ -185,8 +193,24 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(names(2).equals("mary"))
   }
 
+  test("SELECT first field when fetchSize is two") {
+    val names = sql("SELECT NAME FROM fetchtwo").collect().map(x => x.getString(0)).sortWith(_ < _)
+    assert(names.size === 3)
+    assert(names(0).equals("fred"))
+    assert(names(1).equals("joe 'foo' \"bar\""))
+    assert(names(2).equals("mary"))
+  }
+
   test("SELECT second field") {
     val ids = sql("SELECT THEID FROM foobar").collect().map(x => x.getInt(0)).sortWith(_ < _)
+    assert(ids.size === 3)
+    assert(ids(0) === 1)
+    assert(ids(1) === 2)
+    assert(ids(2) === 3)
+  }
+ 
+  test("SELECT second field when fetchSize is two") {
+    val ids = sql("SELECT THEID FROM fetchtwo").collect().map(x => x.getInt(0)).sortWith(_ < _)
     assert(ids.size === 3)
     assert(ids(0) === 1)
     assert(ids(1) === 2)
@@ -230,6 +254,13 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
   test("Basic API") {
     assert(TestSQLContext.read.jdbc(
       urlWithUserAndPass, "TEST.PEOPLE", new Properties).collect().length === 3)
+  }
+
+  test("Basic API with FetchSize") {
+    val properties = new Properties
+    properties.setProperty("fetchSize", "2")
+    assert(TestSQLContext.read.jdbc(
+      urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {

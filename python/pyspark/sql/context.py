@@ -28,6 +28,7 @@ from py4j.protocol import Py4JError
 
 from pyspark.rdd import RDD, _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
+from pyspark.sql import since
 from pyspark.sql.types import Row, StringType, StructType, _verify_type, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter, _python_to_sql_converter
 from pyspark.sql.dataframe import DataFrame
@@ -106,11 +107,13 @@ class SQLContext(object):
             self._scala_SQLContext = self._jvm.SQLContext(self._jsc.sc())
         return self._scala_SQLContext
 
+    @since(1.3)
     def setConf(self, key, value):
         """Sets the given Spark SQL configuration property.
         """
         self._ssql_ctx.setConf(key, value)
 
+    @since(1.3)
     def getConf(self, key, defaultValue):
         """Returns the value of Spark SQL configuration property for the given key.
 
@@ -119,10 +122,12 @@ class SQLContext(object):
         return self._ssql_ctx.getConf(key, defaultValue)
 
     @property
+    @since("1.3.1")
     def udf(self):
         """Returns a :class:`UDFRegistration` for UDF registration."""
         return UDFRegistration(self)
 
+    @since(1.4)
     def range(self, start, end, step=1, numPartitions=None):
         """
         Create a :class:`DataFrame` with single LongType column named `id`,
@@ -144,6 +149,7 @@ class SQLContext(object):
         return DataFrame(jdf, self)
 
     @ignore_unicode_prefix
+    @since(1.2)
     def registerFunction(self, name, f, returnType=StringType()):
         """Registers a lambda function as a UDF so it can be used in SQL statements.
 
@@ -210,7 +216,8 @@ class SQLContext(object):
 
     @ignore_unicode_prefix
     def inferSchema(self, rdd, samplingRatio=None):
-        """::note: Deprecated in 1.3, use :func:`createDataFrame` instead.
+        """
+        .. note:: Deprecated in 1.3, use :func:`createDataFrame` instead.
         """
         warnings.warn("inferSchema is deprecated, please use createDataFrame instead")
 
@@ -221,7 +228,8 @@ class SQLContext(object):
 
     @ignore_unicode_prefix
     def applySchema(self, rdd, schema):
-        """::note: Deprecated in 1.3, use :func:`createDataFrame` instead.
+        """
+        .. note:: Deprecated in 1.3, use :func:`createDataFrame` instead.
         """
         warnings.warn("applySchema is deprecated, please use createDataFrame instead")
 
@@ -233,6 +241,7 @@ class SQLContext(object):
 
         return self.createDataFrame(rdd, schema)
 
+    @since(1.3)
     @ignore_unicode_prefix
     def createDataFrame(self, data, schema=None, samplingRatio=None):
         """
@@ -337,6 +346,7 @@ class SQLContext(object):
         df = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
         return DataFrame(df, self)
 
+    @since(1.3)
     def registerDataFrameAsTable(self, df, tableName):
         """Registers the given :class:`DataFrame` as a temporary table in the catalog.
 
@@ -349,6 +359,7 @@ class SQLContext(object):
         else:
             raise ValueError("Can only register DataFrame as table")
 
+    @since(1.0)
     def parquetFile(self, *paths):
         """Loads a Parquet file, returning the result as a :class:`DataFrame`.
 
@@ -367,6 +378,7 @@ class SQLContext(object):
         jdf = self._ssql_ctx.parquetFile(jpaths)
         return DataFrame(jdf, self)
 
+    @since(1.0)
     def jsonFile(self, path, schema=None, samplingRatio=1.0):
         """Loads a text file storing one JSON object per line as a :class:`DataFrame`.
 
@@ -407,6 +419,7 @@ class SQLContext(object):
         return DataFrame(df, self)
 
     @ignore_unicode_prefix
+    @since(1.0)
     def jsonRDD(self, rdd, schema=None, samplingRatio=1.0):
         """Loads an RDD storing one JSON object per string as a :class:`DataFrame`.
 
@@ -449,6 +462,7 @@ class SQLContext(object):
             df = self._ssql_ctx.jsonRDD(jrdd.rdd(), scala_datatype)
         return DataFrame(df, self)
 
+    @since(1.3)
     def load(self, path=None, source=None, schema=None, **options):
         """Returns the dataset in a data source as a :class:`DataFrame`.
 
@@ -460,6 +474,7 @@ class SQLContext(object):
         """
         return self.read.load(path, source, schema, **options)
 
+    @since(1.3)
     def createExternalTable(self, tableName, path=None, source=None,
                             schema=None, **options):
         """Creates an external table based on the dataset in a data source.
@@ -489,6 +504,7 @@ class SQLContext(object):
         return DataFrame(df, self)
 
     @ignore_unicode_prefix
+    @since(1.0)
     def sql(self, sqlQuery):
         """Returns a :class:`DataFrame` representing the result of the given query.
 
@@ -499,6 +515,7 @@ class SQLContext(object):
         """
         return DataFrame(self._ssql_ctx.sql(sqlQuery), self)
 
+    @since(1.0)
     def table(self, tableName):
         """Returns the specified table as a :class:`DataFrame`.
 
@@ -510,6 +527,7 @@ class SQLContext(object):
         return DataFrame(self._ssql_ctx.table(tableName), self)
 
     @ignore_unicode_prefix
+    @since(1.3)
     def tables(self, dbName=None):
         """Returns a :class:`DataFrame` containing names of tables in the given database.
 
@@ -528,6 +546,7 @@ class SQLContext(object):
         else:
             return DataFrame(self._ssql_ctx.tables(dbName), self)
 
+    @since(1.3)
     def tableNames(self, dbName=None):
         """Returns a list of names of tables in the database ``dbName``.
 
@@ -544,25 +563,27 @@ class SQLContext(object):
         else:
             return [name for name in self._ssql_ctx.tableNames(dbName)]
 
+    @since(1.0)
     def cacheTable(self, tableName):
         """Caches the specified table in-memory."""
         self._ssql_ctx.cacheTable(tableName)
 
+    @since(1.0)
     def uncacheTable(self, tableName):
         """Removes the specified table from the in-memory cache."""
         self._ssql_ctx.uncacheTable(tableName)
 
+    @since(1.3)
     def clearCache(self):
         """Removes all cached tables from the in-memory cache. """
         self._ssql_ctx.clearCache()
 
     @property
+    @since(1.4)
     def read(self):
         """
         Returns a :class:`DataFrameReader` that can be used to read data
         in as a :class:`DataFrame`.
-
-        ::note: Experimental
 
         >>> sqlContext.read
         <pyspark.sql.readwriter.DataFrameReader object at ...>

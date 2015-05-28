@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.errors.DialectException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
+import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -425,10 +425,10 @@ class SQLQuerySuite extends QueryTest {
   test("SPARK-4825 save join to table") {
     val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
     sql("CREATE TABLE test1 (key INT, value STRING)")
-    testData.insertInto("test1")
+    testData.write.mode(SaveMode.Append).insertInto("test1")
     sql("CREATE TABLE test2 (key INT, value STRING)")
-    testData.insertInto("test2")
-    testData.insertInto("test2")
+    testData.write.mode(SaveMode.Append).insertInto("test2")
+    testData.write.mode(SaveMode.Append).insertInto("test2")
     sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
     checkAnswer(
       table("test"),
@@ -812,6 +812,62 @@ class SQLQuerySuite extends QueryTest {
     }
     intercept[AnalysisException] {
       sql("SELECT cast(key+2 as Int) from df_analysis A group by cast(key+1 as int)")
+    }
+  }
+
+  // `Math.exp(1.0)` has different result for different jdk version, so not use createQueryTest
+  test("udf_java_method") {
+    checkAnswer(sql(
+      """
+        |SELECT java_method("java.lang.String", "valueOf", 1),
+        |       java_method("java.lang.String", "isEmpty"),
+        |       java_method("java.lang.Math", "max", 2, 3),
+        |       java_method("java.lang.Math", "min", 2, 3),
+        |       java_method("java.lang.Math", "round", 2.5),
+        |       java_method("java.lang.Math", "exp", 1.0),
+        |       java_method("java.lang.Math", "floor", 1.9)
+        |FROM src tablesample (1 rows)
+      """.stripMargin),
+      Row(
+        "1",
+        "true",
+        java.lang.Math.max(2, 3).toString,
+        java.lang.Math.min(2, 3).toString,
+        java.lang.Math.round(2.5).toString,
+        java.lang.Math.exp(1.0).toString,
+        java.lang.Math.floor(1.9).toString))
+  }
+
+  test("dynamic partition value test") {
+    try {
+      sql("set hive.exec.dynamic.partition.mode=nonstrict")
+      // date
+      sql("drop table if exists dynparttest1")
+      sql("create table dynparttest1 (value int) partitioned by (pdate date)")
+      sql(
+        """
+          |insert into table dynparttest1 partition(pdate)
+          | select count(*), cast('2015-05-21' as date) as pdate from src
+        """.stripMargin)
+      checkAnswer(
+        sql("select * from dynparttest1"),
+        Seq(Row(500, java.sql.Date.valueOf("2015-05-21"))))
+
+      // decimal
+      sql("drop table if exists dynparttest2")
+      sql("create table dynparttest2 (value int) partitioned by (pdec decimal(5, 1))")
+      sql(
+        """
+          |insert into table dynparttest2 partition(pdec)
+          | select count(*), cast('100.12' as decimal(5, 1)) as pdec from src
+        """.stripMargin)
+      checkAnswer(
+        sql("select * from dynparttest2"),
+        Seq(Row(500, new java.math.BigDecimal("100.1"))))
+    } finally {
+      sql("drop table if exists dynparttest1")
+      sql("drop table if exists dynparttest2")
+      sql("set hive.exec.dynamic.partition.mode=strict")
     }
   }
 }

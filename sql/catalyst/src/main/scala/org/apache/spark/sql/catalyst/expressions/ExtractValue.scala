@@ -92,8 +92,6 @@ object ExtractValue {
 
 trait ExtractValue extends UnaryExpression {
   self: Product =>
-
-  type EvaluatedType = Any
 }
 
 /**

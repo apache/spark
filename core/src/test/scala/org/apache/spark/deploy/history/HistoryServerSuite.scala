@@ -82,7 +82,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "running app list json" -> "applications?status=running",
     "minDate app list json" -> "applications?minDate=2015-02-10",
     "maxDate app list json" -> "applications?maxDate=2015-02-10",
-    "maxDate2 app list json" -> "applications?maxDate=2015-02-03T10:42:40.000CST",
+    "maxDate2 app list json" -> "applications?maxDate=2015-02-03T16:42:40.000GMT",
     "one app json" -> "applications/local-1422981780767",
     "one app multi-attempt json" -> "applications/local-1426533911241",
     "job list json" -> "applications/local-1422981780767/jobs",
@@ -198,11 +198,11 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
   }
 
   def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
-    HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/json/v1/$path"))
+    HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/api/v1/$path"))
   }
 
   def getUrl(path: String): String = {
-    HistoryServerSuite.getUrl(new URL(s"http://localhost:$port/json/v1/$path"))
+    HistoryServerSuite.getUrl(new URL(s"http://localhost:$port/api/v1/$path"))
   }
 
   def generateExpectation(name: String, path: String): Unit = {

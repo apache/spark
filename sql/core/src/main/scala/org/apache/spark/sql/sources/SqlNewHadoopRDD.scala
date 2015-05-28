@@ -75,10 +75,6 @@ private[sql] class SqlNewHadoopRDD[K, V](
   with SparkHadoopMapReduceUtil
   with Logging {
 
-  if (initLocalJobFuncOpt.isDefined) {
-    sc.clean(initLocalJobFuncOpt.get)
-  }
-
   protected def getJob(): Job = {
     val conf: Configuration = broadcastedConf.value.value
     // "new Job" will make a copy of the conf. Then, it is
