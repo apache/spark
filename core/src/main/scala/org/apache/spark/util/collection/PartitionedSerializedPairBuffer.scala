@@ -94,7 +94,7 @@ private[spark] class PartitionedSerializedPairBuffer[K, V](
   /** Double the size of the array because we've reached capacity */
   private def growMetaBuffer(): Unit = {
     if (metaBuffer.capacity >= MAXIMUM_META_BUFFER_CAPACITY) {
-      throw new IllegalStateException(s"Can't grow buffer beyond ${MAXIMUM_RECORDS} records")
+      throw new IllegalStateException(s"Can't insert more than ${MAXIMUM_RECORDS} records")
     }
     val newCapacity =
       if (metaBuffer.capacity * 2 < 0 || metaBuffer.capacity * 2 > MAXIMUM_META_BUFFER_CAPACITY) {

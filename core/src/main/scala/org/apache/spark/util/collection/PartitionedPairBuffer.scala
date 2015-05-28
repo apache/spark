@@ -57,7 +57,7 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
   /** Double the size of the array because we've reached capacity */
   private def growArray(): Unit = {
     if (capacity >= MAXIMUM_CAPACITY) {
-      throw new IllegalStateException(s"Can't grow buffer beyond ${MAXIMUM_CAPACITY} elements")
+      throw new IllegalStateException(s"Can't insert more than ${MAXIMUM_CAPACITY} elements")
     }
     val newCapacity =
       if (capacity * 2 < 0 || capacity * 2 > MAXIMUM_CAPACITY) { // Overflow
