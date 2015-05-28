@@ -168,10 +168,10 @@ private[spark] class DiskBlockObjectWriter(
       objOut.flush()
       bs.flush()
       close()
+      finalPosition = file.length()
+      // In certain compression codecs, more bytes are written after close() is called
+      writeMetrics.incShuffleBytesWritten(finalPosition - reportedPosition)
     }
-    finalPosition = file.length()
-    // In certain compression codecs, more bytes are written after close() is called
-    writeMetrics.incShuffleBytesWritten(finalPosition - reportedPosition)
     commitAndCloseHasBeenCalled = true
   }
 
@@ -179,10 +179,9 @@ private[spark] class DiskBlockObjectWriter(
   // truncating the file to its initial position.
   override def revertPartialWritesAndClose() {
     try {
-      writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition)
-      writeMetrics.decShuffleRecordsWritten(numRecordsWritten)
-
       if (initialized) {
+        writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition)
+        writeMetrics.decShuffleRecordsWritten(numRecordsWritten)
         objOut.flush()
         bs.flush()
         close()
