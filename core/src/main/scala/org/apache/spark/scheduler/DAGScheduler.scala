@@ -1360,10 +1360,10 @@ class DAGScheduler(
   private def getPreferredLocsInternal(
       rdd: RDD[_],
       partition: Int,
-      visited: HashSet[(RDD[_],Int)]): Seq[TaskLocation] = {
+      visited: HashSet[(RDD[_], Int)]): Seq[TaskLocation] = {
     // If the partition has already been visited, no need to re-visit.
     // This avoids exponential path exploration.  SPARK-695
-    if (!visited.add((rdd,partition))) {
+    if (!visited.add((rdd, partition))) {
       // Nil has already been returned for previously visited partitions.
       return Nil
     }

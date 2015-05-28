@@ -49,7 +49,7 @@ class CheckpointRDD[T: ClassTag](sc: SparkContext, val checkpointPath: String)
     if (fs.exists(cpath)) {
       val dirContents = fs.listStatus(cpath).map(_.getPath)
       val partitionFiles = dirContents.filter(_.getName.startsWith("part-")).map(_.toString).sorted
-      val numPart =  partitionFiles.length
+      val numPart = partitionFiles.length
       if (numPart > 0 && (! partitionFiles(0).endsWith(CheckpointRDD.splitIdToFile(0)) ||
           ! partitionFiles(numPart-1).endsWith(CheckpointRDD.splitIdToFile(numPart-1)))) {
         throw new SparkException("Invalid checkpoint directory: " + checkpointPath)
