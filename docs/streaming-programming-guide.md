@@ -653,8 +653,7 @@ methods for creating DStreams from files and Akka actors as input sources.
     </div>
     </div>
 
-	Spark Streaming will monitor the directory `dataDirectory` and process any files created in that directory (files written in nested directories not supported). Note that
-
+	Spark Streaming will monitor the directory `dataDirectory` and process any files created in that directory (files written in nested directories not supported). It can also monitor files in subdirectories by setting the optional `depth` parameter to a value greater than 1. Note that
      + The files must have the same data format.
      + The files must be created in the `dataDirectory` by atomically *moving* or *renaming* them into
      the data directory.
