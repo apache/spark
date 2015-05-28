@@ -410,6 +410,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.feature.ChiSqSelector
 
 // Load some data in libsvm format
 val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
