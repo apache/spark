@@ -84,11 +84,11 @@ class UISeleniumSuite
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         go to baseURL
-        find(cssSelector("""ul li a[href*="JDBCServer"]""")) should not be None
+        find(cssSelector("""ul li a[href*="SQL"]""")) should not be None
       }
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        go to (baseURL + "/JDBCServer")
+        go to (baseURL + "/SQL")
         find(id("sessionstat")) should not be None
         find(id("sqlstat")) should not be None
 
