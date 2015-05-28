@@ -326,19 +326,40 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       | FROM src LIMIT 1
     """.stripMargin)
 
-  createQueryTest("Date comparison test 2",
-    "SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1")
+  if (HiveContext.hiveExecutionVersion >= "1.2.0") {
+    // don't run this test before Hive 1.2.0 as Hive and Catalyst results would differ,
+    // after fixes for SPARK-6785 & HIVE-10178 (in Hive v1.2.0) this query will return false
+    createQueryTest("Date comparison test 2",
+      "SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1")
+  }
 
-  createQueryTest("Date cast",
-    """
-      | SELECT
-      | CAST(CAST(0 AS timestamp) AS date),
-      | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
-      | CAST(0 AS timestamp),
-      | CAST(CAST(0 AS timestamp) AS string),
-      | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
-      | FROM src LIMIT 1
-    """.stripMargin)
+  if (HiveContext.hiveExecutionVersion >= "1.2.0") {
+    // SPARK-6785 requires fix for HIVE-10178 in Hive version 1.2.0, otherwise casting dates
+    // before 1970 yields different results in Hive and Catalyst
+    // [Hive] 1970-01-01	1970-01-01	1969-12-31 16:00:00	1969-12-31 16:00:00	1970-01-01 00:00:00
+    // [Cata] 1969-12-31	1969-12-31	1969-12-31 16:00:00	1969-12-31 16:00:00	1970-01-01 00:00:00
+    createQueryTest("Date cast",
+      """
+        | SELECT
+        | CAST(CAST(0 AS timestamp) AS date),
+        | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
+        | CAST(0 AS timestamp),
+        | CAST(CAST(0 AS timestamp) AS string),
+        | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
+        | FROM src LIMIT 1
+      """.stripMargin)
+  } else {
+    createQueryTest("Date cast before Hive 1.2.0",
+      """
+        | SELECT
+        | CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date),
+        | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS string),
+        | CAST(0 AS timestamp),
+        | CAST(CAST(0 AS timestamp) AS string),
+        | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
+        | FROM src LIMIT 1
+      """.stripMargin)
+  }
 
   createQueryTest("Simple Average",
     "SELECT AVG(key) FROM src")
