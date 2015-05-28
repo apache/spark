@@ -22,7 +22,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
-import scala.Option;
 import scala.Product2;
 import scala.Tuple2;
 import scala.collection.Iterator;
@@ -157,10 +156,7 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
       threwException = false;
     } finally {
       Closeables.close(out, threwException);
-      Option<ShuffleWriteMetrics> maybeWriteMetrics = context.taskMetrics().shuffleWriteMetrics();
-      if (maybeWriteMetrics.isDefined()) {
-        maybeWriteMetrics.get().incShuffleWriteTime(System.nanoTime() - writeStartTime);
-      }
+      writeMetrics.incShuffleWriteTime(System.nanoTime() - writeStartTime);
     }
     return lengths;
   }
