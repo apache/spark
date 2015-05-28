@@ -756,7 +756,12 @@ private[spark] class Client(
     val interval = sparkConf.getLong("spark.yarn.report.interval", 1000)
     var lastState: YarnApplicationState = null
     while (true) {
-      Thread.sleep(interval)
+      try {
+        Thread.sleep(interval)
+      } catch {
+        case i: InterruptedException => // Swallow the InterruptedException
+      }
+
       val report: ApplicationReport =
         try {
           getApplicationReport(appId)
