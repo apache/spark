@@ -717,10 +717,19 @@ private[hive] case class MetastoreRelation
   }
 
   // Must be a stable value since new attributes are born here.
-  val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)
+  // Since we create the TTable inside hiveQlTable manually, we can use TTbale's interface
+  // to get Partition keys at here. We do this to make sure Hive will not try to use
+  // any metastore utility functions. All of interactions between metastore and related
+  // parts should be done through our ClientWrapper.
+  /** PartitionKey attributes */
+  val partitionKeys = hiveQlTable.getTTable.getPartitionKeys.map(_.toAttribute)
 
+  // Since we create the TTable inside hiveQlTable manually, we can use TTbale's interface
+  // to get non-partition columns at here. We do this to make sure Hive will not try to use
+  // any metastore utility functions. All of interactions between metastore and related
+  // parts should be done through our ClientWrapper.
   /** Non-partitionKey attributes */
-  val attributes = hiveQlTable.getCols.map(_.toAttribute)
+  val attributes = hiveQlTable.getTTable.getSd.getCols.map(_.toAttribute)
 
   val output = attributes ++ partitionKeys
 
