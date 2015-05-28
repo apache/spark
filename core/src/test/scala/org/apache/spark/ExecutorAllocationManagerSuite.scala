@@ -701,7 +701,7 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsTarget(manager) === 16)
   }
 
-  test("avoid ramp down initial executors when first job is submitted") {
+  test("avoid ramp down initial executors until first job is submitted") {
     sc = createSparkContext(2, 5, 3)
     val manager = sc.executorAllocationManager.get
     val clock = new ManualClock(10000L)
@@ -723,7 +723,7 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsTarget(manager) === 2)
   }
 
-  test("avoid ramp down initial executors when idle executor is timeout") {
+  test("avoid ramp down initial executors until idle executor is timeout") {
     sc = createSparkContext(2, 5, 3)
     val manager = sc.executorAllocationManager.get
     val clock = new ManualClock(10000L)
