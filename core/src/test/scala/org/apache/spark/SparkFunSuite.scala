@@ -39,7 +39,7 @@ private[spark] abstract class SparkFunSuite extends FunSuite with Logging {
       logInfo(s"\n\n===== TEST OUTPUT FOR $shortSuiteName: '$testName' =====\n")
       test()
     } finally {
-      logInfo(s"\n\n***** FINISHED $shortSuiteName: '$testName' *****\n")
+      logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
     }
   }
 
