@@ -172,17 +172,6 @@ case class Or(left: Expression, right: Expression)
 abstract class BinaryComparison extends BinaryExpression with Predicate {
   self: Product =>
 
-  override def checkInputDataTypes: TypeCheckResult = {
-    if (left.dataType != right.dataType) {
-      TypeCheckResult.fail(
-        s"differing types in BinaryComparisons -- ${left.dataType}, ${right.dataType}")
-    } else {
-      checkTypesInternal(left.dataType)
-    }
-  }
-
-  protected def checkTypesInternal(t: DataType): TypeCheckResult = TypeCheckResult.success
-
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
     if(evalE1 == null) {
@@ -231,8 +220,10 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<"
 
-  override protected def checkTypesInternal(t: DataType) = {
-    if (TypeUtils.validForOrderingExpr(t)) {
+  override def checkInputDataTypes: TypeCheckResult = {
+    if (left.dataType != right.dataType) {
+      TypeCheckResult.fail("types do not match -- ${left.dataType} != ${right.dataType}")
+    } else if (TypeUtils.validForOrderingExpr(left.dataType)) {
       TypeCheckResult.success
     } else {
       TypeCheckResult.fail("todo")
@@ -247,8 +238,10 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<="
 
-  override protected def checkTypesInternal(t: DataType) = {
-    if (TypeUtils.validForOrderingExpr(t)) {
+  override def checkInputDataTypes: TypeCheckResult = {
+    if (left.dataType != right.dataType) {
+      TypeCheckResult.fail("types do not match -- ${left.dataType} != ${right.dataType}")
+    } else if (TypeUtils.validForOrderingExpr(left.dataType)) {
       TypeCheckResult.success
     } else {
       TypeCheckResult.fail("todo")
@@ -263,8 +256,10 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = ">"
 
-  override protected def checkTypesInternal(t: DataType) = {
-    if (TypeUtils.validForOrderingExpr(t)) {
+  override def checkInputDataTypes: TypeCheckResult = {
+    if (left.dataType != right.dataType) {
+      TypeCheckResult.fail("types do not match -- ${left.dataType} != ${right.dataType}")
+    } else if (TypeUtils.validForOrderingExpr(left.dataType)) {
       TypeCheckResult.success
     } else {
       TypeCheckResult.fail("todo")
@@ -279,8 +274,10 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = ">="
 
-  override protected def checkTypesInternal(t: DataType) = {
-    if (TypeUtils.validForOrderingExpr(t)) {
+  override def checkInputDataTypes: TypeCheckResult = {
+    if (left.dataType != right.dataType) {
+      TypeCheckResult.fail("types do not match -- ${left.dataType} != ${right.dataType}")
+    } else if (TypeUtils.validForOrderingExpr(left.dataType)) {
       TypeCheckResult.success
     } else {
       TypeCheckResult.fail("todo")
