@@ -140,7 +140,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       (HAVING ~> expression).? ~
       sortType.? ~
       (LIMIT  ~> expression).? ^^ {
-        case d ~ p ~ r ~ f ~ g ~ h ~ o ~ l  =>
+        case d ~ p ~ r ~ f ~ g ~ h ~ o ~ l =>
           val base = r.getOrElse(OneRowRelation)
           val withFilter = f.map(Filter(_, base)).getOrElse(base)
           val withProjection = g
@@ -212,7 +212,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val ordering: Parser[Seq[SortOrder]] =
     ( rep1sep(expression ~ direction.? , ",") ^^ {
-        case exps  => exps.map(pair => SortOrder(pair._1, pair._2.getOrElse(Ascending)))
+        case exps => exps.map(pair => SortOrder(pair._1, pair._2.getOrElse(Ascending)))
       }
     )
 
@@ -242,7 +242,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     | termExpression ~ NOT.? ~ (BETWEEN ~> termExpression) ~ (AND ~> termExpression) ^^ {
         case e ~ not ~ el ~ eu =>
           val betweenExpr: Expression = And(GreaterThanOrEqual(e, el), LessThanOrEqual(e, eu))
-          not.fold(betweenExpr)(f=> Not(betweenExpr))
+          not.fold(betweenExpr)(f => Not(betweenExpr))
       }
     | termExpression ~ (RLIKE  ~> termExpression) ^^ { case e1 ~ e2 => RLike(e1, e2) }
     | termExpression ~ (REGEXP ~> termExpression) ^^ { case e1 ~ e2 => RLike(e1, e2) }
@@ -365,7 +365,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val baseExpression: Parser[Expression] =
     ( "*" ^^^ UnresolvedStar(None)
-    | ident <~ "." ~ "*" ^^ { case tableName  => UnresolvedStar(Option(tableName)) }
+    | ident <~ "." ~ "*" ^^ { case tableName => UnresolvedStar(Option(tableName)) }
     | primary
     )
 
