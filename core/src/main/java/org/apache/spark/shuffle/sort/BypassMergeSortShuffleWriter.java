@@ -120,6 +120,10 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
       final K key = record._1();
       partitionWriters[partitioner.getPartition(key)].write(key, record._2());
     }
+
+    for (BlockObjectWriter writer : partitionWriters) {
+      writer.commitAndClose();
+    }
   }
 
   @Override
@@ -133,9 +137,7 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
       // We were passed an empty iterator
       return lengths;
     }
-    for (BlockObjectWriter writer : partitionWriters) {
-      writer.commitAndClose();
-    }
+
     final FileOutputStream out = new FileOutputStream(outputFile, true);
     final long writeStartTime = System.nanoTime();
     boolean threwException = true;
@@ -158,6 +160,7 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
       Closeables.close(out, threwException);
       writeMetrics.incShuffleWriteTime(System.nanoTime() - writeStartTime);
     }
+    partitionWriters = null;
     return lengths;
   }
 
