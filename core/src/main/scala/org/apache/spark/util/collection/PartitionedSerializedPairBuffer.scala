@@ -178,7 +178,8 @@ private[spark] class OrderedInputStream(metaBuffer: IntBuffer, kvBuffer: Chained
     if (metaBufferPos >= metaBuffer.position) {
       return -1
     }
-    val bytesRemainingInRecord = metaBuffer.get(metaBufferPos + KEY_VAL_LEN)
+    val bytesRemainingInRecord = (metaBuffer.get(metaBufferPos + KEY_VAL_LEN) -
+      (kvBufferPos - getKeyStartPos(metaBuffer, metaBufferPos))).toInt
     val toRead = math.min(bytesRemainingInRecord, len)
     kvBuffer.read(kvBufferPos, bytes, offs, toRead)
     if (toRead == bytesRemainingInRecord) {
