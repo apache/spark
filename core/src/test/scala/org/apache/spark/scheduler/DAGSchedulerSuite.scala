@@ -348,7 +348,7 @@ class DAGSchedulerSuite
     (1 to 30).foreach(_ => rdd = rdd.zip(rdd))
     // getPreferredLocs runs quickly, indicating that exponential graph traversal is avoided.
     failAfter(10 seconds) {
-      val preferredLocs = scheduler.getPreferredLocs(rdd,0)
+      val preferredLocs = scheduler.getPreferredLocs(rdd, 0)
       // No preferred locations are returned.
       assert(preferredLocs.length === 0)
     }
@@ -607,8 +607,8 @@ class DAGSchedulerSuite
     val listener1 = new FailureRecordingJobListener()
     val listener2 = new FailureRecordingJobListener()
 
-    submit(reduceRdd1, Array(0, 1), listener=listener1)
-    submit(reduceRdd2, Array(0, 1), listener=listener2)
+    submit(reduceRdd1, Array(0, 1), listener = listener1)
+    submit(reduceRdd2, Array(0, 1), listener = listener2)
 
     val stageFailureMessage = "Exception failure in map stage"
     failed(taskSets(0), stageFailureMessage)
