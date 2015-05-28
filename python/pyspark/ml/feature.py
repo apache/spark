@@ -333,6 +333,8 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
     :py:attr:`dropLast`) because it makes the vector entries sum up to
     one, and hence linearly dependent.
     So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
+    Note that this is different from scikit-learn's OneHotEncoder,
+    which keeps all categories.
     The output vectors are sparse.
 
     .. seealso::
