@@ -350,7 +350,7 @@ class TableScanSuite extends DataSourceTest {
   test("SPARK-5196 schema field with comment") {
     sql(
       """
-       |CREATE TEMPORARY TABLE student(name string comment "SN", age int comment "SA", grade int)
+       |CREATE TEMPORARY TABLE student(name string comment 'SN', age int comment 'SA', grade int)
        |USING org.apache.spark.sql.sources.AllDataTypesScanSource
        |OPTIONS (
        |  from '1',

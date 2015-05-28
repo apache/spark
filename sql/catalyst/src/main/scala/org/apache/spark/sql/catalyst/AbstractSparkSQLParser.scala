@@ -109,7 +109,7 @@ class SqlLexical extends StdLexical {
     | '\'' ~> chrExcept('\'', '\n', EofCh).* <~ '\'' ^^
       { case chars => StringLit(chars mkString "") }
     | '"' ~> chrExcept('"', '\n', EofCh).* <~ '"' ^^
-      { case chars => StringLit(chars mkString "") }
+      { case chars => Identifier(chars mkString "") }
     | '`' ~> chrExcept('`', '\n', EofCh).* <~ '`' ^^
       { case chars => Identifier(chars mkString "") }
     | EofCh ^^^ EOF
