@@ -20,10 +20,10 @@ package org.apache.spark.deploy.history
 import java.io.{BufferedOutputStream, FileInputStream, File, FileOutputStream, OutputStreamWriter}
 import java.net.URI
 import java.util.concurrent.TimeUnit
-import java.util.zip.ZipInputStream
 
 import scala.io.Source
 
+import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -337,61 +337,48 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   }
 
   test("Event log copy") {
-
-    def getFileContent(file: File): Array[Byte] = {
-      val buff = new Array[Byte](file.length().toInt)
-      val in = new FileInputStream(file)
-      try {
-        in.read(buff)
-      } finally {
-        in.close()
-      }
-      buff
+    val provider = new FsHistoryProvider(createTestConf())
+    val logs = (1 to 2).map { i =>
+      val log = newLogFile("downloadApp1", Some(s"attempt$i"), inProgress = false)
+      writeFile(log, true, None,
+        SparkListenerApplicationStart(
+          "downloadApp1", Some("downloadApp1"), 5000 * i, "test", Some(s"attempt$i")),
+        SparkListenerApplicationEnd(5001 * i)
+      )
+      log
     }
+    provider.checkForLogs()
 
-    def unzipToDir(zipFile: File, outputDir: File): Unit = {
-      val zipStream = new ZipInputStream(new FileInputStream(zipFile))
+    (1 to 2).foreach { i =>
+      val outDir = Utils.createTempDir()
+      val unzipDir = Utils.createTempDir()
       try {
-        val buffer = new Array[Byte](128)
-        var entry = zipStream.getNextEntry
-        while (entry != null) {
-          val unzippedFile = new File(outputDir, entry.getName)
-          val ostream = new BufferedOutputStream(new FileOutputStream(unzippedFile))
+        Utils.chmod700(outDir)
+        Utils.chmod700(unzipDir)
+        val outFile = new File(outDir, s"file$i.zip")
+        val outputStream = new FileOutputStream(outFile)
+        provider.writeEventLogs("downloadApp1", Some(s"attempt$i"), outputStream)
+        HistoryTestUtils.unzipToDir(new FileInputStream(outFile), unzipDir)
+        unzipDir.listFiles().foreach { log =>
+          val inFile = logs.find(_.getName == log.getName).get
+          val expStream = new FileInputStream(inFile)
+          val resultStream = new FileInputStream(log)
           try {
-            var dataRemains = true
-            while (dataRemains) {
-              val read = zipStream.read(buffer)
-              if (read > 0) ostream.write(buffer, 0, read) else dataRemains = false
-            }
+            val input = IOUtils.toString(expStream)
+            val out = IOUtils.toString(resultStream)
+            out should be(input)
           } finally {
-            ostream.close()
+            Seq(expStream, resultStream).foreach { s =>
+              Utils.tryWithSafeFinally(s.close())()
+            }
           }
-          zipStream.closeEntry()
-          entry = zipStream.getNextEntry
         }
       } finally {
-        zipStream.close()
+        Seq(outDir, unzipDir).foreach { f =>
+          Utils.tryWithSafeFinally(Utils.deleteRecursively(f))()
+        }
       }
     }
-
-    val provider = new FsHistoryProvider(createTestConf())
-    val log1 = newLogFile("downloadApp1", Some("attempt1"), inProgress = false)
-    writeFile(log1, true, None,
-      SparkListenerApplicationStart("downloadApp1", Some("downloadApp1"), System
-        .currentTimeMillis() - 400, "test", Some("attempt1")),
-      SparkListenerApplicationEnd(System.currentTimeMillis() - 200)
-    )
-    val log2 = newLogFile("downloadApp1", Some("attempt2"), inProgress = false)
-    writeFile(log2, true, None,
-      SparkListenerApplicationStart("downloadApp1", Some("downloadApp1"), System
-        .currentTimeMillis() - 100, "test", Some("attempt2")),
-      SparkListenerApplicationEnd(System.currentTimeMillis())
-    )
-    provider.checkForLogs()
-    provider.getEventLogPaths("downloadApp1", Some("attempt1"))
-      .head.getName should be (log1.getName)
-    provider.getEventLogPaths("downloadApp1", Some("attempt2"))
-      .head.getName should be (log2.getName)
   }
 
   /**

@@ -22,6 +22,8 @@ import java.net.{HttpURLConnection, URL}
 import java.util.zip.ZipInputStream
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
+import scala.util.control.NonFatal
+
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.mockito.Mockito.when
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
@@ -155,7 +157,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
   }
 
   test("download one log for app with multiple attempts") {
-    (1 to 2).foreach{ attemptId => doDownloadTest(Some(attemptId)) }
+    (1 to 2).foreach { attemptId => doDownloadTest(Some(attemptId)) }
   }
 
   // Test that the files are downloaded correctly, and validate them.
@@ -163,9 +165,9 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
 
     val url = attemptId match {
       case Some(id) =>
-        new URL(s"${generateURL("applications/local-1430917381535")}/$id/download")
+        new URL(s"${generateURL("applications/local-1430917381535")}/$id/logs")
       case None =>
-        new URL(s"${generateURL("applications/local-1430917381535")}/download")
+        new URL(s"${generateURL("applications/local-1430917381535")}/logs")
     }
 
     val (code, inputStream, error) = HistoryServerSuite.connectAndGetInputStream(url)
@@ -174,15 +176,23 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     error should be (None)
 
     def validateFile(fileName: String, tempDir: File): Unit = {
-      val exp = IOUtils.toString(new FileInputStream(new File(logDir, fileName)))
-      val input = IOUtils.toString(new FileInputStream(new File(tempDir, fileName)))
-      input should be(exp)
+      val inStream = new FileInputStream(new File(logDir, fileName))
+      val outStream = new FileInputStream(new File(tempDir, fileName))
+      try {
+        val exp = IOUtils.toString(inStream)
+        val input = IOUtils.toString(outStream)
+        input should be(exp)
+      } finally {
+        Seq(inStream, outStream).foreach { s =>
+          Utils.tryWithSafeFinally(s.close())()
+        }
+      }
     }
 
     val dir = Utils.createTempDir()
     try {
       Utils.chmod700(dir)
-      unzipToDir(inputStream.get, dir)
+      HistoryTestUtils.unzipToDir(inputStream.get, dir)
       val files = dir.listFiles()
       attemptId match {
         case Some(_) => files.length should be (1)
@@ -262,25 +272,6 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     val out = new FileWriter(file)
     out.write(json)
     out.close()
-  }
-
-  def unzipToDir(inputStream: InputStream, dir: File): Unit = {
-    val unzipStream = new ZipInputStream(inputStream)
-    val buffer = new Array[Byte](64 * 1024 * 1024)
-    var nextEntry = unzipStream.getNextEntry
-    while(nextEntry != null) {
-      val file = new File(dir, nextEntry.getName)
-      val outputStream = new BufferedOutputStream(new FileOutputStream(file))
-      var dataRemains = true
-      while (dataRemains) {
-        val read = unzipStream.read(buffer)
-        if (read != -1) outputStream.write(buffer, 0, read)
-        else dataRemains = false
-      }
-      outputStream.close()
-      nextEntry = unzipStream.getNextEntry
-    }
-    unzipStream.close()
   }
 }
 

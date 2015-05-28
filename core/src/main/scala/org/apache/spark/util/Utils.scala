@@ -786,12 +786,6 @@ private[spark] object Utils extends Logging {
       files: Seq[Path],
       hadoopConf: Configuration,
       outputStream: OutputStream): Unit = {
-
-    // Passing in an output stream actually makes this more efficient since we don't have to
-    // create an additional file to which the compressed data is written which has to be read
-    // again by the reader, especially if the data needs to be sent over the wire via an
-    // OutputStream - in which case the destination output stream can be directly passed in here.
-
     val fs = FileSystem.get(hadoopConf)
     val buffer = new Array[Byte](64 * 1024)
     val zipStream = Some(new ZipOutputStream(outputStream))

@@ -16,13 +16,13 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.io.OutputStream
 import javax.servlet.ServletContext
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, Response}
 
 import com.sun.jersey.api.core.ResourceConfig
 import com.sun.jersey.spi.container.servlet.ServletContainer
-import org.apache.hadoop.fs
 import org.eclipse.jetty.server.handler.ContextHandler
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
@@ -165,13 +165,13 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
     }
   }
 
-  @Path("applications/{appId}/download")
+  @Path("applications/{appId}/logs")
   def getEventLogs(
     @PathParam("appId") appId: String): EventLogDownloadResource = {
     new EventLogDownloadResource(uiRoot, appId, None)
   }
 
-  @Path("applications/{appId}/{attemptId}/download")
+  @Path("applications/{appId}/{attemptId}/logs")
   def getEventLogs(
     @PathParam("appId") appId: String,
     @PathParam("attemptId") attemptId: String): EventLogDownloadResource = {
@@ -205,7 +205,10 @@ private[spark] object ApiRootResource {
 private[spark] trait UIRoot {
   def getSparkUI(appKey: String): Option[SparkUI]
   def getApplicationInfoList: Iterator[ApplicationInfo]
-  def getEventLogPaths(appId: String, attemptId: Option[String]): Seq[fs.Path] = Seq.empty
+  def writeEventLogs(
+      appId: String,
+      attemptId: Option[String],
+      outputStream: OutputStream): Unit = { }
 
   /**
    * Get the spark UI with the given appID, and apply a function

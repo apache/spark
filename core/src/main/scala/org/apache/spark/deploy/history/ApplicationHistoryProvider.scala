@@ -17,8 +17,9 @@
 
 package org.apache.spark.deploy.history
 
-import org.apache.hadoop.fs.Path
+import java.io.OutputStream
 
+import org.apache.spark.SparkException
 import org.apache.spark.ui.SparkUI
 
 private[spark] case class ApplicationAttemptInfo(
@@ -65,11 +66,11 @@ private[history] abstract class ApplicationHistoryProvider {
   def getConfig(): Map[String, String] = Map()
 
   /**
-   * Get the [[Path]]s to the Event log files. For legacy event log directories, directory path
-   * itself is returned. The caller is responsible for listing the files and using them as needed.
-   * If the attemptId is [[None]], event logs corresponding to all attempts for the given
-   * application are downloaded as a single zip file.
+   * Writes out the event logs to the output stream provided. The logs will be compressed into a
+   * single zip file and written out.
+   * @throws SparkException if the logs for the app id cannot be found.
    */
-  def getEventLogPaths(appId: String, attemptId: Option[String]): Seq[Path] = Seq.empty
+  @throws(classOf[SparkException])
+  def writeEventLogs(appId: String, attemptId: Option[String], outputStream: OutputStream): Unit
 
 }

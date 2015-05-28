@@ -17,17 +17,18 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{BufferedInputStream, FileNotFoundException, IOException, InputStream}
+import java.io.{OutputStream, FileOutputStream, File, BufferedInputStream,
+  FileNotFoundException, IOException, InputStream}
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.fs.permission.AccessControlException
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SparkException, Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
@@ -60,7 +61,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     .map { d => Utils.resolveURI(d).toString }
     .getOrElse(DEFAULT_LOG_DIR)
 
-  private val fs = Utils.getHadoopFileSystem(logDir, SparkHadoopUtil.get.newConfiguration(conf))
+  private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+  private val fs = Utils.getHadoopFileSystem(logDir, hadoopConf)
 
   // Used by check event thread and clean log thread.
   // Scheduled thread pool size must be one, otherwise it will have concurrent issues about fs
@@ -220,16 +222,49 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  override def getEventLogPaths(appId: String, attemptId: Option[String]): Seq[Path] = {
+  override def writeEventLogs(
+      appId: String,
+      attemptId: Option[String],
+      outputStream: OutputStream): Unit = {
 
-    val filePaths = new ArrayBuffer[Path]()
-    applications.get(appId).foreach { appInfo =>
-      // If no attempt is specified, or there is no attemptId for attempts, return all attempts
-      appInfo.attempts.filter { attempt =>
-        attempt.attemptId.isEmpty || attemptId.isEmpty || attempt.attemptId.get == attemptId.get
-      }.foreach { attempt => filePaths += new Path(logDir, attempt.logPath) }
+    applications.get(appId) match {
+      case Some(appInfo) =>
+        val dirsToClear = new mutable.ArrayBuffer[File]()
+        try {
+          // If no attempt is specified, or there is no attemptId for attempts, return all attempts
+          val pathsToZip = appInfo.attempts.filter { attempt =>
+            attempt.attemptId.isEmpty || attemptId.isEmpty || attempt.attemptId.get == attemptId.get
+          }.map { attempt =>
+            val logPath = new Path(logDir, attempt.logPath)
+            if (isLegacyLogDirectory(fs.getFileStatus(logPath))) {
+              val localDir = Utils.createTempDir()
+              Utils.chmod700(localDir)
+              dirsToClear += localDir
+              val outputFile = new File(localDir, logPath.getName)
+              val outputStream = new FileOutputStream(outputFile)
+              val files = fs.listFiles(logPath, false)
+              val paths = new mutable.ArrayBuffer[Path]()
+              while (files.hasNext) {
+                paths += files.next().getPath
+              }
+              Utils.zipFilesToStream(paths, hadoopConf, outputStream)
+              new Path(outputFile.toURI)
+            } else {
+              new Path(logDir, attempt.logPath)
+            }
+          }
+          Utils.zipFilesToStream(pathsToZip, hadoopConf, outputStream)
+        } finally {
+          dirsToClear.foreach { dir =>
+            try {
+              Utils.deleteRecursively(dir)
+            } catch {
+              case NonFatal(e) => logWarning(s"Error while attempting to delete $dir.")
+            }
+          }
+        }
+      case None => throw new SparkException(s"Logs for $appId not found.")
     }
-    filePaths
   }
 
 

@@ -17,11 +17,11 @@
 
 package org.apache.spark.deploy.history
 
+import java.io.OutputStream
 import java.util.NoSuchElementException
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import com.google.common.cache._
-import org.apache.hadoop.fs.Path
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -174,8 +174,11 @@ class HistoryServer(
     getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
 
-  override def getEventLogPaths(appId: String, attemptId: Option[String]): Seq[Path] = {
-    provider.getEventLogPaths(appId, attemptId)
+  override def writeEventLogs(
+      appId: String,
+      attemptId: Option[String],
+      outputStream: OutputStream): Unit = {
+    provider.writeEventLogs(appId, attemptId, outputStream)
   }
 
   /**
