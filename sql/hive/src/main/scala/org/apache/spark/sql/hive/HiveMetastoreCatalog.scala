@@ -721,6 +721,8 @@ private[hive] case class MetastoreRelation
   // to get Partition keys at here. We do this to make sure Hive will not try to use
   // any metastore utility functions. All of interactions between metastore and related
   // parts should be done through our ClientWrapper.
+  // Without the guard of ClientWrapper, we cannot touch metastore client (e.g. Hive class) and
+  // the conf associated with the metastore client (Hive.get().getConf()).
   /** PartitionKey attributes */
   val partitionKeys = hiveQlTable.getTTable.getPartitionKeys.map(_.toAttribute)
 
@@ -728,6 +730,8 @@ private[hive] case class MetastoreRelation
   // to get non-partition columns at here. We do this to make sure Hive will not try to use
   // any metastore utility functions. All of interactions between metastore and related
   // parts should be done through our ClientWrapper.
+  // Without the guard of ClientWrapper, we cannot touch metastore client (e.g. Hive class) and
+  // the conf associated with the metastore client (Hive.get().getConf()).
   /** Non-partitionKey attributes */
   val attributes = hiveQlTable.getTTable.getSd.getCols.map(_.toAttribute)
 
