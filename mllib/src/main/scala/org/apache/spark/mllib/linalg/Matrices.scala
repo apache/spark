@@ -24,7 +24,8 @@ import scala.collection.mutable.{ArrayBuilder => MArrayBuilder, HashSet => MHash
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Column, DataFrame, Row}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 
@@ -810,6 +811,43 @@ object Matrices {
         throw new UnsupportedOperationException(
           s"Do not support conversion from type ${breeze.getClass.getName}.")
     }
+  }
+
+  /**
+   * Converts a local DataFrame to a DenseMatrix. The values of the DataFrame should be cast-able
+   * to Double. Will create the Matrix from all the numerical columns of the DataFrame.
+   *
+   * TODO: Handle VectorUDT, MatrixUDT, ArrayType with Numerical values
+   * @param df The local DataFrame
+   */
+  def fromDataFrame(df: DataFrame): Matrix = {
+    require(df.isLocal, "This method is used to transform a local DataFrame to a matrix. Please " +
+      "use the BlockMatrix.fromDataFrame to generate a Matrix from a distributed DataFrame.")
+    val columns = new ArrayBuffer[Column](df.columns.length)
+    // The cast will throw an error if the value can't be cast to a Double.
+    df.schema.fields.foreach { field =>
+      if (field.dataType.isInstanceOf[NumericType]) {
+        columns += col(field.name).cast(DoubleType)
+      }
+    }
+    // cast fields to DoubleType
+    val doubleDF = df.select(columns: _*).collect()
+    val numRows = doubleDF.length
+    val numCols = columns.length
+    require(numRows.toLong * numCols <= Int.MaxValue,
+      s"$numRows x $numCols dense matrix is too large to allocate")
+    val mat = DenseMatrix.zeros(numRows, numCols)
+    var i = 0
+    while (i < numRows) {
+      var j = 0
+      val row = doubleDF(i)
+      while (j < numCols) {
+        if (!row.isNullAt(j)) mat.update(i, j, row.getDouble(j))
+        j += 1
+      }
+      i += 1
+    }
+    mat
   }
 
   /**

@@ -24,9 +24,11 @@ import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar._
 import scala.collection.mutable.{Map => MutableMap}
 
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 
-class MatricesSuite extends FunSuite {
+class MatricesSuite extends FunSuite with MLlibTestSparkContext {
   test("dense matrix construction") {
     val m = 3
     val n = 2
@@ -438,6 +440,30 @@ class MatricesSuite extends FunSuite {
     }
     assert(mUDT.typeName == "matrix")
     assert(mUDT.simpleString == "matrix")
+  }
+
+  case class TestRow(a: String, b: Integer, c: Double, d: String, e: Long)
+
+  test("fromDataFrame") {
+    val values = Seq.tabulate(10) { i =>
+      TestRow(i.toString, if (i % 4 == 0) null else i, i * 1.0, i.toString, (2 * i).toLong)
+    }
+    val distDF = sc.parallelize(values).toDF
+    // The DataFrame must be local
+    intercept[IllegalArgumentException] {
+      val fail = Matrices.fromDataFrame(distDF)
+    }
+    val localDF = values.toDF()
+    val mat = Matrices.fromDataFrame(localDF)
+    (0 until 10).foreach { i =>
+      if (i % 4 == 0) {
+        assert(mat(i, 0) === 0.0, "null values should be zeros in the matrix")
+      } else {
+        assert(mat(i, 0) === i.toDouble)
+      }
+      assert(mat(i, 1) === i.toDouble)
+      assert(mat(i, 2) === 2.0 * i)
+    }
   }
 
   test("toString") {
