@@ -349,7 +349,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def when(condition: Column, value: Any):Column = this.expr match {
+  def when(condition: Column, value: Any): Column = this.expr match {
     case CaseWhen(branches: Seq[Expression]) =>
       CaseWhen(branches ++ Seq(lit(condition).expr, lit(value).expr))
     case _ =>
@@ -378,7 +378,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def otherwise(value: Any):Column = this.expr match {
+  def otherwise(value: Any): Column = this.expr match {
     case CaseWhen(branches: Seq[Expression]) =>
       if (branches.size % 2 == 0) {
         CaseWhen(branches :+ lit(value).expr)
