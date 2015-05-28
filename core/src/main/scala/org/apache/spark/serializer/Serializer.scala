@@ -19,6 +19,7 @@ package org.apache.spark.serializer
 
 import java.io._
 import java.nio.ByteBuffer
+import javax.annotation.concurrent.NotThreadSafe
 
 import scala.reflect.ClassTag
 
@@ -114,8 +115,12 @@ object Serializer {
 /**
  * :: DeveloperApi ::
  * An instance of a serializer, for use by one thread at a time.
+ *
+ * It is legal to create multiple serialization / deserialization streams from the same
+ * SerializerInstance as long as those streams are all used within the same thread.
  */
 @DeveloperApi
+@NotThreadSafe
 abstract class SerializerInstance {
   def serialize[T: ClassTag](t: T): ByteBuffer
 
