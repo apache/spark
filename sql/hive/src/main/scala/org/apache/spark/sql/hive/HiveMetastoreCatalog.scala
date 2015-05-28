@@ -707,33 +707,20 @@ private[hive] case class MetastoreRelation
     hiveQlTable.getMetadata
   )
 
-  implicit class SchemaAttribute(f: FieldSchema) {
+  implicit class SchemaAttribute(f: HiveColumn) {
     def toAttribute: AttributeReference = AttributeReference(
-      f.getName,
-      HiveMetastoreTypes.toDataType(f.getType),
+      f.name,
+      HiveMetastoreTypes.toDataType(f.hiveType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
     )(qualifiers = Seq(alias.getOrElse(tableName)))
   }
 
-  // Must be a stable value since new attributes are born here.
-  // Since we create the TTable inside hiveQlTable manually, we can use TTbale's interface
-  // to get Partition keys at here. We do this to make sure Hive will not try to use
-  // any metastore utility functions. All of interactions between metastore and related
-  // parts should be done through our ClientWrapper.
-  // Without the guard of ClientWrapper, we cannot touch metastore client (e.g. Hive class) and
-  // the conf associated with the metastore client (Hive.get().getConf()).
   /** PartitionKey attributes */
-  val partitionKeys = hiveQlTable.getTTable.getPartitionKeys.map(_.toAttribute)
+  val partitionKeys = table.partitionColumns.map(_.toAttribute)
 
-  // Since we create the TTable inside hiveQlTable manually, we can use TTbale's interface
-  // to get non-partition columns at here. We do this to make sure Hive will not try to use
-  // any metastore utility functions. All of interactions between metastore and related
-  // parts should be done through our ClientWrapper.
-  // Without the guard of ClientWrapper, we cannot touch metastore client (e.g. Hive class) and
-  // the conf associated with the metastore client (Hive.get().getConf()).
   /** Non-partitionKey attributes */
-  val attributes = hiveQlTable.getTTable.getSd.getCols.map(_.toAttribute)
+  val attributes = table.schema.map(_.toAttribute)
 
   val output = attributes ++ partitionKeys
 
