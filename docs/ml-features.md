@@ -795,13 +795,84 @@ scaledData = scalerModel.transform(dataFrame)
 
 * `splits`: Parameter for mapping continuous features into buckets. With n+1 splits, there are n buckets. A bucket defined by splits x,y holds values in the range [x,y) except the last bucket, which also includes y. Splits should be strictly increasing. Values at -inf, inf must be explicitly provided to cover all Double values; Otherwise, values outside the splits specified will be treated as errors. Two examples of `splits` are `Array(Double.NegativeInfinity, 0.0, 1.0, Double.PositiveInfinity)` and `Array(0.0, 1.0, 2.0)`.
 
-Note that if the standard deviation of a feature is zero, it will return default `0.0` value in the `Vector` for that feature.
+Note that if you have no idea of the upper bound and lower bound of the targeted column, you would better add the `Double.NegativeInfinity` and `Double.PositiveInfinity` as the bounds of your splits to prevent a potenial out of Bucketizer bounds exception.
+
+Note also that the splits that you provided have to be in strictly increasing order, i.e. `s0 < s1 < s2 < ... < sn`.
 
 More details can be found in the API docs for [Bucketizer](api/scala/index.html#org.apache.spark.ml.feature.Bucketizer).
 
-The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit standard deviation.
+The following example demonstrates how to bucketize a column of `Double`s into another index-wised column.
 
+<div class="codetabs">
+<div data-lang="scala">
+{% highlight scala %}
+import org.apache.spark.ml.feature.Bucketizer
+import org.apache.spark.sql.DataFrame
 
+// Since we know the bounds of data, there is no need to add -inf and inf.
+val splits = Array(-0.5, 0.0, 0.5)
+
+val data = Array(-0.5, -0.3, 0.0, 0.2)
+val dataFrame = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("feature")
+
+val bucketizer = new Bucketizer().setInputCol("feature").setOutputCol("result").setSplits(splits)
+
+// Transform original data into its bucket index.
+val bucketizedData = bucketizer.transform(dataFrame)
+{% endhighlight %}
+</div>
+
+<div data-lang="java">
+{% highlight java %}
+import com.google.common.collect.Lists;
+
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+double[] splits = {-0.5, 0.0, 0.5};
+
+JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
+  RowFactory.create(-0.5),
+  RowFactory.create(-0.3),
+  RowFactory.create(0.0),
+  RowFactory.create(0.2)
+));
+StructType schema = new StructType(new StructField[] {
+  new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
+});
+DataFrame dataFrame = jsql.createDataFrame(data, schema);
+
+Bucketizer bucketizer = new Bucketizer()
+  .setInputCol("feature")
+  .setOutputCol("result")
+  .setSplits(splits);
+
+// Transform original data into its bucket index.
+DataFrame bucketizedData = bucketizer.transform(dataFrame);
+{% endhighlight %}
+</div>
+
+<div data-lang="python">
+{% highlight python %}
+from pyspark.ml.feature import Bucketizer
+
+splits = [-0.5, 0.0, 0.5]
+
+data = [(-0.5,), (-0.3,), (0.0,), (0.2,)]
+dataFrame = sqlContext.createDataFrame(data, ["feature"])
+
+bucketizer = Bucketizer(splits=splits, inputCol="feature", outputCol="result")
+
+# Transform original data into its bucket index.
+bucketizedData = bucketizer.transform(dataFrame)
+{% endhighlight %}
+</div>
+</div>
 
 # Feature Selectors
 
