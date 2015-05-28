@@ -360,7 +360,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 }
 
-class KryoSerializerAutoResetDisabledSuite extends FunSuite with SharedSparkContext {
+class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", classOf[KryoSerializer].getName)
   conf.set("spark.kryo.registrator", classOf[RegistratorWithoutAutoReset].getName)
   conf.set("spark.kryo.referenceTracking", "true")
