@@ -80,7 +80,7 @@ Because HDFS is not protocol-compatible across versions, if you want to read fro
     <tr><td>2.2.x</td><td>hadoop-2.2</td></tr>
     <tr><td>2.3.x</td><td>hadoop-2.3</td></tr>
     <tr><td>2.4.x</td><td>hadoop-2.4</td></tr>
-    <tr><td>2.6.x</td><td>hadoop-2.6</td></tr>
+    <tr><td>2.6.x and later 2.x</td><td>hadoop-2.6</td></tr>
   </tbody>
 </table>
 
