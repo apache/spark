@@ -809,16 +809,18 @@ The following example demonstrates how to bucketize a column of `Double`s into a
 import org.apache.spark.ml.feature.Bucketizer
 import org.apache.spark.sql.DataFrame
 
-// Since we know the bounds of data, there is no need to add -inf and inf.
-val splits = Array(-0.5, 0.0, 0.5)
+val splits = Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity)
 
 val data = Array(-0.5, -0.3, 0.0, 0.2)
-val dataFrame = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("feature")
+val dataFrame = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
 
-val bucketizer = new Bucketizer().setInputCol("feature").setOutputCol("result").setSplits(splits)
+val bucketizer = new Bucketizer()
+  .setInputCol("features")
+  .setOutputCol("bucketedFeatures")
+  .setSplits(splits)
 
 // Transform original data into its bucket index.
-val bucketizedData = bucketizer.transform(dataFrame)
+val bucketedData = bucketizer.transform(dataFrame)
 {% endhighlight %}
 </div>
 
@@ -834,7 +836,7 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-double[] splits = {-0.5, 0.0, 0.5};
+double[] splits = {Double.NEGATIVE_INFINITY, -0.5, 0.0, 0.5, Double.POSITIVE_INFINITY};
 
 JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
   RowFactory.create(-0.5),
@@ -843,17 +845,17 @@ JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
   RowFactory.create(0.2)
 ));
 StructType schema = new StructType(new StructField[] {
-  new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
+  new StructField("features", DataTypes.DoubleType, false, Metadata.empty())
 });
 DataFrame dataFrame = jsql.createDataFrame(data, schema);
 
 Bucketizer bucketizer = new Bucketizer()
-  .setInputCol("feature")
-  .setOutputCol("result")
+  .setInputCol("features")
+  .setOutputCol("bucketedFeatures")
   .setSplits(splits);
 
 // Transform original data into its bucket index.
-DataFrame bucketizedData = bucketizer.transform(dataFrame);
+DataFrame bucketedData = bucketizer.transform(dataFrame);
 {% endhighlight %}
 </div>
 
@@ -861,15 +863,15 @@ DataFrame bucketizedData = bucketizer.transform(dataFrame);
 {% highlight python %}
 from pyspark.ml.feature import Bucketizer
 
-splits = [-0.5, 0.0, 0.5]
+splits = [-float("inf"), -0.5, 0.0, 0.5, float("inf")]
 
 data = [(-0.5,), (-0.3,), (0.0,), (0.2,)]
-dataFrame = sqlContext.createDataFrame(data, ["feature"])
+dataFrame = sqlContext.createDataFrame(data, ["features"])
 
-bucketizer = Bucketizer(splits=splits, inputCol="feature", outputCol="result")
+bucketizer = Bucketizer(splits=splits, inputCol="features", outputCol="bucketedFeatures")
 
 # Transform original data into its bucket index.
-bucketizedData = bucketizer.transform(dataFrame)
+bucketedData = bucketizer.transform(dataFrame)
 {% endhighlight %}
 </div>
 </div>
