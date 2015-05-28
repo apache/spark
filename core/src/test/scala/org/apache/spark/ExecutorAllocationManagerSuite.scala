@@ -719,7 +719,7 @@ class ExecutorAllocationManagerSuite
     assert(maxNumExecutorsNeeded(manager) === 2)
     schedule(manager)
 
-    //Verify that current number of executors should be ramp down when first job is submitted
+    // Verify that current number of executors should be ramp down when first job is submitted
     assert(numExecutorsTarget(manager) === 2)
   }
 
@@ -747,7 +747,7 @@ class ExecutorAllocationManagerSuite
 
     // Schedule again to recalculate the numExecutorsTarget after executor is timeout
     schedule(manager)
-    //Verify that current number of executors should be ramp down when executor is timeout
+    // Verify that current number of executors should be ramp down when executor is timeout
     assert(numExecutorsTarget(manager) === 2)
   }
 
