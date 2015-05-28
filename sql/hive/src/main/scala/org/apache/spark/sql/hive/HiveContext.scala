@@ -354,9 +354,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
-    hiveconf.set(key, value)
     executionHive.runSqlHive(s"SET $key=$value")
     metadataHive.runSqlHive(s"SET $key=$value")
+    // If users put any Spark SQL setting in the spark conf (e.g. spark-defaults.conf),
+    // this setConf will be called in the constructor of the SQLContext.
+    // Also, calling hiveconf will create a default session containing a HiveConf, which
+    // will interfer with the creation of executionHive (which is a lazy val). So,
+    // we put hiveconf.set at the end of this method.
+    hiveconf.set(key, value)
   }
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
