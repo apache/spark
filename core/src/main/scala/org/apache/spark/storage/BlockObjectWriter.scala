@@ -95,6 +95,7 @@ private[spark] class DiskBlockObjectWriter(
   private var objOut: SerializationStream = null
   private var initialized = false
   private var hasBeenClosed = false
+  private var commitAndCloseHasBeenCalled = false
 
   /**
    * Cursors used to represent positions in the file.
@@ -171,6 +172,7 @@ private[spark] class DiskBlockObjectWriter(
     finalPosition = file.length()
     // In certain compression codecs, more bytes are written after close() is called
     writeMetrics.incShuffleBytesWritten(finalPosition - reportedPosition)
+    commitAndCloseHasBeenCalled = true
   }
 
   // Discard current writes. We do this by flushing the outstanding writes and then
@@ -228,6 +230,10 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   override def fileSegment(): FileSegment = {
+    if (!commitAndCloseHasBeenCalled) {
+      throw new IllegalStateException(
+        "fileSegment() is only valid after commitAndClose() has been called")
+    }
     new FileSegment(file, initialPosition, finalPosition - initialPosition)
   }
 
