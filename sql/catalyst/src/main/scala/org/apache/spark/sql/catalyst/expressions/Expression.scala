@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
@@ -90,7 +90,7 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * todo
    */
-  def checkInputDataTypes: Option[String] = None
+  def checkInputDataTypes: TypeCheckResult = TypeCheckResult.success
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
@@ -134,9 +134,9 @@ trait ExpectsInputTypes {
 
   def expectedChildTypes: Seq[DataType]
 
-  override def checkInputDataTypes: Option[String] = {
+  override def checkInputDataTypes: TypeCheckResult = {
     // We will always do type casting for `ExpectsInputTypes` in `HiveTypeCoercion`,
     // so type mismatch error won't be reported here, but for underling `Cast`s.
-    None
+    TypeCheckResult.success
   }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types.{DecimalType, BinaryType, BooleanType, DataType}
@@ -171,15 +172,16 @@ case class Or(left: Expression, right: Expression)
 abstract class BinaryComparison extends BinaryExpression with Predicate {
   self: Product =>
 
-  override def checkInputDataTypes: Option[String] = {
+  override def checkInputDataTypes: TypeCheckResult = {
     if (left.dataType != right.dataType) {
-      Some(s"differing types in BinaryComparisons, ${left.dataType}, ${right.dataType}")
+      TypeCheckResult.fail(
+        s"differing types in BinaryComparisons -- ${left.dataType}, ${right.dataType}")
     } else {
       checkTypesInternal(left.dataType)
     }
   }
 
-  protected def checkTypesInternal(t: DataType): Option[String] = None
+  protected def checkTypesInternal(t: DataType): TypeCheckResult = TypeCheckResult.success
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
@@ -231,9 +233,9 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
 
   override protected def checkTypesInternal(t: DataType) = {
     if (TypeUtils.validForOrderingExpr(t)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -247,9 +249,9 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
 
   override protected def checkTypesInternal(t: DataType) = {
     if (TypeUtils.validForOrderingExpr(t)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -263,9 +265,9 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
 
   override protected def checkTypesInternal(t: DataType) = {
     if (TypeUtils.validForOrderingExpr(t)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -279,9 +281,9 @@ case class GreaterThanOrEqual(left: Expression, right: Expression) extends Binar
 
   override protected def checkTypesInternal(t: DataType) = {
     if (TypeUtils.validForOrderingExpr(t)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -296,11 +298,12 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def children: Seq[Expression] = predicate :: trueValue :: falseValue :: Nil
   override def nullable: Boolean = trueValue.nullable || falseValue.nullable
 
-  override def checkInputDataTypes: Option[String] = {
+  override def checkInputDataTypes: TypeCheckResult = {
     if (trueValue.dataType != falseValue.dataType) {
-      Some(s"differing types in If, ${trueValue.dataType}, ${falseValue.dataType}")
+      TypeCheckResult.fail(
+        s"differing types in If, ${trueValue.dataType}, ${falseValue.dataType}")
     } else {
-      None
+      TypeCheckResult.success
     }
   }
 
@@ -357,13 +360,13 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
 
   override def children: Seq[Expression] = branches
 
-  override def checkInputDataTypes: Option[String] = {
+  override def checkInputDataTypes: TypeCheckResult = {
     if (!whenList.forall(_.dataType == BooleanType)) {
-      Some(s"WHEN expressions should all be boolean type")
+      TypeCheckResult.fail(s"WHEN expressions should all be boolean type")
     } else if (!valueTypesEqual) {
-      Some("THEN and ELSE expressions should all be same type")
+      TypeCheckResult.fail("THEN and ELSE expressions should all be same type")
     } else {
-      None
+      TypeCheckResult.success
     }
   }
 
@@ -408,11 +411,11 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
 
   override def children: Seq[Expression] = key +: branches
 
-  override def checkInputDataTypes: Option[String] = {
+  override def checkInputDataTypes: TypeCheckResult = {
     if (!valueTypesEqual) {
-      Some("THEN and ELSE expressions should all be same type")
+      TypeCheckResult.fail("THEN and ELSE expressions should all be same type")
     } else {
-      None
+      TypeCheckResult.success
     }
   }
 

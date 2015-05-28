@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
@@ -27,11 +28,11 @@ abstract class UnaryArithmetic extends UnaryExpression {
   override def nullable: Boolean = child.nullable
   override def dataType: DataType = child.dataType
 
-  override def checkInputDataTypes: Option[String] = {
+  override def checkInputDataTypes: TypeCheckResult = {
     if (TypeUtils.validForNumericExpr(child.dataType)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -86,15 +87,16 @@ abstract class BinaryArithmetic extends BinaryExpression {
 
   override def dataType: DataType = left.dataType
 
-  override def checkInputDataTypes: Option[String] = {
+  override def checkInputDataTypes: TypeCheckResult = {
     if (left.dataType != right.dataType) {
-      Some(s"differing types in BinaryArithmetics, ${left.dataType}, ${right.dataType}")
+      TypeCheckResult.fail(
+        s"differing types in BinaryArithmetics -- ${left.dataType}, ${right.dataType}")
     } else {
       checkTypesInternal(dataType)
     }
   }
 
-  protected def checkTypesInternal(t: DataType): Option[String]
+  protected def checkTypesInternal(t: DataType): TypeCheckResult
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
@@ -123,9 +125,9 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   protected def checkTypesInternal(t: DataType) = {
     if (TypeUtils.validForNumericExpr(t)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -143,9 +145,9 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
 
   protected def checkTypesInternal(t: DataType) = {
     if (TypeUtils.validForNumericExpr(t)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -163,9 +165,9 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 
   protected def checkTypesInternal(t: DataType) = {
     if (TypeUtils.validForNumericExpr(t)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -184,9 +186,9 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 
   protected def checkTypesInternal(t: DataType) = {
     if (TypeUtils.validForNumericExpr(t)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -220,9 +222,9 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
 
   protected def checkTypesInternal(t: DataType) = {
     if (TypeUtils.validForNumericExpr(t)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -254,9 +256,9 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
 
   protected def checkTypesInternal(t: DataType) = {
     if (TypeUtils.validForBitwiseExpr(t)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -282,9 +284,9 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
 
   protected def checkTypesInternal(t: DataType) = {
     if (TypeUtils.validForBitwiseExpr(t)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -310,9 +312,9 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
 
   protected def checkTypesInternal(t: DataType) = {
     if (TypeUtils.validForBitwiseExpr(t)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -336,11 +338,11 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
 case class BitwiseNot(child: Expression) extends UnaryArithmetic {
   override def toString: String = s"~$child"
 
-  override def checkInputDataTypes: Option[String] = {
+  override def checkInputDataTypes: TypeCheckResult = {
     if (TypeUtils.validForBitwiseExpr(dataType)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -363,9 +365,9 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
 
   protected def checkTypesInternal(t: DataType) = {
     if (TypeUtils.validForOrderingExpr(t)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
@@ -395,9 +397,9 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
 
   protected def checkTypesInternal(t: DataType) = {
     if (TypeUtils.validForOrderingExpr(t)) {
-      None
+      TypeCheckResult.success
     } else {
-      Some("todo")
+      TypeCheckResult.fail("todo")
     }
   }
 
