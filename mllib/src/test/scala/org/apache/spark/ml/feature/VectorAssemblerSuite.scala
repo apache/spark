@@ -71,7 +71,7 @@ class VectorAssemblerSuite extends FunSuite with MLlibTestSparkContext {
       NominalAttribute.defaultAttr.withName("gender").withValues("male", "female"),
       NumericAttribute.defaultAttr.withName("salary")))
     val row = (1.0, 0.5, 1, Vectors.dense(1.0, 1000.0), Vectors.sparse(2, Array(1), Array(2.0)))
-    val df= sqlContext.createDataFrame(Seq(row)).toDF("browser", "hour", "count", "user", "ad")
+    val df = sqlContext.createDataFrame(Seq(row)).toDF("browser", "hour", "count", "user", "ad")
       .select(
         col("browser").as("browser", browser.toMetadata()),
         col("hour").as("hour", hour.toMetadata()),
