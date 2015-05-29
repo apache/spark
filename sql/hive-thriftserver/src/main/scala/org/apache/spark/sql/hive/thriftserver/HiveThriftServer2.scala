@@ -24,9 +24,9 @@ import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLI
 import org.apache.hive.service.server.{HiveServer2, ServerOptionsProcessor}
 import org.apache.spark.sql.SQLConf
 
-import org.apache.spark.{SparkContext, SparkConf, Logging}
+import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.{HiveShim, HiveContext}
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.scheduler.{SparkListenerJobStart, SparkListenerApplicationEnd, SparkListener}
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
@@ -51,6 +51,7 @@ object HiveThriftServer2 extends Logging {
   @DeveloperApi
   def startWithContext(sqlContext: HiveContext): Unit = {
     val server = new HiveThriftServer2(sqlContext)
+    sqlContext.setConf("spark.sql.hive.version", HiveShim.version)
     server.init(sqlContext.hiveconf)
     server.start()
     listener = new HiveThriftServer2Listener(server, sqlContext.conf)
