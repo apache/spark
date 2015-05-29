@@ -505,7 +505,7 @@ v_N
 
 ### Example
 
-This example below demonstrates how to load a simple vectors file, extract a set of vectors, then transform those vectors using a transforming vector value.
+This example below demonstrates how to transform vectors using a transforming vector value.
 
 <div class="codetabs">
 <div data-lang="scala">
