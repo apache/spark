@@ -119,7 +119,7 @@ object LogisticRegressionSuite {
       }
       // Preventing the overflow when we compute the probability
       val maxMargin = margins.max
-      if (maxMargin > 0) for (i <-0 until nClasses) margins(i) -= maxMargin
+      if (maxMargin > 0) for (i <- 0 until nClasses) margins(i) -= maxMargin
 
       // Computing the probabilities for each class from the margins.
       val norm = {
@@ -130,7 +130,7 @@ object LogisticRegressionSuite {
         }
         temp
       }
-      for (i <-0 until nClasses) probs(i) /= norm
+      for (i <- 0 until nClasses) probs(i) /= norm
 
       // Compute the cumulative probability so we can generate a random number and assign a label.
       for (i <- 1 until nClasses) probs(i) += probs(i - 1)
