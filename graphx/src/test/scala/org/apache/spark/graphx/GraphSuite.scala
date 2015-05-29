@@ -248,7 +248,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   test("mask") {
     withSpark { sc =>
       val n = 5
-      val vertices = sc.parallelize((0 to n).map(x => (x:VertexId, x)))
+      val vertices = sc.parallelize((0 to n).map(x => (x: VertexId, x)))
       val edges = sc.parallelize((1 to n).map(x => Edge(0, x, x)))
       val graph: Graph[Int, Int] = Graph(vertices, edges).cache()
 
@@ -260,11 +260,11 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val projectedGraph = graph.mask(subgraph)
 
       val v = projectedGraph.vertices.collect().toSet
-      assert(v === Set((0,0), (1,1), (2,2), (4,4), (5,5)))
+      assert(v === Set((0, 0), (1, 1), (2, 2), (4, 4), (5, 5)))
 
       // the map is necessary because of object-reuse in the edge iterator
       val e = projectedGraph.edges.map(e => Edge(e.srcId, e.dstId, e.attr)).collect().toSet
-      assert(e === Set(Edge(0,1,1), Edge(0,2,2), Edge(0,5,5)))
+      assert(e === Set(Edge(0, 1, 1), Edge(0, 2, 2), Edge(0, 5, 5)))
 
     }
   }
