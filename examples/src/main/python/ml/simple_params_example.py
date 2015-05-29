@@ -34,26 +34,29 @@ Run with:
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        print("Usage: random_forest_example", file=sys.stderr)
+        print("Usage: simple_params_example", file=sys.stderr)
         exit(1)
     sc = SparkContext(appName="PythonSimpleParamsExample")
     sqlContext = SQLContext(sc)
 
     # prepare training data.
+    # We create an RDD of LabeledPoints and convert them into a DataFrame.
+    # Spark DataFrames can automatically infer the schema from named tuples
+    # and LabeledPoint implements __reduce__ to behave like a named tuple.
     training = sc.parallelize([
         LabeledPoint(1.0, DenseVector([0.0, 1.1, 0.1])),
         LabeledPoint(0.0, DenseVector([2.0, 1.0, -1.0])),
         LabeledPoint(0.0, DenseVector([2.0, 1.3, 1.0])),
         LabeledPoint(1.0, DenseVector([0.0, 1.2, -0.5]))]).toDF()
 
-    # Create a LogisticRegression instance.  This instance is an Estimator.
-    lr = LogisticRegression()
+    # Create a LogisticRegression instance with maxIter = 10.
+    # This instance is an Estimator.
+    lr = LogisticRegression(maxIter=10)
     # Print out the parameters, documentation, and any default values.
     print("LogisticRegression parameters:\n" + lr.explainParams() + "\n")
 
-    # We may set parameters using setter methods.
-    lr.setMaxIter(10) \
-        .setRegParam(0.01)
+    # We may also set parameters using setter methods.
+    lr.setRegParam(0.01)
 
     # Learn a LogisticRegression model.  This uses the parameters stored in lr.
     model1 = lr.fit(training)
@@ -65,8 +68,8 @@ if __name__ == "__main__":
     print("Model 1 was fit using parameters:\n")
     pprint.pprint(model1.extractParamMap())
 
-    # We may alternatively specify parameters using a parameter map,
-    # either overriding the default parameters or specifying new values.
+    # We may alternatively specify parameters using a parameter map.
+    # paramMap overrides all lr parameters set earlier.
     paramMap = {lr.maxIter: 20, lr.threshold: 0.55, lr.probabilityCol: "myProbability"}
 
     # Now learn a new model using the new parameters.
@@ -81,12 +84,15 @@ if __name__ == "__main__":
         LabeledPoint(0.0, DenseVector([0.0, 2.2, -1.5]))]).toDF()
 
     # Make predictions on test data using the Transformer.transform() method.
-    # LogisticRegression.transform will only use the 'features' column.
+    # LogisticRegressionModel.transform will only use the 'features' column.
     # Note that model2.transform() outputs a 'myProbability' column instead of the usual
     # 'probability' column since we renamed the lr.probabilityCol parameter previously.
-    model2.transform(test) \
+    result = model2.transform(test) \
         .select("features", "label", "myProbability", "prediction") \
-        .foreach(lambda x: print("features=%s,label=%s -> prob=%s, prediction=%s"
-                                 % (x.features, x.label, x.myProbability, x.prediction)))
+        .collect()
+
+    for row in result:
+        print("features=%s,label=%s -> prob=%s, prediction=%s"
+              % (row.features, row.label, row.myProbability, row.prediction))
 
     sc.stop()

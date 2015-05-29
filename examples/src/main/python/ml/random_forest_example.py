@@ -39,13 +39,11 @@ def testClassification(train, test):
     # Setting featureSubsetStrategy="auto" lets the algorithm choose.
     # Note: Use larger numTrees in practice.
 
-    rf = RandomForestClassifier(labelCol="indexed",
-                                numTrees=3, featureSubsetStrategy="auto",
-                                impurity='gini', maxDepth=4)
+    rf = RandomForestClassifier(labelCol="indexedLabel", numTrees=3, maxDepth=4)
 
     model = rf.fit(train)
-    predictionAndLabels = model.transform(test).select("prediction", "indexed") \
-        .map(lambda x: (float(x.prediction), float(x.indexed)))
+    predictionAndLabels = model.transform(test).select("prediction", "indexedLabel") \
+        .map(lambda x: (x.prediction, x.indexedLabel))
 
     metrics = MulticlassMetrics(predictionAndLabels)
     print("weighted f-measure %.3f" % metrics.weightedFMeasure())
@@ -57,13 +55,11 @@ def testRegression(train, test):
     # Train a RandomForest model.
     # Note: Use larger numTrees in practice.
 
-    rf = RandomForestRegressor(labelCol="indexed",
-                               numTrees=3,
-                               maxDepth=4)
+    rf = RandomForestRegressor(labelCol="indexedLabel", numTrees=3, maxDepth=4)
 
     model = rf.fit(train)
-    predictionAndLabels = model.transform(test).select("prediction", "indexed") \
-        .map(lambda x: (float(x.prediction), float(x.indexed)))
+    predictionAndLabels = model.transform(test).select("prediction", "indexedLabel") \
+        .map(lambda x: (x.prediction, x.indexedLabel))
 
     metrics = RegressionMetrics(predictionAndLabels)
     print("rmse %.3f" % metrics.rootMeanSquaredError)
@@ -82,7 +78,7 @@ if __name__ == "__main__":
     df = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
 
     # Map labels into an indexed column of labels in [0, numLabels)
-    stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
+    stringIndexer = StringIndexer(inputCol="label", outputCol="indexedLabel")
     si_model = stringIndexer.fit(df)
     td = si_model.transform(df)
     [train, test] = td.randomSplit([0.7, 0.3])

@@ -23,12 +23,13 @@ from pyspark import SparkContext
 from pyspark.ml.classification import GBTClassifier
 from pyspark.ml.feature import StringIndexer
 from pyspark.ml.regression import GBTRegressor
-from pyspark.mllib.evaluation import MulticlassMetrics, RegressionMetrics
+from pyspark.mllib.evaluation import BinaryClassificationMetrics, RegressionMetrics
 from pyspark.mllib.util import MLUtils
 from pyspark.sql import Row, SQLContext
 
 """
 A simple example demonstrating a Gradient Boosted Trees Classification/Regression Pipeline.
+Note: GBTClassifier only supports binary classification currently
 Run with:
   bin/spark-submit examples/src/main/python/ml/gradient_boosted_trees.py
 """
@@ -37,26 +38,24 @@ Run with:
 def testClassification(train, test):
     # Train a GradientBoostedTrees model.
 
-    rf = GBTClassifier(maxIter=30, maxDepth=4, labelCol="indexed")
+    rf = GBTClassifier(maxIter=30, maxDepth=4, labelCol="indexedLabel")
 
     model = rf.fit(train)
-    predictionAndLabels = model.transform(test).select("prediction", "indexed") \
-        .map(lambda x: (float(x.prediction), float(x.indexed)))
+    predictionAndLabels = model.transform(test).select("prediction", "indexedLabel") \
+        .map(lambda x: (x.prediction, x.indexedLabel))
 
-    metrics = MulticlassMetrics(predictionAndLabels)
-    print("weighted f-measure %.3f" % metrics.weightedFMeasure())
-    print("precision %s" % metrics.precision())
-    print("recall %s" % metrics.recall())
+    metrics = BinaryClassificationMetrics(predictionAndLabels)
+    print("AUC %.3f" % metrics.areaUnderROC)
 
 
 def testRegression(train, test):
     # Train a GradientBoostedTrees model.
 
-    rf = GBTRegressor(maxIter=30, maxDepth=4, labelCol="indexed")
+    rf = GBTRegressor(maxIter=30, maxDepth=4, labelCol="indexedLabel")
 
     model = rf.fit(train)
-    predictionAndLabels = model.transform(test).select("prediction", "indexed") \
-        .map(lambda x: (float(x.prediction), float(x.indexed)))
+    predictionAndLabels = model.transform(test).select("prediction", "indexedLabel") \
+        .map(lambda x: (x.prediction, x.indexedLabel))
 
     metrics = RegressionMetrics(predictionAndLabels)
     print("rmse %.3f" % metrics.rootMeanSquaredError)
@@ -75,7 +74,7 @@ if __name__ == "__main__":
     df = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
 
     # Map labels into an indexed column of labels in [0, numLabels)
-    stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
+    stringIndexer = StringIndexer(inputCol="label", outputCol="indexedLabel")
     si_model = stringIndexer.fit(df)
     td = si_model.transform(df)
     [train, test] = td.randomSplit([0.7, 0.3])
