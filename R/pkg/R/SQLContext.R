@@ -452,10 +452,15 @@ dropTempTable <- function(sqlContext, tableName) {
 #' df <- read.df(sqlContext, "path/to/file.json", source = "json")
 #' }
 
-read.df <- function(sqlContext, path = NULL, source = NULL, ...) {
+read.df <- function(sqlContext, path = NULL, source = "parquet", ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
     options[['path']] <- path
+  }
+  if (is.null(source)) {
+    sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
+    source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
+                          "org.apache.spark.sql.parquet")
   }
   sdf <- callJMethod(sqlContext, "load", source, options)
   dataFrame(sdf)
