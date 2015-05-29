@@ -48,7 +48,7 @@ import org.apache.spark.util.collection.PartitionedSerializedPairBuffer._
  *   |         keyStart         | keyValLen  | partitionId |
  *   +-------------+------------+------------+-------------+
  *
- * The buffer can support up to 536870911 records.
+ * The buffer can support up to `536870911 (2 ^ 29 - 1)` records.
  *
  * @param metaInitialRecords The initial number of entries in the metadata buffer.
  * @param kvBlockSize The size of each byte buffer in the ChainedBuffer used to store the records.
@@ -261,7 +261,7 @@ private[spark] class SerializedSortDataFormat extends SortDataFormat[Int, IntBuf
   }
 }
 
-private[spark] object PartitionedSerializedPairBuffer {
+private object PartitionedSerializedPairBuffer {
   val KEY_START = 0 // keyStart, a long, gets split across two ints
   val KEY_VAL_LEN = 2
   val PARTITION = 3
