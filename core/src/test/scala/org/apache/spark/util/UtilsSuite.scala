@@ -551,7 +551,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
   test("fetch hcfs dir") {
     val tempDir = Utils.createTempDir()
     val sourceDir = new File(tempDir, "source-dir")
-    val innerSourceDir = Utils.createTempDir(root=sourceDir.getPath)
+    val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
     val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
     val targetDir = new File(tempDir, "target-dir")
     Files.write("some text", sourceFile, UTF_8)

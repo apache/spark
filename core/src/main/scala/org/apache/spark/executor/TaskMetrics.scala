@@ -261,7 +261,7 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
    */
   private var _recordsRead: Long = _
   def recordsRead: Long = _recordsRead
-  def incRecordsRead(records: Long): Unit =  _recordsRead += records
+  def incRecordsRead(records: Long): Unit = _recordsRead += records
 
   /**
    * Invoke the bytesReadCallback and mutate bytesRead.

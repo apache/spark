@@ -218,10 +218,10 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     val pairRDD = generateFatPairRDD()
     pairRDD.checkpoint()
     val unionRDD = new PartitionerAwareUnionRDD(sc, Array(pairRDD))
-    val partitionBeforeCheckpoint =  serializeDeserialize(
+    val partitionBeforeCheckpoint = serializeDeserialize(
       unionRDD.partitions.head.asInstanceOf[PartitionerAwareUnionRDDPartition])
     pairRDD.count()
-    val partitionAfterCheckpoint =  serializeDeserialize(
+    val partitionAfterCheckpoint = serializeDeserialize(
       unionRDD.partitions.head.asInstanceOf[PartitionerAwareUnionRDDPartition])
     assert(
       partitionBeforeCheckpoint.parents.head.getClass !=

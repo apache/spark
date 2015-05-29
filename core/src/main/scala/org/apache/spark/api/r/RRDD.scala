@@ -309,7 +309,7 @@ private class StringRRDD[T: ClassTag](
 }
 
 private object SpecialLengths {
-  val TIMING_DATA   = -1
+  val TIMING_DATA = -1
 }
 
 private[r] class BufferedStreamThread(

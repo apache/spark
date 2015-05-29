@@ -265,7 +265,7 @@ class StatsReportListener extends SparkListener with Logging {
 private[spark] object StatsReportListener extends Logging {
 
   // For profiling, the extremes are more interesting
-  val percentiles = Array[Int](0,5,10,25,50,75,90,95,100)
+  val percentiles = Array[Int](0, 5, 10, 25, 50, 75, 90, 95, 100)
   val probabilities = percentiles.map(_ / 100.0)
   val percentilesHeader = "\t" + percentiles.mkString("%\t") + "%"
 
@@ -299,7 +299,7 @@ private[spark] object StatsReportListener extends Logging {
     dOpt.foreach { d => showDistribution(heading, d, formatNumber)}
   }
 
-  def showDistribution(heading: String, dOpt: Option[Distribution], format:String) {
+  def showDistribution(heading: String, dOpt: Option[Distribution], format: String) {
     def f(d: Double): String = format.format(d)
     showDistribution(heading, dOpt, f _)
   }
@@ -313,7 +313,7 @@ private[spark] object StatsReportListener extends Logging {
   }
 
   def showBytesDistribution(
-      heading:String,
+      heading: String,
       getMetric: (TaskInfo, TaskMetrics) => Option[Long],
       taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]) {
     showBytesDistribution(heading, extractLongDistribution(taskInfoMetrics, getMetric))
