@@ -1,4 +1,0 @@
-space(n) - returns n spaces
-Example:
-   > SELECT space(2) FROM src LIMIT 1;
-  '  '

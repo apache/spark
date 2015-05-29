@@ -1,5 +1,0 @@
-str regexp regexp - Returns true if str matches regexp and false otherwise
-Synonyms: rlike
-Example:
-  > SELECT 'fb' regexp '.*' FROM src LIMIT 1;
-  true

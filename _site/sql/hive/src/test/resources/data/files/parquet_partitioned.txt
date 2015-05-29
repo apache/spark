@@ -1,3 +1,0 @@
-1|foo|part1
-2|bar|part2
-3|baz|part2

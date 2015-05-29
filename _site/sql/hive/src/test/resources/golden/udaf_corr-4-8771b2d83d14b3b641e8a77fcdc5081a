@@ -1,9 +1,0 @@
-corr(x,y) - Returns the Pearson coefficient of correlation
-between a set of number pairs
-The function takes as arguments any pair of numeric types and returns a double.
-Any pair with a NULL is ignored. If the function is applied to an empty set or
-a singleton set, NULL will be returned. Otherwise, it computes the following:
-   COVAR_POP(x,y)/(STDDEV_POP(x)*STDDEV_POP(y))
-where neither x nor y is null,
-COVAR_POP is the population covariance,
-and STDDEV_POP is the population standard deviation.

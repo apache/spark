@@ -1,4 +1,0 @@
-John Doe100000.0Mary SmithTodd JonesFederal Taxes.2State Taxes.05Insurance.11 Michigan Ave.ChicagoIL60600
-Mary Smith80000.0Jeremy KingFederal Taxes.2State Taxes. 05Insurance.1100 Ontario St.ChicagoIL60601
-Todd Jones70000.0Federal Taxes.15State Taxes.03Insurance. 1200 Chicago Ave.Oak ParkIL60700
-Jeremy King60000.0Federal Taxes.15State Taxes.03Insurance. 1300 Obscure Dr.ObscuriaIL60100

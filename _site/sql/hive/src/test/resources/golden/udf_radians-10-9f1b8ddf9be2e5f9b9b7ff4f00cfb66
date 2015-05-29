@@ -1,5 +1,0 @@
-radians(x) - Converts degrees to radians
-Example:
-  > SELECT radians(90) FROM src LIMIT 1;
-  1.5707963267949mo
-

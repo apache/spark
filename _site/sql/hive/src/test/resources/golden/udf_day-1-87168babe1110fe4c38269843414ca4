@@ -1,6 +1,0 @@
-day(date) - Returns the date of the month of date
-Synonyms: dayofmonth
-date is a string in the format of 'yyyy-MM-dd HH:mm:ss' or 'yyyy-MM-dd'.
-Example:
-   > SELECT day('2009-30-07', 1) FROM src LIMIT 1;
-  30

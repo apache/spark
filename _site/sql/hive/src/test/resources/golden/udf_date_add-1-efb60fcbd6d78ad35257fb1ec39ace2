@@ -1,5 +1,0 @@
-date_add(start_date, num_days) - Returns the date that is num_days after start_date.
-start_date is a string in the format 'yyyy-MM-dd HH:mm:ss' or 'yyyy-MM-dd'. num_days is a number. The time part of start_date is ignored.
-Example:
-   > SELECT date_add('2009-30-07', 1) FROM src LIMIT 1;
-  '2009-31-07'

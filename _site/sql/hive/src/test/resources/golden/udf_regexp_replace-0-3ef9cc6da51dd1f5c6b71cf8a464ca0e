@@ -1,1 +1,0 @@
-regexp_replace(str, regexp, rep) - replace all substrings of str that match regexp with rep

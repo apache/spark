@@ -1,3 +1,0 @@
-line1|key11:value11,key12:value12,key13:value13|a,b,c|one,two
-line2|key21:value21,key22:value22,key23:value23|d,e,f|three,four
-line3|key31:value31,key32:value32,key33:value33|g,h,i|five,six

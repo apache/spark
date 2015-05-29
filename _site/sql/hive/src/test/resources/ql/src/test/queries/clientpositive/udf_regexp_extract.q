@@ -1,2 +1,0 @@
-DESCRIBE FUNCTION regexp_extract;
-DESCRIBE FUNCTION EXTENDED regexp_extract;

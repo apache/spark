@@ -1,1 +1,0 @@
-parse_url(url, partToExtract[, key]) - extracts a part from a URL

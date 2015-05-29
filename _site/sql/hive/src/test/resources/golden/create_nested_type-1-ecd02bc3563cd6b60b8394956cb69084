@@ -1,4 +1,0 @@
-a                   	string              	                    
-b                   	array<string>       	                    
-c                   	array<map<string,string>>	                    
-d                   	map<string,array<string>>	                    

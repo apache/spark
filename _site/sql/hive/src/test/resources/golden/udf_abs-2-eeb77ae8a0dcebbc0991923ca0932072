@@ -1,6 +1,0 @@
-abs(x) - returns the absolute value of x
-Example:
-  > SELECT abs(0) FROM src LIMIT 1;
-  0
-  > SELECT abs(-5) FROM src LIMIT 1;
-  5
