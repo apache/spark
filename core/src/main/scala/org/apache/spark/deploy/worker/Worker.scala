@@ -97,6 +97,7 @@ private[worker] class Worker(
   private var masterAddress: Address = null
   private var activeMasterUrl: String = ""
   private[worker] var activeMasterWebUiUrl : String = ""
+  private var workerWebUiUrl: String = ""
   private val akkaUrl = AkkaUtils.address(
     AkkaUtils.protocol(context.system),
     actorSystemName,
@@ -173,6 +174,7 @@ private[worker] class Worker(
     shuffleService.startIfEnabled()
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
+    workerWebUiUrl = "http://" + publicAddress + ":" + webUi.boundPort
     registerWithMaster()
 
     metricsSystem.registerSource(workerSource)
@@ -198,7 +200,7 @@ private[worker] class Worker(
     for (masterAkkaUrl <- masterAkkaUrls) {
       logInfo("Connecting to master " + masterAkkaUrl + "...")
       val actor = context.actorSelection(masterAkkaUrl)
-      actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+      actor ! RegisterWorker(workerId, host, port, cores, memory, workerWebUiUrl)
     }
   }
 
@@ -237,7 +239,7 @@ private[worker] class Worker(
          */
         if (master != null) {
           master ! RegisterWorker(
-            workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+            workerId, host, port, cores, memory, workerWebUiUrl)
         } else {
           // We are retrying the initial registration
           tryRegisterAllMasters()

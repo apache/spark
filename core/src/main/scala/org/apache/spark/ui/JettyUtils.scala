@@ -17,21 +17,25 @@
 
 package org.apache.spark.ui
 
-import java.net.{InetSocketAddress, URL}
+import java.net.{URI, URL}
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
+import scala.collection.mutable.{ArrayBuffer, StringBuilder}
 import scala.language.implicitConversions
 import scala.xml.Node
 
-import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.server.{Connector, Request, Server}
 import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.servlet._
 import org.eclipse.jetty.util.thread.QueuedThreadPool
+import org.eclipse.jetty.server.nio.SelectChannelConnector
+import org.eclipse.jetty.server.ssl.SslSelectChannelConnector
+
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SSLOptions, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
 
 /**
@@ -206,17 +210,41 @@ private[spark] object JettyUtils extends Logging {
   def startJettyServer(
       hostName: String,
       port: Int,
+      securityManager: SecurityManager,
       handlers: Seq[ServletContextHandler],
       conf: SparkConf,
       serverName: String = ""): ServerInfo = {
 
     val collection = new ContextHandlerCollection
-    collection.setHandlers(handlers.toArray)
     addFilters(handlers, conf)
 
     // Bind to the given port, or throw a java.net.BindException if the port is occupied
     def connect(currentPort: Int): (Server, Int) = {
-      val server = new Server(new InetSocketAddress(hostName, currentPort))
+      val server = new Server
+      val connectors = new ArrayBuffer[Connector]
+      // Create a connector on port currentPort to listen for HTTP requests
+      val httpConnector = new SelectChannelConnector()
+      httpConnector.setPort(currentPort)
+      connectors += httpConnector
+
+      val sslContextFactory = securityManager.webUISSLOptions.createJettySslContextFactory()
+      sslContextFactory.foreach { factory =>
+        // If the new port wraps around, do not try a privilege port
+        val securePort = (currentPort + 400 - 1024) % (65536 - 1024) + 1024
+        val scheme = "https"
+        // Create a connector on port securePort to listen for HTTPS requests
+        val connector = new SslSelectChannelConnector(factory)
+        connector.setPort(securePort)
+        connectors += connector
+
+        // redirect the HTTP requests to HTTPS port
+        collection.addHandler(createRedirectHttpsHandler(securePort, scheme))
+      }
+
+      handlers.foreach(collection.addHandler)
+      connectors.foreach(_.setHost(hostName))
+      server.setConnectors(connectors.toArray)
+
       val pool = new QueuedThreadPool
       pool.setDaemon(true)
       server.setThreadPool(pool)
@@ -237,6 +265,41 @@ private[spark] object JettyUtils extends Logging {
 
     val (server, boundPort) = Utils.startServiceOnPort[Server](port, connect, conf, serverName)
     ServerInfo(server, boundPort, collection)
+  }
+
+  private def createRedirectHttpsHandler(securePort: Int, scheme: String): ContextHandler = {
+    val redirectHandler: ContextHandler = new ContextHandler
+    redirectHandler.setContextPath("/")
+    redirectHandler.setHandler(new AbstractHandler {
+      override def handle(
+          target: String,
+          baseRequest: Request,
+          request: HttpServletRequest,
+          response: HttpServletResponse): Unit = {
+        if (baseRequest.isSecure) {
+          return
+        }
+        val httpsURI = createRedirectURI(scheme, baseRequest.getServerName, securePort,
+          baseRequest.getRequestURI, baseRequest.getQueryString)
+        response.setContentLength(0)
+        response.encodeRedirectURL(httpsURI)
+        response.sendRedirect(httpsURI)
+        baseRequest.setHandled(true)
+      }
+    })
+    redirectHandler
+  }
+
+  // Create a new URI from the arguments, handling IPv6 host encoding and default ports.
+  private def createRedirectURI(
+      scheme: String, server: String, port: Int, path: String, query: String) = {
+    val redirectServer = if (server.contains(":") && !server.startsWith("[")) {
+      s"[${server}]"
+    } else {
+      server
+    }
+    val authority = s"$redirectServer:$port"
+    new URI(scheme, authority, path, query, null).toString
   }
 
   /** Attach a prefix to the given path, but avoid returning an empty path */

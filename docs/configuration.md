@@ -1358,6 +1358,7 @@ Apart from these, the following properties are also available, and may be useful
             The reference list of protocols one can find on
             <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
             page.
+            Note: If not set, it will use the default cipher suites of JVM.
         </td>
     </tr>
     <tr>
@@ -1383,12 +1384,26 @@ Apart from these, the following properties are also available, and may be useful
         </td>
     </tr>
     <tr>
+        <td><code>spark.ssl.keyStoreType</code></td>
+        <td>JKS</td>
+        <td>
+            The type of the key-store.
+        </td>
+    </tr>
+    <tr>
         <td><code>spark.ssl.protocol</code></td>
         <td>None</td>
         <td>
             A protocol name. The protocol must be supported by JVM. The reference list of protocols
             one can find on <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
             page.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.needClientAuth</code></td>
+        <td>false</td>
+        <td>
+            Set true if SSL needs client authentication.
         </td>
     </tr>
     <tr>
@@ -1404,6 +1419,13 @@ Apart from these, the following properties are also available, and may be useful
         <td>None</td>
         <td>
             A password to the trust-store.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.trustStoreType</code></td>
+        <td>JKS</td>
+        <td>
+            The type of the trust-store.
         </td>
     </tr>
 </table>

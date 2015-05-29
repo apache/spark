@@ -35,8 +35,11 @@ import org.eclipse.jetty.util.ssl.SslContextFactory
  * @param keyStore            a path to the key-store file
  * @param keyStorePassword    a password to access the key-store file
  * @param keyPassword         a password to access the private key in the key-store
+ * @param keyStoreType         the type of the key-store
+ * @param needClientAuth      set true if SSL needs client authentication
  * @param trustStore          a path to the trust-store file
  * @param trustStorePassword  a password to access the trust-store file
+ * @param trustStoreType     the type of the trust-store
  * @param protocol            SSL protocol (remember that SSLv3 was compromised) supported by Java
  * @param enabledAlgorithms   a set of encryption algorithms to use
  */
@@ -45,8 +48,11 @@ private[spark] case class SSLOptions(
     keyStore: Option[File] = None,
     keyStorePassword: Option[String] = None,
     keyPassword: Option[String] = None,
+    keyStoreType: Option[String] = None,
+    needClientAuth: Boolean = false,
     trustStore: Option[File] = None,
     trustStorePassword: Option[String] = None,
+    trustStoreType: Option[String] = None,
     protocol: Option[String] = None,
     enabledAlgorithms: Set[String] = Set.empty) {
 
@@ -58,12 +64,18 @@ private[spark] case class SSLOptions(
       val sslContextFactory = new SslContextFactory()
 
       keyStore.foreach(file => sslContextFactory.setKeyStorePath(file.getAbsolutePath))
-      trustStore.foreach(file => sslContextFactory.setTrustStore(file.getAbsolutePath))
       keyStorePassword.foreach(sslContextFactory.setKeyStorePassword)
-      trustStorePassword.foreach(sslContextFactory.setTrustStorePassword)
       keyPassword.foreach(sslContextFactory.setKeyManagerPassword)
+      keyStoreType.foreach(sslContextFactory.setKeyStoreType)
+      if (needClientAuth) {
+        trustStore.foreach(file => sslContextFactory.setTrustStore(file.getAbsolutePath))
+        trustStorePassword.foreach(sslContextFactory.setTrustStorePassword)
+        trustStoreType.foreach(sslContextFactory.setTrustStoreType)
+      }
       protocol.foreach(sslContextFactory.setProtocol)
-      sslContextFactory.setIncludeCipherSuites(enabledAlgorithms.toSeq: _*)
+      if (enabledAlgorithms.nonEmpty) {
+        sslContextFactory.setIncludeCipherSuites(enabledAlgorithms.toSeq: _*)
+      }
 
       Some(sslContextFactory)
     } else {
@@ -119,9 +131,12 @@ private[spark] object SSLOptions extends Logging {
     * $ - `[ns].keyStore` - a path to the key-store file; can be relative to the current directory
     * $ - `[ns].keyStorePassword` - a password to the key-store file
     * $ - `[ns].keyPassword` - a password to the private key
+    * $ - `[ns].keyStoreType` - the type of the key-store
+    * $ - `[ns].needClientAuth` - whether SSL needs client authentication
     * $ - `[ns].trustStore` - a path to the trust-store file; can be relative to the current
     *                         directory
     * $ - `[ns].trustStorePassword` - a password to the trust-store file
+    * $ - `[ns].trustStoreType` - the type of trust-store
     * $ - `[ns].protocol` - a protocol name supported by a particular Java version
     * $ - `[ns].enabledAlgorithms` - a comma separated list of ciphers
     *
@@ -149,11 +164,20 @@ private[spark] object SSLOptions extends Logging {
     val keyPassword = conf.getOption(s"$ns.keyPassword")
         .orElse(defaults.flatMap(_.keyPassword))
 
+    val keyStoreType = conf.getOption(s"$ns.keyStoreType")
+        .orElse(defaults.flatMap(_.keyStoreType))
+
+    val needClientAuth =
+      conf.getBoolean(s"$ns.needClientAuth", defaultValue = defaults.exists(_.needClientAuth))
+
     val trustStore = conf.getOption(s"$ns.trustStore").map(new File(_))
         .orElse(defaults.flatMap(_.trustStore))
 
     val trustStorePassword = conf.getOption(s"$ns.trustStorePassword")
         .orElse(defaults.flatMap(_.trustStorePassword))
+
+    val trustStoreType = conf.getOption(s"$ns.trustStoreType")
+        .orElse(defaults.flatMap(_.trustStoreType))
 
     val protocol = conf.getOption(s"$ns.protocol")
         .orElse(defaults.flatMap(_.protocol))
@@ -168,8 +192,11 @@ private[spark] object SSLOptions extends Logging {
       keyStore,
       keyStorePassword,
       keyPassword,
+      keyStoreType,
+      needClientAuth,
       trustStore,
       trustStorePassword,
+      trustStoreType,
       protocol,
       enabledAlgorithms)
   }
