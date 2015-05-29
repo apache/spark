@@ -38,7 +38,7 @@ class BlockManagerMaster(
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String) {
     tell(RemoveExecutor(execId))
-    logInfo("Removed " + execId + " successfully in removeExecutor")
+    logDebug(s"Removed executor $execId successfully")
   }
 
   /** Register the BlockManager's id with the driver. */

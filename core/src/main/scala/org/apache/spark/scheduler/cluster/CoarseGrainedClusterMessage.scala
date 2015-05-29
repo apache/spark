@@ -70,7 +70,8 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case object StopExecutors extends CoarseGrainedClusterMessage
 
-  case class RemoveExecutor(executorId: String, reason: String) extends CoarseGrainedClusterMessage
+  case class RemoveExecutor(executorId: String, reason: String, isError: Boolean)
+    extends CoarseGrainedClusterMessage
 
   case class SetupDriver(driver: RpcEndpointRef) extends CoarseGrainedClusterMessage
 

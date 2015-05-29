@@ -174,8 +174,8 @@ class DAGScheduler(
   }
 
   // Called by TaskScheduler when an executor fails.
-  def executorLost(execId: String): Unit = {
-    eventProcessLoop.post(ExecutorLost(execId))
+  def executorLost(execId: String, isError: Boolean = true): Unit = {
+    eventProcessLoop.post(ExecutorLost(execId, isError))
   }
 
   // Called by TaskScheduler when a host is added
@@ -1133,7 +1133,8 @@ class DAGScheduler(
 
         // TODO: mark the executor as failed only if there were lots of fetch failures on it
         if (bmAddress != null) {
-          handleExecutorLost(bmAddress.executorId, fetchFailed = true, Some(task.epoch))
+          handleExecutorLost(
+            bmAddress.executorId, fetchFailed = true, isError = true, Some(task.epoch))
         }
 
       case commitDenied: TaskCommitDenied =>
@@ -1166,11 +1167,14 @@ class DAGScheduler(
   private[scheduler] def handleExecutorLost(
       execId: String,
       fetchFailed: Boolean,
+      isError: Boolean,
       maybeEpoch: Option[Long] = None) {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
       failedEpoch(execId) = currentEpoch
-      logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
+      if (isError) {
+        logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
+      }
       blockManagerMaster.removeExecutor(execId)
 
       if (!env.blockManager.externalShuffleServiceEnabled || fetchFailed) {
@@ -1437,8 +1441,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case ExecutorAdded(execId, host) =>
       dagScheduler.handleExecutorAdded(execId, host)
 
-    case ExecutorLost(execId) =>
-      dagScheduler.handleExecutorLost(execId, fetchFailed = false)
+    case ExecutorLost(execId, isError) =>
+      dagScheduler.handleExecutorLost(execId, fetchFailed = false, isError = isError)
 
     case BeginEvent(task, taskInfo) =>
       dagScheduler.handleBeginEvent(task, taskInfo)
