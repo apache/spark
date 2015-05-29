@@ -52,7 +52,7 @@ object RandomRDDs {
       numPartitions: Int = 0,
       seed: Long = Utils.random.nextLong()): RDD[Double] = {
     val uniform = new UniformGenerator()
-    randomRDD(sc, uniform,  size, numPartitionsOrDefault(sc, numPartitions), seed)
+    randomRDD(sc, uniform, size, numPartitionsOrDefault(sc, numPartitions), seed)
   }
 
   /**
