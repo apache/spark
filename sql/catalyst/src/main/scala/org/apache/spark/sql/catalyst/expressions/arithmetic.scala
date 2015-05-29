@@ -121,10 +121,6 @@ abstract class BinaryArithmetic extends BinaryExpression {
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "+"
 
-  // We will always cast fixed decimal to unlimited decimal
-  // for `Add` in `HiveTypeCoercion`
-  override lazy val resolved = childrenResolved && !DecimalType.isFixed(dataType)
-
   protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)
 
@@ -135,10 +131,6 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "-"
-
-  // We will always cast fixed decimal to unlimited decimal
-  // for `Subtract` in `HiveTypeCoercion`
-  override lazy val resolved = childrenResolved && !DecimalType.isFixed(dataType)
 
   protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)
@@ -151,10 +143,6 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
 case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "*"
 
-  // We will always cast fixed decimal to unlimited decimal
-  // for `Multiply` in `HiveTypeCoercion`
-  override lazy val resolved = childrenResolved && !DecimalType.isFixed(dataType)
-
   protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)
 
@@ -166,10 +154,6 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "/"
   override def nullable: Boolean = true
-
-  // We will always cast fixed decimal to unlimited decimal
-  // for `Divide` in `HiveTypeCoercion`
-  override lazy val resolved = childrenResolved && !DecimalType.isFixed(dataType)
 
   protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)
@@ -197,10 +181,6 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "%"
   override def nullable: Boolean = true
-
-  // We will always cast fixed decimal to unlimited decimal
-  // for `Remainder` in `HiveTypeCoercion`
-  override lazy val resolved = childrenResolved && !DecimalType.isFixed(dataType)
 
   protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)

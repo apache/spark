@@ -49,7 +49,7 @@ abstract class Expression extends TreeNode[Expression] {
    * should override this if the resolution of this type of expression involves more than just
    * the resolution of its children.
    */
-  lazy val resolved: Boolean = childrenResolved
+  lazy val resolved: Boolean = childrenResolved && !checkInputDataTypes().hasError
 
   /**
    * Returns the [[DataType]] of the result of evaluating this expression.  It is

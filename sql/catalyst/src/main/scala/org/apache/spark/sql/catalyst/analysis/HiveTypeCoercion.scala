@@ -407,7 +407,7 @@ trait HiveTypeCoercion {
         Union(newLeft, newRight)
 
       // fix decimal precision for expressions
-      case q => q.transformExpressionsUp {
+      case q => q.transformExpressions {
         // Skip nodes whose children have not been resolved yet
         case e if !e.childrenResolved => e
 
@@ -619,12 +619,13 @@ trait HiveTypeCoercion {
    */
   object Division extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      // Skip nodes who's children have not been resolved yet or input types do not match.
-      case e if !e.childrenResolved || e.checkInputDataTypes().hasError => e
+      // Skip Divisions who has not been resolved yet,
+      // as this is an extra rule which should be applied at last.
+      case e if !e.resolved => e
 
       // Decimal and Double remain the same
-      case d: Divide if d.resolved && d.dataType == DoubleType => d
-      case d: Divide if d.resolved && d.dataType.isInstanceOf[DecimalType] => d
+      case d: Divide if d.dataType == DoubleType => d
+      case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
 
       case Divide(l, r) => Divide(Cast(l, DoubleType), Cast(r, DoubleType))
     }
