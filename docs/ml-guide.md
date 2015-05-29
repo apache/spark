@@ -3,6 +3,23 @@ layout: global
 title: Spark ML Programming Guide
 ---
 
+`\[
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\x}{\mathbf{x}}
+\newcommand{\y}{\mathbf{y}}
+\newcommand{\wv}{\mathbf{w}}
+\newcommand{\av}{\mathbf{\alpha}}
+\newcommand{\bv}{\mathbf{b}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\id}{\mathbf{I}}
+\newcommand{\ind}{\mathbf{1}}
+\newcommand{\0}{\mathbf{0}}
+\newcommand{\unit}{\mathbf{e}}
+\newcommand{\one}{\mathbf{1}}
+\newcommand{\zero}{\mathbf{0}}
+\]`
+
 `spark.ml` is a new package introduced in Spark 1.2, which aims to provide a uniform set of
 high-level APIs that help users create and tune practical machine learning pipelines.
 It is currently an alpha component, and we would like to hear back from the community about
@@ -159,9 +176,9 @@ There are now several algorithms in the Pipelines API which are not in the lower
 
 ## Linear Methods with Elastic Net Regularization
 
-In MLlib, we implement popular linear methods such as logistic regression and linear least squares with L1 or L2 regularization. Refer to [the linear methods section](mllib-guide.html) for details. In `spark.ml`, we add the [Elastic net](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf), which is a hybrid of L1 and L2 regularization. Mathematically it is defined as a linear combination of the L1-norm and the L2-norm:
+In MLlib, we implement popular linear methods such as logistic regression and linear least squares with L1 or L2 regularization. Refer to [the linear methods section](mllib-linear-methods.html) for details. In `spark.ml`, we add the [Elastic net](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf), which is a hybrid of L1 and L2 regularization. Mathematically it is defined as a linear combination of the L1-norm and the L2-norm:
 `\[
-\alpha \lambda_1\|v\|_1 + (1-\alpha) \frac{\lambda_2}{2}\|v\|_2, \alpha \in [0, 1].
+\alpha \lambda_1\|\wv\|_1 + (1-\alpha) \frac{\lambda_2}{2}\|\wv\|_2, \alpha \in [0, 1].
 \]`
 By setting $\alpha$ properly, it contains both L1 and L2 regularization as special cases. We implement both linear regression and logistic regression with elastic net regularization in `spark.ml`.
 
