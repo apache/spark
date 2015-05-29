@@ -39,7 +39,7 @@ sqlContext <- sparkRSQL.init(sc)
 </div>
 
 ## Creating DataFrames
-With a `SQLContext`, applications can create `DataFrame`s from a local R data frame, from a Hive table, or from <a href='#data-sources'>data sources</a>.
+With a `SQLContext`, applications can create `DataFrame`s from a local R data frame, from a [Hive table](sql-programming-guide.html#hive-tables), or from other [data sources](sql-programming-guide.html#data-sources).
 
 ### From local data frames
 The simplest way to create a data frame is to convert a local R data frame into a SparkR DataFrame. Specifically we can use `createDataFrame` and pass in the local R data frame to create a SparkR DataFrame. As an example, the following creates a `DataFrame` based using the `faithful` dataset from R. 
