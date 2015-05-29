@@ -66,9 +66,7 @@ case class WindowSpecDefinition(
     }
   }
 
-  type EvaluatedType = Any
-
-  override def children: Seq[Expression]  = partitionSpec ++ orderSpec
+  override def children: Seq[Expression] = partitionSpec ++ orderSpec
 
   override lazy val resolved: Boolean =
     childrenResolved && frameSpecification.isInstanceOf[SpecifiedWindowFrame]

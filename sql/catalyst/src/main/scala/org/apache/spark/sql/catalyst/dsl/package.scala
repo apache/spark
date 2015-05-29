@@ -140,7 +140,7 @@ package object dsl {
       // Note that if we make ExpressionConversions an object rather than a trait, we can
       // then make this a value class to avoid the small penalty of runtime instantiation.
       def $(args: Any*): analysis.UnresolvedAttribute = {
-        analysis.UnresolvedAttribute(sc.s(args :_*))
+        analysis.UnresolvedAttribute(sc.s(args : _*))
       }
     }
 

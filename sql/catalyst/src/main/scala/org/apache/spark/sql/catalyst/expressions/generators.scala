@@ -105,8 +105,8 @@ case class Explode(child: Expression)
         val inputArray = child.eval(input).asInstanceOf[Seq[Any]]
         if (inputArray == null) Nil else inputArray.map(v => new GenericRow(Array(v)))
       case MapType(_, _, _) =>
-        val inputMap = child.eval(input).asInstanceOf[Map[Any,Any]]
-        if (inputMap == null) Nil else inputMap.map { case (k,v) => new GenericRow(Array(k,v)) }
+        val inputMap = child.eval(input).asInstanceOf[Map[Any, Any]]
+        if (inputMap == null) Nil else inputMap.map { case (k, v) => new GenericRow(Array(k, v)) }
     }
   }
 

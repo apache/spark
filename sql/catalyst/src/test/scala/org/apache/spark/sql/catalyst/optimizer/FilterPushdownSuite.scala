@@ -97,7 +97,7 @@ class FilterPushdownSuite extends PlanTest {
   test("column pruning for Project(ne, Limit)") {
     val originalQuery =
       testRelation
-        .select('a,'b)
+        .select('a, 'b)
         .limit(2)
         .select('a)
 
