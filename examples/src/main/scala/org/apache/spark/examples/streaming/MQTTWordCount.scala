@@ -49,7 +49,7 @@ object MQTTPublisher {
 
       client.connect()
 
-      val msgtopic  = client.getTopic(topic)
+      val msgtopic = client.getTopic(topic)
       val msgContent = "hello mqtt demo for spark streaming"
       val message = new MqttMessage(msgContent.getBytes("utf-8"))
 
