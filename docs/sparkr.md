@@ -10,8 +10,8 @@ title: SparkR (R on Spark)
 # Overview
 SparkR is an R package that provides a light-weight frontend to use Apache Spark from R.
 In Spark {{site.SPARK_VERSION}}, SparkR provides a distributed data frame implementation that
-supports operations similar to R data frames, [dplyr](https://github.com/hadley/dplyr) but on large
-datasets.
+supports operations like selection, filtering, aggregation etc. (similar to R data frames,
+[dplyr](https://github.com/hadley/dplyr)) but on large datasets.
 
 # SparkR DataFrames
 
@@ -120,8 +120,8 @@ head(select(df, df$eruptions))
 # You can also pass in column name as strings 
 head(select(df, "eruptions"))
 
-# Select wait times shorter than 50 mins
-head(where(df, df$waiting < 50))
+# Filter the DataFrame to only retain rows with wait times shorter than 50 mins
+head(filter(df, df$waiting < 50))
 ##  eruptions waiting
 ##1     1.750      47
 ##2     1.750      47
@@ -139,14 +139,14 @@ SparkR data frames support a number of commonly used functions to aggregate data
 {% highlight r %}
 
 # We use the `n` operator to count the number of times each waiting time appears
-head(agg(groupBy(df, df$waiting), count = n(df$waiting)))
+head(summarize(groupBy(df, df$waiting), count = n(df$waiting)))
 ##  waiting count
 ##1      81    13
 ##2      60     6
 ##3      68     1
 
 # We can also sort the output from the aggregation to get the most common waiting times
-waiting_counts <- agg(groupBy(df, df$waiting), count = n(df$waiting))
+waiting_counts <- summarize(groupBy(df, df$waiting), count = n(df$waiting))
 head(arrange(waiting_counts, desc(waiting_counts$count)))
 
 ##   waiting count
