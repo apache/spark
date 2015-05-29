@@ -17,9 +17,9 @@
 
 package org.apache.spark.util.collection
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class BitSetSuite extends FunSuite {
+class BitSetSuite extends SparkFunSuite {
 
   test("basic set and get") {
     val setBits = Seq(0, 9, 1, 10, 90, 96)

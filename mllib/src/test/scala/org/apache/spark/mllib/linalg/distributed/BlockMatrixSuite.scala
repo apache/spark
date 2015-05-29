@@ -20,14 +20,13 @@ package org.apache.spark.mllib.linalg.distributed
 import java.{util => ju}
 
 import breeze.linalg.{DenseMatrix => BDM}
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{SparseMatrix, DenseMatrix, Matrices, Matrix}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
+class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   val m = 5
   val n = 4

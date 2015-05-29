@@ -20,12 +20,11 @@ package org.apache.spark.mllib.linalg
 import scala.util.Random
 
 import breeze.linalg.{DenseMatrix => BDM, squaredDistance => breezeSquaredDistance}
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.util.TestingUtils._
 
-class VectorsSuite extends FunSuite {
+class VectorsSuite extends SparkFunSuite {
 
   val arr = Array(0.1, 0.0, 0.3, 0.4)
   val n = 4

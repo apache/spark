@@ -17,16 +17,15 @@
 
 package org.apache.spark.mllib.stat
 
-import org.scalatest.FunSuite
-
 import breeze.linalg.{DenseMatrix => BDM, Matrix => BM}
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.correlation.{Correlations, PearsonCorrelation,
   SpearmanCorrelation}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class CorrelationSuite extends FunSuite with MLlibTestSparkContext {
+class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // test input data
   val xData = Array(1.0, 0.0, -2.0)

@@ -17,13 +17,12 @@
 
 package org.apache.spark.mllib.stat.distribution
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{ Vectors, Matrices }
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class MultivariateGaussianSuite extends FunSuite with MLlibTestSparkContext {
+class MultivariateGaussianSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("univariate") {
     val x1 = Vectors.dense(0.0)
     val x2 = Vectors.dense(1.5)

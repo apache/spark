@@ -19,17 +19,17 @@ package org.apache.spark.sql.execution
 
 import java.sql.{Timestamp, Date}
 
-import org.scalatest.{FunSuite, BeforeAndAfterAll}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.ShuffleDependency
+import org.apache.spark.{ShuffleDependency, SparkFunSuite}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.{MyDenseVectorUDT, QueryTest}
 
-class SparkSqlSerializer2DataTypeSuite extends FunSuite {
+class SparkSqlSerializer2DataTypeSuite extends SparkFunSuite {
   // Make sure that we will not use serializer2 for unsupported data types.
   def checkSupported(dataType: DataType, isSupported: Boolean): Unit = {
     val testName =

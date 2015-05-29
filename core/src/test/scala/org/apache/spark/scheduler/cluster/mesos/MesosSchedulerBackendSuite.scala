@@ -30,16 +30,15 @@ import org.apache.mesos.SchedulerDriver
 import org.mockito.Matchers._
 import org.mockito.Mockito._
 import org.mockito.{ArgumentCaptor, Matchers}
-import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerExecutorAdded,
   TaskDescription, TaskSchedulerImpl, WorkerOffer}
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 
-class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with MockitoSugar {
+class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar {
 
   test("check spark-class location correctly") {
     val conf = new SparkConf

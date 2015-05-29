@@ -20,15 +20,16 @@ package org.apache.spark.deploy
 import java.io.{File, PrintStream, OutputStream}
 
 import scala.collection.mutable.ArrayBuffer
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.ivy.core.module.descriptor.MDArtifact
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.resolver.IBiblioResolver
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 
-class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
+class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private val noOpOutputStream = new OutputStream {
     def write(b: Int) = {}

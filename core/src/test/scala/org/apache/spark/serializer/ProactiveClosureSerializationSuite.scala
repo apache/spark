@@ -17,9 +17,7 @@
 
 package org.apache.spark.serializer
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.{SharedSparkContext, SparkException}
+import org.apache.spark.{SharedSparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 
 /* A trivial (but unserializable) container for trivial functions */
@@ -29,7 +27,7 @@ class UnserializableClass {
   def pred[T](x: T): Boolean = x.toString.length % 2 == 0
 }
 
-class ProactiveClosureSerializationSuite extends FunSuite with SharedSparkContext {
+class ProactiveClosureSerializationSuite extends SparkFunSuite with SharedSparkContext {
 
   def fixture: (RDD[String], UnserializableClass) = {
     (sc.parallelize(0 until 1000).map(_.toString), new UnserializableClass)

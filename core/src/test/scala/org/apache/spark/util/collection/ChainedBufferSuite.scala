@@ -19,10 +19,11 @@ package org.apache.spark.util.collection
 
 import java.nio.ByteBuffer
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers._
 
-class ChainedBufferSuite extends FunSuite {
+import org.apache.spark.SparkFunSuite
+
+class ChainedBufferSuite extends SparkFunSuite {
   test("write and read at start") {
     // write from start of source array
     val buffer = new ChainedBuffer(8)

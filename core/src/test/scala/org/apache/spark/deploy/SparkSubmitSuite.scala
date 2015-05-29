@@ -23,7 +23,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.ByteStreams
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
@@ -35,7 +34,12 @@ import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 // Note: this suite mixes in ResetSystemProperties because SparkSubmit.main() sets a bunch
 // of properties that neeed to be cleared after tests.
-class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties with Timeouts {
+class SparkSubmitSuite
+  extends SparkFunSuite
+  with Matchers
+  with ResetSystemProperties
+  with Timeouts {
+
   def beforeAll() {
     System.setProperty("spark.testing", "true")
   }

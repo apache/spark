@@ -20,7 +20,7 @@ package org.apache.spark.shuffle.unsafe
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.Matchers
 
 import org.apache.spark._
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}
@@ -29,7 +29,7 @@ import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}
  * Tests for the fallback logic in UnsafeShuffleManager. Actual tests of shuffling data are
  * performed in other suites.
  */
-class UnsafeShuffleManagerSuite extends FunSuite with Matchers {
+class UnsafeShuffleManagerSuite extends SparkFunSuite with Matchers {
 
   import UnsafeShuffleManager.canUseUnsafeShuffle
 
