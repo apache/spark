@@ -18,7 +18,9 @@
 package org.apache.spark.sql.sources
 
 import org.apache.hadoop.fs.Path
+import org.scalatest.FunSuite
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
@@ -73,6 +75,12 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
     checkAnswer(
       df.filter('a > 1 && 'p1 < 2).select('b, 'p1),
       for (i <- 2 to 3; _ <- Seq("foo", "bar")) yield Row(s"val_$i", 1))
+
+    // Project many copies of columns with different types (reproduction for SPARK-7858)
+    checkAnswer(
+      df.filter('a > 1 && 'p1 < 2).select('b, 'b, 'b, 'b, 'p1, 'p1, 'p1, 'p1),
+      for (i <- 2 to 3; _ <- Seq("foo", "bar"))
+        yield Row(s"val_$i", s"val_$i", s"val_$i", s"val_$i", 1, 1, 1, 1))
 
     // Self-join
     df.registerTempTable("t")
@@ -477,6 +485,26 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
   }
 }
 
+class CommitFailureTestRelationSuite extends FunSuite with SQLTestUtils {
+  import TestHive.implicits._
+
+  override val sqlContext = TestHive
+
+  val dataSourceName: String = classOf[CommitFailureTestSource].getCanonicalName
+
+  test("SPARK-7684: commitTask() failure should fallback to abortTask()") {
+    withTempPath { file =>
+      val df = (1 to 3).map(i => i -> s"val_$i").toDF("a", "b")
+      intercept[SparkException] {
+        df.write.format(dataSourceName).save(file.getCanonicalPath)
+      }
+
+      val fs = new Path(file.getCanonicalPath).getFileSystem(SparkHadoopUtil.get.conf)
+      assert(!fs.exists(new Path(file.getCanonicalPath, "_temporary")))
+    }
+  }
+}
+
 class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   override val dataSourceName: String = classOf[parquet.DefaultSource].getCanonicalName
 
@@ -518,6 +546,22 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
     withTable("t") {
       checkAnswer(table("t"), df.select('b, 'c, 'a).collect())
+    }
+  }
+
+  test("SPARK-7868: _temporary directories should be ignored") {
+    withTempPath { dir =>
+      val df = Seq("a", "b", "c").zipWithIndex.toDF()
+
+      df.write
+        .format("parquet")
+        .save(dir.getCanonicalPath)
+
+      df.write
+        .format("parquet")
+        .save(s"${dir.getCanonicalPath}/_temporary")
+
+      checkAnswer(read.format("parquet").load(dir.getCanonicalPath), df.collect())
     }
   }
 }

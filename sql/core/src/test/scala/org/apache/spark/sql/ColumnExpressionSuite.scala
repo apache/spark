@@ -28,14 +28,14 @@ class ColumnExpressionSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
   test("single explode") {
-    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     checkAnswer(
       df.select(explode('intList)),
       Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 
   test("explode and other columns") {
-    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
 
     checkAnswer(
       df.select($"a", explode('intList)),
@@ -45,13 +45,13 @@ class ColumnExpressionSuite extends QueryTest {
 
     checkAnswer(
       df.select($"*", explode('intList)),
-      Row(1, Seq(1,2,3), 1) ::
-      Row(1, Seq(1,2,3), 2) ::
-      Row(1, Seq(1,2,3), 3) :: Nil)
+      Row(1, Seq(1, 2, 3), 1) ::
+      Row(1, Seq(1, 2, 3), 2) ::
+      Row(1, Seq(1, 2, 3), 3) :: Nil)
   }
 
   test("aliased explode") {
-    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
 
     checkAnswer(
       df.select(explode('intList).as('int)).select('int),
@@ -79,7 +79,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("self join explode") {
-    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     val exploded = df.select(explode('intList).as('i))
 
     checkAnswer(

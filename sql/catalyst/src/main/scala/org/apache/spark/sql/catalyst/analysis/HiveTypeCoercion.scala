@@ -561,8 +561,7 @@ trait HiveTypeCoercion {
 
       case a @ CreateArray(children) if !a.resolved =>
         val commonType = a.childTypes.reduce(
-          (a,b) =>
-            findTightestCommonType(a,b).getOrElse(StringType))
+          (a, b) => findTightestCommonType(a, b).getOrElse(StringType))
         CreateArray(
           children.map(c => if (c.dataType == commonType) c else Cast(c, commonType)))
 
@@ -634,7 +633,7 @@ trait HiveTypeCoercion {
     import HiveTypeCoercion._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      case cw: CaseWhenLike if !cw.resolved && cw.childrenResolved && !cw.valueTypesEqual  =>
+      case cw: CaseWhenLike if !cw.resolved && cw.childrenResolved && !cw.valueTypesEqual =>
         logDebug(s"Input values for null casting ${cw.valueTypes.mkString(",")}")
         val commonType = cw.valueTypes.reduce { (v1, v2) =>
           findTightestCommonType(v1, v2).getOrElse(sys.error(

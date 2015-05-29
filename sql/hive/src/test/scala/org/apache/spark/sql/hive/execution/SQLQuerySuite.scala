@@ -327,7 +327,7 @@ class SQLQuerySuite extends QueryTest {
       "org.apache.hadoop.hive.ql.io.RCFileInputFormat",
       "org.apache.hadoop.hive.ql.io.RCFileOutputFormat",
       "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe",
-      "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22","MANAGED_TABLE"
+      "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22", "MANAGED_TABLE"
     )
 
     if (HiveShim.version =="0.13.1") {
@@ -836,5 +836,38 @@ class SQLQuerySuite extends QueryTest {
         java.lang.Math.round(2.5).toString,
         java.lang.Math.exp(1.0).toString,
         java.lang.Math.floor(1.9).toString))
+  }
+
+  test("dynamic partition value test") {
+    try {
+      sql("set hive.exec.dynamic.partition.mode=nonstrict")
+      // date
+      sql("drop table if exists dynparttest1")
+      sql("create table dynparttest1 (value int) partitioned by (pdate date)")
+      sql(
+        """
+          |insert into table dynparttest1 partition(pdate)
+          | select count(*), cast('2015-05-21' as date) as pdate from src
+        """.stripMargin)
+      checkAnswer(
+        sql("select * from dynparttest1"),
+        Seq(Row(500, java.sql.Date.valueOf("2015-05-21"))))
+
+      // decimal
+      sql("drop table if exists dynparttest2")
+      sql("create table dynparttest2 (value int) partitioned by (pdec decimal(5, 1))")
+      sql(
+        """
+          |insert into table dynparttest2 partition(pdec)
+          | select count(*), cast('100.12' as decimal(5, 1)) as pdec from src
+        """.stripMargin)
+      checkAnswer(
+        sql("select * from dynparttest2"),
+        Seq(Row(500, new java.math.BigDecimal("100.1"))))
+    } finally {
+      sql("drop table if exists dynparttest1")
+      sql("drop table if exists dynparttest2")
+      sql("set hive.exec.dynamic.partition.mode=strict")
+    }
   }
 }

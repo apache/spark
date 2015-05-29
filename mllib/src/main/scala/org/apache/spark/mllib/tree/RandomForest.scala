@@ -249,7 +249,7 @@ private class RandomForest (
       try {
         nodeIdCache.get.deleteAllCheckpoints()
       } catch {
-        case e:IOException =>
+        case e: IOException =>
           logWarning(s"delete all checkpoints failed. Error reason: ${e.getMessage}")
       }
     }

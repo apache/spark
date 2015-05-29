@@ -138,7 +138,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     assert(securityManagerGood.isAuthenticationEnabled() === true)
 
-    val slaveRpcEnv =RpcEnv.create("spark-slave", hostname, "0", goodconf, securityManagerGood)
+    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, "0", goodconf, securityManagerGood)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     slaveTracker.trackerEndpoint =
       slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)

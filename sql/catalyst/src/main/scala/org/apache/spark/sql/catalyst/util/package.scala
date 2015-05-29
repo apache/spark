@@ -83,7 +83,7 @@ package object util {
   }
 
   def resourceToString(
-      resource:String,
+      resource: String,
       encoding: String = "UTF-8",
       classLoader: ClassLoader = Utils.getSparkClassLoader): String = {
     new String(resourceToBytes(resource, classLoader), encoding)

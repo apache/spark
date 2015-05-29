@@ -31,7 +31,7 @@ import org.apache.spark.SerializableWritable
 import org.apache.spark.sql.{Row, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * ::DeveloperApi::
@@ -378,16 +378,22 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
 
     def refresh(): Unit = {
+      // We don't filter files/directories whose name start with "_" or "." here, as specific data
+      // sources may take advantages over them (e.g. Parquet _metadata and _common_metadata files).
+      // But "_temporary" directories are explicitly ignored since failed tasks/jobs may leave
+      // partial/corrupted data files there.
       def listLeafFilesAndDirs(fs: FileSystem, status: FileStatus): Set[FileStatus] = {
-        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
-        val leafDirs = if (dirs.isEmpty) Set(status) else Set.empty[FileStatus]
-        files.toSet ++ leafDirs ++ dirs.flatMap(dir => listLeafFilesAndDirs(fs, dir))
+        if (status.getPath.getName.toLowerCase == "_temporary") {
+          Set.empty
+        } else {
+          val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
+          val leafDirs = if (dirs.isEmpty) Set(status) else Set.empty[FileStatus]
+          files.toSet ++ leafDirs ++ dirs.flatMap(dir => listLeafFilesAndDirs(fs, dir))
+        }
       }
 
       leafFiles.clear()
 
-      // We don't filter files/directories like _temporary/_SUCCESS here, as specific data sources
-      // may take advantages over them (e.g. Parquet _metadata and _common_metadata files).
       val statuses = paths.flatMap { path =>
         val hdfsPath = new Path(path)
         val fs = hdfsPath.getFileSystem(hadoopConf)
@@ -395,7 +401,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         Try(fs.getFileStatus(qualified)).toOption.toArray.flatMap(listLeafFilesAndDirs(fs, _))
       }
 
-      val (dirs, files) = statuses.partition(_.isDir)
+      val files = statuses.filterNot(_.isDir)
       leafFiles ++= files.map(f => f.getPath -> f).toMap
       leafDirToChildrenFiles ++= files.groupBy(_.getPath.getParent)
     }

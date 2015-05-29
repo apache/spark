@@ -25,12 +25,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{IntegerType, StringType, NullType}
 
 case class Dummy(optKey: Option[Expression]) extends Expression {
-  def children: Seq[Expression] = optKey.toSeq
-  def nullable: Boolean = true
-  def dataType: NullType = NullType
+  override def children: Seq[Expression] = optKey.toSeq
+  override def nullable: Boolean = true
+  override def dataType: NullType = NullType
   override lazy val resolved = true
-  type EvaluatedType = Any
-  def eval(input: Row): Any = null.asInstanceOf[Any]
+  override def eval(input: Row): Any = null.asInstanceOf[Any]
 }
 
 class TreeNodeSuite extends FunSuite {
@@ -92,7 +91,7 @@ class TreeNodeSuite extends FunSuite {
   test("transform works on nodes with Option children") {
     val dummy1 = Dummy(Some(Literal.create("1", StringType)))
     val dummy2 = Dummy(None)
-    val toZero: PartialFunction[Expression, Expression] =  { case Literal(_, _) => Literal(0) }
+    val toZero: PartialFunction[Expression, Expression] = { case Literal(_, _) => Literal(0) }
 
     var actual = dummy1 transformDown toZero
     assert(actual === Dummy(Some(Literal(0))))
@@ -105,7 +104,7 @@ class TreeNodeSuite extends FunSuite {
   }
 
   test("preserves origin") {
-    CurrentOrigin.setPosition(1,1)
+    CurrentOrigin.setPosition(1, 1)
     val add = Add(Literal(1), Literal(1))
     CurrentOrigin.reset()
 

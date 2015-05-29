@@ -53,7 +53,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("self join with aliases") {
-    Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str").registerTempTable("df")
+    Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str").registerTempTable("df")
 
     checkAnswer(
       sql(
@@ -76,7 +76,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("self join with alias in agg") {
-      Seq(1,2,3)
+      Seq(1, 2, 3)
         .map(i => (i, i.toString))
         .toDF("int", "str")
         .groupBy("str")
@@ -113,7 +113,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
     checkAnswer(
       sql("SELECT a FROM testData2 SORT BY a"),
-      Seq(1, 1, 2 ,2 ,3 ,3).map(Row(_))
+      Seq(1, 1, 2, 2, 3, 3).map(Row(_))
     )
   }
 
@@ -354,7 +354,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("left semi greater than predicate") {
     checkAnswer(
       sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2"),
-      Seq(Row(3,1), Row(3,2))
+      Seq(Row(3, 1), Row(3, 2))
     )
   }
 
@@ -371,16 +371,16 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("agg") {
     checkAnswer(
       sql("SELECT a, SUM(b) FROM testData2 GROUP BY a"),
-      Seq(Row(1,3), Row(2,3), Row(3,3)))
+      Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
   }
 
   test("literal in agg grouping expressions") {
     checkAnswer(
       sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
-      Seq(Row(1,2), Row(2,2), Row(3,2)))
+      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
     checkAnswer(
       sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
-      Seq(Row(1,2), Row(2,2), Row(3,2)))
+      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
   }
 
   test("aggregates with nulls") {
@@ -405,19 +405,19 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   def sortTest(): Unit = {
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC"),
-      Seq(Row(1,1), Row(1,2), Row(2,1), Row(2,2), Row(3,1), Row(3,2)))
+      Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2)))
 
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a ASC, b DESC"),
-      Seq(Row(1,2), Row(1,1), Row(2,2), Row(2,1), Row(3,2), Row(3,1)))
+      Seq(Row(1, 2), Row(1, 1), Row(2, 2), Row(2, 1), Row(3, 2), Row(3, 1)))
 
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a DESC, b DESC"),
-      Seq(Row(3,2), Row(3,1), Row(2,2), Row(2,1), Row(1,2), Row(1,1)))
+      Seq(Row(3, 2), Row(3, 1), Row(2, 2), Row(2, 1), Row(1, 2), Row(1, 1)))
 
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a DESC, b ASC"),
-      Seq(Row(3,1), Row(3,2), Row(2,1), Row(2,2), Row(1,1), Row(1,2)))
+      Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2)))
 
     checkAnswer(
       sql("SELECT b FROM binaryData ORDER BY a ASC"),
@@ -552,7 +552,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("average overflow") {
     checkAnswer(
       sql("SELECT AVG(a),b FROM largeAndSmallInts group by b"),
-      Seq(Row(2147483645.0,1), Row(2.0,2)))
+      Seq(Row(2147483645.0, 1), Row(2.0, 2)))
   }
 
   test("count") {
@@ -619,10 +619,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         |  (SELECT * FROM testData2 WHERE a = 1) x JOIN
         |  (SELECT * FROM testData2 WHERE a = 1) y
         |WHERE x.a = y.a""".stripMargin),
-      Row(1,1,1,1) ::
-      Row(1,1,1,2) ::
-      Row(1,2,1,1) ::
-      Row(1,2,1,2) :: Nil)
+      Row(1, 1, 1, 1) ::
+      Row(1, 1, 1, 2) ::
+      Row(1, 2, 1, 1) ::
+      Row(1, 2, 1, 2) :: Nil)
   }
 
   test("inner join, no matches") {
@@ -1266,22 +1266,22 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("SPARK-4432 Fix attribute reference resolution error when using ORDER BY") {
     checkAnswer(
       sql("SELECT a + b FROM testData2 ORDER BY a"),
-      Seq(2, 3, 3 ,4 ,4 ,5).map(Row(_))
+      Seq(2, 3, 3, 4, 4, 5).map(Row(_))
     )
   }
 
   test("oder by asc by default when not specify ascending and descending") {
     checkAnswer(
       sql("SELECT a, b FROM testData2 ORDER BY a desc, b"),
-      Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2,2), Row(1, 1), Row(1, 2))
+      Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2))
     )
   }
 
   test("Supporting relational operator '<=>' in Spark SQL") {
-    val nullCheckData1 = TestData(1,"1") :: TestData(2,null) :: Nil
+    val nullCheckData1 = TestData(1, "1") :: TestData(2, null) :: Nil
     val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
     rdd1.toDF().registerTempTable("nulldata1")
-    val nullCheckData2 = TestData(1,"1") :: TestData(2,null) :: Nil
+    val nullCheckData2 = TestData(1, "1") :: TestData(2, null) :: Nil
     val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
     rdd2.toDF().registerTempTable("nulldata2")
     checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
@@ -1290,7 +1290,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("Multi-column COUNT(DISTINCT ...)") {
-    val data = TestData(1,"val_1") :: TestData(2,"val_2") :: Nil
+    val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
     val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
     rdd.toDF().registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
