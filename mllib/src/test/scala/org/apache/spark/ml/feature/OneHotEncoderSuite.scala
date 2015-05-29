@@ -42,11 +42,11 @@ class OneHotEncoderSuite extends FunSuite with MLlibTestSparkContext {
     val encoder = new OneHotEncoder()
       .setInputCol("labelIndex")
       .setOutputCol("labelVec")
-      .setDropLast(true)
+      .setDropLast(false)
     val encoded = encoder.transform(transformed)
 
     val output = encoded.select("id", "labelVec").map { r =>
-      val vec = r.get(1).asInstanceOf[Vector]
+      val vec = r.getAs[Vector](1)
       (r.getInt(0), vec(0), vec(1), vec(2))
     }.collect().toSet
     // a -> 0, b -> 2, c -> 1
@@ -82,8 +82,8 @@ class OneHotEncoderSuite extends FunSuite with MLlibTestSparkContext {
     val output = encoder.transform(df)
     val group = AttributeGroup.fromStructField(output.schema("encoded"))
     assert(group.size === 2)
-    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("index_is_small").withIndex(0))
-    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("index_is_large").withIndex(1))
+    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("size_is_small").withIndex(0))
+    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("size_is_medium").withIndex(1))
   }
 
   test("input column without ML attribute") {
