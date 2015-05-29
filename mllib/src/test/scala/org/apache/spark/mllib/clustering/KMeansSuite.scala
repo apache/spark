@@ -75,7 +75,7 @@ class KMeansSuite extends FunSuite with MLlibTestSparkContext {
     val center = Vectors.dense(1.0, 2.0, 3.0)
 
     // Make sure code runs.
-    var model = KMeans.train(data, k=2, maxIterations=1)
+    var model = KMeans.train(data, k = 2, maxIterations = 1)
     assert(model.clusterCenters.size === 2)
   }
 
@@ -87,7 +87,7 @@ class KMeansSuite extends FunSuite with MLlibTestSparkContext {
       2)
 
     // Make sure code runs.
-    var model = KMeans.train(data, k=3, maxIterations=1)
+    var model = KMeans.train(data, k = 3, maxIterations = 1)
     assert(model.clusterCenters.size === 3)
   }
 

@@ -159,9 +159,9 @@ final class InternalNode private[ml] (
 
   override private[tree] def subtreeToString(indentFactor: Int = 0): String = {
     val prefix: String = " " * indentFactor
-    prefix + s"If (${InternalNode.splitToString(split, left=true)})\n" +
+    prefix + s"If (${InternalNode.splitToString(split, left = true)})\n" +
       leftChild.subtreeToString(indentFactor + 1) +
-      prefix + s"Else (${InternalNode.splitToString(split, left=false)})\n" +
+      prefix + s"Else (${InternalNode.splitToString(split, left = false)})\n" +
       rightChild.subtreeToString(indentFactor + 1)
   }
 

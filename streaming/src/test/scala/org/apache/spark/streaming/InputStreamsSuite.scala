@@ -418,7 +418,7 @@ class TestServer(portToBind: Int = 0) extends Logging {
   val servingThread = new Thread() {
     override def run() {
       try {
-        while(true) {
+        while (true) {
           logInfo("Accepting connections on port " + port)
           val clientSocket = serverSocket.accept()
           if (startLatch.getCount == 1) {

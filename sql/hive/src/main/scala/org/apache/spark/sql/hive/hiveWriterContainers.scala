@@ -34,8 +34,10 @@ import org.apache.hadoop.hive.common.FileUtils
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.Row
 import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.hive.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.HiveShim._
+import org.apache.spark.sql.types._
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
@@ -69,7 +71,7 @@ private[hive] class SparkHiveWriterContainer(
   @transient protected lazy val jobContext = newJobContext(conf.value, jID.value)
   @transient private lazy val taskContext = newTaskAttemptContext(conf.value, taID.value)
   @transient private lazy val outputFormat =
-    conf.value.getOutputFormat.asInstanceOf[HiveOutputFormat[AnyRef,Writable]]
+    conf.value.getOutputFormat.asInstanceOf[HiveOutputFormat[AnyRef, Writable]]
 
   def driverSideSetup() {
     setIDs(0, 0, 0)
@@ -92,7 +94,7 @@ private[hive] class SparkHiveWriterContainer(
     "part-" + numberFormat.format(splitID) + extension
   }
 
-  def getLocalFileWriter(row: Row): FileSinkOperator.RecordWriter = writer
+  def getLocalFileWriter(row: Row, schema: StructType): FileSinkOperator.RecordWriter = writer
 
   def close() {
     // Seems the boolean value passed into close does not matter.
@@ -195,11 +197,20 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     jobConf.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, oldMarker)
   }
 
-  override def getLocalFileWriter(row: Row): FileSinkOperator.RecordWriter = {
+  override def getLocalFileWriter(row: Row, schema: StructType): FileSinkOperator.RecordWriter = {
+    def convertToHiveRawString(col: String, value: Any): String = {
+      val raw = String.valueOf(value)
+      schema(col).dataType match {
+        case DateType => DateUtils.toString(raw.toInt)
+        case _: DecimalType => BigDecimal(raw).toString()
+        case _ => raw
+      }
+    }
+
     val dynamicPartPath = dynamicPartColNames
       .zip(row.toSeq.takeRight(dynamicPartColNames.length))
       .map { case (col, rawVal) =>
-        val string = if (rawVal == null) null else String.valueOf(rawVal)
+        val string = if (rawVal == null) null else convertToHiveRawString(col, rawVal)
         val colString =
           if (string == null || string.isEmpty) {
             defaultPartName

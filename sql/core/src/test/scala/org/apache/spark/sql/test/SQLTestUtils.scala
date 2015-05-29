@@ -75,14 +75,18 @@ trait SQLTestUtils {
   /**
    * Drops temporary table `tableName` after calling `f`.
    */
-  protected def withTempTable(tableName: String)(f: => Unit): Unit = {
-    try f finally sqlContext.dropTempTable(tableName)
+  protected def withTempTable(tableNames: String*)(f: => Unit): Unit = {
+    try f finally tableNames.foreach(sqlContext.dropTempTable)
   }
 
   /**
    * Drops table `tableName` after calling `f`.
    */
-  protected def withTable(tableName: String)(f: => Unit): Unit = {
-    try f finally sqlContext.sql(s"DROP TABLE IF EXISTS $tableName")
+  protected def withTable(tableNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      tableNames.foreach { name =>
+        sqlContext.sql(s"DROP TABLE IF EXISTS $name")
+      }
+    }
   }
 }

@@ -286,7 +286,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
       assert(statuses.size === expectedNumBlocks)
     }
 
-    testUnpersistBroadcast(distributed, numSlaves,  torrentConf, afterCreation,
+    testUnpersistBroadcast(distributed, numSlaves, torrentConf, afterCreation,
       afterUsingBroadcast, afterUnpersist, removeFromDriver)
   }
 

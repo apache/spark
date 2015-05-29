@@ -54,15 +54,15 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
     }
   }
 
-  protected val AS      = Keyword("AS")
-  protected val CACHE   = Keyword("CACHE")
-  protected val CLEAR   = Keyword("CLEAR")
-  protected val IN      = Keyword("IN")
-  protected val LAZY    = Keyword("LAZY")
-  protected val SET     = Keyword("SET")
-  protected val SHOW    = Keyword("SHOW")
-  protected val TABLE   = Keyword("TABLE")
-  protected val TABLES  = Keyword("TABLES")
+  protected val AS = Keyword("AS")
+  protected val CACHE = Keyword("CACHE")
+  protected val CLEAR = Keyword("CLEAR")
+  protected val IN = Keyword("IN")
+  protected val LAZY = Keyword("LAZY")
+  protected val SET = Keyword("SET")
+  protected val SHOW = Keyword("SHOW")
+  protected val TABLE = Keyword("TABLE")
+  protected val TABLES = Keyword("TABLES")
   protected val UNCACHE = Keyword("UNCACHE")
 
   override protected lazy val start: Parser[LogicalPlan] = cache | uncache | set | show | others

@@ -35,48 +35,48 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   private[this] def forceNullable(from: DataType, to: DataType) = (from, to) match {
     case (StringType, _: NumericType) => true
-    case (StringType, TimestampType)  => true
-    case (DoubleType, TimestampType)  => true
-    case (FloatType, TimestampType)   => true
-    case (StringType, DateType)       => true
-    case (_: NumericType, DateType)   => true
-    case (BooleanType, DateType)      => true
-    case (DateType, _: NumericType)   => true
-    case (DateType, BooleanType)      => true
+    case (StringType, TimestampType) => true
+    case (DoubleType, TimestampType) => true
+    case (FloatType, TimestampType) => true
+    case (StringType, DateType) => true
+    case (_: NumericType, DateType) => true
+    case (BooleanType, DateType) => true
+    case (DateType, _: NumericType) => true
+    case (DateType, BooleanType) => true
     case (DoubleType, _: DecimalType) => true
-    case (FloatType, _: DecimalType)  => true
+    case (FloatType, _: DecimalType) => true
     case (_, DecimalType.Fixed(_, _)) => true // TODO: not all upcasts here can really give null
-    case _                            => false
+    case _ => false
   }
 
   private[this] def resolvableNullability(from: Boolean, to: Boolean) = !from || to
 
   private[this] def resolve(from: DataType, to: DataType): Boolean = {
     (from, to) match {
-      case (from, to) if from == to         => true
+      case (from, to) if from == to => true
 
-      case (NullType, _)                    => true
+      case (NullType, _) => true
 
-      case (_, StringType)                  => true
+      case (_, StringType) => true
 
-      case (StringType, BinaryType)         => true
+      case (StringType, BinaryType) => true
 
-      case (StringType, BooleanType)        => true
-      case (DateType, BooleanType)          => true
-      case (TimestampType, BooleanType)     => true
-      case (_: NumericType, BooleanType)    => true
+      case (StringType, BooleanType) => true
+      case (DateType, BooleanType) => true
+      case (TimestampType, BooleanType) => true
+      case (_: NumericType, BooleanType) => true
 
-      case (StringType, TimestampType)      => true
-      case (BooleanType, TimestampType)     => true
-      case (DateType, TimestampType)        => true
-      case (_: NumericType, TimestampType)  => true
+      case (StringType, TimestampType) => true
+      case (BooleanType, TimestampType) => true
+      case (DateType, TimestampType) => true
+      case (_: NumericType, TimestampType) => true
 
-      case (_, DateType)                    => true
+      case (_, DateType) => true
 
-      case (StringType, _: NumericType)     => true
-      case (BooleanType, _: NumericType)    => true
-      case (DateType, _: NumericType)       => true
-      case (TimestampType, _: NumericType)  => true
+      case (StringType, _: NumericType) => true
+      case (BooleanType, _: NumericType) => true
+      case (DateType, _: NumericType) => true
+      case (TimestampType, _: NumericType) => true
       case (_: NumericType, _: NumericType) => true
 
       case (ArrayType(from, fn), ArrayType(to, tn)) =>
@@ -104,8 +104,6 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   }
 
   override def toString: String = s"CAST($child, $dataType)"
-
-  type EvaluatedType = Any
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
@@ -412,21 +410,21 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   private[this] def cast(from: DataType, to: DataType): Any => Any = to match {
     case dt if dt == child.dataType => identity[Any]
-    case StringType                 => castToString(from)
-    case BinaryType                 => castToBinary(from)
-    case DateType                   => castToDate(from)
-    case decimal: DecimalType       => castToDecimal(from, decimal)
-    case TimestampType              => castToTimestamp(from)
-    case BooleanType                => castToBoolean(from)
-    case ByteType                   => castToByte(from)
-    case ShortType                  => castToShort(from)
-    case IntegerType                => castToInt(from)
-    case FloatType                  => castToFloat(from)
-    case LongType                   => castToLong(from)
-    case DoubleType                 => castToDouble(from)
-    case array: ArrayType           => castArray(from.asInstanceOf[ArrayType], array)
-    case map: MapType               => castMap(from.asInstanceOf[MapType], map)
-    case struct: StructType         => castStruct(from.asInstanceOf[StructType], struct)
+    case StringType => castToString(from)
+    case BinaryType => castToBinary(from)
+    case DateType => castToDate(from)
+    case decimal: DecimalType => castToDecimal(from, decimal)
+    case TimestampType => castToTimestamp(from)
+    case BooleanType => castToBoolean(from)
+    case ByteType => castToByte(from)
+    case ShortType => castToShort(from)
+    case IntegerType => castToInt(from)
+    case FloatType => castToFloat(from)
+    case LongType => castToLong(from)
+    case DoubleType => castToDouble(from)
+    case array: ArrayType => castArray(from.asInstanceOf[ArrayType], array)
+    case map: MapType => castMap(from.asInstanceOf[MapType], map)
+    case struct: StructType => castStruct(from.asInstanceOf[StructType], struct)
   }
 
   private[this] lazy val cast: Any => Any = cast(child.dataType, dataType)

@@ -334,7 +334,7 @@ class FileSuite extends FunSuite with LocalSparkContext {
     }
     val copyRdd = mappedRdd.flatMap {
       curData: (String, PortableDataStream) =>
-        for(i <- 1 to numOfCopies) yield (i, curData._2)
+        for (i <- 1 to numOfCopies) yield (i, curData._2)
     }
 
     val copyArr: Array[(Int, PortableDataStream)] = copyRdd.collect()

@@ -97,12 +97,9 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] {
   /** @group getParam */
   def getStages: Array[PipelineStage] = $(stages).clone()
 
-  override def validateParams(paramMap: ParamMap): Unit = {
-    val map = extractParamMap(paramMap)
-    getStages.foreach {
-      case pStage: Params => pStage.validateParams(map)
-      case _ =>
-    }
+  override def validateParams(): Unit = {
+    super.validateParams()
+    $(stages).foreach(_.validateParams())
   }
 
   /**
