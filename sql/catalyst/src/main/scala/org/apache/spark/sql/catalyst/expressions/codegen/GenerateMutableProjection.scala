@@ -86,7 +86,8 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
     }
     """
 
-    logWarning(s"code for ${expressions.mkString(",")}:\n$code")
+
+    logDebug(s"code for ${expressions.mkString(",")}:\n$code")
 
     val c = compile(code)
     val m = c.getDeclaredMethods()(0)

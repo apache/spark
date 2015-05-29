@@ -62,7 +62,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     val tupleElements = expressions.zipWithIndex.map {
       case (e, i) =>
         val evaluatedExpression = expressionEvaluator(e, ctx)
-
         s"""
         {
           ${evaluatedExpression.code}
@@ -130,11 +129,11 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
     }.mkString("\n")
 
-    val hashValues = expressions.zipWithIndex.map { case (e,i) =>
+    val hashValues = expressions.zipWithIndex.map { case (e, i) =>
       val elementName = newTermName(s"c$i")
       val nonNull = e.dataType match {
         case BooleanType => s"$elementName? 0 : 1"
-        case ByteType | ShortType | IntegerType => s"$elementName"
+        case ByteType | ShortType | IntegerType | DateType => s"$elementName"
         case LongType => s"$elementName ^ ($elementName >>> 32)"
         case FloatType => s"Float.floatToIntBits($elementName)"
         case DoubleType =>
@@ -151,9 +150,12 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       """
     ).mkString("\n")
 
-    val columnChecks = (0 until expressions.size).map { i =>
-      val elementName = newTermName(s"c$i")
-      s"if (this.$elementName != specificType.$elementName) return false;\n"
+    val columnChecks = expressions.zipWithIndex.map { case (e, i) =>
+      s"""
+      if (isNullAt($i) != row.isNullAt($i) || !isNullAt($i) && !get($i).equals(row.get($i))) {
+        return false;
+      }
+      """
     }.mkString("\n")
 
     val copyColumns = (0 until expressions.size).map { i =>
@@ -222,8 +224,9 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
         @Override
         public boolean equals(Object other) {
-          if (other instanceof SpecificRow) {
-            SpecificRow specificType = (SpecificRow) other;
+          if (other instanceof Row) {
+            Row row = (Row) other;
+            if (row.length() != size()) return false;
             $columnChecks
             return true;
           }
@@ -248,8 +251,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
     """
 
-    logWarning(
-      s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n${code}")
+    logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n${code}")
 
     val c = compile(code)
     val m = c.getDeclaredMethods()(0)

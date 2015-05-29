@@ -147,14 +147,14 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * A context for codegen
    * @param borrowed the expressions that don't support codegen
    */
-  case class CodeGenContext(borrowed: mutable.Stack[Expression])
+  case class CodeGenContext(borrowed: mutable.ArrayBuffer[Expression])
 
   /**
    * Create a new codegen context for expression evaluator, used to store those
    * expressions that don't support codegen
    */
   def newCodeGenContext(): CodeGenContext = {
-    new CodeGenContext(new mutable.Stack[Expression])
+    new CodeGenContext(new mutable.ArrayBuffer[Expression]())
   }
 
   /**
@@ -207,7 +207,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           boolean $nullTerm = ${eval1.nullTerm} || ${eval2.nullTerm};
           ${primitiveForType(resultType)} $primitiveTerm = ${defaultPrimitive(resultType)};
           if(!$nullTerm) {
-            $primitiveTerm = (${termForType(resultType)})($resultCode);
+            $primitiveTerm = (${primitiveForType(resultType)})($resultCode);
           }
         """
       }
@@ -231,12 +231,18 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         """
 
       case expressions.Literal(value: UTF8String, dataType) =>
+        val arr = s"new byte[]{${value.getBytes.map(_.toString).mkString(", ")}}"
         s"""
           boolean $nullTerm = ${value == null};
           org.apache.spark.sql.types.UTF8String $primitiveTerm =
-            org.apache.spark.sql.types.UTF8String(${value.getBytes});
+            new org.apache.spark.sql.types.UTF8String().set(${arr});
          """
-      //TODO: other literal types
+      case expressions.Literal(value, FloatType) =>
+        s"""
+          boolean $nullTerm = ${value == null};
+          float $primitiveTerm = ${value}f;
+         """
+      // TODO(davies): other literal types
 
       case expressions.Literal(value, dataType) =>
         s"""
@@ -246,32 +252,41 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
       case Cast(child @ BinaryType(), StringType) =>
         child.castOrNull(c =>
-          s"org.apache.spark.sql.types.UTF8String((byte[])$c)",
+          s"new org.apache.spark.sql.types.UTF8String().set($c)",
           StringType)
 
       case Cast(child @ DateType(), StringType) =>
         child.castOrNull(c =>
-          s"""org.apache.spark.sql.types.UTF8String(
+          s"""new org.apache.spark.sql.types.UTF8String().set(
                 org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""",
           StringType)
 
+      case Cast(child @ BooleanType(), dt: NumericType) =>
+        child.castOrNull(c => s"(${primitiveForType(dt)})($c?1:0)", dt)
+
+      case Cast(child @ NumericType(), ByteType) =>
+        child.castOrNull(c => s"(byte)($c)", ByteType)
+
+      case Cast(child @ NumericType(), ShortType) =>
+        child.castOrNull(c => s"(short)($c)", ShortType)
+
       case Cast(child @ NumericType(), IntegerType) =>
-        child.castOrNull(c => s"Int.valueOf($c)", IntegerType)
+        child.castOrNull(c => s"(int)($c)", IntegerType)
 
       case Cast(child @ NumericType(), LongType) =>
-        child.castOrNull(c => s"Long.valueOf($c)", LongType)
+        child.castOrNull(c => s"(long)($c)", LongType)
 
       case Cast(child @ NumericType(), DoubleType) =>
-        child.castOrNull(c => s"Double.valueOf($c)", DoubleType)
+        child.castOrNull(c => s"(double)($c)", DoubleType)
 
       case Cast(child @ NumericType(), FloatType) =>
-        child.castOrNull(c => s"Float.valueOf($c)", FloatType)
+        child.castOrNull(c => s"(float)($c)", FloatType)
 
       // Special handling required for timestamps in hive test cases since the toString function
       // does not match the expected output.
       case Cast(e, StringType) if e.dataType != TimestampType =>
         e.castOrNull(c =>
-          s"org.apache.spark.sql.types.UTF8String($c.toString())",
+          s"new org.apache.spark.sql.types.UTF8String().set($c.toString())",
           StringType)
 
       case EqualTo(e1 @ BinaryType(), e2 @ BinaryType()) =>
@@ -320,7 +335,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       case And(e1, e2) =>
         val eval1 = expressionEvaluator(e1, ctx)
         val eval2 = expressionEvaluator(e2, ctx)
-        //TODO: This is different than And.eval()
+        // TODO(davies): This is different than And.eval()
         s"""
           ${eval1.code}
           boolean $nullTerm = false;
@@ -468,14 +483,15 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         val setEval = expressionEvaluator(set, ctx)
 
         val elementType = set.dataType.asInstanceOf[OpenHashSetUDT].elementType
+        val htype = hashSetForType(elementType)
 
         itemEval.code + setEval.code +
         s"""
            if (!${itemEval.nullTerm} && !${setEval.nullTerm}) {
-             ${setEval.primitiveTerm}.add(${itemEval.primitiveTerm});
+             (($htype)${setEval.primitiveTerm}).add(${itemEval.primitiveTerm});
            }
            boolean $nullTerm = false;
-           ${hashSetForType(elementType)} $primitiveTerm = ${setEval.primitiveTerm};
+           ${htype} $primitiveTerm = ($htype)${setEval.primitiveTerm};
          """
 
       case CombineSets(left, right) =>
@@ -483,13 +499,14 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         val rightEval = expressionEvaluator(right, ctx)
 
         val elementType = left.dataType.asInstanceOf[OpenHashSetUDT].elementType
+        val htype = hashSetForType(elementType)
 
         leftEval.code + rightEval.code +
         s"""
           boolean $nullTerm = false;
-          ${hashSetForType(elementType)} $primitiveTerm =
-            (${hashSetForType(elementType)})${leftEval.primitiveTerm};
-          $primitiveTerm.union((${hashSetForType(elementType)})${rightEval.primitiveTerm});
+          ${htype} $primitiveTerm =
+            (${htype})${leftEval.primitiveTerm};
+          $primitiveTerm.union((${htype})${rightEval.primitiveTerm});
         """
 
       case MaxOf(e1, e2) if e1.dataType != DecimalType() =>
@@ -522,20 +539,20 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
         eval1.code + eval2.code +
         s"""
-          boolean $nullTerm = false
-          var $primitiveTerm: ${termForType(e1.dataType)} = ${defaultPrimitive(e1.dataType)}
+          boolean $nullTerm = false;
+          ${primitiveForType(e1.dataType)} $primitiveTerm = ${defaultPrimitive(e1.dataType)};
 
           if (${eval1.nullTerm}) {
-            $nullTerm = ${eval2.nullTerm}
-            $primitiveTerm = ${eval2.primitiveTerm}
+            $nullTerm = ${eval2.nullTerm};
+            $primitiveTerm = ${eval2.primitiveTerm};
           } else if (${eval2.nullTerm}) {
-            $nullTerm = ${eval1.nullTerm}
-            $primitiveTerm = ${eval1.primitiveTerm}
+            $nullTerm = ${eval1.nullTerm};
+            $primitiveTerm = ${eval1.primitiveTerm};
           } else {
             if (${eval1.primitiveTerm} < ${eval2.primitiveTerm}) {
-              $primitiveTerm = ${eval1.primitiveTerm}
+              $primitiveTerm = ${eval1.primitiveTerm};
             } else {
-              $primitiveTerm = ${eval2.primitiveTerm}
+              $primitiveTerm = ${eval2.primitiveTerm};
             }
           }
         """
@@ -550,16 +567,16 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
          """
 
       case MakeDecimal(child, precision, scale) =>
-        val childEval = expressionEvaluator(child, ctx)
+        val eval = expressionEvaluator(child, ctx)
 
-        childEval.code +
+        eval.code +
         s"""
-         boolean $nullTerm = ${childEval.nullTerm};
+         boolean $nullTerm = ${eval.nullTerm};
          org.apache.spark.sql.types.Decimal $primitiveTerm = ${defaultPrimitive(DecimalType())};
 
          if (!$nullTerm) {
            $primitiveTerm = new org.apache.spark.sql.types.Decimal();
-           $primitiveTerm = $primitiveTerm.setOrNull(${childEval.primitiveTerm}, $precision, $scale);
+           $primitiveTerm = $primitiveTerm.setOrNull(${eval.primitiveTerm}, $precision, $scale);
            $nullTerm = $primitiveTerm == null;
          }
          """
@@ -570,15 +587,13 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     val code: String =
       primitiveEvaluation.lift.apply(e).getOrElse {
         logError(s"No rules to generate $e")
-        ctx.borrowed.push(e)
+        ctx.borrowed += e
         s"""
+          // expression: ${e}
           Object $objectTerm = expressions[${ctx.borrowed.size - 1}].eval(i);
-          System.err.print("evaluation result: ");
-          System.err.print(expressions[${ctx.borrowed.size - 1}]);
-          System.err.print(i);
-          System.err.println($objectTerm);
           boolean $nullTerm = $objectTerm == null;
-          ${primitiveForType(e.dataType)} $primitiveTerm = (${termForType(e.dataType)})$objectTerm;
+          ${primitiveForType(e.dataType)} $primitiveTerm = ${defaultPrimitive(e.dataType)};
+          if (!$nullTerm) $primitiveTerm = (${termForType(e.dataType)})$objectTerm;
          """
       }
 
@@ -600,7 +615,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
   protected def getColumn(inputRow: TermName, dataType: DataType, ordinal: Int) = {
     dataType match {
-      case StringType => s"(org.apache.spark.sql.types.UTF8String)$inputRow($ordinal)"
+      case StringType => s"(org.apache.spark.sql.types.UTF8String)$inputRow.apply($ordinal)"
       case dt: DataType if isNativeType(dt) => s"$inputRow.${accessorForType(dt)}($ordinal)"
       case _ => s"(${termForType(dataType)})$inputRow.apply($ordinal)"
     }
@@ -647,13 +662,14 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case DecimalType() => "org.apache.spark.sql.types.Decimal"
     case BinaryType => "byte[]"
     case StringType => "org.apache.spark.sql.types.UTF8String"
-    case DateType => "Int"
-    case TimestampType => "java.sql.Time"
+    case DateType => "int"
+    case TimestampType => "java.sql.Timestamp"
+    case _ => "Object"
   }
 
   protected def defaultPrimitive(dt: DataType): String = dt match {
     case BooleanType => "false"
-    case FloatType => "-1.0"
+    case FloatType => "-1.0f"
     case ShortType => "-1"
     case LongType => "-1"
     case ByteType => "-1"
@@ -676,19 +692,19 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case DecimalType() => "org.apache.spark.sql.types.Decimal"
     case BinaryType => "byte[]"
     case StringType => "org.apache.spark.sql.types.UTF8String"
-    case DateType => "Int"
-    case TimestampType => "java.sql.Time"
+    case DateType => "Integer"
+    case TimestampType => "java.sql.Timestamp"
 //    case udt: UserDefinedType[_] =>
 //      udt.userClass.getCanonicalName
     case _ =>
-      typeTag[Any].tpe.toString
+      "Object"
   }
 
   /**
    * List of data types that have special accessors and setters in [[Row]].
    */
   protected val nativeTypes =
-    Seq(IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
+    Seq(IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType)
 
   /**
    * Returns true if the data type has a special accessor and setter in [[Row]].

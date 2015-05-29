@@ -507,9 +507,9 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     val seconds = millis * 1000 + 2
     val ts = new Timestamp(millis)
     val tss = new Timestamp(seconds)
-    checkEvaluation(Cast(ts, ShortType), 15)
+    checkEvaluation(Cast(ts, ShortType), 15: Short)
     checkEvaluation(Cast(ts, IntegerType), 15)
-    checkEvaluation(Cast(ts, LongType), 15)
+    checkEvaluation(Cast(ts, LongType), 15: Long)
     checkEvaluation(Cast(ts, FloatType), 15.002f)
     checkEvaluation(Cast(ts, DoubleType), 15.002)
     checkEvaluation(Cast(Cast(tss, ShortType), TimestampType), ts)

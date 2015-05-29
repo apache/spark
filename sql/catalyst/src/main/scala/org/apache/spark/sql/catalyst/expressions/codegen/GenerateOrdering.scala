@@ -57,11 +57,10 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
           {
             byte[] x = ${if (asc) evalA.primitiveTerm else evalB.primitiveTerm};
             byte[] y = ${if (!asc) evalB.primitiveTerm else evalA.primitiveTerm};
-            int i = 0;
-            while (i < x.length() && i < y.length()) {
-              int res = x[i].compareTo(y[i]);
-              if (res != 0) return res;
-              i = i+1;
+            int j = 0;
+            while (j < x.length && j < y.length) {
+              if (x[j] != y[j]) return x[j] - y[j];
+              j = j + 1;
             }
             int d = x.length - y.length;
             if (d != 0) {
