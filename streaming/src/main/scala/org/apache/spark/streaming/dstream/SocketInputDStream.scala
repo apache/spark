@@ -78,8 +78,9 @@ class SocketReceiver[T: ClassTag](
       }
       if (!isStopped()) {
         restart("Socket data stream had no more data")
+      } else {
+        logInfo("Stopped receiving")
       }
-      logInfo("Stopped receiving")
     } catch {
       case e: java.net.ConnectException =>
         restart("Error connecting to " + host + ":" + port, e)
