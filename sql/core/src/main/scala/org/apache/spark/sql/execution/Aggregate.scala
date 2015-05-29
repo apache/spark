@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.HashMap
+import java.util
+import java.util.Map.Entry
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
@@ -36,6 +37,8 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  *                ensure all values where `groupingExpressions` are equal are present.
  * @param groupingExpressions expressions that are evaluated to determine grouping.
  * @param aggregateExpressions expressions that are computed for each group.
+ * @param initSize initialize size of hash for (partial or full) aggregation
+ * @param maxEntry maximum size of hash for partial aggregation. -1 for unlimited
  * @param child the input data source.
  */
 @DeveloperApi
@@ -43,6 +46,8 @@ case class Aggregate(
     partial: Boolean,
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
+    initSize: Int = -1,
+    maxEntry: Int = -1,
     child: SparkPlan)
   extends UnaryNode {
 
@@ -155,29 +160,45 @@ case class Aggregate(
       }
     } else {
       child.execute().mapPartitions { iter =>
-        val hashTable = new HashMap[InternalRow, Array[AggregateFunction1]]
+        val hashTable = if (initSize < 0)
+          new java.util.HashMap[InternalRow, Array[AggregateFunction1]]() else
+          new java.util.HashMap[InternalRow, Array[AggregateFunction1]](initSize)
+
         val groupingProjection = new InterpretedMutableProjection(groupingExpressions, child.output)
 
-        var currentRow: InternalRow = null
-        while (iter.hasNext) {
-          currentRow = iter.next()
-          numInputRows += 1
-          val currentGroup = groupingProjection(currentRow)
-          var currentBuffer = hashTable.get(currentGroup)
-          if (currentBuffer == null) {
-            currentBuffer = newAggregateBuffer()
-            hashTable.put(currentGroup.copy(), currentBuffer)
-          }
+        val staged = new Iterator[java.util.Map.Entry[InternalRow, Array[AggregateFunction1]]]() {
 
-          var i = 0
-          while (i < currentBuffer.length) {
-            currentBuffer(i).update(currentRow)
-            i += 1
+          var current: util.Iterator[Entry[InternalRow, Array[AggregateFunction1]]] = null
+
+          override def hasNext: Boolean = iter.hasNext || (current != null && current.hasNext)
+
+          override def next(): java.util.Map.Entry[InternalRow, Array[AggregateFunction1]] = {
+            if (current == null || !current.hasNext) {
+              hashTable.clear()
+              while (iter.hasNext && (maxEntry < 0 || hashTable.size() < maxEntry)) {
+                var currentRow = iter.next()
+                numInputRows += 1
+                val currentGroup = groupingProjection(currentRow)
+                var currentBuffer = hashTable.get(currentGroup)
+                if (currentBuffer == null) {
+                  currentBuffer = newAggregateBuffer()
+                  hashTable.put(currentGroup.copy(), currentBuffer)
+                }
+
+                var i = 0
+                while (i < currentBuffer.length) {
+                  currentBuffer(i).update(currentRow)
+                  i += 1
+                }
+              }
+              current = hashTable.entrySet().iterator()
+            }
+            current.next()
           }
         }
 
         new Iterator[InternalRow] {
-          private[this] val hashTableIter = hashTable.entrySet().iterator()
+          private[this] val hashTableIter = staged
           private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
           private[this] val resultProjection =
             new InterpretedMutableProjection(
