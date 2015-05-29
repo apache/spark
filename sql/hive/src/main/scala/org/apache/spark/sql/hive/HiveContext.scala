@@ -530,7 +530,7 @@ private[hive] object HiveContext {
     val propMap: HashMap[String, String] = HashMap()
     // We have to mask all properties in hive-site.xml that relates to metastore data source
     // as we used a local metastore here.
-    HiveConf.ConfVars.values().foreach { confvar  =>
+    HiveConf.ConfVars.values().foreach { confvar =>
       if (confvar.varname.contains("datanucleus") || confvar.varname.contains("jdo")) {
         propMap.put(confvar.varname, confvar.defaultVal)
       }
@@ -553,7 +553,7 @@ private[hive] object HiveContext {
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-    case (map: Map[_,_], MapType(kType, vType, _)) =>
+    case (map: Map[_, _], MapType(kType, vType, _)) =>
       map.map {
         case (key, value) =>
           toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))

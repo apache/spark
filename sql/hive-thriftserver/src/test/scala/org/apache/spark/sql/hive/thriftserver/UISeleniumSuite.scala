@@ -73,7 +73,7 @@ class UISeleniumSuite
   }
 
   ignore("thrift server ui test") {
-    withJdbcStatement(statement =>{
+    withJdbcStatement { statement =>
       val baseURL = s"http://localhost:$uiPort"
 
       val queries = Seq(
@@ -97,6 +97,6 @@ class UISeleniumSuite
           findAll(cssSelector("""ul table tbody tr td""")).map(_.text).toList should contain (line)
         }
       }
-    })
+    }
   }
 }

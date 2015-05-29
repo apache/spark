@@ -546,13 +546,17 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
    * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
    */
-  override def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit = ???
+  override def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit = {
+    throw new UnsupportedOperationException
+  }
 
   /**
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
    * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
    */
-  override def unregisterTable(tableIdentifier: Seq[String]): Unit = ???
+  override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
+    throw new UnsupportedOperationException
+  }
 
   override def unregisterAllTables(): Unit = {}
 }
@@ -725,7 +729,7 @@ private[hive] case class MetastoreRelation
   val output = attributes ++ partitionKeys
 
   /** An attribute map that can be used to lookup original attributes based on expression id. */
-  val attributeMap = AttributeMap(output.map(o => (o,o)))
+  val attributeMap = AttributeMap(output.map(o => (o, o)))
 
   /** An attribute map for determining the ordinal for non-partition columns. */
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
