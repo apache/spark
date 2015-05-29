@@ -174,7 +174,7 @@ class StreamingKMeans(
 
   /** Set the decay factor directly (for forgetful algorithms). */
   def setDecayFactor(a: Double): this.type = {
-    this.decayFactor = decayFactor
+    this.decayFactor = a
     this
   }
 
