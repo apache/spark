@@ -51,8 +51,8 @@
   </parameters>
  </check>
  <check level="error" class="org.scalastyle.scalariform.SpacesAfterPlusChecker" enabled="true"></check>
- <check level="error" class="org.scalastyle.file.WhitespaceEndOfLineChecker" enabled="false"></check>
  <check level="error" class="org.scalastyle.scalariform.SpacesBeforePlusChecker" enabled="true"></check>
+ <check level="error" class="org.scalastyle.file.WhitespaceEndOfLineChecker" enabled="false"></check>
  <check level="error" class="org.scalastyle.file.FileLineLengthChecker" enabled="true">
   <parameters>
    <parameter name="maxLineLength"><![CDATA[100]]></parameter>
@@ -142,4 +142,15 @@
  <check level="error" class="org.scalastyle.file.NoNewLineAtEofChecker" enabled="false"></check>
  <check level="error" class="org.scalastyle.scalariform.NonASCIICharacterChecker" enabled="true"></check>
  <check level="error" class="org.scalastyle.scalariform.SpaceAfterCommentStartChecker" enabled="true"></check>
+ <check level="error" class="org.scalastyle.scalariform.EnsureSingleSpaceBeforeTokenChecker" enabled="true">
+   <parameters>
+     <parameter name="tokens">ARROW, EQUALS</parameter>
+   </parameters>
+ </check>
+  <check level="error" class="org.scalastyle.scalariform.EnsureSingleSpaceAfterTokenChecker" enabled="true">
+    <parameters>
+     <parameter name="tokens">ARROW, EQUALS, COMMA, COLON, IF, WHILE, FOR</parameter>
+    </parameters>
+  </check>
+  <check level="error" class="org.scalastyle.scalariform.NotImplementedErrorUsage" enabled="true"></check>
 </scalastyle>
