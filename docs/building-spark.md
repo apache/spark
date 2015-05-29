@@ -130,6 +130,8 @@ To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` prop
     dev/change-version-to-2.11.sh
     mvn -Pyarn -Phadoop-2.4 -Dscala-2.11 -DskipTests clean package
 
+Scala 2.11 support in Spark does not yet support Spark's external JDBC component.
+
 # Spark Tests in Maven
 
 Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin).
