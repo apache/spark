@@ -34,7 +34,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, Spar
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.{PythonRunner, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
-import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util._
 
@@ -220,7 +220,7 @@ private[spark] class ApplicationMaster(
     sparkContextRef.compareAndSet(sc, null)
   }
 
-  private def registerAM(uiAddress: String, securityMgr: SecurityManager) = {
+  private def registerAM(_rpcEnv: RpcEnv, uiAddress: String, securityMgr: SecurityManager) = {
     val sc = sparkContextRef.get()
 
     val appId = client.getAttemptId().getApplicationId().toString()
@@ -231,8 +231,14 @@ private[spark] class ApplicationMaster(
         .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
         .getOrElse("")
 
-    allocator = client.register(yarnConf,
-      if (sc != null) sc.getConf else sparkConf,
+    val _sparkConf = if (sc != null) sc.getConf else sparkConf
+    val driverUrl = _rpcEnv.uriOf(
+        SparkEnv.driverActorSystemName,
+        RpcAddress(_sparkConf.get("spark.driver.host"), _sparkConf.get("spark.driver.port").toInt),
+        CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+    allocator = client.register(driverUrl,
+      yarnConf,
+      _sparkConf,
       if (sc != null) sc.preferredNodeLocationData else Map(),
       uiAddress,
       historyAddress,
@@ -279,7 +285,7 @@ private[spark] class ApplicationMaster(
         sc.getConf.get("spark.driver.host"),
         sc.getConf.get("spark.driver.port"),
         isClusterMode = true)
-      registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
+      registerAM(rpcEnv, sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       userClassThread.join()
     }
   }
@@ -289,7 +295,7 @@ private[spark] class ApplicationMaster(
     rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, port, sparkConf, securityMgr)
     waitForSparkDriver()
     addAmIpFilter()
-    registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
+    registerAM(rpcEnv, sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()

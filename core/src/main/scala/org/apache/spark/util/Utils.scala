@@ -73,6 +73,13 @@ private[spark] object Utils extends Logging {
    */
   val SPARK_CONTEXT_SHUTDOWN_PRIORITY = 50
 
+  /**
+   * The shutdown priority of temp directory must be lower than the SparkContext shutdown
+   * priority. Otherwise cleaning the temp directories while Spark jobs are running can
+   * throw undesirable errors at the time of shutdown.
+   */
+  val TEMP_DIR_SHUTDOWN_PRIORITY = 25
+
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
@@ -189,10 +196,11 @@ private[spark] object Utils extends Logging {
   private val shutdownDeleteTachyonPaths = new scala.collection.mutable.HashSet[String]()
 
   // Add a shutdown hook to delete the temp dirs when the JVM exits
-  addShutdownHook { () =>
-    logDebug("Shutdown hook called")
+  addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY) { () =>
+    logInfo("Shutdown hook called")
     shutdownDeletePaths.foreach { dirPath =>
       try {
+        logInfo("Deleting directory " + dirPath)
         Utils.deleteRecursively(new File(dirPath))
       } catch {
         case e: Exception => logError(s"Exception while deleting Spark temp dir: $dirPath", e)
@@ -882,7 +890,7 @@ private[spark] object Utils extends Logging {
   // If not, we should change it to LRUCache or something.
   private val hostPortParseResults = new ConcurrentHashMap[String, (String, Int)]()
 
-  def parseHostPort(hostPort: String): (String,  Int) = {
+  def parseHostPort(hostPort: String): (String, Int) = {
     // Check cache first.
     val cached = hostPortParseResults.get(hostPort)
     if (cached != null) {

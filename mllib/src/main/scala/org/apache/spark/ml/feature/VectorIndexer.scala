@@ -22,7 +22,7 @@ import java.util.{Map => JMap}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.{IntParam, ParamValidators, Params}
@@ -56,8 +56,7 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
 }
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * Class for indexing categorical feature columns in a dataset of [[Vector]].
  *
  * This has 2 usage modes:
@@ -91,7 +90,7 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *  - Add warning if a categorical feature has only 1 category.
  *  - Add option for allowing unknown categories.
  */
-@AlphaComponent
+@Experimental
 class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerModel]
   with VectorIndexerParams {
 
@@ -230,8 +229,7 @@ private object VectorIndexer {
 }
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * Transform categorical features to use 0-based indices instead of their original values.
  *  - Categorical features are mapped to indices.
  *  - Continuous features (columns) are left unchanged.
@@ -246,7 +244,7 @@ private object VectorIndexer {
  *                      Values are maps from original features values to 0-based category indices.
  *                      If a feature is not in this map, it is treated as continuous.
  */
-@AlphaComponent
+@Experimental
 class VectorIndexerModel private[ml] (
     override val uid: String,
     val numFeatures: Int,

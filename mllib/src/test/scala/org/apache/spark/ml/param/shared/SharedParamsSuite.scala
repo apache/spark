@@ -17,11 +17,10 @@
 
 package org.apache.spark.ml.param.shared
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.Params
 
-class SharedParamsSuite extends FunSuite {
+class SharedParamsSuite extends SparkFunSuite {
 
   test("outputCol") {
 

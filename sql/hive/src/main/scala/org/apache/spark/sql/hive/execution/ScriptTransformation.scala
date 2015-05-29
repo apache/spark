@@ -216,7 +216,7 @@ case class HiveScriptIOSchema (
     val columnTypes = attrs.map {
       case aref: AttributeReference => aref.dataType
       case e: NamedExpression => e.dataType
-      case _ =>  null
+      case _ => null
     }
 
     (columns, columnTypes)

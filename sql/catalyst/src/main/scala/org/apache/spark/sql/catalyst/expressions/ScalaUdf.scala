@@ -27,8 +27,6 @@ import org.apache.spark.sql.types.DataType
 case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expression])
   extends Expression {
 
-  type EvaluatedType = Any
-
   override def nullable: Boolean = true
 
   override def toString: String = s"scalaUDF(${children.mkString(",")})"

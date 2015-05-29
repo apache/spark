@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
+import java.net.URI
 import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
@@ -282,20 +283,27 @@ private[sql] class ParquetRelation2(
         val cacheMetadata = useMetadataCache
 
         @transient val cachedStatuses = inputFiles.map { f =>
-          // In order to encode the authority of a Path containing special characters such as /,
-          // we need to use the string returned by the URI of the path to create a new Path.
-          val pathWithAuthority = new Path(f.getPath.toUri.toString)
-
+          // In order to encode the authority of a Path containing special characters such as '/'
+          // (which does happen in some S3N credentials), we need to use the string returned by the
+          // URI of the path to create a new Path.
+          val pathWithEscapedAuthority = escapePathUserInfo(f.getPath)
           new FileStatus(
             f.getLen, f.isDir, f.getReplication, f.getBlockSize, f.getModificationTime,
-            f.getAccessTime, f.getPermission, f.getOwner, f.getGroup, pathWithAuthority)
+            f.getAccessTime, f.getPermission, f.getOwner, f.getGroup, pathWithEscapedAuthority)
         }.toSeq
 
         @transient val cachedFooters = footers.map { f =>
           // In order to encode the authority of a Path containing special characters such as /,
           // we need to use the string returned by the URI of the path to create a new Path.
-          new Footer(new Path(f.getFile.toUri.toString), f.getParquetMetadata)
+          new Footer(escapePathUserInfo(f.getFile), f.getParquetMetadata)
         }.toSeq
+
+        private def escapePathUserInfo(path: Path): Path = {
+          val uri = path.toUri
+          new Path(new URI(
+            uri.getScheme, uri.getRawUserInfo, uri.getHost, uri.getPort, uri.getPath,
+            uri.getQuery, uri.getFragment))
+        }
 
         // Overridden so we can inject our own cached files statuses.
         override def getPartitions: Array[SparkPartition] = {
@@ -377,7 +385,7 @@ private[sql] class ParquetRelation2(
               .orElse(readSchema())
               .orElse(maybeMetastoreSchema)
               .getOrElse(sys.error("Failed to get the schema."))
-        
+
           // If this Parquet relation is converted from a Hive Metastore table, must reconcile case
           // case insensitivity issue and possible schema mismatch (probably caused by schema
           // evolution).

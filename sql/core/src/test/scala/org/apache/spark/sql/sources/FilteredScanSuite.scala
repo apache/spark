@@ -154,7 +154,7 @@ class FilteredScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE a IN (1,3,5)",
-    Seq(1,3,5).map(i => Row(i, i * 2)))
+    Seq(1, 3, 5).map(i => Row(i, i * 2)))
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE A = 1",

@@ -123,7 +123,7 @@ private[spark] class ZippedPartitionsRDD3
 }
 
 private[spark] class ZippedPartitionsRDD4
-  [A: ClassTag, B: ClassTag, C: ClassTag, D:ClassTag, V: ClassTag](
+  [A: ClassTag, B: ClassTag, C: ClassTag, D: ClassTag, V: ClassTag](
     sc: SparkContext,
     var f: (Iterator[A], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V],
     var rdd1: RDD[A],

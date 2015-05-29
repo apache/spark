@@ -1214,9 +1214,11 @@ storage levels is:
     Compared to MEMORY_ONLY_SER, OFF_HEAP reduces garbage collection overhead and allows executors
     to be smaller and to share a pool of memory, making it attractive in environments with
     large heaps or multiple concurrent applications. Furthermore, as the RDDs reside in Tachyon,
-    the crash of an executor does not lead to losing the in-memory cache. In this mode, the memory 
+    the crash of an executor does not lead to losing the in-memory cache. In this mode, the memory
     in Tachyon is discardable. Thus, Tachyon does not attempt to reconstruct a block that it evicts
-    from memory.
+    from memory. If you plan to use Tachyon as the off heap store, Spark is compatible with Tachyon
+    out-of-the-box. Please refer to this <a href="http://tachyon-project.org/master/Running-Spark-on-Tachyon.html">page</a>
+    for the suggested version pairings.
   </td>
 </tr>
 </table>

@@ -1526,8 +1526,8 @@ adds support for finding tables in the MetaStore and writing queries using HiveQ
 # sc is an existing SparkContext.
 sqlContext <- sparkRHive.init(sc)
 
-hql(sqlContext, "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-hql(sqlContext, "LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+sql(sqlContext, "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+sql(sqlContext, "LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 # Queries can be expressed in HiveQL.
 results = sqlContext.sql("FROM src SELECT key, value").collect()
@@ -1939,7 +1939,7 @@ sqlContext.udf.register("strLen", (s: String) => s.length())
 <div data-lang="java"  markdown="1">
 {% highlight java %}
 
-sqlContext.udf().register("strLen", (String s) -> { s.length(); });
+sqlContext.udf().register("strLen", (String s) -> s.length(), DataTypes.IntegerType);
 
 {% endhighlight %}
 </div>

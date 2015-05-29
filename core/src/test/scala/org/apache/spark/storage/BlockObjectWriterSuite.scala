@@ -18,14 +18,15 @@ package org.apache.spark.storage
 
 import java.io.File
 
-import org.scalatest.{BeforeAndAfterEach, FunSuite}
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.Utils
 
-class BlockObjectWriterSuite extends FunSuite with BeforeAndAfterEach {
+class BlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   var tempDir: File = _
 

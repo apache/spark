@@ -206,7 +206,7 @@ class MathExpressionsSuite extends QueryTest {
   }
 
   test("log") {
-    testOneToOneNonNegativeMathFunction(log, math.log)
+    testOneToOneNonNegativeMathFunction(org.apache.spark.sql.functions.log, math.log)
   }
 
   test("log10") {

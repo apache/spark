@@ -18,6 +18,9 @@
 package org.apache.spark.util.collection
 
 import scala.collection.mutable.ArrayBuffer
+
+import org.scalatest.PrivateMethodTester
+
 import scala.util.Random
 
 import org.scalatest.FunSuite
@@ -25,7 +28,7 @@ import org.scalatest.FunSuite
 import org.apache.spark._
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 
-class ExternalSorterSuite extends FunSuite with LocalSparkContext {
+class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   private def createSparkConf(loadDefaults: Boolean, kryo: Boolean): SparkConf = {
     val conf = new SparkConf(loadDefaults)
     if (kryo) {
