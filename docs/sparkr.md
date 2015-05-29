@@ -94,6 +94,31 @@ write.df(people, path="people.parquet", source="parquet", mode="overwrite")
 {% endhighlight %}
 </div>
 
+### From Hive tables
+
+You can also create SparkR DataFrames from Hive tables. To do this we will need to create a HiveContext which can access tables in the Hive MetaStore. Note that Spark should have been built with [Hive support](building-spark.html#building-with-hive-and-jdbc-support) and more details on the difference between SQLContext and HiveContext can be found in the [SQL programming guide](sql-programming-guide.html#starting-point-sqlcontext).
+
+<div data-lang="r" markdown="1">
+{% highlight r %}
+# sc is an existing SparkContext.
+hiveContext <- sparkRHive.init(sc)
+
+sql(hiveContext, "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+sql(hiveContext, "LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+
+# Queries can be expressed in HiveQL.
+results <- hiveContext.sql("FROM src SELECT key, value")
+
+# results is now a DataFrame
+head(results)
+##  key   value
+## 1 238 val_238
+## 2  86  val_86
+## 3 311 val_311
+
+{% endhighlight %}
+</div>
+
 ## DataFrame Operations
 
 SparkR DataFrames support a number of functions to do structured data processing.
