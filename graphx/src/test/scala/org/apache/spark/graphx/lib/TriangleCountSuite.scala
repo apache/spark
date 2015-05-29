@@ -58,7 +58,7 @@ class TriangleCountSuite extends FunSuite with LocalSparkContext {
       val triangles =
         Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
         Array(0L -> -1L, -1L -> -2L, -2L -> 0L)
-      val revTriangles = triangles.map { case (a,b) => (b,a) }
+      val revTriangles = triangles.map { case (a, b) => (b, a) }
       val rawEdges = sc.parallelize(triangles ++ revTriangles, 2)
       val graph = Graph.fromEdgeTuples(rawEdges, true).cache()
       val triangleCount = graph.triangleCount()

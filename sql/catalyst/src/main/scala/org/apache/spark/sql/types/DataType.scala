@@ -271,7 +271,7 @@ object DataType {
 
     protected lazy val structField: Parser[StructField] =
       ("StructField(" ~> "[a-zA-Z0-9_]*".r) ~ ("," ~> dataType) ~ ("," ~> boolVal <~ ")") ^^ {
-        case name ~ tpe ~ nullable  =>
+        case name ~ tpe ~ nullable =>
           StructField(name, tpe, nullable = nullable)
       }
 

@@ -882,7 +882,7 @@ private[spark] object Utils extends Logging {
   // If not, we should change it to LRUCache or something.
   private val hostPortParseResults = new ConcurrentHashMap[String, (String, Int)]()
 
-  def parseHostPort(hostPort: String): (String,  Int) = {
+  def parseHostPort(hostPort: String): (String, Int) = {
     // Check cache first.
     val cached = hostPortParseResults.get(hostPort)
     if (cached != null) {

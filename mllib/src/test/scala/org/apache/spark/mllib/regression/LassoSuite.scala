@@ -67,11 +67,12 @@ class LassoSuite extends FunSuite with MLlibTestSparkContext {
     assert(weight1 >= -1.60 && weight1 <= -1.40, weight1 + " not in [-1.6, -1.4]")
     assert(weight2 >= -1.0e-3 && weight2 <= 1.0e-3, weight2 + " not in [-0.001, 0.001]")
 
-    val validationData = LinearDataGenerator.generateLinearInput(A, Array[Double](B,C), nPoints, 17)
+    val validationData = LinearDataGenerator
+      .generateLinearInput(A, Array[Double](B, C), nPoints, 17)
       .map { case LabeledPoint(label, features) =>
       LabeledPoint(label, Vectors.dense(1.0 +: features.toArray))
     }
-    val validationRDD  = sc.parallelize(validationData, 2)
+    val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
     validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
@@ -110,11 +111,12 @@ class LassoSuite extends FunSuite with MLlibTestSparkContext {
     assert(weight1 >= -1.60 && weight1 <= -1.40, weight1 + " not in [-1.6, -1.4]")
     assert(weight2 >= -1.0e-3 && weight2 <= 1.0e-3, weight2 + " not in [-0.001, 0.001]")
 
-    val validationData = LinearDataGenerator.generateLinearInput(A, Array[Double](B,C), nPoints, 17)
+    val validationData = LinearDataGenerator
+      .generateLinearInput(A, Array[Double](B, C), nPoints, 17)
       .map { case LabeledPoint(label, features) =>
       LabeledPoint(label, Vectors.dense(1.0 +: features.toArray))
     }
-    val validationRDD  = sc.parallelize(validationData,2)
+    val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
     validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)

@@ -429,8 +429,8 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     }, testH2Dialect))
     assert(agg.canHandle("jdbc:h2:xxx"))
     assert(!agg.canHandle("jdbc:h2"))
-    assert(agg.getCatalystType(0,"",1,null) == Some(LongType))
-    assert(agg.getCatalystType(1,"",1,null) == Some(StringType))
+    assert(agg.getCatalystType(0, "", 1, null) == Some(LongType))
+    assert(agg.getCatalystType(1, "", 1, null) == Some(StringType))
   }
 
 }

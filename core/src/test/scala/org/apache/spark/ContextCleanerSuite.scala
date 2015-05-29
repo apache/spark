@@ -158,7 +158,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     rdd.count()
 
     // Test that GC does not cause RDD cleanup due to a strong reference
-    val preGCTester =  new CleanerTester(sc, rddIds = Seq(rdd.id))
+    val preGCTester = new CleanerTester(sc, rddIds = Seq(rdd.id))
     runGC()
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1000 millis))
@@ -195,7 +195,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     var broadcast = newBroadcast()
 
     // Test that GC does not cause broadcast cleanup due to a strong reference
-    val preGCTester =  new CleanerTester(sc, broadcastIds = Seq(broadcast.id))
+    val preGCTester = new CleanerTester(sc, broadcastIds = Seq(broadcast.id))
     runGC()
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1000 millis))
@@ -267,7 +267,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val shuffleIds = 0 until sc.newShuffleId
     val broadcastIds = broadcastBuffer.map(_.id)
 
-    val preGCTester =  new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
+    val preGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
     runGC()
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1000 millis))

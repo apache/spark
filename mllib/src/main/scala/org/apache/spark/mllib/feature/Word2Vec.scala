@@ -49,7 +49,7 @@ private case class VocabWord(
   var cn: Int,
   var point: Array[Int],
   var code: Array[Int],
-  var codeLen:Int
+  var codeLen: Int
 )
 
 /**
@@ -469,7 +469,7 @@ class Word2VecModel private[mllib] (
     val norm1 = blas.snrm2(n, v1, 1)
     val norm2 = blas.snrm2(n, v2, 1)
     if (norm1 == 0 || norm2 == 0) return 0.0
-    blas.sdot(n, v1, 1, v2,1) / norm1 / norm2
+    blas.sdot(n, v1, 1, v2, 1) / norm1 / norm2
   }
 
   override protected def formatVersion = "1.0"
@@ -500,7 +500,7 @@ class Word2VecModel private[mllib] (
    */
   def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
     val vector = transform(word)
-    findSynonyms(vector,num)
+    findSynonyms(vector, num)
   }
 
   /**

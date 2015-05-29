@@ -109,7 +109,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     check((1, 1))
     check((1, 1L))
     check((1L, 1))
-    check((1L,  1L))
+    check((1L, 1L))
     check((1.0, 1))
     check((1, 1.0))
     check((1.0, 1.0))
@@ -147,7 +147,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     check(List(Some(mutable.HashMap(1->1, 2->2)), None, Some(mutable.HashMap(3->4))))
     check(List(
       mutable.HashMap("one" -> 1, "two" -> 2),
-      mutable.HashMap(1->"one",2->"two",3->"three")))
+      mutable.HashMap(1->"one", 2->"two", 3->"three")))
   }
 
   test("ranges") {
