@@ -48,7 +48,7 @@ case class HashOuterJoin(
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
     case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
-    case x => sys.error(s"HashOuterJoin should not take $x as the JoinType")
+    case x => throw new IllegalStateException(s"HashOuterJoin should not take $x as the JoinType")
   }
 
   override def requiredChildDistribution: Seq[ClusteredDistribution] =
@@ -63,7 +63,7 @@ case class HashOuterJoin(
       case FullOuter =>
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
       case x =>
-        sys.error(s"HashOuterJoin should not take $x as the JoinType")
+        throw new IllegalStateException(s"HashOuterJoin should not take $x as the JoinType")
     }
   }
 
@@ -216,7 +216,8 @@ case class HashOuterJoin(
               rightHashTable.getOrElse(key, EMPTY_LIST), joinedRow)
           }
 
-        case x => sys.error(s"HashOuterJoin should not take $x as the JoinType")
+        case x =>
+          throw new IllegalStateException(s"HashOuterJoin should not take $x as the JoinType")
       }
     }
   }
