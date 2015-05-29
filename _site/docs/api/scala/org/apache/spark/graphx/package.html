@@ -1,0 +1,470 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>graphx - org.apache.spark.graphx</title>
+          <meta name="description" content="graphx - org.apache.spark.graphx" />
+          <meta name="keywords" content="graphx org.apache.spark.graphx" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../../../index.html';
+            var hash = 'org.apache.spark.graphx.package';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="value">
+      <div id="definition">
+        <img src="../../../../lib/package_big.png" />
+        <p id="owner"><a href="../../../package.html" class="extype" name="org">org</a>.<a href="../../package.html" class="extype" name="org.apache">apache</a>.<a href="../package.html" class="extype" name="org.apache.spark">spark</a></p>
+        <h1>graphx</h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <span class="name">graphx</span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"><div class="comment cmt"><p><span class="badge" style="float: right;">ALPHA COMPONENT</span>
+GraphX is a graph processing framework built on top of Spark.
+</p></div><div class="toggleContainer block">
+          <span class="toggle">Linear Supertypes</span>
+          <div class="superTypes hiddenContent"><span class="extype" name="scala.AnyRef">AnyRef</span>, <span class="extype" name="scala.Any">Any</span></div>
+        </div></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        <div id="order">
+              <span class="filtertype">Ordering</span>
+              <ol>
+                
+                <li class="alpha in"><span>Alphabetic</span></li>
+                <li class="inherit out"><span>By inheritance</span></li>
+              </ol>
+            </div>
+        <div id="ancestors">
+                <span class="filtertype">Inherited<br />
+                </span>
+                <ol id="linearization">
+                  <li class="in" name="org.apache.spark.graphx"><span>graphx</span></li><li class="in" name="scala.AnyRef"><span>AnyRef</span></li><li class="in" name="scala.Any"><span>Any</span></li>
+                </ol>
+              </div><div id="ancestors">
+            <span class="filtertype"></span>
+            <ol>
+              <li class="hideall out"><span>Hide All</span></li>
+              <li class="showall in"><span>Show all</span></li>
+            </ol>
+            <a href="http://docs.scala-lang.org/overviews/scaladoc/usage.html#members" target="_blank">Learn more about member selection</a>
+          </div>
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        
+
+        <div id="types" class="types members">
+              <h3>Type Members</h3>
+              <ol><li name="org.apache.spark.graphx.Edge" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="Edge[ED]extendsSerializablewithProduct"></a>
+      <a id="Edge[ED]:Edge[ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="Edge.html"><span class="name">Edge</span></a><span class="tparams">[<span name="ED">ED</span>]</span><span class="params">(<span name="srcId">srcId: <a href="#VertexId=Long" class="extmbr" name="org.apache.spark.graphx.VertexId">VertexId</a> = <span class="symbol">0</span></span>, <span name="dstId">dstId: <a href="#VertexId=Long" class="extmbr" name="org.apache.spark.graphx.VertexId">VertexId</a> = <span class="symbol">0</span></span>, <span name="attr">attr: <span class="extype" name="org.apache.spark.graphx.Edge.ED">ED</span> = <span class="symbol">null.asInstanceOf[ED]</span></span>)</span><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span> with <span class="extype" name="scala.Product">Product</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">A single directed edge consisting of a source id, target id,
+and the data associated with the edge.</p>
+    </li><li name="org.apache.spark.graphx.EdgeContext" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="EdgeContext[VD,ED,A]extendsAnyRef"></a>
+      <a id="EdgeContext[VD,ED,A]:EdgeContext[VD,ED,A]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="EdgeContext.html"><span class="name">EdgeContext</span></a><span class="tparams">[<span name="VD">VD</span>, <span name="ED">ED</span>, <span name="A">A</span>]</span><span class="result"> extends <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Represents an edge along with its neighboring vertices and allows sending messages along the
+edge.</p>
+    </li><li name="org.apache.spark.graphx.EdgeDirection" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="EdgeDirectionextendsSerializable"></a>
+      <a id="EdgeDirection:EdgeDirection"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="EdgeDirection.html"><span class="name">EdgeDirection</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">The direction of a directed edge relative to a vertex.</p>
+    </li><li name="org.apache.spark.graphx.EdgeRDD" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="EdgeRDD[ED]extendsRDD[org.apache.spark.graphx.Edge[ED]]"></a>
+      <a id="EdgeRDD[ED]:EdgeRDD[ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="EdgeRDD.html"><span class="name">EdgeRDD</span></a><span class="tparams">[<span name="ED">ED</span>]</span><span class="result"> extends <a href="../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<a href="Edge.html" class="extype" name="org.apache.spark.graphx.Edge">Edge</a>[<span class="extype" name="org.apache.spark.graphx.EdgeRDD.ED">ED</span>]]</span>
+      </span>
+      </h4>
+      <p class="comment cmt"><code>EdgeRDD[ED, VD]</code> extends <code>RDD[Edge[ED]]</code> by storing the edges in columnar format on each
+partition for performance.</p>
+    </li><li name="org.apache.spark.graphx.EdgeTriplet" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="EdgeTriplet[VD,ED]extendsEdge[ED]"></a>
+      <a id="EdgeTriplet[VD,ED]:EdgeTriplet[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="EdgeTriplet.html"><span class="name">EdgeTriplet</span></a><span class="tparams">[<span name="VD">VD</span>, <span name="ED">ED</span>]</span><span class="result"> extends <a href="Edge.html" class="extype" name="org.apache.spark.graphx.Edge">Edge</a>[<span class="extype" name="org.apache.spark.graphx.EdgeTriplet.ED">ED</span>]</span>
+      </span>
+      </h4>
+      <p class="comment cmt">An edge triplet represents an edge along with the vertex attributes of its neighboring vertices.</p>
+    </li><li name="org.apache.spark.graphx.Graph" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="Graph[VD,ED]extendsSerializable"></a>
+      <a id="Graph[VD,ED]:Graph[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="Graph.html"><span class="name">Graph</span></a><span class="tparams">[<span name="VD">VD</span>, <span name="ED">ED</span>]</span><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">The Graph abstractly represents a graph with arbitrary objects
+associated with vertices and edges.</p>
+    </li><li name="org.apache.spark.graphx.GraphOps" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="GraphOps[VD,ED]extendsSerializable"></a>
+      <a id="GraphOps[VD,ED]:GraphOps[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="GraphOps.html"><span class="name">GraphOps</span></a><span class="tparams">[<span name="VD">VD</span>, <span name="ED">ED</span>]</span><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Contains additional functionality for <a href="Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>.</p>
+    </li><li name="org.apache.spark.graphx.PartitionID" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="PartitionID=Int"></a>
+      <a id="PartitionID:PartitionID"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">type</span>
+      </span>
+      <span class="symbol">
+        <span class="name">PartitionID</span><span class="result"> = <span class="extype" name="scala.Int">Int</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Integer identifer of a graph partition.</p><div class="fullcomment"><div class="comment cmt"><p>Integer identifer of a graph partition. Must be less than 2^30.</p></div></div>
+    </li><li name="org.apache.spark.graphx.PartitionStrategy" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="PartitionStrategyextendsSerializable"></a>
+      <a id="PartitionStrategy:PartitionStrategy"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">trait</span>
+      </span>
+      <span class="symbol">
+        <a href="PartitionStrategy.html"><span class="name">PartitionStrategy</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Represents the way edges are assigned to edge partitions based on their source and destination
+vertex IDs.</p>
+    </li><li name="org.apache.spark.graphx.TripletFields" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="TripletFieldsextendsSerializable"></a>
+      <a id="TripletFields:TripletFields"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="TripletFields.html"><span class="name">TripletFields</span></a><span class="result"> extends <span class="extype" name="java.io.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.graphx.VertexId" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="VertexId=Long"></a>
+      <a id="VertexId:VertexId"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">type</span>
+      </span>
+      <span class="symbol">
+        <span class="name">VertexId</span><span class="result"> = <span class="extype" name="scala.Long">Long</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">A 64-bit vertex identifier that uniquely identifies a vertex within a graph.</p><div class="fullcomment"><div class="comment cmt"><p>A 64-bit vertex identifier that uniquely identifies a vertex within a graph. It does not need
+to follow any ordering or any constraints other than uniqueness.
+</p></div></div>
+    </li><li name="org.apache.spark.graphx.VertexRDD" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="VertexRDD[VD]extendsRDD[(org.apache.spark.graphx.VertexId,VD)]"></a>
+      <a id="VertexRDD[VD]:VertexRDD[VD]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="VertexRDD.html"><span class="name">VertexRDD</span></a><span class="tparams">[<span name="VD">VD</span>]</span><span class="result"> extends <a href="../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[(<a href="#VertexId=Long" class="extmbr" name="org.apache.spark.graphx.VertexId">VertexId</a>, <span class="extype" name="org.apache.spark.graphx.VertexRDD.VD">VD</span>)]</span>
+      </span>
+      </h4>
+      <p class="comment cmt">Extends <code>RDD[(VertexId, VD)]</code> by ensuring that there is only one entry for each vertex and by
+pre-indexing the entries for fast, efficient joins.</p>
+    </li><li name="org.apache.spark.graphx.GraphKryoRegistrator" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="GraphKryoRegistratorextendsKryoRegistrator"></a>
+      <a id="GraphKryoRegistrator:GraphKryoRegistrator"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="GraphKryoRegistrator.html"><span class="name deprecated" title="Deprecated: (Since version 1.2.0) Register GraphX classes with Kryo using GraphXUtils.registerKryoClasses">GraphKryoRegistrator</span></a><span class="result"> extends <a href="../serializer/KryoRegistrator.html" class="extype" name="org.apache.spark.serializer.KryoRegistrator">KryoRegistrator</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Registers GraphX classes with Kryo for improved performance.</p>
+    </li></ol>
+            </div>
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="org.apache.spark.graphx.Edge" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="Edge"></a>
+      <a id="Edge:Edge"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="Edge$.html"><span class="name">Edge</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.graphx.EdgeContext" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="EdgeContext"></a>
+      <a id="EdgeContext:EdgeContext"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="EdgeContext$.html"><span class="name">EdgeContext</span></a>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.graphx.EdgeDirection" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="EdgeDirection"></a>
+      <a id="EdgeDirection:EdgeDirection"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="EdgeDirection$.html"><span class="name">EdgeDirection</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">A set of <a href="EdgeDirection.html" class="extype" name="org.apache.spark.graphx.EdgeDirection">EdgeDirection</a>s.</p>
+    </li><li name="org.apache.spark.graphx.EdgeRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="EdgeRDD"></a>
+      <a id="EdgeRDD:EdgeRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="EdgeRDD$.html"><span class="name">EdgeRDD</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.graphx.Graph" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="Graph"></a>
+      <a id="Graph:Graph"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="Graph$.html"><span class="name">Graph</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">The Graph object contains a collection of routines used to construct graphs from RDDs.</p>
+    </li><li name="org.apache.spark.graphx.GraphLoader" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="GraphLoader"></a>
+      <a id="GraphLoader:GraphLoader"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="GraphLoader$.html"><span class="name">GraphLoader</span></a><span class="result"> extends <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Provides utilities for loading <a href="Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>s from files.</p>
+    </li><li name="org.apache.spark.graphx.GraphXUtils" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="GraphXUtils"></a>
+      <a id="GraphXUtils:GraphXUtils"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="GraphXUtils$.html"><span class="name">GraphXUtils</span></a>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.graphx.PartitionStrategy" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="PartitionStrategy"></a>
+      <a id="PartitionStrategy:PartitionStrategy"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="PartitionStrategy$.html"><span class="name">PartitionStrategy</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Collection of built-in <a href="PartitionStrategy.html" class="extype" name="org.apache.spark.graphx.PartitionStrategy">PartitionStrategy</a> implementations.</p>
+    </li><li name="org.apache.spark.graphx.Pregel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="Pregel"></a>
+      <a id="Pregel:Pregel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="Pregel$.html"><span class="name">Pregel</span></a><span class="result"> extends <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Implements a Pregel-like bulk-synchronous message-passing API.</p>
+    </li><li name="org.apache.spark.graphx.VertexRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="VertexRDD"></a>
+      <a id="VertexRDD:VertexRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="VertexRDD$.html"><span class="name">VertexRDD</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">The VertexRDD singleton is used to construct VertexRDDs.</p>
+    </li><li name="org.apache.spark.graphx.impl" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="impl"></a>
+      <a id="impl:impl"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <a href="impl/package.html"><span class="name">impl</span></a>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.graphx.lib" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="lib"></a>
+      <a id="lib:lib"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <a href="lib/package.html"><span class="name">lib</span></a>
+      </span>
+      </h4>
+      <p class="comment cmt">Various analytics functions for graphs.</p>
+    </li><li name="org.apache.spark.graphx.util" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="util"></a>
+      <a id="util:util"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <a href="util/package.html"><span class="name">util</span></a>
+      </span>
+      </h4>
+      <p class="comment cmt">Collections of utilities used by graphx.</p>
+    </li></ol>
+            </div>
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        <div class="parent" name="scala.AnyRef">
+              <h3>Inherited from <span class="extype" name="scala.AnyRef">AnyRef</span></h3>
+            </div><div class="parent" name="scala.Any">
+              <h3>Inherited from <span class="extype" name="scala.Any">Any</span></h3>
+            </div>
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Ungrouped</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../../../lib/template.js"></script>
+    </body>
+      </html>

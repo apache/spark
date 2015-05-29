@@ -1,0 +1,1142 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>RandomRDDs - org.apache.spark.mllib.random.RandomRDDs</title>
+          <meta name="description" content="RandomRDDs - org.apache.spark.mllib.random.RandomRDDs" />
+          <meta name="keywords" content="RandomRDDs org.apache.spark.mllib.random.RandomRDDs" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../../../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../../../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../../../../index.html';
+            var hash = 'org.apache.spark.mllib.random.RandomRDDs$';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="value">
+      <div id="definition">
+        <img src="../../../../../lib/object_big.png" />
+        <p id="owner"><a href="../../../../package.html" class="extype" name="org">org</a>.<a href="../../../package.html" class="extype" name="org.apache">apache</a>.<a href="../../package.html" class="extype" name="org.apache.spark">spark</a>.<a href="../package.html" class="extype" name="org.apache.spark.mllib">mllib</a>.<a href="package.html" class="extype" name="org.apache.spark.mllib.random">random</a></p>
+        <h1>RandomRDDs</h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <span class="name">RandomRDDs</span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"><div class="comment cmt"><p>:: Experimental ::
+Generator methods for creating RDDs comprised of <code>i.i.d.</code> samples from some distribution.
+</p></div><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/Experimental.html" class="extype" name="org.apache.spark.annotation.Experimental">Experimental</a></span><span class="args">()</span>
+              
+        </dd></dl><div class="toggleContainer block">
+          <span class="toggle">Linear Supertypes</span>
+          <div class="superTypes hiddenContent"><span class="extype" name="scala.AnyRef">AnyRef</span>, <span class="extype" name="scala.Any">Any</span></div>
+        </div></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        <div id="order">
+              <span class="filtertype">Ordering</span>
+              <ol>
+                
+                <li class="alpha in"><span>Alphabetic</span></li>
+                <li class="inherit out"><span>By inheritance</span></li>
+              </ol>
+            </div>
+        <div id="ancestors">
+                <span class="filtertype">Inherited<br />
+                </span>
+                <ol id="linearization">
+                  <li class="in" name="org.apache.spark.mllib.random.RandomRDDs"><span>RandomRDDs</span></li><li class="in" name="scala.AnyRef"><span>AnyRef</span></li><li class="in" name="scala.Any"><span>Any</span></li>
+                </ol>
+              </div><div id="ancestors">
+            <span class="filtertype"></span>
+            <ol>
+              <li class="hideall out"><span>Hide All</span></li>
+              <li class="showall in"><span>Show all</span></li>
+            </ol>
+            <a href="http://docs.scala-lang.org/overviews/scaladoc/usage.html#members" target="_blank">Learn more about member selection</a>
+          </div>
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        
+
+        
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="scala.AnyRef#!=" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="!=(x$1:AnyRef):Boolean"></a>
+      <a id="!=(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $bang$eq" class="name">!=</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.Any#!=" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="!=(x$1:Any):Boolean"></a>
+      <a id="!=(Any):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $bang$eq" class="name">!=</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="scala.AnyRef###" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="##():Int"></a>
+      <a id="##():Int"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $hash$hash" class="name">##</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Int">Int</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="scala.AnyRef#==" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="==(x$1:AnyRef):Boolean"></a>
+      <a id="==(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $eq$eq" class="name">==</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.Any#==" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="==(x$1:Any):Boolean"></a>
+      <a id="==(Any):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $eq$eq" class="name">==</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="scala.Any#asInstanceOf" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="asInstanceOf[T0]:T0"></a>
+      <a id="asInstanceOf[T0]:T0"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">asInstanceOf</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="result">: <span class="extype" name="scala.Any.asInstanceOf.T0">T0</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="scala.AnyRef#clone" visbl="prt" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="clone():Object"></a>
+      <a id="clone():AnyRef"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">clone</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>protected[<a href="../../../../../java$lang.html" class="extype" name="java.lang">java.lang</a>] </dd><dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.CloneNotSupportedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="scala.AnyRef#eq" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="eq(x$1:AnyRef):Boolean"></a>
+      <a id="eq(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">eq</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.AnyRef#equals" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="equals(x$1:Any):Boolean"></a>
+      <a id="equals(Any):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">equals</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#exponentialJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="exponentialJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,size:Long):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="exponentialJavaRDD(JavaSparkContext,Double,Long):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">exponentialJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#exponentialJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,size:Long):org.apache.spark.api.java.JavaDoubleRDD" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#exponentialJavaRDD">RandomRDDs#exponentialJavaRDD</a> with the default number of partitions and the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#exponentialJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="exponentialJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,size:Long,numPartitions:Int):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="exponentialJavaRDD(JavaSparkContext,Double,Long,Int):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">exponentialJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#exponentialJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,size:Long):org.apache.spark.api.java.JavaDoubleRDD" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#exponentialJavaRDD">RandomRDDs#exponentialJavaRDD</a> with the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#exponentialJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="exponentialJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,size:Long,numPartitions:Int,seed:Long):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="exponentialJavaRDD(JavaSparkContext,Double,Long,Int,Long):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">exponentialJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Java-friendly version of <a href="#exponentialRDD(sc:org.apache.spark.SparkContext,mean:Double,size:Long,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[Double]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#exponentialRDD">RandomRDDs#exponentialRDD</a>.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#exponentialJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="exponentialJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="exponentialJavaVectorRDD(JavaSparkContext,Double,Long,Int):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">exponentialJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#exponentialJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#exponentialJavaVectorRDD">RandomRDDs#exponentialJavaVectorRDD</a> with the default number of partitions
+and the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#exponentialJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="exponentialJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,numRows:Long,numCols:Int,numPartitions:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="exponentialJavaVectorRDD(JavaSparkContext,Double,Long,Int,Int):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">exponentialJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#exponentialJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#exponentialJavaVectorRDD">RandomRDDs#exponentialJavaVectorRDD</a> with the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#exponentialJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="exponentialJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="exponentialJavaVectorRDD(JavaSparkContext,Double,Long,Int,Int,Long):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">exponentialJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Java-friendly version of <a href="#exponentialVectorRDD(sc:org.apache.spark.SparkContext,mean:Double,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#exponentialVectorRDD">RandomRDDs#exponentialVectorRDD</a>.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#exponentialRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="exponentialRDD(sc:org.apache.spark.SparkContext,mean:Double,size:Long,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[Double]"></a>
+      <a id="exponentialRDD(SparkContext,Double,Long,Int,Long):RDD[Double]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">exponentialRDD</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span> = <span class="symbol">0</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span> = <span class="symbol"><span class="name"><a href="../../../../package.html">Utils.random.nextLong()</a></span></span></span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<span class="extype" name="scala.Double">Double</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Generates an RDD comprised of <code>i.i.d.</code> samples from the exponential distribution with
+the input mean.</p><div class="fullcomment"><div class="comment cmt"><p>Generates an RDD comprised of <code>i.i.d.</code> samples from the exponential distribution with
+the input mean.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext used to create the RDD.</p></dd><dt class="param">mean</dt><dd class="cmt"><p>Mean, or 1 / lambda, for the exponential distribution.</p></dd><dt class="param">size</dt><dd class="cmt"><p>Size of the RDD.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>Number of partitions in the RDD (default: <code>sc.defaultParallelism</code>).</p></dd><dt class="param">seed</dt><dd class="cmt"><p>Random seed (default: a random long integer).</p></dd><dt>returns</dt><dd class="cmt"><p>RDD[Double] comprised of <code>i.i.d.</code> samples ~ Pois(mean).
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#exponentialVectorRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="exponentialVectorRDD(sc:org.apache.spark.SparkContext,mean:Double,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="exponentialVectorRDD(SparkContext,Double,Long,Int,Int,Long):RDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">exponentialVectorRDD</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span> = <span class="symbol">0</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span> = <span class="symbol"><span class="name"><a href="../../../../package.html">Utils.random.nextLong()</a></span></span></span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Generates an RDD[Vector] with vectors containing <code>i.i.d.</code> samples drawn from the
+exponential distribution with the input mean.</p><div class="fullcomment"><div class="comment cmt"><p>Generates an RDD[Vector] with vectors containing <code>i.i.d.</code> samples drawn from the
+exponential distribution with the input mean.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext used to create the RDD.</p></dd><dt class="param">mean</dt><dd class="cmt"><p>Mean, or 1 / lambda, for the Exponential distribution.</p></dd><dt class="param">numRows</dt><dd class="cmt"><p>Number of Vectors in the RDD.</p></dd><dt class="param">numCols</dt><dd class="cmt"><p>Number of elements in each Vector.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>Number of partitions in the RDD (default: <code>sc.defaultParallelism</code>)</p></dd><dt class="param">seed</dt><dd class="cmt"><p>Random seed (default: a random long integer).</p></dd><dt>returns</dt><dd class="cmt"><p>RDD[Vector] with vectors containing <code>i.i.d.</code> samples ~ Exp(mean).
+</p></dd></dl></div>
+    </li><li name="scala.AnyRef#finalize" visbl="prt" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="finalize():Unit"></a>
+      <a id="finalize():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">finalize</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>protected[<a href="../../../../../java$lang.html" class="extype" name="java.lang">java.lang</a>] </dd><dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="symbol">classOf[java.lang.Throwable]</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#gammaJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="gammaJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,shape:Double,scale:Double,size:Long):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="gammaJavaRDD(JavaSparkContext,Double,Double,Long):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">gammaJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="shape">shape: <span class="extype" name="scala.Double">Double</span></span>, <span name="scale">scale: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#gammaJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,shape:Double,scale:Double,size:Long):org.apache.spark.api.java.JavaDoubleRDD" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#gammaJavaRDD">RandomRDDs#gammaJavaRDD</a> with the default number of partitions and the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#gammaJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="gammaJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,shape:Double,scale:Double,size:Long,numPartitions:Int):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="gammaJavaRDD(JavaSparkContext,Double,Double,Long,Int):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">gammaJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="shape">shape: <span class="extype" name="scala.Double">Double</span></span>, <span name="scale">scale: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#gammaJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,shape:Double,scale:Double,size:Long):org.apache.spark.api.java.JavaDoubleRDD" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#gammaJavaRDD">RandomRDDs#gammaJavaRDD</a> with the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#gammaJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="gammaJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,shape:Double,scale:Double,size:Long,numPartitions:Int,seed:Long):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="gammaJavaRDD(JavaSparkContext,Double,Double,Long,Int,Long):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">gammaJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="shape">shape: <span class="extype" name="scala.Double">Double</span></span>, <span name="scale">scale: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Java-friendly version of <a href="#gammaRDD(sc:org.apache.spark.SparkContext,shape:Double,scale:Double,size:Long,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[Double]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#gammaRDD">RandomRDDs#gammaRDD</a>.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#gammaJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="gammaJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,shape:Double,scale:Double,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="gammaJavaVectorRDD(JavaSparkContext,Double,Double,Long,Int):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">gammaJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="shape">shape: <span class="extype" name="scala.Double">Double</span></span>, <span name="scale">scale: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#gammaJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,shape:Double,scale:Double,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#gammaJavaVectorRDD">RandomRDDs#gammaJavaVectorRDD</a> with the default number of partitions and the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#gammaJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="gammaJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,shape:Double,scale:Double,numRows:Long,numCols:Int,numPartitions:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="gammaJavaVectorRDD(JavaSparkContext,Double,Double,Long,Int,Int):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">gammaJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="shape">shape: <span class="extype" name="scala.Double">Double</span></span>, <span name="scale">scale: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#gammaJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,shape:Double,scale:Double,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#gammaJavaVectorRDD">RandomRDDs#gammaJavaVectorRDD</a> with the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#gammaJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="gammaJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,shape:Double,scale:Double,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="gammaJavaVectorRDD(JavaSparkContext,Double,Double,Long,Int,Int,Long):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">gammaJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="shape">shape: <span class="extype" name="scala.Double">Double</span></span>, <span name="scale">scale: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Java-friendly version of <a href="#gammaVectorRDD(sc:org.apache.spark.SparkContext,shape:Double,scale:Double,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#gammaVectorRDD">RandomRDDs#gammaVectorRDD</a>.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#gammaRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="gammaRDD(sc:org.apache.spark.SparkContext,shape:Double,scale:Double,size:Long,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[Double]"></a>
+      <a id="gammaRDD(SparkContext,Double,Double,Long,Int,Long):RDD[Double]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">gammaRDD</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="shape">shape: <span class="extype" name="scala.Double">Double</span></span>, <span name="scale">scale: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span> = <span class="symbol">0</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span> = <span class="symbol"><span class="name"><a href="../../../../package.html">Utils.random.nextLong()</a></span></span></span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<span class="extype" name="scala.Double">Double</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Generates an RDD comprised of <code>i.i.d.</code> samples from the gamma distribution with the input
+ shape and scale.</p><div class="fullcomment"><div class="comment cmt"><p>Generates an RDD comprised of <code>i.i.d.</code> samples from the gamma distribution with the input
+ shape and scale.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext used to create the RDD.</p></dd><dt class="param">shape</dt><dd class="cmt"><p>shape parameter (&gt; 0) for the gamma distribution</p></dd><dt class="param">scale</dt><dd class="cmt"><p>scale parameter (&gt; 0) for the gamma distribution</p></dd><dt class="param">size</dt><dd class="cmt"><p>Size of the RDD.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>Number of partitions in the RDD (default: <code>sc.defaultParallelism</code>).</p></dd><dt class="param">seed</dt><dd class="cmt"><p>Random seed (default: a random long integer).</p></dd><dt>returns</dt><dd class="cmt"><p>RDD[Double] comprised of <code>i.i.d.</code> samples ~ Pois(mean).
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#gammaVectorRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="gammaVectorRDD(sc:org.apache.spark.SparkContext,shape:Double,scale:Double,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="gammaVectorRDD(SparkContext,Double,Double,Long,Int,Int,Long):RDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">gammaVectorRDD</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="shape">shape: <span class="extype" name="scala.Double">Double</span></span>, <span name="scale">scale: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span> = <span class="symbol">0</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span> = <span class="symbol"><span class="name"><a href="../../../../package.html">Utils.random.nextLong()</a></span></span></span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Generates an RDD[Vector] with vectors containing <code>i.i.d.</code> samples drawn from the
+gamma distribution with the input shape and scale.</p><div class="fullcomment"><div class="comment cmt"><p>Generates an RDD[Vector] with vectors containing <code>i.i.d.</code> samples drawn from the
+gamma distribution with the input shape and scale.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext used to create the RDD.</p></dd><dt class="param">shape</dt><dd class="cmt"><p>shape parameter (&gt; 0) for the gamma distribution.</p></dd><dt class="param">scale</dt><dd class="cmt"><p>scale parameter (&gt; 0) for the gamma distribution.</p></dd><dt class="param">numRows</dt><dd class="cmt"><p>Number of Vectors in the RDD.</p></dd><dt class="param">numCols</dt><dd class="cmt"><p>Number of elements in each Vector.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>Number of partitions in the RDD (default: <code>sc.defaultParallelism</code>)</p></dd><dt class="param">seed</dt><dd class="cmt"><p>Random seed (default: a random long integer).</p></dd><dt>returns</dt><dd class="cmt"><p>RDD[Vector] with vectors containing <code>i.i.d.</code> samples ~ Exp(mean).
+</p></dd></dl></div>
+    </li><li name="scala.AnyRef#getClass" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="getClass():Class[_]"></a>
+      <a id="getClass():Class[_]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">getClass</span><span class="params">()</span><span class="result">: <span class="extype" name="java.lang.Class">Class</span>[_]</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="scala.AnyRef#hashCode" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="hashCode():Int"></a>
+      <a id="hashCode():Int"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">hashCode</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Int">Int</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="scala.Any#isInstanceOf" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="isInstanceOf[T0]:Boolean"></a>
+      <a id="isInstanceOf[T0]:Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">isInstanceOf</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#logNormalJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="logNormalJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,std:Double,size:Long):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="logNormalJavaRDD(JavaSparkContext,Double,Double,Long):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">logNormalJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="std">std: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#logNormalJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,std:Double,size:Long):org.apache.spark.api.java.JavaDoubleRDD" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#logNormalJavaRDD">RandomRDDs#logNormalJavaRDD</a> with the default number of partitions and the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#logNormalJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="logNormalJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,std:Double,size:Long,numPartitions:Int):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="logNormalJavaRDD(JavaSparkContext,Double,Double,Long,Int):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">logNormalJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="std">std: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#logNormalJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,std:Double,size:Long):org.apache.spark.api.java.JavaDoubleRDD" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#logNormalJavaRDD">RandomRDDs#logNormalJavaRDD</a> with the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#logNormalJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="logNormalJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,std:Double,size:Long,numPartitions:Int,seed:Long):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="logNormalJavaRDD(JavaSparkContext,Double,Double,Long,Int,Long):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">logNormalJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="std">std: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Java-friendly version of <a href="#logNormalRDD(sc:org.apache.spark.SparkContext,mean:Double,std:Double,size:Long,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[Double]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#logNormalRDD">RandomRDDs#logNormalRDD</a>.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#logNormalJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="logNormalJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,std:Double,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="logNormalJavaVectorRDD(JavaSparkContext,Double,Double,Long,Int):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">logNormalJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="std">std: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#logNormalJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,std:Double,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#logNormalJavaVectorRDD">RandomRDDs#logNormalJavaVectorRDD</a> with the default number of partitions and
+the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#logNormalJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="logNormalJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,std:Double,numRows:Long,numCols:Int,numPartitions:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="logNormalJavaVectorRDD(JavaSparkContext,Double,Double,Long,Int,Int):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">logNormalJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="std">std: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#logNormalJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,std:Double,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#logNormalJavaVectorRDD">RandomRDDs#logNormalJavaVectorRDD</a> with the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#logNormalJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="logNormalJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,std:Double,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="logNormalJavaVectorRDD(JavaSparkContext,Double,Double,Long,Int,Int,Long):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">logNormalJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="std">std: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Java-friendly version of <a href="#logNormalVectorRDD(sc:org.apache.spark.SparkContext,mean:Double,std:Double,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#logNormalVectorRDD">RandomRDDs#logNormalVectorRDD</a>.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#logNormalRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="logNormalRDD(sc:org.apache.spark.SparkContext,mean:Double,std:Double,size:Long,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[Double]"></a>
+      <a id="logNormalRDD(SparkContext,Double,Double,Long,Int,Long):RDD[Double]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">logNormalRDD</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="std">std: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span> = <span class="symbol">0</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span> = <span class="symbol"><span class="name"><a href="../../../../package.html">Utils.random.nextLong()</a></span></span></span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<span class="extype" name="scala.Double">Double</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Generates an RDD comprised of <code>i.i.d.</code> samples from the log normal distribution with the input
+ mean and standard deviation
+</p><div class="fullcomment"><div class="comment cmt"><p>Generates an RDD comprised of <code>i.i.d.</code> samples from the log normal distribution with the input
+ mean and standard deviation
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext used to create the RDD.</p></dd><dt class="param">mean</dt><dd class="cmt"><p>mean for the log normal distribution</p></dd><dt class="param">std</dt><dd class="cmt"><p>standard deviation for the log normal distribution</p></dd><dt class="param">size</dt><dd class="cmt"><p>Size of the RDD.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>Number of partitions in the RDD (default: <code>sc.defaultParallelism</code>).</p></dd><dt class="param">seed</dt><dd class="cmt"><p>Random seed (default: a random long integer).</p></dd><dt>returns</dt><dd class="cmt"><p>RDD[Double] comprised of <code>i.i.d.</code> samples ~ Pois(mean).
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#logNormalVectorRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="logNormalVectorRDD(sc:org.apache.spark.SparkContext,mean:Double,std:Double,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="logNormalVectorRDD(SparkContext,Double,Double,Long,Int,Int,Long):RDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">logNormalVectorRDD</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="std">std: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span> = <span class="symbol">0</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span> = <span class="symbol"><span class="name"><a href="../../../../package.html">Utils.random.nextLong()</a></span></span></span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Generates an RDD[Vector] with vectors containing <code>i.i.d.</code> samples drawn from a
+log normal distribution.</p><div class="fullcomment"><div class="comment cmt"><p>Generates an RDD[Vector] with vectors containing <code>i.i.d.</code> samples drawn from a
+log normal distribution.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext used to create the RDD.</p></dd><dt class="param">mean</dt><dd class="cmt"><p>Mean of the log normal distribution.</p></dd><dt class="param">std</dt><dd class="cmt"><p>Standard deviation of the log normal distribution.</p></dd><dt class="param">numRows</dt><dd class="cmt"><p>Number of Vectors in the RDD.</p></dd><dt class="param">numCols</dt><dd class="cmt"><p>Number of elements in each Vector.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>Number of partitions in the RDD (default: <code>sc.defaultParallelism</code>).</p></dd><dt class="param">seed</dt><dd class="cmt"><p>Random seed (default: a random long integer).</p></dd><dt>returns</dt><dd class="cmt"><p>RDD[Vector] with vectors containing <code>i.i.d.</code> samples.
+</p></dd></dl></div>
+    </li><li name="scala.AnyRef#ne" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="ne(x$1:AnyRef):Boolean"></a>
+      <a id="ne(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">ne</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#normalJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="normalJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,size:Long):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="normalJavaRDD(JavaSparkContext,Long):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">normalJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#normalJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,size:Long):org.apache.spark.api.java.JavaDoubleRDD" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#normalJavaRDD">RandomRDDs#normalJavaRDD</a> with the default number of partitions and the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#normalJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="normalJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,size:Long,numPartitions:Int):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="normalJavaRDD(JavaSparkContext,Long,Int):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">normalJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#normalJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,size:Long):org.apache.spark.api.java.JavaDoubleRDD" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#normalJavaRDD">RandomRDDs#normalJavaRDD</a> with the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#normalJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="normalJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,size:Long,numPartitions:Int,seed:Long):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="normalJavaRDD(JavaSparkContext,Long,Int,Long):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">normalJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Java-friendly version of <a href="#normalRDD(sc:org.apache.spark.SparkContext,size:Long,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[Double]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#normalRDD">RandomRDDs#normalRDD</a>.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#normalJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="normalJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="normalJavaVectorRDD(JavaSparkContext,Long,Int):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">normalJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#normalJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#normalJavaVectorRDD">RandomRDDs#normalJavaVectorRDD</a> with the default number of partitions and the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#normalJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="normalJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,numRows:Long,numCols:Int,numPartitions:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="normalJavaVectorRDD(JavaSparkContext,Long,Int,Int):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">normalJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#normalJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#normalJavaVectorRDD">RandomRDDs#normalJavaVectorRDD</a> with the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#normalJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="normalJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="normalJavaVectorRDD(JavaSparkContext,Long,Int,Int,Long):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">normalJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Java-friendly version of <a href="#normalVectorRDD(sc:org.apache.spark.SparkContext,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#normalVectorRDD">RandomRDDs#normalVectorRDD</a>.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#normalRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="normalRDD(sc:org.apache.spark.SparkContext,size:Long,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[Double]"></a>
+      <a id="normalRDD(SparkContext,Long,Int,Long):RDD[Double]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">normalRDD</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span> = <span class="symbol">0</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span> = <span class="symbol"><span class="name"><a href="../../../../package.html">Utils.random.nextLong()</a></span></span></span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<span class="extype" name="scala.Double">Double</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Generates an RDD comprised of <code>i.i.d.</code> samples from the standard normal distribution.</p><div class="fullcomment"><div class="comment cmt"><p>Generates an RDD comprised of <code>i.i.d.</code> samples from the standard normal distribution.</p><p>To transform the distribution in the generated RDD from standard normal to some other normal
+<code>N(mean, sigma<sup>2</sup>)</code>, use <code>RandomRDDs.normalRDD(sc, n, p, seed).map(v =&gt; mean + sigma * v)</code>.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext used to create the RDD.</p></dd><dt class="param">size</dt><dd class="cmt"><p>Size of the RDD.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>Number of partitions in the RDD (default: <code>sc.defaultParallelism</code>).</p></dd><dt class="param">seed</dt><dd class="cmt"><p>Random seed (default: a random long integer).</p></dd><dt>returns</dt><dd class="cmt"><p>RDD[Double] comprised of <code>i.i.d.</code> samples ~ N(0.0, 1.0).
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#normalVectorRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="normalVectorRDD(sc:org.apache.spark.SparkContext,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="normalVectorRDD(SparkContext,Long,Int,Int,Long):RDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">normalVectorRDD</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span> = <span class="symbol">0</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span> = <span class="symbol"><span class="name"><a href="../../../../package.html">Utils.random.nextLong()</a></span></span></span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Generates an RDD[Vector] with vectors containing <code>i.i.d.</code> samples drawn from the
+standard normal distribution.</p><div class="fullcomment"><div class="comment cmt"><p>Generates an RDD[Vector] with vectors containing <code>i.i.d.</code> samples drawn from the
+standard normal distribution.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext used to create the RDD.</p></dd><dt class="param">numRows</dt><dd class="cmt"><p>Number of Vectors in the RDD.</p></dd><dt class="param">numCols</dt><dd class="cmt"><p>Number of elements in each Vector.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>Number of partitions in the RDD (default: <code>sc.defaultParallelism</code>).</p></dd><dt class="param">seed</dt><dd class="cmt"><p>Random seed (default: a random long integer).</p></dd><dt>returns</dt><dd class="cmt"><p>RDD[Vector] with vectors containing <code>i.i.d.</code> samples ~ <code>N(0.0, 1.0)</code>.
+</p></dd></dl></div>
+    </li><li name="scala.AnyRef#notify" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="notify():Unit"></a>
+      <a id="notify():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">notify</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.AnyRef#notifyAll" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="notifyAll():Unit"></a>
+      <a id="notifyAll():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">notifyAll</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#poissonJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="poissonJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,size:Long):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="poissonJavaRDD(JavaSparkContext,Double,Long):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">poissonJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#poissonJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,size:Long):org.apache.spark.api.java.JavaDoubleRDD" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#poissonJavaRDD">RandomRDDs#poissonJavaRDD</a> with the default number of partitions and the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#poissonJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="poissonJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,size:Long,numPartitions:Int):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="poissonJavaRDD(JavaSparkContext,Double,Long,Int):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">poissonJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#poissonJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,size:Long):org.apache.spark.api.java.JavaDoubleRDD" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#poissonJavaRDD">RandomRDDs#poissonJavaRDD</a> with the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#poissonJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="poissonJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,size:Long,numPartitions:Int,seed:Long):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="poissonJavaRDD(JavaSparkContext,Double,Long,Int,Long):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">poissonJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Java-friendly version of <a href="#poissonRDD(sc:org.apache.spark.SparkContext,mean:Double,size:Long,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[Double]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#poissonRDD">RandomRDDs#poissonRDD</a>.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#poissonJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="poissonJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="poissonJavaVectorRDD(JavaSparkContext,Double,Long,Int):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">poissonJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#poissonJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#poissonJavaVectorRDD">RandomRDDs#poissonJavaVectorRDD</a> with the default number of partitions and the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#poissonJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="poissonJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,numRows:Long,numCols:Int,numPartitions:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="poissonJavaVectorRDD(JavaSparkContext,Double,Long,Int,Int):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">poissonJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#poissonJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#poissonJavaVectorRDD">RandomRDDs#poissonJavaVectorRDD</a> with the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#poissonJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="poissonJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,mean:Double,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="poissonJavaVectorRDD(JavaSparkContext,Double,Long,Int,Int,Long):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">poissonJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Java-friendly version of <a href="#poissonVectorRDD(sc:org.apache.spark.SparkContext,mean:Double,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#poissonVectorRDD">RandomRDDs#poissonVectorRDD</a>.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#poissonRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="poissonRDD(sc:org.apache.spark.SparkContext,mean:Double,size:Long,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[Double]"></a>
+      <a id="poissonRDD(SparkContext,Double,Long,Int,Long):RDD[Double]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">poissonRDD</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span> = <span class="symbol">0</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span> = <span class="symbol"><span class="name"><a href="../../../../package.html">Utils.random.nextLong()</a></span></span></span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<span class="extype" name="scala.Double">Double</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Generates an RDD comprised of <code>i.i.d.</code> samples from the Poisson distribution with the input
+mean.</p><div class="fullcomment"><div class="comment cmt"><p>Generates an RDD comprised of <code>i.i.d.</code> samples from the Poisson distribution with the input
+mean.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext used to create the RDD.</p></dd><dt class="param">mean</dt><dd class="cmt"><p>Mean, or lambda, for the Poisson distribution.</p></dd><dt class="param">size</dt><dd class="cmt"><p>Size of the RDD.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>Number of partitions in the RDD (default: <code>sc.defaultParallelism</code>).</p></dd><dt class="param">seed</dt><dd class="cmt"><p>Random seed (default: a random long integer).</p></dd><dt>returns</dt><dd class="cmt"><p>RDD[Double] comprised of <code>i.i.d.</code> samples ~ Pois(mean).
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#poissonVectorRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="poissonVectorRDD(sc:org.apache.spark.SparkContext,mean:Double,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="poissonVectorRDD(SparkContext,Double,Long,Int,Int,Long):RDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">poissonVectorRDD</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="mean">mean: <span class="extype" name="scala.Double">Double</span></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span> = <span class="symbol">0</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span> = <span class="symbol"><span class="name"><a href="../../../../package.html">Utils.random.nextLong()</a></span></span></span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Generates an RDD[Vector] with vectors containing <code>i.i.d.</code> samples drawn from the
+Poisson distribution with the input mean.</p><div class="fullcomment"><div class="comment cmt"><p>Generates an RDD[Vector] with vectors containing <code>i.i.d.</code> samples drawn from the
+Poisson distribution with the input mean.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext used to create the RDD.</p></dd><dt class="param">mean</dt><dd class="cmt"><p>Mean, or lambda, for the Poisson distribution.</p></dd><dt class="param">numRows</dt><dd class="cmt"><p>Number of Vectors in the RDD.</p></dd><dt class="param">numCols</dt><dd class="cmt"><p>Number of elements in each Vector.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>Number of partitions in the RDD (default: <code>sc.defaultParallelism</code>)</p></dd><dt class="param">seed</dt><dd class="cmt"><p>Random seed (default: a random long integer).</p></dd><dt>returns</dt><dd class="cmt"><p>RDD[Vector] with vectors containing <code>i.i.d.</code> samples ~ Pois(mean).
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#randomRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="randomRDD[T](sc:org.apache.spark.SparkContext,generator:org.apache.spark.mllib.random.RandomDataGenerator[T],size:Long,numPartitions:Int,seed:Long)(implicitevidence$1:scala.reflect.ClassTag[T]):org.apache.spark.rdd.RDD[T]"></a>
+      <a id="randomRDD[T](SparkContext,RandomDataGenerator[T],Long,Int,Long)(ClassTag[T]):RDD[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">randomRDD</span><span class="tparams">[<span name="T">T</span>]</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="generator">generator: <a href="RandomDataGenerator.html" class="extype" name="org.apache.spark.mllib.random.RandomDataGenerator">RandomDataGenerator</a>[<span class="extype" name="org.apache.spark.mllib.random.RandomRDDs.randomRDD.T">T</span>]</span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span> = <span class="symbol">0</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span> = <span class="symbol"><span class="name"><a href="../../../../package.html">Utils.random.nextLong()</a></span></span></span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.mllib.random.RandomRDDs.randomRDD.T">T</span>]</span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<span class="extype" name="org.apache.spark.mllib.random.RandomRDDs.randomRDD.T">T</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">:: DeveloperApi ::
+Generates an RDD comprised of <code>i.i.d.</code> samples produced by the input RandomDataGenerator.</p><div class="fullcomment"><div class="comment cmt"><p>:: DeveloperApi ::
+Generates an RDD comprised of <code>i.i.d.</code> samples produced by the input RandomDataGenerator.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext used to create the RDD.</p></dd><dt class="param">generator</dt><dd class="cmt"><p>RandomDataGenerator used to populate the RDD.</p></dd><dt class="param">size</dt><dd class="cmt"><p>Size of the RDD.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>Number of partitions in the RDD (default: <code>sc.defaultParallelism</code>).</p></dd><dt class="param">seed</dt><dd class="cmt"><p>Random seed (default: a random long integer).</p></dd><dt>returns</dt><dd class="cmt"><p>RDD[Double] comprised of <code>i.i.d.</code> samples produced by generator.
+</p></dd></dl><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#randomVectorRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="randomVectorRDD(sc:org.apache.spark.SparkContext,generator:org.apache.spark.mllib.random.RandomDataGenerator[Double],numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="randomVectorRDD(SparkContext,RandomDataGenerator[Double],Long,Int,Int,Long):RDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">randomVectorRDD</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="generator">generator: <a href="RandomDataGenerator.html" class="extype" name="org.apache.spark.mllib.random.RandomDataGenerator">RandomDataGenerator</a>[<span class="extype" name="scala.Double">Double</span>]</span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span> = <span class="symbol">0</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span> = <span class="symbol"><span class="name"><a href="../../../../package.html">Utils.random.nextLong()</a></span></span></span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">:: DeveloperApi ::
+Generates an RDD[Vector] with vectors containing <code>i.i.d.</code> samples produced by the
+input RandomDataGenerator.</p><div class="fullcomment"><div class="comment cmt"><p>:: DeveloperApi ::
+Generates an RDD[Vector] with vectors containing <code>i.i.d.</code> samples produced by the
+input RandomDataGenerator.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext used to create the RDD.</p></dd><dt class="param">generator</dt><dd class="cmt"><p>RandomDataGenerator used to populate the RDD.</p></dd><dt class="param">numRows</dt><dd class="cmt"><p>Number of Vectors in the RDD.</p></dd><dt class="param">numCols</dt><dd class="cmt"><p>Number of elements in each Vector.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>Number of partitions in the RDD (default: <code>sc.defaultParallelism</code>).</p></dd><dt class="param">seed</dt><dd class="cmt"><p>Random seed (default: a random long integer).</p></dd><dt>returns</dt><dd class="cmt"><p>RDD[Vector] with vectors containing <code>i.i.d.</code> samples produced by generator.
+</p></dd></dl><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="scala.AnyRef#synchronized" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="synchronized[T0](x$1:=&gt;T0):T0"></a>
+      <a id="synchronized[T0](⇒T0):T0"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">synchronized</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="params">(<span name="arg0">arg0: ⇒ <span class="extype" name="java.lang.AnyRef.synchronized.T0">T0</span></span>)</span><span class="result">: <span class="extype" name="java.lang.AnyRef.synchronized.T0">T0</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.AnyRef#toString" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="toString():String"></a>
+      <a id="toString():String"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">toString</span><span class="params">()</span><span class="result">: <span class="extype" name="java.lang.String">String</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#uniformJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="uniformJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,size:Long):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="uniformJavaRDD(JavaSparkContext,Long):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">uniformJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#uniformJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,size:Long):org.apache.spark.api.java.JavaDoubleRDD" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#uniformJavaRDD">RandomRDDs#uniformJavaRDD</a> with the default number of partitions and the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#uniformJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="uniformJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,size:Long,numPartitions:Int):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="uniformJavaRDD(JavaSparkContext,Long,Int):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">uniformJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#uniformJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,size:Long):org.apache.spark.api.java.JavaDoubleRDD" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#uniformJavaRDD">RandomRDDs#uniformJavaRDD</a> with the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#uniformJavaRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="uniformJavaRDD(jsc:org.apache.spark.api.java.JavaSparkContext,size:Long,numPartitions:Int,seed:Long):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="uniformJavaRDD(JavaSparkContext,Long,Int,Long):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">uniformJavaRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Java-friendly version of <a href="#uniformRDD(sc:org.apache.spark.SparkContext,size:Long,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[Double]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#uniformRDD">RandomRDDs#uniformRDD</a>.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#uniformJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="uniformJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="uniformJavaVectorRDD(JavaSparkContext,Long,Int):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">uniformJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#uniformJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#uniformJavaVectorRDD">RandomRDDs#uniformJavaVectorRDD</a> with the default number of partitions and the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#uniformJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="uniformJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,numRows:Long,numCols:Int,numPartitions:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="uniformJavaVectorRDD(JavaSparkContext,Long,Int,Int):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">uniformJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"><a href="#uniformJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,numRows:Long,numCols:Int):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#uniformJavaVectorRDD">RandomRDDs#uniformJavaVectorRDD</a> with the default seed.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#uniformJavaVectorRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="uniformJavaVectorRDD(jsc:org.apache.spark.api.java.JavaSparkContext,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.api.java.JavaRDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="uniformJavaVectorRDD(JavaSparkContext,Long,Int,Int,Long):JavaRDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">uniformJavaVectorRDD</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Java-friendly version of <a href="#uniformVectorRDD(sc:org.apache.spark.SparkContext,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[org.apache.spark.mllib.linalg.Vector]" class="extmbr" name="org.apache.spark.mllib.random.RandomRDDs#uniformVectorRDD">RandomRDDs#uniformVectorRDD</a>.</p>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#uniformRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="uniformRDD(sc:org.apache.spark.SparkContext,size:Long,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[Double]"></a>
+      <a id="uniformRDD(SparkContext,Long,Int,Long):RDD[Double]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">uniformRDD</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="size">size: <span class="extype" name="scala.Long">Long</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span> = <span class="symbol">0</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span> = <span class="symbol"><span class="name"><a href="../../../../package.html">Utils.random.nextLong()</a></span></span></span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<span class="extype" name="scala.Double">Double</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Generates an RDD comprised of <code>i.i.d.</code> samples from the uniform distribution <code>U(0.0, 1.0)</code>.</p><div class="fullcomment"><div class="comment cmt"><p>Generates an RDD comprised of <code>i.i.d.</code> samples from the uniform distribution <code>U(0.0, 1.0)</code>.</p><p>To transform the distribution in the generated RDD from <code>U(0.0, 1.0)</code> to <code>U(a, b)</code>, use
+<code>RandomRDDs.uniformRDD(sc, n, p, seed).map(v =&gt; a + (b - a) * v)</code>.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext used to create the RDD.</p></dd><dt class="param">size</dt><dd class="cmt"><p>Size of the RDD.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>Number of partitions in the RDD (default: <code>sc.defaultParallelism</code>).</p></dd><dt class="param">seed</dt><dd class="cmt"><p>Random seed (default: a random long integer).</p></dd><dt>returns</dt><dd class="cmt"><p>RDD[Double] comprised of <code>i.i.d.</code> samples ~ <code>U(0.0, 1.0)</code>.
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.mllib.random.RandomRDDs#uniformVectorRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="uniformVectorRDD(sc:org.apache.spark.SparkContext,numRows:Long,numCols:Int,numPartitions:Int,seed:Long):org.apache.spark.rdd.RDD[org.apache.spark.mllib.linalg.Vector]"></a>
+      <a id="uniformVectorRDD(SparkContext,Long,Int,Int,Long):RDD[Vector]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">uniformVectorRDD</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="numRows">numRows: <span class="extype" name="scala.Long">Long</span></span>, <span name="numCols">numCols: <span class="extype" name="scala.Int">Int</span></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span> = <span class="symbol">0</span></span>, <span name="seed">seed: <span class="extype" name="scala.Long">Long</span> = <span class="symbol"><span class="name"><a href="../../../../package.html">Utils.random.nextLong()</a></span></span></span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<a href="../linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Generates an RDD[Vector] with vectors containing <code>i.i.d.</code> samples drawn from the
+uniform distribution on <code>U(0.0, 1.0)</code>.</p><div class="fullcomment"><div class="comment cmt"><p>Generates an RDD[Vector] with vectors containing <code>i.i.d.</code> samples drawn from the
+uniform distribution on <code>U(0.0, 1.0)</code>.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext used to create the RDD.</p></dd><dt class="param">numRows</dt><dd class="cmt"><p>Number of Vectors in the RDD.</p></dd><dt class="param">numCols</dt><dd class="cmt"><p>Number of elements in each Vector.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>Number of partitions in the RDD.</p></dd><dt class="param">seed</dt><dd class="cmt"><p>Seed for the RNG that generates the seed for the generator in each partition.</p></dd><dt>returns</dt><dd class="cmt"><p>RDD[Vector] with vectors containing i.i.d samples ~ <code>U(0.0, 1.0)</code>.
+</p></dd></dl></div>
+    </li><li name="scala.AnyRef#wait" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="wait():Unit"></a>
+      <a id="wait():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.InterruptedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="scala.AnyRef#wait" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="wait(x$1:Long,x$2:Int):Unit"></a>
+      <a id="wait(Long,Int):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Long">Long</span></span>, <span name="arg1">arg1: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.InterruptedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="scala.AnyRef#wait" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="wait(x$1:Long):Unit"></a>
+      <a id="wait(Long):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.InterruptedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li></ol>
+            </div>
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        <div class="parent" name="scala.AnyRef">
+              <h3>Inherited from <span class="extype" name="scala.AnyRef">AnyRef</span></h3>
+            </div><div class="parent" name="scala.Any">
+              <h3>Inherited from <span class="extype" name="scala.Any">Any</span></h3>
+            </div>
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Ungrouped</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../../../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../../../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../../../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../../../../lib/template.js"></script>
+    </body>
+      </html>

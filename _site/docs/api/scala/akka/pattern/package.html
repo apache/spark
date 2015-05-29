@@ -1,0 +1,234 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>pattern - akka.pattern</title>
+          <meta name="description" content="pattern - akka.pattern" />
+          <meta name="keywords" content="pattern akka.pattern" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../index.html';
+            var hash = 'akka.pattern.package';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="value">
+      <div id="definition">
+        <img src="../../lib/package_big.png" />
+        <p id="owner"><a href="../package.html" class="extype" name="akka">akka</a></p>
+        <h1>pattern</h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <span class="name">pattern</span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"><div class="toggleContainer block">
+          <span class="toggle">Linear Supertypes</span>
+          <div class="superTypes hiddenContent"><span class="extype" name="akka.pattern.FutureTimeoutSupport">FutureTimeoutSupport</span>, <span class="extype" name="akka.pattern.GracefulStopSupport">GracefulStopSupport</span>, <span class="extype" name="akka.pattern.AskSupport">AskSupport</span>, <span class="extype" name="akka.pattern.PipeToSupport">PipeToSupport</span>, <span class="extype" name="scala.AnyRef">AnyRef</span>, <span class="extype" name="scala.Any">Any</span></div>
+        </div></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        <div id="order">
+              <span class="filtertype">Ordering</span>
+              <ol>
+                
+                <li class="alpha in"><span>Alphabetic</span></li>
+                <li class="inherit out"><span>By inheritance</span></li>
+              </ol>
+            </div>
+        <div id="ancestors">
+                <span class="filtertype">Inherited<br />
+                </span>
+                <ol id="linearization">
+                  <li class="in" name="akka.pattern"><span>pattern</span></li><li class="in" name="akka.pattern.FutureTimeoutSupport"><span>FutureTimeoutSupport</span></li><li class="in" name="akka.pattern.GracefulStopSupport"><span>GracefulStopSupport</span></li><li class="in" name="akka.pattern.AskSupport"><span>AskSupport</span></li><li class="in" name="akka.pattern.PipeToSupport"><span>PipeToSupport</span></li><li class="in" name="scala.AnyRef"><span>AnyRef</span></li><li class="in" name="scala.Any"><span>Any</span></li>
+                </ol>
+              </div><div id="ancestors">
+            <span class="filtertype"></span>
+            <ol>
+              <li class="hideall out"><span>Hide All</span></li>
+              <li class="showall in"><span>Show all</span></li>
+            </ol>
+            <a href="http://docs.scala-lang.org/overviews/scaladoc/usage.html#members" target="_blank">Learn more about member selection</a>
+          </div>
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        
+
+        <div id="types" class="types members">
+              <h3>Type Members</h3>
+              <ol><li name="akka.pattern.PipeToSupport.PipeableFuture" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="PipeableFuture[T&lt;:&lt;?&gt;]extendsAnyRef"></a>
+      <a id="PipeableFuture[T]:PipeableFuture[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <span class="name">PipeableFuture</span><span class="tparams">[<span name="T">T</span>]</span><span class="result"> extends <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>PipeToSupport</dd></dl></div>
+    </li></ol>
+            </div>
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="akka.pattern.FutureTimeoutSupport#after" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="after[T&lt;:&lt;?&gt;](duration:&lt;?&gt;,using:&lt;?&gt;)(value:&lt;?&gt;)(implicitec:&lt;?&gt;):scala.concurrent.Future[T]"></a>
+      <a id="after[T](FiniteDuration,Scheduler)(⇒Future[T])(ExecutionContext):Future[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">after</span><span class="tparams">[<span name="T">T</span>]</span><span class="params">(<span name="duration">duration: <span class="extype" name="scala.concurrent.duration.FiniteDuration">FiniteDuration</span></span>, <span name="using">using: <span class="extype" name="akka.actor.Scheduler">Scheduler</span></span>)</span><span class="params">(<span name="value">value: ⇒ <span class="extype" name="scala.concurrent.Future">Future</span>[<span class="extype" name="akka.pattern.FutureTimeoutSupport.after.T">T</span>]</span>)</span><span class="params">(<span class="implicit">implicit </span><span name="ec">ec: <span class="extype" name="scala.concurrent.ExecutionContext">ExecutionContext</span></span>)</span><span class="result">: <span class="extype" name="scala.concurrent.Future">Future</span>[<span class="extype" name="akka.pattern.FutureTimeoutSupport.after.T">T</span>]</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>FutureTimeoutSupport</dd></dl></div>
+    </li><li name="akka.pattern.AskSupport#ask" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="ask(actorSelection:akka.actor.ActorSelection,message:Any)(implicittimeout:akka.util.Timeout):scala.concurrent.Future[Any]"></a>
+      <a id="ask(ActorSelection,Any)(Timeout):Future[Any]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">ask</span><span class="params">(<span name="actorSelection">actorSelection: <span class="extype" name="akka.actor.ActorSelection">ActorSelection</span></span>, <span name="message">message: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="params">(<span class="implicit">implicit </span><span name="timeout">timeout: <span class="extype" name="akka.util.Timeout">Timeout</span></span>)</span><span class="result">: <span class="extype" name="scala.concurrent.Future">Future</span>[<span class="extype" name="scala.Any">Any</span>]</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AskSupport</dd></dl></div>
+    </li><li name="akka.pattern.AskSupport#ask" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="ask(actorSelection:akka.actor.ActorSelection):akka.pattern.AskableActorSelection"></a>
+      <a id="ask(ActorSelection):AskableActorSelection"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">implicit </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">ask</span><span class="params">(<span name="actorSelection">actorSelection: <span class="extype" name="akka.actor.ActorSelection">ActorSelection</span></span>)</span><span class="result">: <span class="extype" name="akka.pattern.AskableActorSelection">AskableActorSelection</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AskSupport</dd></dl></div>
+    </li><li name="akka.pattern.AskSupport#ask" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="ask(actorRef:akka.actor.ActorRef,message:Any)(implicittimeout:akka.util.Timeout):scala.concurrent.Future[Any]"></a>
+      <a id="ask(ActorRef,Any)(Timeout):Future[Any]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">ask</span><span class="params">(<span name="actorRef">actorRef: <span class="extype" name="akka.actor.ActorRef">ActorRef</span></span>, <span name="message">message: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="params">(<span class="implicit">implicit </span><span name="timeout">timeout: <span class="extype" name="akka.util.Timeout">Timeout</span></span>)</span><span class="result">: <span class="extype" name="scala.concurrent.Future">Future</span>[<span class="extype" name="scala.Any">Any</span>]</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AskSupport</dd></dl></div>
+    </li><li name="akka.pattern.AskSupport#ask" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="ask(actorRef:akka.actor.ActorRef):akka.pattern.AskableActorRef"></a>
+      <a id="ask(ActorRef):AskableActorRef"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">implicit </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">ask</span><span class="params">(<span name="actorRef">actorRef: <span class="extype" name="akka.actor.ActorRef">ActorRef</span></span>)</span><span class="result">: <span class="extype" name="akka.pattern.AskableActorRef">AskableActorRef</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AskSupport</dd></dl></div>
+    </li><li name="akka.pattern.GracefulStopSupport#gracefulStop" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="gracefulStop(target:&lt;?&gt;,timeout:&lt;?&gt;,stopMessage:&lt;?&gt;):scala.concurrent.Future[Boolean]"></a>
+      <a id="gracefulStop(ActorRef,FiniteDuration,Any):Future[Boolean]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">gracefulStop</span><span class="params">(<span name="target">target: <span class="extype" name="akka.actor.ActorRef">ActorRef</span></span>, <span name="timeout">timeout: <span class="extype" name="scala.concurrent.duration.FiniteDuration">FiniteDuration</span></span>, <span name="stopMessage">stopMessage: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="result">: <span class="extype" name="scala.concurrent.Future">Future</span>[<span class="extype" name="scala.Boolean">Boolean</span>]</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>GracefulStopSupport</dd></dl></div>
+    </li><li name="akka.pattern.PipeToSupport#pipe" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="pipe[T&lt;:&lt;?&gt;](future:&lt;?&gt;)(implicitexecutionContext:&lt;?&gt;):PipeToSupport.this.PipeableFuture[T]"></a>
+      <a id="pipe[T](Future[T])(ExecutionContext):PipeableFuture[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">implicit </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">pipe</span><span class="tparams">[<span name="T">T</span>]</span><span class="params">(<span name="future">future: <span class="extype" name="scala.concurrent.Future">Future</span>[<span class="extype" name="akka.pattern.PipeToSupport.pipe.T">T</span>]</span>)</span><span class="params">(<span class="implicit">implicit </span><span name="executionContext">executionContext: <span class="extype" name="scala.concurrent.ExecutionContext">ExecutionContext</span></span>)</span><span class="result">: <span class="extype" name="akka.pattern.PipeToSupport.PipeableFuture">PipeableFuture</span>[<span class="extype" name="akka.pattern.PipeToSupport.pipe.T">T</span>]</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>PipeToSupport</dd></dl></div>
+    </li></ol>
+            </div>
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        <div class="parent" name="akka.pattern.FutureTimeoutSupport">
+              <h3>Inherited from <span class="extype" name="akka.pattern.FutureTimeoutSupport">FutureTimeoutSupport</span></h3>
+            </div><div class="parent" name="akka.pattern.GracefulStopSupport">
+              <h3>Inherited from <span class="extype" name="akka.pattern.GracefulStopSupport">GracefulStopSupport</span></h3>
+            </div><div class="parent" name="akka.pattern.AskSupport">
+              <h3>Inherited from <span class="extype" name="akka.pattern.AskSupport">AskSupport</span></h3>
+            </div><div class="parent" name="akka.pattern.PipeToSupport">
+              <h3>Inherited from <span class="extype" name="akka.pattern.PipeToSupport">PipeToSupport</span></h3>
+            </div><div class="parent" name="scala.AnyRef">
+              <h3>Inherited from <span class="extype" name="scala.AnyRef">AnyRef</span></h3>
+            </div><div class="parent" name="scala.Any">
+              <h3>Inherited from <span class="extype" name="scala.Any">Any</span></h3>
+            </div>
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Ungrouped</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../lib/template.js"></script>
+    </body>
+      </html>

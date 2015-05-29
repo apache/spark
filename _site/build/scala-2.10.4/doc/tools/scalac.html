@@ -1,0 +1,654 @@
+<?xml version="1.1" encoding="iso-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+<head>
+<title>scalac man page</title>
+<meta http-equiv="Content-Language" content="en"/>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+<meta name="Author" content="Stephane Micheloud"/>
+<style type="text/css">
+  <!--
+  blockquote, pre { margin:1em 4em 1em 4em; }
+  dt { margin: 0.6em 0 0 0; }
+  p { margin:0.6em 2em 0.6em 2em; text-align:justify; }
+  //-->
+</style>
+</head>
+
+<body>
+<!-- header -->
+<div style="margin: 0 0 2em 0;">
+<div style="float:left;">
+scalac(1)
+</div>
+<div style="float:right;">
+scalac(1)
+</div>
+<div style="text-align:center;">
+USER COMMANDS
+</div>
+</div>
+
+<h3 id="name">NAME</h3>
+<p>
+<code><b>scalac</b></code> &#8211; Compiler for the <a href="http://scala-lang.org/">Scala 2</a> language</p>
+
+<h3 id="synopsis">SYNOPSIS</h3>
+<p>
+<code><b>scalac</b></code><code>  [ &lt;<i>options</i>&gt; ] &lt;<i>source files</i>&gt;</code></p>
+
+<h3 id="parameters">PARAMETERS</h3>
+<p>
+<ins><dl>
+<dt>
+<code>&lt;<i>options</i>&gt;</code>
+</dt>
+<dd>
+Command line options. See <a href="#options"><b>OPTIONS</b></a> below.</dd>
+<dt>
+<code>&lt;<i>source files</i>&gt;</code>
+</dt>
+<dd>
+One or more source files to be compiled (such as <code>MyClass.scala</code>).</dd>
+</dl></ins>
+</p>
+
+<h3 id="description">DESCRIPTION</h3>
+<p>
+The <code><b>scalac</b></code> tool reads class and object definitions, written in the Scala programming language, and compiles them into bytecode class files.</p>
+<p>
+By default, the compiler puts each class file in the same directory as its source file. You can specify a separate destination directory with -d (see <a href="#options"><b>OPTIONS</b></a>, below).</p>
+
+<h3 id="options">OPTIONS</h3>
+<p>
+The compiler has a set of standard options that are supported on the current development environment and will be supported in future releases. An additional set of non-standard options are specific to the current virtual machine implementation and are subject to change in the future.  Non-standard options begin with <code><b>-X</b></code>.</p>
+
+<h4 id="standard_options">Standard Options</h4>
+<p>
+<ins><dl>
+<dt>
+<code><b>&#8211;D</b>property=value </code>
+</dt>
+<dd>
+Pass <code><b>&#8211;D</b>property=value </code> directly to the runtime system.</dd>
+<dt>
+<code><b>&#8211;J</b>&lt;<i>flag</i>&gt; </code>
+</dt>
+<dd>
+Pass <code>&lt;<i>flag</i>&gt;</code> directly to the runtime system.</dd>
+<dt>
+<code><b>&#8211;P:</b>&lt;<i>plugin:opt</i>&gt; </code>
+</dt>
+<dd>
+Pass an option to a plugin</dd>
+<dt>
+<code><b>&#8211;X</b> </code>
+</dt>
+<dd>
+Print a synopsis of advanced options.</dd>
+<dt>
+<code><b>&#8211;bootclasspath</b> &lt;<i>path</i>&gt; </code>
+</dt>
+<dd>
+Override location of bootstrap class files (where to find the standard built-in classes, such as "<code>scala.List</code>").</dd>
+<dt>
+<code><b>&#8211;classpath</b> &lt;<i>path</i>&gt; </code>
+</dt>
+<dd>
+<div>
+Specify where to find user class files (on Unix-based systems a colon-separated list of paths, on Windows-based systems, a semicolon-separate list of paths). This does not override the built-in (<code>"boot"</code>) search path.
+</div>
+<div>
+The default class path is the current directory. Setting the <code>CLASSPATH</code> variable or using the <code>-classpath</code> command-line option overrides that default, so if you want to include the current directory in the search path, you must include <code>"."</code> in the new settings.
+</div>
+</dd>
+<dt>
+<code><b>&#8211;d</b> &lt;<i>directory|jar</i>&gt; </code>
+</dt>
+<dd>
+Specify where to place generated class files.</dd>
+<dt>
+<code><b>&#8211;deprecation</b> </code>
+</dt>
+<dd>
+<div>
+Emit warning and location for usages of deprecated APIs.
+</div>
+<div>
+Available since Scala version 2.2.1
+</div>
+</dd>
+<dt>
+<code><b>&#8211;encoding</b> &lt;<i>encoding</i>&gt; </code>
+</dt>
+<dd>
+<div>
+Specify character encoding used by source files.
+</div>
+<div>
+The default value is platform-specific (Linux: <code>"UTF8"</code>, Windows: <code>"Cp1252"</code>). Executing the following code in the Scala interpreter will return the default value on your system:
+</div>
+<div>
+<code><b>    scala&gt; </b></code><code>new java.io.InputStreamReader(System.in).getEncoding</code>
+</div>
+</dd>
+<dt>
+<code><b>&#8211;explaintypes</b> </code>
+</dt>
+<dd>
+Explain type errors in more detail.</dd>
+<dt>
+<code><b>&#8211;extdirs</b> &lt;<i>dirs</i>&gt; </code>
+</dt>
+<dd>
+Override location of installed extensions.</dd>
+<dt>
+<code><b>&#8211;g:</b>{none,source,line,vars,notailcalls} </code>
+</dt>
+<dd>
+<div>
+<code>"none"</code> generates no debugging info,
+</div>
+<div>
+<code>"source"</code> generates only the source file attribute,
+</div>
+<div>
+<code>"line"</code> generates source and line number information,
+</div>
+<div>
+<code>"vars"</code> generates source, line number and local variable information,
+</div>
+<div>
+<code>"notailcalls"</code> generates all of the above and <i>will not</i> perform tail call optimization.
+</div>
+</dd>
+<dt>
+<code><b>&#8211;help</b> </code>
+</dt>
+<dd>
+Print a synopsis of standard options.</dd>
+<dt>
+<code><b>&#8211;javabootclasspath</b> &lt;<i>path</i>&gt; </code>
+</dt>
+<dd>
+Override Java boot classpath.</dd>
+<dt>
+<code><b>&#8211;javaextdirs</b> &lt;<i>path</i>&gt; </code>
+</dt>
+<dd>
+Override Java extdirs classpath.</dd>
+<dt>
+<code><b>&#8211;no-specialization</b> </code>
+</dt>
+<dd>
+Ignore <code><i>@specialize</i></code> annotations.</dd>
+<dt>
+<code><b>&#8211;nobootcp</b> </code>
+</dt>
+<dd>
+Do not use the boot classpath for the Scala jar files.</dd>
+<dt>
+<code><b>&#8211;nowarn</b> </code>
+</dt>
+<dd>
+Generate no warnings</dd>
+<dt>
+<code><b>&#8211;optimise</b> </code>
+</dt>
+<dd>
+Generates faster bytecode by applying optimisations to the program.</dd>
+<dt>
+<code><b>&#8211;print</b> </code>
+</dt>
+<dd>
+Print program with all Scala-specific features removed.</dd>
+<dt>
+<code><b>&#8211;sourcepath</b> &lt;<i>path</i>&gt; </code>
+</dt>
+<dd>
+Specify location(s) of source files.</dd>
+<dt>
+<code><b>&#8211;target:</b>&lt;<i>target</i>&gt; </code>
+</dt>
+<dd>
+<div>
+Specify which backend to use (<code>jvm-1.5,msil</code>).
+</div>
+<div>
+The default value is <code>"jvm-1.5"</code> (was <code>"jvm-1.4"</code> up to Scala version 2.6.1).
+</div>
+</dd>
+<dt>
+<code><b>&#8211;toolcp</b> &lt;<i>path</i>&gt; </code>
+</dt>
+<dd>
+Add to the runner classpath.</dd>
+<dt>
+<code><b>&#8211;unchecked</b> </code>
+</dt>
+<dd>
+<div>
+Enable detailed unchecked (erasure) warnings
+</div>
+<div>
+Non variable type-arguments in type patterns are unchecked since they are eliminated by erasure
+</div>
+<div>
+Available since Scala version 2.3.0
+</div>
+</dd>
+<dt>
+<code><b>&#8211;uniqid</b> </code>
+</dt>
+<dd>
+Uniquely tag all identifiers in debugging output.</dd>
+<dt>
+<code><b>&#8211;verbose</b> </code>
+</dt>
+<dd>
+Output messages about what the compiler is doing</dd>
+<dt>
+<code><b>&#8211;version</b> </code>
+</dt>
+<dd>
+Print product version and exit.</dd>
+<dt>
+<code><b>@</b>&lt;<i>file</i>&gt;</code>
+</dt>
+<dd>
+A text file containing compiler arguments (options and source files)</dd>
+</dl></ins>
+</p>
+
+<h4 id="advanced_options">Advanced Options</h4>
+<p>
+<ins><dl>
+<dt>
+<code><b>&#8211;Xassem-extdirs</b> &lt;<i>dirs</i>&gt; </code>
+</dt>
+<dd>
+(Requires <code>-target:msil</code>) List of directories containing assemblies.  default:<code>lib</code>.</dd>
+<dt>
+<code><b>&#8211;Xassem-name</b> &lt;<i>file</i>&gt; </code>
+</dt>
+<dd>
+(Requires <code>-target:msil</code>) Name of the output assembly.</dd>
+<dt>
+<code><b>&#8211;Xassem-path</b> &lt;<i>path</i>&gt; </code>
+</dt>
+<dd>
+(Requires <code>-target:msil</code>) List of assemblies referenced by the program.</dd>
+<dt>
+<code><b>&#8211;Xcheck-null</b> </code>
+</dt>
+<dd>
+Warn upon selection of nullable reference</dd>
+<dt>
+<code><b>&#8211;Xcheckinit</b> </code>
+</dt>
+<dd>
+Wrap field accessors to throw an exception on uninitialized access.</dd>
+<dt>
+<code><b>&#8211;Xdisable-assertions</b> </code>
+</dt>
+<dd>
+Generate no assertions and assumptions</dd>
+<dt>
+<code><b>&#8211;Xelide-below</b> &lt;<i>n</i>&gt; </code>
+</dt>
+<dd>
+Calls to <code><i>@elidable</i></code> methods are omitted if method priority is lower than argument.</dd>
+<dt>
+<code><b>&#8211;Xexperimental</b> </code>
+</dt>
+<dd>
+Enable experimental extensions</dd>
+<dt>
+<code><b>&#8211;Xfatal-warnings</b> </code>
+</dt>
+<dd>
+Fail the compilation if there are any warnings.</dd>
+<dt>
+<code><b>&#8211;Xfuture</b> </code>
+</dt>
+<dd>
+Turn on future language features.</dd>
+<dt>
+<code><b>&#8211;Xgenerate-phase-graph</b> &lt;<i>file</i>&gt; </code>
+</dt>
+<dd>
+Generate the phase graphs (outputs .dot files) to fileX.dot.</dd>
+<dt>
+<code><b>&#8211;Xlint</b> </code>
+</dt>
+<dd>
+Enable recommended additional warnings.</dd>
+<dt>
+<code><b>&#8211;Xlog-implicits</b> </code>
+</dt>
+<dd>
+Show more detail on why some implicits are not applicable.</dd>
+<dt>
+<code><b>&#8211;Xmax-classfile-name</b> &lt;<i>n</i>&gt; </code>
+</dt>
+<dd>
+Maximum filename length for generated classes.</dd>
+<dt>
+<code><b>&#8211;Xmigration</b> </code>
+</dt>
+<dd>
+Warn about constructs whose behavior may have changed between 2.7 and 2.8.</dd>
+<dt>
+<code><b>&#8211;Xno-forwarders</b> </code>
+</dt>
+<dd>
+Do not generate static forwarders in mirror classes.</dd>
+<dt>
+<code><b>&#8211;Xno-uescape</b> </code>
+</dt>
+<dd>
+Disable handling of \u unicode escapes</dd>
+<dt>
+<code><b>&#8211;Xnojline</b> </code>
+</dt>
+<dd>
+Do not use JLine for editing.</dd>
+<dt>
+<code><b>&#8211;Xplugin:</b>&lt;<i>file</i>&gt; </code>
+</dt>
+<dd>
+Load a plugin from a file</dd>
+<dt>
+<code><b>&#8211;Xplugin-disable:</b>&lt;<i>plugin</i>&gt; </code>
+</dt>
+<dd>
+Disable a plugin</dd>
+<dt>
+<code><b>&#8211;Xplugin-list</b> </code>
+</dt>
+<dd>
+Print a synopsis of loaded plugins</dd>
+<dt>
+<code><b>&#8211;Xplugin-require:</b>&lt;<i>plugin</i>&gt; </code>
+</dt>
+<dd>
+Abort unless the given plugin(s) are available</dd>
+<dt>
+<code><b>&#8211;Xpluginsdir</b> &lt;<i>path</i>&gt; </code>
+</dt>
+<dd>
+Path to search compiler plugins.</dd>
+<dt>
+<code><b>&#8211;Xprint:</b>&lt;<i>phases</i>&gt; </code>
+</dt>
+<dd>
+Print out program after &lt;<i>phases</i>&gt; (see below).</dd>
+<dt>
+<code><b>&#8211;Xprint-icode</b> </code>
+</dt>
+<dd>
+Log internal icode to *.icode files.</dd>
+<dt>
+<code><b>&#8211;Xprint-pos</b> </code>
+</dt>
+<dd>
+Print tree positions, as offsets.</dd>
+<dt>
+<code><b>&#8211;Xprint-types</b> </code>
+</dt>
+<dd>
+Print tree types (debugging option).</dd>
+<dt>
+<code><b>&#8211;Xprompt</b> </code>
+</dt>
+<dd>
+Display a prompt after each error (debugging option).</dd>
+<dt>
+<code><b>&#8211;Xresident</b> </code>
+</dt>
+<dd>
+Compiler stays resident, files to compile are read from standard input.</dd>
+<dt>
+<code><b>&#8211;Xscript</b> &lt;<i>object</i>&gt; </code>
+</dt>
+<dd>
+Treat the source file as a script and wrap it in a main method.</dd>
+<dt>
+<code><b>&#8211;Xshow-class</b> &lt;<i>class</i>&gt; </code>
+</dt>
+<dd>
+Show internal representation of class.</dd>
+<dt>
+<code><b>&#8211;Xshow-object</b> &lt;<i>object</i>&gt; </code>
+</dt>
+<dd>
+Show internal representation of object.</dd>
+<dt>
+<code><b>&#8211;Xshow-phases</b> </code>
+</dt>
+<dd>
+Print a synopsis of compiler phases.</dd>
+<dt>
+<code><b>&#8211;Xsource-reader</b> &lt;<i>classname</i>&gt; </code>
+</dt>
+<dd>
+Specify a custom method for reading source files.</dd>
+<dt>
+<code><b>&#8211;Xsourcedir</b> &lt;<i>path</i>&gt; </code>
+</dt>
+<dd>
+(Requires <code>-target:msil</code>) Mirror source folder structure in output directory..</dd>
+<dt>
+<code><b>&#8211;Xverify</b> </code>
+</dt>
+<dd>
+Verify generic signatures in generated bytecode.</dd>
+<dt>
+<code><b>&#8211;Y</b> </code>
+</dt>
+<dd>
+Print a synopsis of private options.</dd>
+</dl></ins>
+</p>
+
+<h4 id="compilation_phases">Compilation Phases</h4>
+<p>
+<ins><dl>
+<dt>
+<code><i>initial</i></code>
+</dt>
+<dd>
+initializing compiler</dd>
+<dt>
+<code><i>parse</i></code>
+</dt>
+<dd>
+parse source files</dd>
+<dt>
+<code><i>namer</i></code>
+</dt>
+<dd>
+create symbols</dd>
+<dt>
+<code><i>analyze</i></code>
+</dt>
+<dd>
+name and type analysis</dd>
+<dt>
+<code><i>refcheck</i></code>
+</dt>
+<dd>
+reference checking</dd>
+<dt>
+<code><i>uncurry</i></code>
+</dt>
+<dd>
+uncurry function types and applications</dd>
+<dt>
+<code><i>lambdalift</i></code>
+</dt>
+<dd>
+lambda lifter</dd>
+<dt>
+<code><i>typesasvalues</i></code>
+</dt>
+<dd>
+represent types as values</dd>
+<dt>
+<code><i>addaccessors</i></code>
+</dt>
+<dd>
+add accessors for constructor arguments</dd>
+<dt>
+<code><i>explicitouterclasses</i></code>
+</dt>
+<dd>
+make links from inner classes to enclosing one explicit</dd>
+<dt>
+<code><i>addconstructors</i></code>
+</dt>
+<dd>
+add explicit constructor for each class</dd>
+<dt>
+<code><i>tailcall</i></code>
+</dt>
+<dd>
+add tail-calls</dd>
+<dt>
+<code><i>wholeprog</i></code>
+</dt>
+<dd>
+perform whole program analysis</dd>
+<dt>
+<code><i>addinterfaces</i></code>
+</dt>
+<dd>
+add one interface per class</dd>
+<dt>
+<code><i>expandmixins</i></code>
+</dt>
+<dd>
+expand mixins by code copying</dd>
+<dt>
+<code><i>boxing</i></code>
+</dt>
+<dd>
+makes boxing explicit</dd>
+<dt>
+<code><i>erasure</i></code>
+</dt>
+<dd>
+type eraser</dd>
+<dt>
+<code><i>icode</i></code>
+</dt>
+<dd>
+generate icode</dd>
+<dt>
+<code><i>codegen</i></code>
+</dt>
+<dd>
+enable code generation</dd>
+<dt>
+<code><i>terminal</i></code>
+</dt>
+<dd>
+compilation terminated</dd>
+<dt>
+<code><i>all</i></code>
+</dt>
+<dd>
+matches all phases</dd>
+</dl></ins>
+</p>
+
+<h3 id="environment">ENVIRONMENT</h3>
+<p>
+<ins><dl>
+<dt>
+<code><b>JAVACMD</b></code>
+</dt>
+<dd>
+Specify the <code><b>java</b></code> command to be used for running the Scala code.  Arguments may be specified as part of the environment variable; spaces, quotation marks, etc., will be passed directly to the shell for expansion.</dd>
+<dt>
+<code><b>JAVA_HOME</b></code>
+</dt>
+<dd>
+Specify JDK/JRE home directory. This directory is used to locate the <code><b>java</b></code> command unless <code><b>JAVACMD</b></code> variable set.</dd>
+<dt>
+<code><b>JAVA_OPTS</b></code>
+</dt>
+<dd>
+<div>
+Specify the options to be passed to the <code><b>java</b></code> command defined by <code><b>JAVACMD</b></code>.
+</div>
+<div>
+With Java 1.5 (or newer) one may for example configure the memory usage of the JVM as follows: <code>JAVA_OPTS="-Xmx512M -Xms16M -Xss16M"</code>
+</div>
+<div>
+With <a href="http://gcc.gnu.org/java/">GNU Java</a> one may configure the memory usage of the GIJ as follows: <code>JAVA_OPTS="--mx512m --ms16m"</code>
+</div>
+</dd>
+</dl></ins>
+</p>
+
+<h3 id="examples">EXAMPLES</h3>
+<p>
+<ins><dl>
+<dt>
+Compile a Scala program to the current directory
+</dt>
+<dd>
+<code><b>scalac</b></code><code> HelloWorld</code></dd>
+<dt>
+Compile a Scala program to the destination directory <code><b>classes</b></code>
+</dt>
+<dd>
+<code><b>scalac</b></code><code> <code><b>&#8211;d</b> classes </code>HelloWorld.scala</code></dd>
+<dt>
+Compile a Scala program using a user-defined <code><b>java</b></code> command
+</dt>
+<dd>
+<code><b>env JAVACMD</b></code><code>=/usr/local/bin/cacao </code><code><b>scalac</b></code><code> <code><b>&#8211;d</b> classes </code>HelloWorld.scala</code></dd>
+<dt>
+Compile all Scala files found in the source directory <code><b>src</b></code> to the destination directory <code><b>classes</b></code>
+</dt>
+<dd>
+<code><b>scalac</b></code><code> <code><b>&#8211;d</b> classes </code>src/*.scala</code></dd>
+</dl></ins>
+</p>
+
+<h3 id="exit_status">EXIT STATUS</h3>
+<p>
+<code><b>scalac</b></code> returns a zero exist status if it succeeds to compile the specified input files. Non zero is returned in case of failure.</p>
+
+<h3 id="author">AUTHOR</h3>
+<p>
+Written by Martin Odersky and other members of the <a href="http://www.scala-lang.org/node/89">Scala team</a>.</p>
+
+<h3 id="reporting_bugs">REPORTING BUGS</h3>
+<p>
+Report bugs to <code>https://issues.scala-lang.org/</code>.</p>
+
+<h3 id="copyright">COPYRIGHT</h3>
+<p>
+This is open-source software, available to you under a BSD-like license. See accomponying "copyright" or "LICENSE" file for copying conditions. There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.</p>
+
+<h3 id="see_also">SEE ALSO</h3>
+<p>
+<a href="fsc.html"><b>fsc</b>(1)</a>, <a href="scala.html"><b>scala</b>(1)</a>, <a href="scaladoc.html"><b>scaladoc</b>(1)</a>, <a href="scalap.html"><b>scalap</b>(1)</a></p>
+<!-- footer -->
+<div style="margin: 2em 0 0 0;">
+<div style="float:left;">
+version 1.0
+</div>
+<div style="float:right;">
+scalac(1)
+</div>
+<div style="text-align:center;">
+March 2012
+</div>
+</div>
+</body>
+</html>

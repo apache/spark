@@ -1,0 +1,2 @@
+DESCRIBE FUNCTION from_unixtime;
+DESCRIBE FUNCTION EXTENDED from_unixtime;

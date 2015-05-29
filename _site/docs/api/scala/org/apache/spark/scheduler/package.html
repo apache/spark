@@ -1,0 +1,621 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>scheduler - org.apache.spark.scheduler</title>
+          <meta name="description" content="scheduler - org.apache.spark.scheduler" />
+          <meta name="keywords" content="scheduler org.apache.spark.scheduler" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../../../index.html';
+            var hash = 'org.apache.spark.scheduler.package';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="value">
+      <div id="definition">
+        <img src="../../../../lib/package_big.png" />
+        <p id="owner"><a href="../../../package.html" class="extype" name="org">org</a>.<a href="../../package.html" class="extype" name="org.apache">apache</a>.<a href="../package.html" class="extype" name="org.apache.spark">spark</a></p>
+        <h1>scheduler</h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <span class="name">scheduler</span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"><div class="comment cmt"><p>Spark's scheduling components. This includes the <span class="extype" name="org.apache.spark.scheduler.DAGScheduler">org.apache.spark.scheduler.DAGScheduler</span> and
+lower level <span class="extype" name="org.apache.spark.scheduler.TaskScheduler">org.apache.spark.scheduler.TaskScheduler</span>.
+</p></div><div class="toggleContainer block">
+          <span class="toggle">Linear Supertypes</span>
+          <div class="superTypes hiddenContent"><span class="extype" name="scala.AnyRef">AnyRef</span>, <span class="extype" name="scala.Any">Any</span></div>
+        </div></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        <div id="order">
+              <span class="filtertype">Ordering</span>
+              <ol>
+                
+                <li class="alpha in"><span>Alphabetic</span></li>
+                <li class="inherit out"><span>By inheritance</span></li>
+              </ol>
+            </div>
+        <div id="ancestors">
+                <span class="filtertype">Inherited<br />
+                </span>
+                <ol id="linearization">
+                  <li class="in" name="org.apache.spark.scheduler"><span>scheduler</span></li><li class="in" name="scala.AnyRef"><span>AnyRef</span></li><li class="in" name="scala.Any"><span>Any</span></li>
+                </ol>
+              </div><div id="ancestors">
+            <span class="filtertype"></span>
+            <ol>
+              <li class="hideall out"><span>Hide All</span></li>
+              <li class="showall in"><span>Show all</span></li>
+            </ol>
+            <a href="http://docs.scala-lang.org/overviews/scaladoc/usage.html#members" target="_blank">Learn more about member selection</a>
+          </div>
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        
+
+        <div id="types" class="types members">
+              <h3>Type Members</h3>
+              <ol><li name="org.apache.spark.scheduler.AccumulableInfo" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="AccumulableInfoextendsAnyRef"></a>
+      <a id="AccumulableInfo:AccumulableInfo"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="AccumulableInfo.html"><span class="name">AccumulableInfo</span></a><span class="result"> extends <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Information about an <a href="../Accumulable.html" class="extype" name="org.apache.spark.Accumulable">org.apache.spark.Accumulable</a> modified during a task or stage.</p>
+    </li><li name="org.apache.spark.scheduler.InputFormatInfo" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="InputFormatInfoextendsLogging"></a>
+      <a id="InputFormatInfo:InputFormatInfo"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="InputFormatInfo.html"><span class="name">InputFormatInfo</span></a><span class="result"> extends <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Parses and holds information about inputFormat (and files) specified as a parameter.</p>
+    </li><li name="org.apache.spark.scheduler.JobResult" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="JobResultextendsAnyRef"></a>
+      <a id="JobResult:JobResult"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">sealed </span>
+        <span class="kind">trait</span>
+      </span>
+      <span class="symbol">
+        <a href="JobResult.html"><span class="name">JobResult</span></a><span class="result"> extends <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+A result of a job in the DAGScheduler.</p>
+    </li><li name="org.apache.spark.scheduler.SparkListener" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="SparkListenerextendsAnyRef"></a>
+      <a id="SparkListener:SparkListener"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">trait</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListener.html"><span class="name">SparkListener</span></a><span class="result"> extends <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Interface for listening to events from the Spark scheduler.</p>
+    </li><li name="org.apache.spark.scheduler.SparkListenerApplicationEnd" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerApplicationEndextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerApplicationEnd:SparkListenerApplicationEnd"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerApplicationEnd.html"><span class="name">SparkListenerApplicationEnd</span></a><span class="params">(<span name="time">time: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerApplicationStart" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerApplicationStartextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerApplicationStart:SparkListenerApplicationStart"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerApplicationStart.html"><span class="name">SparkListenerApplicationStart</span></a><span class="params">(<span name="appName">appName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="appId">appId: <span class="extype" name="scala.Option">Option</span>[<span class="extype" name="scala.Predef.String">String</span>]</span>, <span name="time">time: <span class="extype" name="scala.Long">Long</span></span>, <span name="sparkUser">sparkUser: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerBlockManagerAdded" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerBlockManagerAddedextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerBlockManagerAdded:SparkListenerBlockManagerAdded"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerBlockManagerAdded.html"><span class="name">SparkListenerBlockManagerAdded</span></a><span class="params">(<span name="time">time: <span class="extype" name="scala.Long">Long</span></span>, <span name="blockManagerId">blockManagerId: <a href="../storage/BlockManagerId.html" class="extype" name="org.apache.spark.storage.BlockManagerId">BlockManagerId</a></span>, <span name="maxMem">maxMem: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerBlockManagerRemoved" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerBlockManagerRemovedextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerBlockManagerRemoved:SparkListenerBlockManagerRemoved"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerBlockManagerRemoved.html"><span class="name">SparkListenerBlockManagerRemoved</span></a><span class="params">(<span name="time">time: <span class="extype" name="scala.Long">Long</span></span>, <span name="blockManagerId">blockManagerId: <a href="../storage/BlockManagerId.html" class="extype" name="org.apache.spark.storage.BlockManagerId">BlockManagerId</a></span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerEnvironmentUpdate" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerEnvironmentUpdateextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerEnvironmentUpdate:SparkListenerEnvironmentUpdate"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerEnvironmentUpdate.html"><span class="name">SparkListenerEnvironmentUpdate</span></a><span class="params">(<span name="environmentDetails">environmentDetails: <span class="extype" name="scala.collection.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Seq">Seq</span>[(<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>)]]</span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerEvent" visbl="pub" data-isabs="true" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerEventextendsAnyRef"></a>
+      <a id="SparkListenerEvent:SparkListenerEvent"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">sealed </span>
+        <span class="kind">trait</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerEvent.html"><span class="name">SparkListenerEvent</span></a><span class="result"> extends <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerExecutorAdded" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerExecutorAddedextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerExecutorAdded:SparkListenerExecutorAdded"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerExecutorAdded.html"><span class="name">SparkListenerExecutorAdded</span></a><span class="params">(<span name="time">time: <span class="extype" name="scala.Long">Long</span></span>, <span name="executorId">executorId: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="executorInfo">executorInfo: <a href="cluster/ExecutorInfo.html" class="extype" name="org.apache.spark.scheduler.cluster.ExecutorInfo">ExecutorInfo</a></span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerExecutorMetricsUpdate" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="SparkListenerExecutorMetricsUpdateextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerExecutorMetricsUpdate:SparkListenerExecutorMetricsUpdate"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerExecutorMetricsUpdate.html"><span class="name">SparkListenerExecutorMetricsUpdate</span></a><span class="params">(<span name="execId">execId: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="taskMetrics">taskMetrics: <span class="extype" name="scala.Seq">Seq</span>[(<span class="extype" name="scala.Long">Long</span>, <span class="extype" name="scala.Int">Int</span>, <span class="extype" name="scala.Int">Int</span>, <span class="extype" name="org.apache.spark.executor.TaskMetrics">TaskMetrics</span>)]</span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Periodic updates from executors.</p>
+    </li><li name="org.apache.spark.scheduler.SparkListenerExecutorRemoved" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerExecutorRemovedextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerExecutorRemoved:SparkListenerExecutorRemoved"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerExecutorRemoved.html"><span class="name">SparkListenerExecutorRemoved</span></a><span class="params">(<span name="time">time: <span class="extype" name="scala.Long">Long</span></span>, <span name="executorId">executorId: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="reason">reason: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerJobEnd" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerJobEndextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerJobEnd:SparkListenerJobEnd"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerJobEnd.html"><span class="name">SparkListenerJobEnd</span></a><span class="params">(<span name="jobId">jobId: <span class="extype" name="scala.Int">Int</span></span>, <span name="time">time: <span class="extype" name="scala.Long">Long</span></span>, <span name="jobResult">jobResult: <a href="JobResult.html" class="extype" name="org.apache.spark.scheduler.JobResult">JobResult</a></span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerJobStart" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerJobStartextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerJobStart:SparkListenerJobStart"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerJobStart.html"><span class="name">SparkListenerJobStart</span></a><span class="params">(<span name="jobId">jobId: <span class="extype" name="scala.Int">Int</span></span>, <span name="time">time: <span class="extype" name="scala.Long">Long</span></span>, <span name="stageInfos">stageInfos: <span class="extype" name="scala.Seq">Seq</span>[<a href="StageInfo.html" class="extype" name="org.apache.spark.scheduler.StageInfo">StageInfo</a>]</span>, <span name="properties">properties: <span class="extype" name="java.util.Properties">Properties</span> = <span class="symbol">null</span></span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerStageCompleted" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerStageCompletedextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerStageCompleted:SparkListenerStageCompleted"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerStageCompleted.html"><span class="name">SparkListenerStageCompleted</span></a><span class="params">(<span name="stageInfo">stageInfo: <a href="StageInfo.html" class="extype" name="org.apache.spark.scheduler.StageInfo">StageInfo</a></span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerStageSubmitted" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerStageSubmittedextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerStageSubmitted:SparkListenerStageSubmitted"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerStageSubmitted.html"><span class="name">SparkListenerStageSubmitted</span></a><span class="params">(<span name="stageInfo">stageInfo: <a href="StageInfo.html" class="extype" name="org.apache.spark.scheduler.StageInfo">StageInfo</a></span>, <span name="properties">properties: <span class="extype" name="java.util.Properties">Properties</span> = <span class="symbol">null</span></span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerTaskEnd" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerTaskEndextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerTaskEnd:SparkListenerTaskEnd"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerTaskEnd.html"><span class="name">SparkListenerTaskEnd</span></a><span class="params">(<span name="stageId">stageId: <span class="extype" name="scala.Int">Int</span></span>, <span name="stageAttemptId">stageAttemptId: <span class="extype" name="scala.Int">Int</span></span>, <span name="taskType">taskType: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="reason">reason: <a href="../TaskEndReason.html" class="extype" name="org.apache.spark.TaskEndReason">TaskEndReason</a></span>, <span name="taskInfo">taskInfo: <a href="TaskInfo.html" class="extype" name="org.apache.spark.scheduler.TaskInfo">TaskInfo</a></span>, <span name="taskMetrics">taskMetrics: <span class="extype" name="org.apache.spark.executor.TaskMetrics">TaskMetrics</span></span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerTaskGettingResult" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerTaskGettingResultextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerTaskGettingResult:SparkListenerTaskGettingResult"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerTaskGettingResult.html"><span class="name">SparkListenerTaskGettingResult</span></a><span class="params">(<span name="taskInfo">taskInfo: <a href="TaskInfo.html" class="extype" name="org.apache.spark.scheduler.TaskInfo">TaskInfo</a></span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerTaskStart" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerTaskStartextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerTaskStart:SparkListenerTaskStart"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerTaskStart.html"><span class="name">SparkListenerTaskStart</span></a><span class="params">(<span name="stageId">stageId: <span class="extype" name="scala.Int">Int</span></span>, <span name="stageAttemptId">stageAttemptId: <span class="extype" name="scala.Int">Int</span></span>, <span name="taskInfo">taskInfo: <a href="TaskInfo.html" class="extype" name="org.apache.spark.scheduler.TaskInfo">TaskInfo</a></span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SparkListenerUnpersistRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SparkListenerUnpersistRDDextendsSparkListenerEventwithProductwithSerializable"></a>
+      <a id="SparkListenerUnpersistRDD:SparkListenerUnpersistRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SparkListenerUnpersistRDD.html"><span class="name">SparkListenerUnpersistRDD</span></a><span class="params">(<span name="rddId">rddId: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result"> extends <a href="SparkListenerEvent.html" class="extype" name="org.apache.spark.scheduler.SparkListenerEvent">SparkListenerEvent</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SplitInfo" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="SplitInfoextendsAnyRef"></a>
+      <a id="SplitInfo:SplitInfo"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="SplitInfo.html"><span class="name">SplitInfo</span></a><span class="result"> extends <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.StageInfo" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="StageInfoextendsAnyRef"></a>
+      <a id="StageInfo:StageInfo"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="StageInfo.html"><span class="name">StageInfo</span></a><span class="result"> extends <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Stores information about a stage to pass from the scheduler to SparkListeners.</p>
+    </li><li name="org.apache.spark.scheduler.StatsReportListener" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="StatsReportListenerextendsSparkListenerwithLogging"></a>
+      <a id="StatsReportListener:StatsReportListener"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="StatsReportListener.html"><span class="name">StatsReportListener</span></a><span class="result"> extends <a href="SparkListener.html" class="extype" name="org.apache.spark.scheduler.SparkListener">SparkListener</a> with <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Simple SparkListener that logs a few summary statistics when each stage completes
+</p>
+    </li><li name="org.apache.spark.scheduler.TaskInfo" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="TaskInfoextendsAnyRef"></a>
+      <a id="TaskInfo:TaskInfo"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="TaskInfo.html"><span class="name">TaskInfo</span></a><span class="result"> extends <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Information about a running task attempt inside a TaskSet.</p>
+    </li><li name="org.apache.spark.scheduler.JobLogger" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="JobLoggerextendsSparkListenerwithLogging"></a>
+      <a id="JobLogger:JobLogger"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="JobLogger.html"><span class="name deprecated" title="Deprecated: (Since version 1.0.0) Log application information by setting spark.eventLog.enabled.">JobLogger</span></a><span class="result"> extends <a href="SparkListener.html" class="extype" name="org.apache.spark.scheduler.SparkListener">SparkListener</a> with <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+A logger class to record runtime information for jobs in Spark.</p>
+    </li></ol>
+            </div>
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="org.apache.spark.scheduler.AccumulableInfo" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="AccumulableInfo"></a>
+      <a id="AccumulableInfo:AccumulableInfo"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="AccumulableInfo$.html"><span class="name">AccumulableInfo</span></a>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.scheduler.InputFormatInfo" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="InputFormatInfo"></a>
+      <a id="InputFormatInfo:InputFormatInfo"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="InputFormatInfo$.html"><span class="name">InputFormatInfo</span></a>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.scheduler.JobSucceeded" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="JobSucceeded"></a>
+      <a id="JobSucceeded:JobSucceeded"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="JobSucceeded$.html"><span class="name">JobSucceeded</span></a><span class="result"> extends <a href="JobResult.html" class="extype" name="org.apache.spark.scheduler.JobResult">JobResult</a> with <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.SchedulingMode" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="SchedulingMode"></a>
+      <a id="SchedulingMode:SchedulingMode"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="SchedulingMode$.html"><span class="name">SchedulingMode</span></a><span class="result"> extends <span class="extype" name="scala.Enumeration">Enumeration</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt"> &quot;FAIR&quot; and &quot;FIFO&quot; determines which policy is used
+   to order tasks amongst a Schedulable's sub-queues
+ &quot;NONE&quot; is used when the a Schedulable has no sub-queues.</p>
+    </li><li name="org.apache.spark.scheduler.SplitInfo" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="SplitInfo"></a>
+      <a id="SplitInfo:SplitInfo"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="SplitInfo$.html"><span class="name">SplitInfo</span></a>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.scheduler.TaskLocality" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="TaskLocality"></a>
+      <a id="TaskLocality:TaskLocality"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="TaskLocality$.html"><span class="name">TaskLocality</span></a><span class="result"> extends <span class="extype" name="scala.Enumeration">Enumeration</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.scheduler.cluster" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="cluster"></a>
+      <a id="cluster:cluster"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <a href="cluster/package.html"><span class="name">cluster</span></a>
+      </span>
+      </h4>
+      
+    </li></ol>
+            </div>
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        <div class="parent" name="scala.AnyRef">
+              <h3>Inherited from <span class="extype" name="scala.AnyRef">AnyRef</span></h3>
+            </div><div class="parent" name="scala.Any">
+              <h3>Inherited from <span class="extype" name="scala.Any">Any</span></h3>
+            </div>
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Ungrouped</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../../../lib/template.js"></script>
+    </body>
+      </html>

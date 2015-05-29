@@ -1,0 +1,4 @@
+instr(str, substr) - Returns the index of the first occurance of substr in str
+Example:
+  > SELECT instr('Facebook', 'boo') FROM src LIMIT 1;
+  5

@@ -1,0 +1,11 @@
+1712634731	record_0	[0,0,0]	["0","0","0"]	[{"myint":0,"mystring":"0","underscore_int":0}]	{"key_0":"value_0"}
+465985200	record_1	[1,2,3]	["10","100","1000"]	[{"myint":1,"mystring":"1","underscore_int":1}]	{"key_1":"value_1"}
+-751827638	record_2	[2,4,6]	["20","200","2000"]	[{"myint":4,"mystring":"8","underscore_int":2}]	{"key_2":"value_2"}
+477111222	record_3	[3,6,9]	["30","300","3000"]	[{"myint":9,"mystring":"27","underscore_int":3}]	{"key_3":"value_3"}
+-734328909	record_4	[4,8,12]	["40","400","4000"]	[{"myint":16,"mystring":"64","underscore_int":4}]	{"key_4":"value_4"}
+-1952710710	record_5	[5,10,15]	["50","500","5000"]	[{"myint":25,"mystring":"125","underscore_int":5}]	{"key_5":"value_5"}
+1244525190	record_6	[6,12,18]	["60","600","6000"]	[{"myint":36,"mystring":"216","underscore_int":6}]	{"key_6":"value_6"}
+-1461153973	record_7	[7,14,21]	["70","700","7000"]	[{"myint":49,"mystring":"343","underscore_int":7}]	{"key_7":"value_7"}
+1638581578	record_8	[8,16,24]	["80","800","8000"]	[{"myint":64,"mystring":"512","underscore_int":8}]	{"key_8":"value_8"}
+336964413	record_9	[9,18,27]	["90","900","9000"]	[{"myint":81,"mystring":"729","underscore_int":9}]	{"key_9":"value_9"}
+0	NULL	NULL	NULL	NULL	NULL

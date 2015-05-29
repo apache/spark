@@ -1,0 +1,1 @@
+SELECT variance(*) FROM src;

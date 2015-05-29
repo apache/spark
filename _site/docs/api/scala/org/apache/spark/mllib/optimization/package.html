@@ -1,0 +1,277 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>optimization - org.apache.spark.mllib.optimization</title>
+          <meta name="description" content="optimization - org.apache.spark.mllib.optimization" />
+          <meta name="keywords" content="optimization org.apache.spark.mllib.optimization" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../../../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../../../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../../../../index.html';
+            var hash = 'org.apache.spark.mllib.optimization.package';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="value">
+      <div id="definition">
+        <img src="../../../../../lib/package_big.png" />
+        <p id="owner"><a href="../../../../package.html" class="extype" name="org">org</a>.<a href="../../../package.html" class="extype" name="org.apache">apache</a>.<a href="../../package.html" class="extype" name="org.apache.spark">spark</a>.<a href="../package.html" class="extype" name="org.apache.spark.mllib">mllib</a></p>
+        <h1>optimization</h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <span class="name">optimization</span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        
+        
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        
+
+        <div id="types" class="types members">
+              <h3>Type Members</h3>
+              <ol><li name="org.apache.spark.mllib.optimization.Gradient" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="GradientextendsSerializable"></a>
+      <a id="Gradient:Gradient"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="Gradient.html"><span class="name">Gradient</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Class used to compute the gradient for a loss function, given a single data point.</p>
+    </li><li name="org.apache.spark.mllib.optimization.GradientDescent" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="GradientDescentextendsOptimizerwithLogging"></a>
+      <a id="GradientDescent:GradientDescent"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="GradientDescent.html"><span class="name">GradientDescent</span></a><span class="result"> extends <a href="Optimizer.html" class="extype" name="org.apache.spark.mllib.optimization.Optimizer">Optimizer</a> with <a href="../../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Class used to solve an optimization problem using Gradient Descent.</p>
+    </li><li name="org.apache.spark.mllib.optimization.HingeGradient" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="HingeGradientextendsGradient"></a>
+      <a id="HingeGradient:HingeGradient"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="HingeGradient.html"><span class="name">HingeGradient</span></a><span class="result"> extends <a href="Gradient.html" class="extype" name="org.apache.spark.mllib.optimization.Gradient">Gradient</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Compute gradient and loss for a Hinge loss function, as used in SVM binary classification.</p>
+    </li><li name="org.apache.spark.mllib.optimization.L1Updater" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="L1UpdaterextendsUpdater"></a>
+      <a id="L1Updater:L1Updater"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="L1Updater.html"><span class="name">L1Updater</span></a><span class="result"> extends <a href="Updater.html" class="extype" name="org.apache.spark.mllib.optimization.Updater">Updater</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Updater for L1 regularized problems.</p>
+    </li><li name="org.apache.spark.mllib.optimization.LBFGS" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="LBFGSextendsOptimizerwithLogging"></a>
+      <a id="LBFGS:LBFGS"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="LBFGS.html"><span class="name">LBFGS</span></a><span class="result"> extends <a href="Optimizer.html" class="extype" name="org.apache.spark.mllib.optimization.Optimizer">Optimizer</a> with <a href="../../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Class used to solve an optimization problem using Limited-memory BFGS.</p>
+    </li><li name="org.apache.spark.mllib.optimization.LeastSquaresGradient" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="LeastSquaresGradientextendsGradient"></a>
+      <a id="LeastSquaresGradient:LeastSquaresGradient"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="LeastSquaresGradient.html"><span class="name">LeastSquaresGradient</span></a><span class="result"> extends <a href="Gradient.html" class="extype" name="org.apache.spark.mllib.optimization.Gradient">Gradient</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Compute gradient and loss for a Least-squared loss function, as used in linear regression.</p>
+    </li><li name="org.apache.spark.mllib.optimization.LogisticGradient" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="LogisticGradientextendsGradient"></a>
+      <a id="LogisticGradient:LogisticGradient"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="LogisticGradient.html"><span class="name">LogisticGradient</span></a><span class="result"> extends <a href="Gradient.html" class="extype" name="org.apache.spark.mllib.optimization.Gradient">Gradient</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Compute gradient and loss for a multinomial logistic loss function, as used
+in multi-class classification (it is also used in binary logistic regression).</p>
+    </li><li name="org.apache.spark.mllib.optimization.Optimizer" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="OptimizerextendsSerializable"></a>
+      <a id="Optimizer:Optimizer"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">trait</span>
+      </span>
+      <span class="symbol">
+        <a href="Optimizer.html"><span class="name">Optimizer</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Trait for optimization problem solvers.</p>
+    </li><li name="org.apache.spark.mllib.optimization.SimpleUpdater" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="SimpleUpdaterextendsUpdater"></a>
+      <a id="SimpleUpdater:SimpleUpdater"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="SimpleUpdater.html"><span class="name">SimpleUpdater</span></a><span class="result"> extends <a href="Updater.html" class="extype" name="org.apache.spark.mllib.optimization.Updater">Updater</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+A simple updater for gradient descent *without* any regularization.</p>
+    </li><li name="org.apache.spark.mllib.optimization.SquaredL2Updater" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="SquaredL2UpdaterextendsUpdater"></a>
+      <a id="SquaredL2Updater:SquaredL2Updater"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="SquaredL2Updater.html"><span class="name">SquaredL2Updater</span></a><span class="result"> extends <a href="Updater.html" class="extype" name="org.apache.spark.mllib.optimization.Updater">Updater</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Updater for L2 regularized problems.</p>
+    </li><li name="org.apache.spark.mllib.optimization.Updater" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="UpdaterextendsSerializable"></a>
+      <a id="Updater:Updater"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="Updater.html"><span class="name">Updater</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Class used to perform steps (weight update) using Gradient Descent methods.</p>
+    </li></ol>
+            </div>
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="org.apache.spark.mllib.optimization.GradientDescent" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="GradientDescent"></a>
+      <a id="GradientDescent:GradientDescent"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="GradientDescent$.html"><span class="name">GradientDescent</span></a><span class="result"> extends <a href="../../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Top-level method to run gradient descent.</p>
+    </li><li name="org.apache.spark.mllib.optimization.LBFGS" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="LBFGS"></a>
+      <a id="LBFGS:LBFGS"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="LBFGS$.html"><span class="name">LBFGS</span></a><span class="result"> extends <a href="../../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Top-level method to run L-BFGS.</p>
+    </li></ol>
+            </div>
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Ungrouped</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../../../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../../../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../../../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../../../../lib/template.js"></script>
+    </body>
+      </html>

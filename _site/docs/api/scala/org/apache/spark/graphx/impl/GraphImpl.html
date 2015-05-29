@@ -1,0 +1,1026 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>GraphImpl - org.apache.spark.graphx.impl.GraphImpl</title>
+          <meta name="description" content="GraphImpl - org.apache.spark.graphx.impl.GraphImpl" />
+          <meta name="keywords" content="GraphImpl org.apache.spark.graphx.impl.GraphImpl" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../../../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../../../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../../../../index.html';
+            var hash = 'org.apache.spark.graphx.impl.GraphImpl';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="type">
+      <div id="definition">
+        <a href="GraphImpl$.html" title="Go to companion"><img src="../../../../../lib/class_to_object_big.png" /></a>
+        <p id="owner"><a href="../../../../package.html" class="extype" name="org">org</a>.<a href="../../../package.html" class="extype" name="org.apache">apache</a>.<a href="../../package.html" class="extype" name="org.apache.spark">spark</a>.<a href="../package.html" class="extype" name="org.apache.spark.graphx">graphx</a>.<a href="package.html" class="extype" name="org.apache.spark.graphx.impl">impl</a></p>
+        <h1><a href="GraphImpl$.html" title="Go to companion">GraphImpl</a></h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <span class="name">GraphImpl</span><span class="tparams">[<span name="VD">VD</span>, <span name="ED">ED</span>]</span><span class="result"> extends <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>] with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"><div class="comment cmt"><p>An implementation of <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">org.apache.spark.graphx.Graph</a> to support computation on graphs.</p><p>Graphs are represented using two RDDs: <code>vertices</code>, which contains vertex attributes and the
+routing information for shipping vertex attributes to edge partitions, and
+<code>replicatedVertexView</code>, which contains edges and the vertex attributes mentioned by each edge.
+</p></div><div class="toggleContainer block">
+          <span class="toggle">Linear Supertypes</span>
+          <div class="superTypes hiddenContent"><a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>], <span class="extype" name="scala.Serializable">Serializable</span>, <span class="extype" name="java.io.Serializable">Serializable</span>, <span class="extype" name="scala.AnyRef">AnyRef</span>, <span class="extype" name="scala.Any">Any</span></div>
+        </div></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        <div id="order">
+              <span class="filtertype">Ordering</span>
+              <ol>
+                
+                <li class="alpha in"><span>Alphabetic</span></li>
+                <li class="inherit out"><span>By inheritance</span></li>
+              </ol>
+            </div>
+        <div id="ancestors">
+                <span class="filtertype">Inherited<br />
+                </span>
+                <ol id="linearization">
+                  <li class="in" name="org.apache.spark.graphx.impl.GraphImpl"><span>GraphImpl</span></li><li class="in" name="org.apache.spark.graphx.Graph"><span>Graph</span></li><li class="in" name="scala.Serializable"><span>Serializable</span></li><li class="in" name="java.io.Serializable"><span>Serializable</span></li><li class="in" name="scala.AnyRef"><span>AnyRef</span></li><li class="in" name="scala.Any"><span>Any</span></li>
+                </ol>
+              </div><div id="ancestors">
+            <span class="filtertype"></span>
+            <ol>
+              <li class="hideall out"><span>Hide All</span></li>
+              <li class="showall in"><span>Show all</span></li>
+            </ol>
+            <a href="http://docs.scala-lang.org/overviews/scaladoc/usage.html#members" target="_blank">Learn more about member selection</a>
+          </div>
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        <div id="constructors" class="members">
+              <h3>Instance Constructors</h3>
+              <ol><li name="org.apache.spark.graphx.impl.GraphImpl#&lt;init&gt;" visbl="prt" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="&lt;init&gt;()(implicitevidence$3:scala.reflect.ClassTag[VD],implicitevidence$4:scala.reflect.ClassTag[ED]):org.apache.spark.graphx.impl.GraphImpl[VD,ED]"></a>
+      <a id="&lt;init&gt;:GraphImpl[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">new</span>
+      </span>
+      <span class="symbol">
+        <span class="name">GraphImpl</span><span class="params">()</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>]</span>, <span name="arg1">arg1: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>)</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Default constructor is provided to support serialization</p><div class="fullcomment"><div class="comment cmt"><p>Default constructor is provided to support serialization</p></div><dl class="attributes block"> <dt>Attributes</dt><dd>protected </dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#&lt;init&gt;" visbl="prt" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="&lt;init&gt;(vertices:org.apache.spark.graphx.VertexRDD[VD],replicatedVertexView:org.apache.spark.graphx.impl.ReplicatedVertexView[VD,ED])(implicitevidence$1:scala.reflect.ClassTag[VD],implicitevidence$2:scala.reflect.ClassTag[ED]):org.apache.spark.graphx.impl.GraphImpl[VD,ED]"></a>
+      <a id="&lt;init&gt;:GraphImpl[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">new</span>
+      </span>
+      <span class="symbol">
+        <span class="name">GraphImpl</span><span class="params">(<span name="vertices">vertices: <a href="../VertexRDD.html" class="extype" name="org.apache.spark.graphx.VertexRDD">VertexRDD</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>]</span>, <span name="replicatedVertexView">replicatedVertexView: <span class="extype" name="org.apache.spark.graphx.impl.ReplicatedVertexView">ReplicatedVertexView</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>]</span>, <span name="arg1">arg1: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>)</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>protected </dd></dl></div>
+    </li></ol>
+            </div>
+
+        
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="scala.AnyRef#!=" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="!=(x$1:AnyRef):Boolean"></a>
+      <a id="!=(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $bang$eq" class="name">!=</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.Any#!=" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="!=(x$1:Any):Boolean"></a>
+      <a id="!=(Any):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $bang$eq" class="name">!=</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="scala.AnyRef###" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="##():Int"></a>
+      <a id="##():Int"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $hash$hash" class="name">##</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Int">Int</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="scala.AnyRef#==" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="==(x$1:AnyRef):Boolean"></a>
+      <a id="==(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $eq$eq" class="name">==</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.Any#==" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="==(x$1:Any):Boolean"></a>
+      <a id="==(Any):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $eq$eq" class="name">==</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="org.apache.spark.graphx.Graph#aggregateMessages" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="aggregateMessages[A](sendMsg:org.apache.spark.graphx.EdgeContext[VD,ED,A]=&gt;Unit,mergeMsg:(A,A)=&gt;A,tripletFields:org.apache.spark.graphx.TripletFields)(implicitevidence$12:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]"></a>
+      <a id="aggregateMessages[A]((EdgeContext[VD,ED,A])⇒Unit,(A,A)⇒A,TripletFields)(ClassTag[A]):VertexRDD[A]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">aggregateMessages</span><span class="tparams">[<span name="A">A</span>]</span><span class="params">(<span name="sendMsg">sendMsg: (<a href="../EdgeContext.html" class="extype" name="org.apache.spark.graphx.EdgeContext">EdgeContext</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>, <span class="extype" name="org.apache.spark.graphx.Graph.aggregateMessages.A">A</span>]) ⇒ <span class="extype" name="scala.Unit">Unit</span></span>, <span name="mergeMsg">mergeMsg: (<span class="extype" name="org.apache.spark.graphx.Graph.aggregateMessages.A">A</span>, <span class="extype" name="org.apache.spark.graphx.Graph.aggregateMessages.A">A</span>) ⇒ <span class="extype" name="org.apache.spark.graphx.Graph.aggregateMessages.A">A</span></span>, <span name="tripletFields">tripletFields: <a href="../TripletFields.html" class="extype" name="org.apache.spark.graphx.TripletFields">TripletFields</a> = <span class="symbol">TripletFields.All</span></span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.Graph.aggregateMessages.A">A</span>]</span>)</span><span class="result">: <a href="../VertexRDD.html" class="extype" name="org.apache.spark.graphx.VertexRDD">VertexRDD</a>[<span class="extype" name="org.apache.spark.graphx.Graph.aggregateMessages.A">A</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Aggregates values from the neighboring edges and vertices of each vertex.</p><div class="fullcomment"><div class="comment cmt"><p>Aggregates values from the neighboring edges and vertices of each vertex. The user-supplied
+<code>sendMsg</code> function is invoked on each edge of the graph, generating 0 or more messages to be
+sent to either vertex in the edge. The <code>mergeMsg</code> function is then used to combine all messages
+destined to the same vertex.
+</p></div><dl class="paramcmts block"><dt class="tparam">A</dt><dd class="cmt"><p>the type of message to be sent to each vertex
+</p></dd><dt class="param">sendMsg</dt><dd class="cmt"><p>runs on each edge, sending messages to neighboring vertices using the
+  <a href="../EdgeContext.html" class="extype" name="org.apache.spark.graphx.EdgeContext">EdgeContext</a>.</p></dd><dt class="param">mergeMsg</dt><dd class="cmt"><p>used to combine messages from <code>sendMsg</code> destined to the same vertex. This
+  combiner should be commutative and associative.</p></dd><dt class="param">tripletFields</dt><dd class="cmt"><p>which fields should be included in the <a href="../EdgeContext.html" class="extype" name="org.apache.spark.graphx.EdgeContext">EdgeContext</a> passed to the
+  <code>sendMsg</code> function. If not all fields are needed, specifying this can improve performance.
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd><div class="block">Example:
+               <ol><li class="cmt"><p>We can use this function to compute the in-degree of each
+vertex</p><pre><span class="kw">val</span> rawGraph: Graph[_, _] = Graph.textFile(<span class="lit">"twittergraph"</span>)
+<span class="kw">val</span> inDeg: RDD[(VertexId, <span class="std">Int</span>)] =
+  aggregateMessages[<span class="std">Int</span>](ctx <span class="kw">=&gt;</span> ctx.sendToDst(<span class="num">1</span>), _ + _)</pre></li></ol>
+            </div><dt>Note</dt><dd><span class="cmt"><p>By expressing computation at the edge level we achieve
+maximum parallelism.  This is one of the core functions in the
+Graph API in that enables neighborhood level computation. For
+example this function can be used to count neighbors satisfying a
+predicate or implement PageRank.</p></span></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#aggregateMessagesWithActiveSet" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="aggregateMessagesWithActiveSet[A](sendMsg:org.apache.spark.graphx.EdgeContext[VD,ED,A]=&gt;Unit,mergeMsg:(A,A)=&gt;A,tripletFields:org.apache.spark.graphx.TripletFields,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$11:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]"></a>
+      <a id="aggregateMessagesWithActiveSet[A]((EdgeContext[VD,ED,A])⇒Unit,(A,A)⇒A,TripletFields,Option[(VertexRDD[_],EdgeDirection)])(ClassTag[A]):VertexRDD[A]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">aggregateMessagesWithActiveSet</span><span class="tparams">[<span name="A">A</span>]</span><span class="params">(<span name="sendMsg">sendMsg: (<a href="../EdgeContext.html" class="extype" name="org.apache.spark.graphx.EdgeContext">EdgeContext</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.aggregateMessagesWithActiveSet.A">A</span>]) ⇒ <span class="extype" name="scala.Unit">Unit</span></span>, <span name="mergeMsg">mergeMsg: (<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.aggregateMessagesWithActiveSet.A">A</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.aggregateMessagesWithActiveSet.A">A</span>) ⇒ <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.aggregateMessagesWithActiveSet.A">A</span></span>, <span name="tripletFields">tripletFields: <a href="../TripletFields.html" class="extype" name="org.apache.spark.graphx.TripletFields">TripletFields</a></span>, <span name="activeSetOpt">activeSetOpt: <span class="extype" name="scala.Option">Option</span>[(<a href="../VertexRDD.html" class="extype" name="org.apache.spark.graphx.VertexRDD">VertexRDD</a>[_], <a href="../EdgeDirection.html" class="extype" name="org.apache.spark.graphx.EdgeDirection">EdgeDirection</a>)]</span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.aggregateMessagesWithActiveSet.A">A</span>]</span>)</span><span class="result">: <a href="../VertexRDD.html" class="extype" name="org.apache.spark.graphx.VertexRDD">VertexRDD</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.aggregateMessagesWithActiveSet.A">A</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Aggregates values from the neighboring edges and vertices of each vertex.</p><div class="fullcomment"><div class="comment cmt"><p>Aggregates values from the neighboring edges and vertices of each vertex. The user-supplied
+<code>sendMsg</code> function is invoked on each edge of the graph, generating 0 or more messages to be
+sent to either vertex in the edge. The <code>mergeMsg</code> function is then used to combine all messages
+destined to the same vertex.</p><p>This variant can take an active set to restrict the computation and is intended for internal
+use only.
+</p></div><dl class="paramcmts block"><dt class="tparam">A</dt><dd class="cmt"><p>the type of message to be sent to each vertex
+</p></dd><dt class="param">sendMsg</dt><dd class="cmt"><p>runs on each edge, sending messages to neighboring vertices using the
+  <a href="../EdgeContext.html" class="extype" name="org.apache.spark.graphx.EdgeContext">EdgeContext</a>.</p></dd><dt class="param">mergeMsg</dt><dd class="cmt"><p>used to combine messages from <code>sendMsg</code> destined to the same vertex. This
+  combiner should be commutative and associative.</p></dd><dt class="param">tripletFields</dt><dd class="cmt"><p>which fields should be included in the <a href="../EdgeContext.html" class="extype" name="org.apache.spark.graphx.EdgeContext">EdgeContext</a> passed to the
+  <code>sendMsg</code> function. If not all fields are needed, specifying this can improve performance.</p></dd><dt class="param">activeSetOpt</dt><dd class="cmt"><p>an efficient way to run the aggregation on a subset of the edges if
+  desired. This is done by specifying a set of &quot;active&quot; vertices and an edge direction. The
+  <code>sendMsg</code> function will then run on only edges connected to active vertices by edges in the
+  specified direction. If the direction is <code>In</code>, <code>sendMsg</code> will only be run on edges with
+  destination in the active set. If the direction is <code>Out</code>, <code>sendMsg</code> will only be run on edges
+  originating from vertices in the active set. If the direction is <code>Either</code>, <code>sendMsg</code> will be
+  run on edges with *either* vertex in the active set. If the direction is <code>Both</code>, <code>sendMsg</code>
+  will be run on edges with *both* vertices in the active set. The active set must have the
+  same index as the graph's vertices.
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="scala.Any#asInstanceOf" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="asInstanceOf[T0]:T0"></a>
+      <a id="asInstanceOf[T0]:T0"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">asInstanceOf</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="result">: <span class="extype" name="scala.Any.asInstanceOf.T0">T0</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#cache" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="cache():org.apache.spark.graphx.Graph[VD,ED]"></a>
+      <a id="cache():Graph[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">cache</span><span class="params">()</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Caches the vertices and edges associated with this graph at the previously-specified target
+storage levels, which default to <code>MEMORY_ONLY</code>.</p><div class="fullcomment"><div class="comment cmt"><p>Caches the vertices and edges associated with this graph at the previously-specified target
+storage levels, which default to <code>MEMORY_ONLY</code>. This is used to pin a graph in memory enabling
+multiple queries to reuse the same construction process.
+</p></div><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#checkpoint" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="checkpoint():Unit"></a>
+      <a id="checkpoint():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">checkpoint</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Mark this Graph for checkpointing.</p><div class="fullcomment"><div class="comment cmt"><p>Mark this Graph for checkpointing. It will be saved to a file inside the checkpoint
+directory set with SparkContext.setCheckpointDir() and all references to its parent
+RDDs will be removed. It is strongly recommended that this Graph is persisted in
+memory, otherwise saving it on a file will require recomputation.
+</p></div><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="scala.AnyRef#clone" visbl="prt" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="clone():Object"></a>
+      <a id="clone():AnyRef"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">clone</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>protected[<a href="../../../../../java$lang.html" class="extype" name="java.lang">java.lang</a>] </dd><dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.CloneNotSupportedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#edges" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="edges:org.apache.spark.graphx.impl.EdgeRDDImpl[ED,VD]"></a>
+      <a id="edges:EdgeRDDImpl[ED,VD]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">val</span>
+      </span>
+      <span class="symbol">
+        <span class="name">edges</span><span class="result">: <a href="EdgeRDDImpl.html" class="extype" name="org.apache.spark.graphx.impl.EdgeRDDImpl">EdgeRDDImpl</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">An RDD containing the edges and their associated attributes.</p><div class="fullcomment"><div class="comment cmt"><p>An RDD containing the edges and their associated attributes.  The entries in the RDD contain
+just the source id and target id along with the edge data.
+</p></div><dl class="paramcmts block"><dt>returns</dt><dd class="cmt"><p>an RDD containing the edges in this graph
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd><dt>See also</dt><dd><span class="cmt"><p><a href="../Graph.html#triplets:org.apache.spark.rdd.RDD[org.apache.spark.graphx.EdgeTriplet[VD,ED]]" class="extmbr" name="org.apache.spark.graphx.Graph#triplets">Graph#triplets</a> to get an RDD which contains all the edges
+along with their vertex data.</p></span><span class="cmt"><p><a href="../Edge.html" class="extype" name="org.apache.spark.graphx.Edge">Edge</a> for the edge type.</p></span></dd></dl></div>
+    </li><li name="scala.AnyRef#eq" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="eq(x$1:AnyRef):Boolean"></a>
+      <a id="eq(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">eq</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.AnyRef#equals" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="equals(x$1:Any):Boolean"></a>
+      <a id="equals(Any):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">equals</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="scala.AnyRef#finalize" visbl="prt" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="finalize():Unit"></a>
+      <a id="finalize():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">finalize</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>protected[<a href="../../../../../java$lang.html" class="extype" name="java.lang">java.lang</a>] </dd><dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="symbol">classOf[java.lang.Throwable]</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#getCheckpointFiles" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="getCheckpointFiles:Seq[String]"></a>
+      <a id="getCheckpointFiles:Seq[String]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">getCheckpointFiles</span><span class="result">: <span class="extype" name="scala.Seq">Seq</span>[<span class="extype" name="scala.Predef.String">String</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Gets the name of the files to which this Graph was checkpointed.</p><div class="fullcomment"><div class="comment cmt"><p>Gets the name of the files to which this Graph was checkpointed.
+(The vertices RDD and edges RDD are checkpointed separately.)
+</p></div><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="scala.AnyRef#getClass" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="getClass():Class[_]"></a>
+      <a id="getClass():Class[_]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">getClass</span><span class="params">()</span><span class="result">: <span class="extype" name="java.lang.Class">Class</span>[_]</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#groupEdges" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="groupEdges(merge:(ED,ED)=&gt;ED):org.apache.spark.graphx.Graph[VD,ED]"></a>
+      <a id="groupEdges((ED,ED)⇒ED):Graph[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">groupEdges</span><span class="params">(<span name="merge">merge: (<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>) ⇒ <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span></span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Merges multiple edges between two vertices into a single edge.</p><div class="fullcomment"><div class="comment cmt"><p>Merges multiple edges between two vertices into a single edge. For correct results, the graph
+must have been partitioned using <a href="#partitionBy(partitionStrategy:org.apache.spark.graphx.PartitionStrategy,numPartitions:Int):org.apache.spark.graphx.Graph[VD,ED]" class="extmbr" name="org.apache.spark.graphx.impl.GraphImpl#partitionBy">partitionBy</a>.
+</p></div><dl class="paramcmts block"><dt class="param">merge</dt><dd class="cmt"><p>the user-supplied commutative associative function to merge edge attributes
+             for duplicate edges.
+</p></dd><dt>returns</dt><dd class="cmt"><p>The resulting graph with a single edge for each (source, dest) vertex pair.
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="scala.AnyRef#hashCode" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="hashCode():Int"></a>
+      <a id="hashCode():Int"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">hashCode</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Int">Int</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#isCheckpointed" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="isCheckpointed:Boolean"></a>
+      <a id="isCheckpointed:Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">isCheckpointed</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Return whether this Graph has been checkpointed or not.</p><div class="fullcomment"><div class="comment cmt"><p>Return whether this Graph has been checkpointed or not.
+This returns true iff both the vertices RDD and edges RDD have been checkpointed.
+</p></div><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="scala.Any#isInstanceOf" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="isInstanceOf[T0]:Boolean"></a>
+      <a id="isInstanceOf[T0]:Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">isInstanceOf</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#mapEdges" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="mapEdges[ED2](f:(org.apache.spark.graphx.PartitionID,Iterator[org.apache.spark.graphx.Edge[ED]])=&gt;Iterator[ED2])(implicitevidence$6:scala.reflect.ClassTag[ED2]):org.apache.spark.graphx.Graph[VD,ED2]"></a>
+      <a id="mapEdges[ED2]((PartitionID,Iterator[Edge[ED]])⇒Iterator[ED2])(ClassTag[ED2]):Graph[VD,ED2]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">mapEdges</span><span class="tparams">[<span name="ED2">ED2</span>]</span><span class="params">(<span name="f">f: (<a href="../package.html#PartitionID=Int" class="extmbr" name="org.apache.spark.graphx.PartitionID">PartitionID</a>, <span class="extype" name="scala.Iterator">Iterator</span>[<a href="../Edge.html" class="extype" name="org.apache.spark.graphx.Edge">Edge</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]]) ⇒ <span class="extype" name="scala.Iterator">Iterator</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapEdges.ED2">ED2</span>]</span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapEdges.ED2">ED2</span>]</span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapEdges.ED2">ED2</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Transforms each edge attribute using the map function, passing it a whole partition at a
+time.</p><div class="fullcomment"><div class="comment cmt"><p>Transforms each edge attribute using the map function, passing it a whole partition at a
+time. The map function is given an iterator over edges within a logical partition as well as
+the partition's ID, and it should return a new iterator over the new values of each edge. The
+new iterator's elements must correspond one-to-one with the old iterator's elements. If
+adjacent vertex values are desired, use <code>mapTriplets</code>.
+</p></div><dl class="paramcmts block"><dt class="tparam">ED2</dt><dd class="cmt"><p>the new edge data type</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd><dt>Note</dt><dd><span class="cmt"><p>This does not change the structure of the
+graph or modify the values of this graph.  As a consequence
+the underlying index structures can be reused.
+</p></span></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.Graph#mapEdges" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="mapEdges[ED2](map:org.apache.spark.graphx.Edge[ED]=&gt;ED2)(implicitevidence$4:scala.reflect.ClassTag[ED2]):org.apache.spark.graphx.Graph[VD,ED2]"></a>
+      <a id="mapEdges[ED2]((Edge[ED])⇒ED2)(ClassTag[ED2]):Graph[VD,ED2]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">mapEdges</span><span class="tparams">[<span name="ED2">ED2</span>]</span><span class="params">(<span name="map">map: (<a href="../Edge.html" class="extype" name="org.apache.spark.graphx.Edge">Edge</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]) ⇒ <span class="extype" name="org.apache.spark.graphx.Graph.mapEdges.ED2">ED2</span></span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.Graph.mapEdges.ED2">ED2</span>]</span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.Graph.mapEdges.ED2">ED2</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Transforms each edge attribute in the graph using the map function.</p><div class="fullcomment"><div class="comment cmt"><p>Transforms each edge attribute in the graph using the map function.  The map function is not
+passed the vertex value for the vertices adjacent to the edge.  If vertex values are desired,
+use <code>mapTriplets</code>.
+</p></div><dl class="paramcmts block"><dt class="tparam">ED2</dt><dd class="cmt"><p>the new edge data type
+</p></dd><dt class="param">map</dt><dd class="cmt"><p>the function from an edge object to a new edge value.
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd><div class="block">Example:
+               <ol><li class="cmt"><p>This function might be used to initialize edge
+attributes.</p></li></ol>
+            </div><dt>Note</dt><dd><span class="cmt"><p>This graph is not changed and that the new graph has the
+same structure.  As a consequence the underlying index structures
+can be reused.
+</p></span></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#mapReduceTriplets" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="mapReduceTriplets[A](mapFunc:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Iterator[(org.apache.spark.graphx.VertexId,A)],reduceFunc:(A,A)=&gt;A,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$10:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]"></a>
+      <a id="mapReduceTriplets[A]((EdgeTriplet[VD,ED])⇒Iterator[(VertexId,A)],(A,A)⇒A,Option[(VertexRDD[_],EdgeDirection)])(ClassTag[A]):VertexRDD[A]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">mapReduceTriplets</span><span class="tparams">[<span name="A">A</span>]</span><span class="params">(<span name="mapFunc">mapFunc: (<a href="../EdgeTriplet.html" class="extype" name="org.apache.spark.graphx.EdgeTriplet">EdgeTriplet</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]) ⇒ <span class="extype" name="scala.Iterator">Iterator</span>[(<a href="../package.html#VertexId=Long" class="extmbr" name="org.apache.spark.graphx.VertexId">VertexId</a>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapReduceTriplets.A">A</span>)]</span>, <span name="reduceFunc">reduceFunc: (<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapReduceTriplets.A">A</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapReduceTriplets.A">A</span>) ⇒ <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapReduceTriplets.A">A</span></span>, <span name="activeSetOpt">activeSetOpt: <span class="extype" name="scala.Option">Option</span>[(<a href="../VertexRDD.html" class="extype" name="org.apache.spark.graphx.VertexRDD">VertexRDD</a>[_], <a href="../EdgeDirection.html" class="extype" name="org.apache.spark.graphx.EdgeDirection">EdgeDirection</a>)]</span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapReduceTriplets.A">A</span>]</span>)</span><span class="result">: <a href="../VertexRDD.html" class="extype" name="org.apache.spark.graphx.VertexRDD">VertexRDD</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapReduceTriplets.A">A</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Aggregates values from the neighboring edges and vertices of each vertex.</p><div class="fullcomment"><div class="comment cmt"><p>Aggregates values from the neighboring edges and vertices of each vertex.  The user supplied
+<code>mapFunc</code> function is invoked on each edge of the graph, generating 0 or more &quot;messages&quot; to be
+&quot;sent&quot; to either vertex in the edge.  The <code>reduceFunc</code> is then used to combine the output of
+the map phase destined to each vertex.</p><p>This function is deprecated in 1.2.0 because of SPARK-3936. Use aggregateMessages instead.
+</p></div><dl class="paramcmts block"><dt class="tparam">A</dt><dd class="cmt"><p>the type of &quot;message&quot; to be sent to each vertex
+</p></dd><dt class="param">mapFunc</dt><dd class="cmt"><p>the user defined map function which returns 0 or
+more messages to neighboring vertices
+</p></dd><dt class="param">reduceFunc</dt><dd class="cmt"><p>the user defined reduce function which should
+be commutative and associative and is used to combine the output
+of the map phase
+</p></dd><dt class="param">activeSetOpt</dt><dd class="cmt"><p>an efficient way to run the aggregation on a subset of the edges if
+desired. This is done by specifying a set of &quot;active&quot; vertices and an edge direction. The
+<code>sendMsg</code> function will then run only on edges connected to active vertices by edges in the
+specified direction. If the direction is <code>In</code>, <code>sendMsg</code> will only be run on edges with
+destination in the active set. If the direction is <code>Out</code>, <code>sendMsg</code> will only be run on edges
+originating from vertices in the active set. If the direction is <code>Either</code>, <code>sendMsg</code> will be
+run on edges with *either* vertex in the active set. If the direction is <code>Both</code>, <code>sendMsg</code>
+will be run on edges with *both* vertices in the active set. The active set must have the
+same index as the graph's vertices.
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd><div class="block">Example:
+               <ol><li class="cmt"><p>We can use this function to compute the in-degree of each
+vertex</p><pre><span class="kw">val</span> rawGraph: Graph[(),()] = Graph.textFile(<span class="lit">"twittergraph"</span>)
+<span class="kw">val</span> inDeg: RDD[(VertexId, <span class="std">Int</span>)] =
+  mapReduceTriplets[<span class="std">Int</span>](et <span class="kw">=&gt;</span> Iterator((et.dst.id, <span class="num">1</span>)), _ + _)</pre></li></ol>
+            </div><dt>Note</dt><dd><span class="cmt"><p>By expressing computation at the edge level we achieve
+maximum parallelism.  This is one of the core functions in the
+Graph API in that enables neighborhood level computation. For
+example this function can be used to count neighbors satisfying a
+predicate or implement PageRank.</p></span></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#mapTriplets" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="mapTriplets[ED2](f:(org.apache.spark.graphx.PartitionID,Iterator[org.apache.spark.graphx.EdgeTriplet[VD,ED]])=&gt;Iterator[ED2],tripletFields:org.apache.spark.graphx.TripletFields)(implicitevidence$7:scala.reflect.ClassTag[ED2]):org.apache.spark.graphx.Graph[VD,ED2]"></a>
+      <a id="mapTriplets[ED2]((PartitionID,Iterator[EdgeTriplet[VD,ED]])⇒Iterator[ED2],TripletFields)(ClassTag[ED2]):Graph[VD,ED2]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">mapTriplets</span><span class="tparams">[<span name="ED2">ED2</span>]</span><span class="params">(<span name="f">f: (<a href="../package.html#PartitionID=Int" class="extmbr" name="org.apache.spark.graphx.PartitionID">PartitionID</a>, <span class="extype" name="scala.Iterator">Iterator</span>[<a href="../EdgeTriplet.html" class="extype" name="org.apache.spark.graphx.EdgeTriplet">EdgeTriplet</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]]) ⇒ <span class="extype" name="scala.Iterator">Iterator</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapTriplets.ED2">ED2</span>]</span>, <span name="tripletFields">tripletFields: <a href="../TripletFields.html" class="extype" name="org.apache.spark.graphx.TripletFields">TripletFields</a></span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapTriplets.ED2">ED2</span>]</span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapTriplets.ED2">ED2</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Transforms each edge attribute a partition at a time using the map function, passing it the
+adjacent vertex attributes as well.</p><div class="fullcomment"><div class="comment cmt"><p>Transforms each edge attribute a partition at a time using the map function, passing it the
+adjacent vertex attributes as well. The map function is given an iterator over edge triplets
+within a logical partition and should yield a new iterator over the new values of each edge in
+the order in which they are provided.  If adjacent vertex values are not required, consider
+using <code>mapEdges</code> instead.
+</p></div><dl class="paramcmts block"><dt class="tparam">ED2</dt><dd class="cmt"><p>the new edge data type</p></dd><dt class="param">tripletFields</dt><dd class="cmt"><p>which fields should be included in the edge triplet passed to the map
+  function. If not all fields are needed, specifying this can improve performance.
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd><dt>Note</dt><dd><span class="cmt"><p>This does not change the structure of the
+graph or modify the values of this graph.  As a consequence
+the underlying index structures can be reused.
+</p></span></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.Graph#mapTriplets" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="mapTriplets[ED2](map:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;ED2,tripletFields:org.apache.spark.graphx.TripletFields)(implicitevidence$7:scala.reflect.ClassTag[ED2]):org.apache.spark.graphx.Graph[VD,ED2]"></a>
+      <a id="mapTriplets[ED2]((EdgeTriplet[VD,ED])⇒ED2,TripletFields)(ClassTag[ED2]):Graph[VD,ED2]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">mapTriplets</span><span class="tparams">[<span name="ED2">ED2</span>]</span><span class="params">(<span name="map">map: (<a href="../EdgeTriplet.html" class="extype" name="org.apache.spark.graphx.EdgeTriplet">EdgeTriplet</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]) ⇒ <span class="extype" name="org.apache.spark.graphx.Graph.mapTriplets.ED2">ED2</span></span>, <span name="tripletFields">tripletFields: <a href="../TripletFields.html" class="extype" name="org.apache.spark.graphx.TripletFields">TripletFields</a></span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.Graph.mapTriplets.ED2">ED2</span>]</span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.Graph.mapTriplets.ED2">ED2</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Transforms each edge attribute using the map function, passing it the adjacent vertex
+attributes as well.</p><div class="fullcomment"><div class="comment cmt"><p>Transforms each edge attribute using the map function, passing it the adjacent vertex
+attributes as well. If adjacent vertex values are not required,
+consider using <code>mapEdges</code> instead.
+</p></div><dl class="paramcmts block"><dt class="tparam">ED2</dt><dd class="cmt"><p>the new edge data type
+</p></dd><dt class="param">map</dt><dd class="cmt"><p>the function from an edge object to a new edge value.</p></dd><dt class="param">tripletFields</dt><dd class="cmt"><p>which fields should be included in the edge triplet passed to the map
+  function. If not all fields are needed, specifying this can improve performance.
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd><div class="block">Example:
+               <ol><li class="cmt"><p>This function might be used to initialize edge
+attributes based on the attributes associated with each vertex.</p><pre><span class="kw">val</span> rawGraph: Graph[<span class="std">Int</span>, <span class="std">Int</span>] = someLoadFunction()
+<span class="kw">val</span> graph = rawGraph.mapTriplets[<span class="std">Int</span>]( edge <span class="kw">=&gt;</span>
+  edge.src.data - edge.dst.data)</pre></li></ol>
+            </div><dt>Note</dt><dd><span class="cmt"><p>This does not change the structure of the
+graph or modify the values of this graph.  As a consequence
+the underlying index structures can be reused.
+</p></span></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.Graph#mapTriplets" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="mapTriplets[ED2](map:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;ED2)(implicitevidence$6:scala.reflect.ClassTag[ED2]):org.apache.spark.graphx.Graph[VD,ED2]"></a>
+      <a id="mapTriplets[ED2]((EdgeTriplet[VD,ED])⇒ED2)(ClassTag[ED2]):Graph[VD,ED2]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">mapTriplets</span><span class="tparams">[<span name="ED2">ED2</span>]</span><span class="params">(<span name="map">map: (<a href="../EdgeTriplet.html" class="extype" name="org.apache.spark.graphx.EdgeTriplet">EdgeTriplet</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]) ⇒ <span class="extype" name="org.apache.spark.graphx.Graph.mapTriplets.ED2">ED2</span></span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.Graph.mapTriplets.ED2">ED2</span>]</span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.Graph.mapTriplets.ED2">ED2</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Transforms each edge attribute using the map function, passing it the adjacent vertex
+attributes as well.</p><div class="fullcomment"><div class="comment cmt"><p>Transforms each edge attribute using the map function, passing it the adjacent vertex
+attributes as well. If adjacent vertex values are not required,
+consider using <code>mapEdges</code> instead.
+</p></div><dl class="paramcmts block"><dt class="tparam">ED2</dt><dd class="cmt"><p>the new edge data type
+</p></dd><dt class="param">map</dt><dd class="cmt"><p>the function from an edge object to a new edge value.
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd><div class="block">Example:
+               <ol><li class="cmt"><p>This function might be used to initialize edge
+attributes based on the attributes associated with each vertex.</p><pre><span class="kw">val</span> rawGraph: Graph[<span class="std">Int</span>, <span class="std">Int</span>] = someLoadFunction()
+<span class="kw">val</span> graph = rawGraph.mapTriplets[<span class="std">Int</span>]( edge <span class="kw">=&gt;</span>
+  edge.src.data - edge.dst.data)</pre></li></ol>
+            </div><dt>Note</dt><dd><span class="cmt"><p>This does not change the structure of the
+graph or modify the values of this graph.  As a consequence
+the underlying index structures can be reused.
+</p></span></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#mapVertices" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="mapVertices[VD2](f:(org.apache.spark.graphx.VertexId,VD)=&gt;VD2)(implicitevidence$5:scala.reflect.ClassTag[VD2],impliciteq:=:=[VD,VD2]):org.apache.spark.graphx.Graph[VD2,ED]"></a>
+      <a id="mapVertices[VD2]((VertexId,VD)⇒VD2)(ClassTag[VD2],=:=[VD,VD2]):Graph[VD2,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">mapVertices</span><span class="tparams">[<span name="VD2">VD2</span>]</span><span class="params">(<span name="f">f: (<a href="../package.html#VertexId=Long" class="extmbr" name="org.apache.spark.graphx.VertexId">VertexId</a>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>) ⇒ <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapVertices.VD2">VD2</span></span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapVertices.VD2">VD2</span>]</span>, <span name="eq">eq: <span class="extype" name="scala.Predef.=:=">=:=</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapVertices.VD2">VD2</span>] = <span class="symbol">null</span></span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mapVertices.VD2">VD2</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Transforms each vertex attribute in the graph using the map function.</p><div class="fullcomment"><div class="comment cmt"><p>Transforms each vertex attribute in the graph using the map function.
+</p></div><dl class="paramcmts block"><dt class="tparam">VD2</dt><dd class="cmt"><p>the new vertex data type
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd><div class="block">Example:
+               <ol><li class="cmt"><p>We might use this operation to change the vertex values
+from one type to another to initialize an algorithm.</p><pre><span class="kw">val</span> rawGraph: Graph[(), ()] = Graph.textFile(<span class="lit">"hdfs://file"</span>)
+<span class="kw">val</span> root = <span class="num">42</span>
+<span class="kw">var</span> bfsGraph = rawGraph.mapVertices[<span class="std">Int</span>]((vid, data) <span class="kw">=&gt;</span> <span class="kw">if</span> (vid == root) <span class="num">0</span> <span class="kw">else</span> Math.MaxValue)</pre></li></ol>
+            </div><dt>Note</dt><dd><span class="cmt"><p>The new graph has the same structure.  As a consequence the underlying index structures
+can be reused.
+</p></span></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#mask" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="mask[VD2,ED2](other:org.apache.spark.graphx.Graph[VD2,ED2])(implicitevidence$8:scala.reflect.ClassTag[VD2],implicitevidence$9:scala.reflect.ClassTag[ED2]):org.apache.spark.graphx.Graph[VD,ED]"></a>
+      <a id="mask[VD2,ED2](Graph[VD2,ED2])(ClassTag[VD2],ClassTag[ED2]):Graph[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">mask</span><span class="tparams">[<span name="VD2">VD2</span>, <span name="ED2">ED2</span>]</span><span class="params">(<span name="other">other: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mask.VD2">VD2</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mask.ED2">ED2</span>]</span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mask.VD2">VD2</span>]</span>, <span name="arg1">arg1: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.mask.ED2">ED2</span>]</span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Restricts the graph to only the vertices and edges that are also in <code>other</code>, but keeps the
+attributes from this graph.</p><div class="fullcomment"><div class="comment cmt"><p>Restricts the graph to only the vertices and edges that are also in <code>other</code>, but keeps the
+attributes from this graph.</p></div><dl class="paramcmts block"><dt class="param">other</dt><dd class="cmt"><p>the graph to project this graph onto</p></dd><dt>returns</dt><dd class="cmt"><p>a graph with vertices and edges that exist in both the current graph and <code>other</code>,
+with vertex and edge data from the current graph
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="scala.AnyRef#ne" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="ne(x$1:AnyRef):Boolean"></a>
+      <a id="ne(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">ne</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.AnyRef#notify" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="notify():Unit"></a>
+      <a id="notify():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">notify</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.AnyRef#notifyAll" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="notifyAll():Unit"></a>
+      <a id="notifyAll():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">notifyAll</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="org.apache.spark.graphx.Graph#ops" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="ops:org.apache.spark.graphx.GraphOps[VD,ED]"></a>
+      <a id="ops:GraphOps[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">val</span>
+      </span>
+      <span class="symbol">
+        <span class="name">ops</span><span class="result">: <a href="../GraphOps.html" class="extype" name="org.apache.spark.graphx.GraphOps">GraphOps</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">The associated <a href="../GraphOps.html" class="extype" name="org.apache.spark.graphx.GraphOps">GraphOps</a> object.</p><div class="fullcomment"><div class="comment cmt"><p>The associated <a href="../GraphOps.html" class="extype" name="org.apache.spark.graphx.GraphOps">GraphOps</a> object.
+</p></div><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#outerJoinVertices" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="outerJoinVertices[U,VD2](other:org.apache.spark.rdd.RDD[(org.apache.spark.graphx.VertexId,U)])(updateF:(org.apache.spark.graphx.VertexId,VD,Option[U])=&gt;VD2)(implicitevidence$12:scala.reflect.ClassTag[U],implicitevidence$13:scala.reflect.ClassTag[VD2],impliciteq:=:=[VD,VD2]):org.apache.spark.graphx.Graph[VD2,ED]"></a>
+      <a id="outerJoinVertices[U,VD2](RDD[(VertexId,U)])((VertexId,VD,Option[U])⇒VD2)(ClassTag[U],ClassTag[VD2],=:=[VD,VD2]):Graph[VD2,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">outerJoinVertices</span><span class="tparams">[<span name="U">U</span>, <span name="VD2">VD2</span>]</span><span class="params">(<span name="other">other: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[(<a href="../package.html#VertexId=Long" class="extmbr" name="org.apache.spark.graphx.VertexId">VertexId</a>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.outerJoinVertices.U">U</span>)]</span>)</span><span class="params">(<span name="updateF">updateF: (<a href="../package.html#VertexId=Long" class="extmbr" name="org.apache.spark.graphx.VertexId">VertexId</a>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="scala.Option">Option</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.outerJoinVertices.U">U</span>]) ⇒ <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.outerJoinVertices.VD2">VD2</span></span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.outerJoinVertices.U">U</span>]</span>, <span name="arg1">arg1: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.outerJoinVertices.VD2">VD2</span>]</span>, <span name="eq">eq: <span class="extype" name="scala.Predef.=:=">=:=</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.outerJoinVertices.VD2">VD2</span>] = <span class="symbol">null</span></span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.outerJoinVertices.VD2">VD2</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Joins the vertices with entries in the <code>table</code> RDD and merges the results using <code>mapFunc</code>.</p><div class="fullcomment"><div class="comment cmt"><p>Joins the vertices with entries in the <code>table</code> RDD and merges the results using <code>mapFunc</code>.
+The input table should contain at most one entry for each vertex.  If no entry in <code>other</code> is
+provided for a particular vertex in the graph, the map function receives <code>None</code>.
+</p></div><dl class="paramcmts block"><dt class="tparam">U</dt><dd class="cmt"><p>the type of entry in the table of updates</p></dd><dt class="tparam">VD2</dt><dd class="cmt"><p>the new vertex value type
+</p></dd><dt class="param">other</dt><dd class="cmt"><p>the table to join with the vertices in the graph.
+             The table should contain at most one entry for each vertex.</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd><div class="block">Example:
+               <ol><li class="cmt"><p>This function is used to update the vertices with new values based on external data.
+         For example we could add the out-degree to each vertex record:</p><pre><span class="kw">val</span> rawGraph: Graph[_, _] = Graph.textFile(<span class="lit">"webgraph"</span>)
+<span class="kw">val</span> outDeg: RDD[(VertexId, <span class="std">Int</span>)] = rawGraph.outDegrees
+<span class="kw">val</span> graph = rawGraph.outerJoinVertices(outDeg) {
+  (vid, data, optDeg) <span class="kw">=&gt;</span> optDeg.getOrElse(<span class="num">0</span>)
+}</pre></li></ol>
+            </div></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#partitionBy" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="partitionBy(partitionStrategy:org.apache.spark.graphx.PartitionStrategy,numPartitions:Int):org.apache.spark.graphx.Graph[VD,ED]"></a>
+      <a id="partitionBy(PartitionStrategy,Int):Graph[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">partitionBy</span><span class="params">(<span name="partitionStrategy">partitionStrategy: <a href="../PartitionStrategy.html" class="extype" name="org.apache.spark.graphx.PartitionStrategy">PartitionStrategy</a></span>, <span name="numPartitions">numPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Repartitions the edges in the graph according to <code>partitionStrategy</code>.</p><div class="fullcomment"><div class="comment cmt"><p>Repartitions the edges in the graph according to <code>partitionStrategy</code>.
+</p></div><dl class="paramcmts block"><dt class="param">partitionStrategy</dt><dd class="cmt"><p>the partitioning strategy to use when partitioning the edges
+in the graph.</p></dd><dt class="param">numPartitions</dt><dd class="cmt"><p>the number of edge partitions in the new graph.
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#partitionBy" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="partitionBy(partitionStrategy:org.apache.spark.graphx.PartitionStrategy):org.apache.spark.graphx.Graph[VD,ED]"></a>
+      <a id="partitionBy(PartitionStrategy):Graph[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">partitionBy</span><span class="params">(<span name="partitionStrategy">partitionStrategy: <a href="../PartitionStrategy.html" class="extype" name="org.apache.spark.graphx.PartitionStrategy">PartitionStrategy</a></span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Repartitions the edges in the graph according to <code>partitionStrategy</code>.</p><div class="fullcomment"><div class="comment cmt"><p>Repartitions the edges in the graph according to <code>partitionStrategy</code>.
+</p></div><dl class="paramcmts block"><dt class="param">partitionStrategy</dt><dd class="cmt"><p>the partitioning strategy to use when partitioning the edges
+in the graph.
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#persist" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="persist(newLevel:org.apache.spark.storage.StorageLevel):org.apache.spark.graphx.Graph[VD,ED]"></a>
+      <a id="persist(StorageLevel):Graph[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">persist</span><span class="params">(<span name="newLevel">newLevel: <a href="../../storage/StorageLevel.html" class="extype" name="org.apache.spark.storage.StorageLevel">StorageLevel</a></span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Caches the vertices and edges associated with this graph at the specified storage level,
+ignoring any target storage levels previously set.</p><div class="fullcomment"><div class="comment cmt"><p>Caches the vertices and edges associated with this graph at the specified storage level,
+ignoring any target storage levels previously set.
+</p></div><dl class="paramcmts block"><dt class="param">newLevel</dt><dd class="cmt"><p>the level at which to cache the graph.
+</p></dd><dt>returns</dt><dd class="cmt"><p>A reference to this graph for convenience.
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#replicatedVertexView" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="replicatedVertexView:org.apache.spark.graphx.impl.ReplicatedVertexView[VD,ED]"></a>
+      <a id="replicatedVertexView:ReplicatedVertexView[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">val</span>
+      </span>
+      <span class="symbol">
+        <span class="name">replicatedVertexView</span><span class="result">: <span class="extype" name="org.apache.spark.graphx.impl.ReplicatedVertexView">ReplicatedVertexView</span>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#reverse" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="reverse:org.apache.spark.graphx.Graph[VD,ED]"></a>
+      <a id="reverse:Graph[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">reverse</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Reverses all edges in the graph.</p><div class="fullcomment"><div class="comment cmt"><p>Reverses all edges in the graph.  If this graph contains an edge from a to b then the returned
+graph contains an edge from b to a.
+</p></div><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#subgraph" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="subgraph(epred:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Boolean,vpred:(org.apache.spark.graphx.VertexId,VD)=&gt;Boolean):org.apache.spark.graphx.Graph[VD,ED]"></a>
+      <a id="subgraph((EdgeTriplet[VD,ED])⇒Boolean,(VertexId,VD)⇒Boolean):Graph[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">subgraph</span><span class="params">(<span name="epred">epred: (<a href="../EdgeTriplet.html" class="extype" name="org.apache.spark.graphx.EdgeTriplet">EdgeTriplet</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]) ⇒ <span class="extype" name="scala.Boolean">Boolean</span> = <span class="symbol">x =&gt; true</span></span>, <span name="vpred">vpred: (<a href="../package.html#VertexId=Long" class="extmbr" name="org.apache.spark.graphx.VertexId">VertexId</a>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>) ⇒ <span class="extype" name="scala.Boolean">Boolean</span> = <span class="symbol">(a, b) =&gt; true</span></span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Restricts the graph to only the vertices and edges satisfying the predicates.</p><div class="fullcomment"><div class="comment cmt"><p>Restricts the graph to only the vertices and edges satisfying the predicates. The resulting
+subgraph satisifies</p><pre>V' = {v : <span class="kw">for</span> all v in V where vpred(v)}
+E' = {(u,v): <span class="kw">for</span> all (u,v) in E where epred((u,v)) &amp;&amp; vpred(u) &amp;&amp; vpred(v)}</pre></div><dl class="paramcmts block"><dt class="param">epred</dt><dd class="cmt"><p>the edge predicate, which takes a triplet and
+evaluates to true if the edge is to remain in the subgraph.  Note
+that only edges where both vertices satisfy the vertex
+predicate are considered.
+</p></dd><dt class="param">vpred</dt><dd class="cmt"><p>the vertex predicate, which takes a vertex object and
+evaluates to true if the vertex is to be included in the subgraph
+</p></dd><dt>returns</dt><dd class="cmt"><p>the subgraph containing only the vertices and edges that
+satisfy the predicates
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="scala.AnyRef#synchronized" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="synchronized[T0](x$1:=&gt;T0):T0"></a>
+      <a id="synchronized[T0](⇒T0):T0"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">synchronized</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="params">(<span name="arg0">arg0: ⇒ <span class="extype" name="java.lang.AnyRef.synchronized.T0">T0</span></span>)</span><span class="result">: <span class="extype" name="java.lang.AnyRef.synchronized.T0">T0</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.AnyRef#toString" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="toString():String"></a>
+      <a id="toString():String"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">toString</span><span class="params">()</span><span class="result">: <span class="extype" name="java.lang.String">String</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#triplets" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="triplets:org.apache.spark.rdd.RDD[org.apache.spark.graphx.EdgeTriplet[VD,ED]]"></a>
+      <a id="triplets:RDD[EdgeTriplet[VD,ED]]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">lazy val</span>
+      </span>
+      <span class="symbol">
+        <span class="name">triplets</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<a href="../EdgeTriplet.html" class="extype" name="org.apache.spark.graphx.EdgeTriplet">EdgeTriplet</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Return a RDD that brings edges together with their source and destination vertices.</p><div class="fullcomment"><div class="comment cmt"><p>Return a RDD that brings edges together with their source and destination vertices.</p></div><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#unpersist" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="unpersist(blocking:Boolean):org.apache.spark.graphx.Graph[VD,ED]"></a>
+      <a id="unpersist(Boolean):Graph[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">unpersist</span><span class="params">(<span name="blocking">blocking: <span class="extype" name="scala.Boolean">Boolean</span> = <span class="symbol">true</span></span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Uncaches both vertices and edges of this graph.</p><div class="fullcomment"><div class="comment cmt"><p>Uncaches both vertices and edges of this graph. This is useful in iterative algorithms that
+build a new graph in each iteration.
+</p></div><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#unpersistVertices" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="unpersistVertices(blocking:Boolean):org.apache.spark.graphx.Graph[VD,ED]"></a>
+      <a id="unpersistVertices(Boolean):Graph[VD,ED]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">unpersistVertices</span><span class="params">(<span name="blocking">blocking: <span class="extype" name="scala.Boolean">Boolean</span> = <span class="symbol">true</span></span>)</span><span class="result">: <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Uncaches only the vertices of this graph, leaving the edges alone.</p><div class="fullcomment"><div class="comment cmt"><p>Uncaches only the vertices of this graph, leaving the edges alone. This is useful in iterative
+algorithms that modify the vertex attributes but reuse the edges. This method can be used to
+uncache the vertex attributes of previous iterations once they are no longer needed, improving
+GC performance.
+</p></div><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd></dl></div>
+    </li><li name="org.apache.spark.graphx.impl.GraphImpl#vertices" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="vertices:org.apache.spark.graphx.VertexRDD[VD]"></a>
+      <a id="vertices:VertexRDD[VD]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">val</span>
+      </span>
+      <span class="symbol">
+        <span class="name">vertices</span><span class="result">: <a href="../VertexRDD.html" class="extype" name="org.apache.spark.graphx.VertexRDD">VertexRDD</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">An RDD containing the vertices and their associated attributes.</p><div class="fullcomment"><div class="comment cmt"><p>An RDD containing the vertices and their associated attributes.
+</p></div><dl class="paramcmts block"><dt>returns</dt><dd class="cmt"><p>an RDD containing the vertices in this graph
+</p></dd></dl><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.graphx.impl.GraphImpl">GraphImpl</a> → <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a></dd><dt>Note</dt><dd><span class="cmt"><p>vertex ids are unique.</p></span></dd></dl></div>
+    </li><li name="scala.AnyRef#wait" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="wait():Unit"></a>
+      <a id="wait():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.InterruptedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="scala.AnyRef#wait" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="wait(x$1:Long,x$2:Int):Unit"></a>
+      <a id="wait(Long,Int):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Long">Long</span></span>, <span name="arg1">arg1: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.InterruptedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="scala.AnyRef#wait" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="wait(x$1:Long):Unit"></a>
+      <a id="wait(Long):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.InterruptedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li></ol>
+            </div>
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        <div class="parent" name="org.apache.spark.graphx.Graph">
+              <h3>Inherited from <a href="../Graph.html" class="extype" name="org.apache.spark.graphx.Graph">Graph</a>[<span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.VD">VD</span>, <span class="extype" name="org.apache.spark.graphx.impl.GraphImpl.ED">ED</span>]</h3>
+            </div><div class="parent" name="scala.Serializable">
+              <h3>Inherited from <span class="extype" name="scala.Serializable">Serializable</span></h3>
+            </div><div class="parent" name="java.io.Serializable">
+              <h3>Inherited from <span class="extype" name="java.io.Serializable">Serializable</span></h3>
+            </div><div class="parent" name="scala.AnyRef">
+              <h3>Inherited from <span class="extype" name="scala.AnyRef">AnyRef</span></h3>
+            </div><div class="parent" name="scala.Any">
+              <h3>Inherited from <span class="extype" name="scala.Any">Any</span></h3>
+            </div>
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Ungrouped</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../../../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../../../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../../../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../../../../lib/template.js"></script>
+    </body>
+      </html>

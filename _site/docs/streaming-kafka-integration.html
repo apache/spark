@@ -1,0 +1,186 @@
+<p><a href="http://kafka.apache.org/">Apache Kafka</a> is publish-subscribe messaging rethought as a distributed, partitioned, replicated commit log service.  Here we explain how to configure Spark Streaming to receive data from Kafka. There are two approaches to this - the old approach using Receivers and Kafka’s high-level API, and a new experimental approach (introduced in Spark 1.3) without using Receivers. They have different programming models, performance characteristics, and semantics guarantees, so read on for more details.</p>
+
+<h2 id="approach-1-receiver-based-approach">Approach 1: Receiver-based Approach</h2>
+<p>This approach uses a Receiver to receive the data. The Received is implemented using the Kafka high-level consumer API. As with all receivers, the data received from Kafka through a Receiver is stored in Spark executors, and then jobs launched by Spark Streaming processes the data.</p>
+
+<p>However, under default configuration, this approach can lose data under failures (see <a href="streaming-programming-guide.html#receiver-reliability">receiver reliability</a>. To ensure zero-data loss, you have to additionally enable Write Ahead Logs in Spark Streaming. To ensure zero data loss, enable the Write Ahead Logs (introduced in Spark 1.2). This synchronously saves all the received Kafka data into write ahead logs on a distributed file system (e.g HDFS), so that all the data can be recovered on failure. See <a href="streaming-programming-guide.html#deploying-applications">Deploying section</a> in the streaming programming guide for more details on Write Ahead Logs.</p>
+
+<p>Next, we discuss how to use this approach in your streaming application.</p>
+
+<ol>
+  <li>
+    <p><strong>Linking:</strong> For Scala/Java applications using SBT/Maven project definitions, link your streaming application with the following artifact (see <a href="streaming-programming-guide.html#linking">Linking section</a> in the main programming guide for further information).</p>
+
+    <pre><code> groupId = org.apache.spark
+ artifactId = spark-streaming-kafka_
+ version = 
+</code></pre>
+
+    <p>For Python applications, you will have to add this above library and its dependencies when deploying your application. See the <em>Deploying</em> subsection below.</p>
+  </li>
+  <li>
+    <p><strong>Programming:</strong> In the streaming application code, import <code>KafkaUtils</code> and create an input DStream as follows.</p>
+
+    <div class="codetabs">
+ <div data-lang="scala">
+        <pre><code> import org.apache.spark.streaming.kafka._
+
+ val kafkaStream = KafkaUtils.createStream(streamingContext, 
+     [ZK quorum], [consumer group id], [per-topic number of Kafka partitions to consume])
+</code></pre>
+
+        <p>You can also specify the key and value classes and their corresponding decoder classes using variations of <code>createStream</code>. See the <a href="api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$">API docs</a>
+ and the <a href="/blob/master/examples/scala-2.10/src/main/scala/org/apache/spark/examples/streaming/KafkaWordCount.scala">example</a>.</p>
+      </div>
+ <div data-lang="java">
+        <pre><code> import org.apache.spark.streaming.kafka.*;
+
+ JavaPairReceiverInputDStream&lt;String, String&gt; kafkaStream = 
+     KafkaUtils.createStream(streamingContext,
+     [ZK quorum], [consumer group id], [per-topic number of Kafka partitions to consume]);
+</code></pre>
+
+        <p>You can also specify the key and value classes and their corresponding decoder classes using variations of <code>createStream</code>. See the <a href="api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html">API docs</a>
+ and the <a href="/blob/master/examples/scala-2.10/src/main/java/org/apache/spark/examples/streaming/JavaKafkaWordCount.java">example</a>.</p>
+
+      </div>
+ <div data-lang="python">
+        <pre><code> from pyspark.streaming.kafka import KafkaUtils
+
+ kafkaStream = KafkaUtils.createStream(streamingContext, \
+     [ZK quorum], [consumer group id], [per-topic number of Kafka partitions to consume])
+</code></pre>
+
+        <p>By default, the Python API will decode Kafka data as UTF8 encoded strings. You can specify your custom decoding function to decode the byte arrays in Kafka records to any arbitrary data type. See the <a href="api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils">API docs</a>
+ and the <a href="/blob/master/examples/src/main/python/streaming/kafka_wordcount.py">example</a>.</p>
+      </div>
+ </div>
+
+    <p><strong>Points to remember:</strong></p>
+
+    <ul>
+      <li>
+        <p>Topic partitions in Kafka does not correlate to partitions of RDDs generated in Spark Streaming. So increasing the number of topic-specific partitions in the <code>KafkaUtils.createStream()</code> only increases the number of threads using which topics that are consumed within a single receiver. It does not increase the parallelism of Spark in processing the data. Refer to the main document for more information on that.</p>
+      </li>
+      <li>
+        <p>Multiple Kafka input DStreams can be created with different groups and topics for parallel receiving of data using multiple receivers.</p>
+      </li>
+      <li>
+        <p>If you have enabled Write Ahead Logs with a replicated file system like HDFS, the received data is already being replicated in the log. Hence, the storage level in storage level for the input stream to <code>StorageLevel.MEMORY_AND_DISK_SER</code> (that is, use
+<code>KafkaUtils.createStream(..., StorageLevel.MEMORY_AND_DISK_SER)</code>).</p>
+      </li>
+    </ul>
+  </li>
+  <li>
+    <p><strong>Deploying:</strong> As with any Spark applications, <code>spark-submit</code> is used to launch your application. However, the details are slightly different for Scala/Java applications and Python applications.</p>
+
+    <p>For Scala and Java applications, if you are using SBT or Maven for project management, then package <code>spark-streaming-kafka_</code> and its dependencies into the application JAR. Make sure <code>spark-core_</code> and <code>spark-streaming_</code> are marked as <code>provided</code> dependencies as those are already present in a Spark installation. Then use <code>spark-submit</code> to launch your application (see <a href="streaming-programming-guide.html#deploying-applications">Deploying section</a> in the main programming guide).</p>
+
+    <p>For Python applications which lack SBT/Maven project management, <code>spark-streaming-kafka_</code> and its dependencies can be directly added to <code>spark-submit</code> using <code>--packages</code> (see <a href="submitting-applications.html">Application Submission Guide</a>). That is,</p>
+
+    <pre><code> ./bin/spark-submit --packages org.apache.spark:spark-streaming-kafka_: ...
+</code></pre>
+
+    <p>Alternatively, you can also download the JAR of the Maven artifact <code>spark-streaming-kafka-assembly</code> from the 
+ <a href="http://search.maven.org/#search|ga|1|a%3A%22spark-streaming-kafka-assembly_2.10%22%20AND%20v%3A%22%22">Maven repository</a> and add it to <code>spark-submit</code> with <code>--jars</code>.</p>
+  </li>
+</ol>
+
+<h2 id="approach-2-direct-approach-no-receivers">Approach 2: Direct Approach (No Receivers)</h2>
+<p>This is a new receiver-less “direct” approach has been introduced in Spark 1.3 to ensure stronger end-to-end guarantees. Instead of using receivers to receive data, this approach periodically queries Kafka for the latest offsets in each topic+partition, and accordingly defines the offset ranges to process in each batch. When the jobs to process the data are launched, Kafka’s simple consumer API is used to read the defined ranges of offsets from Kafka (similar to read files from a file system). Note that this is an experimental feature in Spark 1.3 and is only available in the Scala and Java API.</p>
+
+<p>This approach has the following advantages over the received-based approach (i.e. Approach 1).</p>
+
+<ul>
+  <li>
+    <p><em>Simplified Parallelism:</em> No need to create multiple input Kafka streams and union-ing them. With <code>directStream</code>, Spark Streaming will create as many RDD partitions as there is Kafka partitions to consume, which will all read data from Kafka in parallel. So there is one-to-one mapping between Kafka and RDD partitions, which is easier to understand and tune.</p>
+  </li>
+  <li>
+    <p><em>Efficiency:</em> Achieving zero-data loss in the first approach required the data to be stored in a Write Ahead Log, which further replicated the data. This is actually inefficient as the data effectively gets replicated twice - once by Kafka, and a second time by the Write Ahead Log. This second approach eliminate the problem as there is no receiver, and hence no need for Write Ahead Logs.</p>
+  </li>
+  <li>
+    <p><em>Exactly-once semantics:</em> The first approach uses Kafka’s high level API to store consumed offsets in Zookeeper. This is traditionally the way to consume data from Kafka. While this approach (in combination with write ahead logs) can ensure zero data loss (i.e. at-least once semantics), there is a small chance some records may get consumed twice under some failures. This occurs because of inconsistencies between data reliably received by Spark Streaming and offsets tracked by Zookeeper. Hence, in this second approach, we use simple Kafka API that does not use Zookeeper and offsets tracked only by Spark Streaming within its checkpoints. This eliminates inconsistencies between Spark Streaming and Zookeeper/Kafka, and so each record is received by Spark Streaming effectively exactly once despite failures.</p>
+  </li>
+</ul>
+
+<p>Note that one disadvantage of this approach is that it does not update offsets in Zookeeper, hence Zookeeper-based Kafka monitoring tools will not show progress. However, you can access the offsets processed by this approach in each batch and update Zookeeper yourself (see below).</p>
+
+<p>Next, we discuss how to use this approach in your streaming application.</p>
+
+<ol>
+  <li>
+    <p><strong>Linking:</strong> This approach is supported only in Scala/Java application. Link your SBT/Maven project with the following artifact (see <a href="streaming-programming-guide.html#linking">Linking section</a> in the main programming guide for further information).</p>
+
+    <pre><code> groupId = org.apache.spark
+ artifactId = spark-streaming-kafka_
+ version = 
+</code></pre>
+  </li>
+  <li>
+    <p><strong>Programming:</strong> In the streaming application code, import <code>KafkaUtils</code> and create an input DStream as follows.</p>
+
+    <div class="codetabs">
+ <div data-lang="scala">
+        <pre><code> import org.apache.spark.streaming.kafka._
+
+ val directKafkaStream = KafkaUtils.createDirectStream[
+     [key class], [value class], [key decoder class], [value decoder class] ](
+     streamingContext, [map of Kafka parameters], [set of topics to consume])
+</code></pre>
+
+        <p>See the <a href="api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$">API docs</a>
+ and the <a href="/blob/master/examples/scala-2.10/src/main/scala/org/apache/spark/examples/streaming/DirectKafkaWordCount.scala">example</a>.</p>
+      </div>
+ <div data-lang="java">
+        <pre><code> import org.apache.spark.streaming.kafka.*;
+
+ JavaPairReceiverInputDStream&lt;String, String&gt; directKafkaStream = 
+     KafkaUtils.createDirectStream(streamingContext,
+         [key class], [value class], [key decoder class], [value decoder class],
+         [map of Kafka parameters], [set of topics to consume]);
+</code></pre>
+
+        <p>See the <a href="api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html">API docs</a>
+ and the <a href="/blob/master/examples/scala-2.10/src/main/java/org/apache/spark/examples/streaming/JavaDirectKafkaWordCount.java">example</a>.</p>
+
+      </div>
+ </div>
+
+    <p>In the Kafka parameters, you must specify either <code>metadata.broker.list</code> or <code>bootstrap.servers</code>.
+ By default, it will start consuming from the latest offset of each Kafka partition. If you set configuration <code>auto.offset.reset</code> in Kafka parameters to <code>smallest</code>, then it will start consuming from the smallest offset.</p>
+
+    <p>You can also start consuming from any arbitrary offset using other variations of <code>KafkaUtils.createDirectStream</code>. Furthermore, if you want to access the Kafka offsets consumed in each batch, you can do the following.</p>
+
+    <div class="codetabs">
+ <div data-lang="scala">
+        <pre><code> directKafkaStream.foreachRDD { rdd =&gt; 
+     val offsetRanges = rdd.asInstanceOf[HasOffsetRanges]
+     // offsetRanges.length = # of Kafka partitions being consumed
+     ...
+ }
+</code></pre>
+      </div>
+ <div data-lang="java">
+        <pre><code> directKafkaStream.foreachRDD(
+     new Function&lt;JavaPairRDD&lt;String, String&gt;, Void&gt;() {
+         @Override
+         public Void call(JavaPairRDD&lt;String, Integer&gt; rdd) throws IOException {
+             OffsetRange[] offsetRanges = ((HasOffsetRanges)rdd).offsetRanges
+             // offsetRanges.length = # of Kafka partitions being consumed
+             ...
+             return null;
+         }
+     }
+ );
+</code></pre>
+      </div>
+ </div>
+
+    <p>You can use this to update Zookeeper yourself if you want Zookeeper-based Kafka monitoring tools to show progress of the streaming application.</p>
+
+    <p>Another thing to note is that since this approach does not use Receivers, the standard receiver-related (that is, <a href="configuration.html">configurations</a> of the form <code>spark.streaming.receiver.*</code> ) will not apply to the input DStreams created by this approach (will apply to other input DStreams though). Instead, use the <a href="configuration.html">configurations</a> <code>spark.streaming.kafka.*</code>. An important one is <code>spark.streaming.kafka.maxRatePerPartition</code> which is the maximum rate at which each Kafka partition will be read by this direct API.</p>
+  </li>
+  <li>
+    <p><strong>Deploying:</strong> Similar to the first approach, you can package <code>spark-streaming-kafka_</code> and its dependencies into the application JAR and the launch the application using <code>spark-submit</code>. Make sure <code>spark-core_</code> and <code>spark-streaming_</code> are marked as <code>provided</code> dependencies as those are already present in a Spark installation.</p>
+  </li>
+</ol>

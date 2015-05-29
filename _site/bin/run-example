@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+export SPARK_HOME="$FWDIR"
+EXAMPLES_DIR="$FWDIR"/examples
+
+. "$FWDIR"/bin/load-spark-env.sh
+
+if [ -n "$1" ]; then
+  EXAMPLE_CLASS="$1"
+  shift
+else
+  echo "Usage: ./bin/run-example <example-class> [example-args]" 1>&2
+  echo "  - set MASTER=XX to use a specific master" 1>&2
+  echo "  - can use abbreviated example class name relative to com.apache.spark.examples" 1>&2
+  echo "     (e.g. SparkPi, mllib.LinearRegression, streaming.KinesisWordCountASL)" 1>&2
+  exit 1
+fi
+
+if [ -f "$FWDIR/RELEASE" ]; then
+  JAR_PATH="${FWDIR}/lib"
+else
+  JAR_PATH="${EXAMPLES_DIR}/target/scala-${SPARK_SCALA_VERSION}"
+fi
+
+JAR_COUNT=0
+
+for f in "${JAR_PATH}"/spark-examples-*hadoop*.jar; do
+  if [[ ! -e "$f" ]]; then
+    echo "Failed to find Spark examples assembly in $FWDIR/lib or $FWDIR/examples/target" 1>&2
+    echo "You need to build Spark before running this program" 1>&2
+    exit 1
+  fi
+  SPARK_EXAMPLES_JAR="$f"
+  JAR_COUNT=$((JAR_COUNT+1))
+done
+
+if [ "$JAR_COUNT" -gt "1" ]; then
+  echo "Found multiple Spark examples assembly jars in ${JAR_PATH}" 1>&2
+  ls "${JAR_PATH}"/spark-examples-*hadoop*.jar 1>&2
+  echo "Please remove all but one jar." 1>&2
+  exit 1
+fi
+
+export SPARK_EXAMPLES_JAR
+
+EXAMPLE_MASTER=${MASTER:-"local[*]"}
+
+if [[ ! $EXAMPLE_CLASS == org.apache.spark.examples* ]]; then
+  EXAMPLE_CLASS="org.apache.spark.examples.$EXAMPLE_CLASS"
+fi
+
+exec "$FWDIR"/bin/spark-submit \
+  --master $EXAMPLE_MASTER \
+  --class $EXAMPLE_CLASS \
+  "$SPARK_EXAMPLES_JAR" \
+  "$@"

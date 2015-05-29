@@ -1,0 +1,292 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>attribute - org.apache.spark.ml.attribute</title>
+          <meta name="description" content="attribute - org.apache.spark.ml.attribute" />
+          <meta name="keywords" content="attribute org.apache.spark.ml.attribute" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../../../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../../../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../../../../index.html';
+            var hash = 'org.apache.spark.ml.attribute.package';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="value">
+      <div id="definition">
+        <img src="../../../../../lib/package_big.png" />
+        <p id="owner"><a href="../../../../package.html" class="extype" name="org">org</a>.<a href="../../../package.html" class="extype" name="org.apache">apache</a>.<a href="../../package.html" class="extype" name="org.apache.spark">spark</a>.<a href="../package.html" class="extype" name="org.apache.spark.ml">ml</a></p>
+        <h1>attribute</h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <span class="name">attribute</span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"><div class="comment cmt"><h4>ML attributes</h4><p>The ML pipeline API uses <span class="extype" name="DataFrame">DataFrame</span>s as ML datasets.
+Each dataset consists of typed columns, e.g., string, double, vector, etc.
+However, knowing only the column type may not be sufficient to handle the data properly.
+For instance, a double column with values 0.0, 1.0, 2.0, ... may represent some label indices,
+which cannot be treated as numeric values in ML algorithms, and, for another instance, we may
+want to know the names and types of features stored in a vector column.
+ML attributes are used to provide additional information to describe columns in a dataset.</p><h5>ML columns</h5><p>A column with ML attributes attached is called an ML column.
+The data in ML columns are stored as double values, i.e., an ML column is either a scalar column
+of double values or a vector column.
+Columns of other types must be encoded into ML columns using transformers.
+We use <a href="Attribute.html" class="extype" name="org.apache.spark.ml.attribute.Attribute">Attribute</a> to describe a scalar ML column, and <a href="AttributeGroup.html" class="extype" name="org.apache.spark.ml.attribute.AttributeGroup">AttributeGroup</a> to describe a vector
+ML column.
+ML attributes are stored in the metadata field of the column schema.
+</p></div><div class="toggleContainer block">
+          <span class="toggle">Linear Supertypes</span>
+          <div class="superTypes hiddenContent"><span class="extype" name="scala.AnyRef">AnyRef</span>, <span class="extype" name="scala.Any">Any</span></div>
+        </div></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        <div id="order">
+              <span class="filtertype">Ordering</span>
+              <ol>
+                
+                <li class="alpha in"><span>Alphabetic</span></li>
+                <li class="inherit out"><span>By inheritance</span></li>
+              </ol>
+            </div>
+        <div id="ancestors">
+                <span class="filtertype">Inherited<br />
+                </span>
+                <ol id="linearization">
+                  <li class="in" name="org.apache.spark.ml.attribute"><span>attribute</span></li><li class="in" name="scala.AnyRef"><span>AnyRef</span></li><li class="in" name="scala.Any"><span>Any</span></li>
+                </ol>
+              </div><div id="ancestors">
+            <span class="filtertype"></span>
+            <ol>
+              <li class="hideall out"><span>Hide All</span></li>
+              <li class="showall in"><span>Show all</span></li>
+            </ol>
+            <a href="http://docs.scala-lang.org/overviews/scaladoc/usage.html#members" target="_blank">Learn more about member selection</a>
+          </div>
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        
+
+        <div id="types" class="types members">
+              <h3>Type Members</h3>
+              <ol><li name="org.apache.spark.ml.attribute.Attribute" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="AttributeextendsSerializable"></a>
+      <a id="Attribute:Attribute"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">sealed abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="Attribute.html"><span class="name">Attribute</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Abstract class for ML attributes.</p>
+    </li><li name="org.apache.spark.ml.attribute.AttributeGroup" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="AttributeGroupextendsSerializable"></a>
+      <a id="AttributeGroup:AttributeGroup"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="AttributeGroup.html"><span class="name">AttributeGroup</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Attributes that describe a vector ML column.</p>
+    </li><li name="org.apache.spark.ml.attribute.AttributeType" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="AttributeTypeextendsAnyRef"></a>
+      <a id="AttributeType:AttributeType"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">sealed abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="AttributeType.html"><span class="name">AttributeType</span></a><span class="result"> extends <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">An enum-like type for attribute types: <a href="AttributeType$.html#Numeric:org.apache.spark.ml.attribute.AttributeType" class="extmbr" name="org.apache.spark.ml.attribute.AttributeType#Numeric">AttributeType$#Numeric</a>, <a href="AttributeType$.html#Nominal:org.apache.spark.ml.attribute.AttributeType" class="extmbr" name="org.apache.spark.ml.attribute.AttributeType#Nominal">AttributeType$#Nominal</a>,
+and <a href="AttributeType$.html#Binary:org.apache.spark.ml.attribute.AttributeType" class="extmbr" name="org.apache.spark.ml.attribute.AttributeType#Binary">AttributeType$#Binary</a>.</p>
+    </li><li name="org.apache.spark.ml.attribute.BinaryAttribute" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="BinaryAttributeextendsAttribute"></a>
+      <a id="BinaryAttribute:BinaryAttribute"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="BinaryAttribute.html"><span class="name">BinaryAttribute</span></a><span class="result"> extends <a href="Attribute.html" class="extype" name="org.apache.spark.ml.attribute.Attribute">Attribute</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">A binary attribute.</p>
+    </li><li name="org.apache.spark.ml.attribute.NominalAttribute" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="NominalAttributeextendsAttribute"></a>
+      <a id="NominalAttribute:NominalAttribute"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="NominalAttribute.html"><span class="name">NominalAttribute</span></a><span class="result"> extends <a href="Attribute.html" class="extype" name="org.apache.spark.ml.attribute.Attribute">Attribute</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">A nominal attribute.</p>
+    </li><li name="org.apache.spark.ml.attribute.NumericAttribute" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="NumericAttributeextendsAttribute"></a>
+      <a id="NumericAttribute:NumericAttribute"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="NumericAttribute.html"><span class="name">NumericAttribute</span></a><span class="result"> extends <a href="Attribute.html" class="extype" name="org.apache.spark.ml.attribute.Attribute">Attribute</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">A numeric attribute with optional summary statistics.</p>
+    </li></ol>
+            </div>
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="org.apache.spark.ml.attribute.Attribute" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="Attribute"></a>
+      <a id="Attribute:Attribute"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="Attribute$.html"><span class="name">Attribute</span></a><span class="result"> extends <span class="extype" name="org.apache.spark.ml.attribute.AttributeFactory">AttributeFactory</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.ml.attribute.AttributeGroup" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="AttributeGroup"></a>
+      <a id="AttributeGroup:AttributeGroup"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="AttributeGroup$.html"><span class="name">AttributeGroup</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Factory methods to create attribute groups.</p>
+    </li><li name="org.apache.spark.ml.attribute.AttributeType" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="AttributeType"></a>
+      <a id="AttributeType:AttributeType"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="AttributeType$.html"><span class="name">AttributeType</span></a>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.ml.attribute.BinaryAttribute" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="BinaryAttribute"></a>
+      <a id="BinaryAttribute:BinaryAttribute"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="BinaryAttribute$.html"><span class="name">BinaryAttribute</span></a><span class="result"> extends <span class="extype" name="org.apache.spark.ml.attribute.AttributeFactory">AttributeFactory</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Factory methods for binary attributes.</p>
+    </li><li name="org.apache.spark.ml.attribute.NominalAttribute" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="NominalAttribute"></a>
+      <a id="NominalAttribute:NominalAttribute"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="NominalAttribute$.html"><span class="name">NominalAttribute</span></a><span class="result"> extends <span class="extype" name="org.apache.spark.ml.attribute.AttributeFactory">AttributeFactory</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Factory methods for nominal attributes.</p>
+    </li><li name="org.apache.spark.ml.attribute.NumericAttribute" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="NumericAttribute"></a>
+      <a id="NumericAttribute:NumericAttribute"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="NumericAttribute$.html"><span class="name">NumericAttribute</span></a><span class="result"> extends <span class="extype" name="org.apache.spark.ml.attribute.AttributeFactory">AttributeFactory</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Factory methods for numeric attributes.</p>
+    </li></ol>
+            </div>
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        <div class="parent" name="scala.AnyRef">
+              <h3>Inherited from <span class="extype" name="scala.AnyRef">AnyRef</span></h3>
+            </div><div class="parent" name="scala.Any">
+              <h3>Inherited from <span class="extype" name="scala.Any">Any</span></h3>
+            </div>
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Members</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../../../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../../../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../../../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../../../../lib/template.js"></script>
+    </body>
+      </html>

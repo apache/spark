@@ -1,0 +1,4 @@
+elt(n, str1, str2, ...) - returns the n-th string
+Example:
+  > SELECT elt(1, 'face', 'book') FROM src LIMIT 1;
+  'face'

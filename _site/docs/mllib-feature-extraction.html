@@ -1,0 +1,606 @@
+<ul id="markdown-toc">
+  <li><a href="#tf-idf" id="markdown-toc-tf-idf">TF-IDF</a></li>
+  <li><a href="#word2vec" id="markdown-toc-word2vec">Word2Vec</a>    <ul>
+      <li><a href="#model" id="markdown-toc-model">Model</a></li>
+      <li><a href="#example" id="markdown-toc-example">Example</a></li>
+    </ul>
+  </li>
+  <li><a href="#standardscaler" id="markdown-toc-standardscaler">StandardScaler</a>    <ul>
+      <li><a href="#model-fitting" id="markdown-toc-model-fitting">Model Fitting</a></li>
+      <li><a href="#example-1" id="markdown-toc-example-1">Example</a></li>
+    </ul>
+  </li>
+  <li><a href="#normalizer" id="markdown-toc-normalizer">Normalizer</a>    <ul>
+      <li><a href="#example-2" id="markdown-toc-example-2">Example</a></li>
+    </ul>
+  </li>
+  <li><a href="#feature-selection" id="markdown-toc-feature-selection">Feature selection</a>    <ul>
+      <li><a href="#chisqselector" id="markdown-toc-chisqselector">ChiSqSelector</a>        <ul>
+          <li><a href="#model-fitting-1" id="markdown-toc-model-fitting-1">Model Fitting</a></li>
+          <li><a href="#example-3" id="markdown-toc-example-3">Example</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#elementwiseproduct" id="markdown-toc-elementwiseproduct">ElementwiseProduct</a>    <ul>
+      <li><a href="#example-4" id="markdown-toc-example-4">Example</a></li>
+    </ul>
+  </li>
+  <li><a href="#pca" id="markdown-toc-pca">PCA</a>    <ul>
+      <li><a href="#example-5" id="markdown-toc-example-5">Example</a></li>
+    </ul>
+  </li>
+</ul>
+
+<h2 id="tf-idf">TF-IDF</h2>
+
+<p><a href="http://en.wikipedia.org/wiki/Tf%E2%80%93idf">Term frequency-inverse document frequency (TF-IDF)</a> is a feature 
+vectorization method widely used in text mining to reflect the importance of a term to a document in the corpus.
+Denote a term by <code>$t$</code>, a document by <code>$d$</code>, and the corpus by <code>$D$</code>.
+Term frequency <code>$TF(t, d)$</code> is the number of times that term <code>$t$</code> appears in document <code>$d$</code>,
+while document frequency <code>$DF(t, D)$</code> is the number of documents that contains term <code>$t$</code>.
+If we only use term frequency to measure the importance, it is very easy to over-emphasize terms that
+appear very often but carry little information about the document, e.g., “a”, “the”, and “of”.
+If a term appears very often across the corpus, it means it doesn’t carry special information about
+a particular document.
+Inverse document frequency is a numerical measure of how much information a term provides:
+<code>\[
+IDF(t, D) = \log \frac{|D| + 1}{DF(t, D) + 1},
+\]</code>
+where <code>$|D|$</code> is the total number of documents in the corpus.
+Since logarithm is used, if a term appears in all documents, its IDF value becomes 0.
+Note that a smoothing term is applied to avoid dividing by zero for terms outside the corpus.
+The TF-IDF measure is simply the product of TF and IDF:
+<code>\[
+TFIDF(t, d, D) = TF(t, d) \cdot IDF(t, D).
+\]</code>
+There are several variants on the definition of term frequency and document frequency.
+In MLlib, we separate TF and IDF to make them flexible.</p>
+
+<p>Our implementation of term frequency utilizes the
+<a href="http://en.wikipedia.org/wiki/Feature_hashing">hashing trick</a>.
+A raw feature is mapped into an index (term) by applying a hash function.
+Then term frequencies are calculated based on the mapped indices.
+This approach avoids the need to compute a global term-to-index map,
+which can be expensive for a large corpus, but it suffers from potential hash collisions,
+where different raw features may become the same term after hashing.
+To reduce the chance of collision, we can increase the target feature dimension, i.e., 
+the number of buckets of the hash table.
+The default feature dimension is <code>$2^{20} = 1,048,576$</code>.</p>
+
+<p><strong>Note:</strong> MLlib doesn’t provide tools for text segmentation.
+We refer users to the <a href="http://nlp.stanford.edu/">Stanford NLP Group</a> and 
+<a href="https://github.com/scalanlp/chalk">scalanlp/chalk</a>.</p>
+
+<div class="codetabs">
+<div data-lang="scala">
+
+    <p>TF and IDF are implemented in <a href="api/scala/index.html#org.apache.spark.mllib.feature.HashingTF">HashingTF</a>
+and <a href="api/scala/index.html#org.apache.spark.mllib.feature.IDF">IDF</a>.
+<code>HashingTF</code> takes an <code>RDD[Iterable[_]]</code> as the input.
+Each record could be an iterable of strings or other types.</p>
+
+    <div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.rdd.RDD</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.SparkContext</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.feature.HashingTF</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.linalg.Vector</span>
+
+<span class="k">val</span> <span class="n">sc</span><span class="k">:</span> <span class="kt">SparkContext</span> <span class="o">=</span> <span class="o">...</span>
+
+<span class="c1">// Load documents (one per line).</span>
+<span class="k">val</span> <span class="n">documents</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[</span><span class="kt">Seq</span><span class="o">[</span><span class="kt">String</span><span class="o">]]</span> <span class="k">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="o">(</span><span class="s">&quot;...&quot;</span><span class="o">).</span><span class="n">map</span><span class="o">(</span><span class="k">_</span><span class="o">.</span><span class="n">split</span><span class="o">(</span><span class="s">&quot; &quot;</span><span class="o">).</span><span class="n">toSeq</span><span class="o">)</span>
+
+<span class="k">val</span> <span class="n">hashingTF</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">HashingTF</span><span class="o">()</span>
+<span class="k">val</span> <span class="n">tf</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[</span><span class="kt">Vector</span><span class="o">]</span> <span class="k">=</span> <span class="n">hashingTF</span><span class="o">.</span><span class="n">transform</span><span class="o">(</span><span class="n">documents</span><span class="o">)</span></code></pre></div>
+
+    <p>While applying <code>HashingTF</code> only needs a single pass to the data, applying <code>IDF</code> needs two passes: 
+first to compute the IDF vector and second to scale the term frequencies by IDF.</p>
+
+    <div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.mllib.feature.IDF</span>
+
+<span class="c1">// ... continue from the previous example</span>
+<span class="n">tf</span><span class="o">.</span><span class="n">cache</span><span class="o">()</span>
+<span class="k">val</span> <span class="n">idf</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">IDF</span><span class="o">().</span><span class="n">fit</span><span class="o">(</span><span class="n">tf</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">tfidf</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[</span><span class="kt">Vector</span><span class="o">]</span> <span class="k">=</span> <span class="n">idf</span><span class="o">.</span><span class="n">transform</span><span class="o">(</span><span class="n">tf</span><span class="o">)</span></code></pre></div>
+
+    <p>MLlib’s IDF implementation provides an option for ignoring terms which occur in less than a
+minimum number of documents.  In such cases, the IDF for these terms is set to 0.  This feature
+can be used by passing the <code>minDocFreq</code> value to the IDF constructor.</p>
+
+    <div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.mllib.feature.IDF</span>
+
+<span class="c1">// ... continue from the previous example</span>
+<span class="n">tf</span><span class="o">.</span><span class="n">cache</span><span class="o">()</span>
+<span class="k">val</span> <span class="n">idf</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">IDF</span><span class="o">(</span><span class="n">minDocFreq</span> <span class="k">=</span> <span class="mi">2</span><span class="o">).</span><span class="n">fit</span><span class="o">(</span><span class="n">tf</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">tfidf</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[</span><span class="kt">Vector</span><span class="o">]</span> <span class="k">=</span> <span class="n">idf</span><span class="o">.</span><span class="n">transform</span><span class="o">(</span><span class="n">tf</span><span class="o">)</span></code></pre></div>
+
+  </div>
+<div data-lang="python">
+
+    <p>TF and IDF are implemented in <a href="api/python/pyspark.mllib.html#pyspark.mllib.feature.HashingTF">HashingTF</a>
+and <a href="api/python/pyspark.mllib.html#pyspark.mllib.feature.IDF">IDF</a>.
+<code>HashingTF</code> takes an RDD of list as the input.
+Each record could be an iterable of strings or other types.</p>
+
+    <div class="highlight"><pre><code class="language-python" data-lang="python"><span class="kn">from</span> <span class="nn">pyspark</span> <span class="kn">import</span> <span class="n">SparkContext</span>
+<span class="kn">from</span> <span class="nn">pyspark.mllib.feature</span> <span class="kn">import</span> <span class="n">HashingTF</span>
+
+<span class="n">sc</span> <span class="o">=</span> <span class="n">SparkContext</span><span class="p">()</span>
+
+<span class="c"># Load documents (one per line).</span>
+<span class="n">documents</span> <span class="o">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="p">(</span><span class="s">&quot;...&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">line</span><span class="p">:</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&quot; &quot;</span><span class="p">))</span>
+
+<span class="n">hashingTF</span> <span class="o">=</span> <span class="n">HashingTF</span><span class="p">()</span>
+<span class="n">tf</span> <span class="o">=</span> <span class="n">hashingTF</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">documents</span><span class="p">)</span></code></pre></div>
+
+    <p>While applying <code>HashingTF</code> only needs a single pass to the data, applying <code>IDF</code> needs two passes: 
+first to compute the IDF vector and second to scale the term frequencies by IDF.</p>
+
+    <div class="highlight"><pre><code class="language-python" data-lang="python"><span class="kn">from</span> <span class="nn">pyspark.mllib.feature</span> <span class="kn">import</span> <span class="n">IDF</span>
+
+<span class="c"># ... continue from the previous example</span>
+<span class="n">tf</span><span class="o">.</span><span class="n">cache</span><span class="p">()</span>
+<span class="n">idf</span> <span class="o">=</span> <span class="n">IDF</span><span class="p">()</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">tf</span><span class="p">)</span>
+<span class="n">tfidf</span> <span class="o">=</span> <span class="n">idf</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">tf</span><span class="p">)</span></code></pre></div>
+
+    <p>MLLib’s IDF implementation provides an option for ignoring terms which occur in less than a
+minimum number of documents.  In such cases, the IDF for these terms is set to 0.  This feature
+can be used by passing the <code>minDocFreq</code> value to the IDF constructor.</p>
+
+    <div class="highlight"><pre><code class="language-python" data-lang="python"><span class="c"># ... continue from the previous example</span>
+<span class="n">tf</span><span class="o">.</span><span class="n">cache</span><span class="p">()</span>
+<span class="n">idf</span> <span class="o">=</span> <span class="n">IDF</span><span class="p">(</span><span class="n">minDocFreq</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">tf</span><span class="p">)</span>
+<span class="n">tfidf</span> <span class="o">=</span> <span class="n">idf</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">tf</span><span class="p">)</span></code></pre></div>
+
+  </div>
+</div>
+
+<h2 id="word2vec">Word2Vec</h2>
+
+<p><a href="https://code.google.com/p/word2vec/">Word2Vec</a> computes distributed vector representation of words.
+The main advantage of the distributed
+representations is that similar words are close in the vector space, which makes generalization to 
+novel patterns easier and model estimation more robust. Distributed vector representation is 
+showed to be useful in many natural language processing applications such as named entity 
+recognition, disambiguation, parsing, tagging and machine translation.</p>
+
+<h3 id="model">Model</h3>
+
+<p>In our implementation of Word2Vec, we used skip-gram model. The training objective of skip-gram is
+to learn word vector representations that are good at predicting its context in the same sentence. 
+Mathematically, given a sequence of training words <code>$w_1, w_2, \dots, w_T$</code>, the objective of the
+skip-gram model is to maximize the average log-likelihood 
+<code>\[
+\frac{1}{T} \sum_{t = 1}^{T}\sum_{j=-k}^{j=k} \log p(w_{t+j} | w_t)
+\]</code>
+where $k$ is the size of the training window.</p>
+
+<p>In the skip-gram model, every word $w$ is associated with two vectors $u_w$ and $v_w$ which are 
+vector representations of $w$ as word and context respectively. The probability of correctly 
+predicting word $w_i$ given word $w_j$ is determined by the softmax model, which is 
+<code>\[
+p(w_i | w_j ) = \frac{\exp(u_{w_i}^{\top}v_{w_j})}{\sum_{l=1}^{V} \exp(u_l^{\top}v_{w_j})}
+\]</code>
+where $V$ is the vocabulary size.</p>
+
+<p>The skip-gram model with softmax is expensive because the cost of computing $\log p(w_i | w_j)$ 
+is proportional to $V$, which can be easily in order of millions. To speed up training of Word2Vec, 
+we used hierarchical softmax, which reduced the complexity of computing of $\log p(w_i | w_j)$ to
+$O(\log(V))$</p>
+
+<h3 id="example">Example</h3>
+
+<p>The example below demonstrates how to load a text file, parse it as an RDD of <code>Seq[String]</code>,
+construct a <code>Word2Vec</code> instance and then fit a <code>Word2VecModel</code> with the input data. Finally,
+we display the top 40 synonyms of the specified word. To run the example, first download
+the <a href="http://mattmahoney.net/dc/text8.zip">text8</a> data and extract it to your preferred directory.
+Here we assume the extracted file is <code>text8</code> and in same directory as you run the spark shell.</p>
+
+<div class="codetabs">
+<div data-lang="scala">
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark._</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.rdd._</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.SparkContext._</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.feature.Word2Vec</span>
+
+<span class="k">val</span> <span class="n">input</span> <span class="k">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="o">(</span><span class="s">&quot;text8&quot;</span><span class="o">).</span><span class="n">map</span><span class="o">(</span><span class="n">line</span> <span class="k">=&gt;</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="o">(</span><span class="s">&quot; &quot;</span><span class="o">).</span><span class="n">toSeq</span><span class="o">)</span>
+
+<span class="k">val</span> <span class="n">word2vec</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">Word2Vec</span><span class="o">()</span>
+
+<span class="k">val</span> <span class="n">model</span> <span class="k">=</span> <span class="n">word2vec</span><span class="o">.</span><span class="n">fit</span><span class="o">(</span><span class="n">input</span><span class="o">)</span>
+
+<span class="k">val</span> <span class="n">synonyms</span> <span class="k">=</span> <span class="n">model</span><span class="o">.</span><span class="n">findSynonyms</span><span class="o">(</span><span class="s">&quot;china&quot;</span><span class="o">,</span> <span class="mi">40</span><span class="o">)</span>
+
+<span class="k">for</span><span class="o">((</span><span class="n">synonym</span><span class="o">,</span> <span class="n">cosineSimilarity</span><span class="o">)</span> <span class="k">&lt;-</span> <span class="n">synonyms</span><span class="o">)</span> <span class="o">{</span>
+  <span class="n">println</span><span class="o">(</span><span class="n">s</span><span class="s">&quot;$synonym $cosineSimilarity&quot;</span><span class="o">)</span>
+<span class="o">}</span></code></pre></div>
+
+</div>
+<div data-lang="python">
+
+<div class="highlight"><pre><code class="language-python" data-lang="python"><span class="kn">from</span> <span class="nn">pyspark</span> <span class="kn">import</span> <span class="n">SparkContext</span>
+<span class="kn">from</span> <span class="nn">pyspark.mllib.feature</span> <span class="kn">import</span> <span class="n">Word2Vec</span>
+
+<span class="n">sc</span> <span class="o">=</span> <span class="n">SparkContext</span><span class="p">(</span><span class="n">appName</span><span class="o">=</span><span class="s">&#39;Word2Vec&#39;</span><span class="p">)</span>
+<span class="n">inp</span> <span class="o">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="p">(</span><span class="s">&quot;text8_lines&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">row</span><span class="p">:</span> <span class="n">row</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&quot; &quot;</span><span class="p">))</span>
+
+<span class="n">word2vec</span> <span class="o">=</span> <span class="n">Word2Vec</span><span class="p">()</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">word2vec</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">inp</span><span class="p">)</span>
+
+<span class="n">synonyms</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">findSynonyms</span><span class="p">(</span><span class="s">&#39;china&#39;</span><span class="p">,</span> <span class="mi">40</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">word</span><span class="p">,</span> <span class="n">cosine_distance</span> <span class="ow">in</span> <span class="n">synonyms</span><span class="p">:</span>
+    <span class="k">print</span> <span class="s">&quot;{}: {}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">word</span><span class="p">,</span> <span class="n">cosine_distance</span><span class="p">)</span></code></pre></div>
+
+</div>
+</div>
+
+<h2 id="standardscaler">StandardScaler</h2>
+
+<p>Standardizes features by scaling to unit variance and/or removing the mean using column summary
+statistics on the samples in the training set. This is a very common pre-processing step.</p>
+
+<p>For example, RBF kernel of Support Vector Machines or the L1 and L2 regularized linear models
+typically work better when all features have unit variance and/or zero mean.</p>
+
+<p>Standardization can improve the convergence rate during the optimization process, and also prevents
+against features with very large variances exerting an overly large influence during model training.</p>
+
+<h3 id="model-fitting">Model Fitting</h3>
+
+<p><a href="api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler"><code>StandardScaler</code></a> has the
+following parameters in the constructor:</p>
+
+<ul>
+  <li><code>withMean</code> False by default. Centers the data with mean before scaling. It will build a dense
+output, so this does not work on sparse input and will raise an exception.</li>
+  <li><code>withStd</code> True by default. Scales the data to unit standard deviation.</li>
+</ul>
+
+<p>We provide a <a href="api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler"><code>fit</code></a> method in
+<code>StandardScaler</code> which can take an input of <code>RDD[Vector]</code>, learn the summary statistics, and then
+return a model which can transform the input dataset into unit standard deviation and/or zero mean features
+depending how we configure the <code>StandardScaler</code>.</p>
+
+<p>This model implements <a href="api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer"><code>VectorTransformer</code></a>
+which can apply the standardization on a <code>Vector</code> to produce a transformed <code>Vector</code> or on
+an <code>RDD[Vector]</code> to produce a transformed <code>RDD[Vector]</code>.</p>
+
+<p>Note that if the variance of a feature is zero, it will return default <code>0.0</code> value in the <code>Vector</code>
+for that feature.</p>
+
+<h3 id="example-1">Example</h3>
+
+<p>The example below demonstrates how to load a dataset in libsvm format, and standardize the features
+so that the new features have unit standard deviation and/or zero mean.</p>
+
+<div class="codetabs">
+<div data-lang="scala">
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.SparkContext._</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.feature.StandardScaler</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.linalg.Vectors</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.util.MLUtils</span>
+
+<span class="k">val</span> <span class="n">data</span> <span class="k">=</span> <span class="nc">MLUtils</span><span class="o">.</span><span class="n">loadLibSVMFile</span><span class="o">(</span><span class="n">sc</span><span class="o">,</span> <span class="s">&quot;data/mllib/sample_libsvm_data.txt&quot;</span><span class="o">)</span>
+
+<span class="k">val</span> <span class="n">scaler1</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">StandardScaler</span><span class="o">().</span><span class="n">fit</span><span class="o">(</span><span class="n">data</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">x</span> <span class="k">=&gt;</span> <span class="n">x</span><span class="o">.</span><span class="n">features</span><span class="o">))</span>
+<span class="k">val</span> <span class="n">scaler2</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">StandardScaler</span><span class="o">(</span><span class="n">withMean</span> <span class="k">=</span> <span class="kc">true</span><span class="o">,</span> <span class="n">withStd</span> <span class="k">=</span> <span class="kc">true</span><span class="o">).</span><span class="n">fit</span><span class="o">(</span><span class="n">data</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">x</span> <span class="k">=&gt;</span> <span class="n">x</span><span class="o">.</span><span class="n">features</span><span class="o">))</span>
+<span class="c1">// scaler3 is an identical model to scaler2, and will produce identical transformations</span>
+<span class="k">val</span> <span class="n">scaler3</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">StandardScalerModel</span><span class="o">(</span><span class="n">scaler2</span><span class="o">.</span><span class="n">std</span><span class="o">,</span> <span class="n">scaler2</span><span class="o">.</span><span class="n">mean</span><span class="o">)</span>
+
+<span class="c1">// data1 will be unit variance.</span>
+<span class="k">val</span> <span class="n">data1</span> <span class="k">=</span> <span class="n">data</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">x</span> <span class="k">=&gt;</span> <span class="o">(</span><span class="n">x</span><span class="o">.</span><span class="n">label</span><span class="o">,</span> <span class="n">scaler1</span><span class="o">.</span><span class="n">transform</span><span class="o">(</span><span class="n">x</span><span class="o">.</span><span class="n">features</span><span class="o">)))</span>
+
+<span class="c1">// Without converting the features into dense vectors, transformation with zero mean will raise</span>
+<span class="c1">// exception on sparse vector.</span>
+<span class="c1">// data2 will be unit variance and zero mean.</span>
+<span class="k">val</span> <span class="n">data2</span> <span class="k">=</span> <span class="n">data</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">x</span> <span class="k">=&gt;</span> <span class="o">(</span><span class="n">x</span><span class="o">.</span><span class="n">label</span><span class="o">,</span> <span class="n">scaler2</span><span class="o">.</span><span class="n">transform</span><span class="o">(</span><span class="nc">Vectors</span><span class="o">.</span><span class="n">dense</span><span class="o">(</span><span class="n">x</span><span class="o">.</span><span class="n">features</span><span class="o">.</span><span class="n">toArray</span><span class="o">))))</span></code></pre></div>
+
+</div>
+
+<div data-lang="python">
+
+<div class="highlight"><pre><code class="language-python" data-lang="python"><span class="kn">from</span> <span class="nn">pyspark.mllib.util</span> <span class="kn">import</span> <span class="n">MLUtils</span>
+<span class="kn">from</span> <span class="nn">pyspark.mllib.linalg</span> <span class="kn">import</span> <span class="n">Vectors</span>
+<span class="kn">from</span> <span class="nn">pyspark.mllib.feature</span> <span class="kn">import</span> <span class="n">StandardScaler</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="n">MLUtils</span><span class="o">.</span><span class="n">loadLibSVMFile</span><span class="p">(</span><span class="n">sc</span><span class="p">,</span> <span class="s">&quot;data/mllib/sample_libsvm_data.txt&quot;</span><span class="p">)</span>
+<span class="n">label</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">label</span><span class="p">)</span>
+<span class="n">features</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">features</span><span class="p">)</span>
+
+<span class="n">scaler1</span> <span class="o">=</span> <span class="n">StandardScaler</span><span class="p">()</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
+<span class="n">scaler2</span> <span class="o">=</span> <span class="n">StandardScaler</span><span class="p">(</span><span class="n">withMean</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">withStd</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
+<span class="c"># scaler3 is an identical model to scaler2, and will produce identical transformations</span>
+<span class="n">scaler3</span> <span class="o">=</span> <span class="n">StandardScalerModel</span><span class="p">(</span><span class="n">scaler2</span><span class="o">.</span><span class="n">std</span><span class="p">,</span> <span class="n">scaler2</span><span class="o">.</span><span class="n">mean</span><span class="p">)</span>
+
+
+<span class="c"># data1 will be unit variance.</span>
+<span class="n">data1</span> <span class="o">=</span> <span class="n">label</span><span class="o">.</span><span class="n">zip</span><span class="p">(</span><span class="n">scaler1</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">features</span><span class="p">))</span>
+
+<span class="c"># Without converting the features into dense vectors, transformation with zero mean will raise</span>
+<span class="c"># exception on sparse vector.</span>
+<span class="c"># data2 will be unit variance and zero mean.</span>
+<span class="n">data2</span> <span class="o">=</span> <span class="n">label</span><span class="o">.</span><span class="n">zip</span><span class="p">(</span><span class="n">scaler1</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">features</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">Vectors</span><span class="o">.</span><span class="n">dense</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">toArray</span><span class="p">()))))</span></code></pre></div>
+
+</div>
+</div>
+
+<h2 id="normalizer">Normalizer</h2>
+
+<p>Normalizer scales individual samples to have unit $L^p$ norm. This is a common operation for text
+classification or clustering. For example, the dot product of two $L^2$ normalized TF-IDF vectors
+is the cosine similarity of the vectors.</p>
+
+<p><a href="api/scala/index.html#org.apache.spark.mllib.feature.Normalizer"><code>Normalizer</code></a> has the following
+parameter in the constructor:</p>
+
+<ul>
+  <li><code>p</code> Normalization in $L^p$ space, $p = 2$ by default.</li>
+</ul>
+
+<p><code>Normalizer</code> implements <a href="api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer"><code>VectorTransformer</code></a>
+which can apply the normalization on a <code>Vector</code> to produce a transformed <code>Vector</code> or on
+an <code>RDD[Vector]</code> to produce a transformed <code>RDD[Vector]</code>.</p>
+
+<p>Note that if the norm of the input is zero, it will return the input vector.</p>
+
+<h3 id="example-2">Example</h3>
+
+<p>The example below demonstrates how to load a dataset in libsvm format, and normalizes the features
+with $L^2$ norm, and $L^\infty$ norm.</p>
+
+<div class="codetabs">
+<div data-lang="scala">
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.SparkContext._</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.feature.Normalizer</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.linalg.Vectors</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.util.MLUtils</span>
+
+<span class="k">val</span> <span class="n">data</span> <span class="k">=</span> <span class="nc">MLUtils</span><span class="o">.</span><span class="n">loadLibSVMFile</span><span class="o">(</span><span class="n">sc</span><span class="o">,</span> <span class="s">&quot;data/mllib/sample_libsvm_data.txt&quot;</span><span class="o">)</span>
+
+<span class="k">val</span> <span class="n">normalizer1</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">Normalizer</span><span class="o">()</span>
+<span class="k">val</span> <span class="n">normalizer2</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">Normalizer</span><span class="o">(</span><span class="n">p</span> <span class="k">=</span> <span class="nc">Double</span><span class="o">.</span><span class="nc">PositiveInfinity</span><span class="o">)</span>
+
+<span class="c1">// Each sample in data1 will be normalized using $L^2$ norm.</span>
+<span class="k">val</span> <span class="n">data1</span> <span class="k">=</span> <span class="n">data</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">x</span> <span class="k">=&gt;</span> <span class="o">(</span><span class="n">x</span><span class="o">.</span><span class="n">label</span><span class="o">,</span> <span class="n">normalizer1</span><span class="o">.</span><span class="n">transform</span><span class="o">(</span><span class="n">x</span><span class="o">.</span><span class="n">features</span><span class="o">)))</span>
+
+<span class="c1">// Each sample in data2 will be normalized using $L^\infty$ norm.</span>
+<span class="k">val</span> <span class="n">data2</span> <span class="k">=</span> <span class="n">data</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">x</span> <span class="k">=&gt;</span> <span class="o">(</span><span class="n">x</span><span class="o">.</span><span class="n">label</span><span class="o">,</span> <span class="n">normalizer2</span><span class="o">.</span><span class="n">transform</span><span class="o">(</span><span class="n">x</span><span class="o">.</span><span class="n">features</span><span class="o">)))</span></code></pre></div>
+
+</div>
+
+<div data-lang="python">
+
+<div class="highlight"><pre><code class="language-python" data-lang="python"><span class="kn">from</span> <span class="nn">pyspark.mllib.util</span> <span class="kn">import</span> <span class="n">MLUtils</span>
+<span class="kn">from</span> <span class="nn">pyspark.mllib.linalg</span> <span class="kn">import</span> <span class="n">Vectors</span>
+<span class="kn">from</span> <span class="nn">pyspark.mllib.feature</span> <span class="kn">import</span> <span class="n">Normalizer</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="n">MLUtils</span><span class="o">.</span><span class="n">loadLibSVMFile</span><span class="p">(</span><span class="n">sc</span><span class="p">,</span> <span class="s">&quot;data/mllib/sample_libsvm_data.txt&quot;</span><span class="p">)</span>
+<span class="n">labels</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">label</span><span class="p">)</span>
+<span class="n">features</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">features</span><span class="p">)</span>
+
+<span class="n">normalizer1</span> <span class="o">=</span> <span class="n">Normalizer</span><span class="p">()</span>
+<span class="n">normalizer2</span> <span class="o">=</span> <span class="n">Normalizer</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="s">&quot;inf&quot;</span><span class="p">))</span>
+
+<span class="c"># Each sample in data1 will be normalized using $L^2$ norm.</span>
+<span class="n">data1</span> <span class="o">=</span> <span class="n">labels</span><span class="o">.</span><span class="n">zip</span><span class="p">(</span><span class="n">normalizer1</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">features</span><span class="p">))</span>
+
+<span class="c"># Each sample in data2 will be normalized using $L^\infty$ norm.</span>
+<span class="n">data2</span> <span class="o">=</span> <span class="n">labels</span><span class="o">.</span><span class="n">zip</span><span class="p">(</span><span class="n">normalizer2</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">features</span><span class="p">))</span></code></pre></div>
+
+</div>
+</div>
+
+<h2 id="feature-selection">Feature selection</h2>
+<p><a href="http://en.wikipedia.org/wiki/Feature_selection">Feature selection</a> allows selecting the most relevant features for use in model construction. Feature selection reduces the size of the vector space and, in turn, the complexity of any subsequent operation with vectors. The number of features to select can be tuned using a held-out validation set.</p>
+
+<h3 id="chisqselector">ChiSqSelector</h3>
+<p><a href="api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector"><code>ChiSqSelector</code></a> stands for Chi-Squared feature selection. It operates on labeled data with categorical features. <code>ChiSqSelector</code> orders features based on a Chi-Squared test of independence from the class, and then filters (selects) the top features which are most closely related to the label.</p>
+
+<h4 id="model-fitting-1">Model Fitting</h4>
+
+<p><a href="api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector"><code>ChiSqSelector</code></a> has the
+following parameters in the constructor:</p>
+
+<ul>
+  <li><code>numTopFeatures</code> number of top features that the selector will select (filter).</li>
+</ul>
+
+<p>We provide a <a href="api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector"><code>fit</code></a> method in
+<code>ChiSqSelector</code> which can take an input of <code>RDD[LabeledPoint]</code> with categorical features, learn the summary statistics, and then
+return a <code>ChiSqSelectorModel</code> which can transform an input dataset into the reduced feature space.</p>
+
+<p>This model implements <a href="api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer"><code>VectorTransformer</code></a>
+which can apply the Chi-Squared feature selection on a <code>Vector</code> to produce a reduced <code>Vector</code> or on
+an <code>RDD[Vector]</code> to produce a reduced <code>RDD[Vector]</code>.</p>
+
+<p>Note that the user can also construct a <code>ChiSqSelectorModel</code> by hand by providing an array of selected feature indices (which must be sorted in ascending order).</p>
+
+<h4 id="example-3">Example</h4>
+
+<p>The following example shows the basic use of ChiSqSelector.</p>
+
+<div class="codetabs">
+<div data-lang="scala">
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.SparkContext._</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.linalg.Vectors</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.regression.LabeledPoint</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.util.MLUtils</span>
+
+<span class="c1">// Load some data in libsvm format</span>
+<span class="k">val</span> <span class="n">data</span> <span class="k">=</span> <span class="nc">MLUtils</span><span class="o">.</span><span class="n">loadLibSVMFile</span><span class="o">(</span><span class="n">sc</span><span class="o">,</span> <span class="s">&quot;data/mllib/sample_libsvm_data.txt&quot;</span><span class="o">)</span>
+<span class="c1">// Discretize data in 16 equal bins since ChiSqSelector requires categorical features</span>
+<span class="k">val</span> <span class="n">discretizedData</span> <span class="k">=</span> <span class="n">data</span><span class="o">.</span><span class="n">map</span> <span class="o">{</span> <span class="n">lp</span> <span class="k">=&gt;</span>
+  <span class="nc">LabeledPoint</span><span class="o">(</span><span class="n">lp</span><span class="o">.</span><span class="n">label</span><span class="o">,</span> <span class="nc">Vectors</span><span class="o">.</span><span class="n">dense</span><span class="o">(</span><span class="n">lp</span><span class="o">.</span><span class="n">features</span><span class="o">.</span><span class="n">toArray</span><span class="o">.</span><span class="n">map</span> <span class="o">{</span> <span class="n">x</span> <span class="k">=&gt;</span> <span class="n">x</span> <span class="o">/</span> <span class="mi">16</span> <span class="o">}</span> <span class="o">)</span> <span class="o">)</span>
+<span class="o">}</span>
+<span class="c1">// Create ChiSqSelector that will select 50 features</span>
+<span class="k">val</span> <span class="n">selector</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">ChiSqSelector</span><span class="o">(</span><span class="mi">50</span><span class="o">)</span>
+<span class="c1">// Create ChiSqSelector model (selecting features)</span>
+<span class="k">val</span> <span class="n">transformer</span> <span class="k">=</span> <span class="n">selector</span><span class="o">.</span><span class="n">fit</span><span class="o">(</span><span class="n">discretizedData</span><span class="o">)</span>
+<span class="c1">// Filter the top 50 features from each feature vector</span>
+<span class="k">val</span> <span class="n">filteredData</span> <span class="k">=</span> <span class="n">discretizedData</span><span class="o">.</span><span class="n">map</span> <span class="o">{</span> <span class="n">lp</span> <span class="k">=&gt;</span> 
+  <span class="nc">LabeledPoint</span><span class="o">(</span><span class="n">lp</span><span class="o">.</span><span class="n">label</span><span class="o">,</span> <span class="n">transformer</span><span class="o">.</span><span class="n">transform</span><span class="o">(</span><span class="n">lp</span><span class="o">.</span><span class="n">features</span><span class="o">))</span> 
+<span class="o">}</span></code></pre></div>
+
+</div>
+
+<div data-lang="java">
+
+<div class="highlight"><pre><code class="language-java" data-lang="java"><span class="kn">import</span> <span class="nn">org.apache.spark.SparkConf</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.api.java.JavaRDD</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.api.java.JavaSparkContext</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.api.java.function.Function</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.feature.ChiSqSelector</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.feature.ChiSqSelectorModel</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.linalg.Vectors</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.regression.LabeledPoint</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.util.MLUtils</span><span class="o">;</span>
+
+<span class="n">SparkConf</span> <span class="n">sparkConf</span> <span class="o">=</span> <span class="k">new</span> <span class="nf">SparkConf</span><span class="o">().</span><span class="na">setAppName</span><span class="o">(</span><span class="s">&quot;JavaChiSqSelector&quot;</span><span class="o">);</span>
+<span class="n">JavaSparkContext</span> <span class="n">sc</span> <span class="o">=</span> <span class="k">new</span> <span class="nf">JavaSparkContext</span><span class="o">(</span><span class="n">sparkConf</span><span class="o">);</span>
+<span class="n">JavaRDD</span><span class="o">&lt;</span><span class="n">LabeledPoint</span><span class="o">&gt;</span> <span class="n">points</span> <span class="o">=</span> <span class="n">MLUtils</span><span class="o">.</span><span class="na">loadLibSVMFile</span><span class="o">(</span><span class="n">sc</span><span class="o">.</span><span class="na">sc</span><span class="o">(),</span>
+    <span class="s">&quot;data/mllib/sample_libsvm_data.txt&quot;</span><span class="o">).</span><span class="na">toJavaRDD</span><span class="o">().</span><span class="na">cache</span><span class="o">();</span>
+
+<span class="c1">// Discretize data in 16 equal bins since ChiSqSelector requires categorical features</span>
+<span class="n">JavaRDD</span><span class="o">&lt;</span><span class="n">LabeledPoint</span><span class="o">&gt;</span> <span class="n">discretizedData</span> <span class="o">=</span> <span class="n">points</span><span class="o">.</span><span class="na">map</span><span class="o">(</span>
+    <span class="k">new</span> <span class="n">Function</span><span class="o">&lt;</span><span class="n">LabeledPoint</span><span class="o">,</span> <span class="n">LabeledPoint</span><span class="o">&gt;()</span> <span class="o">{</span>
+      <span class="nd">@Override</span>
+      <span class="kd">public</span> <span class="n">LabeledPoint</span> <span class="nf">call</span><span class="o">(</span><span class="n">LabeledPoint</span> <span class="n">lp</span><span class="o">)</span> <span class="o">{</span>
+        <span class="kd">final</span> <span class="kt">double</span><span class="o">[]</span> <span class="n">discretizedFeatures</span> <span class="o">=</span> <span class="k">new</span> <span class="kt">double</span><span class="o">[</span><span class="n">lp</span><span class="o">.</span><span class="na">features</span><span class="o">().</span><span class="na">size</span><span class="o">()];</span>
+        <span class="k">for</span> <span class="o">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="o">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">lp</span><span class="o">.</span><span class="na">features</span><span class="o">().</span><span class="na">size</span><span class="o">();</span> <span class="o">++</span><span class="n">i</span><span class="o">)</span> <span class="o">{</span>
+          <span class="n">discretizedFeatures</span><span class="o">[</span><span class="n">i</span><span class="o">]</span> <span class="o">=</span> <span class="n">lp</span><span class="o">.</span><span class="na">features</span><span class="o">().</span><span class="na">apply</span><span class="o">(</span><span class="n">i</span><span class="o">)</span> <span class="o">/</span> <span class="mi">16</span><span class="o">;</span>
+        <span class="o">}</span>
+        <span class="k">return</span> <span class="k">new</span> <span class="nf">LabeledPoint</span><span class="o">(</span><span class="n">lp</span><span class="o">.</span><span class="na">label</span><span class="o">(),</span> <span class="n">Vectors</span><span class="o">.</span><span class="na">dense</span><span class="o">(</span><span class="n">discretizedFeatures</span><span class="o">));</span>
+      <span class="o">}</span>
+    <span class="o">});</span>
+
+<span class="c1">// Create ChiSqSelector that will select 50 features</span>
+<span class="n">ChiSqSelector</span> <span class="n">selector</span> <span class="o">=</span> <span class="k">new</span> <span class="nf">ChiSqSelector</span><span class="o">(</span><span class="mi">50</span><span class="o">);</span>
+<span class="c1">// Create ChiSqSelector model (selecting features)</span>
+<span class="kd">final</span> <span class="n">ChiSqSelectorModel</span> <span class="n">transformer</span> <span class="o">=</span> <span class="n">selector</span><span class="o">.</span><span class="na">fit</span><span class="o">(</span><span class="n">discretizedData</span><span class="o">.</span><span class="na">rdd</span><span class="o">());</span>
+<span class="c1">// Filter the top 50 features from each feature vector</span>
+<span class="n">JavaRDD</span><span class="o">&lt;</span><span class="n">LabeledPoint</span><span class="o">&gt;</span> <span class="n">filteredData</span> <span class="o">=</span> <span class="n">discretizedData</span><span class="o">.</span><span class="na">map</span><span class="o">(</span>
+    <span class="k">new</span> <span class="n">Function</span><span class="o">&lt;</span><span class="n">LabeledPoint</span><span class="o">,</span> <span class="n">LabeledPoint</span><span class="o">&gt;()</span> <span class="o">{</span>
+      <span class="nd">@Override</span>
+      <span class="kd">public</span> <span class="n">LabeledPoint</span> <span class="nf">call</span><span class="o">(</span><span class="n">LabeledPoint</span> <span class="n">lp</span><span class="o">)</span> <span class="o">{</span>
+        <span class="k">return</span> <span class="k">new</span> <span class="nf">LabeledPoint</span><span class="o">(</span><span class="n">lp</span><span class="o">.</span><span class="na">label</span><span class="o">(),</span> <span class="n">transformer</span><span class="o">.</span><span class="na">transform</span><span class="o">(</span><span class="n">lp</span><span class="o">.</span><span class="na">features</span><span class="o">()));</span>
+      <span class="o">}</span>
+    <span class="o">}</span>
+<span class="o">);</span>
+
+<span class="n">sc</span><span class="o">.</span><span class="na">stop</span><span class="o">();</span></code></pre></div>
+
+</div>
+</div>
+
+<h2 id="elementwiseproduct">ElementwiseProduct</h2>
+
+<p>ElementwiseProduct multiplies each input vector by a provided “weight” vector, using element-wise multiplication. In other words, it scales each column of the dataset by a scalar multiplier.  This represents the <a href="https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29">Hadamard product</a> between the input vector, <code>v</code> and transforming vector, <code>w</code>, to yield a result vector.</p>
+
+<p><code>\[ \begin{pmatrix}
+v_1 \\
+\vdots \\
+v_N
+\end{pmatrix} \circ \begin{pmatrix}
+                    w_1 \\
+                    \vdots \\
+                    w_N
+                    \end{pmatrix}
+= \begin{pmatrix}
+  v_1 w_1 \\
+  \vdots \\
+  v_N w_N
+  \end{pmatrix}
+\]</code></p>
+
+<p><a href="api/scala/index.html#org.apache.spark.mllib.feature.ElementwiseProduct"><code>ElementwiseProduct</code></a> has the following parameter in the constructor:</p>
+
+<ul>
+  <li><code>w</code>: the transforming vector.</li>
+</ul>
+
+<p><code>ElementwiseProduct</code> implements <a href="api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer"><code>VectorTransformer</code></a> which can apply the weighting on a <code>Vector</code> to produce a transformed <code>Vector</code> or on an <code>RDD[Vector]</code> to produce a transformed <code>RDD[Vector]</code>.</p>
+
+<h3 id="example-4">Example</h3>
+
+<p>This example below demonstrates how to load a simple vectors file, extract a set of vectors, then transform those vectors using a transforming vector value.</p>
+
+<div class="codetabs">
+<div data-lang="scala">
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.SparkContext._</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.feature.ElementwiseProduct</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.linalg.Vectors</span>
+
+<span class="c1">// Load and parse the data:</span>
+<span class="k">val</span> <span class="n">data</span> <span class="k">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="o">(</span><span class="s">&quot;data/mllib/kmeans_data.txt&quot;</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">parsedData</span> <span class="k">=</span> <span class="n">data</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">s</span> <span class="k">=&gt;</span> <span class="nc">Vectors</span><span class="o">.</span><span class="n">dense</span><span class="o">(</span><span class="n">s</span><span class="o">.</span><span class="n">split</span><span class="o">(</span><span class="sc">&#39; &#39;</span><span class="o">).</span><span class="n">map</span><span class="o">(</span><span class="k">_</span><span class="o">.</span><span class="n">toDouble</span><span class="o">)))</span>
+
+<span class="k">val</span> <span class="n">transformingVector</span> <span class="k">=</span> <span class="nc">Vectors</span><span class="o">.</span><span class="n">dense</span><span class="o">(</span><span class="mf">0.0</span><span class="o">,</span> <span class="mf">1.0</span><span class="o">,</span> <span class="mf">2.0</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">transformer</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">ElementwiseProduct</span><span class="o">(</span><span class="n">transformingVector</span><span class="o">)</span>
+
+<span class="c1">// Batch transform and per-row transform give the same results:</span>
+<span class="k">val</span> <span class="n">transformedData</span> <span class="k">=</span> <span class="n">transformer</span><span class="o">.</span><span class="n">transform</span><span class="o">(</span><span class="n">parsedData</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">transformedData2</span> <span class="k">=</span> <span class="n">parsedData</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">x</span> <span class="k">=&gt;</span> <span class="n">transformer</span><span class="o">.</span><span class="n">transform</span><span class="o">(</span><span class="n">x</span><span class="o">))</span></code></pre></div>
+
+</div>
+</div>
+
+<h2 id="pca">PCA</h2>
+
+<p>A feature transformer that projects vectors to a low-dimensional space using PCA.
+Details you can read at <a href="mllib-dimensionality-reduction.html">dimensionality reduction</a>.</p>
+
+<h3 id="example-5">Example</h3>
+
+<p>The following code demonstrates how to compute principal components on a <code>Vector</code>
+and use them to project the vectors into a low-dimensional space while keeping associated labels
+for calculation a <a href="(mllib-linear-methods.html)">Linear Regression</a></p>
+
+<div class="codetabs">
+<div data-lang="scala">
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.mllib.regression.LinearRegressionWithSGD</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.regression.LabeledPoint</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.linalg.Vectors</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.feature.PCA</span>
+
+<span class="k">val</span> <span class="n">data</span> <span class="k">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="o">(</span><span class="s">&quot;data/mllib/ridge-data/lpsa.data&quot;</span><span class="o">).</span><span class="n">map</span> <span class="o">{</span> <span class="n">line</span> <span class="k">=&gt;</span>
+  <span class="k">val</span> <span class="n">parts</span> <span class="k">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="o">(</span><span class="sc">&#39;,&#39;</span><span class="o">)</span>
+  <span class="nc">LabeledPoint</span><span class="o">(</span><span class="n">parts</span><span class="o">(</span><span class="mi">0</span><span class="o">).</span><span class="n">toDouble</span><span class="o">,</span> <span class="nc">Vectors</span><span class="o">.</span><span class="n">dense</span><span class="o">(</span><span class="n">parts</span><span class="o">(</span><span class="mi">1</span><span class="o">).</span><span class="n">split</span><span class="o">(</span><span class="sc">&#39; &#39;</span><span class="o">).</span><span class="n">map</span><span class="o">(</span><span class="k">_</span><span class="o">.</span><span class="n">toDouble</span><span class="o">)))</span>
+<span class="o">}.</span><span class="n">cache</span><span class="o">()</span>
+
+<span class="k">val</span> <span class="n">splits</span> <span class="k">=</span> <span class="n">data</span><span class="o">.</span><span class="n">randomSplit</span><span class="o">(</span><span class="nc">Array</span><span class="o">(</span><span class="mf">0.6</span><span class="o">,</span> <span class="mf">0.4</span><span class="o">),</span> <span class="n">seed</span> <span class="k">=</span> <span class="mi">11L</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">training</span> <span class="k">=</span> <span class="n">splits</span><span class="o">(</span><span class="mi">0</span><span class="o">).</span><span class="n">cache</span><span class="o">()</span>
+<span class="k">val</span> <span class="n">test</span> <span class="k">=</span> <span class="n">splits</span><span class="o">(</span><span class="mi">1</span><span class="o">)</span>
+
+<span class="k">val</span> <span class="n">pca</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">PCA</span><span class="o">(</span><span class="n">training</span><span class="o">.</span><span class="n">first</span><span class="o">().</span><span class="n">features</span><span class="o">.</span><span class="n">size</span><span class="o">/</span><span class="mi">2</span><span class="o">).</span><span class="n">fit</span><span class="o">(</span><span class="n">data</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="k">_</span><span class="o">.</span><span class="n">features</span><span class="o">))</span>
+<span class="k">val</span> <span class="n">training_pca</span> <span class="k">=</span> <span class="n">training</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">p</span> <span class="k">=&gt;</span> <span class="n">p</span><span class="o">.</span><span class="n">copy</span><span class="o">(</span><span class="n">features</span> <span class="k">=</span> <span class="n">pca</span><span class="o">.</span><span class="n">transform</span><span class="o">(</span><span class="n">p</span><span class="o">.</span><span class="n">features</span><span class="o">)))</span>
+<span class="k">val</span> <span class="n">test_pca</span> <span class="k">=</span> <span class="n">test</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">p</span> <span class="k">=&gt;</span> <span class="n">p</span><span class="o">.</span><span class="n">copy</span><span class="o">(</span><span class="n">features</span> <span class="k">=</span> <span class="n">pca</span><span class="o">.</span><span class="n">transform</span><span class="o">(</span><span class="n">p</span><span class="o">.</span><span class="n">features</span><span class="o">)))</span>
+
+<span class="k">val</span> <span class="n">numIterations</span> <span class="k">=</span> <span class="mi">100</span>
+<span class="k">val</span> <span class="n">model</span> <span class="k">=</span> <span class="nc">LinearRegressionWithSGD</span><span class="o">.</span><span class="n">train</span><span class="o">(</span><span class="n">training</span><span class="o">,</span> <span class="n">numIterations</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">model_pca</span> <span class="k">=</span> <span class="nc">LinearRegressionWithSGD</span><span class="o">.</span><span class="n">train</span><span class="o">(</span><span class="n">training_pca</span><span class="o">,</span> <span class="n">numIterations</span><span class="o">)</span>
+
+<span class="k">val</span> <span class="n">valuesAndPreds</span> <span class="k">=</span> <span class="n">test</span><span class="o">.</span><span class="n">map</span> <span class="o">{</span> <span class="n">point</span> <span class="k">=&gt;</span>
+  <span class="k">val</span> <span class="n">score</span> <span class="k">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="o">(</span><span class="n">point</span><span class="o">.</span><span class="n">features</span><span class="o">)</span>
+  <span class="o">(</span><span class="n">score</span><span class="o">,</span> <span class="n">point</span><span class="o">.</span><span class="n">label</span><span class="o">)</span>
+<span class="o">}</span>
+
+<span class="k">val</span> <span class="n">valuesAndPreds_pca</span> <span class="k">=</span> <span class="n">test_pca</span><span class="o">.</span><span class="n">map</span> <span class="o">{</span> <span class="n">point</span> <span class="k">=&gt;</span>
+  <span class="k">val</span> <span class="n">score</span> <span class="k">=</span> <span class="n">model_pca</span><span class="o">.</span><span class="n">predict</span><span class="o">(</span><span class="n">point</span><span class="o">.</span><span class="n">features</span><span class="o">)</span>
+  <span class="o">(</span><span class="n">score</span><span class="o">,</span> <span class="n">point</span><span class="o">.</span><span class="n">label</span><span class="o">)</span>
+<span class="o">}</span>
+
+<span class="k">val</span> <span class="nc">MSE</span> <span class="k">=</span> <span class="n">valuesAndPreds</span><span class="o">.</span><span class="n">map</span><span class="o">{</span><span class="k">case</span><span class="o">(</span><span class="n">v</span><span class="o">,</span> <span class="n">p</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">math</span><span class="o">.</span><span class="n">pow</span><span class="o">((</span><span class="n">v</span> <span class="o">-</span> <span class="n">p</span><span class="o">),</span> <span class="mi">2</span><span class="o">)}.</span><span class="n">mean</span><span class="o">()</span>
+<span class="k">val</span> <span class="nc">MSE_pca</span> <span class="k">=</span> <span class="n">valuesAndPreds_pca</span><span class="o">.</span><span class="n">map</span><span class="o">{</span><span class="k">case</span><span class="o">(</span><span class="n">v</span><span class="o">,</span> <span class="n">p</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">math</span><span class="o">.</span><span class="n">pow</span><span class="o">((</span><span class="n">v</span> <span class="o">-</span> <span class="n">p</span><span class="o">),</span> <span class="mi">2</span><span class="o">)}.</span><span class="n">mean</span><span class="o">()</span>
+
+<span class="n">println</span><span class="o">(</span><span class="s">&quot;Mean Squared Error = &quot;</span> <span class="o">+</span> <span class="nc">MSE</span><span class="o">)</span>
+<span class="n">println</span><span class="o">(</span><span class="s">&quot;PCA Mean Squared Error = &quot;</span> <span class="o">+</span> <span class="nc">MSE_pca</span><span class="o">)</span></code></pre></div>
+
+</div>
+</div>

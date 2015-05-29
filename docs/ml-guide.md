@@ -159,21 +159,18 @@ There are now several algorithms in the Pipelines API which are not in the lower
 
 ## Linear Methods with Elastic Net Regularization
 
-[Elastic net](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf) is a hybrid of L1 and L2 regularization. Mathematically it is defined as a linear combination of the L1-norm and the L2-norm:
+In MLlib, we implement popular linear methods such as logistic regression and linear least squares with L1 or L2 regularization. Refer to [the linear methods section](mllib-guide.html) for details. In `spark.ml`, we add the [Elastic net](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf), which is a hybrid of L1 and L2 regularization. Mathematically it is defined as a linear combination of the L1-norm and the L2-norm:
 `\[
 \alpha \lambda_1\|v\|_1 + (1-\alpha) \frac{\lambda_2}{2}\|v\|_2, \alpha \in [0, 1].
 \]`
-By setting $\alpha$ properly, it contains both L1 and L2 regularization as special cases. We implement both linear regression and logistict regression with elastic net regularization.
+By setting $\alpha$ properly, it contains both L1 and L2 regularization as special cases. We implement both linear regression and logistic regression with elastic net regularization in `spark.ml`.
 
 **Examples**
 
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-The following code snippet illustrates how to load a sample dataset, execute a
-training algorithm on this training data using a static method in the algorithm
-object, and make predictions with the resulting model to compute the training
-error.
+
 
 {% highlight scala %}
 
@@ -182,11 +179,6 @@ error.
 </div>
 
 <div data-lang="java" markdown="1">
-All of MLlib's methods use Java-friendly types, so you can import and call them there the same
-way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
-Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
-calling `.rdd()` on your `JavaRDD` object. A self-contained application example
-that is equivalent to the provided example in Scala is given bellow:
 
 {% highlight java %}
 
@@ -194,10 +186,7 @@ that is equivalent to the provided example in Scala is given bellow:
 </div>
 
 <div data-lang="python" markdown="1">
-The following example shows how to load a sample dataset, build Logistic Regression model,
-and make predictions with the resulting model to compute the training error.
 
-Note that the Python API does not yet support model save/load but will in the future.
 
 {% highlight python %}
 

@@ -1,0 +1,178 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>feature - org.apache.spark.ml.feature</title>
+          <meta name="description" content="feature - org.apache.spark.ml.feature" />
+          <meta name="keywords" content="feature org.apache.spark.ml.feature" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../../../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../../../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../../../../index.html';
+            var hash = 'org.apache.spark.ml.feature.package';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="value">
+      <div id="definition">
+        <img src="../../../../../lib/package_big.png" />
+        <p id="owner"><a href="../../../../package.html" class="extype" name="org">org</a>.<a href="../../../package.html" class="extype" name="org.apache">apache</a>.<a href="../../package.html" class="extype" name="org.apache.spark">spark</a>.<a href="../package.html" class="extype" name="org.apache.spark.ml">ml</a></p>
+        <h1>feature</h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <span class="name">feature</span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        
+        
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        
+
+        <div id="types" class="types members">
+              <h3>Type Members</h3>
+              <ol><li name="org.apache.spark.ml.feature.HashingTF" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="HashingTFextendsUnaryTransformer[Iterable[_],org.apache.spark.mllib.linalg.Vector,org.apache.spark.ml.feature.HashingTF]"></a>
+      <a id="HashingTF:HashingTF"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="HashingTF.html"><span class="name">HashingTF</span></a><span class="result"> extends <span class="extype" name="org.apache.spark.ml.UnaryTransformer">UnaryTransformer</span>[<span class="extype" name="scala.Iterable">Iterable</span>[_], <a href="../../mllib/linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>, <a href="HashingTF.html" class="extype" name="org.apache.spark.ml.feature.HashingTF">HashingTF</a>]</span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: AlphaComponent ::
+Maps a sequence of terms to their term frequencies using the hashing trick.</p>
+    </li><li name="org.apache.spark.ml.feature.Normalizer" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="NormalizerextendsUnaryTransformer[org.apache.spark.mllib.linalg.Vector,org.apache.spark.mllib.linalg.Vector,org.apache.spark.ml.feature.Normalizer]"></a>
+      <a id="Normalizer:Normalizer"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="Normalizer.html"><span class="name">Normalizer</span></a><span class="result"> extends <span class="extype" name="org.apache.spark.ml.UnaryTransformer">UnaryTransformer</span>[<a href="../../mllib/linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>, <a href="../../mllib/linalg/Vector.html" class="extype" name="org.apache.spark.mllib.linalg.Vector">Vector</a>, <a href="Normalizer.html" class="extype" name="org.apache.spark.ml.feature.Normalizer">Normalizer</a>]</span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: AlphaComponent ::
+Normalize a vector to have unit norm using the given p-norm.</p>
+    </li><li name="org.apache.spark.ml.feature.RegexTokenizer" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="RegexTokenizerextendsUnaryTransformer[String,Seq[String],org.apache.spark.ml.feature.RegexTokenizer]"></a>
+      <a id="RegexTokenizer:RegexTokenizer"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="RegexTokenizer.html"><span class="name">RegexTokenizer</span></a><span class="result"> extends <span class="extype" name="org.apache.spark.ml.UnaryTransformer">UnaryTransformer</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Seq">Seq</span>[<span class="extype" name="scala.Predef.String">String</span>], <a href="RegexTokenizer.html" class="extype" name="org.apache.spark.ml.feature.RegexTokenizer">RegexTokenizer</a>]</span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: AlphaComponent ::
+A regex based tokenizer that extracts tokens either by repeatedly matching the regex(default)
+or using it to split the text (set matching to false).</p>
+    </li><li name="org.apache.spark.ml.feature.StandardScaler" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="StandardScalerextendsEstimator[org.apache.spark.ml.feature.StandardScalerModel]withStandardScalerParams"></a>
+      <a id="StandardScaler:StandardScaler"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="StandardScaler.html"><span class="name">StandardScaler</span></a><span class="result"> extends <a href="../Estimator.html" class="extype" name="org.apache.spark.ml.Estimator">Estimator</a>[<a href="StandardScalerModel.html" class="extype" name="org.apache.spark.ml.feature.StandardScalerModel">StandardScalerModel</a>] with <span class="extype" name="org.apache.spark.ml.feature.StandardScalerParams">StandardScalerParams</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: AlphaComponent ::
+Standardizes features by removing the mean and scaling to unit variance using column summary
+statistics on the samples in the training set.</p>
+    </li><li name="org.apache.spark.ml.feature.StandardScalerModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="StandardScalerModelextendsModel[org.apache.spark.ml.feature.StandardScalerModel]withStandardScalerParams"></a>
+      <a id="StandardScalerModel:StandardScalerModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="StandardScalerModel.html"><span class="name">StandardScalerModel</span></a><span class="result"> extends <a href="../Model.html" class="extype" name="org.apache.spark.ml.Model">Model</a>[<a href="StandardScalerModel.html" class="extype" name="org.apache.spark.ml.feature.StandardScalerModel">StandardScalerModel</a>] with <span class="extype" name="org.apache.spark.ml.feature.StandardScalerParams">StandardScalerParams</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: AlphaComponent ::
+Model fitted by <a href="StandardScaler.html" class="extype" name="org.apache.spark.ml.feature.StandardScaler">StandardScaler</a>.</p>
+    </li><li name="org.apache.spark.ml.feature.Tokenizer" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="TokenizerextendsUnaryTransformer[String,Seq[String],org.apache.spark.ml.feature.Tokenizer]"></a>
+      <a id="Tokenizer:Tokenizer"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="Tokenizer.html"><span class="name">Tokenizer</span></a><span class="result"> extends <span class="extype" name="org.apache.spark.ml.UnaryTransformer">UnaryTransformer</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Seq">Seq</span>[<span class="extype" name="scala.Predef.String">String</span>], <a href="Tokenizer.html" class="extype" name="org.apache.spark.ml.feature.Tokenizer">Tokenizer</a>]</span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: AlphaComponent ::
+A tokenizer that converts the input string to lowercase and then splits it by white spaces.</p>
+    </li></ol>
+            </div>
+
+        
+
+        
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Members</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../../../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../../../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../../../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../../../../lib/template.js"></script>
+    </body>
+      </html>

@@ -1,0 +1,9 @@
+16|john|4000|USA
+17|robert|2000|USA
+18|andrew|4000|USA
+19|katty|2000|USA
+27|edward|4000|UK
+29|alan|3000|UK
+31|kerry|4000|UK
+34|tom|3000|UK
+35|zack|2000|UK

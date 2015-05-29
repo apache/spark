@@ -1,0 +1,8 @@
+xpath(xml, xpath) - Returns a string array of values within xml nodes that match the xpath expression
+Example:
+  > SELECT xpath('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>', 'a/text()') FROM src LIMIT 1
+  []
+  > SELECT xpath('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>', 'a/b/text()') FROM src LIMIT 1
+  ["b1","b2","b3"]
+  > SELECT xpath('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>', 'a/c/text()') FROM src LIMIT 1
+  ["c1","c2"]
