@@ -514,16 +514,15 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.feature.ElementwiseProduct
 import org.apache.spark.mllib.linalg.Vectors
 
-// Load and parse the data:
-val data = sc.textFile("data/mllib/kmeans_data.txt")
-val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble)))
+// Create some vector data; also works for sparse vectors
+val data = sc.parallelize(Array(Vectors.dense(1.0, 2.0, 3.0), Vectors.dense(4.0, 5.0, 6.0)))
 
 val transformingVector = Vectors.dense(0.0, 1.0, 2.0)
 val transformer = new ElementwiseProduct(transformingVector)
 
 // Batch transform and per-row transform give the same results:
-val transformedData = transformer.transform(parsedData)
-val transformedData2 = parsedData.map(x => transformer.transform(x))
+val transformedData = transformer.transform(data)
+val transformedData2 = data.map(x => transformer.transform(x))
 
 {% endhighlight %}
 </div>
@@ -546,6 +545,7 @@ ElementwiseProduct transformer = new ElementwiseProduct(transformingVector);
 JavaRDD<Vector> transformedData = transformer.transform(data);
 JavaRDD<Vector> transformedData2 = data.map(
   new Function<Vector, Vector>() {
+    @Override
     public Vector call(Vector v) {
       return transformer.transform(v);
     }
