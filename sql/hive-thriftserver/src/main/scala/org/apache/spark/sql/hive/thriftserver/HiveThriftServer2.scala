@@ -17,23 +17,23 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.{HiveServer2, ServerOptionsProcessor}
-import org.apache.spark.sql.SQLConf
 
-import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.hive.{HiveShim, HiveContext}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
-import org.apache.spark.scheduler.{SparkListenerJobStart, SparkListenerApplicationEnd, SparkListener}
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
+import org.apache.spark.sql.hive.{HiveContext, HiveShim}
 import org.apache.spark.util.Utils
-
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import org.apache.spark.{Logging, SparkContext}
 
 /**
  * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSQLContext` and a
